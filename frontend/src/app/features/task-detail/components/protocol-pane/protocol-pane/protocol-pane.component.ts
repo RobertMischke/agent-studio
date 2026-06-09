@@ -71,8 +71,8 @@ import { OverlayPortalRef, OverlayPortalService } from '../../../../../services/
 export type InspectorTab = 'protocol' | 'activity';
 
 /**
- * Sub-view of the Activity tab: the agent's own task Plan, the next-gen
- * CLI conversation renderer, or the raw Trace (legacy activity-log view).
+ * Sub-view of the Activity tab: the agent's own task Plan, the compact
+ * CLI conversation/output renderer, or the raw Trace (legacy activity-log view).
  * Trace is reached from the Activity overflow menu; the primary segmented
  * toggle stays intentionally small: Plan | CLI.
  */
@@ -706,17 +706,16 @@ export class ProtocolPaneComponent implements OnDestroy {
    * The Activity tab is a single panel with a compact [Plan] [CLI] toggle in
    * its toolbar and secondary actions in the overflow menu. `activityViewOverride` holds the user's explicit pick;
    * when null the panel falls back to {@link defaultActivityView} (Plan when
-   * a plan exists, else Conversation when `Frontend:NextGenChat` is on, else
-   * the raw Trace). The constructor effect resets it per job.
+   * a plan exists, else CLI output). The constructor effect resets it per job.
    *
-   * Trace is the legacy `app-activity-log-view`; Conversation is the next-gen
-   * `app-conversation-view` over the `ConversationEvent[]` projection. With
-   * the flag off the Conversation tab never appears, so the off-state renders
-   * exactly the raw Trace as before.
+   * CLI uses the next-gen `app-conversation-view` over the `ConversationEvent[]`
+   * projection when the flag is enabled, and otherwise falls back to the
+   * legacy activity-log conversation view. Trace remains an overflow action.
    */
   private readonly activityViewOverride = signal<ActivityView | null>(null);
   readonly activityMenuOpen = signal(false);
   readonly activityMenuAnchor = signal<HTMLElement | null>(null);
+  readonly activityDebugEnabled = signal(false);
 
   /** True once a usable task plan exists - mirrors `PlanStripComponent.visible`. */
   readonly planAvailable = computed<boolean>(() => {
@@ -724,21 +723,20 @@ export class ProtocolPaneComponent implements OnDestroy {
     return !!p && p.hasPlan && p.items.length > 0;
   });
 
-  /** The Conversation sub-view only exists when the next-gen chat flag is on. */
-  readonly conversationAvailable = computed<boolean>(() => this.featureFlags.nextGenChat());
+  /** The compact CLI sub-view is always available; next-gen chat is only its preferred renderer. */
+  readonly conversationAvailable = computed<boolean>(() => true);
+  readonly nextGenConversationEnabled = computed<boolean>(() => this.featureFlags.nextGenChat());
 
   /** Sub-view shown when the user has not picked one explicitly. */
   readonly defaultActivityView = computed<ActivityView>(() => {
     if (this.planAvailable()) return 'plan';
-    if (this.conversationAvailable()) return 'conversation';
-    return 'trace';
+    return 'conversation';
   });
 
   /** Effective Activity sub-view: the user's pick if still valid, else the default. */
   readonly activityView = computed<ActivityView>(() => {
     const picked = this.activityViewOverride();
     if (picked === 'plan' && !this.planAvailable()) return this.defaultActivityView();
-    if (picked === 'conversation' && !this.conversationAvailable()) return this.defaultActivityView();
     return picked ?? this.defaultActivityView();
   });
 
@@ -748,13 +746,11 @@ export class ProtocolPaneComponent implements OnDestroy {
     if (this.planAvailable()) {
       tabs.push({ id: 'plan', label: 'Plan', testid: 'activity-view-tab-plan' });
     }
-    if (this.conversationAvailable()) {
-      tabs.push({
-        id: 'conversation',
-        label: 'CLI',
-        testid: 'activity-view-tab-conversation',
-      });
-    }
+    tabs.push({
+      id: 'conversation',
+      label: 'CLI',
+      testid: 'activity-view-tab-cli',
+    });
     return tabs;
   });
 
@@ -776,6 +772,7 @@ export class ProtocolPaneComponent implements OnDestroy {
       kind: 'row',
       id: 'debug',
       label: 'Debug',
+      active: this.activityDebugEnabled(),
       disabled: this.filteredCliOutput().length === 0 && !this.runTimeline(),
     },
     { kind: 'separator' },
@@ -792,8 +789,10 @@ export class ProtocolPaneComponent implements OnDestroy {
   }
 
   onActivityPrimaryTabChange(id: string): void {
-    if (id === 'plan' || id === 'conversation') {
-      this.setActivityView(id);
+    if (id === 'plan') {
+      this.setActivityView('plan');
+    } else if (id === 'conversation' || id === 'cli') {
+      this.setActivityView('conversation');
     }
   }
 
@@ -814,7 +813,7 @@ export class ProtocolPaneComponent implements OnDestroy {
         this.setActivityView('trace');
         break;
       case 'debug':
-        this.verboseDebugOpen.set(true);
+        this.activityDebugEnabled.update((v) => !v);
         break;
       case 'copy':
         void this.copyActivityView();

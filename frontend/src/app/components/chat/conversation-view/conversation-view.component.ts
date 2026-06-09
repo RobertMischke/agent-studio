@@ -205,6 +205,8 @@ export class ConversationViewComponent {
   readonly isRunning = input<boolean>(false);
   readonly queuedFollowUp = input<boolean>(false);
   readonly variant = input<'framed' | 'embedded'>('embedded');
+  readonly showHeader = input<boolean>(true);
+  readonly toolsVisible = input<boolean | null>(null);
 
   readonly openTrace = output<RawLineRange | null>();
   readonly openVerboseDebug = output<void>();
@@ -222,7 +224,8 @@ export class ConversationViewComponent {
    * reads as a plain agent/user conversation. Hiding bursts also lets two
    * agent turns that were only separated by a burst merge into one block.
    */
-  readonly showTools = signal(true);
+  private readonly localShowTools = signal(true);
+  readonly showTools = computed(() => this.toolsVisible() ?? this.localShowTools());
 
   readonly visibleItemLimit = VISIBLE_ITEM_LIMIT;
 
@@ -534,7 +537,7 @@ export class ConversationViewComponent {
   }
 
   toggleTools(): void {
-    this.showTools.update((v) => !v);
+    this.localShowTools.update((v) => !v);
   }
 
   formatTime(iso: string): string {

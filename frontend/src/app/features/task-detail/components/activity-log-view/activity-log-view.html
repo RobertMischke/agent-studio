@@ -1,16 +1,20 @@
     <div class="activity-log" [class.activity-log--embedded]="variant() === 'embedded'">
       @if (showToolbar()) {
         <div class="activity-log__toolbar">
-        <div class="activity-log__tabs" role="tablist">
-          <button class="activity-log__tab"
+        <div class="activity-log__tabs" role="tablist" aria-label="Activity log view">
+          <button type="button"
+                  class="activity-log__tab"
                   data-testid="activity-log-mode-conversation"
+                  role="tab"
+                  [attr.aria-selected]="mode() === 'conversation'"
                   [class.activity-log__tab--active]="mode() === 'conversation'"
                   (click)="mode.set('conversation')">
             CLI
           </button>
         </div>
         <div class="activity-log__actions">
-          <button class="activity-log__btn"
+          <button type="button"
+                  class="activity-log__btn"
                   data-testid="activity-log-toolbar-menu"
                   aria-label="More activity actions"
                   aria-haspopup="menu"

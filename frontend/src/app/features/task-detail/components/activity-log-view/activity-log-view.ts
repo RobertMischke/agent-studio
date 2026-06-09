@@ -65,6 +65,9 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
   readonly bodyMaxHeight = input('400px');
   readonly variant = input<'framed' | 'embedded'>('framed');
   readonly showToolbar = input(true);
+  readonly defaultMode = input<ViewMode>('conversation');
+  readonly toolsVisible = input<boolean | null>(null);
+  readonly debugVisible = input<boolean | null>(null);
   /**
    * When true the live-status row renders at the bottom of the body
    * (in both Conversation and Trace mode). The row pulses, names what
@@ -101,6 +104,10 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
 
   readonly parsedGroups = computed(() => parseActivityLog(this.lines()));
 
+  private readonly defaultModeEffect = effect(() => {
+    this.mode.set(this.defaultMode());
+  });
+
   readonly conversationTurns = computed<ConversationTurn[]>(
     () => buildConversationTurns(this.parsedGroups())
   );
@@ -124,7 +131,7 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
 
   readonly visibleConversation = computed<RenderedTurn[]>(() => {
     const turns = this.conversationTurns();
-    const showTools = this.showTools();
+    const showTools = this.toolsEnabled();
     const filtered = turns.filter((turn) => showTools || turn.kind !== 'tools');
     if (this.renderTurnCache.size > filtered.length * 4) {
       this.renderTurnCache.clear();
@@ -146,7 +153,7 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
    */
   readonly visibleTraceGroups = computed<ActivityLogGroup[]>(() => {
     const groups = this.parsedGroups();
-    if (this.showDebug()) return groups;
+    if (this.debugEnabled()) return groups;
     return groups.filter((group) => !isDebugNoise(group));
   });
 
@@ -192,7 +199,7 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
       kind: 'row',
       id: 'debug',
       label: 'Debug',
-      active: this.mode() === 'conversation' ? this.showTools() : this.showDebug(),
+      active: this.mode() === 'conversation' ? this.toolsEnabled() : this.debugEnabled(),
       disabled: this.lines().length === 0,
     },
     { kind: 'separator' },
@@ -203,6 +210,9 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
       disabled: this.copyDisabled(),
     },
   ]);
+
+  readonly toolsEnabled = computed(() => this.toolsVisible() ?? this.showTools());
+  readonly debugEnabled = computed(() => this.debugVisible() ?? this.showDebug());
 
   formatSince(ms: number): string {
     return formatLiveSince(ms);
@@ -237,6 +247,7 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
     }
     this.autoScrollEffect.destroy();
     this.liveTickerEffect.destroy();
+    this.defaultModeEffect.destroy();
   }
 
   testIdFor(turn: ConversationTurn): string | null {
@@ -303,9 +314,13 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
         break;
       case 'debug':
         if (this.mode() === 'conversation') {
-          this.showTools.update(v => !v);
+          if (this.toolsVisible() === null) {
+            this.showTools.update(v => !v);
+          }
         } else {
-          this.showDebug.update(v => !v);
+          if (this.debugVisible() === null) {
+            this.showDebug.update(v => !v);
+          }
         }
         break;
       case 'copy':

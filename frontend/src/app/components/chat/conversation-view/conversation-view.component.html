@@ -5,40 +5,39 @@
          [attr.data-running]="isRunning() ? 'true' : 'false'"
          [attr.data-stuck]="stick.stuck() ? 'true' : 'false'"
          data-testid="conversation-view">
-  <header class="conv__head">
-    <div class="conv__head-titles">
-      <strong class="conv__title">Conversation</strong>
-      <span class="conv__subtitle">Next-gen chat preview</span>
-    </div>
-    <div class="conv__head-actions">
-      <button type="button"
-              class="conv__head-btn conv__head-btn--toggle"
-              data-testid="conversation-show-tools"
-              [class.conv__head-btn--on]="showTools()"
-              [attr.aria-pressed]="showTools() ? 'true' : 'false'"
-              [appTooltip]="showTools() ? 'Hide tool activity rows' : 'Show tool activity rows'"
-              (click)="toggleTools()">
-        <span aria-hidden="true">🔧</span>
-        <span>Tools</span>
-      </button>
-      <button type="button"
-              class="conv__head-btn"
-              data-testid="conversation-open-trace"
-              [appTooltip]="'Open the raw activity log in Trace mode'"
-              (click)="emitOpenTrace(null)">
-        <span aria-hidden="true">≣</span>
-        <span>Trace</span>
-      </button>
-      <button type="button"
-              class="conv__head-btn"
-              data-testid="conversation-open-verbose-debug"
-              [appTooltip]="'Open the read-only Verbose Debug view'"
-              (click)="emitOpenVerboseDebug()">
-        <span aria-hidden="true">🐞</span>
-        <span>Debug</span>
-      </button>
-    </div>
-  </header>
+  @if (showHeader()) {
+    <header class="conv__head">
+      <div class="conv__head-titles">
+        <strong class="conv__title">Conversation</strong>
+        <span class="conv__subtitle">Next-gen chat preview</span>
+      </div>
+      <div class="conv__head-actions">
+        <button type="button"
+                class="conv__head-btn conv__head-btn--toggle"
+                data-testid="conversation-show-tools"
+                [class.conv__head-btn--on]="showTools()"
+                [attr.aria-pressed]="showTools() ? 'true' : 'false'"
+                [appTooltip]="showTools() ? 'Hide tool activity rows' : 'Show tool activity rows'"
+                (click)="toggleTools()">
+          <span aria-hidden="true">Tools</span>
+        </button>
+        <button type="button"
+                class="conv__head-btn"
+                data-testid="conversation-open-trace"
+                [appTooltip]="'Open the raw activity log in Trace mode'"
+                (click)="emitOpenTrace(null)">
+          <span>Trace</span>
+        </button>
+        <button type="button"
+                class="conv__head-btn"
+                data-testid="conversation-open-verbose-debug"
+                [appTooltip]="'Open the read-only Verbose Debug view'"
+                (click)="emitOpenVerboseDebug()">
+          <span>Debug</span>
+        </button>
+      </div>
+    </header>
+  }
 
   @if (!hasContent()) {
     <div class="conv__empty" data-testid="conversation-empty">

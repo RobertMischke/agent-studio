@@ -409,13 +409,27 @@
                     <app-plan-strip [plan]="plan()" [isRunning]="isRunning()" />
                   }
                   @case ('conversation') {
-                    <app-conversation-view [events]="nextGenChatEvents()"
-                                           [isRunning]="isRunning() || isActiveJob()"
-                                           [queuedFollowUp]="queuedFollowUp()"
-                                           variant="embedded"
-                                           (openTrace)="onConversationOpenTrace($event)"
-                                           (openFollowUp)="onOpenFollowup($event)"
-                                           (openVerboseDebug)="onConversationOpenVerboseDebug()" />
+                    @if (nextGenConversationEnabled()) {
+                      <app-conversation-view [events]="nextGenChatEvents()"
+                                             [isRunning]="isRunning() || isActiveJob()"
+                                             [queuedFollowUp]="queuedFollowUp()"
+                                             [showHeader]="false"
+                                             [toolsVisible]="activityDebugEnabled()"
+                                             variant="embedded"
+                                             (openTrace)="onConversationOpenTrace($event)"
+                                             (openFollowUp)="onOpenFollowup($event)"
+                                             (openVerboseDebug)="onConversationOpenVerboseDebug()" />
+                    } @else {
+                      <app-activity-log-view [lines]="filteredCliOutput()"
+                                             [bodyMaxHeight]="'none'"
+                                             [isRunning]="isRunning()"
+                                             [defaultMode]="'conversation'"
+                                             [toolsVisible]="activityDebugEnabled()"
+                                             variant="embedded"
+                                             [showToolbar]="false"
+                                             (applyComposeSuggestion)="onSteerOptionApply($event)"
+                                             (requestUploadScreenshot)="onSteerUploadRequest()" />
+                    }
                   }
                   @case ('trace') {
                     @if (conversationAvailable()) {
@@ -426,12 +440,14 @@
                         <button type="button"
                                 class="next-gen-chat-trace-banner__back"
                                 data-testid="next-gen-chat-trace-back"
-                                (click)="exitConversationTraceFallback()">Back to chat</button>
+                                (click)="exitConversationTraceFallback()">Back to CLI</button>
                       </div>
                     }
                     <app-activity-log-view [lines]="filteredCliOutput()"
                                            [bodyMaxHeight]="'none'"
                                            [isRunning]="isRunning()"
+                                           [defaultMode]="'trace'"
+                                           [debugVisible]="true"
                                            variant="embedded"
                                            [showToolbar]="false"
                                            (applyComposeSuggestion)="onSteerOptionApply($event)"

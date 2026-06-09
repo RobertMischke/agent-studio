@@ -2,14 +2,14 @@ import { expect, Page, test } from '@playwright/test';
 import * as path from 'path';
 
 /**
- * Task-detail Activity tab: the Plan / Conversation / Trace sub-view toggle
+ * Task-detail Activity tab: the Plan / CLI sub-view toggle
  * (ASS-677..682). The Activity panel used to hang the task-plan strip above a
  * [Conversation] [Trace] switch. It is now a single segmented pill toggle:
  *
  *   - [Plan] appears only when the agent has emitted a usable plan, and is the
  *     default sub-view when present.
- *   - [Conversation] appears only when `Frontend:NextGenChat` is on.
- *   - [Trace] is always present (the legacy activity-log view).
+ *   - [CLI] is always present and renders the CLI conversation/output view.
+ *   - [Trace], [Debug], and [Copy] live in the Activity overflow menu.
  *
  * The spec drives the live frontend (proxied to a real backend) but pins the
  * two pieces of evidence the behaviour keys off — the per-job `output` buffer
@@ -23,6 +23,8 @@ import * as path from 'path';
 
 const SHOTS_DIR = process.env.PLAN_TOGGLE_SHOTS?.trim()
   || path.resolve(__dirname, '../../test-results/plan-toggle');
+
+const TARGET = { id: 'activity-toolbar-fixture', watchPath: 'C:/fixtures/activity-toolbar' };
 
 interface OutLine { timestamp: string; stream: string; text: string; }
 
@@ -58,12 +60,83 @@ function buildPlan(present: boolean) {
   };
 }
 
-async function pinEvidence(page: Page, jobId: string, planPresent: boolean): Promise<void> {
-  const esc = encodeURIComponent(jobId);
+function detail() {
+  return {
+    info: {
+      id: TARGET.id,
+      taskKey: `ASS-E2E-${TARGET.id}`,
+      displayKey: 'ASS-E2E',
+      title: 'Activity toolbar fixture',
+      state: '5-human-review',
+      order: 1,
+      agent: 'codex',
+      cliType: 'codex',
+      model: 'gpt-5',
+      watchPath: TARGET.watchPath,
+      projectName: 'fixture',
+      folderPath: `${TARGET.watchPath}/.orchestrator/jobs/5-human-review/${TARGET.id}`,
+      createdAt: '2026-06-09T08:00:00.000Z',
+      lastActivity: '2026-06-09T08:05:00.000Z',
+      sessionName: null,
+      useOwnSession: null,
+      lastUsage: null,
+      execution: null,
+      commit: null,
+      commits: [],
+      codeActivityDetected: false,
+      summaryState: null,
+      taskType: 'bug',
+      tags: [],
+      references: { dependsOn: [], relatedTo: [], blockedBy: [], supersedes: [] },
+    },
+    promptMarkdown: 'Fixture prompt.',
+    promptHistory: [],
+    titleHistory: [],
+    statusMarkdown: '## Status\n\nWaiting for review.',
+    contextUsage: null,
+    log: [],
+    summaryState: null,
+    reviewEvidence: [],
+  };
+}
+
+async function installRoutes(page: Page, planPresent: boolean): Promise<void> {
+  const esc = encodeURIComponent(TARGET.id);
   const output = JSON.stringify(buildOutputBuffer());
   const plan = JSON.stringify(buildPlan(planPresent));
-  // The app talks to /api/tasks/*; mock the legacy /api/jobs/* aliases too so
-  // the spec stays green if either route is ever reintroduced.
+  await page.route('**/api/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.route('**/api/tasks/grouped**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        backlog: [],
+        preparation: [],
+        orchestratorPrep: [],
+        ready: [],
+        progress: [],
+        failedPickup: [],
+        codeNotComplete: [],
+        autoReview: [],
+        humanReview: [detail().info],
+        review: [],
+        completed: [],
+        archive: [],
+      }),
+    }));
+  await page.route('**/api/watch-paths**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{ name: 'fixture', path: TARGET.watchPath, rootPath: TARGET.watchPath }]),
+    }));
+  await page.route('**/api/runner/status**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ projects: { fixture: { projectName: 'fixture', mode: 'manual', activeJobId: null, activeExecution: null, queuedJobIds: [] } } }),
+    }));
   await page.route(`**/api/tasks/${esc}/output**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: output }));
   await page.route(`**/api/jobs/${esc}/output**`, (route) =>
@@ -72,6 +145,14 @@ async function pinEvidence(page: Page, jobId: string, planPresent: boolean): Pro
     route.fulfill({ status: 200, contentType: 'application/json', body: plan }));
   await page.route(`**/api/jobs/${esc}/plan**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: plan }));
+  await page.route(`**/api/tasks/${esc}/runs**`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) }));
+  await page.route(`**/api/tasks/${esc}/session-events**`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [], sessionChain: [] }) }));
+  await page.route(`**/api/tasks/${esc}/claude-session**`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }));
+  await page.route(`**/api/tasks/${esc}?**`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail()) }));
 }
 
 async function setFlag(page: Page, on: boolean): Promise<void> {
@@ -79,21 +160,6 @@ async function setFlag(page: Page, on: boolean): Promise<void> {
     if (enable) localStorage.setItem('atp.flag.nextGenChat', '1');
     else localStorage.removeItem('atp.flag.nextGenChat');
   }, on);
-}
-
-// The Activity inspector only mounts for a job in a "running" lane. A backlog
-// job lands on the Prompt pane with no inspector, so pick a mountable-lane job
-// (prefer 3-progress) exactly like the sibling conversation-view specs.
-const MOUNTABLE_LANES = new Set(['3-progress', '4-auto-review', '5-human-review']);
-
-async function pickJob(page: Page): Promise<{ id: string; watchPath: string } | null> {
-  const res = await page.request.get('/api/tasks');
-  if (!res.ok()) return null;
-  const jobs = (await res.json()) as { id: string; watchPath: string; state: string }[];
-  if (!Array.isArray(jobs) || jobs.length === 0) return null;
-  const j = jobs.find((x) => x.state === '3-progress')
-    ?? jobs.find((x) => MOUNTABLE_LANES.has(x.state));
-  return j ? { id: j.id, watchPath: j.watchPath } : null;
 }
 
 async function openActivity(page: Page, job: { id: string; watchPath: string }): Promise<void> {
@@ -104,19 +170,19 @@ async function openActivity(page: Page, job: { id: string; watchPath: string }):
   await activityTab.click();
 }
 
-test.describe('Activity tab Plan / Conversation / Trace toggle', () => {
-  test('plan present (flag off): Plan tab is default-active, toggle is [Plan] [Trace]', async ({ page }) => {
-    const job = await pickJob(page);
-    if (!job) { test.skip(true, 'No jobs on the board.'); return; }
+test.describe('Activity tab Plan / CLI toggle', () => {
+  test('plan present (flag off): Plan tab is default-active, toggle is [Plan] [CLI]', async ({ page }) => {
     await setFlag(page, false);
-    await pinEvidence(page, job.id, true);
-    await openActivity(page, job);
+    await installRoutes(page, true);
+    await openActivity(page, TARGET);
 
     const planTab = page.getByTestId('activity-view-tab-plan');
-    const traceTab = page.getByTestId('activity-view-tab-trace');
+    const cliTab = page.getByTestId('activity-view-tab-cli');
     await expect(planTab).toBeVisible({ timeout: 15_000 });
-    await expect(traceTab).toBeVisible();
-    // Flag off -> no Conversation tab.
+    await expect(cliTab).toBeVisible();
+    // Trace is no longer a primary tab.
+    await expect(page.getByTestId('activity-view-tab-trace')).toHaveCount(0);
+    // The old Conversation test id was retired in favour of the user-facing CLI label.
     await expect(page.getByTestId('activity-view-tab-conversation')).toHaveCount(0);
     // Plan is the default sub-view when a plan exists.
     await expect(planTab).toHaveAttribute('aria-selected', 'true');
@@ -126,20 +192,25 @@ test.describe('Activity tab Plan / Conversation / Trace toggle', () => {
     await page.screenshot({ path: path.join(SHOTS_DIR, 'plan-default-flag-off.png'), fullPage: false });
   });
 
-  test('Trace switch hides the plan; Plan switch brings it back', async ({ page }) => {
-    const job = await pickJob(page);
-    if (!job) { test.skip(true, 'No jobs on the board.'); return; }
+  test('Trace overflow action hides the plan; Plan switch brings it back', async ({ page }) => {
     await setFlag(page, false);
-    await pinEvidence(page, job.id, true);
-    await openActivity(page, job);
+    await installRoutes(page, true);
+    await openActivity(page, TARGET);
 
     await expect(page.getByTestId('plan-strip')).toBeVisible({ timeout: 15_000 });
 
-    // Switch to Trace: the legacy activity-log body shows, the plan hides.
-    await page.getByTestId('activity-view-tab-trace').click();
+    // Switch to Trace from the overflow menu: the raw activity-log body shows, the plan hides.
+    await page.getByTestId('activity-toolbar-menu').click();
+    const traceItem = page.getByTestId('activity-toolbar-menu-item-trace');
+    await expect(traceItem).toBeVisible();
+    await expect(page.getByTestId('activity-toolbar-menu-item-debug')).toContainText('Debug');
+    await expect(page.getByTestId('activity-toolbar-menu-item-copy')).toContainText('Copy');
+    await page.screenshot({ path: path.join(SHOTS_DIR, 'toolbar-menu-open.png'), fullPage: false });
+    await traceItem.click();
     await expect(page.getByTestId('activity-log-body')).toBeVisible();
+    await expect(page.getByTestId('activity-log-trace')).toBeVisible();
     await expect(page.getByTestId('plan-strip')).toHaveCount(0);
-    await expect(page.getByTestId('activity-view-tab-trace')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('activity-view-tab-cli')).toBeVisible();
 
     await page.screenshot({ path: path.join(SHOTS_DIR, 'trace-after-switch.png'), fullPage: false });
 
@@ -149,15 +220,16 @@ test.describe('Activity tab Plan / Conversation / Trace toggle', () => {
     await expect(page.getByTestId('activity-log-body')).toHaveCount(0);
   });
 
-  test('no plan (flag off): no Plan tab, Trace is the body and the toggle is hidden', async ({ page }) => {
-    const job = await pickJob(page);
-    if (!job) { test.skip(true, 'No jobs on the board.'); return; }
+  test('no plan (flag off): no Plan tab, CLI is the body and the toggle stays visible', async ({ page }) => {
     await setFlag(page, false);
-    await pinEvidence(page, job.id, false);
-    await openActivity(page, job);
+    await installRoutes(page, false);
+    await openActivity(page, TARGET);
 
-    // Trace body renders directly; with only one sub-view the toggle is hidden.
-    await expect(page.getByTestId('activity-log-body')).toBeVisible({ timeout: 15_000 });
+    // CLI body renders directly; the single-tab toggle stays visible to anchor the overflow menu row.
+    await expect(page.getByTestId('activity-view-tab-cli')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('activity-view-tab-cli')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('activity-log-body')).toBeVisible();
+    await expect(page.getByTestId('activity-log-conversation')).toBeVisible();
     await expect(page.getByTestId('activity-view-tab-plan')).toHaveCount(0);
     await expect(page.getByTestId('activity-view-tab-trace')).toHaveCount(0);
     await expect(page.getByTestId('plan-strip')).toHaveCount(0);
@@ -165,21 +237,19 @@ test.describe('Activity tab Plan / Conversation / Trace toggle', () => {
     await page.screenshot({ path: path.join(SHOTS_DIR, 'no-plan-trace-only.png'), fullPage: false });
   });
 
-  test('plan present (flag on): toggle is [Plan] [Conversation] [Trace], Plan default-active', async ({ page }) => {
-    const job = await pickJob(page);
-    if (!job) { test.skip(true, 'No jobs on the board.'); return; }
+  test('plan present (flag on): toggle is [Plan] [CLI], Plan default-active', async ({ page }) => {
     await setFlag(page, true);
-    await pinEvidence(page, job.id, true);
-    await openActivity(page, job);
+    await installRoutes(page, true);
+    await openActivity(page, TARGET);
 
     await expect(page.getByTestId('activity-view-tab-plan')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('activity-view-tab-conversation')).toBeVisible();
-    await expect(page.getByTestId('activity-view-tab-trace')).toBeVisible();
+    await expect(page.getByTestId('activity-view-tab-cli')).toBeVisible();
+    await expect(page.getByTestId('activity-view-tab-trace')).toHaveCount(0);
     await expect(page.getByTestId('activity-view-tab-plan')).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByTestId('plan-strip')).toBeVisible();
 
-    // Conversation tab swaps in the next-gen renderer.
-    await page.getByTestId('activity-view-tab-conversation').click();
+    // CLI tab swaps in the next-gen renderer when the feature flag is on.
+    await page.getByTestId('activity-view-tab-cli').click();
     await expect(page.getByTestId('conversation-view')).toBeVisible();
     await expect(page.getByTestId('plan-strip')).toHaveCount(0);
 

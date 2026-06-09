@@ -24,14 +24,15 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
-      padding: 8px 12px;
+      gap: var(--studio-spacing-2, 8px);
+      padding: var(--studio-spacing-2, 8px) var(--studio-spacing-3, 12px);
       border-bottom: 1px solid var(--studio-border);
       background: var(--studio-bg-hover);
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      min-width: 0;
     }
     .activity-log--embedded .activity-log__toolbar {
-      padding: 0 0 8px;
+      padding: 0 0 var(--studio-spacing-2, 8px);
       background: transparent;
       border-bottom: 1px solid var(--studio-border);
     }
@@ -39,9 +40,11 @@
     .activity-log__actions {
       display: flex;
       align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
+      gap: var(--studio-spacing-2, 8px);
+      flex-wrap: nowrap;
+      min-width: 0;
     }
+    .activity-log__actions { margin-left: auto; }
     .activity-log__tab,
     .activity-log__btn {
       // Surface + border read studio tokens that flip per theme.
@@ -51,6 +54,8 @@
       border-radius: 6px;
       padding: 5px 12px;
       font-size: 12.5px;
+      line-height: 1.2;
+      white-space: nowrap;
       cursor: pointer;
       transition: background-color 80ms ease, color 80ms ease, border-color 80ms ease;
     }
@@ -677,8 +682,7 @@
 
     @media (max-width: 720px) {
       .activity-log__toolbar {
-        align-items: flex-start;
-        flex-direction: column;
+        align-items: center;
       }
       .trace-group__header { grid-template-columns: 14px minmax(0, 1fr); }
       .trace-line { grid-template-columns: 1fr; }
