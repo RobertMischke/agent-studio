@@ -99,7 +99,7 @@ public class TokenSummaryTests
         Assert.True(s.AllModelsPriced);
 
         Assert.Equal(2, s.ByModel.Count);
-        var opus = s.ByModel.Single(m => m.Model == "claude-opus-4-7");
+        var opus = s.ByModel.Single(m => m.Model == "Claude Opus 4.7");
         Assert.Equal(2, opus.Calls);
         Assert.Equal(150_000L, opus.InputTokens);
         Assert.Equal(1.125m, opus.EstimatedApiCostUsd);
@@ -118,6 +118,21 @@ public class TokenSummaryTests
         var unknown = s.ByModel.Single(m => m.Model == "gpt-5");
         Assert.False(unknown.ModelPriced);
         Assert.Equal(0m, unknown.EstimatedApiCostUsd);
+    }
+
+    [Fact]
+    public void Summarize_ByModelUsesRegistryLabels()
+    {
+        var entries = new[]
+        {
+            Entry("gpt-5-codex", 1_000, 100),
+            Entry("claude-sonnet-4.6", 1_000, 100),
+        };
+
+        var s = TokenSummaryService.Summarize("Demo", entries);
+
+        Assert.Contains(s.ByModel, m => m.Model == "GPT-5 Codex");
+        Assert.Contains(s.ByModel, m => m.Model == "Claude Sonnet 4.6");
     }
 
     [Fact]

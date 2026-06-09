@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
 
 /**
  * Job-card token bubble.
@@ -17,7 +18,9 @@ import { test, expect, Page } from '@playwright/test';
  * carrying real orchestrator activity.
  */
 
-const SHOTS = 'screenshots/token-bubble';
+const SHOTS = process.env.JOB_RESULTS_DIR
+  ? `${process.env.JOB_RESULTS_DIR}/token-popover-model`
+  : 'screenshots/token-bubble';
 
 interface JobInfoStub {
   id: string;
@@ -180,12 +183,12 @@ test.describe('Token bubble on job cards', () => {
         cacheReadTokens: 250_000,
         cacheCreationTokens: 12_000,
         totalTokens: 400_000,
-        lastModel: 'claude-sonnet-4-6',
+        lastModel: 'GPT-5 Codex',
         lastUpdate: '2026-05-05T08:30:00Z',
         entries: [
-          { ts: '2026-05-05T08:00:00Z', model: 'claude-sonnet-4-6', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:15:00Z', model: 'claude-sonnet-4-6', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:30:00Z', model: 'claude-sonnet-4-6', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000 }
+          { ts: '2026-05-05T08:00:00Z', model: 'GPT-5 Codex', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000 },
+          { ts: '2026-05-05T08:15:00Z', model: 'Claude Haiku 4.5', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000 },
+          { ts: '2026-05-05T08:30:00Z', model: 'GPT-5 Codex', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000 }
         ]
       }
     });
@@ -211,24 +214,20 @@ test.describe('Token bubble on job cards', () => {
     // pointer-events races with any overlay that might appear before the
     // cards land.
     await bubble.focus();
-    const popover = card.locator('[data-testid="task-card-token-popover"]');
+    const popover = page.locator('[data-testid="task-card-token-popover"]');
     await expect(popover).toBeVisible();
     await expect(popover.getByTestId('token-row-input')).toContainText('120k');
     await expect(popover.getByTestId('token-row-output')).toContainText('18k');
     await expect(popover.getByTestId('token-row-cache-read')).toContainText('250k');
     await expect(popover.getByTestId('token-row-cache-write')).toContainText('12k');
     await expect(popover.getByTestId('token-row-total')).toContainText('400k');
-    await expect(popover.getByTestId('token-row-model')).toContainText('claude-sonnet-4-6');
+    await expect(popover.getByTestId('token-row-model')).toContainText('GPT-5 Codex');
+    await expect(popover.locator('.task-card__token-table--runs')).toContainText('Claude Haiku 4.5');
     await expect(popover.getByTestId('token-popover-timeline-link')).toBeVisible();
 
-    // Anti-clipping contract: the popover must render in the browser top
-    // layer (native Popover API) so the card's overflow:hidden +
-    // content-visibility paint containment and the lane scroll container
-    // cannot cut it off. `:popover-open` only matches when showPopover()
-    // promoted it to the top layer; the bounding box must also sit fully
-    // inside the viewport (the directive clamps it at every edge).
-    await expect(popover).toHaveAttribute('popover', 'manual');
-    expect(await popover.evaluate((el: HTMLElement) => el.matches(':popover-open'))).toBe(true);
+    // Anti-clipping contract: the directive lifts the panel into the
+    // shared body overlay portal, so the card's overflow/content-visibility
+    // containment and lane scroll container cannot cut it off.
     const popBox = await popover.boundingBox();
     const vp = page.viewportSize()!;
     expect(popBox).not.toBeNull();
@@ -237,20 +236,9 @@ test.describe('Token bubble on job cards', () => {
     expect(popBox!.x + popBox!.width).toBeLessThanOrEqual(vp.width + 1);
     expect(popBox!.y + popBox!.height).toBeLessThanOrEqual(vp.height + 1);
 
-    // Screenshot evidence: bubble + popover. We screenshot a tight crop so
-    // the diff stays small.
-    const cardBox = await card.boundingBox();
-    if (cardBox) {
-      await page.screenshot({
-        path: `${SHOTS}/card-with-bubble-and-popover.png`,
-        clip: {
-          x: Math.max(0, cardBox.x - 8),
-          y: Math.max(0, cardBox.y - 8),
-          width: Math.min(page.viewportSize()!.width - cardBox.x + 8, cardBox.width + 16),
-          height: cardBox.height + 240
-        }
-      });
-    }
+    // Screenshot evidence: bubble + overlay popover in the viewport.
+    mkdirSync(SHOTS, { recursive: true });
+    await page.screenshot({ path: `${SHOTS}/card-with-bubble-and-popover.png`, fullPage: false });
   });
 
   test('tier escalates with spend', async ({ page }) => {

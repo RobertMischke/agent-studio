@@ -360,10 +360,13 @@ public class TokenSummaryService
             totalCacheRead += u.CacheReadTokens;
             totalCacheCreate += u.CacheCreationTokens;
 
-            var key = string.IsNullOrWhiteSpace(u.Model) ? "(unknown)" : u.Model!.Trim();
+            var canonicalModel = ModelMetadataRegistry.NormalizeId(u.Model);
+            var key = string.IsNullOrWhiteSpace(canonicalModel) ? "(unknown)" : canonicalModel;
             if (!perModel.TryGetValue(key, out var bucket))
             {
-                bucket = new ModelBucket(key);
+                bucket = new ModelBucket(
+                    key,
+                    TokenModelDisplay.Label(u.Model) ?? "(unknown)");
                 perModel[key] = bucket;
             }
             bucket.Calls++;
@@ -382,7 +385,7 @@ public class TokenSummaryService
             grandTotal += cost.Total;
             if (!cost.ModelKnown) allPriced = false;
             byModel.Add(new TokenSummaryByModel(
-                Model: bucket.Model,
+                Model: bucket.DisplayModel,
                 Calls: bucket.Calls,
                 InputTokens: bucket.Input,
                 OutputTokens: bucket.Output,
@@ -409,6 +412,7 @@ public class TokenSummaryService
     private sealed class ModelBucket
     {
         public string Model { get; }
+        public string DisplayModel { get; }
         public int Calls;
         public long Input;
         public long Output;
@@ -416,6 +420,10 @@ public class TokenSummaryService
         public long CacheCreate;
         public decimal Cost;
         public bool AnyUnpriced;
-        public ModelBucket(string model) { Model = model; }
+        public ModelBucket(string model, string displayModel)
+        {
+            Model = model;
+            DisplayModel = displayModel;
+        }
     }
 }
