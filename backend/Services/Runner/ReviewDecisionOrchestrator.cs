@@ -153,6 +153,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     public Func<string, string?, RegressionRadarResult>? RegressionRadarAnalyzer { get; set; }
     private readonly TimelineLog? _timeline;
     private readonly ProjectSettingsService? _projectSettings;
+    private readonly WorkspaceArtifactCommitService? _workspaceArtifactCommits;
     // The system-escalation funnel. Used here only for the boot-time repair of
     // legacy 5-human-review cards that carry no verdict (RecordVerdictAndStatus,
     // no move). Optional so test fixtures that do not exercise the backfill keep
@@ -190,7 +191,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         TimelineLog? timeline = null,
         ProjectSettingsService? projectSettings = null,
         HumanReviewEscalation? humanReviewEscalation = null,
-        RegressionRadarService? regressionRadar = null)
+        RegressionRadarService? regressionRadar = null,
+        WorkspaceArtifactCommitService? workspaceArtifactCommits = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -213,6 +215,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _projectSettings = projectSettings;
         _humanReviewEscalation = humanReviewEscalation;
         _regressionRadar = regressionRadar;
+        _workspaceArtifactCommits = workspaceArtifactCommits;
 
         _statusSnapshot.ConfigureEscalationRateAlert(
             _configuration.GetValue(
@@ -937,7 +940,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     followUpPrompt: followUp, context: steering));
         }
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -945,7 +948,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: reason,
             Prompt: "(deterministic NOOP branch)",
             Response: "(no fast-model call)",
-            FollowUp: followUp));
+            FollowUp: followUp),
+            current.FolderPath,
+            moved?.FolderPath);
     }
 
     private Task EscalateNoOpAsync(
@@ -975,7 +980,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             BuildEscalateDetails("noop-escalate", reason,
                 CountPriorReissues(workspace, entry.Name, current.Id)));
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -983,7 +988,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: reason,
             Prompt: "(deterministic NOOP branch)",
             Response: "(no fast-model call)",
-            FollowUp: string.Empty));
+            FollowUp: string.Empty),
+            current.FolderPath,
+            move.NewFolderPath);
 
         return Task.CompletedTask;
     }
@@ -1167,7 +1174,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     followUpPrompt: followUp, context: steering));
         }
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -1175,7 +1182,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: reason,
             Prompt: "(deterministic no-completion-signal branch)",
             Response: "(no fast-model call)",
-            FollowUp: followUp));
+            FollowUp: followUp),
+            current.FolderPath,
+            moved?.FolderPath);
     }
 
     private Task EscalateNoCompletionSignalAsync(
@@ -1207,7 +1216,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             BuildEscalateDetails("no-completion-signal", reason,
                 CountPriorReissues(workspace, entry.Name, current.Id)));
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -1215,7 +1224,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: reason,
             Prompt: "(deterministic no-completion-signal branch)",
             Response: "(no fast-model call)",
-            FollowUp: string.Empty));
+            FollowUp: string.Empty),
+            current.FolderPath,
+            escalatedFolder);
 
         return Task.CompletedTask;
     }
@@ -1250,7 +1261,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             BuildEscalateDetails("agent-blocked", reason,
                 CountPriorReissues(workspace, entry.Name, current.Id)));
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -1258,7 +1269,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: reason,
             Prompt: "(deterministic BLOCKED branch)",
             Response: "(no fast-model call)",
-            FollowUp: string.Empty));
+            FollowUp: string.Empty),
+            current.FolderPath,
+            move.NewFolderPath);
 
         return Task.CompletedTask;
     }
@@ -1310,7 +1323,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             "ReviewDecisionOrchestrator: bounced unworked card {Project}/{JobId} from 4-auto-review to 2-ready (no core run)",
             entry.Name, current.Id);
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -1318,7 +1331,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: "Card reached 4-auto-review with no core run (0 commits, no run output); bounced to 2-ready.",
             Prompt: "(unworked-no-core-run sweep-guard)",
             Response: string.Empty,
-            FollowUp: string.Empty));
+            FollowUp: string.Empty),
+            current.FolderPath,
+            movedFolderPath);
     }
 
     /// <summary>
@@ -1729,7 +1744,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             _statusSnapshot.RecordAccept();
         }
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -1739,7 +1754,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 : "Multi-aspect: all aspects pass",
             Prompt: "(multi-aspect run; per-aspect prompts written to aspect-*.md)",
             Response: AspectSummaryLine(report),
-            FollowUp: string.Empty));
+            FollowUp: string.Empty),
+            current.FolderPath,
+            movedFolderPath);
     }
 
     private async Task ReissueOnBlockAsync(
@@ -1799,7 +1816,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         _statusSnapshot.RecordReissue();
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -1807,7 +1824,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: "Multi-aspect block: " + AspectSummaryLine(report),
             Prompt: "(multi-aspect run; per-aspect prompts written to aspect-*.md)",
             Response: AspectSummaryLine(report),
-            FollowUp: followUp));
+            FollowUp: followUp),
+            current.FolderPath,
+            moved.FolderPath);
     }
 
     /// <summary>
@@ -1901,7 +1920,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         _statusSnapshot.RecordAccept();
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -1909,7 +1928,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: loopBreak.Reason,
             Prompt: "(loop-break: empty follow-up diff on clean re-run)",
             Response: AspectSummaryLine(report),
-            FollowUp: string.Empty));
+            FollowUp: string.Empty),
+            current.FolderPath,
+            movedFolderPath);
     }
 
     /// <summary>
@@ -1949,7 +1970,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         _statusSnapshot.RecordEscalate();
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -1957,7 +1978,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: loopBreak.Reason,
             Prompt: "(loop-break: reissue budget exhausted)",
             Response: AspectSummaryLine(report),
-            FollowUp: string.Empty));
+            FollowUp: string.Empty),
+            current.FolderPath,
+            escalatedFolder);
     }
 
     /// <summary>
@@ -2009,7 +2032,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, gate.Reason,
                 BuildEscalateDetails("evidence-gate", gate.Reason, priorReissues));
 
-            ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            AppendReviewDecision(workspace, new ReviewDecisionRecord(
                 CreatedAt: DateTime.UtcNow,
                 JobId: current.Id,
                 Project: entry.Name,
@@ -2017,7 +2040,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 Reason: gate.Reason,
                 Prompt: "(evidence-gate static check)",
                 Response: findingsBlock,
-                FollowUp: string.Empty));
+                FollowUp: string.Empty),
+                current.FolderPath,
+                escalatedFolder);
 
             _statusSnapshot.RecordEscalate();
             return;
@@ -2053,7 +2078,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         _statusSnapshot.RecordReissue();
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -2061,7 +2086,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: gate.Reason,
             Prompt: "(evidence-gate static check)",
             Response: findingsBlock,
-            FollowUp: followUp));
+            FollowUp: followUp),
+            current.FolderPath,
+            moved.FolderPath);
     }
 
     /// <summary>
@@ -2417,7 +2444,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, gate.Reason,
                 BuildEscalateDetails("completion-gate", gate.Reason, priorReissues));
 
-            ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            AppendReviewDecision(workspace, new ReviewDecisionRecord(
                 CreatedAt: DateTime.UtcNow,
                 JobId: current.Id,
                 Project: entry.Name,
@@ -2425,7 +2452,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 Reason: gate.Reason,
                 Prompt: "(completion-gate static scan)",
                 Response: findingsBlock,
-                FollowUp: string.Empty));
+                FollowUp: string.Empty),
+                current.FolderPath,
+                escalatedFolder);
 
             _statusSnapshot.RecordEscalate();
             return;
@@ -2467,7 +2496,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         _statusSnapshot.RecordReissue();
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -2475,7 +2504,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: gate.Reason,
             Prompt: "(completion-gate static scan)",
             Response: findingsBlock,
-            FollowUp: followUp));
+            FollowUp: followUp),
+            current.FolderPath,
+            moved.FolderPath);
     }
 
     /// <summary>
@@ -2847,7 +2878,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     current.Id, move.Status, move.Message);
             }
             _statusSnapshot.RecordEscalate();
-            ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            AppendReviewDecision(workspace, new ReviewDecisionRecord(
                 CreatedAt: DateTime.UtcNow,
                 JobId: current.Id,
                 Project: entry.Name,
@@ -2855,7 +2886,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 Reason: reason,
                 Prompt: "(deterministic build-test gate post-step)",
                 Response: result.Output,
-                FollowUp: string.Empty));
+                FollowUp: string.Empty),
+                current.FolderPath,
+                move.NewFolderPath);
             return;
         }
 
@@ -2885,7 +2918,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 result.Output));
 
         _statusSnapshot.RecordReissue();
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -2893,7 +2926,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: BuildTestGateReissueReasonPrefix + result.Reason,
             Prompt: "(deterministic build-test gate post-step)",
             Response: result.Output,
-            FollowUp: followUp));
+            FollowUp: followUp),
+            current.FolderPath,
+            moved.FolderPath);
     }
 
     private static string BuildBuildTestGateFollowUp(BuildTestGateResult result)
@@ -2958,7 +2993,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     current.Id, move.Status, move.Message);
             }
             _statusSnapshot.RecordEscalate();
-            ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            AppendReviewDecision(workspace, new ReviewDecisionRecord(
                 CreatedAt: DateTime.UtcNow,
                 JobId: current.Id,
                 Project: entry.Name,
@@ -2966,7 +3001,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 Reason: reason,
                 Prompt: "(deterministic lint-scss post-step)",
                 Response: result.Output,
-                FollowUp: string.Empty));
+                FollowUp: string.Empty),
+                current.FolderPath,
+                move.NewFolderPath);
             return;
         }
 
@@ -2992,7 +3029,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 result.Output));
 
         _statusSnapshot.RecordReissue();
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -3000,7 +3037,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: LintScssReissueReasonPrefix + $"stylelint exit {result.ExitCode}",
             Prompt: "(deterministic lint-scss post-step)",
             Response: result.Output,
-            FollowUp: followUp));
+            FollowUp: followUp),
+            current.FolderPath,
+            moved2.FolderPath);
     }
 
     private static string BuildLintScssFollowUp(LintScssResult result) =>
@@ -3644,7 +3683,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 CountPriorReissues(workspace, entry.Name, current.Id),
                 verdict.Reason));
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -3652,7 +3691,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: verdict.Reason,
             Prompt: prompt,
             Response: response,
-            FollowUp: followUp));
+            FollowUp: followUp),
+            current.FolderPath,
+            moved.FolderPath);
     }
 
     private Task HandleEscalateAsync(
@@ -3702,7 +3743,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             BuildEscalateDetails("needs-input-escalate", verdict.Reason,
                 CountPriorReissues(workspace, entry.Name, current.Id)));
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -3710,7 +3751,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: verdict.Reason,
             Prompt: prompt,
             Response: response,
-            FollowUp: string.Empty));
+            FollowUp: string.Empty),
+            current.FolderPath,
+            movedFolderPath);
 
         return Task.CompletedTask;
     }
@@ -3770,7 +3813,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 ["reason"] = Truncate(reason, 600),
             });
 
-        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
             Project: entry.Name,
@@ -3778,7 +3821,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: reason,
             Prompt: prompt,
             Response: response,
-            FollowUp: string.Empty));
+            FollowUp: string.Empty),
+            current.FolderPath,
+            movedFolderPath);
     }
 
     private string BuildPrompt(WatchPathEntry entry, PendingDecision pending, string workspace)
@@ -3818,6 +3863,27 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         $"Task body:\n{v["task_body"]}\n\n" +
         $"Recent log:\n{v["recent_log"]}\n\n" +
         $"Reply with exactly one [[ORCHESTRATOR_DECISION: action=<reissue|escalate|accept-as-done>; reason=<short>]] sentinel then [[TASK_DONE]].";
+
+    private void AppendReviewDecision(
+        string workspace,
+        ReviewDecisionRecord record,
+        string? beforeMoveFolderPath,
+        string? afterMoveFolderPath)
+    {
+        ReviewDecisionLog.Append(workspace, record);
+        var result = _workspaceArtifactCommits?.TryCommitRunBoundary(
+            workspace,
+            record.JobId,
+            beforeMoveFolderPath,
+            afterMoveFolderPath,
+            record.Kind);
+        if (result is { Success: false })
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: workspace artifact commit failed for {Project}/{JobId}: {Error}",
+                record.Project, record.JobId, result.Error);
+        }
+    }
 
     private static (string TaskBody, string RecentLog) LoadTaskContext(PendingDecision pending)
     {

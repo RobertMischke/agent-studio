@@ -305,6 +305,7 @@ builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.IBuildTestGateRu
 builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.WikiMaintenancePostStepRunner>();
 builder.Services.AddSingleton<AspectRunnerService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Review.CodeReviewStepService>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Runner.WorkspaceArtifactCommitService>();
 // Intelligente Abbruch-Bewertung (ADR-0032): the post-abort LLM review step.
 // Forwarded into ProjectRunner via TaskRunnerService; default-OFF per project.
 builder.Services.AddSingleton<OrchestratorApi.Services.Runner.PostAbortReviewStepService>();

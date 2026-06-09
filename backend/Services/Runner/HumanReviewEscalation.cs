@@ -75,6 +75,8 @@ public sealed class HumanReviewEscalation
     private readonly TaskTransitionService _transitions;
     private readonly string? _workspaceRoot;
     private readonly ILogger _logger;
+    private readonly TaskScannerService? _scanner;
+    private readonly WorkspaceArtifactCommitService? _workspaceArtifactCommits;
 
     /// <summary>DI ctor: the workspace root is the same <c>TaskRepository</c> the
     /// verdict-read side (<c>TaskEndpointHelpers.BuildOrchestratorVerdictLookup</c>)
@@ -83,8 +85,10 @@ public sealed class HumanReviewEscalation
         TaskStateMachine states,
         TaskTransitionService transitions,
         IConfiguration configuration,
-        ILogger<HumanReviewEscalation> logger)
-        : this(states, transitions, configuration["TaskRepository"], logger)
+        ILogger<HumanReviewEscalation> logger,
+        TaskScannerService? scanner = null,
+        WorkspaceArtifactCommitService? workspaceArtifactCommits = null)
+        : this(states, transitions, configuration["TaskRepository"], logger, scanner, workspaceArtifactCommits)
     {
     }
 
@@ -94,12 +98,16 @@ public sealed class HumanReviewEscalation
         TaskStateMachine states,
         TaskTransitionService transitions,
         string? workspaceRoot,
-        ILogger logger)
+        ILogger logger,
+        TaskScannerService? scanner = null,
+        WorkspaceArtifactCommitService? workspaceArtifactCommits = null)
     {
         _states = states;
         _transitions = transitions;
         _workspaceRoot = workspaceRoot;
         _logger = logger;
+        _scanner = scanner;
+        _workspaceArtifactCommits = workspaceArtifactCommits;
     }
 
     /// <summary>
@@ -114,9 +122,13 @@ public sealed class HumanReviewEscalation
         string jobId, string watchPath, string project,
         string category, string reason, CancellationToken ct = default)
     {
+        var beforeFolder = _scanner?.FindJob(jobId, watchPath)?.FolderPath;
         var outcome = await _transitions.MoveAsync(jobId, TaskStates.Escalated, watchPath, ct);
         if (outcome.Status == MoveJobStatus.Success)
+        {
             RecordVerdictAndStatus(project, jobId, outcome.NewFolderPath, category, reason);
+            TryCommitArtifacts(project, jobId, beforeFolder, outcome.NewFolderPath);
+        }
         else
             _logger.LogWarning(
                 "HumanReviewEscalation: move of {Project}/{JobId} to 5e-escalated failed: {Status} {Message}",
@@ -133,9 +145,13 @@ public sealed class HumanReviewEscalation
         string jobId, string watchPath, string project,
         string category, string reason)
     {
+        var beforeFolder = _scanner?.FindJob(jobId, watchPath)?.FolderPath;
         var outcome = _states.MoveJob(jobId, TaskStates.Escalated, watchPath);
         if (outcome.Status == MoveJobStatus.Success)
+        {
             RecordVerdictAndStatus(project, jobId, outcome.NewFolderPath, category, reason);
+            TryCommitArtifacts(project, jobId, beforeFolder, outcome.NewFolderPath);
+        }
         else
             _logger.LogWarning(
                 "HumanReviewEscalation: move of {Project}/{JobId} to 5e-escalated failed: {Status} {Message}",
@@ -235,6 +251,22 @@ public sealed class HumanReviewEscalation
             // Best-effort: the verdict already records the escalation; an
             // unwritable status.md must not crash the runner.
             _logger.LogWarning(ex, "HumanReviewEscalation: failed to write status.md stub at {Path}", path);
+        }
+    }
+
+    private void TryCommitArtifacts(string project, string jobId, string? beforeFolderPath, string? afterFolderPath)
+    {
+        var result = _workspaceArtifactCommits?.TryCommitRunBoundary(
+            _workspaceRoot,
+            jobId,
+            beforeFolderPath,
+            afterFolderPath,
+            ReviewDecisionKind.Escalate);
+        if (result is { Success: false })
+        {
+            _logger.LogWarning(
+                "HumanReviewEscalation: workspace artifact commit failed for {Project}/{JobId}: {Error}",
+                project, jobId, result.Error);
         }
     }
 }
