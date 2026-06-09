@@ -24,6 +24,7 @@ interface QuotaWindowDisplay {
 interface QuotaChip {
   windowKey: string;
   tag: string;
+  label?: string;
   value: string;
   barPct: number;
   tone: Tone;
@@ -147,7 +148,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     const shortWindow = this.buildWindowDisplay(s.windows, 'five_hour');
     const weekWindow = this.buildWindowDisplay(s.windows, 'weekly');
     const primary = this.buildPrimaryDisplay(s.windows);
-    const chips = this.buildChips(shortWindow, weekWindow, primary);
+    const chips = this.buildChips(shortWindow, weekWindow, primary, s.windows);
     const tone = this.cardTone(shortWindow, weekWindow, !!s.error, primary);
     const state = this.cardState(tone, stale, !!s.error, shortWindow, weekWindow, primary);
     return {
@@ -198,7 +199,10 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     sw: QuotaWindowDisplay | undefined,
     ww: QuotaWindowDisplay | undefined,
     primary: QuotaPrimaryDisplay,
+    windows?: QuotaWindow[],
   ): QuotaChip[] {
+    if (windows?.length) return this.buildReportedWindowChips(windows);
+
     const chips: QuotaChip[] = [];
     if (sw) chips.push({ windowKey: '5h', tag: '5H', value: sw.value, barPct: sw.barPct, tone: sw.tone });
     if (ww) chips.push({ windowKey: 'wk', tag: 'WK', value: ww.value, barPct: ww.barPct, tone: ww.tone });
@@ -211,6 +215,25 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
 
   private placeholderChip(): QuotaChip {
     return { windowKey: 'none', tag: '', value: '—', barPct: 0, tone: 'unknown' };
+  }
+
+  private buildReportedWindowChips(windows: QuotaWindow[]): QuotaChip[] {
+    const seen = new Map<string, number>();
+    return windows.map((w) => {
+      const baseKey = this.windowKey(w.label);
+      const count = seen.get(baseKey) ?? 0;
+      seen.set(baseKey, count + 1);
+      const pct = w.usedPct == null ? null : Math.round(w.usedPct);
+      const windowKey = count === 0 ? baseKey : `${baseKey}-${count + 1}`;
+      return {
+        windowKey,
+        tag: this.windowTag(w.label),
+        label: w.label,
+        value: pct == null ? '—' : `${pct}%`,
+        barPct: Math.max(0, Math.min(100, pct ?? 0)),
+        tone: this.toneFor(pct),
+      };
+    });
   }
 
   private buildWindowDisplay(windows: QuotaWindow[], kind: 'five_hour' | 'weekly'): QuotaWindowDisplay | undefined {
@@ -272,6 +295,11 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   /** Short uppercase tag for a window label, e.g. "5H", "WK", "MO". */
   private windowTag(label: string): string {
     const l = (label ?? '').toLowerCase();
+    const isSpark = l.includes('spark');
+    const isFiveHour = l.includes('5h') || l.includes('5-hour') || l.includes('session');
+    const isWeekly = l.includes('week');
+    if (isSpark && isFiveHour) return 'S5H';
+    if (isSpark && isWeekly) return 'SWK';
     if (l.includes('5h') || l.includes('5-hour') || l.includes('session')) return '5H';
     if (l.includes('week')) return 'WK';
     if (l.includes('month')) return 'MO';
@@ -281,10 +309,25 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     return word.slice(0, 2).toUpperCase();
   }
 
+  private windowKey(label: string): string {
+    const l = (label ?? '').toLowerCase();
+    const isSpark = l.includes('spark');
+    const isFiveHour = l.includes('5h') || l.includes('5-hour') || l.includes('session');
+    const isWeekly = l.includes('week');
+    if (isSpark && isFiveHour) return 'spark-5h';
+    if (isSpark && isWeekly) return 'spark-wk';
+    if (isFiveHour) return '5h';
+    if (isWeekly) return 'wk';
+    if (l.includes('month')) return 'mo';
+    if (l.includes('dai') || l.includes('day')) return 'dy';
+    if (l.includes('hour')) return 'hr';
+    return l.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'window';
+  }
+
   private cardAriaLabel(label: string, chips: QuotaChip[]): string {
     const real = chips.filter(c => c.windowKey !== 'none');
     if (real.length === 0) return `${label} quota: no data yet`;
-    const parts = real.map(c => (c.tag ? `${c.tag} ${c.value}` : c.value));
+    const parts = real.map(c => (c.label ? `${c.label} ${c.value}` : c.tag ? `${c.tag} ${c.value}` : c.value));
     return `${label} quota: ${parts.join(', ')} used`;
   }
 

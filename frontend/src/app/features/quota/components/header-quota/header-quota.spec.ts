@@ -8,7 +8,16 @@ import { HeaderQuotaComponent } from './header-quota';
 
 type WindowDisplay = { value: string; barPct: number; tone: string; windowKind: string };
 type PrimaryDisplay = { value: string; tag: string; barPct: number; hasValue: boolean; tone: string };
-type Chip = { windowKey: string; tag: string; value: string; barPct: number; tone: string };
+type Chip = { windowKey: string; tag: string; label?: string; value: string; barPct: number; tone: string };
+type QuotaWindowInput = {
+  label: string;
+  usedPct: number | null;
+  used: number | null;
+  limit: number | null;
+  unit: string | null;
+  resetAt: string | null;
+  resetLabel: string | null;
+};
 
 const noPrimary: PrimaryDisplay = { value: '—', tag: '', barPct: 0, hasValue: false, tone: 'unknown' };
 
@@ -74,6 +83,7 @@ describe('HeaderQuotaComponent (semantic state)', () => {
         sw: WindowDisplay | undefined,
         ww: WindowDisplay | undefined,
         primary: PrimaryDisplay,
+        windows?: QuotaWindowInput[],
       ) => Chip[];
     };
   }
@@ -122,6 +132,22 @@ describe('HeaderQuotaComponent (semantic state)', () => {
     expect(chips.map(ch => ch.windowKey)).toEqual(['5h', 'wk']);
     expect(chips.map(ch => ch.tag)).toEqual(['5H', 'WK']);
     expect(chips.map(ch => ch.value)).toEqual(['11%', '47%']);
+  });
+
+  it('renders Spark windows as separate status-bar chips', async () => {
+    const c = await buildComponent();
+    const windows: QuotaWindowInput[] = [
+      { label: '5-hour', usedPct: 3, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '20:09' },
+      { label: 'Weekly', usedPct: 14, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '23:43 on 11 Jun' },
+      { label: 'Spark 5-hour', usedPct: 0, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '21:25' },
+      { label: 'Spark Weekly', usedPct: 0, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '16:25 on 14 Jun' },
+    ];
+
+    const chips = c.buildChips(undefined, undefined, noPrimary, windows);
+
+    expect(chips.map(ch => ch.windowKey)).toEqual(['5h', 'wk', 'spark-5h', 'spark-wk']);
+    expect(chips.map(ch => ch.tag)).toEqual(['5H', 'WK', 'S5H', 'SWK']);
+    expect(chips.map(ch => ch.value)).toEqual(['3%', '14%', '0%', '0%']);
   });
 
   it('falls back to the primary chip when no 5H / WK window is reported', async () => {

@@ -32,6 +32,10 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         @"Weekly\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex SparkHeaderRegex = new(
+        @"GPT\s*-\s*5\.3\s*-\s*Codex\s*-\s*Spark\s*limit\s*:?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     // "Account: someone@example.com (Plus)" — captures the parenthesised plan name.
     private static readonly Regex PlanRegex = new(
         @"Account\s*:?[^()\r\n]{1,120}\(\s*(?<plan>[A-Za-z][A-Za-z0-9 +]{0,30})\s*\)",
@@ -80,45 +84,7 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
                 ? pm.Groups["plan"].Value.Trim()
                 : null;
 
-            var windows = new List<QuotaWindow>();
-
-            if (FiveHourRegex.Match(snap) is { Success: true } fm
-                && int.TryParse(fm.Groups["left"].Value, out var fLeft))
-            {
-                var resetRaw = fm.Groups["reset"].Value.Trim();
-                windows.Add(new QuotaWindow
-                {
-                    Label      = "5-hour",
-                    UsedPct    = 100 - fLeft,
-                    Unit       = "%",
-                    ResetAt    = ParseResetUtc(resetRaw),
-                    ResetLabel = resetRaw
-                });
-            }
-
-            if (WeeklyRegex.Match(snap) is { Success: true } wm
-                && int.TryParse(wm.Groups["left"].Value, out var wLeft))
-            {
-                var resetRaw = wm.Groups["reset"].Value.Trim();
-                windows.Add(new QuotaWindow
-                {
-                    Label      = "Weekly",
-                    UsedPct    = 100 - wLeft,
-                    Unit       = "%",
-                    ResetAt    = ParseResetUtc(resetRaw),
-                    ResetLabel = resetRaw
-                });
-            }
-
-            // Footer fallback when /status didn't render — at least we still
-            // get usage percentages, just no reset time.
-            if (windows.Count == 0 && FooterRegex.Match(snap) is { Success: true } fmm
-                && int.TryParse(fmm.Groups["h5left"].Value, out var h5)
-                && int.TryParse(fmm.Groups["wkleft"].Value, out var wk))
-            {
-                windows.Add(new QuotaWindow { Label = "5-hour", UsedPct = 100 - h5, Unit = "%" });
-                windows.Add(new QuotaWindow { Label = "Weekly", UsedPct = 100 - wk, Unit = "%" });
-            }
+            var windows = ParseStatusWindows(snap);
 
             return new QuotaSnapshot
             {
@@ -137,6 +103,54 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
             _logger.LogWarning(ex, "Codex quota probe failed");
             return new QuotaSnapshot { CliType = CliType, Source = "/status", Error = ex.Message };
         }
+    }
+
+    public static List<QuotaWindow> ParseStatusWindows(string snap)
+    {
+        var windows = new List<QuotaWindow>();
+        var sparkHeader = SparkHeaderRegex.Match(snap);
+        var standardSnap = sparkHeader.Success ? snap[..sparkHeader.Index] : snap;
+
+        AddLimitWindow(windows, standardSnap, FiveHourRegex, "5-hour");
+        AddLimitWindow(windows, standardSnap, WeeklyRegex, "Weekly");
+
+        if (sparkHeader.Success)
+        {
+            var sparkSnap = snap[(sparkHeader.Index + sparkHeader.Length)..];
+            AddLimitWindow(windows, sparkSnap, FiveHourRegex, "Spark 5-hour");
+            AddLimitWindow(windows, sparkSnap, WeeklyRegex, "Spark Weekly");
+        }
+
+        // Footer fallback when /status didn't render: at least we still
+        // get usage percentages, just no reset time.
+        if (windows.Count == 0 && FooterRegex.Match(snap) is { Success: true } fmm
+            && int.TryParse(fmm.Groups["h5left"].Value, out var h5)
+            && int.TryParse(fmm.Groups["wkleft"].Value, out var wk))
+        {
+            windows.Add(new QuotaWindow { Label = "5-hour", UsedPct = 100 - h5, Unit = "%" });
+            windows.Add(new QuotaWindow { Label = "Weekly", UsedPct = 100 - wk, Unit = "%" });
+        }
+
+        return windows;
+    }
+
+    private static void AddLimitWindow(List<QuotaWindow> windows, string snap, Regex regex, string label)
+    {
+        if (regex.Match(snap) is not { Success: true } match
+            || !int.TryParse(match.Groups["left"].Value, out var left))
+        {
+            return;
+        }
+
+        var resetRaw = match.Groups["reset"].Value.Trim();
+        windows.Add(new QuotaWindow
+        {
+            Label      = label,
+            UsedPct    = 100 - left,
+            Unit       = "%",
+            ResetAt    = ParseResetUtc(resetRaw),
+            ResetLabel = resetRaw
+        });
     }
 
     /// <summary>
