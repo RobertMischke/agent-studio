@@ -135,6 +135,65 @@ describe('RunTimelineComponent (smoke)', () => {
     expect(text).toContain('Code review found the save button still wraps on mobile.');
     http.verify();
   });
+
+  it('shows the full prompt-history text even when the run also has captured context', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RunTimelineComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RunTimelineComponent);
+    fixture.componentRef.setInput('job', taskInfo());
+    fixture.componentRef.setInput('runs', [
+      runRecord(1, 'start', 'completed', null, 20),
+      { ...runRecord(2, 'continue', 'completed', 'Use the extension prompt.', 25), contextRef: 'logs/run-context/run-2.md' },
+    ]);
+    fixture.componentRef.setInput('promptHistory', [
+      {
+        index: 1,
+        fileName: 'prompt-1.md',
+        markdown: 'Use the extension prompt.\n\nAdd context and token snapshots.',
+        writtenAt: '2026-06-08T10:01:00Z',
+      },
+    ]);
+    fixture.componentRef.setInput('promptEntries', [
+      promptEntry(1, 1, 'start', 'prompt.md', 30, null),
+      {
+        ...promptEntry(2, 2, 'continue', 'prompt-1.md', 14, 180),
+        promptTokenSource: 'prompt-history',
+        contextRef: 'logs/run-context/run-2.md',
+        contextSnapshot: {
+          source: 'captured-context',
+          ref: 'logs/run-context/run-2.md',
+          at: null,
+          status: 'captured',
+          tokenEstimate: 180,
+          metrics: [],
+        },
+      },
+    ]);
+    fixture.detectChanges();
+
+    const runButton = fixture.nativeElement.querySelector('[data-testid="run-icon-2"]') as HTMLButtonElement;
+    runButton.click();
+    const http = TestBed.inject(HttpTestingController);
+    const commitsReq = http.expectOne(r =>
+      r.url.endsWith('/tasks/task-1/runs/2/commits') &&
+      r.params.get('watchPath') === 'C:\\watch');
+    commitsReq.flush({ commits: [] });
+    fixture.detectChanges();
+
+    const promptPre = fixture.nativeElement.querySelector('[data-testid="run-prompt-pre-2"]') as HTMLElement;
+    expect(promptPre.textContent).toContain('Use the extension prompt.');
+    expect(promptPre.textContent).toContain('Add context and token snapshots.');
+    expect(fixture.nativeElement.querySelector('[data-testid="run-context-pre-2"]')).toBeNull();
+    http.verify();
+  });
 });
 
 function taskInfo(): TaskInfo {

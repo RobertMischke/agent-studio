@@ -97,7 +97,16 @@
               }
 
               <div class="run-card__row run-card__row--context">
-                <span class="run-card__row-label">Passed prompt</span>
+                <span class="run-card__row-label">Prompt text</span>
+                @if (selectedPromptText(); as promptText) {
+                  <pre class="run-card__context-pre" [attr.data-testid]="'run-prompt-pre-' + r.index">{{ promptText }}</pre>
+                } @else {
+                  <span class="run-card__context-empty">Prompt text not captured for this run.</span>
+                }
+              </div>
+
+              <div class="run-card__row run-card__row--context">
+                <span class="run-card__row-label">Passed context</span>
                 @if (r.contextRef) {
                   <div class="run-card__context">
                     <button type="button"
@@ -119,8 +128,6 @@
                       }
                     }
                   </div>
-                } @else if (fallbackPromptText(r.index); as fallback) {
-                  <pre class="run-card__context-pre" [attr.data-testid]="'run-context-pre-' + r.index">{{ fallback }}</pre>
                 } @else {
                   <span class="run-card__context-empty">Not captured for this run.</span>
                 }

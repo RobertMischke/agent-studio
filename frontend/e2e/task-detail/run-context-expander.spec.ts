@@ -163,7 +163,14 @@ function makeDetail(state: string) {
     promptMarkdown: 'Test prompt.',
     statusMarkdown: '',
     log: [],
-    promptHistory: [],
+    promptHistory: [
+      {
+        index: 1,
+        fileName: 'prompt-1.md',
+        markdown: 'please continue\n\nCapture the prompt and context token snapshots.',
+        writtenAt: '2026-05-29T10:04:00Z',
+      },
+    ],
     contextUsage: null,
     reviewEvidence: [],
     summaryState: { status: 'none', startedAt: null, finishedAt: null, errorMessage: null },
@@ -414,6 +421,8 @@ test.describe('Run timeline: per-run passed context', () => {
     await expect(detail).toContainText('Context size');
     await expect(detail).toContainText('31 tokens');
     await expect(detail).toContainText('captured at run start');
+    await expect(page.getByTestId('run-prompt-pre-2')).toContainText('Capture the prompt and context token snapshots.');
+    await expect(page.getByTestId('run-context-pre-2')).toHaveCount(0);
 
     if (RESULTS_DIR) {
       await page.screenshot({ path: path.join(RESULTS_DIR, 'run-prompts-token-snapshots.png') });

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, output, si
 import type { CliType, TaskInfo, TaskPromptHistoryEntry } from '../../../../../models/task.model';
 import type { RunCommitInfo, RunPromptEntry, RunRecord } from '../../../../../features/run-timeline';
 import { TaskService } from '../../../../../services/task.service';
-import { cliTypeIcon, cliTypeLabel, formatTokens } from '../../../../../services/format.util';
+import { cliTypeIcon, cliTypeLabel, formatTime as formatTimeValue, formatTokens } from '../../../../../services/format.util';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 /**
@@ -60,6 +60,13 @@ export class RunTimelineComponent {
     const run = this.selectedRun();
     if (!run) return null;
     return this.promptItems().find(i => i.run.index === run.index)?.entry ?? null;
+  });
+
+  readonly selectedPromptText = computed<string | null>(() => {
+    const run = this.selectedRun();
+    const prompt = this.selectedPrompt();
+    if (!run || !prompt) return null;
+    return this.promptTextFor(prompt, run);
   });
 
   readonly statusSummary = computed(() => {
@@ -202,10 +209,19 @@ export class RunTimelineComponent {
     return metrics.slice(0, 2).map(m => `${m.label}: ${m.value}`).join(' | ');
   }
 
-  fallbackPromptText(runIndex: number): string | null {
-    if (runIndex === 1) return this.promptMarkdown();
-    const history = this.promptHistory().find(h => h.index === runIndex - 1);
-    return history?.markdown ?? null;
+  promptTextFor(entry: RunPromptEntry, run: RunRecord): string | null {
+    switch (entry.promptTokenSource) {
+      case 'task-prompt':
+        return this.cleanPromptText(this.promptMarkdown());
+      case 'prompt-history':
+        return this.cleanPromptText(this.resolvePromptHistoryText(entry, run));
+      case 'user-followup':
+        return this.cleanPromptText(run.userFollowup ?? entry.promptPreview);
+      case 'captured-context':
+        return this.cleanPromptText(this.contextByRun().get(run.index) ?? null);
+      default:
+        return this.cleanPromptText(this.resolvePromptHistoryText(entry, run) ?? (run.index === 1 ? this.promptMarkdown() : null));
+    }
   }
 
   cliIcon(cli: string | null): string {
@@ -269,6 +285,29 @@ export class RunTimelineComponent {
     };
   }
 
+  private fallbackPromptText(runIndex: number): string | null {
+    if (runIndex === 1) return this.promptMarkdown();
+    const history = this.promptHistory().find(h => h.index === runIndex - 1);
+    return history?.markdown ?? null;
+  }
+
+  private resolvePromptHistoryText(entry: RunPromptEntry, run: RunRecord): string | null {
+    const history = this.promptHistory();
+    if (entry.fileName) {
+      const byName = history.find(h => h.fileName === entry.fileName);
+      if (byName) return byName.markdown;
+    }
+    const byRunIndex = history.find(h => h.index === run.index - 1);
+    if (byRunIndex) return byRunIndex.markdown;
+    const byPromptIndex = history.find(h => h.index === entry.index - 1);
+    return byPromptIndex?.markdown ?? null;
+  }
+
+  private cleanPromptText(text: string | null | undefined): string | null {
+    const trimmed = text?.trim();
+    return trimmed ? trimmed : null;
+  }
+
   private estimateTokens(text: string): number {
     return Math.max(1, Math.ceil(text.length / 4));
   }
@@ -291,7 +330,7 @@ export class RunTimelineComponent {
   formatTime(iso: string): string {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return iso;
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return formatTimeValue(iso);
   }
 
   short(id: string): string {
