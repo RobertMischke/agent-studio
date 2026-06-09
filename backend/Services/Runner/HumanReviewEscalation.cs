@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Pipeline;
 using OrchestratorApi.Services.Tasks;
 
 namespace OrchestratorApi.Services.Runner;

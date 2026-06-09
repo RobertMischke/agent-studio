@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using OrchestratorApi.Services.Pipeline;
 using OrchestratorApi.Services.Runner;
 using Xunit;
 
