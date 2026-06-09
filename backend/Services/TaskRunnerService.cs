@@ -48,6 +48,7 @@ public class TaskRunnerService : BackgroundService
     private readonly AgentMessageBusBridge? _bus;
     private readonly OrchestratorApi.Services.TaskAccess.ITaskAccess _taskAccess;
     private readonly PickupLockFile? _pickupLock;
+    private readonly IntegrationLeaseService? _integrationLeases;
     private readonly TimelineLog? _timeline;
     private readonly OrchestratorApi.Services.Pipeline.PipelineExecutionLog? _pipelineLog;
     // Forwarded to each ProjectRunner. DI injects the registered singleton; the
@@ -105,6 +106,7 @@ public class TaskRunnerService : BackgroundService
         OrchestratorApi.Services.TaskAccess.ITaskAccess taskAccess,
         AgentMessageBusBridge? bus = null,
         PickupLockFile? pickupLock = null,
+        IntegrationLeaseService? integrationLeases = null,
         TimelineLog? timeline = null,
         OrchestratorApi.Services.Pipeline.PipelineExecutionLog? pipelineLog = null,
         HumanReviewEscalation? humanReviewEscalation = null,
@@ -138,6 +140,7 @@ public class TaskRunnerService : BackgroundService
         _taskAccess = taskAccess;
         _bus = bus;
         _pickupLock = pickupLock;
+        _integrationLeases = integrationLeases;
         _timeline = timeline;
         _pipelineLog = pipelineLog;
         _postAbortReview = postAbortReview;
@@ -242,6 +245,7 @@ public class TaskRunnerService : BackgroundService
                 role: Role,
                 pickupLock: _pickupLock,
                 pickupLockOwner: BuildPickupLockOwner(entry.Name),
+                integrationLeases: _integrationLeases,
                 timeline: _timeline,
                 pipelineLog: _pipelineLog,
                 humanReviewEscalation: _humanReviewEscalation,

@@ -175,6 +175,7 @@ public class ProjectRunner
     // belt-and-braces (single-process unit tests).
     private readonly PickupLockFile? _pickupLock;
     private readonly PickupLockOwner? _pickupLockOwner;
+    private readonly IntegrationLeaseService? _integrationLeases;
     private string? _activePickupLockFolder;
     // Deferred mode: when SetMode(manual|paused) arrives while a job is
     // active, store the requested mode here, leave _mode at its auto-* value,
@@ -350,6 +351,7 @@ public class ProjectRunner
         RunnerRole role = RunnerRole.Orchestrator,
         PickupLockFile? pickupLock = null,
         PickupLockOwner? pickupLockOwner = null,
+        IntegrationLeaseService? integrationLeases = null,
         OrchestratorApi.Services.Tasks.TimelineLog? timeline = null,
         OrchestratorApi.Services.Pipeline.PipelineExecutionLog? pipelineLog = null,
         HumanReviewEscalation? humanReviewEscalation = null,
@@ -388,6 +390,7 @@ public class ProjectRunner
         _role = role;
         _pickupLock = pickupLock;
         _pickupLockOwner = pickupLockOwner;
+        _integrationLeases = integrationLeases;
         _timeline = timeline;
         _pipelineLog = pipelineLog;
         _postAbortReview = postAbortReview;
@@ -897,18 +900,58 @@ public class ProjectRunner
                     run.JobId, run.Branch, commit.Sha ?? "<unknown>");
             var branchHeadAfterRun = _git.ReadHeadShaAt(run.WorktreePath!);
             var pushResult = await PushTaskBranchForPortabilityAsync(info, run, branchHeadAfterRun);
-            // 2) serialize integration into the shared work branch (merge-queue).
-            //    Do NOT tear down here: the worktree survives for resume/reissue.
-            _integrateLock.Wait();
+            // 2) serialize integration into the shared work branch. The local
+            // semaphore keeps same-process slots orderly; the Task Server
+            // integration lease is the cross-runner / cross-machine fence.
+            // Do NOT tear down here: the worktree survives for resume/reissue.
+            await _integrateLock.WaitAsync();
+            IntegrationLeaseGrant? integrationLease = null;
+            CancellationTokenSource? integrationHeartbeatCts = null;
+            Task? integrationHeartbeat = null;
             try
             {
                 var integrateStarted = DateTime.UtcNow;
-                var integrationBaseSha = _git.ReadHeadShaAt(Entry.RootPath);
                 RecordIntegrationStep(info, PipelineStepStatus.Running, "running",
-                    pushResult.Success
-                        ? $"Integrating `{run.Branch}` into `{workBranch}` after pushing it to `origin`."
-                        : $"Integrating `{run.Branch}` into `{workBranch}` locally; branch push to `origin` is still pending.",
+                    $"Waiting for the integration queue before folding `{run.Branch}` into `{workBranch}`.",
                     integrateStarted);
+
+                if (string.Equals(strategy, IntegrationStrategies.DirectMerge, StringComparison.OrdinalIgnoreCase))
+                {
+                    integrationLease = await AcquireIntegrationLeaseAsync(info, run, workBranch);
+                    if (integrationLease is not null)
+                    {
+                        integrationHeartbeatCts = new CancellationTokenSource();
+                        integrationHeartbeat = StartIntegrationLeaseHeartbeat(integrationLease, integrationHeartbeatCts.Token);
+                    }
+                }
+
+                var integrationBaseSha = _git.ReadHeadShaAt(Entry.RootPath);
+                var leaseSuffix = integrationLease is null
+                    ? ""
+                    : $" Integration lease token `{integrationLease.FencingToken}` is current.";
+                RecordIntegrationStep(info, PipelineStepStatus.Running, "running",
+                    (pushResult.Success
+                        ? $"Integrating `{run.Branch}` into `{workBranch}` after pushing it to `origin`."
+                        : $"Integrating `{run.Branch}` into `{workBranch}` locally; branch push to `origin` is still pending.")
+                    + leaseSuffix,
+                    integrateStarted);
+
+                if (integrationLease is not null && !IntegrationLeaseStillCurrent(integrationLease))
+                {
+                    var lost = IntegrationLeaseLostResult(integrationLease);
+                    RecordIntegrationStep(info, PipelineStepStatus.Failed, "lease-lost",
+                        IntegrationSummary("Integration lease was lost before merge.", run, workBranch, lost),
+                        integrateStarted);
+                    AppendWorktreeIntegrationIssue(
+                        info,
+                        OrchestratorMessageKind.IntegrationError,
+                        "Worktree branch integration failed because the integration lease was lost.",
+                        run,
+                        workBranch,
+                        lost);
+                    return BuildBranchCommitRange(run, branchHeadAfterRun);
+                }
+
                 var res = Worktree.Integrate(
                     Entry.RootPath,
                     run.WorktreePath!,
@@ -936,7 +979,7 @@ public class ProjectRunner
                         IntegrationSummary("Merge conflict detected.", run, workBranch, res),
                         integrateStarted);
 
-                    var resolution = await RunConflictResolutionStepAsync(info, run, workBranch, res);
+                    var resolution = await RunConflictResolutionStepAsync(info, run, workBranch, res, integrationLease);
                     if (resolution.Outcome == IntegrationOutcome.Merged)
                     {
                         _logger.LogInformation("[taskboard] parallel run {Job} conflict resolved and integrated into {Branch} at {Sha}",
@@ -951,8 +994,12 @@ public class ProjectRunner
                     {
                         AppendWorktreeIntegrationIssue(
                             info,
-                            OrchestratorMessageKind.IntegrationConflict,
-                            "Integration blocked: conflict-resolution could not produce a mergeable task branch.",
+                            resolution.Outcome == IntegrationOutcome.Error
+                                ? OrchestratorMessageKind.IntegrationError
+                                : OrchestratorMessageKind.IntegrationConflict,
+                            resolution.Outcome == IntegrationOutcome.Error
+                                ? "Integration blocked: conflict-resolution failed before a fenced merge could complete."
+                                : "Integration blocked: conflict-resolution could not produce a mergeable task branch.",
                             run,
                             workBranch,
                             resolution);
@@ -976,7 +1023,23 @@ public class ProjectRunner
                     return BuildBranchCommitRange(run, branchHeadAfterRun);
                 }
             }
-            finally { _integrateLock.Release(); }
+            finally
+            {
+                if (integrationHeartbeatCts != null)
+                {
+                    integrationHeartbeatCts.Cancel();
+                    if (integrationHeartbeat != null)
+                    {
+                        try { await integrationHeartbeat; }
+                        catch (OperationCanceledException) { }
+                    }
+                    integrationHeartbeatCts.Dispose();
+                }
+
+                if (integrationLease != null)
+                    ReleaseIntegrationLease(info, integrationLease);
+                _integrateLock.Release();
+            }
         }
         catch (Exception ex)
         {
@@ -991,6 +1054,148 @@ public class ProjectRunner
                 workBranch,
                 new IntegrationResult(IntegrationOutcome.Error, null, ex.Message));
             return null;
+        }
+    }
+
+    private async Task<IntegrationLeaseGrant?> AcquireIntegrationLeaseAsync(TaskInfo info, ActiveRun run, string workBranch)
+    {
+        if (_integrationLeases is null)
+            return null;
+
+        var request = BuildIntegrationLeaseAcquireRequest(run, workBranch);
+        RecordIntegrationLeaseEvent(info, "waiting",
+            $"Waiting for integration lease on `{ProjectName}/{workBranch}` for `{run.Branch}`.");
+        var lease = await _integrationLeases.WaitAcquireAsync(
+            request,
+            retryDelay: TimeSpan.FromSeconds(1),
+            CancellationToken.None);
+        RecordIntegrationLeaseEvent(info, "acquired",
+            $"Acquired integration lease `{lease.LeaseId}` token `{lease.FencingToken}` for `{ProjectName}/{workBranch}`.",
+            lease);
+        return lease;
+    }
+
+    private IntegrationLeaseAcquireRequest BuildIntegrationLeaseAcquireRequest(ActiveRun run, string workBranch)
+    {
+        var host = string.IsNullOrWhiteSpace(_pickupLockOwner?.Hostname)
+            ? System.Environment.MachineName
+            : _pickupLockOwner!.Hostname;
+        var pid = _pickupLockOwner?.Pid > 0 ? _pickupLockOwner.Pid : System.Environment.ProcessId;
+        var backend = string.IsNullOrWhiteSpace(_pickupLockOwner?.BackendName)
+            ? "backend"
+            : _pickupLockOwner!.BackendName;
+        var runnerId = $"{backend}@{host}:{pid}/{ProjectName}";
+        return new IntegrationLeaseAcquireRequest(
+            ProjectName,
+            workBranch,
+            run.JobId,
+            runnerId,
+            host,
+            pid,
+            backend,
+            RequestedTtlSeconds: (int)IntegrationLeaseService.DefaultTtl.TotalSeconds);
+    }
+
+    private Task StartIntegrationLeaseHeartbeat(IntegrationLeaseGrant lease, CancellationToken ct)
+    {
+        return Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMinutes(2));
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                if (_integrationLeases is null) return;
+                var renewed = _integrationLeases.Renew(new IntegrationLeaseHeartbeatRequest(
+                    lease.ProjectName,
+                    lease.IntegrationBranch,
+                    lease.LeaseId,
+                    lease.FencingToken,
+                    lease.RunnerId,
+                    RequestedTtlSeconds: (int)IntegrationLeaseService.DefaultTtl.TotalSeconds));
+                if (!renewed.Granted)
+                {
+                    _logger.LogWarning(
+                        "[integration-lease] heartbeat failed for {Project}/{Branch} lease={LeaseId} token={FencingToken}: {Outcome} {Message}",
+                        lease.ProjectName,
+                        lease.IntegrationBranch,
+                        lease.LeaseId,
+                        lease.FencingToken,
+                        renewed.Outcome,
+                        renewed.Message ?? "<no message>");
+                    return;
+                }
+            }
+        }, CancellationToken.None);
+    }
+
+    private bool IntegrationLeaseStillCurrent(IntegrationLeaseGrant lease)
+        => _integrationLeases?.IsCurrent(lease) ?? true;
+
+    private IntegrationResult IntegrationLeaseLostResult(IntegrationLeaseGrant lease)
+        => new(
+            IntegrationOutcome.Error,
+            null,
+            $"Integration lease `{lease.LeaseId}` token `{lease.FencingToken}` for `{lease.ProjectName}/{lease.IntegrationBranch}` is no longer current.");
+
+    private void ReleaseIntegrationLease(TaskInfo info, IntegrationLeaseGrant lease)
+    {
+        if (_integrationLeases is null) return;
+
+        var released = _integrationLeases.Release(new IntegrationLeaseReleaseRequest(
+            lease.ProjectName,
+            lease.IntegrationBranch,
+            lease.LeaseId,
+            lease.FencingToken,
+            lease.RunnerId));
+        RecordIntegrationLeaseEvent(info, released.Outcome.ToLowerInvariant(),
+            $"Released integration lease `{lease.LeaseId}` token `{lease.FencingToken}` for `{lease.ProjectName}/{lease.IntegrationBranch}`: {released.Outcome}.",
+            lease);
+        if (!string.Equals(released.Outcome, "Released", StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "[integration-lease] release returned {Outcome} for {Project}/{Branch} lease={LeaseId} token={FencingToken}: {Message}",
+                released.Outcome,
+                lease.ProjectName,
+                lease.IntegrationBranch,
+                lease.LeaseId,
+                lease.FencingToken,
+                released.Message ?? "<no message>");
+        }
+    }
+
+    private void RecordIntegrationLeaseEvent(
+        TaskInfo info,
+        string outcome,
+        string summary,
+        IntegrationLeaseGrant? lease = null)
+    {
+        if (_timeline == null || string.IsNullOrWhiteSpace(info.FolderPath)) return;
+        try
+        {
+            var details = new Dictionary<string, string>
+            {
+                ["project"] = ProjectName,
+                ["outcome"] = outcome,
+            };
+            if (lease is not null)
+            {
+                details["integrationBranch"] = lease.IntegrationBranch;
+                details["leaseId"] = lease.LeaseId;
+                details["fencingToken"] = lease.FencingToken.ToString(CultureInfo.InvariantCulture);
+                details["runnerId"] = lease.RunnerId;
+            }
+
+            _timeline.Append(info.FolderPath, new TimelineEvent
+            {
+                Ts = DateTime.UtcNow,
+                Kind = TimelineEventKinds.IntegrationLease,
+                Actor = TimelineActors.System,
+                Summary = summary,
+                Details = details,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to record integration lease timeline event for {JobId}", info.Id);
         }
     }
 
@@ -1108,7 +1313,8 @@ public class ProjectRunner
         TaskInfo info,
         ActiveRun run,
         string workBranch,
-        IntegrationResult conflict)
+        IntegrationResult conflict,
+        IntegrationLeaseGrant? integrationLease = null)
     {
         var started = DateTime.UtcNow;
         RecordConflictResolutionStep(info, PipelineStepStatus.Running, "running",
@@ -1176,6 +1382,16 @@ public class ProjectRunner
                 RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
                     IntegrationSummary(timedOut.Error!, run, workBranch, timedOut), started, model: final.Model ?? info.Model);
                 return timedOut;
+            }
+
+            if (integrationLease is not null && !IntegrationLeaseStillCurrent(integrationLease))
+            {
+                var lost = IntegrationLeaseLostResult(integrationLease);
+                RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "lease-lost",
+                    IntegrationSummary("Integration lease was lost during conflict-resolution.", run, workBranch, lost),
+                    started,
+                    model: final.Model ?? info.Model);
+                return lost;
             }
 
             var commit = _git.CrashRecoveryCommit(ProjectName, run.WorktreePath!,

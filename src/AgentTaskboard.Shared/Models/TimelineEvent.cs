@@ -87,6 +87,12 @@ public static class TimelineEventKinds
     /// picked. At MaxParallelism == 1 this is the single sequential slot.
     /// </summary>
     public const string RunnerSlotAdmission = "runner_slot_admission";
+    /// <summary>
+    /// ADR-0052 multi-system follow-up: the Task Server granted, rejected, or
+    /// released the fenced integration lease that serializes direct merges into
+    /// a project's integration branch across runner machines.
+    /// </summary>
+    public const string IntegrationLease = "integration_lease";
     /// <summary>The CLI invocation ended; <see cref="TimelineEvent.Summary"/> carries the outcome.</summary>
     public const string AgentRunFinished = "agent_run_finished";
     /// <summary>A pipeline pre-step started (ADR-0045).</summary>
