@@ -1,7 +1,6 @@
 import { expect, Page, test } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
-import { listJobs } from '../helpers/jobs';
 import { setTheme } from '../helpers/theme';
 
 /**
@@ -28,6 +27,10 @@ const RESULTS_DIR = process.env.JOB_RESULTS_DIR?.trim()
   || path.resolve(__dirname, '../../test-results/verbose-debug-overlay');
 fs.mkdirSync(RESULTS_DIR, { recursive: true });
 const JOB_RESULTS_DIR = process.env.JOB_RESULTS_DIR?.trim();
+const TARGET = {
+  id: 'verbose-debug-fixture',
+  watchPath: 'C:/fixtures/verbose-debug',
+};
 
 interface OutLine { timestamp: string; stream: string; text: string; }
 
@@ -107,6 +110,27 @@ function buildJobDetail(jobId: string, watchPath: string) {
     contextUsage: null,
     reviewEvidence: [],
     summaryState: { status: 'none', startedAt: null, finishedAt: null, errorMessage: null }
+  };
+}
+
+function buildJobSummary(jobId: string, watchPath: string) {
+  return buildJobDetail(jobId, watchPath).info;
+}
+
+function buildGroupedTasks(jobId: string, watchPath: string) {
+  const job = buildJobSummary(jobId, watchPath);
+  return {
+    backlog: [],
+    preparation: [],
+    orchestratorPrep: [],
+    ready: [],
+    progress: [],
+    failedPickup: [],
+    autoReview: [job],
+    humanReview: [],
+    escalated: [],
+    completed: [],
+    archive: [],
   };
 }
 
@@ -203,19 +227,32 @@ function recordReviewEvidence(): void {
   );
 }
 
-async function pickAnyJob(): Promise<{ id: string; watchPath: string } | null> {
-  const jobs = await listJobs();
-  if (jobs.length === 0) return null;
-  return { id: jobs[0].id, watchPath: jobs[0].watchPath };
-}
-
-async function enableNextGenChat(page: Page): Promise<void> {
+async function enableNextGenChat(
+  page: Page,
+  target: { id: string; watchPath: string },
+): Promise<void> {
+  const taskKey = `${target.watchPath}::${target.id}`;
   await page.addInitScript(() => {
     try {
       localStorage.setItem('atp.flag.nextGenChat', '1');
-      localStorage.removeItem('atp.studio.tabs.v1');
+      localStorage.setItem('atp.studio.theme', 'dark');
+      document.documentElement.dataset['studioTheme'] = 'dark';
+      localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: true, git: false }));
+      localStorage.setItem('taskboard.activeInspectorTab', '"activity"');
     } catch { /* ignore */ }
   });
+  await page.addInitScript((key) => {
+    try {
+      localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+        v: 1,
+        tabs: [
+          { kind: 'board', projectName: '__all__' },
+          { kind: 'task', taskKey: key },
+        ],
+        activeKey: `task:${key}`,
+      }));
+    } catch { /* ignore */ }
+  }, taskKey);
 }
 
 async function openVerboseDebugFromActivityMenu(page: Page) {
@@ -239,9 +276,71 @@ async function installMocks(
   target: { id: string; watchPath: string }
 ): Promise<void> {
   const detailBody = JSON.stringify(buildJobDetail(target.id, target.watchPath));
+  const summaryBody = JSON.stringify([buildJobSummary(target.id, target.watchPath)]);
+  const groupedBody = JSON.stringify(buildGroupedTasks(target.id, target.watchPath));
   const outputBody = JSON.stringify(buildOutputBuffer());
   const runsBody = JSON.stringify(buildRunTimeline(target.id));
   const screenshotsBody = JSON.stringify(buildScreenshots(target.id));
+
+  await page.route('**/api/**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.route('**/api/tasks', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: summaryBody });
+  });
+  await page.route('**/api/tasks/grouped**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: groupedBody });
+  });
+  await page.route('**/api/watch-paths**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          name: 'fixture',
+          path: target.watchPath,
+          rootPath: target.watchPath,
+          repositoryPath: target.watchPath,
+        },
+      ]),
+    });
+  });
+  await page.route('**/api/environment**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        isDev: false,
+        devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false },
+      }),
+    });
+  });
+  await page.route('**/api/runner/status**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ projects: {}, autoMode: 'manual', activeProjects: [] }),
+    });
+  });
+  await page.route('**/api/runner/global**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ mode: 'paused', activeProjects: [] }),
+    });
+  });
+  await page.route('**/api/agent-rules**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.route('**/api/clients', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.route('**/api/cli/usage**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) });
+  });
+  await page.route('**/api/cli/quota**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) });
+  });
 
   const escId = encodeURIComponent(target.id);
   const taskEndpoint = (suffix = '') => new RegExp(`/api/(?:jobs|tasks)/${escId}${suffix}(?:\\?.*)?$`);
@@ -270,16 +369,11 @@ async function installMocks(
 
 test.describe('Verbose Debug overlay - task workbench', () => {
   test('opens from the protocol pane, exposes filters, routes raw trace, supports light/dark', async ({ page }) => {
-    const target = await pickAnyJob();
-    if (!target) {
-      test.skip(true, 'No jobs on the board to attach mocks to.');
-      return;
-    }
-    await enableNextGenChat(page);
+    const target = TARGET;
+    await enableNextGenChat(page, target);
     await installMocks(page, target);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
-    await setTheme(page, 'dark');
 
     const overlay = await openVerboseDebugFromActivityMenu(page);
     await expect(page.getByTestId('verbose-debug-theme-toggle')).toHaveCount(0);
@@ -365,12 +459,8 @@ test.describe('Verbose Debug overlay - task workbench', () => {
   });
 
   test('mobile collapse keeps the overlay scrollable and tabs reachable', async ({ page }) => {
-    const target = await pickAnyJob();
-    if (!target) {
-      test.skip(true, 'No jobs on the board to attach mocks to.');
-      return;
-    }
-    await enableNextGenChat(page);
+    const target = TARGET;
+    await enableNextGenChat(page, target);
     await installMocks(page, target);
     await page.setViewportSize({ width: 412, height: 880 });
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
@@ -396,12 +486,8 @@ test.describe('Verbose Debug overlay - task workbench', () => {
 
 test.describe('Verbose Debug overlay - project side sheet', () => {
   test('opens from the project side sheet bug button when a task is active', async ({ page }) => {
-    const target = await pickAnyJob();
-    if (!target) {
-      test.skip(true, 'No jobs on the board to attach mocks to.');
-      return;
-    }
-    await enableNextGenChat(page);
+    const target = TARGET;
+    await enableNextGenChat(page, target);
     await installMocks(page, target);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
