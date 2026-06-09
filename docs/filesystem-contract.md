@@ -45,6 +45,16 @@ The filesystem layout is the storage contract, not the normal operating interfac
 
 Direct folder edits are reserved for backend implementation, migrations, recovery, and tests that deliberately exercise this contract. Normal queue management goes through the API so validation, owner identity, SignalR updates, and the Task Access layer remain authoritative.
 
+### Project docs manifests
+
+A watched project's own `docs/` tree carries one app-owned manifest:
+`docs/.wiki-organization.json`. It is a git-tracked presentation layer (theme
+groups, hierarchy, ordering, doc-title overrides) over the immutable `docs/*.md`
+files; the docs themselves never move, so per-file git history stays intact. It
+is read/written only through `GET`/`PUT /api/projects/{projectName}/wiki/organization`.
+Schema and the companion `/wiki/history/{relPath}` provenance endpoint are in
+[wiki-organization.md](wiki-organization.md).
+
 ## Job Folder Layout
 
 Each visible state is a folder, and each job is a subfolder inside one state:

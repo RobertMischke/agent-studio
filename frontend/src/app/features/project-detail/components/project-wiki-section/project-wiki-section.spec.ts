@@ -43,6 +43,24 @@ async function setup(org: WikiOrganization = EMPTY_ORG) {
 
 const el = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
 
+/** Minimal DataTransfer backed by a Map so getData/setData round-trip in jsdom. */
+function makeDataTransfer(): DataTransfer {
+  const store = new Map<string, string>();
+  return {
+    dropEffect: 'none',
+    effectAllowed: 'all',
+    setData(type: string, val: string) { store.set(type, val); },
+    getData(type: string) { return store.get(type) ?? ''; },
+  } as unknown as DataTransfer;
+}
+
+/** Dispatches a drag event carrying a shared DataTransfer (jsdom has no DragEvent). */
+function fireDrag(target: Element, type: string, dt: DataTransfer): void {
+  const ev = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(ev, 'dataTransfer', { value: dt, configurable: true });
+  target.dispatchEvent(ev);
+}
+
 describe('ProjectWikiSectionComponent', () => {
   it('renders every doc under the Ungrouped bucket when no manifest exists', async () => {
     const { fixture, http } = await setup();
@@ -127,6 +145,114 @@ describe('ProjectWikiSectionComponent', () => {
 
     // A rename input opens for the freshly created group.
     expect(el(fixture).querySelector('.pwiki__rename-input')).toBeTruthy();
+    http.verify();
+  });
+
+  it('renders a nested group hierarchy with increasing indentation per depth', async () => {
+    const { fixture, http } = await setup({
+      version: 1,
+      nodes: [
+        { id: 'g1', type: 'group', title: 'Architecture', relPath: null, parentId: null, order: 0 },
+        { id: 'g2', type: 'group', title: 'Decisions', relPath: null, parentId: 'g1', order: 0 },
+        { id: 'doc:concepts/overview.md', type: 'doc', title: null, relPath: 'concepts/overview.md', parentId: 'g2', order: 0 },
+      ],
+    });
+
+    const root = el(fixture);
+    const pad = (id: string): number => {
+      const row = root.querySelector<HTMLElement>(`[data-testid="project-wiki-node-${id}"]`);
+      expect(row, `row ${id} should render`).toBeTruthy();
+      return parseFloat(row!.style.paddingLeft || '0');
+    };
+
+    // Tree is g1 > g2 > doc; each level indents deeper than its parent, proving
+    // the nesting is actually rendered (not a flattened list).
+    const g1Pad = pad('g1');
+    const g2Pad = pad('g2');
+    const docPad = pad('doc:concepts/overview.md');
+    expect(g2Pad).toBeGreaterThan(g1Pad);
+    expect(docPad).toBeGreaterThan(g2Pad);
+
+    // The nested group label is visible (parent expanded by the seed effect).
+    expect(root.querySelector('[data-testid="project-wiki-node-g2"]')!.textContent).toContain('Decisions');
+    http.verify();
+  });
+
+  it('opens a TEXT-ONLY right-click context menu (no icons) for docs and groups', async () => {
+    const { fixture, http } = await setup({
+      version: 1,
+      nodes: [
+        { id: 'g1', type: 'group', title: 'Concepts', relPath: null, parentId: null, order: 0 },
+      ],
+    });
+    const root = el(fixture);
+
+    const openCtx = (id: string) => {
+      const row = root.querySelector<HTMLElement>(`[data-testid="project-wiki-node-${id}"]`);
+      expect(row, `row ${id}`).toBeTruthy();
+      row!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+      fixture.detectChanges();
+    };
+
+    const assertTextOnly = (panel: HTMLElement) => {
+      // The project-wide menu convention: no decorative leading icons.
+      expect(panel.querySelectorAll('img')).toHaveLength(0);
+      expect(panel.querySelectorAll('svg')).toHaveLength(0);
+      expect(panel.querySelectorAll('.app-menu__icon')).toHaveLength(0);
+    };
+
+    // The menu renders into a document-level overlay portal, so query globally.
+    // Doc context menu: Rename + View history rows, text-only.
+    openCtx('doc:README.md');
+    let panel = document.querySelector<HTMLElement>('[data-testid="wiki-ctx-panel"]');
+    expect(panel, 'doc context menu panel').toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]')!.textContent).toContain('Rename');
+    expect(document.querySelector('[data-testid="wiki-ctx-item-history"]')).toBeTruthy();
+    assertTextOnly(panel!);
+
+    fixture.componentInstance.closeMenu();
+    fixture.detectChanges();
+
+    // Group context menu: Rename + New subgroup + Delete group, also text-only.
+    openCtx('g1');
+    panel = document.querySelector<HTMLElement>('[data-testid="wiki-ctx-panel"]');
+    expect(panel, 'group context menu panel').toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-subgroup"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-delete"]')!.textContent).toContain('Delete');
+    assertTextOnly(panel!);
+    http.verify();
+  });
+
+  it('drag-drops a doc onto a group and persists the new parent in the manifest', async () => {
+    const { fixture, http } = await setup({
+      version: 1,
+      nodes: [
+        { id: 'g1', type: 'group', title: 'Concepts', relPath: null, parentId: null, order: 0 },
+      ],
+    });
+    const root = el(fixture);
+
+    // README starts in the Ungrouped bucket; drag it onto the real group g1.
+    const docRow = root.querySelector<HTMLElement>('[data-testid="project-wiki-node-doc:README.md"]');
+    const groupRow = root.querySelector<HTMLElement>('[data-testid="project-wiki-node-g1"]');
+    expect(docRow).toBeTruthy();
+    expect(groupRow).toBeTruthy();
+
+    const dt = makeDataTransfer();
+    fireDrag(docRow!, 'dragstart', dt);
+    fireDrag(groupRow!, 'dragover', dt);
+    fireDrag(groupRow!, 'drop', dt);
+    fixture.detectChanges();
+
+    const put = http.expectOne(req =>
+      req.method === 'PUT' && req.url === '/api/projects/Demo/wiki/organization');
+    const body = put.request.body as WikiOrganization;
+    const moved = body.nodes.find(n => n.type === 'doc' && n.relPath === 'README.md');
+    expect(moved, 'README should be pinned into the manifest').toBeTruthy();
+    expect(moved!.parentId).toBe('g1');
+    put.flush(body);
+    fixture.detectChanges();
     http.verify();
   });
 });

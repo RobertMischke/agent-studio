@@ -38,7 +38,12 @@ coverage.
   Wiki / Docs, and "Agent Docs" - the AGENTS.md-style instructions agents read
   on their own, key `steering`). "Runtime Prompts" (the `prompts/runtime/*.md`
   CLI-behaviour prompts) is a separate top-level point, not a child of that
-  container; keep the two distinct.
+  container; keep the two distinct. The Wiki / Docs rail
+  (`project-detail/components/project-wiki-section/`) is a user-organisable tree
+  (theme groups, nesting, drag-drop, text-only rename menu) plus a per-doc
+  History panel (model / when / why + git log); its endpoints and the
+  `docs/.wiki-organization.json` manifest are documented in
+  [docs/wiki-organization.md](wiki-organization.md).
 - `frontend/src/app/services/task.service.ts`: task API integration, optimistic
   lane moves, reorder, and rollback.
 - `frontend/src/app/services/cli-catalog.store.ts`: boot-hydrated CLI model

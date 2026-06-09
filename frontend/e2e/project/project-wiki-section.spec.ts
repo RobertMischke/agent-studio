@@ -52,7 +52,7 @@ test.describe('Project detail - Wiki / Docs section', () => {
     // The tree renders with at least one document button.
     const tree = page.getByTestId('project-wiki-tree');
     await expect(tree).toBeVisible();
-    const firstFile = tree.locator('button.pwiki__file-btn').first();
+    const firstFile = tree.locator('[data-testid^="project-wiki-file-"]').first();
     await expect(firstFile).toBeVisible({ timeout: 10_000 });
 
     // Count badge reflects a non-empty tree.
@@ -82,18 +82,18 @@ test.describe('Project detail - Wiki / Docs section', () => {
     await expect(page.getByTestId('project-wiki-section')).toBeVisible({ timeout: 10_000 });
 
     const tree = page.getByTestId('project-wiki-tree');
-    const before = await tree.locator('button.pwiki__file-btn').count();
+    const before = await tree.locator('[data-testid^="project-wiki-file-"]').count();
     expect(before).toBeGreaterThan(0);
 
     // A needle that cannot match any path collapses the tree to the
     // no-match state without crashing.
     await page.getByTestId('project-wiki-filter').fill('zzz-no-such-doc-zzz');
     await expect(page.getByTestId('project-wiki-no-match')).toBeVisible({ timeout: 5_000 });
-    await expect(tree.locator('button.pwiki__file-btn')).toHaveCount(0);
+    await expect(tree.locator('[data-testid^="project-wiki-file-"]')).toHaveCount(0);
 
     // Clearing the filter restores the full tree.
     await page.getByTestId('project-wiki-filter').fill('');
-    await expect(tree.locator('button.pwiki__file-btn').first()).toBeVisible({ timeout: 5_000 });
+    await expect(tree.locator('[data-testid^="project-wiki-file-"]').first()).toBeVisible({ timeout: 5_000 });
   });
 
   test('Unknown project surfaces the backend 404 without crashing', async ({ page }) => {

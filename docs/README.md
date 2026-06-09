@@ -56,6 +56,7 @@ The root agent navigation card lives in [AGENTS.md](../AGENTS.md). Domain maps b
 | [skills-architecture.md](skills-architecture.md) | Portable-skills doctrine: central library plus per-target lookup contract. |
 | [supported-clis.md](supported-clis.md) | Cross-CLI invocation contract: what each CLI must satisfy (session model, output format, resume flag, quota probe). |
 | [wiki/README.md](wiki/README.md) | Project wiki conventions and the common-problems library. Search this when a familiar runtime, CLI, permission, filesystem, runner, or state-machine failure appears. |
+| [wiki-organization.md](wiki-organization.md) | Project Wiki / Docs rail: hierarchy + user-created theme groups + drag-drop, the `/wiki/organization` and `/wiki/history/{relPath}` endpoints, and the `docs/.wiki-organization.json` manifest schema. |
 
 ## CLI integration (per-CLI deep refs)
 
