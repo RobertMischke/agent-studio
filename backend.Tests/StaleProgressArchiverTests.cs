@@ -127,6 +127,57 @@ public sealed class StaleProgressArchiverTests : IDisposable
     }
 
     [Fact]
+    public async Task Sweep_RealZombie_TaskJsonMtimeBumpedByMetadataEdit_IsStillRequeued()
+    {
+        // Acceptance regression (bug-3-progress-zombies): a real interrupted run
+        // sits in 3-progress past the resume window. A bulk metadata edit (the
+        // live trigger was "switch every task to Opus 4.8") rewrites task.json
+        // and bumps its FILE mtime to "now". The old activity signature folded
+        // that mtime in, so the sweep reported the folder fresh -> 0 actionable
+        // -> the zombie stayed stranded for hours. Liveness is now run-bound (log
+        // mtimes + the stable enteredLaneAt value), so bumping task.json's mtime
+        // must NOT rescue a real zombie.
+        const string slug = "metadata-edited-zombie";
+        WriteJobWithEnteredLaneAt(TaskStates.Progress, slug, DateTime.UtcNow - TimeSpan.FromHours(3));
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, slug);
+        WriteCliLog(folder, "agent ran, then the run was interrupted with no sentinel");
+
+        // The run died ~3h ago: its only run-produced log is stale.
+        SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
+        // task.json keeps its stale enteredLaneAt VALUE, but the metadata edit
+        // bumps its file mtime to "now" - the exact shape that defeated the sweep.
+        File.SetLastWriteTimeUtc(Path.Combine(folder, "task.json"), DateTime.UtcNow);
+
+        var (archiver, _) = Build();
+        var decisions = await archiver.SweepAsync();
+
+        Assert.False(Directory.Exists(folder),
+            "a metadata-edit mtime bump must not keep a real zombie in 3-progress");
+        var d = Assert.Single(decisions);
+        Assert.Equal(StaleProgressDecisionKinds.RequeuedToReady, d.Kind);
+        Assert.Equal(TaskStates.Ready, d.TargetState);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, slug)),
+            "interrupted task must return to 2-ready under its original slug");
+    }
+
+    [Fact]
+    public async Task Sweep_FreshEnteredLaneNoLogsYet_IsLeftAlone()
+    {
+        // A folder that only just entered 3-progress (e.g. a parallel pickup
+        // whose run has not streamed its first log line yet) has no logs/ files.
+        // The enteredLaneAt value floors the activity signal so the sweep does
+        // not prematurely requeue a run that is starting up.
+        WriteJobWithEnteredLaneAt(TaskStates.Progress, "just-entered", DateTime.UtcNow);
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "just-entered");
+
+        var (archiver, _) = Build();
+        var decisions = await archiver.SweepAsync();
+
+        Assert.True(Directory.Exists(folder), "a freshly-entered folder must not be swept before its first log line");
+        Assert.Equal(StaleProgressDecisionKinds.Fresh, Assert.Single(decisions).Kind);
+    }
+
+    [Fact]
     public async Task HostedService_RunOnce_RequeuesStaleProgressFolderWithoutRestart()
     {
         WriteJob(TaskStates.Progress, "runtime-zombie");
@@ -444,6 +495,15 @@ public sealed class StaleProgressArchiverTests : IDisposable
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\"}}");
+    }
+
+    private void WriteJobWithEnteredLaneAt(string state, string slug, DateTime enteredLaneAt)
+    {
+        var dir = Path.Combine(_watchPath, state, slug);
+        Directory.CreateDirectory(dir);
+        var stamp = enteredLaneAt.ToUniversalTime().ToString("o", System.Globalization.CultureInfo.InvariantCulture);
+        File.WriteAllText(Path.Combine(dir, "task.json"),
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\",\"enteredLaneAt\":\"{stamp}\"}}");
     }
 
     private static void WriteCliLog(string folder, string body)

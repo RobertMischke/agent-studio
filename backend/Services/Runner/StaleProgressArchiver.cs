@@ -25,13 +25,20 @@ namespace OrchestratorApi.Services.Runner;
 ///
 /// Decision shape per folder:
 /// <list type="bullet">
-///   <item>Latest activity = max mtime across <c>task.json</c> and every file
+///   <item>Latest activity = max over (a) the mtime of every run-produced file
 ///   under <c>logs/</c> (<c>cli-output.log</c>, <c>tool-calls.jsonl</c>,
-///   <c>session-events.jsonl</c>, future log types). Reading any single file
-///   as the liveness signal misclassifies a session that is currently emitting
-///   only tool-use events into <c>tool-calls.jsonl</c> while <c>cli-output.log</c>
-///   stays quiet. Folders with no files at all are treated as
-///   <c>epoch 0</c>.</item>
+///   <c>session-events.jsonl</c>, future log types) and (b) the
+///   <c>enteredLaneAt</c> value read from <c>task.json</c>'s <em>content</em>.
+///   <c>task.json</c>'s file mtime is deliberately excluded: metadata edits the
+///   run never makes - a bulk model switch, a tag change, the scanner stamping
+///   <c>ownerClientId</c> - rewrite the file and bump its mtime to "now", which
+///   would mask a genuine zombie whose run died hours ago. The run-produced log
+///   mtimes and the stable <c>enteredLaneAt</c> stamp (set on lane entry, never
+///   touched by a metadata edit) are the non-fragile, run-bound signals.
+///   Reading any single log file as the liveness signal misclassifies a session
+///   that is currently emitting only tool-use events into <c>tool-calls.jsonl</c>
+///   while <c>cli-output.log</c> stays quiet. Folders with no files at all are
+///   treated as <c>epoch 0</c>.</item>
 ///   <item>If younger than <c>Supervisor:StuckResumeWindowMinutes</c> (default
 ///   60), the progress-first pickup will resume it and the sweep leaves it
 ///   alone. Setting the window to <c>0</c> turns the sweep off.</item>
@@ -395,16 +402,28 @@ public sealed class StaleProgressArchiver
 
     private static (DateTime LastActivity, bool IsEmpty) MeasureFolder(string jobFolder)
     {
-        // Activity signature is the union of every file the runner may append
-        // to during a live session: task.json, logs/cli-output.log,
-        // logs/tool-calls.jsonl, logs/session-events.jsonl, plus any future
-        // log file the runner adds. Reading only cli-output.log misses
-        // sessions that emit primarily tool-use events into tool-calls.jsonl
-        // and stays quiet on stdout for tens of minutes; that
-        // misclassification let actively-working folders be moved to
-        // failed-pickup with `-orphan-`. The union catches every form of
-        // runner-side append without coupling the sweep to a specific file
-        // name.
+        // Liveness must come from RUN-PRODUCED activity, never from task.json's
+        // file mtime. task.json is rewritten by edits the run never makes - a
+        // bulk model switch, a tag change, the scanner stamping ownerClientId -
+        // each of which bumps its mtime to "now". Folding that mtime into the
+        // signature let a metadata edit "rescue" a genuine zombie whose run died
+        // hours ago, so the sweep reported 0 actionable while real tasks sat
+        // stranded in 3-progress (bug-3-progress-zombies). The robust, run-bound
+        // signals are:
+        //   (a) the mtime of every run-produced file under logs/
+        //       (cli-output.log, tool-calls.jsonl, session-events.jsonl, plus
+        //       any future log type) - only the runner appends to these, so they
+        //       track real agent activity. Reading only cli-output.log misses
+        //       sessions that emit primarily tool-use events into
+        //       tool-calls.jsonl and stay quiet on stdout for tens of minutes;
+        //       the union catches every form of runner-side append.
+        //   (b) the enteredLaneAt VALUE inside task.json (read as content, not
+        //       mtime): a stable run-lifecycle stamp set on lane entry and never
+        //       touched by a metadata edit. It floors the signal so a folder
+        //       that only just entered 3-progress (e.g. a parallel pickup whose
+        //       run has not streamed its first log line yet) is not misjudged
+        //       stale, while still letting a folder that entered the lane long
+        //       ago with no fresh log writes cross the threshold.
         var jobJson = Path.Combine(jobFolder, "task.json");
         var logsDir = Path.Combine(jobFolder, "logs");
         var hasJson = File.Exists(jobJson);
@@ -433,24 +452,48 @@ public sealed class StaleProgressArchiver
         {
             // Truly empty folder: nothing for the runner to resume from.
             // lastActivity = epoch so it always crosses any configured
-            // threshold; the FailureKind.Empty branch handles the placard.
+            // threshold; the debris branch handles the archive.
             return (DateTime.MinValue.ToUniversalTime(), IsEmpty: true);
         }
 
-        if (hasJson)
+        // Stable run-lifecycle stamp from task.json CONTENT. Its file mtime is
+        // deliberately NOT read here (that is the metadata-edit-fragile signal
+        // this sweep was failing on); only the enteredLaneAt field value is.
+        if (hasJson && TryReadEnteredLaneAt(jobJson) is { } enteredLaneAt && enteredLaneAt > maxStamp)
         {
-            try
-            {
-                var stamp = File.GetLastWriteTimeUtc(jobJson);
-                if (stamp > maxStamp) maxStamp = stamp;
-            }
-            catch
-            {
-                // Same best-effort policy as above.
-            }
+            maxStamp = enteredLaneAt;
         }
 
         return (maxStamp, IsEmpty: false);
+    }
+
+    /// <summary>
+    /// Reads the <c>enteredLaneAt</c> value out of a folder's <c>task.json</c>
+    /// content - the wall-clock UTC instant the task entered its current lane,
+    /// stamped on every lane move and preserved verbatim across metadata edits
+    /// (model / tags / cli-type / ownerClientId all go through a field-level
+    /// rewrite that keeps sibling fields). Returned in UTC. Null for a legacy
+    /// task.json written before the field existed or any unreadable file; the
+    /// caller then relies on the run-produced log mtimes alone.
+    /// </summary>
+    private static DateTime? TryReadEnteredLaneAt(string jobJsonPath)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(jobJsonPath));
+            if (doc.RootElement.TryGetProperty("enteredLaneAt", out var el)
+                && el.ValueKind == JsonValueKind.String
+                && el.TryGetDateTime(out var dt))
+            {
+                return dt.ToUniversalTime();
+            }
+        }
+        catch
+        {
+            // Best-effort: a torn or schema-less task.json contributes no
+            // enteredLaneAt floor; the log mtimes still drive the verdict.
+        }
+        return null;
     }
 
     private static readonly Regex SentinelRegex = new(
