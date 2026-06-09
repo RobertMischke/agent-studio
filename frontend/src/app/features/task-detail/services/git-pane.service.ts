@@ -395,15 +395,9 @@ export class GitPaneService implements OnDestroy {
           .getJobCommitDiffAggregate(info.id, path, info.watchPath)
           .subscribe(handlers);
       } else {
-        const newest = this.commitChain()[this.commitChain().length - 1]?.sha ?? null;
-        const useShaEndpoint = selectedSha !== newest;
-        if (useShaEndpoint) {
-          this.jobService
-            .getJobCommitDiffBySha(info.id, selectedSha, path, info.watchPath)
-            .subscribe(handlers);
-        } else {
-          this.jobService.getJobCommitDiff(info.id, path, info.watchPath).subscribe(handlers);
-        }
+        this.jobService
+          .getJobCommitDiffBySha(info.id, selectedSha, path, info.watchPath)
+          .subscribe(handlers);
       }
       return;
     }

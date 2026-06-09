@@ -21,6 +21,7 @@ public record GitStatusResult(
 
 public record GitCommitResult(bool Success, string? Sha, string? Error);
 public record GitPushResult(bool Success, string Sha, string Status, string? Error);
+public record GitDiffLookupResult(bool Success, string Diff, string? Error);
 
 /// <summary>
 /// ADR-0052: result of a worktree / integration primitive
@@ -640,27 +641,34 @@ public class GitService
 
     public string GetDiff(string jobId, string? watchPath, string? path)
     {
+        var result = GetDiffResult(jobId, watchPath, path);
+        return result.Success ? result.Diff : result.Error ?? "";
+    }
+
+    public GitDiffLookupResult GetDiffResult(string jobId, string? watchPath, string? path)
+    {
         var configured = ResolveRepoRoot(jobId, watchPath);
-        if (configured == null) return "";
+        if (configured == null) return new GitDiffLookupResult(false, "", "Could not resolve repo root.");
         var root = ResolveGitToplevel(configured);
-        if (root == null) return "";
+        if (root == null) return new GitDiffLookupResult(false, "", $"Not a git repository: {configured}");
         // HEAD diff catches both staged and unstaged. For untracked files we
         // fall back to showing the file body so the panel isn't empty.
-        var args = string.IsNullOrWhiteSpace(path)
-            ? "diff HEAD"
-            : $"diff HEAD -- \"{path.Replace("\"", "\\\"")}\"";
-        var (output, err, code) = RunGit(root, args);
-        if (code == 0 && !string.IsNullOrWhiteSpace(output)) return output;
+        var (output, err, code) = string.IsNullOrWhiteSpace(path)
+            ? RunGitArgs(root, "diff", "HEAD")
+            : RunGitArgs(root, "diff", "HEAD", "--", path!);
+        if (code != 0)
+            return new GitDiffLookupResult(false, "", string.IsNullOrWhiteSpace(err) ? "git diff failed." : err.Trim());
+        if (!string.IsNullOrWhiteSpace(output)) return new GitDiffLookupResult(true, output, null);
 
         if (!string.IsNullOrWhiteSpace(path))
         {
             var abs = Path.Combine(root, path);
             if (File.Exists(abs))
             {
-                try { return File.ReadAllText(abs); } catch { /* best-effort */ }
+                try { return new GitDiffLookupResult(true, File.ReadAllText(abs), null); } catch { /* best-effort */ }
             }
         }
-        return string.IsNullOrWhiteSpace(output) ? err : output;
+        return new GitDiffLookupResult(true, output, null);
     }
 
     /// <summary>
@@ -893,12 +901,13 @@ public class GitService
     /// </summary>
     public List<GitFileChange> GetCommitFiles(string jobId, string? watchPath, string sha)
     {
+        if (string.IsNullOrWhiteSpace(sha) || !IsLikelyShaOrRef(sha)) return [];
         var configured = ResolveRepoRoot(jobId, watchPath);
-        if (configured == null || string.IsNullOrWhiteSpace(sha)) return [];
+        if (configured == null) return [];
         var root = ResolveGitToplevel(configured);
         if (root == null) return [];
 
-        var (statusOut, _, statusCode) = RunGit(root, $"show --name-status --pretty=format: {sha}");
+        var (statusOut, _, statusCode) = RunGitArgs(root, "show", "--name-status", "--pretty=format:", sha);
         if (statusCode != 0) return [];
 
         var statusByPath = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -912,7 +921,7 @@ public class GitService
         }
 
         var numstat = new Dictionary<string, (int Added, int Removed)>(StringComparer.Ordinal);
-        var (numOut, _, numCode) = RunGit(root, $"show --numstat --pretty=format: {sha}");
+        var (numOut, _, numCode) = RunGitArgs(root, "show", "--numstat", "--pretty=format:", sha);
         if (numCode == 0)
         {
             foreach (var line in numOut.Split('\n'))
@@ -972,15 +981,24 @@ public class GitService
     /// </summary>
     public string GetCommitDiff(string jobId, string? watchPath, string sha, string? path)
     {
+        var result = GetCommitDiffResult(jobId, watchPath, sha, path);
+        return result.Success ? result.Diff : result.Error ?? "";
+    }
+
+    public GitDiffLookupResult GetCommitDiffResult(string jobId, string? watchPath, string sha, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(sha) || !IsLikelyShaOrRef(sha))
+            return new GitDiffLookupResult(false, "", "Invalid commit SHA.");
         var configured = ResolveRepoRoot(jobId, watchPath);
-        if (configured == null || string.IsNullOrWhiteSpace(sha)) return "";
+        if (configured == null) return new GitDiffLookupResult(false, "", "Could not resolve repo root.");
         var root = ResolveGitToplevel(configured);
-        if (root == null) return "";
-        var args = string.IsNullOrWhiteSpace(path)
-            ? $"show --pretty=format: {sha}"
-            : $"show --pretty=format: {sha} -- \"{path.Replace("\"", "\\\"")}\"";
-        var (output, err, code) = RunGit(root, args);
-        return code == 0 ? output : err;
+        if (root == null) return new GitDiffLookupResult(false, "", $"Not a git repository: {configured}");
+        var (output, err, code) = string.IsNullOrWhiteSpace(path)
+            ? RunGitArgs(root, "show", "--pretty=format:", sha)
+            : RunGitArgs(root, "show", "--pretty=format:", sha, "--", path!);
+        if (code != 0)
+            return new GitDiffLookupResult(false, "", string.IsNullOrWhiteSpace(err) ? "git show failed." : err.Trim());
+        return new GitDiffLookupResult(true, output, null);
     }
 
     /// <summary>
@@ -1026,16 +1044,24 @@ public class GitService
     /// </summary>
     public string GetAggregateCommitDiff(string jobId, string? watchPath, IEnumerable<string> shas, string? path)
     {
+        var result = GetAggregateCommitDiffResult(jobId, watchPath, shas, path);
+        return result.Success ? result.Diff : result.Error ?? "";
+    }
+
+    public GitDiffLookupResult GetAggregateCommitDiffResult(string jobId, string? watchPath, IEnumerable<string> shas, string? path)
+    {
         var parts = new StringBuilder();
         foreach (var sha in NormalizeCommitShas(shas))
         {
-            var diff = GetCommitDiff(jobId, watchPath, sha, path);
+            var result = GetCommitDiffResult(jobId, watchPath, sha, path);
+            if (!result.Success) return result;
+            var diff = result.Diff;
             if (string.IsNullOrWhiteSpace(diff)) continue;
             if (parts.Length > 0) parts.AppendLine();
             parts.Append(diff.TrimEnd());
             parts.AppendLine();
         }
-        return parts.ToString();
+        return new GitDiffLookupResult(true, parts.ToString(), null);
     }
 
     private static IEnumerable<string> NormalizeCommitShas(IEnumerable<string> shas) =>

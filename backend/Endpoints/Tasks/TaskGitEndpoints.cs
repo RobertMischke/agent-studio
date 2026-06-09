@@ -20,7 +20,7 @@ public static class TaskGitEndpoints
             Results.Ok(git.GetStatus(jobId, watchPath)));
 
         group.MapGet("/{jobId}/git/diff", (string jobId, string? watchPath, string? path, GitService git) =>
-            Results.Text(git.GetDiff(jobId, watchPath, path), "text/plain"));
+            DiffTextResult(git.GetDiffResult(jobId, watchPath, path)));
 
         group.MapPost("/{jobId}/git/commit", (string jobId, string? watchPath, GitCommitRequest req, GitService git) =>
         {
@@ -58,8 +58,9 @@ public static class TaskGitEndpoints
         group.MapGet("/{jobId}/commit/diff", (string jobId, string? watchPath, string? path, TaskScannerService scanner, GitService git) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
-            if (info?.Commit == null) return Results.Text("", "text/plain");
-            return Results.Text(git.GetCommitDiff(jobId, watchPath, info.Commit.Sha, path), "text/plain");
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            if (info.Commit == null) return Results.NotFound(new { error = "This task has no recorded commit." });
+            return DiffTextResult(git.GetCommitDiffResult(jobId, watchPath, info.Commit.Sha, path));
         });
 
         // Job-level commit aggregation: every commit attributed to this
@@ -119,8 +120,15 @@ public static class TaskGitEndpoints
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             info = TryBackfillAttribution(info, watchPath, scanner, sessions, git, mutations);
 
-            var diff = git.GetAggregateCommitDiff(jobId, watchPath, JobCommitShas(info), path);
-            return Results.Ok(new { diff });
+            var shas = JobCommitShas(info);
+            if (shas.Count == 0)
+            {
+                return Results.Ok(DiffJsonResponse("", "This task has no attributed commits."));
+            }
+            var result = git.GetAggregateCommitDiffResult(jobId, watchPath, shas, path);
+            return result.Success
+                ? Results.Ok(DiffJsonResponse(result.Diff, "No diff for this path in the task's attributed commits."))
+                : Results.BadRequest(new { error = result.Error ?? "Could not load diff." });
         });
 
         // File list for one of the job's commits. Validates the SHA is
@@ -146,8 +154,10 @@ public static class TaskGitEndpoints
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             if (!IsKnownJobCommit(info, sessions, jobId, watchPath, git, sha))
                 return Results.NotFound(new { error = "Commit is not associated with this job." });
-            var diff = git.GetCommitDiff(jobId, watchPath, sha, path);
-            return Results.Ok(new { diff });
+            var result = git.GetCommitDiffResult(jobId, watchPath, sha, path);
+            return result.Success
+                ? Results.Ok(DiffJsonResponse(result.Diff, "No diff for this path in the selected commit."))
+                : Results.BadRequest(new { error = result.Error ?? "Could not load diff." });
         });
 
         // Per-job hygiene: project-level snapshot overlaid with whether the
@@ -304,5 +314,25 @@ public static class TaskGitEndpoints
         }
 
         return info.Commit?.Sha is { Length: > 0 } sha ? [sha] : [];
+    }
+
+    private static IResult DiffTextResult(GitDiffLookupResult result)
+    {
+        if (!result.Success)
+            return Results.BadRequest(new { error = result.Error ?? "Could not load diff." });
+        if (string.IsNullOrWhiteSpace(result.Diff))
+            return Results.NoContent();
+        return Results.Text(result.Diff, "text/plain");
+    }
+
+    private static object DiffJsonResponse(string diff, string emptyReason)
+    {
+        var hasDiff = !string.IsNullOrWhiteSpace(diff);
+        return new
+        {
+            diff,
+            hasDiff,
+            emptyReason = hasDiff ? null : emptyReason
+        };
     }
 }

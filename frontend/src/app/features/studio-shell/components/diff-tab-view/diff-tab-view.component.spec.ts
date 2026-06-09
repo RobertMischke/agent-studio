@@ -120,4 +120,66 @@ describe('StudioDiffViewComponent (smoke)', () => {
     expect(root.querySelector('[data-testid="studio-diff-gated"]')).toBeNull();
     httpCtrl.verify();
   });
+
+  it('renders a loaded empty state when the diff endpoint returns an empty body', async () => {
+    await TestBed.configureTestingModule({
+      imports: [StudioDiffViewComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const taskService = TestBed.inject(TaskService);
+    const sha = 'def5678def5678def5678def5678def5678def5';
+    taskService.jobs.set([
+      {
+        id: 'empty-diff-job',
+        taskKey: 'p::empty-diff-job',
+        title: 'Empty diff job',
+        state: '5-human-review',
+        order: 1,
+        agent: 'claude',
+        cliType: 'claude',
+        ownerClientId: 'local-default',
+        sessionName: '',
+        watchPath: 'C:/projects/foo',
+        projectName: 'Foo',
+        folderPath: 'C:/projects/foo/5-human-review/empty-diff-job',
+        createdAt: '2026-05-01T00:00:00Z',
+        sessionChain: [],
+        commits: [
+          {
+            sha,
+            shortSha: 'def5678',
+            message: 'Empty path diff',
+            filesChanged: 1,
+            files: ['src/empty.ts'],
+            at: '2026-06-09T12:00:00Z',
+          },
+        ],
+      } as unknown as TaskInfo,
+    ]);
+
+    const fixture = TestBed.createComponent(StudioDiffViewComponent);
+    fixture.componentRef.setInput('commitSha', sha);
+    fixture.detectChanges();
+
+    const httpCtrl = TestBed.inject(HttpTestingController);
+    httpCtrl.expectOne((r) => r.url.includes('/api/tasks/empty-diff-job/commits/def5678def5678def5678def5678def5678def5/files')).flush({
+      sha,
+      files: [{ status: 'M', path: 'src/empty.ts', added: 0, removed: 0 }],
+    });
+    fixture.detectChanges();
+
+    httpCtrl.expectOne((r) => r.url.includes('/api/tasks/empty-diff-job/commits/def5678def5678def5678def5678def5678def5/diff')).flush(null);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(fixture.componentInstance.diffState()).toBe('loaded');
+    expect(root.querySelector('[data-testid="studio-diff-empty"]')?.textContent).toContain('empty response');
+    expect(root.textContent).not.toContain('Loading diff');
+    httpCtrl.verify();
+  });
 });

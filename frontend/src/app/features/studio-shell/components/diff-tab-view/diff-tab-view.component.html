@@ -70,9 +70,16 @@
           } @else if (diffState() === 'loading') {
             <p class="diff__note">Loading diff for <code>{{ selectedPath() }}</code>...</p>
           } @else if (diffState() === 'error') {
-            <p class="diff__note diff__note--error">{{ diffError() }}</p>
+            <div class="diff__gated" data-testid="studio-diff-error">
+              <p class="diff__note diff__note--error">{{ diffError() }}</p>
+              <div class="diff__gated-actions">
+                <button type="button" class="diff__action" data-testid="studio-diff-retry" (click)="retryDiff()">Retry</button>
+              </div>
+            </div>
           } @else if (!diffText()) {
-            <p class="diff__note">No diff available for <code>{{ selectedPath() }}</code>.</p>
+            <p class="diff__note" data-testid="studio-diff-empty">
+              {{ diffEmptyMessage() || 'No diff available for this path.' }}
+            </p>
           } @else if (diffGated()) {
             <div class="diff__gated" data-testid="studio-diff-gated">
               <div class="diff__gated-meta">

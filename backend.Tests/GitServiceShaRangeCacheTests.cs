@@ -91,6 +91,39 @@ public class GitServiceShaRangeCacheTests : IDisposable
         Assert.NotEqual(diffA, diffB);
     }
 
+    [Fact]
+    public void GetCommitDiffResult_PathOutsideCommitIsSuccessfulEmptyDiff()
+    {
+        var (repoRoot, _, headSha) = BuildTwoCommitRepo("added.txt");
+        var git = BuildGitService(("Repo", repoRoot));
+
+        var result = git.GetCommitDiffResult("any-job-id", repoRoot, headSha, path: "not-touched.txt");
+
+        Assert.True(result.Success);
+        Assert.Equal("", result.Diff);
+        Assert.Null(result.Error);
+    }
+
+    [Fact]
+    public void GetAggregateCommitDiffResult_UsesOnlyProvidedTaskCommitSet()
+    {
+        var (repoRoot, _, firstTaskSha) = BuildTwoCommitRepo("task-owned.txt");
+        WriteFile(repoRoot, "foreign.txt", "foreign\n");
+        RunGit(repoRoot, "add -A");
+        RunGit(repoRoot, "commit -q -m foreign");
+        var git = BuildGitService(("Repo", repoRoot));
+
+        var result = git.GetAggregateCommitDiffResult(
+            "any-job-id",
+            repoRoot,
+            [firstTaskSha],
+            path: "foreign.txt");
+
+        Assert.True(result.Success);
+        Assert.Equal("", result.Diff);
+        Assert.Null(result.Error);
+    }
+
     private (string repoRoot, string baseSha, string headSha) BuildTwoCommitRepo(
         params string[] extraFilesInSecondCommit)
     {
@@ -114,6 +147,7 @@ public class GitServiceShaRangeCacheTests : IDisposable
         RunGit(repoRoot, "add -A");
         RunGit(repoRoot, "commit -q -m add-files");
         var headSha = CurrentSha(repoRoot);
+        SeedJob(repoRoot, "any-job-id");
         return (repoRoot, baseSha, headSha);
     }
 
@@ -124,12 +158,35 @@ public class GitServiceShaRangeCacheTests : IDisposable
         {
             dict[$"WatchPaths:{i}:Name"] = entries[i].Name;
             dict[$"WatchPaths:{i}:RootPath"] = entries[i].RootPath;
-            dict[$"WatchPaths:{i}:Path"] = Path.Combine(entries[i].RootPath, ".orchestrator", "jobs");
+            dict[$"WatchPaths:{i}:Path"] = entries[i].RootPath;
         }
         var config = new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         return new GitService(NullLogger<GitService>.Instance, scanner, config);
+    }
+
+    private static void SeedJob(string watchPath, string jobId)
+    {
+        var dir = Path.Combine(watchPath, "3-progress", jobId);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "task.json"), $$"""
+        {
+          "id": "{{jobId}}",
+          "title": "Git fixture job",
+          "state": "3-progress",
+          "order": 1,
+          "agent": "claude",
+          "createdAt": "2026-06-09T00:00:00Z"
+        }
+        """);
+    }
+
+    private static void WriteFile(string root, string relativePath, string content)
+    {
+        var full = Path.Combine(root, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllText(full, content);
     }
 
     private static string CurrentSha(string repoRoot)

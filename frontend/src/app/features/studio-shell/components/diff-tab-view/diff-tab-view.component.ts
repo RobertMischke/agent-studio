@@ -1,11 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
+import { retry, timeout } from 'rxjs';
 import { TaskService } from '../../../../services/task.service';
 import { RowComponent } from '../../../../components/row/row.component';
 import type { TaskInfo } from '../../../../models/task.model';
 import type { GitFileChange } from '../../../git';
 import { currentDiff2Html, hasDiff2HtmlLoaded, loadDiff2Html } from '../../../../utils/diff2html-lazy';
 import { describeDiffSize, isLargeDiff } from '../../../../utils/large-diff-gate';
+
+interface CommitDiffPayload {
+  readonly diff?: string | null;
+  readonly emptyReason?: string | null;
+}
 
 /**
  * Full-screen "Diff" tab. Resolves the owning job for a commit SHA by
@@ -43,6 +49,7 @@ export class StudioDiffViewComponent {
   readonly diffText = signal('');
   readonly diffState = signal<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   readonly diffError = signal<string | null>(null);
+  readonly diffEmptyMessage = signal<string | null>(null);
   private readonly revealedPaths = signal<Set<string>>(new Set<string>());
   readonly revealAllLargeDiffs = signal(false);
   private readonly diff2htmlReady = signal(hasDiff2HtmlLoaded());
@@ -165,6 +172,13 @@ export class StudioDiffViewComponent {
     this.revealAllLargeDiffs.set(true);
   }
 
+  retryDiff(): void {
+    const owner = this.owner();
+    const path = this.selectedPath();
+    if (!owner || !path) return;
+    this.loadDiff(owner, path);
+  }
+
   trackFile(_index: number, file: GitFileChange): string {
     return file.path;
   }
@@ -201,19 +215,59 @@ export class StudioDiffViewComponent {
     this.diffLoadKey = requestKey;
     this.diffState.set('loading');
     this.diffError.set(null);
+    this.diffEmptyMessage.set(null);
     this.diffText.set('');
-    this.jobService.getJobCommitDiffBySha(owner.job.id, owner.commit.sha, path, owner.job.watchPath).subscribe({
-      next: (resp) => {
-        if (requestKey !== this.diffLoadKey) return;
-        this.diffText.set(resp.diff ?? '');
-        this.diffState.set('loaded');
-      },
-      error: (err) => {
-        if (requestKey !== this.diffLoadKey) return;
-        this.diffError.set(err?.error?.error || err?.message || 'Could not load diff.');
-        this.diffState.set('error');
-      },
-    });
+    this.jobService.getJobCommitDiffBySha(owner.job.id, owner.commit.sha, path, owner.job.watchPath)
+      .pipe(
+        timeout({ each: 15000 }),
+        retry({ count: 1, delay: 500 }),
+      )
+      .subscribe({
+        next: (resp) => {
+          if (requestKey !== this.diffLoadKey) return;
+          const payload = this.normalizeDiffPayload(resp);
+          this.diffText.set(payload.diff);
+          this.diffEmptyMessage.set(
+            payload.diff.trim().length > 0
+              ? null
+              : payload.emptyReason ?? 'No diff for this path in the selected commit.',
+          );
+          this.diffState.set('loaded');
+        },
+        error: (err) => {
+          if (requestKey !== this.diffLoadKey) return;
+          this.diffError.set(this.describeDiffError(err));
+          this.diffState.set('error');
+        },
+      });
+  }
+
+  private normalizeDiffPayload(resp: unknown): { diff: string; emptyReason: string | null } {
+    if (typeof resp === 'string') {
+      return { diff: resp, emptyReason: null };
+    }
+    if (resp && typeof resp === 'object') {
+      const payload = resp as CommitDiffPayload;
+      return {
+        diff: typeof payload.diff === 'string' ? payload.diff : '',
+        emptyReason: typeof payload.emptyReason === 'string' ? payload.emptyReason : null,
+      };
+    }
+    return { diff: '', emptyReason: 'Diff endpoint returned an empty response.' };
+  }
+
+  private describeDiffError(err: unknown): string {
+    const record = err as { name?: string; message?: string; error?: unknown } | null;
+    if (record?.name === 'TimeoutError') {
+      return 'Diff request timed out. Retry the file or pick another file.';
+    }
+    const body = record?.error;
+    if (body && typeof body === 'object' && 'error' in body) {
+      const message = (body as { error?: unknown }).error;
+      if (typeof message === 'string' && message.trim()) return message;
+    }
+    if (typeof body === 'string' && body.trim()) return body;
+    return record?.message || 'Could not load diff.';
   }
 
   private resetFiles(): void {
@@ -229,5 +283,6 @@ export class StudioDiffViewComponent {
     this.diffText.set('');
     this.diffState.set('idle');
     this.diffError.set(null);
+    this.diffEmptyMessage.set(null);
   }
 }
