@@ -135,6 +135,39 @@ public class SessionEventsTests : IDisposable
     }
 
     [Fact]
+    public void BackfillLatestSessionEventHeadShaRange_RewritesLatestRangeOnly()
+    {
+        WriteJob(TaskStates.Progress, "demo-task");
+        var (_, sessions) = BuildServices();
+        sessions.AppendSessionEvent("demo-task", new SessionEvent
+        {
+            Ts = DateTime.UtcNow.AddMinutes(-2),
+            Kind = "start",
+            Cli = "claude",
+            HeadShaBefore = "old-before",
+            HeadShaAfter = "old-after"
+        }, _watchPath);
+        sessions.AppendSessionEvent("demo-task", new SessionEvent
+        {
+            Ts = DateTime.UtcNow.AddMinutes(-1),
+            Kind = "continue",
+            Cli = "claude",
+            HeadShaBefore = "spawn-before",
+            HeadShaAfter = null
+        }, _watchPath);
+
+        var ok = sessions.BackfillLatestSessionEventHeadShaRange(
+            "demo-task", "integration-base", "task-tip", _watchPath);
+
+        Assert.True(ok);
+        var events = sessions.ReadSessionEvents("demo-task", _watchPath);
+        Assert.Equal("old-before", events[0].HeadShaBefore);
+        Assert.Equal("old-after", events[0].HeadShaAfter);
+        Assert.Equal("integration-base", events[1].HeadShaBefore);
+        Assert.Equal("task-tip", events[1].HeadShaAfter);
+    }
+
+    [Fact]
     public void AppendSessionToChain_ExtendsChainAndUpdatesSessionName()
     {
         WriteJob(TaskStates.Progress, "demo-task", sessionName: "abc-123", sessionChain: ["abc-123"]);

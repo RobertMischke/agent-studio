@@ -158,6 +158,19 @@ public class TaskSessionLog
         return MutateLatestSessionEvent(jobId, watchPath, evt => evt with { HeadShaAfter = sha });
     }
 
+    /// <summary>
+    /// Rewrites the latest event's deterministic commit range. Worktree runs
+    /// use this after integration to replace the spawn-time branch snapshot
+    /// with the integration-branch range that actually landed for this task.
+    /// </summary>
+    public bool BackfillLatestSessionEventHeadShaRange(
+        string jobId, string? beforeSha, string? afterSha, string? watchPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(beforeSha) || string.IsNullOrWhiteSpace(afterSha)) return false;
+        return MutateLatestSessionEvent(jobId, watchPath,
+            evt => evt with { HeadShaBefore = beforeSha, HeadShaAfter = afterSha });
+    }
+
     private bool MutateLatestSessionEvent(string jobId, string? watchPath, Func<SessionEvent, SessionEvent> mutate)
     {
         var info = _scanner.FindJob(jobId, watchPath);

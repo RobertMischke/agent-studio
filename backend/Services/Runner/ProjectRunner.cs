@@ -853,6 +853,8 @@ public class ProjectRunner
     private string WorktreeRoot()
         => Path.Combine(Path.GetTempPath(), "ass-worktrees", System.Text.RegularExpressions.Regex.Replace(ProjectName, "[^A-Za-z0-9_.-]", "-"));
 
+    private sealed record WorktreeCommitRange(string HeadShaBefore, string HeadShaAfter);
+
     /// <summary>
     /// Post-run integration for a worktree (parallel-slot) run: commit the agent's
     /// edits onto the task branch, then under the per-project merge-queue lock
@@ -862,9 +864,9 @@ public class ProjectRunner
     /// by the task, not the run). On conflict the branch is left for resolution.
     /// No-op for the sequential (max==1) path.
     /// </summary>
-    private async Task IntegrateWorktreeRunAsync(ActiveRun run, TaskInfo info)
+    private async Task<WorktreeCommitRange?> IntegrateWorktreeRunAsync(ActiveRun run, TaskInfo info)
     {
-        if (!run.IsWorktreeRun) return;
+        if (!run.IsWorktreeRun) return null;
         if (MainCheckoutChangedDuringWorktreeRun(run))
         {
             var summary = $"Worktree run {run.JobId} changed the shared main checkout `{Entry.RootPath}`; integration skipped.";
@@ -872,7 +874,7 @@ public class ProjectRunner
             RecordWorktreeContainment(info, PipelineStepStatus.Failed, "main-checkout-modified", summary);
             _chatLog.Append(info, OrchestratorMessageKind.WorktreeContainment,
                 "[worktree-containment] " + summary);
-            return;
+            return null;
         }
 
         RecordWorktreeContainment(info, PipelineStepStatus.Passed, "contained",
@@ -893,12 +895,14 @@ public class ProjectRunner
             if (commit.Success)
                 _logger.LogInformation("[taskboard] parallel run {Job} committed agent edits on {Branch} at {Sha}",
                     run.JobId, run.Branch, commit.Sha ?? "<unknown>");
+            var branchHeadAfterRun = _git.ReadHeadShaAt(run.WorktreePath!);
             // 2) serialize integration into the shared work branch (merge-queue).
             //    Do NOT tear down here: the worktree survives for resume/reissue.
             _integrateLock.Wait();
             try
             {
                 var integrateStarted = DateTime.UtcNow;
+                var integrationBaseSha = _git.ReadHeadShaAt(Entry.RootPath);
                 RecordIntegrationStep(info, PipelineStepStatus.Running, "running",
                     $"Integrating `{run.Branch}` into `{workBranch}`.", integrateStarted);
                 var res = Worktree.Integrate(
@@ -917,6 +921,8 @@ public class ProjectRunner
                         integrateStarted);
                     RecordConflictResolutionStep(info, PipelineStepStatus.Skipped, "not-needed",
                         "No merge conflict was detected.", DateTime.UtcNow);
+                    return BuildIntegratedCommitRange(integrationBaseSha, res.IntegratedSha)
+                        ?? BuildBranchCommitRange(run, branchHeadAfterRun);
                 }
                 else if (res.Outcome == IntegrationOutcome.Conflict)
                 {
@@ -934,6 +940,8 @@ public class ProjectRunner
                         RecordIntegrationStep(info, PipelineStepStatus.Passed, "merged-after-resolution",
                             $"Task branch `{run.Branch}` merged into `{workBranch}` after conflict resolution at `{resolution.IntegratedSha ?? "<unknown>"}`.",
                             integrateStarted);
+                        return BuildIntegratedCommitRange(integrationBaseSha, resolution.IntegratedSha)
+                            ?? BuildBranchCommitRange(run, branchHeadAfterRun);
                     }
                     else
                     {
@@ -944,6 +952,7 @@ public class ProjectRunner
                             run,
                             workBranch,
                             resolution);
+                        return BuildBranchCommitRange(run, branchHeadAfterRun);
                     }
                 }
                 else
@@ -960,6 +969,7 @@ public class ProjectRunner
                         run,
                         workBranch,
                         res);
+                    return BuildBranchCommitRange(run, branchHeadAfterRun);
                 }
             }
             finally { _integrateLock.Release(); }
@@ -976,7 +986,22 @@ public class ProjectRunner
                 run,
                 workBranch,
                 new IntegrationResult(IntegrationOutcome.Error, null, ex.Message));
+            return null;
         }
+    }
+
+    private WorktreeCommitRange? BuildIntegratedCommitRange(string? beforeSha, string? afterSha)
+    {
+        if (string.IsNullOrWhiteSpace(beforeSha) || string.IsNullOrWhiteSpace(afterSha)) return null;
+        return new WorktreeCommitRange(beforeSha, afterSha);
+    }
+
+    private WorktreeCommitRange? BuildBranchCommitRange(ActiveRun run, string? afterSha)
+    {
+        if (string.IsNullOrWhiteSpace(afterSha)) return null;
+        var beforeSha = _sessions.ReadSessionEvents(run.JobId, Entry.Path).LastOrDefault()?.HeadShaBefore;
+        if (string.IsNullOrWhiteSpace(beforeSha)) return null;
+        return new WorktreeCommitRange(beforeSha, afterSha);
     }
 
     private void AppendWorktreeIntegrationIssue(
@@ -3435,6 +3460,7 @@ public class ProjectRunner
             _logger.LogInformation("Job {JobId} finished in project '{Project}' on {Cli} with status {Status}",
                 jobId, ProjectName, cliType, execution.Status);
 
+            WorktreeCommitRange? worktreeCommitRange = null;
             // ADR-0052 slice 2: a parallel (worktree) run commits its edits on the
             // task branch and integrates them into the work branch BEFORE the
             // post-run review reads the result; a merge conflict is left for the
@@ -3442,7 +3468,7 @@ public class ProjectRunner
             if (run.IsWorktreeRun)
             {
                 var wtInfo = _scanner.FindJob(jobId, Entry.Path);
-                if (wtInfo != null) await IntegrateWorktreeRunAsync(run, wtInfo);
+                if (wtInfo != null) worktreeCommitRange = await IntegrateWorktreeRunAsync(run, wtInfo);
             }
 
             var cli = _router.Get(cliType);
@@ -3538,10 +3564,23 @@ public class ProjectRunner
             // This must happen before any auto-commit hook fires (the hook
             // is part of the Progress->Review transition, not the run
             // itself, and we want the run to own the agent's own commits).
-            var headShaAfter = SafeGetHeadSha(jobId);
-            if (!string.IsNullOrWhiteSpace(headShaAfter))
+            string? headShaAfter;
+            if (worktreeCommitRange != null)
             {
-                _sessions.BackfillLatestSessionEventHeadShaAfter(jobId, headShaAfter, Entry.Path);
+                headShaAfter = worktreeCommitRange.HeadShaAfter;
+                _sessions.BackfillLatestSessionEventHeadShaRange(
+                    jobId,
+                    worktreeCommitRange.HeadShaBefore,
+                    worktreeCommitRange.HeadShaAfter,
+                    Entry.Path);
+            }
+            else
+            {
+                headShaAfter = SafeGetHeadSha(jobId);
+                if (!string.IsNullOrWhiteSpace(headShaAfter))
+                {
+                    _sessions.BackfillLatestSessionEventHeadShaAfter(jobId, headShaAfter, Entry.Path);
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(capturedSessionId))
@@ -6320,11 +6359,18 @@ public class ProjectRunner
     /// HEAD-SHA capture wrapper. Swallows git failures - missing repo,
     /// missing tool, transient errors - so a flaky environment can't
     /// take down a run. The persisted SHA stays null on failure and the
-    /// commits endpoint falls back to the wall-clock window.
+    /// commits endpoint falls back to the wall-clock window. Worktree runs
+    /// capture the isolated task branch here; successful integration later
+    /// rewrites the event to the exact integration-branch range that landed.
     /// </summary>
     private string? SafeGetHeadSha(string jobId)
     {
-        try { return _git.GetHeadSha(jobId, Entry.Path); }
+        try
+        {
+            if (_activeRuns.Get(jobId) is { IsWorktreeRun: true, WorktreePath: { Length: > 0 } worktreePath })
+                return _git.ReadHeadShaAt(worktreePath);
+            return _git.GetHeadSha(jobId, Entry.Path);
+        }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "HEAD SHA capture failed for {JobId}", jobId);

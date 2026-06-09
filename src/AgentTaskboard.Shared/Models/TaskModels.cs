@@ -667,13 +667,14 @@ public record SessionEvent
     /// <summary>Human-readable note when <see cref="Resumed"/> is false (e.g. <c>no session recorded</c>, <c>incompatible session id</c>).</summary>
     public string? Reason { get; init; }
     /// <summary>
-    /// HEAD SHA of the project's git working tree captured immediately
-    /// before this run's CLI started. Combined with <see cref="HeadShaAfter"/>
-    /// this gives a deterministic SHA range for "commits made during this
-    /// run" (<c>git rev-list HeadShaBefore..HeadShaAfter</c>) - the
-    /// wall-clock window we used to derive commits from is a best-effort
-    /// fallback. Null when the project has no repo configured or git was
-    /// unavailable.
+    /// HEAD SHA captured for the run's deterministic commit range. Sequential
+    /// runs capture the project working tree immediately before the CLI starts.
+    /// Worktree-isolated runs may rewrite this after integration to the
+    /// integration-branch HEAD observed under the merge lock, so
+    /// <see cref="HeadShaBefore"/>..<see cref="HeadShaAfter"/> contains only
+    /// the task branch commits folded in by that run, not sibling commits that
+    /// landed while the task was running. Null when the project has no repo
+    /// configured or git was unavailable.
     /// </summary>
     public string? HeadShaBefore { get; init; }
     /// <summary>
