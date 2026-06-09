@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TooltipDirective } from './tooltip.directive';
 
 const TIP_TESTID = 'app-tooltip';
@@ -22,6 +22,10 @@ function getTooltip(): HTMLElement | null {
   return document.querySelector(`[data-testid="${TIP_TESTID}"]`);
 }
 
+function removeTooltipDom(): void {
+  document.querySelectorAll(`[data-testid="${TIP_TESTID}"]`).forEach(node => node.remove());
+}
+
 function fireHover(el: HTMLElement, type: 'mouseenter' | 'mouseleave' | 'focusin' | 'focusout' | 'click' | 'touchstart') {
   el.dispatchEvent(new Event(type, { bubbles: true }));
 }
@@ -32,8 +36,7 @@ describe('TooltipDirective', () => {
 
   beforeEach(() => {
     // Reset any tooltip DOM from previous tests.
-    const stale = getTooltip();
-    if (stale && stale.parentElement) stale.parentElement.removeChild(stale);
+    removeTooltipDom();
 
     TestBed.configureTestingModule({
       imports: [HostComponent],
@@ -42,6 +45,10 @@ describe('TooltipDirective', () => {
     fixture = TestBed.createComponent(HostComponent);
     fixture.detectChanges();
     anchor = fixture.nativeElement.querySelector('[data-testid="anchor"]') as HTMLElement;
+  });
+
+  afterEach(() => {
+    removeTooltipDom();
   });
 
   it('does NOT create tooltip DOM before first hover (lazy render)', () => {

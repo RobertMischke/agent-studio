@@ -22,7 +22,8 @@ namespace OrchestratorApi.Tests;
 /// ADR-0025 routing: tasks land in <c>4-auto-review</c>; reissue moves
 /// to <c>2-ready</c> at order 0 (the runner picks it next without
 /// displacing a currently active job); accept-as-done and escalate
-/// both promote to <c>5-human-review</c>.
+/// accept promotes to <c>5-human-review</c>, while escalation parks the
+/// original card in <c>5e-escalated</c>.
 /// </summary>
 public class ReviewDecisionOrchestratorTests : IDisposable
 {
@@ -118,7 +119,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task Escalate_FlipsOriginalToHumanReview_WritesSupervisorBanner_NoWrapperCard()
+    public async Task Escalate_FlipsOriginalToEscalated_WritesSupervisorBanner_NoWrapperCard()
     {
         SeedReviewJobWithNeedsInput("auth-rewrite", "use OAuth or magic-link?");
         var orchestrator = BuildOrchestrator(
@@ -136,7 +137,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("strategic call", log);
-        Assert.Contains("5-human-review", log);
+        Assert.Contains(TaskStates.Escalated, log);
 
         // ADR-0049: no sibling human-decision-needed-<slug> wrapper card is
         // spawned - the wrapper-card pattern (ASS-30) is the bug this ADR ends.

@@ -14,7 +14,7 @@ namespace OrchestratorApi.Tests;
 /// ADR-0049 acceptance test: when the orchestrator cannot decide a
 /// 4-auto-review task unattended (the agent emitted TASK_NEEDS_INPUT and the
 /// fast model returns <c>action=escalate</c>), it must keep the task
-/// self-contained. The single original card flips to 5-human-review (the
+/// self-contained. The single original card flips to 5e-escalated (the
 /// retired 1b-needs-human-review lane is gone) and records one
 /// <c>orchestrator_escalated</c> event on its own timeline.
 /// It must NOT spawn a sibling <c>human-decision-needed-&lt;slug&gt;</c> wrapper
@@ -54,9 +54,9 @@ public class ReviewDecisionOrchestrator_NoWrapperCardTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         // 1) The original card moved OUT of 4-auto-review and INTO
-        //    5-human-review. Same id, same folder, no clone.
+        //    5e-escalated. Same id, same folder, no clone.
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "payment-flow")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "payment-flow")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "payment-flow")));
 
         // 2) No sibling wrapper card was spawned in 1-preparation. We assert
         //    both the specific legacy slug AND that the lane gained no cards.
@@ -68,7 +68,7 @@ public class ReviewDecisionOrchestrator_NoWrapperCardTests : IDisposable
         // 3) The original card's timeline carries exactly one
         //    orchestrator_escalated event explaining the hand-off.
         var events = _timeline.ReadAll(
-            Path.Combine(_watchPath, TaskStates.HumanReview, "payment-flow"));
+            Path.Combine(_watchPath, TaskStates.Escalated, "payment-flow"));
         var escalate = Assert.Single(
             events.Where(e => e.Kind == TimelineEventKinds.OrchestratorEscalated).ToList());
         Assert.Equal(TimelineActors.Orchestrator, escalate.Actor);

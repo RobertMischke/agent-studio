@@ -100,9 +100,9 @@ public static class TimelineEventKinds
     /// <summary>
     /// The orchestrator could not decide unattended and asked a human to
     /// take the wheel. The original card is escalated to
-    /// <c>5-human-review</c> via the human-review funnel (the retired
-    /// <c>1b-needs-human-review</c> lane previously held these); no wrapper
-    /// card is spawned (ADR-0049).
+    /// <c>5e-escalated</c> via the human-review escalation funnel (the
+    /// retired <c>1b-needs-human-review</c> lane previously held these); no
+    /// wrapper card is spawned (ADR-0049).
     /// </summary>
     public const string OrchestratorEscalated = "orchestrator_escalated";
     /// <summary>The orchestrator emitted a STEER block (see OrchestratorReplyParser).</summary>
