@@ -7,32 +7,15 @@ import type { TaskCommitInfo } from '../../../../git';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 import { isLargeDiff, describeDiffSize } from '../../../../../utils/large-diff-gate';
+import { currentDiff2Html, hasDiff2HtmlLoaded, loadDiff2Html } from '../../../../../utils/diff2html-lazy';
 // Cycle 7f: diff2html (~120 KB minified, includes its own theme CSS) is
 // loaded lazily the first time a non-empty diff arrives. The pre-Cycle-7f
 // import was static, which dragged the whole library into the initial
 // chunk even though most users never open the git pane on first paint.
 // The lazy module + dark-color-scheme constant are cached after first
 // load so the second diff render is synchronous.
-// We hold the dynamically-imported modules behind a narrow local type so
-// the component stays free of static diff2html imports. The shape we need
-// is one function plus the dark color-scheme enum value.
-interface Diff2HtmlOptions {
-  drawFileList: boolean;
-  outputFormat: 'line-by-line' | 'side-by-side';
-  matching: 'lines';
-  colorScheme: number;
-}
-type Diff2HtmlRenderer = (diff: string, opts: Diff2HtmlOptions) => string;
-let diff2htmlModuleCache: { html: Diff2HtmlRenderer; darkScheme: number } | null = null;
-async function loadDiff2Html(): Promise<typeof diff2htmlModuleCache> {
-  if (diff2htmlModuleCache) return diff2htmlModuleCache;
-  const [main, types] = await Promise.all([
-    import('diff2html'),
-    import('diff2html/lib-esm/types'),
-  ]);
-  diff2htmlModuleCache = { html: main.html as unknown as Diff2HtmlRenderer, darkScheme: types.ColorSchemeType.DARK as unknown as number };
-  return diff2htmlModuleCache;
-}
+// The loader itself lives in utils so every diff surface shares the same
+// cached module and the same large-diff gate can suppress that import.
 
 /**
  * Renders the Git pane of the job-detail view: working-tree status,
@@ -118,7 +101,7 @@ export class GitPaneComponent {
   });
 
   /** Tracks whether the diff2html module has finished its dynamic import. */
-  private readonly diff2htmlReady = signal(diff2htmlModuleCache !== null);
+  private readonly diff2htmlReady = signal(hasDiff2HtmlLoaded());
 
   // Trigger the lazy import the first time we're asked to render a diff.
   // Until the module is in memory, diffHtml() returns null and the
@@ -179,13 +162,14 @@ export class GitPaneComponent {
     const text = this.git.diffText();
     if (!text) return null;
     if (this.diffGated()) return null;
-    if (!this.diff2htmlReady() || !diff2htmlModuleCache) return null;
+    const diff2html = currentDiff2Html();
+    if (!this.diff2htmlReady() || !diff2html) return null;
     const sideBySide = this.maximized() || this.diffMaximized();
-    const rendered = diff2htmlModuleCache.html(text, {
+    const rendered = diff2html.html(text, {
       drawFileList: false,
       outputFormat: sideBySide ? 'side-by-side' : 'line-by-line',
       matching: 'lines',
-      colorScheme: diff2htmlModuleCache.darkScheme,
+      colorScheme: diff2html.darkScheme,
     });
     return this.sanitizer.bypassSecurityTrustHtml(rendered);
   });

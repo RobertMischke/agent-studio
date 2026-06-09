@@ -103,11 +103,25 @@
                 </div>
               </header>
               @if (expandedBody(); as body) {
-                <app-markdown
-                  class="cr-body-markdown"
-                  [source]="body"
-                  [dense]="true"
-                  testId="code-review-body-markdown" />
+                @if (bodyGated()) {
+                  <div class="cr-body-gated" data-testid="code-review-body-gated">
+                    <div class="cr-body-gated__meta">
+                      <strong>{{ entry.fileName }}</strong>
+                      <span>{{ bodySizeLabel() }}</span>
+                    </div>
+                    <p>Large review body - not rendered automatically to keep the editor fast.</p>
+                    <button type="button"
+                            class="cr-body-gated__action"
+                            data-testid="code-review-body-show"
+                            (click)="revealExpandedBody()">Show review body</button>
+                  </div>
+                } @else {
+                  <app-markdown
+                    class="cr-body-markdown"
+                    [source]="body"
+                    [dense]="true"
+                    testId="code-review-body-markdown" />
+                }
               } @else {
                 <p class="cr-body-state">Loading...</p>
               }

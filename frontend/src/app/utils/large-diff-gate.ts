@@ -1,19 +1,20 @@
 /**
- * Central "large-diff gate" shared by every diff render surface
- * (the task-detail git pane and the per-run git viewer). One threshold
- * plus one predicate so all surfaces agree on what counts as "too big to
- * auto-render", and only this file has to change to tune it.
+ * Central "large-diff gate" shared by every expensive diff/text render
+ * surface. One threshold plus one predicate so all surfaces agree on
+ * what counts as "too big to auto-render", and only this file has to
+ * change to tune it.
  *
  * Metric choice (AC: evaluate file size vs. changed lines): render cost
  * in both surfaces scales with the number of rendered diff *lines* -
- * diff2html builds one table row per line, and the run viewer runs an
- * async syntax-highlight pass per line and emits one DOM node per line.
- * Line count is therefore the primary, most robust signal. Raw byte size
- * is a secondary guard for the pathological "few lines, enormous bytes"
- * case (minified bundles, generated assets, single-line lockfiles) where
- * line count alone would under-count the real layout/highlight cost.
+ * diff2html builds one table row per line, Markdown/code surfaces emit
+ * one row or block per source line, and the run viewer runs an async
+ * syntax-highlight pass per line plus one DOM node per line. Line count
+ * is therefore the primary, most robust signal. Raw byte size is a
+ * secondary guard for the pathological "few lines, enormous bytes" case
+ * (minified bundles, generated assets, single-line lockfiles) where line
+ * count alone would under-count the real layout/highlight cost.
  *
- * Tune both surfaces from here: change the two thresholds and every diff
+ * Tune every surface from here: change the two thresholds and every diff
  * render stop follows.
  */
 export const LARGE_DIFF_LINE_THRESHOLD = 500;
@@ -44,5 +45,6 @@ export function isLargeDiff(text: string | null | undefined): boolean {
 export function describeDiffSize(text: string | null | undefined): string {
   const m = measureDiff(text);
   const size = m.bytes >= 1024 ? `${Math.round(m.bytes / 1024)} KB` : `${m.bytes} B`;
-  return `${m.lines.toLocaleString()} lines · ${size}`;
+  const lineLabel = m.lines === 1 ? 'line' : 'lines';
+  return `${m.lines.toLocaleString()} ${lineLabel} · ${size}`;
 }

@@ -38,11 +38,63 @@
           </app-row>
         }
       </div>
-      <p class="diff__note">
-        The inline diff renderer is being migrated from the existing task
-        diff pane. Open the owning task to see the file list, +/- counts,
-        and per-file unified diff for this commit.
-      </p>
+      <div class="diff__viewer" data-testid="studio-diff-inline">
+        <aside class="diff__files" data-testid="studio-diff-files">
+          @if (filesState() === 'loading') {
+            <p class="diff__note">Loading changed files...</p>
+          } @else if (filesState() === 'error') {
+            <p class="diff__note diff__note--error">{{ filesError() }}</p>
+          } @else if (files().length === 0) {
+            <p class="diff__note">No files recorded for this commit.</p>
+          } @else {
+            @for (file of files(); track trackFile($index, file)) {
+              <button type="button"
+                      class="diff__file"
+                      [class.diff__file--selected]="selectedPath() === file.path"
+                      [attr.aria-pressed]="selectedPath() === file.path"
+                      (click)="selectFile(file.path)">
+                <span class="diff__file-status" [attr.data-status]="file.status">{{ file.status }}</span>
+                <span class="diff__file-path">{{ file.path }}</span>
+                <span class="diff__file-stats">
+                  @if (file.added > 0) { <span class="diff__file-add">+{{ file.added }}</span> }
+                  @if (file.removed > 0) { <span class="diff__file-del">-{{ file.removed }}</span> }
+                </span>
+              </button>
+            }
+          }
+        </aside>
+
+        <section class="diff__render-shell" data-testid="studio-diff-render-shell">
+          @if (!selectedPath()) {
+            <p class="diff__note">Select a file to view its diff.</p>
+          } @else if (diffState() === 'loading') {
+            <p class="diff__note">Loading diff for <code>{{ selectedPath() }}</code>...</p>
+          } @else if (diffState() === 'error') {
+            <p class="diff__note diff__note--error">{{ diffError() }}</p>
+          } @else if (!diffText()) {
+            <p class="diff__note">No diff available for <code>{{ selectedPath() }}</code>.</p>
+          } @else if (diffGated()) {
+            <div class="diff__gated" data-testid="studio-diff-gated">
+              <div class="diff__gated-meta">
+                @if (selectedFile(); as file) {
+                  <span class="diff__file-status" [attr.data-status]="file.status">{{ file.status }}</span>
+                }
+                <code class="diff__gated-name">{{ selectedPath() }}</code>
+                <span class="diff__gated-size">{{ diffSizeLabel() }}</span>
+              </div>
+              <p class="diff__gated-hint">Large file - not rendered automatically to keep the editor fast.</p>
+              <div class="diff__gated-actions">
+                <button type="button" class="diff__action" data-testid="studio-diff-show" (click)="revealCurrentDiff()">Show diff</button>
+                <button type="button" class="diff__action" data-testid="studio-diff-show-all" (click)="revealAll()">Show all large diffs</button>
+              </div>
+            </div>
+          } @else if (diffHtml(); as dh) {
+            <div class="diff__render" data-testid="studio-diff-render" [innerHTML]="dh"></div>
+          } @else {
+            <p class="diff__note">Preparing diff renderer...</p>
+          }
+        </section>
+      </div>
     </div>
   } @else {
     <div class="diff__empty">

@@ -39,6 +39,6 @@ describe('large-diff-gate', () => {
   it('formats a human-readable size label', () => {
     expect(describeDiffSize('a\nb\nc')).toBe('3 lines · 5 B');
     const kb = 'x'.repeat(2048);
-    expect(describeDiffSize(kb)).toBe('1 lines · 2 KB');
+    expect(describeDiffSize(kb)).toBe('1 line · 2 KB');
   });
 });

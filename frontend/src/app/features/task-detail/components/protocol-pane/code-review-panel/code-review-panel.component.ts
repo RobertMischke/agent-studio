@@ -19,6 +19,7 @@ import { TooltipDirective } from '../../../../../components/tooltip';
 import { cleanStepResultMarkdown } from '../../prompt-pane/pipeline-step-result/pipeline-step-result.util';
 import { CLAUDE_FALLBACK_MODEL_ID } from '../../../../cli';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
+import { describeDiffSize, isLargeDiff } from '../../../../../utils/large-diff-gate';
 
 /** localStorage key holding the last CLI+model the operator ran a review with. */
 const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
@@ -71,6 +72,7 @@ export class CodeReviewPanelComponent implements OnInit {
   readonly error = signal<string | null>(null);
   readonly expandedFile = signal<string | null>(null);
   readonly expandedBody = signal<string | null>(null);
+  readonly expandedBodyRevealed = signal(false);
   readonly selectedModel = signal<string>(CLAUDE_FALLBACK_MODEL_ID);
   readonly selectedThinkingLevel = signal<string | null>(null);
   readonly selectedCli = signal<CliType>('claude');
@@ -80,6 +82,9 @@ export class CodeReviewPanelComponent implements OnInit {
 
   /** True when there is at least one MD listed and the user can drill in. */
   readonly hasEntries = computed(() => this.entries().length > 0);
+  readonly bodyIsLarge = computed<boolean>(() => isLargeDiff(this.expandedBody()));
+  readonly bodySizeLabel = computed<string>(() => describeDiffSize(this.expandedBody()));
+  readonly bodyGated = computed<boolean>(() => this.bodyIsLarge() && !this.expandedBodyRevealed());
 
   ngOnInit(): void {
     // Seed precedence (directly serves the operator's "remember the last
@@ -214,10 +219,12 @@ export class CodeReviewPanelComponent implements OnInit {
     if (this.expandedFile() === entry.fileName) {
       this.expandedFile.set(null);
       this.expandedBody.set(null);
+      this.expandedBodyRevealed.set(false);
       return;
     }
     this.expandedFile.set(entry.fileName);
     this.expandedBody.set(null);
+    this.expandedBodyRevealed.set(false);
     const job = this.job();
     if (!job?.id) return;
     this.jobs.readCodeReview(job.id, entry.fileName, job.watchPath).subscribe({
@@ -232,6 +239,10 @@ export class CodeReviewPanelComponent implements OnInit {
         }
       },
     });
+  }
+
+  revealExpandedBody(): void {
+    this.expandedBodyRevealed.set(true);
   }
 
   verdictTone(v: string): 'pass' | 'concerns' | 'block' | 'unknown' {

@@ -8,6 +8,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { GitPaneComponent } from './git-pane.component';
 import { GitPaneService } from '../../../services/git-pane.service';
 import type { GitFileChange, TaskCommitDetail, TaskCommitInfo } from '../../../../git';
+import { LARGE_DIFF_LINE_THRESHOLD } from '../../../../../utils/large-diff-gate';
 
 const commits: TaskCommitInfo[] = [
   {
@@ -123,5 +124,36 @@ describe('GitPaneComponent', () => {
     expect(root.querySelector('[data-testid="git-commit-chain"]')).not.toBeNull();
     expect(root.querySelector('[data-testid="git-commit-chain-all"]')?.textContent).toContain('All 2 commits');
     expect(root.querySelector('[data-testid="git-commit-aggregate-header"]')).toBeNull();
+  });
+
+  it('gates a large selected diff until the operator reveals it', async () => {
+    const git = makeGitPaneMock();
+    git.diffText.set(Array.from({ length: LARGE_DIFF_LINE_THRESHOLD }, (_, i) => `+line ${i}`).join('\n'));
+    await TestBed.configureTestingModule({
+      imports: [GitPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: GitPaneService, useValue: git },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const gated = root.querySelector('[data-testid="git-diff-gated"]');
+    expect(gated?.textContent).toContain('src/one.ts');
+    expect(gated?.textContent).toContain('Show diff');
+    expect(root.querySelector('[data-testid="git-diff"]')).toBeNull();
+
+    root.querySelector<HTMLButtonElement>('[data-testid="git-diff-show"]')?.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.diffGated()).toBe(false);
+    expect(root.querySelector('[data-testid="git-diff-gated"]')).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { CodeReviewPanelComponent } from './code-review-panel.component';
 import { CodeReviewActivityStore } from '../../../../../services/code-review-activity.store';
 import type { TaskInfo } from '../../../../../models/task.model';
+import { LARGE_DIFF_LINE_THRESHOLD } from '../../../../../utils/large-diff-gate';
 
 /**
  * Behaviour spec for the user-triggered code-review panel. Pins the
@@ -296,6 +297,59 @@ describe('CodeReviewPanelComponent', () => {
     expect(body?.querySelectorAll('li').length).toBe(2);
     expect(body?.querySelector('code')?.textContent).toBe('helper');
     expect(body?.textContent).not.toContain('ASPECT_VERDICT');
+    httpCtrl.verify();
+  });
+
+  it('shows a placeholder for a large review body until it is revealed', async () => {
+    await setup();
+    const fixture = TestBed.createComponent(CodeReviewPanelComponent);
+    fixture.componentRef.setInput('job', seedJob());
+    fixture.detectChanges();
+
+    const httpCtrl = TestBed.inject(HttpTestingController);
+    httpCtrl
+      .expectOne((r) => r.url.includes('/tasks/code-review/defaults'))
+      .flush({ cliType: 'claude', model: 'claude-haiku-4-5' });
+    httpCtrl.expectOne((r) => r.url.includes('/code-review/list')).flush({
+      entries: [
+        {
+          fileName: 'code-review-large.md',
+          verdict: 'concerns',
+          summary: 'Generated diff is large.',
+          model: 'claude-haiku-4-5',
+          cliType: 'claude',
+          commit: '0aa4c5d',
+          runAt: '2026-05-14T12:00:00Z',
+        },
+      ],
+    });
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    (root.querySelector('.cr-row-toggle') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    const largeBody = [
+      '# Code Review Step',
+      '',
+      ...Array.from({ length: LARGE_DIFF_LINE_THRESHOLD }, (_, i) => `- generated finding ${i}`),
+    ].join('\n');
+    httpCtrl.expectOne((r) => r.url.includes('/code-review/code-review-large.md')).flush({
+      fileName: 'code-review-large.md',
+      content: largeBody,
+    });
+    fixture.detectChanges();
+
+    const gated = root.querySelector('[data-testid="code-review-body-gated"]');
+    expect(gated?.textContent).toContain('code-review-large.md');
+    expect(gated?.textContent).toContain('Show review body');
+    expect(root.querySelector('app-markdown')).toBeNull();
+
+    root.querySelector<HTMLButtonElement>('[data-testid="code-review-body-show"]')?.click();
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="code-review-body-gated"]')).toBeNull();
+    expect(root.querySelector('app-markdown')).toBeTruthy();
     httpCtrl.verify();
   });
 
