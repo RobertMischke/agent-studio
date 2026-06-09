@@ -1,0 +1,17 @@
+# Live reconstruction proof (run trailer grep) — 2026-06-09T19:43:41Z
+# The fix's data source: GitService.GetTaskRunCommits => git log --all --grep '[parallel-slot worktree run; jobId=<id>]'
+
+## jobId=slice-1-per-run-commit-step-artefakte
+c0d4aacd 2026-06-09 Slice 1: Per-Run-Commit der Step-Artefakte (Workspace-Git) [Foundation]
+63889dd3 2026-06-09 Slice 1: Per-Run-Commit der Step-Artefakte (Workspace-Git) [Foundation]
+9f5da998 2026-06-09 Slice 1: Per-Run-Commit der Step-Artefakte (Workspace-Git) [Foundation]
+(count: 3)
+
+## jobId=arch-lane-keys-single-source-of-truth
+
+(count: 0)
+
+## jobId=ui-navbar-lane-counters
+
+(count: 0)
+
