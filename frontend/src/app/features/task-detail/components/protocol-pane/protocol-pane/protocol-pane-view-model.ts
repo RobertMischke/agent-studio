@@ -64,6 +64,8 @@ export function outcomeIssueExplanation(issue: TaskOutcomeIssue): string {
       return 'The runner could not map the reply to a known completion shape. This is tracked separately so repeated classifier misses are visible at task and project level.';
     case 'heuristic-done':
       return 'The runner accepted a completed-looking reply through the compatibility heuristic. The category remains visible so these cases can be reduced over time.';
+    case 'task-branch-unpushed':
+      return 'The runner finished the local task-branch handoff but could not push the task branch to origin after retry. The task can still be reviewed locally, but the branch is not durable for another machine until push succeeds.';
     default:
       return 'The runner attached a categorized outcome issue to this task. The raw source is still logs/cli-output.log.';
   }

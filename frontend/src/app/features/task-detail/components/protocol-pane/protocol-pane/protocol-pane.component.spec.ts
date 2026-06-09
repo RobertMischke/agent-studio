@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ProtocolPaneComponent } from './protocol-pane.component';
+import { outcomeIssueExplanation } from './protocol-pane-view-model';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -43,5 +44,20 @@ describe('ProtocolPaneComponent (smoke)', () => {
       console.warn('[smoke] ProtocolPaneComponent initial render skipped:', (e as Error).message);
     }
     expect(fixture.componentInstance).toBeTruthy();
+  });
+});
+
+describe('outcomeIssueExplanation', () => {
+  it('explains an unpushed task branch as a portability warning', () => {
+    const text = outcomeIssueExplanation({
+      kind: 'task-branch-unpushed',
+      label: 'Task branch unpushed',
+      severity: 'Warn',
+      summary: 'Push status: failed.',
+      lastSeenAt: null,
+    });
+
+    expect(text).toContain('could not push the task branch to origin after retry');
+    expect(text).toContain('not durable for another machine');
   });
 });

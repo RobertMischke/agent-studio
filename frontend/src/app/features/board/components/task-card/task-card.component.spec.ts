@@ -453,6 +453,34 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.className).toContain('task-card__issue-pill--high');
   });
 
+  it('renders an unpushed task branch as a warning outcome issue', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      outcomeIssue: {
+        kind: 'task-branch-unpushed',
+        label: 'Task branch unpushed',
+        severity: 'Warn',
+        summary: 'Push status: failed.',
+        lastSeenAt: '2026-06-09T10:00:00Z',
+      },
+    }));
+    fixture.detectChanges();
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-outcome-issue"]') as HTMLElement | null;
+    expect(pill?.textContent).toContain('Task branch unpushed');
+    expect(pill?.className).toContain('task-card__issue-pill--warn');
+  });
+
   it('expands an epic card to show inline sub-tasks and opens a clicked sub-task', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],
