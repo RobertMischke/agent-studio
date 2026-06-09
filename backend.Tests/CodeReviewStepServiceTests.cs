@@ -181,6 +181,25 @@ public class CodeReviewStepServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_PromptNamesGoalMissRedundantAndHalfFinishedReviewRisks()
+    {
+        string? capturedPrompt = null;
+        var service = BuildService((_, _, prompt, _, _) =>
+        {
+            capturedPrompt = prompt;
+            return Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+        });
+
+        await service.RunAsync(BuildRequest(), CancellationToken.None);
+
+        Assert.NotNull(capturedPrompt);
+        Assert.Contains("do what the task asks", capturedPrompt);
+        Assert.Contains("redundant work", capturedPrompt);
+        Assert.Contains("half-finished", capturedPrompt);
+        Assert.Contains("does not solve the task", capturedPrompt);
+    }
+
+    [Fact]
     public void TagFor_MapsAllVerdicts()
     {
         Assert.Equal("code-review:pass", CodeReviewStepService.TagFor(AspectStatus.Pass));

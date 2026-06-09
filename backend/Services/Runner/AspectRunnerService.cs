@@ -120,13 +120,13 @@ public sealed class AspectRunnerService
                 ConcernNamespace: "requirement",
                 PromptTemplate: "review-aspect-requirement-fit.md",
                 Title: "Requirement fit",
-                FallbackSystem: "Does the agent's report match the prompt's acceptance criteria? Did anything land that the prompt did not ask for?"),
+                FallbackSystem: "Does the change solve the task's acceptance criteria? Block clear goal misses, redundant already-done work, or half-finished placeholders."),
             ["code-quality"] = new AspectDefinition(
                 Id: "code-quality",
                 ConcernNamespace: "quality",
                 PromptTemplate: "review-aspect-code-quality.md",
                 Title: "Code quality",
-                FallbackSystem: "Look at the diff and the changed-file list. Are there obvious regressions, dead code, missing tests, or type errors visible in the changed files?"),
+                FallbackSystem: "Look at the diff and changed-file list. Are there regressions, broken types, redundant unused implementations, or half-finished/stubbed paths visible in the changed files?"),
             ["documentation-impact"] = new AspectDefinition(
                 Id: "documentation-impact",
                 ConcernNamespace: "docs",

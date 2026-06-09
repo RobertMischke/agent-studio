@@ -1656,6 +1656,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
+        var solutionQualityGate = SolutionQualityGate.Evaluate(
+            report,
+            CountPriorReissues(workspace, entry.Name, current.Id),
+            ConfiguredMaxReissues());
+        if (solutionQualityGate.IsBlocking)
+        {
+            await HandleSolutionQualityGateAsync(workspace, entry, pending, current, report, solutionQualityGate, ct);
+            return;
+        }
+
         // Reconcile (not merge-only): set the concern tags to exactly this
         // pass's set. A follow-up pass that now passes cleanly - or raises
         // fewer concerns than before - must STRIP the stale concern chips an
@@ -2099,6 +2109,129 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Kind: ReviewDecisionKind.Reissue,
             Reason: gate.Reason,
             Prompt: "(evidence-gate static check)",
+            Response: findingsBlock,
+            FollowUp: followUp),
+            current.FolderPath,
+            moved.FolderPath);
+    }
+
+    /// <summary>
+    /// Drive a solution-quality gate decision to a conclusion. The aspect pass
+    /// did not produce a hard BLOCK, but requirement-fit / code-quality raised a
+    /// narrow non-shippable concern such as "goal not met", redundant work, or a
+    /// half-finished implementation. Those signals should not be advanced as
+    /// ordinary accept-with-concerns; they reuse the same bounded reissue /
+    /// escalate path as the other auto-review gates.
+    /// </summary>
+    private async Task HandleSolutionQualityGateAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        TaskInfo current,
+        AspectRunReport report,
+        SolutionQualityGate.Decision gate,
+        CancellationToken ct)
+    {
+        var findingsBlock = string.Join("; ", gate.Findings.Take(SolutionQualityGate.MaxFindings));
+        var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
+
+        if (gate.Action == SolutionQualityGate.SolutionQualityGateAction.Escalate)
+        {
+            ConcernTagWriter.ReconcileConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
+
+            _chatLog.AppendSupervisor(current, "escalate",
+                $"Auto-review could not clear solution-quality concerns. Reason: {gate.Reason}. Promoted to {TaskStates.Escalated}.");
+
+            var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            if (move.Status != MoveJobStatus.Success)
+            {
+                _logger.LogWarning(
+                    "ReviewDecisionOrchestrator: failed to move {JobId} to escalated after solution-quality-gate escalate: {Status} {Message}",
+                    current.Id, move.Status, move.Message);
+            }
+
+            var escalatedFolder = move.NewFolderPath ?? current.FolderPath;
+            var escalated = current with { FolderPath = escalatedFolder, State = TaskStates.Escalated };
+            RecordOrchestratorDecisionStep(escalatedFolder, PipelineStepStatus.Failed,
+                DecisionVerdictEscalate, gate.Reason);
+            WritePostProcessingOutcome(escalated, PostProcessingOutcomes.NeedsHumanInput,
+                summary: gate.Reason,
+                performerCliType: CliTypes.Claude,
+                stepId: PipelineCatalogue.OrchestratorDecisionStepId,
+                evidenceRef: "pipeline-execution.json",
+                findingRefs: report.Verdicts
+                    .Where(v => v.Status == AspectStatus.Concerns &&
+                                (string.Equals(v.Aspect, SolutionQualityGate.RequirementFitAspectId, StringComparison.OrdinalIgnoreCase) ||
+                                 string.Equals(v.Aspect, SolutionQualityGate.CodeQualityAspectId, StringComparison.OrdinalIgnoreCase)))
+                    .Select(v => $"aspect-{v.Aspect}.md")
+                    .ToList());
+
+            EmitVerdictTimeline(escalatedFolder,
+                TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, gate.Reason,
+                BuildEscalateDetails("solution-quality-gate", gate.Reason, priorReissues));
+
+            AppendReviewDecision(workspace, new ReviewDecisionRecord(
+                CreatedAt: DateTime.UtcNow,
+                JobId: current.Id,
+                Project: entry.Name,
+                Kind: ReviewDecisionKind.Escalate,
+                Reason: gate.Reason,
+                Prompt: "(solution-quality-gate static check)",
+                Response: findingsBlock,
+                FollowUp: string.Empty),
+                current.FolderPath,
+                escalatedFolder);
+
+            _statusSnapshot.RecordEscalate();
+            return;
+        }
+
+        var followUp = SolutionQualityGate.BuildFollowUp(gate);
+        var moved = MoveReissueToReadyTop(current, entry, "solution-quality-gate");
+        if (moved == null)
+        {
+            // Move failed -> no operator-facing banner; the DONE stays unresolved
+            // and the next tick retries.
+            return;
+        }
+
+        RecordOrchestratorDecisionStep(moved.FolderPath, PipelineStepStatus.Failed,
+            DecisionVerdictReissue, gate.Reason);
+        WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsFollowUpTask,
+            summary: gate.Reason,
+            performerCliType: CliTypes.Claude,
+            stepId: PipelineCatalogue.OrchestratorDecisionStepId,
+            evidenceRef: "pipeline-execution.json",
+            findingRefs: report.Verdicts
+                .Where(v => v.Status == AspectStatus.Concerns &&
+                            (string.Equals(v.Aspect, SolutionQualityGate.RequirementFitAspectId, StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(v.Aspect, SolutionQualityGate.CodeQualityAspectId, StringComparison.OrdinalIgnoreCase)))
+                .Select(v => $"aspect-{v.Aspect}.md")
+                .ToList());
+
+        await WriteFollowUpFileAsync(moved, followUp, ct);
+
+        var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
+        var count = gate.Findings.Count;
+        var noun = count == 1 ? "concern" : "concerns";
+        _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
+            $"Auto-review sent \"{title}\" back to 2-ready ({count} blocking solution-quality {noun}).");
+
+        EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
+            TimelineActors.QualityLoop,
+            $"Reopened: solution-quality gate requires follow-up for {count} {noun}.",
+            BuildReopenDetails("solution-quality-gate",
+                CountPriorReissues(workspace, entry.Name, current.Id), findingsBlock));
+
+        _statusSnapshot.RecordReissue();
+
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Reissue,
+            Reason: gate.Reason,
+            Prompt: "(solution-quality-gate static check)",
             Response: findingsBlock,
             FollowUp: followUp),
             current.FolderPath,

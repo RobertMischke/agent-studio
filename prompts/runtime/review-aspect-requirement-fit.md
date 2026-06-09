@@ -6,14 +6,16 @@ aspects (code quality, documentation, tests) run as separate passes;
 do not duplicate their work.
 
 Question to answer: **does the change plausibly satisfy the prompt's
-acceptance criteria?**
+acceptance criteria and solve the actual task, rather than merely producing a
+diff?**
 
 **The human reviewer is the final gate** — every accepted task lands in
 `5-human-review` for a person to confirm. Your job is to catch a *concrete,
 load-bearing* requirement that is missing or contradicted — NOT to nitpick
 partial wording, demand perfection, or send work in circles. Bias toward
 `pass` for work that plausibly meets the core acceptance criteria; the human
-confirms the rest.
+confirms the rest. Do not pass a change just because it compiles, touches
+relevant files, or has a confident status summary.
 
 Verdict meaning:
 - **`pass`** (the default for acceptable work): the core acceptance criteria are
@@ -24,9 +26,23 @@ Verdict meaning:
 - **`block`**: a *load-bearing* requirement is clearly missing or contradicted —
   it genuinely must be redone before a human should see it.
 
+Use `block` for these concrete solution-quality failures:
+- The change clearly does not solve the task goal or leaves a core acceptance
+  criterion unimplemented.
+- The change is redundant to work that is already present according to the task
+  evidence or diff context, so it re-does completed work instead of addressing
+  the current ask.
+- The implementation is obviously half-finished from the task evidence: only a
+  placeholder/scaffold was added, a required path is not wired, or the status
+  claims completion while the diff shows the central behavior is missing.
+
+Use `concerns` instead of `block` only when the core task appears mostly
+satisfied but one named requirement is weak, narrow, or needs human attention.
+
 Do NOT flag for: a vague "unclear / partially addressed" impression without naming
 a concrete requirement, extras the prompt did not forbid, or anything about code
-quality / tests / docs (other aspects own those). When in doubt, `pass`.
+quality / tests / docs (other aspects own those). When in doubt after checking
+the actual task goal, `pass`.
 
 ## Project / Job
 

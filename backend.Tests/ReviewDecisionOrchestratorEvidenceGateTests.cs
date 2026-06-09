@@ -121,6 +121,34 @@ public class ReviewDecisionOrchestratorEvidenceGateTests : IDisposable
     }
 
     [Fact]
+    public async Task RequirementFitGoalMissConcern_ReissuesNotAcceptWithConcerns()
+    {
+        // A clear "goal not met" signal is too strong for ordinary
+        // accept-with-concerns. The solution-quality gate uses the shared
+        // reissue budget and sends the card back with concrete feedback.
+        SeedReviewJobWithDone("goal-miss", CleanStatus, taskType: TaskTypes.Chore, withScreenshot: true);
+        var orchestrator = BuildOrchestrator(aspect => aspect switch
+        {
+            "requirement-fit" => "[[ASPECT_VERDICT: status=concerns; summary=Core task goal not met, the change only updates comments.]]\n[[TASK_DONE]]",
+            _ => PassVerdict,
+        }, maxReissues: 3);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.Ready, "goal-miss");
+        Assert.True(Directory.Exists(folder), "a clear goal-miss concern must reissue, not accept-with-concerns");
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "goal-miss")));
+
+        var pipelineJson = File.ReadAllText(Path.Combine(folder, PipelineExecutionLog.FileName));
+        Assert.Contains("\"verdict\": \"reissue\"", pipelineJson);
+        Assert.DoesNotContain("accept-with-concerns", pipelineJson);
+
+        var followUp = File.ReadAllText(Path.Combine(folder, "orchestrator-follow-up.md"));
+        Assert.Contains("Core task goal not met", followUp);
+        Assert.Contains("Do not redo already-complete work", followUp);
+    }
+
+    [Fact]
     public async Task BugTask_WithScreenshot_AspectsPass_PromotesToHumanReview()
     {
         // Control / green path: a bug task that DID ship a screenshot and passes

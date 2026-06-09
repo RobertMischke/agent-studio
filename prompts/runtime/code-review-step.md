@@ -8,22 +8,28 @@ model they picked. Your job is to produce one short narrative + one
 verdict.
 
 Question to answer: **does the change set do what the task asks for and
-not introduce regressions, dead code, broken types, or obviously bad code
-visible in the change?** The diff below may span several commits (e.g. a
-feature commit plus a later test/doc commit); judge the work as a whole.
-A later commit being test- or doc-only does **not** mean the feature is
-missing - look across the entire diff for the implementation. Focus on
-what is in the diff, not on the rest of the codebase.
+not introduce regressions, dead code, broken types, redundant work, or
+obviously bad code visible in the change?** The diff below may span several
+commits (e.g. a feature commit plus a later test/doc commit); judge the work
+as a whole. A later commit being test- or doc-only does **not** mean the
+feature is missing - look across the entire diff for the implementation.
+Focus on what is in the diff, not on the rest of the codebase.
 
 Verdicts:
 
 - `pass` - the diff is clean and the change does what the prompt asks.
 - `concerns` - something is worth flagging but the work is shippable
-  (dead code, missed reuse opportunity, minor scope creep, comment that
-  no longer matches the code).
-- `block` - a regression, broken type, dropped error path, or obvious
-  bug visible in the diff. Block is for things that should not ship
-  until fixed.
+  (mild duplication, missed reuse opportunity, minor scope creep, comment
+  that no longer matches the code).
+- `block` - a regression, broken type, dropped error path, clear task-goal
+  miss, redundant reimplementation of already-present behavior, or obvious
+  half-finished/stubbed work visible in the diff. Block is for things that
+  should not ship until fixed.
+
+Do not accept a change merely because it compiles or touches plausible files.
+Block when the submitted work clearly does not solve the task, blindly redoes
+work the evidence says already exists, or leaves the product on the old path
+because the new implementation is not wired.
 
 ## Project / Job
 

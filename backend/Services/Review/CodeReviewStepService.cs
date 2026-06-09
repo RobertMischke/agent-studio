@@ -242,6 +242,9 @@ public sealed class CodeReviewStepService
             $"Commit: `{request.Commit ?? "(HEAD)"}`. Model: `{request.Model}`.\n\n" +
             $"## Task body\n\n```\n{request.TaskBody}\n```\n\n" +
             $"## Diff\n\n```\n{request.Diff}\n```\n\n" +
+            "Block clear task-goal misses, redundant reimplementations of already-present behavior, " +
+            "regressions, broken types, and half-finished/stubbed work visible in the diff. " +
+            "Use concerns only for shippable issues a human can review without another agent run.\n\n" +
             "Reply with a short paragraph plus exactly one sentinel on its own line:\n\n" +
             "[[ASPECT_VERDICT: status=<pass|concerns|block>; summary=<one short sentence>]]\n";
     }
