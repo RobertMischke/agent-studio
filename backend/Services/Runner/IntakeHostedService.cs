@@ -69,7 +69,7 @@ public sealed class IntakeHostedService : BackgroundService
                 var allSettings = settings.GetAll();
                 var enabledProjects = scanner.GetWatchPaths()
                     .Where(p => allSettings.TryGetValue(p.Name, out var s)
-                                && s.IntakeEnabled is true)
+                                && ShouldAutoRunIntake(s))
                     .ToList();
 
                 if (enabledProjects.Count == 0)
@@ -190,4 +190,12 @@ public sealed class IntakeHostedService : BackgroundService
         return string.IsNullOrWhiteSpace(phase)
             || string.Equals(phase, LifecyclePhases.HumanReady, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Background intake is automatic preparation, so the manual autonomy level
+    /// suppresses it even when intake is enabled. A user can still trigger
+    /// intake explicitly through the manual endpoint.
+    /// </summary>
+    internal static bool ShouldAutoRunIntake(ProjectSettings settings)
+        => settings.IntakeEnabled is true && (settings.AutonomyLevel ?? 2) > 0;
 }

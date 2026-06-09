@@ -4835,10 +4835,14 @@ public class ProjectRunner
         var promptPath = Path.Combine(info.FolderPath, "prompt.md");
         var repositoryPath = string.IsNullOrWhiteSpace(Entry.RepositoryPath) ? Entry.RootPath : Entry.RepositoryPath;
         var effectiveRepositoryPath = IsWorktreePath(runWorkingDir) ? runWorkingDir : repositoryPath;
+        var promptText = ReadPromptText(promptPath);
+        if (ShouldForegroundIntakeEnrichment(plan))
+            promptText = PrependIntakeEnrichment(info.FolderPath, promptText);
+
         var values = new Dictionary<string, string?>(plan.PromptVariables)
         {
             ["prompt_path"] = promptPath,
-            ["prompt_text"] = RewriteMainCheckoutPathsForRun(ReadPromptText(promptPath), runWorkingDir),
+            ["prompt_text"] = RewriteMainCheckoutPathsForRun(promptText, runWorkingDir),
             ["job_folder"] = info.FolderPath,
             ["title"] = string.IsNullOrWhiteSpace(info.Title) ? "(untitled)" : info.Title,
             ["working_directory"] = runWorkingDir,
@@ -4927,6 +4931,32 @@ public class ProjectRunner
         try
         {
             return File.Exists(promptPath) ? File.ReadAllText(promptPath).Trim() : string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static bool ShouldForegroundIntakeEnrichment(RunPlan plan)
+        => string.Equals(plan.PromptTemplate, RuntimePromptService.RunnerFreshStart, StringComparison.Ordinal);
+
+    private static string PrependIntakeEnrichment(string jobFolder, string promptText)
+    {
+        var enrichment = ReadIntakeEnrichedContext(jobFolder);
+        if (string.IsNullOrWhiteSpace(enrichment)) return promptText;
+        if (string.IsNullOrWhiteSpace(promptText)) return enrichment.Trim();
+        return enrichment.TrimEnd() + "\n\n---\n\n" + promptText;
+    }
+
+    private static string ReadIntakeEnrichedContext(string jobFolder)
+    {
+        try
+        {
+            var path = Path.Combine(
+                jobFolder,
+                IntakeRunner.EnrichedContextRelativePath.Replace('/', Path.DirectorySeparatorChar));
+            return File.Exists(path) ? File.ReadAllText(path).Trim() : string.Empty;
         }
         catch
         {

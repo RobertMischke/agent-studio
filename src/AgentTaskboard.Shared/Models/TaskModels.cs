@@ -452,6 +452,14 @@ public record LifecycleSnapshot
     /// can read what context the card carries and what is still outstanding.
     /// </summary>
     public ContextManifest? Context { get; init; }
+    /// <summary>
+    /// Constraint/context enrichment selected by intake and foregrounded in the
+    /// coding-run prompt. Null when intake has not run or selected no
+    /// constraints. The Markdown artifact lives in the job folder at
+    /// <see cref="IntakeEnrichmentManifest.ArtifactPath"/> so the exact injected
+    /// block is auditable after the fact.
+    /// </summary>
+    public IntakeEnrichmentManifest? Enrichment { get; init; }
 }
 
 /// <summary>
@@ -480,6 +488,38 @@ public record ContextManifest
     /// <summary>True when every referenced task and attachment was resolved.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsComplete => MissingReferences.Count == 0 && MissingAttachments.Count == 0;
+}
+
+/// <summary>
+/// Result of the intake constraint/context enrichment step. The step selects a
+/// small set of repository-wide constraints that are relevant to the task and
+/// writes the rendered block to <see cref="ArtifactPath"/> under the job folder.
+/// </summary>
+public record IntakeEnrichmentManifest
+{
+    public int Version { get; init; } = 1;
+    /// <summary>Relative Markdown artifact path inside the job folder.</summary>
+    public string ArtifactPath { get; init; } = "";
+    /// <summary>Selector implementation that produced this manifest.</summary>
+    public string Selector { get; init; } = "";
+    /// <summary>Detected task areas that drove relevance selection.</summary>
+    public List<string> Areas { get; init; } = [];
+    /// <summary>Constraints injected into the coding-run prompt.</summary>
+    public List<IntakeConstraintSelection> Constraints { get; init; } = [];
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsEmpty => Constraints.Count == 0;
+}
+
+/// <summary>One repository-wide constraint selected for a task by intake.</summary>
+public record IntakeConstraintSelection
+{
+    /// <summary>Stable id used by tests, audits, and future UI chips.</summary>
+    public string Id { get; init; } = "";
+    public string Title { get; init; } = "";
+    public string Text { get; init; } = "";
+    public string Source { get; init; } = "";
+    public List<string> Areas { get; init; } = [];
 }
 
 /// <summary>One scheduled or completed check inside a <see cref="LifecycleSnapshot"/>.</summary>

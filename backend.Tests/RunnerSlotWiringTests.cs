@@ -127,6 +127,58 @@ public sealed class RunnerSlotWiringTests : IDisposable
     }
 
     [Fact]
+    public void RenderPrompt_FreshStart_PrependsIntakeEnrichedContext()
+    {
+        var (runner, _) = BuildRunner();
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "git-runner-context");
+        Directory.CreateDirectory(jobFolder);
+        var promptPath = Path.Combine(jobFolder, "prompt.md");
+        File.WriteAllText(promptPath, "Original task body: update runner git handling.");
+        var intakeDir = Path.Combine(jobFolder, "intake");
+        Directory.CreateDirectory(intakeDir);
+        File.WriteAllText(Path.Combine(intakeDir, "enriched-context.md"),
+            "## Intake-enriched context\n\n- **Keep git handling in the backend** (`git-handling-api-not-cli`)\n  Git lifecycle work belongs in API/backend orchestration.");
+
+        var info = new TaskInfo
+        {
+            Id = "git-runner-context",
+            Title = "Update runner git handling",
+            State = TaskStates.Progress,
+            FolderPath = jobFolder,
+            WatchPath = _watchPath,
+            ProjectName = ProjectName
+        };
+        var plan = new RunPlan(
+            PromptTemplate: RuntimePromptService.RunnerFreshStart,
+            PromptVariables: new Dictionary<string, string?>
+            {
+                ["prompt_path"] = promptPath,
+                ["job_folder"] = jobFolder,
+                ["user_followup"] = null
+            },
+            PromptOverride: null,
+            SessionToResume: null,
+            ResumeFlag: false,
+            EventKind: "start",
+            EventReason: null,
+            EventInputSessionId: null,
+            MoveJobToProgress: false,
+            MarkSessionChainRecovery: false,
+            WriteCutMarker: false,
+            CutMarkerReason: null,
+            PersistSessionName: null,
+            ClearStaleSessionName: false);
+
+        var rendered = InvokeRenderPrompt(runner, plan, info, _repoRoot);
+
+        Assert.Contains("## Intake-enriched context", rendered);
+        Assert.Contains("git-handling-api-not-cli", rendered);
+        var enrichedIndex = rendered.IndexOf("## Intake-enriched context", StringComparison.Ordinal);
+        var originalIndex = rendered.IndexOf("Original task body", StringComparison.Ordinal);
+        Assert.True(enrichedIndex >= 0 && originalIndex > enrichedIndex);
+    }
+
+    [Fact]
     public void RenderPrompt_ForWorktreePromptOverride_StillAddsContainmentNotice()
     {
         var (runner, _) = BuildRunner();

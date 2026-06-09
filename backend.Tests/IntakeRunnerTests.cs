@@ -303,6 +303,47 @@ public class IntakeRunnerTests : IDisposable
         Assert.False(manifest.IsComplete);
     }
 
+    // ---- Constraint/context enrichment --------------------------------------
+
+    [Fact]
+    public void BuildEnrichmentManifest_GitRunnerTask_IncludesGitHandlingConstraint()
+    {
+        var target = new TaskInfo
+        {
+            Id = "git-runner",
+            Title = "Move git handling out of the CLI runner",
+            State = TaskStates.Ready,
+            Tags = ["runner"]
+        };
+        var prompt = "Change the backend runner so worktree branch, commit, and merge handling is orchestrated by the API instead of worker agents.";
+
+        var manifest = IntakeRunner.BuildEnrichmentManifest(target, prompt);
+
+        Assert.Contains("git", manifest.Areas);
+        Assert.Contains("runner", manifest.Areas);
+        Assert.Contains(manifest.Constraints, c => c.Id == "git-handling-api-not-cli");
+        Assert.Contains(manifest.Constraints, c => c.Id == "orchestrator-state-machine-authority");
+    }
+
+    [Fact]
+    public void BuildEnrichmentManifest_FrontendTask_IncludesDesignTokenConstraint()
+    {
+        var target = new TaskInfo
+        {
+            Id = "frontend-layout",
+            Title = "Polish the task card layout",
+            State = TaskStates.Ready,
+            Tags = ["frontend"]
+        };
+        var prompt = "Update the Angular component SCSS so the card spacing and badge colors follow the shared UI design.";
+
+        var manifest = IntakeRunner.BuildEnrichmentManifest(target, prompt);
+
+        Assert.Contains("frontend", manifest.Areas);
+        Assert.Contains(manifest.Constraints, c => c.Id == "frontend-design-tokens-components");
+        Assert.DoesNotContain(manifest.Constraints, c => c.Id == "git-handling-api-not-cli");
+    }
+
     // ---- RunForJob integration: phase transitions + sidecar ------------------
 
     [Fact]
@@ -357,9 +398,11 @@ public class IntakeRunnerTests : IDisposable
     public void RunForJob_DuplicateCandidate_PinsPeerInDetails()
     {
         WriteJob(TaskStates.Ready, "dup-old", phase: LifecyclePhases.HumanReady,
-            promptMd: "Add daily token rollup card to project header. Acceptance: chip shows totals.");
+            promptMd: "Add daily token rollup card to project header. Acceptance: chip shows totals.",
+            title: "Add daily token rollup card to project header");
         WriteJob(TaskStates.Ready, "dup-new", phase: LifecyclePhases.HumanReady,
-            promptMd: "Add daily token rollup card to project header. Done when chip is visible.");
+            promptMd: "Add daily token rollup card to project header. Done when chip is visible.",
+            title: "Add daily token rollup card project header");
 
         var runner = BuildRunner();
         var verdict = runner.RunForJob("dup-new");
@@ -418,6 +461,32 @@ public class IntakeRunnerTests : IDisposable
     }
 
     [Fact]
+    public void RunForJob_WritesEnrichedContextArtifactAndSidecarManifest()
+    {
+        WriteJob(TaskStates.Ready, "git-card", phase: LifecyclePhases.HumanReady,
+            promptMd: "Update backend runner git handling so worktree branch, commit, and merge steps live in the API layer. Done when worker agents no longer own git lifecycle decisions.");
+
+        var runner = BuildRunner();
+        runner.RunForJob("git-card");
+
+        var artifactPath = Path.Combine(
+            _watchPath,
+            TaskStates.Ready,
+            "git-card",
+            IntakeRunner.EnrichedContextRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        Assert.True(File.Exists(artifactPath));
+        var artifact = File.ReadAllText(artifactPath);
+        Assert.Contains("Intake-enriched context", artifact);
+        Assert.Contains("git-handling-api-not-cli", artifact);
+
+        var sidecar = ReadLifecycleJson("git-card");
+        Assert.NotNull(sidecar);
+        Assert.NotNull(sidecar!.Enrichment);
+        Assert.Equal(IntakeRunner.EnrichedContextRelativePath, sidecar.Enrichment!.ArtifactPath);
+        Assert.Contains(sidecar.Enrichment.Constraints, c => c.Id == "git-handling-api-not-cli");
+    }
+
+    [Fact]
     public void RunForJob_RejectsNonReadyJobs()
     {
         WriteJob(TaskStates.Preparation, "draft", phase: null, promptMd: "Anything goes.");
@@ -429,13 +498,13 @@ public class IntakeRunnerTests : IDisposable
 
     // ---- helpers -------------------------------------------------------------
 
-    private void WriteJob(string state, string slug, string? phase, string promptMd)
+    private void WriteJob(string state, string slug, string? phase, string promptMd, string? title = null)
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
         var phaseField = phase is null ? "" : $",\"phase\":\"{phase}\"";
         File.WriteAllText(Path.Combine(dir, "task.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\",\"ownerClientId\":\"default\"{phaseField}}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{title ?? slug + " title"}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\",\"ownerClientId\":\"default\"{phaseField}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptMd);
     }
 

@@ -260,6 +260,27 @@ public class OrchestratorIntakeTests : IDisposable
     }
 
     [Fact]
+    public void ShouldAutoRunIntake_RequiresEnabledAndNonManualAutonomy()
+    {
+        Assert.False(IntakeHostedService.ShouldAutoRunIntake(new ProjectSettings()));
+        Assert.True(IntakeHostedService.ShouldAutoRunIntake(new ProjectSettings
+        {
+            IntakeEnabled = true,
+            AutonomyLevel = null
+        }));
+        Assert.False(IntakeHostedService.ShouldAutoRunIntake(new ProjectSettings
+        {
+            IntakeEnabled = true,
+            AutonomyLevel = 0
+        }));
+        Assert.True(IntakeHostedService.ShouldAutoRunIntake(new ProjectSettings
+        {
+            IntakeEnabled = true,
+            AutonomyLevel = 1
+        }));
+    }
+
+    [Fact]
     public void Intake_DrainsEveryAwaitingCardInOneTick()
     {
         // The parallel-prep contract: several awaiting cards are all stamped in

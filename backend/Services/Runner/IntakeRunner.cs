@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Tasks;
@@ -78,6 +79,8 @@ public sealed record IntakeVerdict
 public sealed class IntakeRunner
 {
     public const string IntakeParticipantPrefix = "intake:";
+    public const string EnrichedContextRelativePath = "intake/enriched-context.md";
+    private const string EnrichmentSelector = "constraint-selector-v1";
 
     private readonly TaskScannerService _scanner;
     private readonly TaskMutationService _mutations;
@@ -103,6 +106,80 @@ public sealed class IntakeRunner
     }
 
     public static string ParticipantIntakeFor(string project) => $"{IntakeParticipantPrefix}{project}";
+
+    /// <summary>
+    /// Select repository-wide constraints that should be foregrounded for this
+    /// task before the coding CLI sees the prompt. Deterministic V1 keeps the
+    /// contract testable and cheap; the manifest's selector/version fields let a
+    /// later model-assisted selector land without changing the audit artifact.
+    /// </summary>
+    public static IntakeEnrichmentManifest BuildEnrichmentManifest(TaskInfo target, string? promptMarkdown)
+    {
+        var areas = DetectTaskAreas(target, promptMarkdown);
+        var areaSet = new HashSet<string>(areas, StringComparer.OrdinalIgnoreCase);
+        var selected = new List<IntakeConstraintSelection>();
+
+        foreach (var rule in ConstraintRules)
+        {
+            if (rule.Applies(areaSet))
+                selected.Add(CloneConstraint(rule.Constraint));
+        }
+
+        return new IntakeEnrichmentManifest
+        {
+            ArtifactPath = EnrichedContextRelativePath,
+            Selector = EnrichmentSelector,
+            Areas = areas.ToList(),
+            Constraints = selected
+        };
+    }
+
+    public static IReadOnlyList<string> DetectTaskAreas(TaskInfo target, string? promptMarkdown)
+    {
+        var haystack = string.Join('\n',
+            target.Title ?? string.Empty,
+            target.TaskType ?? string.Empty,
+            string.Join(" ", target.Tags ?? Enumerable.Empty<string>()),
+            promptMarkdown ?? string.Empty);
+
+        var areas = new List<string>();
+        foreach (var (area, needles) in AreaNeedles)
+        {
+            if (needles.Any(n => haystack.Contains(n, StringComparison.OrdinalIgnoreCase)))
+                areas.Add(area);
+        }
+        return areas;
+    }
+
+    public static string RenderEnrichedContextMarkdown(IntakeEnrichmentManifest manifest)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("## Intake-enriched context");
+        sb.AppendLine();
+        sb.AppendLine("The orchestrator selected these project constraints before the coding run. Treat them as task-specific guardrails on top of `AGENTS.md` and the original prompt.");
+        sb.AppendLine();
+        sb.AppendLine($"- Selector: `{(string.IsNullOrWhiteSpace(manifest.Selector) ? EnrichmentSelector : manifest.Selector)}`");
+        sb.AppendLine($"- Detected areas: `{(manifest.Areas.Count == 0 ? "general" : string.Join("`, `", manifest.Areas))}`");
+        sb.AppendLine($"- Audit artifact: `{(string.IsNullOrWhiteSpace(manifest.ArtifactPath) ? EnrichedContextRelativePath : manifest.ArtifactPath)}`");
+        sb.AppendLine();
+
+        if (manifest.Constraints.Count == 0)
+        {
+            sb.AppendLine("No task-specific constraints were selected.");
+            return sb.ToString().TrimEnd();
+        }
+
+        sb.AppendLine("### Injected constraints");
+        sb.AppendLine();
+        foreach (var c in manifest.Constraints)
+        {
+            sb.AppendLine($"- **{c.Title}** (`{c.Id}`)");
+            sb.AppendLine($"  Source: `{c.Source}`");
+            sb.AppendLine($"  {c.Text}");
+        }
+
+        return sb.ToString().TrimEnd();
+    }
 
     /// <summary>
     /// Pure-function evaluation surface. Runs every check in order and
@@ -256,6 +333,8 @@ public sealed class IntakeRunner
         // Context-load: resolve references + prompt attachments against what is
         // actually available, so the verdict and sidecar carry the card's context.
         var context = BuildContextManifest(info, prompt, peers, ReadAttachmentFileNames(info.FolderPath));
+        var enrichment = BuildEnrichmentManifest(info, prompt);
+        WriteEnrichedContextArtifact(info, enrichment);
         // Surface the context-load result in the run log: the manifest already
         // lands in lifecycle.json, but a structured line lets operators watching
         // the Preparation step see at a glance what context a card is missing
@@ -266,6 +345,12 @@ public sealed class IntakeRunner
             context.ResolvedReferences.Count, context.MissingReferences.Count,
             context.ResolvedAttachments.Count, context.MissingAttachments.Count,
             context.Tags.Count, context.IsComplete);
+        _logger.LogInformation(
+            "Intake enrichment for {JobId}: selected {ConstraintCount} constraint(s) for areas [{Areas}] into {ArtifactPath}",
+            info.Id,
+            enrichment.Constraints.Count,
+            string.Join(", ", enrichment.Areas),
+            enrichment.ArtifactPath);
 
         // Stamp intake-running first so observers see the in-flight state. A
         // restart between this stamp and the verdict write leaves the card in
@@ -274,20 +359,24 @@ public sealed class IntakeRunner
         EmitChat(info, "running", $"Intake check started by {ParticipantIntakeFor(info.ProjectName)}.");
 
         var verdict = Evaluate(info, prompt, peers);
-        ApplyVerdict(info, verdict, context);
+        ApplyVerdict(info, verdict, context, enrichment);
         return verdict;
     }
 
     /// <summary>Apply a precomputed verdict to a job (used by tests and by RunForJob).</summary>
-    public void ApplyVerdict(TaskInfo info, IntakeVerdict verdict, ContextManifest? context = null)
+    public void ApplyVerdict(
+        TaskInfo info,
+        IntakeVerdict verdict,
+        ContextManifest? context = null,
+        IntakeEnrichmentManifest? enrichment = null)
     {
         var phase = verdict.Outcome == IntakeOutcome.Pass
             ? LifecyclePhases.IntakePassed
             : LifecyclePhases.IntakeBlocked;
         WritePhase(info, phase);
-        WriteLifecycleSidecar(info, verdict, phase, context);
+        WriteLifecycleSidecar(info, verdict, phase, context, enrichment);
         var tag = verdict.Outcome.ToString().ToLowerInvariant();
-        EmitChat(info, tag, $"Intake {tag}: {verdict.Reason}");
+        EmitChat(info, tag, $"Intake {tag}: {verdict.Reason}{BuildEnrichmentChatSuffix(enrichment)}");
         // Job-lifecycle bus event: the substate transition is meaningful
         // independent of the chat note (typed timeline drill-down).
         if (_bus != null)
@@ -310,7 +399,12 @@ public sealed class IntakeRunner
         _mutations.SetJobPhase(info.FolderPath, phase);
     }
 
-    private void WriteLifecycleSidecar(TaskInfo info, IntakeVerdict verdict, string phase, ContextManifest? context)
+    private void WriteLifecycleSidecar(
+        TaskInfo info,
+        IntakeVerdict verdict,
+        string phase,
+        ContextManifest? context,
+        IntakeEnrichmentManifest? enrichment)
     {
         try
         {
@@ -322,6 +416,7 @@ public sealed class IntakeRunner
                 PhaseEnteredAt = now,
                 BlockingReason = verdict.Outcome == IntakeOutcome.Pass ? null : verdict.Reason,
                 Context = context,
+                Enrichment = enrichment,
                 IntakeChecks =
                 [
                     new LifecycleCheck
@@ -342,6 +437,30 @@ public sealed class IntakeRunner
         }
     }
 
+    private void WriteEnrichedContextArtifact(TaskInfo info, IntakeEnrichmentManifest enrichment)
+    {
+        try
+        {
+            var path = Path.Combine(info.FolderPath, EnrichedContextRelativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, RenderEnrichedContextMarkdown(enrichment));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write intake enrichment artifact for {JobId}", info.Id);
+        }
+    }
+
+    private static string BuildEnrichmentChatSuffix(IntakeEnrichmentManifest? enrichment)
+    {
+        if (enrichment == null) return "";
+        if (enrichment.Constraints.Count == 0)
+            return $" No additional constraints selected; audit artifact: {enrichment.ArtifactPath}.";
+
+        var ids = string.Join(", ", enrichment.Constraints.Select(c => c.Id));
+        return $" Injected {enrichment.Constraints.Count} constraint(s) into {enrichment.ArtifactPath}: {ids}.";
+    }
+
     private void EmitChat(TaskInfo info, string tag, string body)
     {
         try
@@ -357,6 +476,87 @@ public sealed class IntakeRunner
     }
 
     // ---- Heuristic checks ------------------------------------------------
+
+    private sealed record ConstraintRule(
+        IntakeConstraintSelection Constraint,
+        Func<IReadOnlySet<string>, bool> Applies);
+
+    private static readonly (string Area, string[] Needles)[] AreaNeedles =
+    [
+        ("backend", ["backend", ".cs", "c#", ".net", "dotnet", "api", "endpoint", "service", "controller"]),
+        ("runner", ["runner", "pickup", "cli", "agent", "orchestrator", "intake", "pre-step", "pipeline", "watchdog", "sentinel"]),
+        ("frontend", ["frontend", "angular", ".ts", ".scss", "css", "component", "ui", "design", "token", "layout", "button", "lane", "card", "visual"]),
+        ("git", ["git", "commit", "push", "merge", "branch", "worktree", "workspace artifact", "auto-commit", "pull request"]),
+        ("filesystem", ["job folder", "task folder", "job.json", "task.json", "lane", "state", "move", "reorder", "archive", ".orchestrator", "workspace"]),
+        ("refactor", ["refactor", "split", "extract", "rename", "namespace", "move file", "decompose"])
+    ];
+
+    private static readonly ConstraintRule[] ConstraintRules =
+    [
+        new(
+            new IntakeConstraintSelection
+            {
+                Id = "repo-instructions-source",
+                Title = "Use repository instructions and indexed docs",
+                Source = "AGENTS.md; docs/README.md",
+                Areas = ["general"],
+                Text = "Follow the active AGENTS.md rules first. When project documentation is needed, start at docs/README.md instead of scanning docs/ blindly. Repository artifacts, prompts, comments, and docs written by this project stay in English."
+            },
+            _ => true),
+        new(
+            new IntakeConstraintSelection
+            {
+                Id = "git-handling-api-not-cli",
+                Title = "Keep git/workspace artifact handling in the backend",
+                Source = "AGENTS.md#stable-update-policy; docs/commit-push-doctrine.md; docs/architecture-decisions.md#adr-0052",
+                Areas = ["git", "runner", "backend"],
+                Text = "Git handling for workspace artifacts belongs in API/backend orchestration and platform-owned pre/post pipeline steps, not in the CLI/agent layer. Worker CLIs do not commit, push, merge, or manage task worktrees on their own."
+            },
+            areas => areas.Contains("git") || (areas.Contains("runner") && areas.Contains("backend"))),
+        new(
+            new IntakeConstraintSelection
+            {
+                Id = "task-state-api-first",
+                Title = "Use API/state-machine boundaries for task state",
+                Source = "AGENTS.md#task-organization-rule-api-first; docs/filesystem-contract.md",
+                Areas = ["filesystem", "runner"],
+                Text = "Task folders, lanes, pickup, stop, continue, and state transitions are application-owned. Code should route task mutations through the API/state-machine services instead of direct filesystem moves or job.json state edits."
+            },
+            areas => areas.Contains("filesystem") || areas.Contains("runner")),
+        new(
+            new IntakeConstraintSelection
+            {
+                Id = "frontend-design-tokens-components",
+                Title = "Use central frontend design tokens and components",
+                Source = "frontend/AGENTS.md#spacing-tokens-never-raw-px; docs/design-principles.md",
+                Areas = ["frontend"],
+                Text = "Frontend changes should use the central design-token scale and existing standard components. Avoid local hard-coded spacing, colors, badge geometry, or one-off UI primitives when shared tokens/components cover the case."
+            },
+            areas => areas.Contains("frontend")),
+        new(
+            new IntakeConstraintSelection
+            {
+                Id = "stable-namespaces-on-splits",
+                Title = "Keep namespaces stable during file splits",
+                Source = "AGENTS.md; existing C# project conventions",
+                Areas = ["refactor", "backend"],
+                Text = "When splitting or extracting files, keep existing namespaces and public type identities stable unless the task explicitly calls for a coordinated namespace migration."
+            },
+            areas => areas.Contains("refactor")),
+        new(
+            new IntakeConstraintSelection
+            {
+                Id = "orchestrator-state-machine-authority",
+                Title = "The orchestrator remains the state-machine authority",
+                Source = "AGENTS.md#orchestration-philosophy-deterministic-over-prompt-based; docs/agent-task-contract.md",
+                Areas = ["runner", "backend"],
+                Text = "CLI output and sentinels are inputs, not authority. Runner and policy code own deterministic lifecycle decisions, escalation, retries, and lane movement."
+            },
+            areas => areas.Contains("runner"))
+    ];
+
+    private static IntakeConstraintSelection CloneConstraint(IntakeConstraintSelection c)
+        => c with { Areas = c.Areas.ToList() };
 
     private static IntakeVerdict? CheckBlocked(string prompt)
     {
