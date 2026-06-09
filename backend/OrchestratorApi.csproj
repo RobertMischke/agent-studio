@@ -15,13 +15,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\AgentTaskboard.Shared\AgentTaskboard.Shared.csproj" />
-    <ProjectReference Include="..\src\AgentTaskboard.OutputParser\AgentTaskboard.OutputParser.csproj" />
-    <ProjectReference Include="..\src\AgentTaskboard.Runner\AgentTaskboard.Runner.csproj" />
+    <InternalsVisibleTo Include="OrchestratorApi.Tests" />
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="OrchestratorApi.Tests" />
+    <!-- Global usings preserved from the now-consolidated AgentTaskboard.Runner
+         project (its source files relied on these as project-level usings). -->
+    <Using Include="Microsoft.Extensions.Logging" />
+    <Using Include="Microsoft.Extensions.Configuration" />
   </ItemGroup>
 
   <ItemGroup>
