@@ -194,4 +194,11 @@ test('Explorer Project Board row shows subtle live lane counters', async ({ page
 
   expect(styles.color).not.toBe(styles.background);
   expect(styles.border).not.toBe(styles.background);
+
+  const screenshotPath = test.info().outputPath('project-board-lane-counters.png');
+  await board.screenshot({ path: screenshotPath });
+  await test.info().attach('project-board-lane-counters', {
+    path: screenshotPath,
+    contentType: 'image/png',
+  });
 });
