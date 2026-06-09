@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using OrchestratorApi.Models;
 using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services.Pipeline;
@@ -139,7 +140,7 @@ public sealed class WorkspaceArtifactCommitService
                 if (string.IsNullOrWhiteSpace(id)) continue;
 
                 var verdict = GetString(step, "verdict");
-                var status = GetString(step, "status");
+                var status = ResolveTerminalStatusToken(step);
                 var value = string.IsNullOrWhiteSpace(verdict) ? status : verdict;
                 if (string.IsNullOrWhiteSpace(value)) continue;
                 steps.Add($"{id}={NormalizeToken(value)}");
@@ -176,8 +177,42 @@ public sealed class WorkspaceArtifactCommitService
         return count;
     }
 
+    internal static int ResolveRunIndexFromPipelineAttempt(string? jobFolderPath)
+    {
+        if (string.IsNullOrWhiteSpace(jobFolderPath)) return 0;
+        var path = Path.Combine(jobFolderPath, "pipeline-execution.json");
+        if (!File.Exists(path)) return 0;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            if (doc.RootElement.TryGetProperty("attempt", out var attemptEl)
+                && attemptEl.ValueKind == JsonValueKind.Number
+                && attemptEl.TryGetInt32(out var attempt)
+                && attempt > 0)
+            {
+                return attempt;
+            }
+
+            if (doc.RootElement.TryGetProperty("previousAttempts", out var previousEl)
+                && previousEl.ValueKind == JsonValueKind.Array)
+            {
+                return previousEl.GetArrayLength() + 1;
+            }
+        }
+        catch
+        {
+            return 0;
+        }
+
+        return 0;
+    }
+
     private int ResolveRunIndex(string gitRoot, IReadOnlyList<string> pathspecs, string afterFolder)
     {
+        var fromPipeline = ResolveRunIndexFromPipelineAttempt(afterFolder);
+        if (fromPipeline > 0) return fromPipeline;
+
         var fromEvents = ResolveRunIndexFromSessionEvents(afterFolder);
         if (fromEvents > 0) return fromEvents;
 
@@ -247,6 +282,36 @@ public sealed class WorkspaceArtifactCommitService
 
     private static string NormalizeToken(string value) =>
         value.Trim().Replace(' ', '-').ToLowerInvariant();
+
+    private static string? ResolveTerminalStatusToken(JsonElement step)
+    {
+        if (!step.TryGetProperty("status", out var el)) return null;
+
+        PipelineStepStatus? status = null;
+        string? raw = null;
+        if (el.ValueKind == JsonValueKind.String)
+        {
+            raw = el.GetString();
+            if (!string.IsNullOrWhiteSpace(raw)
+                && Enum.TryParse<PipelineStepStatus>(raw, ignoreCase: true, out var parsed))
+            {
+                status = parsed;
+            }
+        }
+        else if (el.ValueKind == JsonValueKind.Number
+                 && el.TryGetInt32(out var numeric)
+                 && Enum.IsDefined(typeof(PipelineStepStatus), numeric))
+        {
+            status = (PipelineStepStatus)numeric;
+        }
+
+        return status switch
+        {
+            PipelineStepStatus.Passed or PipelineStepStatus.Failed or PipelineStepStatus.Skipped => status.Value.ToString(),
+            null when !string.IsNullOrWhiteSpace(raw) => raw,
+            _ => null,
+        };
+    }
 
     private static string? GetString(JsonElement obj, string property)
         => obj.TryGetProperty(property, out var el) && el.ValueKind == JsonValueKind.String

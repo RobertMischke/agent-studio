@@ -118,18 +118,86 @@ public sealed class WorkspaceArtifactCommitServiceTests : IDisposable
         Assert.Contains(history, m => m.Contains("Steps: aspect-code-quality=pass"));
     }
 
+    [Fact]
+    public void RunBoundaryCommit_UsesPipelineAttemptForRunIndex()
+    {
+        var job = JobFolder("ASS-8");
+        Directory.CreateDirectory(Path.Combine(job, "logs"));
+        File.WriteAllText(Path.Combine(job, "code-review.md"), "review\n");
+        File.WriteAllText(Path.Combine(job, "pipeline-execution.json"), PipelineJson("aspect-code-quality", "Pass", attempt: 2));
+        File.WriteAllText(Path.Combine(job, "logs", "session-events.jsonl"), "{}\n{}\n{}\n{}\n");
+
+        var result = _service.TryCommitRunBoundary(
+            _root,
+            "ASS-8",
+            beforeMoveFolderPath: null,
+            afterMoveFolderPath: job,
+            ReviewDecisionKind.AcceptAsDone);
+
+        Assert.True(result.Success, result.Error);
+        Assert.True(result.DidCommit);
+        Assert.Equal(2, result.RunIndex);
+
+        var message = RunGitCapture(_root, "log", "-1", "--format=%B");
+        Assert.Contains("Run-Index: 2", message);
+        Assert.Contains("Verdict: accept", message);
+    }
+
+    [Fact]
+    public void RunBoundaryCommit_ParsesNumericPipelineStatusesForStepsTrailer()
+    {
+        var job = JobFolder("ASS-9");
+        Directory.CreateDirectory(job);
+        File.WriteAllText(Path.Combine(job, "pipeline-execution.json"), NumericPipelineJson());
+
+        var result = _service.TryCommitRunBoundary(
+            _root,
+            "ASS-9",
+            beforeMoveFolderPath: null,
+            afterMoveFolderPath: job,
+            ReviewDecisionKind.Reissue);
+
+        Assert.True(result.Success, result.Error);
+        Assert.True(result.DidCommit);
+        Assert.Equal(
+            "pre-loop-guard=passed,aspect-code-quality=warn,post-orchestrator-decision=skipped",
+            result.Steps);
+
+        var message = RunGitCapture(_root, "log", "-1", "--format=%B");
+        Assert.Contains("Steps: pre-loop-guard=passed,aspect-code-quality=warn,post-orchestrator-decision=skipped", message);
+    }
+
     private string JobFolder(string id) =>
         Path.Combine(_root, "projects", "agent-taskboard", "tasks", "001", id);
 
     private string Relative(string path) =>
         Path.GetRelativePath(_root, path).Replace('\\', '/');
 
-    private static string PipelineJson(string stepId, string verdict) =>
-        $$"""
+    private static string PipelineJson(string stepId, string verdict, int? attempt = null)
+    {
+        var attemptLine = attempt.HasValue
+            ? $",\n  \"attempt\": {attempt.Value}"
+            : string.Empty;
+        return
+            "{\n" +
+            "  \"steps\": [\n" +
+            $"    {{ \"stepId\": \"{stepId}\", \"status\": \"Passed\", \"verdict\": \"{verdict}\" }}\n" +
+            "  ]" +
+            attemptLine + "\n" +
+            "}\n";
+    }
+
+    private static string NumericPipelineJson() =>
+        """
         {
           "steps": [
-            { "stepId": "{{stepId}}", "status": "Passed", "verdict": "{{verdict}}" }
-          ]
+            { "stepId": "pre-loop-guard", "status": 2 },
+            { "stepId": "core-agent-run", "status": 1 },
+            { "stepId": "aspect-code-quality", "status": 2, "verdict": "Warn" },
+            { "stepId": "post-orchestrator-decision", "status": 4 },
+            { "stepId": "post-git-commit-attribution", "status": 5 }
+          ],
+          "attempt": 1
         }
         """;
 
