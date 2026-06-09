@@ -50,8 +50,12 @@
     max-height: min(520px, calc(100vh - 96px));
     border: 1px solid var(--studio-border);
     border-radius: 8px;
-    background: var(--studio-bg-raised, var(--studio-bg));
-    box-shadow: var(--elevation-tooltip, 0 12px 32px rgba(0, 0, 0, 0.35));
+    // Opaque elevated surface so the content below never bleeds through the
+    // popover. Earlier this read undefined tokens (--studio-bg-raised /
+    // --studio-bg), which made `background` fall back to its `transparent`
+    // initial value and rendered the result unreadable.
+    background: var(--studio-bg-elevated);
+    box-shadow: var(--elevation-modal, 0 12px 32px rgba(0, 0, 0, 0.35));
     overflow: auto;
   }
 
@@ -100,7 +104,7 @@
     letter-spacing: 0.03em;
     padding: 1px 8px;
     border-radius: 999px;
-    background: var(--studio-bg);
+    background: var(--studio-bg-elevated);
     border: 1px solid var(--studio-border);
     color: var(--studio-fg-dim);
 
@@ -141,7 +145,7 @@
     align-items: center;
     padding: 1px 7px;
     border-radius: 999px;
-    background: var(--studio-bg);
+    background: var(--studio-bg-elevated);
     border: 1px solid var(--studio-border);
     color: var(--studio-fg-dim);
     font-family: var(--font-mono);

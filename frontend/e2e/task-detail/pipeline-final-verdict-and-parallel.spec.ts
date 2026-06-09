@@ -325,6 +325,24 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     await expect(aspectRow.getByTestId('pipeline-step-result-card')).toBeVisible();
     await expect(aspectRow.getByTestId('pipeline-step-result-body')).toContainText('Requirement Fit Review');
 
+    // Regression (ASS-1716): the aspect/model-reply popover must paint an OPAQUE
+    // surface so the content beneath never bleeds through. It once read undefined
+    // surface tokens (--studio-bg-raised / --studio-bg), so `background` fell back
+    // to its `transparent` initial value and the overlay was unreadable.
+    const popoverBackground = await aspectRow
+      .getByTestId('pipeline-step-result-card')
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    const popoverAlpha = (() => {
+      const channels = popoverBackground.match(/rgba?\(([^)]+)\)/);
+      if (!channels) return 1;
+      const parts = channels[1].split(',').map((part) => part.trim());
+      return parts.length === 4 ? Number(parts[3]) : 1;
+    })();
+    expect(
+      popoverAlpha,
+      `aspect popover background must be opaque, got "${popoverBackground}"`,
+    ).toBe(1);
+
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
       await page.screenshot({
