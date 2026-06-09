@@ -409,6 +409,95 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(el.querySelector('.ov-pl-total__label')?.textContent).toContain('SUM');
   });
 
+  it('pipeline block: clicking CORE tokens opens a step-scoped token modal', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const startedAt = new Date('2026-06-09T08:00:00.000Z').toISOString();
+    const completedAt = new Date('2026-06-09T08:02:05.000Z').toISOString();
+    const pipe = agentPipeline('claude-opus-4-8');
+    pipe.execution!.steps[0] = {
+      ...pipe.execution!.steps[0],
+      status: 'passed',
+      startedAt,
+      completedAt,
+      durationMs: 125_000,
+      inputTokens: 2_500,
+      outputTokens: 195_600,
+      cacheReadTokens: 18_500_000,
+      cacheCreationTokens: 1_000_000,
+      tokenUsageSource: 'AGENT (CLI FOOTER) / reported',
+    };
+    pipe.cost = emptyCost({
+      steps: [
+        stepCost({
+          stepId: 'core-agent-run',
+          kind: 'core',
+          model: 'claude-opus-4-8',
+          tokenUsageSource: 'AGENT (CLI FOOTER) / reported',
+          modelKnown: true,
+          inputTokens: 2_500,
+          outputTokens: 195_600,
+          cacheReadTokens: 18_500_000,
+          cacheCreationTokens: 1_000_000,
+          totalTokens: 19_698_100,
+          inputCostUsd: 0.0125,
+          outputCostUsd: 4.89,
+          cacheReadCostUsd: 9.25,
+          cacheCreationCostUsd: 6.25,
+          costUsd: 20.4025,
+        }),
+      ],
+      totalInputTokens: 2_500,
+      totalOutputTokens: 195_600,
+      totalCacheReadTokens: 18_500_000,
+      totalCacheCreationTokens: 1_000_000,
+      totalTokens: 19_698_100,
+      totalInputCostUsd: 0.0125,
+      totalOutputCostUsd: 4.89,
+      totalCacheReadCostUsd: 9.25,
+      totalCacheCreationCostUsd: 6.25,
+      totalCostUsd: 20.4025,
+    });
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    TestBed.inject(RunTimelinePollService).timeline.set(runTimeline(2, [
+      runRecord({ startedAt, endedAt: completedAt, durationSeconds: 125 }),
+    ]));
+
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="overview-tokens"]')).toBeNull();
+    const tokenCell = host.querySelector<HTMLButtonElement>(
+      '[data-step-id="core-agent-run"] [data-testid="overview-pipeline-step-tokens"]',
+    );
+    expect(tokenCell).not.toBeNull();
+    tokenCell!.click();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const modal = document.body.querySelector<HTMLElement>('[data-testid="overview-step-token-modal"]');
+    expect(modal).not.toBeNull();
+    const text = modal!.textContent ?? '';
+    expect(text).toContain('Agent execution');
+    expect(text).toContain('AGENT (CLI FOOTER) / reported');
+    expect(text).toContain('2 agent runs');
+    expect(text).toContain('$20.40');
+    expect(text).toContain('Input');
+    expect(text).toContain('2.5k');
+    expect(text).toContain('Output');
+    expect(text).toContain('195.6k');
+    expect(text).toContain('Cache read');
+    expect(text).toContain('18.50M');
+    expect(text).toContain('Cache write');
+    expect(text).toContain('1.00M');
+    expect(text).toContain('Total');
+    expect(text).toContain('19.70M');
+    expect(text).toContain('CORE totals come from the agent CLI footer');
+    expect(modal!.querySelector('[data-testid="overview-step-token-modal-total-note"]')).toBeNull();
+
+    fixture.componentInstance.closeStepTokenModal();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    expect(document.body.querySelector('[data-testid="overview-step-token-modal"]')).toBeNull();
+  });
+
   it('pipeline block: an in-flight execution row surfaces a running status the template can highlight', async () => {
     const fixture = await build(baseJob({ state: '3-progress' }));
     const pipe: TaskPipelineResponse = {
