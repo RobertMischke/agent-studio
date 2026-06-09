@@ -23,6 +23,20 @@ public class ProjectDocsService
     private const string AdrRel = "docs/architecture-decisions.md";
     private const string WikiRel = "docs";
 
+    // User-defined wiki organisation (themes/groups + parent/child + ordering)
+    // lives in a single git-tracked manifest at the docs root. It is a
+    // presentation layer over the immutable docs tree: nodes reference docs by
+    // relPath, so the physical files never move and per-file git history stays
+    // pristine. The dotfile is not a *.md doc, so it never shows up as content.
+    private const string WikiOrgFile = ".wiki-organization.json";
+    private const int WikiOrgMaxNodes = 5000;
+
+    private static readonly JsonSerializerOptions WikiJsonOptions =
+        new(JsonSerializerDefaults.Web) { WriteIndented = true };
+
+    private static readonly Regex WikiFrontmatterRegex =
+        new(@"\A---\r?\n(?<body>.*?)\r?\n---", RegexOptions.Singleline | RegexOptions.Compiled);
+
     // Image/diagram extensions the wiki asset endpoint is allowed to serve so
     // relative `![](images/foo.png)` references in a doc render in place.
     private static readonly Dictionary<string, string> WikiAssetContentTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -239,6 +253,123 @@ public class ProjectDocsService
         return full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) ? full : null;
     }
 
+    /// <summary>
+    /// Absolute path of a wiki <c>.md</c> doc after the same traversal guard as
+    /// the read endpoints. Exposed so the history endpoint can hand the path to
+    /// <see cref="GitService"/> without re-implementing path resolution.
+    /// </summary>
+    public string? ResolveWikiDocFullPath(string projectName, string relPath) =>
+        ResolveWikiPath(projectName, relPath, requireMarkdown: true);
+
+    // -------- Wiki organisation (user-defined themes / hierarchy) --------
+
+    /// <summary>
+    /// Reads the user-defined organisation manifest. Returns an empty (but
+    /// valid) manifest when none has been written yet, and null only when the
+    /// project itself is unknown. A corrupt manifest degrades to empty rather
+    /// than throwing, so a bad write never bricks the wiki view.
+    /// </summary>
+    public WikiOrganization? GetWikiOrganization(string projectName)
+    {
+        var entry = FindProject(projectName);
+        if (entry == null) return null;
+        var baseDir = ResolveBaseDir(entry);
+        if (baseDir == null) return null;
+
+        var path = Path.Combine(baseDir, WikiRel, WikiOrgFile);
+        if (!File.Exists(path)) return new WikiOrganization(1, []);
+        try
+        {
+            var org = JsonSerializer.Deserialize<WikiOrganization>(File.ReadAllText(path), WikiJsonOptions);
+            return SanitizeOrganization(org);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Wiki organisation manifest unreadable for {Project}; serving empty", projectName);
+            return new WikiOrganization(1, []);
+        }
+    }
+
+    public bool WriteWikiOrganization(string projectName, WikiOrganization? org)
+    {
+        var entry = FindProject(projectName);
+        if (entry == null) return false;
+        var baseDir = ResolveBaseDir(entry);
+        if (baseDir == null) return false;
+
+        var dir = Path.Combine(baseDir, WikiRel);
+        Directory.CreateDirectory(dir);
+        var sanitized = SanitizeOrganization(org);
+        File.WriteAllText(Path.Combine(dir, WikiOrgFile), JsonSerializer.Serialize(sanitized, WikiJsonOptions));
+        return true;
+    }
+
+    /// <summary>
+    /// Drops malformed nodes (no id, unknown type), normalises titles, and
+    /// clears stray relPaths off group nodes. Keeps the manifest trustworthy
+    /// regardless of what a client PUTs. Returns a version-1 manifest.
+    /// </summary>
+    internal static WikiOrganization SanitizeOrganization(WikiOrganization? org)
+    {
+        var nodes = org?.Nodes ?? [];
+        var clean = nodes
+            .Where(n => n != null && !string.IsNullOrWhiteSpace(n.Id))
+            .Where(n => n.Type is "group" or "doc")
+            .Take(WikiOrgMaxNodes)
+            .Select(n => n with
+            {
+                Title = string.IsNullOrWhiteSpace(n.Title) ? null : n.Title.Trim(),
+                RelPath = n.Type == "doc" ? n.RelPath?.Replace('\\', '/') : null,
+                ParentId = string.IsNullOrWhiteSpace(n.ParentId) ? null : n.ParentId,
+            })
+            .ToList();
+        return new WikiOrganization(1, clean);
+    }
+
+    /// <summary>
+    /// Parses the leading YAML frontmatter block (<c>--- … ---</c>) of a wiki
+    /// doc into the provenance fields the history panel surfaces: which model
+    /// last edited it, when, and why. Hand-written docs without frontmatter
+    /// return <see cref="WikiDocMetadata.HasFrontmatter"/> = false, leaving the
+    /// panel to fall back to git history alone. Static + side-effect free for
+    /// unit testing.
+    /// </summary>
+    public static WikiDocMetadata ParseWikiMetadata(string? content)
+    {
+        var empty = new WikiDocMetadata(null, null, null, null, null, null, false);
+        if (string.IsNullOrEmpty(content)) return empty;
+        var m = WikiFrontmatterRegex.Match(content);
+        if (!m.Success) return empty;
+
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in m.Groups["body"].Value.Split('\n'))
+        {
+            var raw = line.TrimEnd('\r');
+            var idx = raw.IndexOf(':');
+            if (idx <= 0) continue;
+            var key = raw[..idx].Trim();
+            var val = raw[(idx + 1)..].Trim().Trim('"');
+            if (key.Length == 0 || val.Length == 0) continue;
+            map.TryAdd(key, val);
+        }
+
+        string? Get(params string[] keys)
+        {
+            foreach (var k in keys)
+                if (map.TryGetValue(k, out var v)) return v;
+            return null;
+        }
+
+        return new WikiDocMetadata(
+            Model: Get("model", "agent-model"),
+            UpdatedAt: Get("last-distilled", "last-updated", "updated", "date"),
+            Reason: Get("why", "reason", "summary"),
+            TaskKey: Get("task-key"),
+            Status: Get("status"),
+            RunCount: Get("run-count"),
+            HasFrontmatter: true);
+    }
+
     private static List<WikiFileEntry> ListWikiDocs(string wikiDir)
     {
         if (!Directory.Exists(wikiDir)) return [];
@@ -389,6 +520,29 @@ public class ProjectDocsService
 public record WikiFileEntry(string Name, string RelPath, string Title, DateTime UpdatedAt, long Size);
 public record WikiOverview(string ProjectName, string BaseDir, bool Exists, List<WikiFileEntry> Files);
 public record WikiFileContent(string RelPath, string Content);
+
+/// <summary>Provenance distilled from a wiki doc's YAML frontmatter.</summary>
+public record WikiDocMetadata(
+    string? Model,
+    string? UpdatedAt,
+    string? Reason,
+    string? TaskKey,
+    string? Status,
+    string? RunCount,
+    bool HasFrontmatter);
+
+/// <summary>
+/// One node in the user-defined wiki organisation tree. A <c>group</c> is a
+/// user-created theme (uses <see cref="Title"/>); a <c>doc</c> pins an existing
+/// docs file (uses <see cref="RelPath"/>, with an optional <see cref="Title"/>
+/// rename override). <see cref="ParentId"/> nests nodes; <see cref="Order"/>
+/// sorts siblings.
+/// </summary>
+public record WikiOrgNode(string Id, string Type, string? Title, string? RelPath, string? ParentId, int Order);
+public record WikiOrganization(int Version, List<WikiOrgNode> Nodes);
+
+/// <summary>History + provenance payload for one wiki doc.</summary>
+public record WikiFileHistory(string RelPath, string? Model, WikiDocMetadata Metadata, List<GitCommitInfo> Commits);
 
 public record SecurityMeta(string? LastReviewDate, string? Rating, string? Summary);
 public record SecurityFileEntry(string Name, string RelPath, DateTime UpdatedAt, long Size);

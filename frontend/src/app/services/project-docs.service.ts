@@ -6,6 +6,8 @@ import {
   SecurityMeta,
   SecurityOverview,
   WikiFileContent,
+  WikiFileHistory,
+  WikiOrganization,
   WikiOverview
 } from '../models/project-docs.model';
 
@@ -60,6 +62,28 @@ export class ProjectDocsService {
   /** Absolute API URL for a wiki image/diagram asset (used by the image resolver). */
   wikiAssetUrl(projectName: string, relPath: string): string {
     return `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/assets/${this.encodeRelPath(relPath)}`;
+  }
+
+  /** Per-document provenance (model/when/why) + git history, newest first. */
+  getWikiFileHistory(projectName: string, relPath: string) {
+    return this.http.get<WikiFileHistory>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/history/${this.encodeRelPath(relPath)}`
+    );
+  }
+
+  /** The user-defined organisation manifest (themes + hierarchy) over the docs tree. */
+  getWikiOrganization(projectName: string) {
+    return this.http.get<WikiOrganization>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/organization`
+    );
+  }
+
+  /** Persist a re-organised manifest; the server sanitises and echoes it back. */
+  putWikiOrganization(projectName: string, org: WikiOrganization) {
+    return this.http.put<WikiOrganization>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/organization`,
+      org
+    );
   }
 
   getArchitectureOverview(projectName: string) {

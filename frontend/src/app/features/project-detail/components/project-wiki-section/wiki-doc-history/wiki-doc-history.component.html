@@ -1,0 +1,67 @@
+<section class="wdh" data-testid="wiki-doc-history">
+  @if (loading()) {
+    <p class="studio-empty">Loading history…</p>
+  } @else if (!history()) {
+    <p class="studio-empty" data-testid="wiki-doc-history-empty">No history available.</p>
+  } @else {
+    @if (hasProvenance()) {
+      <dl class="wdh__prov" data-testid="wiki-doc-history-provenance">
+        @if (model(); as m) {
+          <div class="wdh__row">
+            <dt>Model</dt>
+            <dd><span class="wdh__badge" data-testid="wiki-doc-history-model">{{ m }}</span></dd>
+          </div>
+        }
+        @if (meta()?.updatedAt; as when) {
+          <div class="wdh__row">
+            <dt>Updated</dt>
+            <dd data-testid="wiki-doc-history-updated">{{ formatTime(when) }}</dd>
+          </div>
+        }
+        @if (meta()?.reason; as why) {
+          <div class="wdh__row">
+            <dt>Why</dt>
+            <dd data-testid="wiki-doc-history-why">{{ why }}</dd>
+          </div>
+        }
+        @if (meta()?.status; as status) {
+          <div class="wdh__row">
+            <dt>Status</dt>
+            <dd>{{ status }}</dd>
+          </div>
+        }
+        @if (meta()?.taskKey; as taskKey) {
+          <div class="wdh__row">
+            <dt>Task</dt>
+            <dd><code>{{ taskKey }}</code></dd>
+          </div>
+        }
+      </dl>
+    }
+
+    <div class="wdh__commits">
+      <div class="wdh__commits-label">Git history</div>
+      @if (commits().length === 0) {
+        <p class="studio-empty" data-testid="wiki-doc-history-no-commits">
+          No commits recorded for this file.
+        </p>
+      } @else {
+        <ul class="wdh__list" data-testid="wiki-doc-history-commits">
+          @for (c of commits(); track c.sha) {
+            <li class="wdh__commit">
+              <div class="wdh__commit-top">
+                <span class="wdh__subject">{{ c.subject }}</span>
+                <span class="wdh__sha">{{ c.shortSha }}</span>
+              </div>
+              <div class="wdh__commit-meta">
+                <span>{{ c.author }}</span>
+                <span>{{ formatTime(c.authorDateUtc) }}</span>
+                <span class="wdh__stat">{{ formatStat(c.added, c.removed) }}</span>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+  }
+</section>

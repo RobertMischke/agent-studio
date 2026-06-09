@@ -2202,6 +2202,115 @@ public class GitService
     }
 
     /// <summary>
+    /// Per-file commit history (newest first) for a path relative to the
+    /// repository root. Backs the wiki "history / provenance" panel: which
+    /// commit (and thus which agent run) touched a document, when, and the
+    /// commit subject as the "why". <c>--follow</c> keeps a renamed document's
+    /// lineage intact. Returns an empty list when the repo or path can't be
+    /// resolved, mirroring the other read-only git lookups on this service.
+    /// </summary>
+    public List<GitCommitInfo> GetFileHistory(string repoRoot, string repoRelPath, int limit = 50)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || string.IsNullOrWhiteSpace(repoRelPath)) return [];
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        if (!Directory.Exists(root)) return [];
+        if (limit <= 0) limit = 50;
+
+        // Fields separated by Unit Separator (0x1F) so a commit subject with
+        // any printable char round-trips. --follow needs exactly one pathspec
+        // after `--`; args are passed verbatim so a path with spaces survives.
+        const string fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
+        var (output, _, code) = RunGitArgs(root,
+            "log", "--no-merges", $"--max-count={limit}", "--follow",
+            "--shortstat", $"--pretty=format:{fmt}", "--", repoRelPath.Replace('\\', '/'));
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+        return ParseLogBlocks(output);
+    }
+
+    /// <summary>
+    /// Parses <c>git log --shortstat --pretty=format:%H&lt;US&gt;...</c> output
+    /// into <see cref="GitCommitInfo"/> records. Records are newline-separated;
+    /// when --shortstat is on each record is followed by a blank line then the
+    /// " N files changed, +X / -Y" summary. Fields inside a record use the
+    /// Unit Separator (0x1F).
+    /// </summary>
+    private static List<GitCommitInfo> ParseLogBlocks(string output)
+    {
+        const char US = '';
+        var list = new List<GitCommitInfo>();
+        var raw = output.Replace("\r\n", "\n");
+        var blocks = raw.Split("\n\n", StringSplitOptions.None);
+        foreach (var block in blocks)
+        {
+            if (string.IsNullOrWhiteSpace(block)) continue;
+            var blockLines = block.Split('\n');
+            string? recordLine = null;
+            string? shortstatLine = null;
+            foreach (var l in blockLines)
+            {
+                if (string.IsNullOrWhiteSpace(l)) continue;
+                if (recordLine == null) recordLine = l;
+                else { shortstatLine = l.Trim(); break; }
+            }
+            if (recordLine == null) continue;
+            var parts = recordLine.Split(US);
+            if (parts.Length < 5) continue;
+            if (!DateTime.TryParse(parts[2], System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var ts))
+                continue;
+            var (files, added, removed) = ParseShortstat(shortstatLine);
+            list.Add(new GitCommitInfo(
+                Sha: parts[0],
+                ShortSha: parts[1],
+                AuthorDateUtc: DateTime.SpecifyKind(ts, DateTimeKind.Utc),
+                Author: parts[3],
+                Subject: parts[4],
+                FilesChanged: files,
+                Added: added,
+                Removed: removed));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Best-effort model/agent attribution for the most recent commit that
+    /// touched <paramref name="repoRelPath"/>, read from the commit's
+    /// <c>Co-authored-by</c> trailer (managed runs stamp the model there). The
+    /// address is stripped so the wiki provenance line shows just the model
+    /// name. Returns null for a hand-authored commit with no such trailer.
+    /// </summary>
+    public string? GetLatestModelForPath(string repoRoot, string repoRelPath)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || string.IsNullOrWhiteSpace(repoRelPath)) return null;
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        if (!Directory.Exists(root)) return null;
+
+        var (output, _, code) = RunGitArgs(root,
+            "log", "--no-merges", "--max-count=1",
+            "--pretty=format:%(trailers:key=Co-authored-by,valueonly,separator=%x1f)",
+            "--", repoRelPath.Replace('\\', '/'));
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return null;
+        return ParseModelTrailer(output);
+    }
+
+    /// <summary>
+    /// Extracts a display model name from a <c>Co-authored-by</c> trailer
+    /// value-list ("Name &lt;email&gt;", possibly several, US-separated). Takes
+    /// the first non-empty entry and strips the address. Split out for tests.
+    /// </summary>
+    internal static string? ParseModelTrailer(string trailerOutput)
+    {
+        if (string.IsNullOrWhiteSpace(trailerOutput)) return null;
+        var first = trailerOutput
+            .Replace("\r", "")
+            .Split('\n', '\x1f')
+            .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
+        if (string.IsNullOrWhiteSpace(first)) return null;
+        var lt = first.IndexOf('<');
+        var name = (lt > 0 ? first[..lt] : first).Trim();
+        return string.IsNullOrWhiteSpace(name) ? null : name;
+    }
+
+    /// <summary>
     /// Counts commits in the SHA range without deserialising any
     /// metadata. Cheap enough for the per-job kanban aggregate path
     /// (one process per non-trivial range). Returns 0 when the range is

@@ -1,0 +1,99 @@
+:host { display: block; }
+
+.wdh {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wdh__prov {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--studio-fg) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--studio-fg) 10%, transparent);
+  border-radius: 6px;
+}
+.wdh__row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px;
+  align-items: baseline;
+}
+.wdh__row dt {
+  margin: 0;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--studio-fg-muted);
+}
+.wdh__row dd {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--studio-fg);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.wdh__badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  background: color-mix(in srgb, var(--studio-accent-3) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--studio-accent-3) 45%, transparent);
+  color: var(--studio-fg);
+}
+
+.wdh__commits { display: flex; flex-direction: column; gap: 6px; }
+.wdh__commits-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--studio-fg-muted);
+}
+.wdh__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.wdh__commit {
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--studio-fg) 8%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--studio-fg) 2%, transparent);
+}
+.wdh__commit-top {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.wdh__subject {
+  font-size: 0.82rem;
+  color: var(--studio-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wdh__sha {
+  flex-shrink: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  color: var(--studio-accent-4-strong);
+}
+.wdh__commit-meta {
+  display: flex;
+  gap: 12px;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  color: var(--studio-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.wdh__stat { font-family: var(--font-mono, monospace); }

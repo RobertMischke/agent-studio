@@ -86,6 +86,49 @@ public static class ProjectDocsEndpoints
                 : Results.File(asset.Value.Path, asset.Value.ContentType);
         });
 
+        // Per-doc provenance + history: which model last touched it (frontmatter
+        // `model:` wins, else the latest commit's Co-authored-by trailer), plus
+        // the file's git log (when / why / who, newest first). `history/` sits
+        // before the catch-all so it isn't swallowed by /wiki/files/{**relPath}.
+        app.MapGet("/api/projects/{projectName}/wiki/history/{**relPath}", (string projectName, string relPath, ProjectDocsService docs, GitService git) =>
+        {
+            var full = docs.ResolveWikiDocFullPath(projectName, relPath);
+            if (full == null || !File.Exists(full))
+                return Results.NotFound(new { error = "File not found or path rejected" });
+
+            var repoRoot = git.ResolveRepoRootForProject(projectName);
+            List<GitCommitInfo> commits = [];
+            string? trailerModel = null;
+            if (!string.IsNullOrWhiteSpace(repoRoot))
+            {
+                var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
+                commits = git.GetFileHistory(repoRoot, repoRel, 50);
+                trailerModel = git.GetLatestModelForPath(repoRoot, repoRel);
+            }
+
+            var meta = ProjectDocsService.ParseWikiMetadata(File.ReadAllText(full));
+            var model = !string.IsNullOrWhiteSpace(meta.Model) ? meta.Model : trailerModel;
+            return Results.Ok(new WikiFileHistory(relPath.Replace('\\', '/'), model, meta, commits));
+        });
+
+        // ---- Wiki organisation (user-defined themes + hierarchy) ----
+
+        app.MapGet("/api/projects/{projectName}/wiki/organization", (string projectName, ProjectDocsService docs) =>
+        {
+            var org = docs.GetWikiOrganization(projectName);
+            return org == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(org);
+        });
+
+        app.MapPut("/api/projects/{projectName}/wiki/organization", (string projectName, WikiOrganization? org, ProjectDocsService docs) =>
+        {
+            var ok = docs.WriteWikiOrganization(projectName, org);
+            return ok
+                ? Results.Ok(docs.GetWikiOrganization(projectName))
+                : Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+        });
+
         // ---- Architecture decisions ----
 
         app.MapGet("/api/projects/{projectName}/architecture", (string projectName, ProjectDocsService docs) =>

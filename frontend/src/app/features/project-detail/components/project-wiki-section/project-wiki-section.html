@@ -1,8 +1,17 @@
 <section class="pwiki" data-testid="project-wiki-section">
   <header class="pwiki__head">
-    <h3 class="pwiki__title"><span class="pwiki__icon" aria-hidden="true">📚</span> Wiki / Docs</h3>
+    <h3 class="pwiki__title-h"><span class="pwiki__icon" aria-hidden="true">📚</span> Wiki / Docs</h3>
     @if (overview()) {
       <span class="pwiki__count" data-testid="project-wiki-count">{{ docCount() }} docs</span>
+    }
+    @if (savingOrg()) {
+      <span class="pwiki__saving" data-testid="project-wiki-saving">Saving…</span>
+    }
+    <span class="pwiki__spacer"></span>
+    @if (overview()) {
+      <button class="pwiki__new-group" type="button"
+              (click)="createGroup(null)"
+              data-testid="project-wiki-new-group">+ New group</button>
     }
   </header>
 
@@ -23,44 +32,102 @@
                (ngModelChange)="filter.set($event)"
                placeholder="Filter docs…"
                data-testid="project-wiki-filter">
-        @for (group of groups(); track group.dir) {
-          <div class="pwiki__group">
-            <div class="pwiki__group-label" [attr.title]="group.dir">{{ group.label }}</div>
-            <ul class="pwiki__files">
-              @for (f of group.files; track f.relPath) {
-                <li class="pwiki__file" [class.pwiki__file--active]="openedRel() === f.relPath">
-                  <button class="pwiki__file-btn"
-                          type="button"
-                          (click)="openFile(f.relPath)"
-                          [attr.data-testid]="'project-wiki-file-' + f.relPath"
-                          [attr.title]="f.relPath">
-                    <span class="pwiki__file-name">{{ f.title }}</span>
-                    <span class="pwiki__file-ts">{{ formatTime(f.updatedAt) }}</span>
-                  </button>
-                </li>
+
+        <div class="pwiki__rows" role="tree">
+          @for (row of rows(); track row.node.id) {
+            <div class="pwiki__row"
+                 [class.pwiki__row--group]="row.node.kind === 'group'"
+                 [class.pwiki__row--doc]="row.node.kind === 'doc'"
+                 [class.pwiki__row--active]="openedRel() === row.node.relPath"
+                 [class.pwiki__row--drop]="dropTargetId() === row.node.id"
+                 [style.padding-left.px]="rowPad(row.depth)"
+                 [attr.data-testid]="'project-wiki-node-' + row.node.id"
+                 [draggable]="row.node.kind === 'doc'"
+                 (dragstart)="onDocDragStart($event, row.node)"
+                 (dragend)="onDragEnd()"
+                 (dragover)="onGroupDragOver($event, row.node)"
+                 (dragleave)="onGroupDragLeave(row.node)"
+                 (drop)="onGroupDrop($event, row.node)"
+                 (contextmenu)="onContextMenu($event, row.node)">
+
+              @if (row.node.kind === 'group' && row.hasChildren) {
+                <button class="pwiki__chevron" type="button"
+                        (click)="toggleExpand(row.node.id)"
+                        [attr.aria-label]="row.expanded ? 'Collapse' : 'Expand'"
+                        [attr.data-testid]="'project-wiki-chevron-' + row.node.id">
+                  <span class="pwiki__chevron-glyph" [class.pwiki__chevron-glyph--open]="row.expanded">▸</span>
+                </button>
+              } @else {
+                <span class="pwiki__chevron-spacer"></span>
               }
-            </ul>
-          </div>
-        }
-        @if (groups().length === 0) {
-          <p class="studio-empty" data-testid="project-wiki-no-match">No docs match “{{ filter() }}”.</p>
-        }
+
+              @if (renamingId() === row.node.id) {
+                <input class="pwiki__rename-input"
+                       type="text"
+                       [ngModel]="renameValue()"
+                       (ngModelChange)="renameValue.set($event)"
+                       (keydown.enter)="commitRename()"
+                       (keydown.escape)="cancelRename()"
+                       (blur)="commitRename()"
+                       [attr.data-testid]="'project-wiki-rename-' + row.node.id">
+              } @else if (row.node.kind === 'group') {
+                <button class="pwiki__label pwiki__label--group" type="button"
+                        (click)="toggleExpand(row.node.id)">
+                  <span class="pwiki__label-text">{{ row.node.title }}</span>
+                  <span class="pwiki__group-count">{{ row.node.children.length }}</span>
+                </button>
+              } @else {
+                <button class="pwiki__label pwiki__label--doc" type="button"
+                        (click)="openFile(row.node.relPath!)"
+                        [attr.title]="row.node.relPath"
+                        [attr.data-testid]="'project-wiki-file-' + row.node.relPath">
+                  <span class="pwiki__label-text">{{ row.node.title }}</span>
+                </button>
+              }
+            </div>
+          }
+          @if (rows().length === 0) {
+            <p class="studio-empty" data-testid="project-wiki-no-match">No docs match “{{ filter() }}”.</p>
+          }
+        </div>
       </nav>
 
       <div class="pwiki__viewer">
         @if (openedRel(); as rel) {
           <header class="pwiki__viewer-head">
+            <div class="pwiki__tabs" role="tablist">
+              <button class="pwiki__tab" type="button"
+                      role="tab"
+                      [class.pwiki__tab--active]="viewerTab() === 'doc'"
+                      [attr.aria-selected]="viewerTab() === 'doc'"
+                      (click)="selectTab('doc')"
+                      data-testid="project-wiki-tab-doc">Document</button>
+              <button class="pwiki__tab" type="button"
+                      role="tab"
+                      [class.pwiki__tab--active]="viewerTab() === 'history'"
+                      [attr.aria-selected]="viewerTab() === 'history'"
+                      (click)="selectTab('history')"
+                      data-testid="project-wiki-tab-history">History</button>
+            </div>
             <code data-testid="project-wiki-viewer-path">{{ rel }}</code>
             <button class="pwiki__viewer-close" type="button" (click)="closeFile()"
                     data-testid="project-wiki-close">Close</button>
           </header>
-          @if (loadingDoc()) {
-            <p class="studio-empty">Loading document…</p>
+
+          @if (viewerTab() === 'doc') {
+            @if (loadingDoc()) {
+              <p class="studio-empty">Loading document…</p>
+            } @else {
+              <app-markdown class="pwiki__viewer-body"
+                            data-testid="project-wiki-viewer"
+                            [source]="openedContent()"
+                            [resolveImageSrc]="imageResolver()" />
+            }
           } @else {
-            <app-markdown class="pwiki__viewer-body"
-                          data-testid="project-wiki-viewer"
-                          [source]="openedContent()"
-                          [resolveImageSrc]="imageResolver()" />
+            <app-wiki-doc-history class="pwiki__history"
+                                  data-testid="project-wiki-history"
+                                  [history]="history()"
+                                  [loading]="loadingHistory()" />
           }
         } @else {
           <p class="studio-empty pwiki__viewer-empty" data-testid="project-wiki-viewer-empty">
@@ -70,4 +137,13 @@
       </div>
     </div>
   }
+
+  <app-menu
+    [items]="menuItems()"
+    [open]="menuOpen()"
+    [position]="menuPos()"
+    testIdPrefix="wiki-ctx"
+    ariaLabel="Wiki item actions"
+    (itemClick)="onMenuItemClick($event)"
+    (closeRequest)="closeMenu()" />
 </section>
