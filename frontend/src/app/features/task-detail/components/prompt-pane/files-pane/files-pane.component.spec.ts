@@ -82,7 +82,7 @@ describe('FilesPaneComponent (smoke)', () => {
 
     const http = TestBed.inject(HttpTestingController);
     http.expectOne((r) => r.url.includes('/api/tasks/demo-job/files/code-review-2026-06-09T12-00-00Z.md'))
-      .flush('# Review\n');
+      .flush(utf8Buffer('# Review\n'));
     fixture.detectChanges();
 
     const root = fixture.nativeElement as HTMLElement;
@@ -93,3 +93,10 @@ describe('FilesPaneComponent (smoke)', () => {
     http.verify();
   });
 });
+
+function utf8Buffer(value: string): ArrayBuffer {
+  const bytes = new TextEncoder().encode(value);
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}

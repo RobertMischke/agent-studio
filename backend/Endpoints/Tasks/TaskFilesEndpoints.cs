@@ -1,6 +1,7 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Tasks;
+using System.Text;
 
 namespace OrchestratorApi.Endpoints.Tasks;
 
@@ -19,7 +20,7 @@ public static class TaskFilesEndpoints
         group.MapGet("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, TaskScannerService scanner) =>
         {
             var content = scanner.ReadJobFile(jobId, fileName, watchPath);
-            return content is null ? Results.NotFound() : Results.Text(content);
+            return content is null ? Results.NotFound() : JobTextFile(fileName, content);
         });
 
         // Lists every `.md` file directly in the job root (status.md excluded).
@@ -121,5 +122,15 @@ public static class TaskFilesEndpoints
             var (resolved, contentType) = screenshots.ResolveScreenshotFile(jobId, path, watchPath);
             return resolved is null ? Results.NotFound() : Results.File(resolved, contentType);
         });
+    }
+
+    private static IResult JobTextFile(string fileName, string content)
+    {
+        var contentType = fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            ? "application/json"
+            : fileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+                ? "text/markdown"
+                : "text/plain";
+        return Results.Text(content, contentType, Encoding.UTF8);
     }
 }

@@ -1,5 +1,6 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
+import { map } from 'rxjs';
 import type {
   CreateJobRequest,
   GroupedJobs,
@@ -431,6 +432,12 @@ export class TaskService {
     return { params: (base.params ?? new HttpParams()).set('path', path) };
   }
 
+  private getUtf8Text(url: string, opts: { params?: HttpParams } = {}) {
+    return this.http.get(url, { ...opts, responseType: 'arraybuffer' as const }).pipe(
+      map((buffer) => new TextDecoder('utf-8').decode(buffer)),
+    );
+  }
+
   getDetail(jobId: string, watchPath?: string) {
     return this.http.get<TaskDetail>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}`,
@@ -751,9 +758,9 @@ export class TaskService {
    */
   readJobFile(jobId: string, fileName: string, watchPath?: string) {
     const opts = this.withWatchPath(watchPath);
-    return this.http.get(
+    return this.getUtf8Text(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/files/${encodeURIComponent(fileName)}`,
-      { ...opts, responseType: 'text' },
+      opts,
     );
   }
 
@@ -804,10 +811,7 @@ export class TaskService {
     // HttpClient, which dropped the param whenever watchPath was present and
     // made the backend return the whole-tree diff instead of the file's.
     const opts = path ? this.withWatchPathAndPath(watchPath, path) : this.withWatchPath(watchPath);
-    return this.http.get(`${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/git/diff`, {
-      ...opts,
-      responseType: 'text',
-    });
+    return this.getUtf8Text(`${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/git/diff`, opts);
   }
 
   commitJob(jobId: string, message: string, watchPath?: string) {
@@ -839,10 +843,7 @@ export class TaskService {
     // See getGitDiff: scope the commit diff to one path via HttpParams.set,
     // not a plain property on the immutable HttpParams (which is dropped).
     const opts = path ? this.withWatchPathAndPath(watchPath, path) : this.withWatchPath(watchPath);
-    return this.http.get(`${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commit/diff`, {
-      ...opts,
-      responseType: 'text',
-    });
+    return this.getUtf8Text(`${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commit/diff`, opts);
   }
 
   /**

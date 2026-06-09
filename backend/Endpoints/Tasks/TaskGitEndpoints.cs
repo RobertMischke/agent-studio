@@ -2,6 +2,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Runner;
+using System.Text;
 
 namespace OrchestratorApi.Endpoints.Tasks;
 
@@ -322,7 +323,7 @@ public static class TaskGitEndpoints
             return Results.BadRequest(new { error = result.Error ?? "Could not load diff." });
         if (string.IsNullOrWhiteSpace(result.Diff))
             return Results.NoContent();
-        return Results.Text(result.Diff, "text/plain");
+        return Results.Text(result.Diff, "text/plain", Encoding.UTF8);
     }
 
     private static object DiffJsonResponse(string diff, string emptyReason)

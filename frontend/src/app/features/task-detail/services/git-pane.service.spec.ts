@@ -57,11 +57,11 @@ describe('GitPaneService.selectDiffPath (out-of-order responses)', () => {
     expect(service.selectedDiffPath()).toBe('b/y.ts');
 
     // B resolves first and is shown.
-    reqB.flush('DIFF_B');
+    reqB.flush(utf8Buffer('DIFF_B'));
     expect(service.diffText()).toBe('DIFF_B');
 
     // A resolves late — it must NOT clobber the visible diff for B.
-    reqA.flush('DIFF_A');
+    reqA.flush(utf8Buffer('DIFF_A'));
     expect(service.selectedDiffPath()).toBe('b/y.ts');
     expect(service.diffText()).toBe('DIFF_B');
   });
@@ -72,8 +72,8 @@ describe('GitPaneService.selectDiffPath (out-of-order responses)', () => {
     service.selectDiffPath('b/y.ts');
     const reqB = diffReq('b/y.ts');
 
-    reqB.flush('DIFF_B');
-    reqA.flush('DIFF_A'); // stale for display, but cached.
+    reqB.flush(utf8Buffer('DIFF_B'));
+    reqA.flush(utf8Buffer('DIFF_A')); // stale for display, but cached.
 
     // Re-select A: served from cache, no second round-trip, correct text.
     service.selectDiffPath('a/x.ts');
@@ -82,3 +82,10 @@ describe('GitPaneService.selectDiffPath (out-of-order responses)', () => {
     expect(service.diffText()).toBe('DIFF_A');
   });
 });
+
+function utf8Buffer(value: string): ArrayBuffer {
+  const bytes = new TextEncoder().encode(value);
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
