@@ -39,6 +39,8 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 | [run-outcome-contract.md](run-outcome-contract.md) | Single post-run classification shared by lane routing, `status.md`, and frontend failure-toast surfacing. |
 | [loop-inventory.md](loop-inventory.md) | Registry of every place work can re-enter itself (retry, requeue, replay). Each entry carries kind, code anchor, budget constant, breaker test. CI-enforced via `LoopInventoryConsistencyTest`. |
 | [architecture-3-progress-lane-writers.md](architecture-3-progress-lane-writers.md) | Inventory of every service that mutates the `3-progress` lane, the boot sequence that orders them, and the `LaneMutexRegistry` (F21) that serialises them per-project. Required reading before adding a seventh writer. |
+| [concepts/parallel-task-execution.md](concepts/parallel-task-execution.md) | ADR-0052 design home: opt-in intra-project parallelism, worktrees, `task/<id>` branches, pipeline-owned git steps, local slot slicing, and the later multi-system lease/store risk checkpoint. |
+| [concepts/task-execution-and-log-architecture.md](concepts/task-execution-and-log-architecture.md) | Concept for the Server/Runner split, per-run stream logs, lease-based task execution, and shared-state architecture. |
 | [protocol-style.md](protocol-style.md) | `status.md` shape, Activity Log markers, `attachments/` vs `results/`, per-CLI image retention. |
 | [commit-push-doctrine.md](commit-push-doctrine.md) | Who owns the git commit + push boundary (the platform, not the CLI). When a CLI is allowed to commit (almost never). |
 | [skills-architecture.md](skills-architecture.md) | Portable-skills doctrine: central library plus per-target lookup contract. |

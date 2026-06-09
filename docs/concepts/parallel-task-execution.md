@@ -31,7 +31,7 @@ The product already has most of the scaffolding. Each item below is a docking po
 | **Completion loop** (retry-until-done, budgeted) | ASS-566; card `epic-orchestrator-completion-loop…` | An `orchestratorReaction: review` integration step that returns `reopen` ticks the loop budget. The loop *wraps* the pipeline (ADR-0051 §7). |
 | **Git plumbing** | `backend/Services/GitService.cs` | Has `status`/`diff`/`Commit` (`add -A` + `commit -F -`)/`AutoCommitAsync`/`GenerateCommitMessageAsync` (Haiku) /`PushShaAsync`/commit-attribution helpers. Slice A/B added worktree add/remove, rebase, branch FF-merge, branch-parameterized push, retry, and best-effort remote cleanup for merged `task/<id>` branches. **Missing:** PR creation. |
 | **Per-project serialization gate** | `ProjectRunner.cs:461` — `if (_processing || _activeJobId != null) return;` (comment at 472–474: "one coding CLI per project at a time") | This single `_activeJobId` latch is the thing `maxParallelism` generalizes into N slots. |
-| **Pickup lease primitive** | `PickupLockFile` / `PickupLockOwner` (disk-backed `.pickup-lock.json`) | Becomes one lease per running task/slot instead of one per project. |
+| **Pickup lease primitive** | `PickupLockFile` / `PickupLockOwner` (disk-backed `.pickup-lock.json`) | Single-machine guard only. Slice 2 can use one local lease per running task/slot, but multi-system execution needs the shared-store lease design in §8.2C. |
 | **Crash-safe pickup** (PREREQUISITE) | card `bug-kritisch-crash-safe-pickup---eine-task-darf-niemals-den-backend-host-killen` | ADR-0052 gates this concept on it: N concurrent runs widen the crash surface. Must land first. |
 
 ## 2. Configuration (project level, `project-settings.json`)
@@ -105,11 +105,57 @@ Dependency-ordered. Each slice is independently shippable/verifiable and names i
 > **Slice 0 — crash-safe pickup (PREREQUISITE, already its own card).** Not part of this concept's scope; ADR-0052 gates everything below on it. Do not start §8.2+ in `maxParallelism ≥ 2` mode until `bug-kritisch-crash-safe-pickup…` is closed.
 
 1. **[Done] Config + worktree plumbing in `GitService` (no behaviour change at default).** `maxParallelism` / `integrationBranch` / `integrationStrategy` live in `ProjectSettings` + `ProjectSettingsService` and the runner keeps `maxParallelism = 1` behaviour byte-for-byte. `GitService` now exposes worktree add/remove, rebase, FF-merge, and branch-parameterized `PushShaAsync`; `WorktreeTaskLifecycle` wraps those primitives for `task/<id>` branches. *Acceptance:* settings round-trip and real temp-repo coverage live in `ProjectSettingsServiceTests`, `GitWorktreePrimitivesTests`, and `WorktreeTaskLifecycleTests`.
-2. **Worktree + slot model + lease-per-task.** Generalize the `ProjectRunner.cs:461` `_activeJobId` latch into N slots bounded by `maxParallelism`; one `PickupLockFile` lease per occupied slot instead of per project. Pre-step creates `task/<id>` worktree off `integrationBranch`; teardown post-step removes it. The prompt contract (§4) is injected by the pre-step. *Acceptance:* with `maxParallelism = 2`, two disjoint tasks run concurrently each in its own worktree; with `= 1`, behaviour is identical to today (`ParallelLanesPickupTests` stays green).
+2. **Worktree + slot model + local lease-per-task.** Generalize the `ProjectRunner.cs:461` `_activeJobId` latch into N slots bounded by `maxParallelism`; one local `PickupLockFile` lease per occupied slot instead of one per project. Pre-step creates `task/<id>` worktree off `integrationBranch`; teardown post-step removes it. The prompt contract (§4) is injected by the pre-step. *Acceptance:* with `maxParallelism = 2`, two disjoint tasks run concurrently each in its own worktree under one backend process; with `= 1`, behaviour is identical to today (`ParallelLanesPickupTests` stays green). This is **not** the multi-machine locking design; do not treat `.pickup-lock.json` as a distributed lease.
 3. **[Done] Git steps as runner-owned branch commit + push first.** A worktree run is committed on its `task/<id>` branch by `ProjectRunner.IntegrateWorktreeRunAsync`, then `WorktreeTaskLifecycle.PushTaskBranchWithRetryAsync` pushes that branch to `origin` before local integration. Failed push retries surface as a Warn `task-branch-unpushed` outcome issue on the card and task detail; the run may still integrate locally. *Acceptance:* `WorktreeTaskLifecycleTests.PushTaskBranchWithRetry_PushesTaskBranchToOrigin`, `TaskScannerOutcomeIssueTests.TaskBranchUnpushedMarker_SurfacesWarnOutcome`, and the protocol-pane explanation spec cover the durable branch and visible warning paths.
 4. **Parallelisability gate + timeline.** Add the `exclusive?` + `predictedScope` prep step (§5.1) and the pick-gate (§5.2) at the slot admission point. Render the pick decision + rationale as a timeline event (ADR-0049). *Acceptance:* a cross-cutting task is held serial / flagged exclusive with a visible rationale; disjoint tasks admit in parallel.
 5. **[Done] Integration step - `direct-merge` + merge-queue.** `ProjectRunner` serializes integration with the per-project merge lock, records the integration pipeline step, and emits `integration-conflict` / `integration-error` outcome issues when the task branch cannot be folded into the work branch. `TeardownIfIntegrated` removes the worktree plus local and remote task branch only after the branch is already merged. *Acceptance:* `WorktreeTaskLifecycleTests` covers direct merge, advanced integration branch rebase, conflict preservation, local cleanup, and remote branch cleanup.
 6. **Integration step — `pull-request`.** Push branch + open PR against `integrationBranch` via `gh`/provider API. The only genuinely new external surface. *Acceptance:* a task in `pull-request` mode leaves an open PR and stops; no auto-merge unless D2 says otherwise.
+
+### 8.2C Multi-system follow-up: task leases, shared store, and origin distribution
+
+This is deliberately later than the local worktree/slot slices. Do **not** start a multi-system runner or "agent builder" from this concept without a reviewed design task and close operator supervision. The local slice proves slot admission and worktree isolation inside one backend. Multi-system execution changes the source-of-truth model and must be treated as a separate critical checkpoint.
+
+**Hard prerequisite: one authoritative Task Server.** A local task-folder repository is not a distribution protocol. In multi-system mode, task state, lane transitions, run records, leases, heartbeats, timeline events, and durable log/artifact references live behind a shared Task Store owned by the Task Server. Local folders can exist only as runner caches/projections. There must not be two authoritative writers, and there must not be a "best effort sync" between local file repos. This aligns with the Server/Runner split in [Task Execution & Log Architecture](task-execution-and-log-architecture.md).
+
+**Lease contract.** Lease acquisition is a transactional store operation, not a filesystem lock:
+
+- `AcquireRunLease(taskId, runnerId, requestedTtl)` succeeds only when the task has no unexpired lease and the task is still in an admissible state. It creates a `leaseId`, increments a monotonic `fencingToken`, records `runnerId`, and sets `expiresAt` using server/store time.
+- `Heartbeat(leaseId, fencingToken, ttl)` extends the lease only when both the lease id and fencing token still match the current row.
+- Every write that can affect task state requires the current `leaseId` and `fencingToken`: log chunk ingestion, timeline append, run completion, lane transition, artifact registration, branch integration, and cleanup decisions.
+- Expiry permits a new runner to acquire a new lease with a higher fencing token. The old runner may still be alive, but its later writes are rejected as stale. This is the split-brain guard; TTL without fencing is not sufficient.
+- Lease expiry, heartbeat failure, stale-token rejection, and re-acquisition are first-class timeline/runtime events with runner id, lease id, fencing token, and reason.
+
+**Store requirements.** The shared store must provide atomic conditional update or compare-and-swap semantics over task/run lease rows. Use the store/server clock for `expiresAt`; runner-local clocks are not authoritative. If the Task Server itself becomes highly available, it must sit on an externally consistent database or consensus-backed store. Do not implement multi-primary locking in application memory.
+
+**Code distribution.** Task code does not travel through the Task Store. It travels through `origin`:
+
+- The server records `origin`, `integrationBranch`, `taskBranch = task/<id>`, base commit, and current task-branch head.
+- A runner starts by fetching from origin, then creating or checking out its local worktree from the recorded refs. Handoff after a crash uses `git fetch origin task/<id>`; the new runner does not depend on the crashed runner's disk.
+- The commit/push step publishes `task/<id>` before a task can be considered remotely recoverable. If a runner dies before the branch exists on origin, recovery must either restart from the base commit or escalate; do not pretend local unsynced code can be recovered cross-machine.
+- Integration uses a separate per-project integration lease or merge queue, also fenced. Only the current integration holder may mutate the integration branch or delete remote `task/<id>`.
+
+**Risks and review gates.**
+
+| Risk | Failure mode | Required mitigation before implementation |
+|---|---|---|
+| Split brain | Runner A misses heartbeats, Runner B gets the task, then A wakes up and completes stale work | Fencing token checked on every write and integration action; stale writes are rejected and surfaced |
+| Dual source of truth | Local task folders and the Task Server both accept mutations | One shared Task Store is authoritative; local folders are cache/projection only; all mutations go through server APIs |
+| Lease TTL tuning | Too short causes false takeover; too long leaves dead tasks stuck | Configurable TTL, heartbeat interval, grace policy, visible lease state, and tests for slow heartbeat/recovery |
+| Network partition | Runner can keep editing while disconnected from the server | Runner may continue local process only until it cannot renew; completion/state writes fail without the current lease |
+| Origin drift | Remote branch is deleted, force-pushed, or points at an unexpected SHA | Expected-SHA checks, no force push by default, protected branch rules, explicit human escalation on mismatch |
+| Integration race | Two runners merge or delete remote branches concurrently | Fenced integration lease/merge queue per project and integration branch |
+| Mixed runner versions | Old runner omits fencing fields or does not understand branch handoff | Runner capability registration and minimum-version checks before lease acquisition |
+| Credentials spread | Every runner needs git and Task Server access | Per-runner identities, least-privilege git tokens, audit events for lease and branch mutations |
+| Large artifacts/logs | Store becomes a blob bucket | Store metadata and pointers; artifact/log payloads use the log/artifact ingestion path from the Server/Runner split |
+
+**Acceptance tests for the multi-system slice.** Before enabling it outside a supervised test setup:
+
+- Two runner processes race the same ready task; only one gets a lease.
+- Runner A acquires a lease, loses heartbeat, Runner B acquires a higher fenced lease, and Runner A's stale completion/log/integration writes are rejected.
+- Server restart preserves lease rows and requeues only after stored expiry.
+- Crash handoff on a pushed `task/<id>` branch succeeds from `origin`; handoff before the first push escalates or restarts from base with an explicit reason.
+- Two completed task branches contend for integration; the merge queue serializes them and rejects stale integration tokens.
+- Shared-store mode has no direct task-folder state mutation path outside the Task Server API.
 
 ## 9. Open decisions — recommended defaults (operator may override)
 
