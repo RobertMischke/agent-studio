@@ -4,6 +4,19 @@ Concept proposal for the task-detail header action cluster. This consolidates
 ASS-565, ASS-564, and the feedback about "Force-accept" / "Edit prompt" into
 one UX direction before implementation.
 
+> **Shipped labels (post-implementation note).** The label tables below are the
+> original concept. Two human-facing labels later diverged from this proposal
+> and are now the source of truth in the UI:
+> - The `5-human-review` primary (`mark-done`) ships as **"Merge into Develop"**
+>   (not the proposed `→ Completed`); it still moves to `6-completed`.
+> - The `6-completed` lane is displayed as **"Delivered"**, and the overflow
+>   move action `move-to-completed` reads **"Move to Delivered"**.
+>
+> The action ids, intents, and state keys are unchanged. See
+> `frontend/src/app/features/task-detail/state/triage-actions.model.ts` and the
+> lane concept docs (`docs/concept-docs/lane-5-human-review.md`,
+> `lane-6-completed.md`) for the current wording.
+
 ## Current Catalogue Analysis
 
 Source of truth today is
