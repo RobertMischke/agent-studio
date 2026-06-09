@@ -940,7 +940,7 @@ public class ProjectRunner
                         AppendWorktreeIntegrationIssue(
                             info,
                             OrchestratorMessageKind.IntegrationConflict,
-                            "Merge blockiert: conflict-resolution could not produce a mergeable task branch.",
+                            "Integration blocked: conflict-resolution could not produce a mergeable task branch.",
                             run,
                             workBranch,
                             resolution);
@@ -987,6 +987,17 @@ public class ProjectRunner
         string workBranch,
         IntegrationResult result)
     {
+        _chatLog.Append(info, kind,
+            BuildWorktreeIntegrationIssueMessage(summary, run.Branch, run.WorktreePath, workBranch, result));
+    }
+
+    internal static string BuildWorktreeIntegrationIssueMessage(
+        string summary,
+        string? taskBranch,
+        string? worktreePath,
+        string workBranch,
+        IntegrationResult result)
+    {
         var conflicted = result.ConflictedFiles is { Count: > 0 }
             ? string.Join(", ", result.ConflictedFiles.Take(12))
             : "none reported";
@@ -997,9 +1008,8 @@ public class ProjectRunner
             ? "No git error text was reported."
             : result.Error.Trim();
 
-        _chatLog.Append(info, kind,
-            $"{summary} Task branch `{run.Branch ?? "<unknown>"}` was not merged into `{workBranch}`. " +
-            $"Worktree: `{run.WorktreePath ?? "<unknown>"}`. Conflicted files: {conflicted}{overflow}. Error: {error}");
+        return $"{summary} Task branch `{taskBranch ?? "<unknown>"}` was not merged into `{workBranch}`. " +
+               $"Worktree: `{worktreePath ?? "<unknown>"}`. Conflicted files: {conflicted}{overflow}. Error: {error}";
     }
 
     private async Task<IntegrationResult> RunConflictResolutionStepAsync(
@@ -1103,7 +1113,7 @@ public class ProjectRunner
                 retry.Error ?? "Conflict resolver finished, but the branch is still not mergeable.",
                 conflictedFiles);
             RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
-                IntegrationSummary("Merge blockiert.", run, workBranch, blocked),
+                IntegrationSummary("Integration blocked.", run, workBranch, blocked),
                 started,
                 model: final.Model ?? info.Model);
             return blocked;
@@ -1113,7 +1123,7 @@ public class ProjectRunner
             _logger.LogWarning(ex, "[taskboard] conflict-resolution step failed for {Job}", run.JobId);
             var failed = new IntegrationResult(IntegrationOutcome.Conflict, null, ex.Message, conflict.ConflictedFiles);
             RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
-                IntegrationSummary("Merge blockiert.", run, workBranch, failed), started, model: info.Model);
+                IntegrationSummary("Integration blocked.", run, workBranch, failed), started, model: info.Model);
             return failed;
         }
     }

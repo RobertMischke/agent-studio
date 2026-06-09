@@ -131,6 +131,44 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
         Assert.Equal(0, RunGit(repo, "rev-parse --verify task/task-9").Code);
         // The worktree was left clean (rebase aborted): no rebase in progress.
         Assert.NotEqual(0, RunGit(prep.WorktreePath!, "rev-parse --verify REBASE_HEAD").Code);
+
+        var watchPath = Path.Combine(repo, ".orchestrator", "jobs");
+        foreach (var state in TaskStates.All)
+            Directory.CreateDirectory(Path.Combine(watchPath, state));
+        var jobFolder = Path.Combine(watchPath, TaskStates.AutoReview, "task-9");
+        Directory.CreateDirectory(jobFolder);
+        File.WriteAllText(Path.Combine(jobFolder, "task.json"),
+            $"{{\"id\":\"task-9\",\"title\":\"conflicted task\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"codex\"}}");
+
+        var info = new TaskInfo
+        {
+            Id = "task-9",
+            Title = "conflicted task",
+            State = TaskStates.AutoReview,
+            FolderPath = jobFolder,
+            WatchPath = watchPath
+        };
+        var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
+        var issueMessage = ProjectRunner.BuildWorktreeIntegrationIssueMessage(
+            "Worktree branch integration is blocked by a merge conflict.",
+            prep.Branch,
+            prep.WorktreePath,
+            "develop",
+            result);
+
+        Assert.True(chatLog.Append(info, OrchestratorMessageKind.IntegrationConflict, issueMessage));
+        var persistedLog = File.ReadAllText(TaskPaths.CliOutputLog(jobFolder));
+        Assert.Contains("[integration-conflict]", persistedLog);
+        Assert.Contains("task/task-9", persistedLog);
+        Assert.Contains("shared.txt", persistedLog);
+
+        var issue = BuildScanner(repo).FindJob("task-9", watchPath)?.OutcomeIssue;
+        Assert.NotNull(issue);
+        Assert.Equal("integration-conflict", issue!.Kind);
+        Assert.Equal("High", issue.Severity);
+        Assert.Contains("task/task-9", issue.Summary);
+        Assert.Contains(prep.WorktreePath!, issue.Summary);
+        Assert.Contains("shared.txt", issue.Summary);
     }
 
     [Fact]
@@ -420,6 +458,22 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
 
     private static GitService BuildGitService(string repo)
     {
+        var config = BuildConfig(repo);
+        var scanner = BuildScanner(config);
+        return new GitService(NullLogger<GitService>.Instance, scanner, config);
+    }
+
+    private static TaskScannerService BuildScanner(string repo)
+        => BuildScanner(BuildConfig(repo));
+
+    private static TaskScannerService BuildScanner(IConfiguration config)
+    {
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        return new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+    }
+
+    private static IConfiguration BuildConfig(string repo)
+    {
         var dict = new Dictionary<string, string?>
         {
             ["WatchPaths:0:Name"] = "Fixture",
@@ -427,10 +481,7 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
             ["WatchPaths:0:RepositoryPath"] = repo,
             ["WatchPaths:0:Path"] = Path.Combine(repo, ".orchestrator", "jobs"),
         };
-        var config = new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
-        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
-        return new GitService(NullLogger<GitService>.Instance, scanner, config);
+        return new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
     }
 
     private static (string Out, string Err, int Code) RunGit(string cwd, string args)
