@@ -100,6 +100,14 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
     /// </summary>
     internal async Task ProcessAsync(AutoReviewPostProcessingRequest request, CancellationToken ct)
     {
+        if (!_configuration.GetValue("ReviewDecisionOrchestrator:Enabled", false))
+        {
+            _logger.LogInformation(
+                "auto-review-postprocessing-skipped project={Project} job={JobId} reason=review-decision-orchestrator-disabled",
+                request.ProjectName, request.JobId);
+            return;
+        }
+
         var workspace = _configuration["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace))
         {

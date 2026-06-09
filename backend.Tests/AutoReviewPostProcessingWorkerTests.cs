@@ -58,7 +58,34 @@ public sealed class AutoReviewPostProcessingWorkerTests : IDisposable
         Assert.True(File.Exists(followUp));
     }
 
-    private Deps BuildDeps()
+    [Fact]
+    public async Task ProcessAsync_WhenReviewDecisionOrchestratorDisabled_LeavesQueuedCardInAutoReview()
+    {
+        SeedNoOpReviewJob("disabled-task");
+        var deps = BuildDeps(reviewDecisionEnabled: false);
+        var worker = new AutoReviewPostProcessingWorker(
+            deps.Queue,
+            deps.Orchestrator,
+            deps.Scanner,
+            deps.Mutations,
+            deps.Configuration,
+            NullLogger<AutoReviewPostProcessingWorker>.Instance);
+
+        await worker.ProcessAsync(new AutoReviewPostProcessingRequest(
+            ProjectName: Project,
+            JobId: "disabled-task",
+            WatchPath: _watchPath,
+            EnqueuedAtUtc: DateTime.UtcNow,
+            Source: "test"),
+            CancellationToken.None);
+
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "disabled-task")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "disabled-task")));
+        var followUp = Path.Combine(_watchPath, TaskStates.AutoReview, "disabled-task", "orchestrator-follow-up.md");
+        Assert.False(File.Exists(followUp));
+    }
+
+    private Deps BuildDeps(bool reviewDecisionEnabled = true)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -67,6 +94,7 @@ public sealed class AutoReviewPostProcessingWorkerTests : IDisposable
                 ["WatchPaths:0:Name"] = Project,
                 ["WatchPaths:0:Path"] = _watchPath,
                 ["WatchPaths:0:RootPath"] = _watchPath,
+                ["ReviewDecisionOrchestrator:Enabled"] = reviewDecisionEnabled ? "true" : "false",
                 ["ReviewDecisionOrchestrator:CallsPerHour"] = "100"
             })
             .Build();
