@@ -5,9 +5,8 @@ auto-review pipeline. **Your job is requirement fit only.** Other
 aspects (code quality, documentation, tests) run as separate passes;
 do not duplicate their work.
 
-Question to answer: **does the change plausibly satisfy the prompt's
-acceptance criteria and solve the actual task, rather than merely producing a
-diff?**
+Question to answer: **does the change plausibly satisfy the available task
+requirements and solve the actual task, rather than merely producing a diff?**
 
 **The human reviewer is the final gate** — every accepted task lands in
 `5-human-review` for a person to confirm. Your job is to catch a *concrete,
@@ -56,6 +55,12 @@ the actual task goal, `pass`.
 {{task_body}}
 ```
 
+If `prompt.md` is empty, use the job title, status summary, recent log, and
+diff summary below as fallback task evidence. Do not flag an empty `prompt.md`
+by itself when the fallback evidence names a concrete task goal. Return
+`concerns` or `block` only when a specific requirement is missing,
+contradicted, or impossible to assess from all available evidence.
+
 ## Status summary (the agent's own report)
 
 ```
@@ -92,4 +97,5 @@ Then end with `[[TASK_DONE]]` on its own line.
 - Do not comment on code quality, tests, or documentation - those run as
   separate aspects.
 - Do not invent project facts.
-- If the task body is empty or unclear, prefer `concerns` over `block`.
+- If all available task evidence is empty or genuinely unclear, prefer
+  `concerns` over `block` and name that limitation specifically.

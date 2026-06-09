@@ -193,6 +193,41 @@ public class AspectRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task RequirementFitPrompt_UsesFallbackEvidence_WhenTaskBodyIsEmpty()
+    {
+        string? capturedPrompt = null;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        runner.CliRunner = (_, _, _, prompt, _, _) =>
+        {
+            capturedPrompt = prompt;
+            return Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=fallback evidence is assessable.]]\n[[TASK_DONE]]");
+        };
+
+        var inputs = new AspectRunInputs(
+            Project: "demo",
+            JobId: "empty-prompt-job",
+            JobTitle: "Convert legacy token aggregators to bus-backed shims",
+            JobFolderPath: _jobFolder,
+            TaskBody: "",
+            RecentLog: "Agent reported the token aggregator shim conversion complete.",
+            DiffSummary: "AdHocUsageService.cs, TokenSummary.cs, WorkspaceTokensTimelineService.cs changed.",
+            StatusSummary: "Converted legacy token aggregator services to bus-backed shims.");
+
+        var report = await runner.RunAsync(inputs,
+            new[] { "requirement-fit" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.Equal(AspectStatus.Pass, report.Overall);
+        Assert.NotNull(capturedPrompt);
+        Assert.Contains("If `prompt.md` is empty", capturedPrompt!);
+        Assert.Contains("Do not flag an empty `prompt.md`", capturedPrompt);
+        Assert.Contains("Convert legacy token aggregators to bus-backed shims", capturedPrompt);
+        Assert.DoesNotContain("If the task body is empty or unclear, prefer `concerns` over `block`", capturedPrompt);
+    }
+
+    [Fact]
     public async Task PerAspectModel_RoutesEachAspectsCliCallToItsConfiguredModel()
     {
         // The load-bearing per-step-model-selection acceptance: when the
