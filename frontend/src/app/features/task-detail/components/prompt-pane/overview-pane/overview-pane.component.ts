@@ -43,10 +43,9 @@ import {
 } from '../pipeline-step-result/pipeline-step-result.component';
 import { ReferencesSectionComponent } from '../../references-section/references-section.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
-import type { StructuredTooltip } from '../../../../../components/tooltip';
+import type { StructuredTooltip, TooltipSeverity } from '../../../../../components/tooltip';
 import { TaskPromptPopoverComponent } from '../task-prompt-popover/task-prompt-popover.component';
 import {
-  SteeringDetailComponent,
   isSteeringKind,
   steeringInfoFromEvent,
   type SteeringInfo,
@@ -146,6 +145,25 @@ interface PipelineRowVm {
   costKnown: boolean;
   tokenTooltip: StructuredTooltip | null;
   costTooltip: StructuredTooltip | null;
+}
+
+/**
+ * Compact decision badge for the single final orchestrator ruling row. Carries
+ * the steering verdict (Accept / Re-issue / Escalate) as an inline pill and the
+ * full reasoning in a tooltip, so the DECISION phase reads as one terse badge
+ * instead of an expanded steering block repeated on every orchestrator row
+ * (ASS-1706).
+ */
+interface DecisionBadgeVm {
+  verdict: SteeringInfo['verdict'];
+  /** Human label (e.g. "Re-issue"); uppercased to ACCEPT / REISSUE / ESCALATE via CSS. */
+  label: string;
+  /** Central severity tone driving the pill colour. */
+  tone: SteeringInfo['tone'];
+  /** Tooltip accent matched to the tone. */
+  severity: TooltipSeverity;
+  /** Reasoning surfaced on hover / focus instead of inline. */
+  tooltip: StructuredTooltip;
 }
 
 type PipelinePhaseKey = 'pre' | 'core' | 'aspect' | 'tool' | 'decision' | 'drift';
@@ -253,6 +271,44 @@ function buildConcernTooltip(
   const kind = verdictTitle(verdict);
   if (!kind) return null;
   return { title: `${label} · ${kind}`, body: text };
+}
+
+/** Map a steering tone to the tooltip accent colour. */
+function decisionTooltipSeverity(tone: SteeringInfo['tone']): TooltipSeverity {
+  switch (tone) {
+    case 'ok':     return 'success';
+    case 'warn':   return 'warn';
+    case 'danger': return 'error';
+    default:       return 'info';
+  }
+}
+
+/**
+ * Build the decision badge tooltip: the orchestrator's reasoning headline, the
+ * open items behind the ruling, and the run context, composed into the body so
+ * the inline badge stays compact and the detail is available on hover / focus.
+ */
+function buildDecisionTooltip(info: SteeringInfo): StructuredTooltip {
+  const lines: string[] = [];
+  if (info.reason) lines.push(info.reason);
+  if (info.openItems.length > 0) {
+    if (lines.length > 0) lines.push('');
+    lines.push('Open items:');
+    for (const item of info.openItems) {
+      const verdict = item.verdict ? ` [${item.verdict}]` : '';
+      const reason = item.reason ? `: ${item.reason}` : '';
+      lines.push(`• ${item.aspect}${verdict}${reason}`);
+    }
+  }
+  if (info.context.length > 0) {
+    if (lines.length > 0) lines.push('');
+    for (const line of info.context) lines.push(`${line.key}: ${line.value}`);
+  }
+  const body = lines.join('\n').trim();
+  return {
+    title: `Decision · ${info.verdictLabel}`,
+    body: body || info.verdictLabel,
+  };
 }
 
 /**
@@ -386,7 +442,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, SteeringDetailComponent, PipelineStepResultComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineStepResultComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -962,12 +1018,24 @@ export class OverviewPaneComponent {
   });
 
   /**
-   * Structured steering block for an orchestrator-kind step row. Both the
-   * review and the decision step reflect the orchestrator's steer, so each
-   * surfaces the latest steering trace; non-orchestrator rows return null.
+   * Compact decision badge for the single FINAL orchestrator ruling row
+   * (`isFinalVerdict`). Projects the latest steering trace into a terse
+   * Accept / Re-issue / Escalate pill whose tooltip carries the full reasoning,
+   * so the DECISION phase no longer repeats an expanded steering block on every
+   * orchestrator row (ASS-1706). Null for non-final rows or before any steering
+   * event, in which case the row falls back to its generic verdict pill.
    */
-  steeringForRow(row: PipelineRowVm): SteeringInfo | null {
-    return row.kind === 'orchestrator' ? this.latestSteeringInfo() : null;
+  decisionBadgeForRow(row: PipelineRowVm): DecisionBadgeVm | null {
+    if (!row.isFinalVerdict) return null;
+    const info = this.latestSteeringInfo();
+    if (info == null) return null;
+    return {
+      verdict: info.verdict,
+      label: info.verdictLabel,
+      tone: info.tone,
+      severity: decisionTooltipSeverity(info.tone),
+      tooltip: buildDecisionTooltip(info),
+    };
   }
 
   /**
@@ -977,9 +1045,9 @@ export class OverviewPaneComponent {
    * meta), or null for steps that have no per-job result file. The CORE run
    * carries `status.md`; each review aspect carries `aspect-{id}.md` (the step
    * id IS the report stem). Only shown once the step has actually run so the
-   * card never fetches a file that does not exist yet; orchestrator steps keep
-   * their richer steering trace via {@link steeringForRow}, and tool / drift
-   * steps have no per-job markdown.
+   * card never fetches a file that does not exist yet; the final orchestrator
+   * ruling carries its verdict via {@link decisionBadgeForRow}, and tool /
+   * drift steps have no per-job markdown.
    */
   resultForRow(row: PipelineRowVm): { fileName: string; header: PipelineStepResultHeader } | null {
     if (!this.selectedPipelineIsCurrent()) return null;

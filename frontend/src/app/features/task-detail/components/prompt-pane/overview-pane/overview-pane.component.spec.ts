@@ -13,6 +13,7 @@ import type { TaskInfo } from '../../../../../models/task.model';
 import type { AgentWorkSummary } from '../../../../session-events';
 import type { PipelineCostSummary, PipelineStepCost, TaskPipelineResponse } from '../../../../task-pipeline';
 import type { RunRecord, RunTimeline } from '../../../../run-timeline';
+import type { TaskTimelineEvent } from '../../../../task-timeline';
 
 /** A pipeline catalogue + execution with a single core Agent-execution row. */
 function agentPipeline(coreModel: string | null = 'claude-opus-4-8'): TaskPipelineResponse {
@@ -975,6 +976,95 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(decisionEl).not.toBeNull();
     expect(decisionEl!.classList.contains('ov-pl-step--final-verdict')).toBe(true);
     expect(decisionEl!.getAttribute('data-run-mode')).toBe('sequential');
+  });
+
+  it('decision badge: only the final ruling projects the latest steering verdict, with reasoning in the tooltip (ASS-1706)', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'post-orchestrator-review', displayName: 'Post-Core Orchestrator-Review', kind: 'orchestrator', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+          { id: 'post-orchestrator-decision', displayName: 'Final Orchestrator-Review', kind: 'orchestrator', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+        steps: [
+          { stepId: 'post-orchestrator-review', kind: 'orchestrator', status: 'passed', durationMs: 1, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'complete' },
+          { stepId: 'post-orchestrator-decision', kind: 'orchestrator', status: 'passed', durationMs: 1, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'accept' },
+        ],
+      },
+      cost: emptyCost(),
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+
+    const steerEvent: TaskTimelineEvent = {
+      ts: new Date().toISOString(),
+      kind: 'quality_loop_reopened',
+      actor: 'orchestrator',
+      summary: 'Reopened for missing tests.',
+      details: { gap: 'requirement-fit still open', attempt: '2', maxAttempts: '5' },
+    };
+    TestBed.inject(TaskTimelinePollService).events.set([steerEvent]);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    const rows = c.pipelineRows();
+    const decision = rows.find(r => r.id === 'post-orchestrator-decision')!;
+    const review = rows.find(r => r.id === 'post-orchestrator-review')!;
+
+    // The final ruling projects the steering verdict into a compact badge.
+    const badge = c.decisionBadgeForRow(decision);
+    expect(badge).not.toBeNull();
+    expect(badge!.verdict).toBe('reissue');
+    expect(badge!.label).toBe('Re-issue');
+    expect(badge!.tone).toBe('warn');
+    expect(badge!.severity).toBe('warn');
+    // The detailed reasoning + context lives in the tooltip, not inline.
+    expect(badge!.tooltip.title).toBe('Decision · Re-issue');
+    expect(badge!.tooltip.body).toContain('requirement-fit still open');
+    expect(badge!.tooltip.body).toContain('Attempt: 2 / 5');
+
+    // The early gate is NOT the final ruling -> no badge, keeps its own pill.
+    expect(c.decisionBadgeForRow(review)).toBeNull();
+  });
+
+  it('decision badge: the final ruling falls back to its generic verdict pill when no steering event exists', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'post-orchestrator-decision', displayName: 'Final Orchestrator-Review', kind: 'orchestrator', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+        steps: [
+          { stepId: 'post-orchestrator-decision', kind: 'orchestrator', status: 'passed', durationMs: 1, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'accept' },
+        ],
+      },
+      cost: emptyCost(),
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    const decision = c.pipelineRows().find(r => r.id === 'post-orchestrator-decision')!;
+    expect(c.decisionBadgeForRow(decision)).toBeNull();
+
+    // With no badge, the generic verdict pill renders the recorded verdict.
+    const badgeEl = fixture.nativeElement.querySelector('[data-testid="overview-pipeline-step-decision"]');
+    expect(badgeEl).toBeNull();
+    const verdictEl = fixture.nativeElement.querySelector('[data-step-id="post-orchestrator-decision"] [data-testid="overview-pipeline-step-verdict"]');
+    expect(verdictEl?.textContent?.trim()).toBe('accept');
   });
 
   it('pipeline block: renders visual phase groups in pipeline order including the decision phase', async () => {

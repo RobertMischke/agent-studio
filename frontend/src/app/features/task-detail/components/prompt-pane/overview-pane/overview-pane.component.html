@@ -289,7 +289,19 @@
                 {{ agentRunCountLabel() }}
               </button>
             }
-            @if (row.verdict) {
+            @if (decisionBadgeForRow(row); as badge) {
+              <!-- Compact decision badge (ASS-1706): the orchestrator's final
+                   Accept / Re-issue / Escalate ruling inline, with the full
+                   reasoning in the tooltip instead of an expanded block. -->
+              <span class="ov-pl-step__decision"
+                    tabindex="0"
+                    [attr.data-tone]="badge.tone"
+                    [attr.data-verdict]="badge.verdict"
+                    [appTooltip]="badge.tooltip"
+                    [tooltipSeverity]="badge.severity"
+                    [attr.aria-label]="'Decision: ' + badge.label"
+                    data-testid="overview-pipeline-step-decision">{{ badge.label }}</span>
+            } @else if (row.verdict) {
               <span class="ov-pl-step__verdict"
                     [class.ov-pl-step__verdict--concern]="row.concernTooltip"
                     [attr.data-verdict]="row.verdict"
@@ -362,16 +374,6 @@
               }
             </span>
           </div>
-          @if (steeringForRow(row); as steer) {
-            <!-- Structured steering trace for the orchestrator review / decision
-                 steps (Epic ASS-776): verdict + reason + collapsible steer
-                 prompt + context, mirroring the Timeline, instead of only the
-                 bare verdict token above. -->
-            <app-steering-detail class="ov-pl-steer"
-                                 [info]="steer"
-                                 [showVerdictChip]="true"
-                                 data-testid="overview-pipeline-step-steering" />
-          }
         }
       </div>
 

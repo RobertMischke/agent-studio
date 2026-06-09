@@ -285,4 +285,47 @@ test.describe('Pipeline: orchestrator-review rows are distinct, single final ver
       });
     }
   });
+
+  test('final decision shows a compact verdict badge inline with reasoning in the tooltip, no expanded steering block', async ({ page }) => {
+    await installRoutes(page, '4-auto-review');
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+
+    // ASS-1706: the redundant expanded steering block is gone from every row.
+    await expect(page.getByTestId('overview-pipeline-step-steering')).toHaveCount(0);
+
+    // Exactly ONE compact decision badge, on the final decision row only, and it
+    // carries the steering verdict (ACCEPT, rendered "Accept" before CSS upper).
+    const badges = page.getByTestId('overview-pipeline-step-decision');
+    await expect(badges).toHaveCount(1);
+
+    const reviewRow = page.locator('[data-step-id="post-orchestrator-review"]');
+    const decisionRow = page.locator('[data-step-id="post-orchestrator-decision"]');
+    const badge = decisionRow.getByTestId('overview-pipeline-step-decision');
+    await expect(badge).toHaveCount(1);
+    await expect(badge).toHaveText('Accept');
+    await expect(badge).toHaveAttribute('data-tone', 'ok');
+
+    // The badge REPLACES the generic verdict pill on the final row; the early
+    // gate keeps its own compact verdict pill ("complete"), not a decision badge.
+    await expect(decisionRow.getByTestId('overview-pipeline-step-verdict')).toHaveCount(0);
+    await expect(reviewRow.getByTestId('overview-pipeline-step-decision')).toHaveCount(0);
+    await expect(reviewRow.getByTestId('overview-pipeline-step-verdict')).toHaveText('complete');
+
+    // The detailed reasoning lives in the tooltip (hover), not inline.
+    await badge.hover();
+    const tooltip = page.getByTestId('app-tooltip');
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toContainText('Moved to 5-human-review for your approval.');
+
+    if (RESULTS_DIR) {
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, 'pipeline-decision-badge-tooltip.png'),
+        fullPage: false,
+      });
+    }
+  });
 });

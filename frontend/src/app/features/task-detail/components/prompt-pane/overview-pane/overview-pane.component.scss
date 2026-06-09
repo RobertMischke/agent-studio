@@ -661,17 +661,6 @@
   }
 }
 
-// Structured steering trace rendered under an orchestrator step row
-// (Epic ASS-776). Indented and rail-marked so it reads as belonging to the
-// step above it, not as a peer pipeline row.
-.ov-pl-steer {
-  display: block;
-  margin: 2px 0 6px;
-  padding: 6px 0 6px 10px;
-  border-left: 2px solid var(--studio-border);
-  margin-left: calc(var(--ov-pipeline-status-col) + var(--studio-spacing-1));
-}
-
 .ov-pl-step {
   --ov-pl-phase-accent: var(--studio-accent-2);
 
@@ -872,6 +861,7 @@
   &__running-badge { grid-column: 6; }
   &__runs { grid-column: 7; }
   &__verdict { grid-column: 5; }
+  &__decision { grid-column: 5; }
   &__result { grid-column: 6; }
   &__model { grid-column: 7; }
   &__model-select { grid-column: 6; }
@@ -921,6 +911,49 @@
 
     // Hover affordance: the pill carries the concrete concern in a tooltip.
     &--concern { cursor: help; }
+  }
+
+  // Compact decision badge for the final orchestrator ruling (ASS-1706): the
+  // Accept / Re-issue / Escalate verdict inline, full reasoning on hover. Tone
+  // tracks the central severity tokens so it reads consistently with the grid.
+  &__decision {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    font-size: 9.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 7px;
+    border-radius: 5px;
+    border: 1px solid var(--studio-border);
+    background: transparent;
+    color: var(--studio-fg-dim);
+    // The badge carries the orchestrator's reasoning in a tooltip.
+    cursor: help;
+
+    &[data-tone='ok'] {
+      color: var(--severity-pass);
+      border-color: color-mix(in srgb, var(--severity-pass) 56%, var(--studio-border));
+      background: color-mix(in srgb, var(--severity-pass) 16%, transparent);
+    }
+    &[data-tone='warn'] {
+      color: var(--severity-warn);
+      border-color: color-mix(in srgb, var(--severity-warn) 56%, var(--studio-border));
+      background: color-mix(in srgb, var(--severity-warn) 16%, transparent);
+    }
+    &[data-tone='danger'] {
+      color: var(--severity-high);
+      border-color: color-mix(in srgb, var(--severity-high) 58%, var(--studio-border));
+      background: color-mix(in srgb, var(--severity-high) 18%, transparent);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--studio-accent-2);
+      outline-offset: 1px;
+    }
   }
 
   &__model {
