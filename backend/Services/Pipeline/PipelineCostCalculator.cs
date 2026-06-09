@@ -46,6 +46,53 @@ public sealed record PipelineCostSummary(
     bool AnyModelUnknown);
 
 /// <summary>
+/// Token + cost rollup for a single model, summed across the steps that ran
+/// on it. A run uses several models (the core agent model, the aspect
+/// reviewer's Haiku, an orchestrator decision model), so the Overview RUNS
+/// view groups a run's step tokens by model into these rows.
+/// <see cref="ModelKnown"/> is false when the model is absent from the
+/// <see cref="TokenPricing"/> catalogue so the UI renders "n/a" cost.
+/// </summary>
+public sealed record PipelineModelTokenUsage(
+    string Model,
+    bool ModelKnown,
+    int Steps,
+    long InputTokens,
+    long OutputTokens,
+    long CacheReadTokens,
+    long CacheCreationTokens,
+    long TotalTokens,
+    decimal CostUsd);
+
+/// <summary>
+/// One pipeline run (a <see cref="PipelineExecutionRecord"/> attempt) with
+/// its tokens grouped per model. <see cref="Current"/> marks the live run;
+/// older runs come from <see cref="PipelineExecutionRecord.PreviousAttempts"/>.
+/// </summary>
+public sealed record PipelineRunTokenUsage(
+    int Attempt,
+    bool Current,
+    DateTime StartedAt,
+    DateTime? CompletedAt,
+    IReadOnlyList<PipelineModelTokenUsage> Models,
+    long TotalTokens,
+    decimal TotalCostUsd,
+    bool AnyModelUnknown);
+
+/// <summary>
+/// Per-model token usage for one task across every run: a per-run breakdown
+/// plus a grand total that sums each model over all runs. Powers the
+/// Overview "RUNS - tokens by model" surface (per-run cards plus a visually
+/// distinct lifetime total row).
+/// </summary>
+public sealed record PipelineModelUsageSummary(
+    IReadOnlyList<PipelineRunTokenUsage> Runs,
+    IReadOnlyList<PipelineModelTokenUsage> TotalByModel,
+    long TotalTokens,
+    decimal TotalCostUsd,
+    bool AnyModelUnknown);
+
+/// <summary>
 /// Derives per-step and task-total cost from an already-recorded
 /// <see cref="PipelineExecutionRecord"/> using the single price table in
 /// <see cref="TokenPricing"/>. Pure and cheap: a task has a handful of
@@ -131,6 +178,96 @@ public static class PipelineCostCalculator
             Round(totalCacheCreationCost),
             Round(totalCost),
             anyUnknown);
+    }
+
+    /// <summary>
+    /// Groups a task's recorded tokens by model, per run and across all runs.
+    /// Runs are the current <paramref name="record"/> plus its flattened
+    /// <see cref="PipelineExecutionRecord.PreviousAttempts"/>, ordered oldest
+    /// first so the UI reads Run #1 -> latest top to bottom. Cost is computed
+    /// on the per-model summed tokens (pricing is linear, so summing tokens
+    /// then estimating equals estimating per step then summing). Steps with
+    /// zero tokens are ignored; a null / empty model collapses to "unknown".
+    /// </summary>
+    public static PipelineModelUsageSummary SummarizeByModel(PipelineExecutionRecord? record)
+    {
+        if (record == null)
+        {
+            return new PipelineModelUsageSummary(
+                Array.Empty<PipelineRunTokenUsage>(),
+                Array.Empty<PipelineModelTokenUsage>(),
+                0, 0m, false);
+        }
+
+        // Oldest first: archived attempts (newest-first on disk) ascending by
+        // attempt, then the live record last.
+        var runs = new List<PipelineRunTokenUsage>();
+        foreach (var prev in record.PreviousAttempts.OrderBy(p => p.Attempt))
+        {
+            runs.Add(BuildRun(prev, current: false));
+        }
+        runs.Add(BuildRun(record, current: true));
+
+        var allSteps = record.PreviousAttempts
+            .SelectMany(p => p.Steps)
+            .Concat(record.Steps);
+        var totalByModel = GroupByModel(allSteps);
+
+        long totalTokens = totalByModel.Sum(m => m.TotalTokens);
+        decimal totalCost = Round(totalByModel.Sum(m => m.CostUsd));
+        bool anyUnknown = totalByModel.Any(m => m.TotalTokens > 0 && !m.ModelKnown);
+
+        return new PipelineModelUsageSummary(runs, totalByModel, totalTokens, totalCost, anyUnknown);
+    }
+
+    private static PipelineRunTokenUsage BuildRun(PipelineExecutionRecord run, bool current)
+    {
+        var models = GroupByModel(run.Steps);
+        return new PipelineRunTokenUsage(
+            Attempt: run.Attempt,
+            Current: current,
+            StartedAt: run.StartedAt,
+            CompletedAt: run.CompletedAt,
+            Models: models,
+            TotalTokens: models.Sum(m => m.TotalTokens),
+            TotalCostUsd: Round(models.Sum(m => m.CostUsd)),
+            AnyModelUnknown: models.Any(m => m.TotalTokens > 0 && !m.ModelKnown));
+    }
+
+    // Sum a flat list of steps into per-model rows, busiest model first.
+    private static IReadOnlyList<PipelineModelTokenUsage> GroupByModel(
+        IEnumerable<PipelineStepExecution> steps)
+    {
+        var byModel = new List<PipelineModelTokenUsage>();
+        var groups = steps
+            .Where(s => s.InputTokens + s.OutputTokens + s.CacheReadTokens + s.CacheCreationTokens > 0)
+            .GroupBy(s => string.IsNullOrWhiteSpace(s.Model) ? "unknown" : s.Model!.Trim(),
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var g in groups)
+        {
+            long input = g.Sum(s => s.InputTokens);
+            long output = g.Sum(s => s.OutputTokens);
+            long cacheRead = g.Sum(s => s.CacheReadTokens);
+            long cacheCreation = g.Sum(s => s.CacheCreationTokens);
+            var est = TokenPricing.Estimate(g.Key, input, output, cacheRead, cacheCreation);
+
+            byModel.Add(new PipelineModelTokenUsage(
+                Model: g.Key,
+                ModelKnown: est.ModelKnown,
+                Steps: g.Count(),
+                InputTokens: input,
+                OutputTokens: output,
+                CacheReadTokens: cacheRead,
+                CacheCreationTokens: cacheCreation,
+                TotalTokens: input + output + cacheRead + cacheCreation,
+                CostUsd: Round(est.Total)));
+        }
+
+        return byModel
+            .OrderByDescending(m => m.TotalTokens)
+            .ThenBy(m => m.Model, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     // Costs are fractions of a cent for a single task; keep 6 dp so the

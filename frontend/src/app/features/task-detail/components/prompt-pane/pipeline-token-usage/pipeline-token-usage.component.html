@@ -1,0 +1,132 @@
+@if (runCount() > 0) {
+  <section class="ptu" data-testid="pipeline-token-usage">
+    <h3 class="ptu__title"
+        [appTooltip]="'Tokens each run spent, grouped by model, plus a lifetime total summed over every run. API cost is theoretical - runs go through CLI subscription plans, so the real bill is $0.'">
+      Tokens by model
+      <span class="ptu__title-sub">{{ runCount() }} run{{ runCount() === 1 ? '' : 's' }}</span>
+    </h3>
+
+    <!-- Per-run breakdown: one card per attempt, tokens grouped per model. -->
+    @for (run of runs(); track run.attempt) {
+      <article class="ptu__run"
+               [attr.data-attempt]="run.attempt"
+               [attr.data-current]="run.current ? 'true' : null"
+               data-testid="pipeline-token-usage-run">
+        <header class="ptu__run-head">
+          <span class="ptu__run-name">Run #{{ run.attempt }}</span>
+          @if (run.current) {
+            <span class="ptu__badge ptu__badge--current" data-testid="pipeline-token-usage-run-current">Current</span>
+          }
+          @if (run.startedAt) {
+            <span class="ptu__run-time">{{ relativeTime(run.startedAt) }}</span>
+          }
+          <span class="ptu__run-spacer"></span>
+          <span class="ptu__run-total ptu__mono" data-testid="pipeline-token-usage-run-total">
+            {{ tokens(run.totalTokens) }}
+          </span>
+          <span class="ptu__run-cost ptu__mono">
+            {{ formatCost(run.totalCostUsd) }}@if (run.anyModelUnknown) {<span class="ptu__na" [appTooltip]="'A model in this run has no price on file; the cost excludes it.'">*</span>}
+          </span>
+        </header>
+
+        <div class="ptu__scroll">
+          <table class="ptu__table">
+            <thead>
+              <tr>
+                <th scope="col">Model</th>
+                <th scope="col" class="ptu__num">Input</th>
+                <th scope="col" class="ptu__num">Output</th>
+                <th scope="col" class="ptu__num">Cache read</th>
+                <th scope="col" class="ptu__num">Cache write</th>
+                <th scope="col" class="ptu__num">Total</th>
+                <th scope="col" class="ptu__num">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (m of run.models; track m.model) {
+                <tr data-testid="pipeline-token-usage-run-model" [appTooltip]="modelTooltip(m)">
+                  <td class="ptu__model">
+                    <code>{{ m.model }}</code>
+                    @if (m.steps > 1) {
+                      <span class="ptu__steps">×{{ m.steps }}</span>
+                    }
+                  </td>
+                  <td class="ptu__num ptu__mono">{{ tokens(m.inputTokens) }}</td>
+                  <td class="ptu__num ptu__mono">{{ tokens(m.outputTokens) }}</td>
+                  <td class="ptu__num ptu__mono">{{ tokens(m.cacheReadTokens) }}</td>
+                  <td class="ptu__num ptu__mono">{{ tokens(m.cacheCreationTokens) }}</td>
+                  <td class="ptu__num ptu__mono ptu__strong">{{ tokens(m.totalTokens) }}</td>
+                  <td class="ptu__num ptu__mono" [class.ptu__na]="!m.modelKnown">
+                    {{ costLabel(m.costUsd, m.modelKnown) }}
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </article>
+    }
+
+    <!-- Grand total over ALL runs, summed by model. Visually set off as its
+         own elevated card so it reads as the lifetime total, not a run. -->
+    <article class="ptu__total" data-testid="pipeline-token-usage-total">
+      <header class="ptu__total-head">
+        <span class="ptu__total-label">Total
+          <span class="ptu__total-scope">all runs</span>
+        </span>
+        <span class="ptu__total-sub">summed by model</span>
+      </header>
+
+      <div class="ptu__scroll">
+        <table class="ptu__table ptu__table--total">
+          <thead>
+            <tr>
+              <th scope="col">Model</th>
+              <th scope="col" class="ptu__num">Input</th>
+              <th scope="col" class="ptu__num">Output</th>
+              <th scope="col" class="ptu__num">Cache read</th>
+              <th scope="col" class="ptu__num">Cache write</th>
+              <th scope="col" class="ptu__num">Total</th>
+              <th scope="col" class="ptu__num">Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (m of totalByModel(); track m.model) {
+              <tr data-testid="pipeline-token-usage-total-model" [appTooltip]="modelTooltip(m)">
+                <td class="ptu__model">
+                  <code>{{ m.model }}</code>
+                  @if (m.steps > 1) {
+                    <span class="ptu__steps">×{{ m.steps }}</span>
+                  }
+                </td>
+                <td class="ptu__num ptu__mono">{{ tokens(m.inputTokens) }}</td>
+                <td class="ptu__num ptu__mono">{{ tokens(m.outputTokens) }}</td>
+                <td class="ptu__num ptu__mono">{{ tokens(m.cacheReadTokens) }}</td>
+                <td class="ptu__num ptu__mono">{{ tokens(m.cacheCreationTokens) }}</td>
+                <td class="ptu__num ptu__mono ptu__strong">{{ tokens(m.totalTokens) }}</td>
+                <td class="ptu__num ptu__mono" [class.ptu__na]="!m.modelKnown">
+                  {{ costLabel(m.costUsd, m.modelKnown) }}
+                </td>
+              </tr>
+            }
+          </tbody>
+          <tfoot>
+            <tr class="ptu__grand" data-testid="pipeline-token-usage-grand-total">
+              <th scope="row" class="ptu__grand-label">All models</th>
+              <td class="ptu__num ptu__mono">{{ tokens(grandTotals().inputTokens) }}</td>
+              <td class="ptu__num ptu__mono">{{ tokens(grandTotals().outputTokens) }}</td>
+              <td class="ptu__num ptu__mono">{{ tokens(grandTotals().cacheReadTokens) }}</td>
+              <td class="ptu__num ptu__mono">{{ tokens(grandTotals().cacheCreationTokens) }}</td>
+              <td class="ptu__num ptu__mono ptu__strong" data-testid="pipeline-token-usage-grand-total-tokens">
+                {{ tokens(grandTotals().totalTokens) }}
+              </td>
+              <td class="ptu__num ptu__mono ptu__strong" data-testid="pipeline-token-usage-grand-total-cost">
+                {{ formatCost(grandTotals().costUsd) }}@if (grandTotals().anyModelUnknown) {<span class="ptu__na" [appTooltip]="'One or more models have no price on file; the total excludes them.'">*</span>}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </article>
+  </section>
+}

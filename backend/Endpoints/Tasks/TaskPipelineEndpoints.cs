@@ -42,6 +42,10 @@ public static class TaskPipelineEndpoints
             // with per-aspect concern detail for the response so the
             // Overview pipeline can tooltip the CONCERNS pill.
             var cost = PipelineCostCalculator.Summarize(record);
+            // Per-model tokens, per run plus a grand total over all runs, off
+            // the raw record (includes previousAttempts) for the Overview
+            // "RUNS - tokens by model" surface.
+            var tokensByModel = PipelineCostCalculator.SummarizeByModel(record);
             var execution = AspectConcernReader.Enrich(record, info.FolderPath);
 
             var settings = string.IsNullOrWhiteSpace(info.ProjectName)
@@ -76,6 +80,7 @@ public static class TaskPipelineEndpoints
                 pipeline,
                 execution,
                 cost,
+                tokensByModel,
                 config,
             });
         });

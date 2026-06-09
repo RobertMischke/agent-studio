@@ -205,6 +205,159 @@ public class PipelineConfigAndCostTests
         Assert.Equal(700, summary.TotalTokens);
     }
 
+    [Fact]
+    public void SummarizeByModel_EmptyRecord_IsZero()
+    {
+        var summary = PipelineCostCalculator.SummarizeByModel(null);
+        Assert.Empty(summary.Runs);
+        Assert.Empty(summary.TotalByModel);
+        Assert.Equal(0, summary.TotalTokens);
+        Assert.Equal(0m, summary.TotalCostUsd);
+        Assert.False(summary.AnyModelUnknown);
+    }
+
+    [Fact]
+    public void SummarizeByModel_GroupsStepsPerModel_BusiestFirst()
+    {
+        var record = new PipelineExecutionRecord
+        {
+            Attempt = 1,
+            StartedAt = new DateTime(2026, 6, 2, 10, 0, 0, DateTimeKind.Utc),
+            CompletedAt = new DateTime(2026, 6, 2, 10, 5, 0, DateTimeKind.Utc),
+            Steps =
+            {
+                // Two aspect steps on Haiku ($1 / $5 per million) -> one model row.
+                new PipelineStepExecution
+                {
+                    StepId = "aspect-code-quality", Kind = StepKind.Aspect,
+                    Model = "claude-haiku-4-5", InputTokens = 1_000_000, OutputTokens = 200_000, // $2.00
+                },
+                new PipelineStepExecution
+                {
+                    StepId = "aspect-requirement-fit", Kind = StepKind.Aspect,
+                    Model = "claude-haiku-4-5", InputTokens = 1_000_000, OutputTokens = 200_000, // $2.00
+                },
+                // Core run on Opus ($5 / $25 per million) -> a smaller, separate row.
+                new PipelineStepExecution
+                {
+                    StepId = "core-agent-run", Kind = StepKind.Core,
+                    Model = "claude-opus-4-8", InputTokens = 100_000, OutputTokens = 10_000, // $0.75
+                },
+            },
+        };
+
+        var summary = PipelineCostCalculator.SummarizeByModel(record);
+
+        var run = Assert.Single(summary.Runs);
+        Assert.True(run.Current);
+        Assert.Equal(1, run.Attempt);
+        Assert.Equal(2, run.Models.Count);
+
+        // Busiest model first: Haiku (2.4M tokens) before Opus (110K tokens).
+        var haiku = run.Models[0];
+        Assert.Equal("claude-haiku-4-5", haiku.Model);
+        Assert.Equal(2, haiku.Steps);
+        Assert.Equal(2_400_000, haiku.TotalTokens);
+        Assert.Equal(4.00m, haiku.CostUsd); // two $2.00 steps summed
+        Assert.True(haiku.ModelKnown);
+
+        var opus = run.Models[1];
+        Assert.Equal("claude-opus-4-8", opus.Model);
+        Assert.Equal(0.75m, opus.CostUsd);
+
+        Assert.Equal(2_510_000, run.TotalTokens);
+        Assert.Equal(4.75m, run.TotalCostUsd);
+
+        // Single run -> grand total equals the run.
+        Assert.Equal(2_510_000, summary.TotalTokens);
+        Assert.Equal(4.75m, summary.TotalCostUsd);
+        Assert.False(summary.AnyModelUnknown);
+    }
+
+    [Fact]
+    public void SummarizeByModel_SumsModelsAcrossAllRuns_OldestFirst()
+    {
+        var older = new PipelineExecutionRecord
+        {
+            Attempt = 1,
+            StartedAt = new DateTime(2026, 6, 1, 9, 0, 0, DateTimeKind.Utc),
+            CompletedAt = new DateTime(2026, 6, 1, 9, 5, 0, DateTimeKind.Utc),
+            Steps =
+            {
+                new PipelineStepExecution
+                {
+                    StepId = "core-agent-run", Kind = StepKind.Core,
+                    Model = "claude-haiku-4-5", InputTokens = 1_000_000, OutputTokens = 200_000, // $2.00
+                },
+            },
+        };
+        var current = new PipelineExecutionRecord
+        {
+            Attempt = 2,
+            StartedAt = new DateTime(2026, 6, 2, 9, 0, 0, DateTimeKind.Utc),
+            Steps =
+            {
+                new PipelineStepExecution
+                {
+                    StepId = "core-agent-run", Kind = StepKind.Core,
+                    Model = "claude-haiku-4-5", InputTokens = 1_000_000, OutputTokens = 200_000, // $2.00
+                },
+            },
+            // PreviousAttempts are stored newest-first on disk.
+            PreviousAttempts = { older },
+        };
+
+        var summary = PipelineCostCalculator.SummarizeByModel(current);
+
+        // Oldest first: Run #1 then the current Run #2.
+        Assert.Equal(2, summary.Runs.Count);
+        Assert.Equal(1, summary.Runs[0].Attempt);
+        Assert.False(summary.Runs[0].Current);
+        Assert.Equal(2, summary.Runs[1].Attempt);
+        Assert.True(summary.Runs[1].Current);
+
+        // Grand total sums the same model across both runs.
+        var total = Assert.Single(summary.TotalByModel);
+        Assert.Equal("claude-haiku-4-5", total.Model);
+        Assert.Equal(2_400_000, total.TotalTokens);
+        Assert.Equal(4.00m, total.CostUsd);
+        Assert.Equal(4.00m, summary.TotalCostUsd);
+        Assert.False(summary.AnyModelUnknown);
+    }
+
+    [Fact]
+    public void SummarizeByModel_CollapsesNullModelToUnknown_AndFlagsIt()
+    {
+        var record = new PipelineExecutionRecord
+        {
+            Attempt = 1,
+            StartedAt = new DateTime(2026, 6, 2, 10, 0, 0, DateTimeKind.Utc),
+            Steps =
+            {
+                new PipelineStepExecution
+                {
+                    StepId = "core-agent-run", Kind = StepKind.Core,
+                    Model = null, InputTokens = 500, OutputTokens = 200,
+                },
+                // Zero-token step is ignored entirely.
+                new PipelineStepExecution
+                {
+                    StepId = "post-lint-scss", Kind = StepKind.Tool, Model = null,
+                },
+            },
+        };
+
+        var summary = PipelineCostCalculator.SummarizeByModel(record);
+
+        var model = Assert.Single(summary.TotalByModel);
+        Assert.Equal("unknown", model.Model);
+        Assert.False(model.ModelKnown);
+        Assert.Equal(1, model.Steps); // the zero-token step did not count
+        Assert.Equal(700, model.TotalTokens);
+        Assert.Equal(0m, model.CostUsd);
+        Assert.True(summary.AnyModelUnknown);
+    }
+
     private static PipelineExecutionRecord RunOn(DateTime day, params PipelineStepExecution[] steps)
         => new()
         {

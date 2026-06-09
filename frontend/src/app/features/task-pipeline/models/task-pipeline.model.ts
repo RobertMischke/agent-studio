@@ -125,6 +125,53 @@ export interface PipelineCostSummary {
   anyModelUnknown: boolean;
 }
 
+/**
+ * Token + cost rollup for one model, summed across the steps that ran on
+ * it within a run (or across all runs for the grand total). Mirrors backend
+ * `PipelineModelTokenUsage`. `modelKnown` false -> render "n/a" cost.
+ */
+export interface PipelineModelTokenUsage {
+  model: string;
+  modelKnown: boolean;
+  steps: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  totalTokens: number;
+  costUsd: number;
+}
+
+/**
+ * One pipeline run (attempt) with its tokens grouped per model. `current`
+ * marks the live run; older runs come from previous attempts. Mirrors
+ * backend `PipelineRunTokenUsage`.
+ */
+export interface PipelineRunTokenUsage {
+  attempt: number;
+  current: boolean;
+  startedAt: string;
+  completedAt?: string | null;
+  models: PipelineModelTokenUsage[];
+  totalTokens: number;
+  totalCostUsd: number;
+  anyModelUnknown: boolean;
+}
+
+/**
+ * Per-model token usage for one task across every run: a per-run breakdown
+ * plus a grand total summing each model over all runs. Mirrors backend
+ * `PipelineModelUsageSummary`. Powers the Overview "RUNS - tokens by model"
+ * surface.
+ */
+export interface PipelineModelUsageSummary {
+  runs: PipelineRunTokenUsage[];
+  totalByModel: PipelineModelTokenUsage[];
+  totalTokens: number;
+  totalCostUsd: number;
+  anyModelUnknown: boolean;
+}
+
 /** Per-project override resolved for one step (from project-settings.json). */
 export interface PipelineStepConfig {
   enabled: boolean;
@@ -225,5 +272,11 @@ export interface TaskPipelineResponse {
   pipeline: TaskPipeline;
   execution: PipelineExecutionRecord | null;
   cost: PipelineCostSummary;
+  /**
+   * Per-model tokens grouped per run plus a grand total over all runs.
+   * Optional so older fixtures / responses without it still type-check;
+   * the backend always emits it (possibly empty).
+   */
+  tokensByModel?: PipelineModelUsageSummary | null;
   config: Record<string, PipelineStepConfig>;
 }

@@ -401,6 +401,18 @@
     </section>
   }
 
+  <!-- RUNS - tokens by model (ASS-1708): per-run breakdown grouped by model
+       plus a lifetime grand total summed over every run, set off as its own
+       card. Self-hides when the task has no recorded run tokens. -->
+  @if (pipelineTokenUsage(); as tokensByModel) {
+    @if (tokensByModel.runs.length > 0) {
+      <section class="ov-section studio-measure studio-measure--tabular-compact"
+               data-testid="overview-pipeline-tokens-by-model">
+        <app-pipeline-token-usage [summary]="tokensByModel" />
+      </section>
+    }
+  }
+
   @if (selectedTokenRow(); as tokenRow) {
     <app-dialog
       eyebrow="Pipeline tokens"

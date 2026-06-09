@@ -29,6 +29,7 @@ import type {
   PipelineStep,
   PipelineStepExecution,
   PipelineStepStatus,
+  PipelineModelUsageSummary,
   StepKind,
   StepRunMode,
 } from '../../../../task-pipeline';
@@ -41,6 +42,7 @@ import {
   PipelineStepResultComponent,
   type PipelineStepResultHeader,
 } from '../pipeline-step-result/pipeline-step-result.component';
+import { PipelineTokenUsageComponent } from '../pipeline-token-usage/pipeline-token-usage.component';
 import { ReferencesSectionComponent } from '../../references-section/references-section.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
 import type { StructuredTooltip, TooltipSeverity } from '../../../../../components/tooltip';
@@ -442,7 +444,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineStepResultComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineStepResultComponent, PipelineTokenUsageComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -1150,6 +1152,15 @@ export class OverviewPaneComponent {
 
   /** True once at least one step has a recorded execution. */
   readonly hasPipelineExecution = computed(() => this.pipelinePoll.hasExecution());
+
+  /**
+   * Per-model token usage for every run of this task (per-run breakdown plus
+   * a lifetime grand total), straight off the pipeline endpoint. Null until
+   * the first poll resolves; the child renders nothing when there are no runs.
+   */
+  readonly pipelineTokenUsage = computed<PipelineModelUsageSummary | null>(
+    () => this.pipelinePoll.pipeline()?.tokensByModel ?? null,
+  );
 
   /**
    * Tooltip for a step's model chip. Before a run, names the resolved effective
