@@ -204,6 +204,28 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
     }
 
     [Fact]
+    public async Task MoveProgressToAutoReview_UsesLiveAutoCommitSetting()
+    {
+        WriteJob(TaskStates.Progress, "toggle-off-task");
+        var dirty = Path.Combine(_repoRoot, "toggle-off-change.txt");
+        File.WriteAllText(dirty, "operator chose no auto-commit\n");
+
+        var deps = BuildDeps();
+        deps.Settings.SetAutoCommit(ProjectName, false);
+
+        var outcome = await deps.Transitions.MoveAsync("toggle-off-task", TaskStates.AutoReview, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var moved = ReadJob(TaskStates.AutoReview, "toggle-off-task");
+        Assert.Null(moved?.Commit);
+        Assert.Empty(moved?.Commits ?? new List<TaskCommitInfo>());
+
+        var status = deps.Git.GetStatus("toggle-off-task", _watchPath);
+        Assert.True(status.IsRepo);
+        Assert.Contains(status.Files, f => f.Path.EndsWith("toggle-off-change.txt", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task MoveProgressToAutoReview_ReadOnlyMode_SkipsAutoCommit_LeavesTreeDirty()
     {
         // Read-only-Pipeline fuer planning/research: a planning / research run
@@ -289,7 +311,7 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
             scanner, states, mutations, git, settings,
             NullLogger<TaskTransitionService>.Instance,
             sessions);
-        return new Deps(scanner, transitions, git);
+        return new Deps(scanner, transitions, git, settings);
     }
 
     private void WriteJob(string state, string slug, string? mode = null)
@@ -359,5 +381,9 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         return so;
     }
 
-    private sealed record Deps(TaskScannerService Scanner, TaskTransitionService Transitions, GitService Git);
+    private sealed record Deps(
+        TaskScannerService Scanner,
+        TaskTransitionService Transitions,
+        GitService Git,
+        ProjectSettingsService Settings);
 }

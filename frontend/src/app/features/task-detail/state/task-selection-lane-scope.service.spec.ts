@@ -44,6 +44,7 @@ describe('TaskSelectionService · lane peers honour the board scope (badge == pa
       review: [],
       autoReview: [],
       humanReview: [],
+      escalated: [],
       completed: [],
       archive: [],
     }) as GroupedJobs;

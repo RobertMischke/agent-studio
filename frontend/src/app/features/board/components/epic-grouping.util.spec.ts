@@ -40,6 +40,7 @@ function emptyGrouped(): GroupedJobs {
     codeNotComplete: [],
     autoReview: [],
     humanReview: [],
+    escalated: [],
     review: [],
     completed: [],
     archive: [],

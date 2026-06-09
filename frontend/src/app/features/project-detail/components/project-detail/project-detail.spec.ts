@@ -41,4 +41,25 @@ describe('ProjectDetailComponent (smoke)', () => {
     }
     expect(fixture.componentInstance).toBeTruthy();
   });
+
+  it('renders the auto-commit immediacy hint in settings view', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ProjectDetailComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ProjectDetailComponent);
+    fixture.componentRef.setInput('projectName', 'demo');
+    fixture.componentRef.setInput('view', 'settings');
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Auto-commit on transition 3-progress -> 4-auto-review');
+    expect(text).toContain('Changes apply immediately to the next job transition.');
+  });
 });
