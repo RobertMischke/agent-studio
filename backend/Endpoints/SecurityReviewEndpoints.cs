@@ -84,7 +84,7 @@ public static class SecurityReviewEndpoints
             // pending or running. The check covers 1-preparation through
             // 3-progress — anything past 3-progress is finished from the
             // runner's perspective and should not block a fresh request.
-            var openLanes = new[] { "1-preparation", "1a-orchestrator-prep", "2-ready", "3-progress" };
+            var openLanes = new[] { TaskStates.Preparation, TaskStates.OrchestratorPrep, TaskStates.Ready, TaskStates.Progress };
             var existingAudit = scanner.ScanAllJobs().FirstOrDefault(j =>
                 string.Equals(j.WatchPath, entry.Path, StringComparison.OrdinalIgnoreCase) &&
                 openLanes.Contains(j.State, StringComparer.OrdinalIgnoreCase) &&
@@ -110,14 +110,14 @@ public static class SecurityReviewEndpoints
                 Agent = "claude",
                 CliType = "claude",
                 WatchPath = entry.Path,
-                TargetState = "2-ready",
+                TargetState = TaskStates.Ready,
                 PromptMarkdown = BuildAuditPromptMarkdown(projectName),
                 OwnerClientId = string.IsNullOrWhiteSpace(ownerHeader) ? null : ownerHeader,
             };
             var jobId = mutations.CreateJob(req);
             if (jobId is null)
                 return Results.Conflict(new { error = "create-failed", message = "Job already exists or invalid input." });
-            return Results.Ok(new { jobId, state = "2-ready", title = req.Title });
+            return Results.Ok(new { jobId, state = TaskStates.Ready, title = req.Title });
         });
     }
 

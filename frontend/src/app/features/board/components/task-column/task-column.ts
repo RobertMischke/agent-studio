@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { TaskInfo, TaskOrderItem, ProjectRunnerStatus } from '../../../../models/task.model';
+import { TaskInfo, TaskOrderItem, ProjectRunnerStatus, TaskState } from '../../../../models/task.model';
 import { TaskCardComponent } from '../task-card/task-card.component';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { cliTypeIcon } from '../../../../services/format.util';
@@ -137,7 +137,7 @@ export class TaskColumnComponent {
    * (the existing `autoProject()` gate).
    */
   readonly statusCluster = computed(() => {
-    if (this.state() !== '3-progress' || !this.autoProject()) return null;
+    if (this.state() !== TaskState.Progress || !this.autoProject()) return null;
     const status = this.runnerStatus();
     const mode = this.autoMode();
     const reason = status?.modeReason ?? null;
@@ -357,13 +357,13 @@ export class TaskColumnComponent {
 
   canAddTask(): boolean {
     const s = this.state();
-    return s === '1-preparation' || s === '2-ready';
+    return s === TaskState.Preparation || s === TaskState.Ready;
   }
 
   isArchive(): boolean {
     // Accept both ADR-0025 and legacy archive lane names so a transitional
     // payload (legacy backend, new frontend) keeps rendering correctly.
-    return this.state() === '7-archive' || this.state() === '6-archive';
+    return this.state() === TaskState.Archive || this.state() === '6-archive';
   }
 
   /**
@@ -403,7 +403,7 @@ export class TaskColumnComponent {
   readonly reviewGroups = computed(() => groupReviewJobs(this.jobs()));
 
   canArchiveAll(): boolean {
-    return this.state() === '6-completed' || this.state() === '5-completed';
+    return this.state() === TaskState.Completed || this.state() === '5-completed';
   }
 
   readonly archiveVisible = computed(() => {

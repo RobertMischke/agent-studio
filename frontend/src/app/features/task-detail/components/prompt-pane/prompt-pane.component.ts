@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
-import { TaskArtifact, TaskInfo, TaskPromptHistoryEntry, TaskTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/task.model';
+import { TaskArtifact, TaskInfo, TaskPromptHistoryEntry, TaskTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource, TaskState } from '../../../../models/task.model';
 import type { CliType } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../cli';
 import type { TaskScreenshot } from '../../../screenshots/models/screenshots.model';
@@ -238,16 +238,16 @@ export class PromptPaneComponent {
    *  STATE_TO_LANE in job.service.ts. */
   laneLabel(state: string): string {
     switch (state) {
-      case '0-backlog':            return 'Backlog';
-      case '1-preparation':        return 'In Preparation';
-      case '1a-orchestrator-prep': return 'Orchestrator Prep';
-      case '2-ready':              return 'Ready';
-      case '3-progress':           return 'In Progress';
-      case '4-auto-review':        return 'Post Processing';
-      case '5-human-review':       return 'Review';
-      case '5e-escalated':         return 'Escalated';
-      case '6-completed':          return 'Completed';
-      case '7-archive':            return 'Archive';
+      case TaskState.Backlog:          return 'Backlog';
+      case TaskState.Preparation:      return 'In Preparation';
+      case TaskState.OrchestratorPrep: return 'Orchestrator Prep';
+      case TaskState.Ready:            return 'Ready';
+      case TaskState.Progress:         return 'In Progress';
+      case TaskState.AutoReview:       return 'Post Processing';
+      case TaskState.HumanReview:      return 'Review';
+      case TaskState.Escalated:        return 'Escalated';
+      case TaskState.Completed:        return 'Completed';
+      case TaskState.Archive:          return 'Archive';
       default:                     return state ?? '';
     }
   }

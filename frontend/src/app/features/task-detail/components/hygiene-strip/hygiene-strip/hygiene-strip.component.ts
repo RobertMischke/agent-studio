@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 
 import type { TaskInfo } from '../../../../../models/task.model';
+import { TaskState } from '../../../../../models/task.model';
 import type { GitHygieneStatus } from '../../../../../features/git';
 import { GitHygieneService } from '../../../../../services/git-hygiene.service';
 import { ErrorDialogService } from '../../../../../services/error-dialog.service';
@@ -63,12 +64,12 @@ export class HygieneStripComponent implements OnDestroy {
 
   // Lanes where we want the strip visible. Pre-progress lanes don't
   // produce committable evidence so the chip would be noise.
-  private static readonly VISIBLE_STATES = new Set([
-    '4-auto-review',
-    '5-human-review',
-    '5e-escalated',
-    '6-completed',
-    '7-archive',
+  private static readonly VISIBLE_STATES = new Set<string>([
+    TaskState.AutoReview,
+    TaskState.HumanReview,
+    TaskState.Escalated,
+    TaskState.Completed,
+    TaskState.Archive,
   ]);
 
   readonly visibleForState = computed(() =>

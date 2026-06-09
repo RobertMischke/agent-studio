@@ -1,3 +1,5 @@
+using OrchestratorApi.Models;
+
 namespace OrchestratorApi.Services.Drift;
 
 /// <summary>
@@ -77,7 +79,7 @@ public static class DriftReportValidator
             if (s is null) { error = "followUpTaskSuggestions entry is null"; return false; }
             if (string.IsNullOrWhiteSpace(s.Title)) { error = "follow-up suggestion missing title"; return false; }
             if (s.Title.Length > 200) { error = "follow-up suggestion title must be at most 200 characters"; return false; }
-            if (s.TargetState is not null && s.TargetState != "1-preparation" && s.TargetState != "2-ready")
+            if (s.TargetState is not null && s.TargetState != TaskStates.Preparation && s.TargetState != TaskStates.Ready)
             {
                 error = $"follow-up suggestion targetState must be 1-preparation or 2-ready (was '{s.TargetState}')";
                 return false;

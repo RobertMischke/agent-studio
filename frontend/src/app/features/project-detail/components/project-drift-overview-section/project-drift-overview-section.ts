@@ -15,6 +15,7 @@ import {
   DriftScoreBand,
   DriftSeverity,
 } from '../../../../models/drift.model';
+import { TaskState } from '../../../../models/task.model';
 
 /**
  * Project-level Drift overview surface (ROADMAP "Drift Control",
@@ -252,7 +253,7 @@ export class ProjectDriftOverviewSectionComponent implements OnInit, OnDestroy {
           agent: 'claude',
           watchPath,
           promptMarkdown,
-          targetState: '1-preparation',
+          targetState: TaskState.Preparation,
         }).subscribe({
           next: (resp) => {
             this.busyAction.set(null);
@@ -293,7 +294,7 @@ export class ProjectDriftOverviewSectionComponent implements OnInit, OnDestroy {
           agent: 'claude',
           watchPath,
           promptMarkdown,
-          targetState: '1-preparation',
+          targetState: TaskState.Preparation,
         }).subscribe({
           next: (resp) => {
             this.busyFollowUp.set(null);
@@ -334,7 +335,7 @@ export class ProjectDriftOverviewSectionComponent implements OnInit, OnDestroy {
           agent: 'claude',
           watchPath,
           promptMarkdown,
-          targetState: (s.targetState === '2-ready' ? '2-ready' : '1-preparation'),
+          targetState: (s.targetState === TaskState.Ready ? TaskState.Ready : TaskState.Preparation),
         }).subscribe({
           next: (resp) => {
             this.busyFollowUp.set(null);

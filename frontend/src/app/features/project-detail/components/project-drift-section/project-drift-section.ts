@@ -12,6 +12,7 @@ import {
   DriftSeverity,
   ElementStateOverride,
 } from '../../../../models/drift.model';
+import { TaskState } from '../../../../models/task.model';
 
 interface MarbleRow {
   element: DriftArchitectureElement;
@@ -213,7 +214,7 @@ export class ProjectDriftSectionComponent implements OnInit, OnDestroy {
           agent: 'claude',
           watchPath,
           promptMarkdown,
-          targetState: '1-preparation',
+          targetState: TaskState.Preparation,
         }).subscribe({
           next: (resp) => {
             this.busy.set(null);
@@ -256,7 +257,7 @@ export class ProjectDriftSectionComponent implements OnInit, OnDestroy {
           agent: 'claude',
           watchPath,
           promptMarkdown,
-          targetState: '1-preparation',
+          targetState: TaskState.Preparation,
         }).subscribe({
           next: (resp) => {
             this.busy.set(null);

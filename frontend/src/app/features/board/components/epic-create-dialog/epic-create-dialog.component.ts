@@ -5,6 +5,7 @@ import { DialogComponent } from '../../../../components/dialog/dialog.component'
 import { TaskService } from '../../../../services/task.service';
 import { NotificationService } from '../../../../services/notification.service';
 import type { CliType } from '../../../../models/task.model';
+import { TaskState } from '../../../../models/task.model';
 
 /**
  * Focused "create an epic" modal opened from the epic overview screen
@@ -77,7 +78,7 @@ export class EpicCreateDialogComponent implements AfterViewInit {
       model: model || undefined,
       promptMarkdown: description || undefined,
       kind: 'epic',
-      targetState: '0-backlog',
+      targetState: TaskState.Backlog,
     }).subscribe({
       next: (res) => {
         this.submitting.set(false);

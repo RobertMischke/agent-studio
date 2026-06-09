@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, computed, effect, inject, input, output, signal } from '@angular/core';
-import { TaskInfo } from '../../../../models/task.model';
+import { TaskInfo, TaskState } from '../../../../models/task.model';
 import {
   formatDateTime as fmtDateTime,
   formatRelativeShort as fmtRelativeShort,
@@ -123,12 +123,12 @@ export class DetailHeaderComponent {
    * lane is omitted too (prep runs in-place on 1-preparation now).
    */
   readonly laneOptions: readonly { state: string; label: string }[] = [
-    { state: '1-preparation',         label: 'Preparation' },
-    { state: '2-ready',               label: 'Ready' },
-    { state: '5-human-review',        label: 'Review' },
-    { state: '5e-escalated',          label: 'Escalated' },
-    { state: '6-completed',           label: 'Completed' },
-    { state: '7-archive',             label: 'Archive' },
+    { state: TaskState.Preparation,   label: 'Preparation' },
+    { state: TaskState.Ready,         label: 'Ready' },
+    { state: TaskState.HumanReview,   label: 'Review' },
+    { state: TaskState.Escalated,     label: 'Escalated' },
+    { state: TaskState.Completed,     label: 'Completed' },
+    { state: TaskState.Archive,       label: 'Archive' },
   ];
 
   isStandardLane(state: string): boolean {
@@ -138,7 +138,7 @@ export class DetailHeaderComponent {
   /** "Do Next" only makes sense while the task is queued in 2-ready and not yet
    *  picked up. The state-select dropdown is the path to bring it into ready
    *  from a different lane first; after that the button surfaces. */
-  readonly canMoveToTop = computed(() => this.info().state === '2-ready');
+  readonly canMoveToTop = computed(() => this.info().state === TaskState.Ready);
 
   /** Lane the dropdown shows as selected (pager lane, fallback to job state). */
   readonly selectedLane = computed(() => this.pagerLaneState() || this.info().state);

@@ -1,3 +1,5 @@
+using OrchestratorApi.Models;
+
 namespace OrchestratorApi.Services.Supervisor;
 
 /// <summary>
@@ -180,7 +182,7 @@ public static class MetaCycleRules
         if (verdict == MetaCycleVerdict.EscalationOnly)
         {
             var topic = findings.FirstOrDefault(f => EscalateOnlyTopics.Contains(f.Topic, StringComparer.Ordinal))?.Topic ?? "needs-human";
-            return new MetaCycleAction(MetaCycleActionKind.EscalateToUser, $"escalate:{topic}", FollowUpState: "1-preparation");
+            return new MetaCycleAction(MetaCycleActionKind.EscalateToUser, $"escalate:{topic}", FollowUpState: TaskStates.Preparation);
         }
 
         if (verdict == MetaCycleVerdict.FixTriggering)
@@ -190,7 +192,7 @@ public static class MetaCycleRules
                 return new MetaCycleAction(
                     MetaCycleActionKind.EscalateToUser,
                     "auto-fix-rate-limit",
-                    FollowUpState: "1-preparation");
+                    FollowUpState: TaskStates.Preparation);
             }
 
             // Pick the highest-severity finding that has a known template.
@@ -204,13 +206,13 @@ public static class MetaCycleRules
                 return new MetaCycleAction(
                     MetaCycleActionKind.EscalateToUser,
                     "no-template-for-finding",
-                    FollowUpState: "1-preparation");
+                    FollowUpState: TaskStates.Preparation);
             }
 
             return new MetaCycleAction(
                 MetaCycleActionKind.QueueFix,
                 $"queue-fix:{primary.Topic}",
-                FollowUpState: "1-preparation");
+                FollowUpState: TaskStates.Preparation);
         }
 
         // Healthy

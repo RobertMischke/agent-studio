@@ -1,4 +1,4 @@
-import { GroupedJobs, TaskInfo } from '../../../models/task.model';
+import { GroupedJobs, TaskInfo, TaskState } from '../../../models/task.model';
 
 /**
  * Group-by-epic board view model. The "Gruppieren nach Epic" toggle renders
@@ -34,8 +34,8 @@ export interface EpicGroupView {
 const NO_EPIC_ID = '__none__';
 const ORPHAN_ID = '__orphan__';
 
-const COMPLETED_STATES = new Set(['6-completed', '7-archive']);
-const OPEN_STATES = new Set(['0-backlog', '2-ready']);
+const COMPLETED_STATES = new Set<string>([TaskState.Completed, TaskState.Archive]);
+const OPEN_STATES = new Set<string>([TaskState.Backlog, TaskState.Ready]);
 
 function isEpic(t: TaskInfo): boolean {
   return t.kind === 'epic';

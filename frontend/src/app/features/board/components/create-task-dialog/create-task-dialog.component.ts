@@ -4,6 +4,7 @@ import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
 import type { CliType, TagRegistryEntry, TaskKind, TaskMode, WatchPathEntry } from '../../../../models/task.model';
+import { TaskState } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../../features/cli';
 import { TaskService } from '../../../../services/task.service';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
@@ -31,9 +32,9 @@ export interface LaneOption {
  * manual create target.
  */
 export const CREATE_LANE_OPTIONS: readonly LaneOption[] = [
-  { state: '0-backlog',     label: 'Backlog',     icon: '🗒️' },
-  { state: '1-preparation', label: 'Preparation', icon: '📋' },
-  { state: '2-ready',       label: 'Ready',       icon: '📦' },
+  { state: TaskState.Backlog,     label: 'Backlog',     icon: '🗒️' },
+  { state: TaskState.Preparation, label: 'Preparation', icon: '📋' },
+  { state: TaskState.Ready,       label: 'Ready',       icon: '📦' },
 ];
 
 const PENDING_PREFIX = 'pending-attachment-';
@@ -77,7 +78,7 @@ export class CreateTaskDialogComponent implements AfterViewInit {
   /** Backlog-lane spec: tag ids attached on create. */
   readonly newTags = model<string[]>([]);
   /** Lane the new task lands in. One of the entries in CREATE_LANE_OPTIONS. */
-  readonly newTargetState = model<string>('1-preparation');
+  readonly newTargetState = model<string>(TaskState.Preparation);
   /** Card kind: `task` (default) or `epic` (a sub-task container). */
   readonly newKind = model<TaskKind>('task');
   readonly isEpic = computed(() => this.newKind() === 'epic');
@@ -96,9 +97,9 @@ export class CreateTaskDialogComponent implements AfterViewInit {
   /** Reactive dialog header derived from the chosen target lane. */
   readonly header = computed<string>(() => {
     switch (this.newTargetState()) {
-      case '0-backlog':     return 'Add to Backlog';
-      case '1-preparation': return 'New Preparation Task';
-      case '2-ready':       return 'New Ready Task';
+      case TaskState.Backlog:     return 'Add to Backlog';
+      case TaskState.Preparation: return 'New Preparation Task';
+      case TaskState.Ready:       return 'New Ready Task';
       default:              return 'New Task';
     }
   });
@@ -271,8 +272,8 @@ export class CreateTaskDialogComponent implements AfterViewInit {
       // to Ready unless the user already moved it past Backlog. Don't
       // overwrite an explicit Backlog choice (the user wanted triage).
       const lane = this.newTargetState();
-      if (lane === '1-preparation') {
-        this.newTargetState.set('2-ready');
+      if (lane === TaskState.Preparation) {
+        this.newTargetState.set(TaskState.Ready);
       }
 
       this.enhanceSummary.set({ intent, appliedTagIds, unknownTags });

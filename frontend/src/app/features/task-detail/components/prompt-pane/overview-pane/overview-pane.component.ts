@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { CliType, PromoteToCodingResponse, TaskInfo } from '../../../../../models/task.model';
+import { TaskState } from '../../../../../models/task.model';
 import { CreateTaskFormService, type PendingAttachment } from '../../../../board';
 import type { CliModelInfo } from '../../../../cli';
 import type { RunRecord } from '../../../../run-timeline';
@@ -462,11 +463,11 @@ export class OverviewPaneComponent {
    * failure / still-running lane. See
    * docs/research/planning-research-task-kinds-2026-05.md.
    */
-  private static readonly FINISHED_STATES = new Set([
-    '4-auto-review',
-    '5-human-review',
-    '5e-escalated',
-    '6-completed',
+  private static readonly FINISHED_STATES = new Set<string>([
+    TaskState.AutoReview,
+    TaskState.HumanReview,
+    TaskState.Escalated,
+    TaskState.Completed,
   ]);
 
   /**
@@ -1520,17 +1521,17 @@ export class OverviewPaneComponent {
 
   laneLabel(state: string): string {
     switch (state) {
-      case '0-backlog':              return 'Backlog';
-      case '1-preparation':          return 'In Preparation';
-      case '1a-orchestrator-prep':   return 'Orchestrator Prep';
+      case TaskState.Backlog:          return 'Backlog';
+      case TaskState.Preparation:      return 'In Preparation';
+      case TaskState.OrchestratorPrep: return 'Orchestrator Prep';
       case '1b-needs-human-review':  return 'Needs Human Review';
-      case '2-ready':                return 'Ready';
-      case '3-progress':             return 'In Progress';
-      case '4-auto-review':          return 'Post Processing';
-      case '5-human-review':         return 'Review';
-      case '5e-escalated':           return 'Escalated';
-      case '6-completed':            return 'Completed';
-      case '7-archive':              return 'Archive';
+      case TaskState.Ready:            return 'Ready';
+      case TaskState.Progress:         return 'In Progress';
+      case TaskState.AutoReview:       return 'Post Processing';
+      case TaskState.HumanReview:      return 'Review';
+      case TaskState.Escalated:        return 'Escalated';
+      case TaskState.Completed:        return 'Completed';
+      case TaskState.Archive:          return 'Archive';
       default:                       return state ?? '';
     }
   }

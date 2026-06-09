@@ -24,7 +24,7 @@ import type {
   ContinueMode,
   ReviewEvidenceEntry,
 } from '../../models/task.model';
-import { CLI_TYPES } from '../../models/task.model';
+import { CLI_TYPES, TaskState } from '../../models/task.model';
 import type { CliModelInfo } from '../../features/cli';
 import { TaskService } from '../../services/task.service';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
@@ -455,7 +455,7 @@ export class TaskDetailComponent implements OnDestroy {
       //  • Otherwise: Protocol if a summary exists, else Activity.
       // The auto-switch effect below promotes Activity → Protocol once
       // Haiku finishes, unless the user has manually picked a tab.
-      const isInProgress = d.info.state === '3-progress';
+      const isInProgress = d.info.state === TaskState.Progress;
       this.activeInspectorTab.set(
         isInProgress ? 'activity' : d.statusMarkdown ? 'protocol' : 'activity',
       );
@@ -479,7 +479,7 @@ export class TaskDetailComponent implements OnDestroy {
     if (
       !this.userTouchedInspectorTab &&
       this.activeInspectorTab() === 'activity' &&
-      d.info.state !== '3-progress' &&
+      d.info.state !== TaskState.Progress &&
       d.summaryState?.status === 'ready' &&
       d.statusMarkdown
     ) {
@@ -494,7 +494,7 @@ export class TaskDetailComponent implements OnDestroy {
     if (
       !this.userTouchedInspectorTab &&
       this.activeInspectorTab() === 'protocol' &&
-      d.info.state === '3-progress'
+      d.info.state === TaskState.Progress
     ) {
       this.activeInspectorTab.set('activity');
     }
@@ -672,7 +672,7 @@ export class TaskDetailComponent implements OnDestroy {
 
   canStartJob(): boolean {
     const state = this.detail().info.state;
-    return (state === '2-ready' || state === '3-progress') && !this.isRunning();
+    return (state === TaskState.Ready || state === TaskState.Progress) && !this.isRunning();
   }
 
   /**
@@ -1031,7 +1031,7 @@ export class TaskDetailComponent implements OnDestroy {
   }
 
   isProgress(): boolean {
-    return this.detail().info.state === '3-progress';
+    return this.detail().info.state === TaskState.Progress;
   }
 
   /**
@@ -1150,13 +1150,13 @@ export class TaskDetailComponent implements OnDestroy {
   moveToTopOfReady(): void {
     if (this.movingToTop()) return;
     const info = this.detail().info;
-    if (info.state !== '2-ready') return;
+    if (info.state !== TaskState.Ready) return;
 
     // Capture the lane order BEFORE the promote so undo can replay it
     // via /api/tasks/reorder. Same-lane reorders cannot be expressed via
     // the cross-lane move endpoint (it skips SetOrderInLane when
     // fromState == targetState).
-    const prevOrder = this.captureLaneOrder('2-ready');
+    const prevOrder = this.captureLaneOrder(TaskState.Ready);
     this.movingToTop.set(true);
     this.jobService.beginOptimisticPersist();
     this.jobService.moveJobToTop(info.id, info.watchPath).subscribe({
@@ -1168,8 +1168,8 @@ export class TaskDetailComponent implements OnDestroy {
             jobId: info.id,
             jobLabel: info.title || info.id,
             actionLabel: 'Moved',
-            targetLaneLabel: `top of ${laneLabelFor('2-ready')}`,
-            laneState: '2-ready',
+            targetLaneLabel: `top of ${laneLabelFor(TaskState.Ready)}`,
+            laneState: TaskState.Ready,
             prevOrder,
           });
         }

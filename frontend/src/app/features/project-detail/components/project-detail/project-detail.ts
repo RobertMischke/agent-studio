@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { GroupedJobs, ProjectQueueHealth, RunnerStatus } from '../../../../models/task.model';
-import { CLI_TYPES, type CliType } from '../../../../models/task.model';
+import { CLI_TYPES, TaskState, type CliType } from '../../../../models/task.model';
 import { cliTypeLabel, cliTypeIcon } from '../../../../services/format.util';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
 import {
@@ -350,15 +350,15 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     const proj = this.projectName();
     const c = (jobs: readonly { projectName: string }[]) => jobs.filter(j => j.projectName === proj).length;
     return [
-      { state: '0-backlog',     label: 'Backlog',     count: c(grouped.backlog ?? []) },
-      { state: '1-preparation', label: 'Preparation', count: c(grouped.preparation) },
-      { state: '2-ready',       label: 'Ready',       count: c(grouped.ready) },
-      { state: '3-progress',    label: 'Progress',    count: c(grouped.progress) },
-      { state: '4-auto-review', label: 'Post Processing', count: c(grouped.autoReview ?? grouped.review) },
-      { state: '5-human-review',label: 'Review',      count: c(grouped.humanReview ?? []) },
-      { state: '5e-escalated',   label: 'Escalated',  count: c(grouped.escalated ?? []) },
-      { state: '6-completed',   label: 'Completed',   count: c(grouped.completed) },
-      { state: '7-archive',     label: 'Archive',     count: c(grouped.archive) }
+      { state: TaskState.Backlog,     label: 'Backlog',     count: c(grouped.backlog ?? []) },
+      { state: TaskState.Preparation, label: 'Preparation', count: c(grouped.preparation) },
+      { state: TaskState.Ready,       label: 'Ready',       count: c(grouped.ready) },
+      { state: TaskState.Progress,    label: 'Progress',    count: c(grouped.progress) },
+      { state: TaskState.AutoReview, label: 'Post Processing', count: c(grouped.autoReview ?? grouped.review) },
+      { state: TaskState.HumanReview, label: 'Review',      count: c(grouped.humanReview ?? []) },
+      { state: TaskState.Escalated,   label: 'Escalated',  count: c(grouped.escalated ?? []) },
+      { state: TaskState.Completed,   label: 'Completed',   count: c(grouped.completed) },
+      { state: TaskState.Archive,     label: 'Archive',     count: c(grouped.archive) }
     ];
   });
 

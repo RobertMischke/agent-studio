@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using OrchestratorApi.Models;
 
 namespace OrchestratorApi.Services.Analysis;
 
@@ -132,8 +133,8 @@ public enum AnalysisReportFollowUpRelatedTopic
 /// </summary>
 public static class AnalysisReportFollowUpTargetStates
 {
-    public const string OnePreparation = "1-preparation";
-    public const string TwoReady = "2-ready";
+    public const string OnePreparation = TaskStates.Preparation;
+    public const string TwoReady = TaskStates.Ready;
 }
 
 /// <summary>

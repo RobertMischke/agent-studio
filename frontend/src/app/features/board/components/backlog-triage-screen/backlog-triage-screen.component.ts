@@ -16,6 +16,7 @@ import { TaskService } from '../../../../services/task.service';
 import { ErrorDialogService } from '../../../../services/error-dialog.service';
 import { NotificationService } from '../../../../services/notification.service';
 import type { TaskInfo, TagRegistryEntry } from '../../../../models/task.model';
+import { TaskState } from '../../../../models/task.model';
 import { BoardFiltersService } from '../../state/board-filters.service';
 import {
   BacklogTriageService,
@@ -166,7 +167,7 @@ export class BacklogTriageScreenComponent implements OnDestroy {
     this.boardFilters.clearAllFilters();
   }
 
-  promote(task: TaskInfo, target: '1-preparation' | '2-ready'): void {
+  promote(task: TaskInfo, target: typeof TaskState.Preparation | typeof TaskState.Ready): void {
     this.boardMutations.changeStateFromTriage(task, target);
   }
 

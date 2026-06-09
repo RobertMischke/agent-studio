@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, ViewEncapsulation, computed, input } from '@angular/core';
 import type { TaskInfo } from '../../models/task.model';
+import { TaskState } from '../../models/task.model';
 import { projectIdentity } from '../../services/project-identity.util';
 import { cliTypeLabel } from '../../services/format.util';
 import { InfoButtonComponent } from '../info-button/info-button.component';
@@ -70,16 +71,16 @@ export class TaskStatusCardComponent {
  */
 function laneLabelFor(state: string): string {
   switch (state) {
-    case '1-preparation':          return 'Preparation';
-    case '1a-orchestrator-prep':   return 'Orchestrator Prep';
-    case '2-ready':                return 'Ready';
-    case '3-progress':             return 'In Progress';
+    case TaskState.Preparation:    return 'Preparation';
+    case TaskState.OrchestratorPrep: return 'Orchestrator Prep';
+    case TaskState.Ready:          return 'Ready';
+    case TaskState.Progress:       return 'In Progress';
     case '4-review':               return 'Review';
-    case '4-auto-review':          return 'Post Processing';
-    case '5-human-review':         return 'Review';
-    case '5e-escalated':           return 'Escalated';
-    case '6-completed':            return 'Completed';
-    case '7-archive':              return 'Archive';
+    case TaskState.AutoReview:     return 'Post Processing';
+    case TaskState.HumanReview:    return 'Review';
+    case TaskState.Escalated:      return 'Escalated';
+    case TaskState.Completed:      return 'Completed';
+    case TaskState.Archive:        return 'Archive';
     default:                       return state || '';
   }
 }

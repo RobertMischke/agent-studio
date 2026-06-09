@@ -1,4 +1,4 @@
-import { CliType, TaskMode } from '../models/task.model';
+import { CliType, TaskMode, TaskState } from '../models/task.model';
 
 /**
  * Pure formatting helpers used by both the board and detail views.
@@ -39,7 +39,7 @@ export function formatResetIn(epochSeconds: number, now: number): string {
 }
 
 export function stateLabel(state: string): string {
-  if (state === '4-auto-review') return 'Post Processing';
+  if (state === TaskState.AutoReview) return 'Post Processing';
   return state.replace(/^\d+-/, '');
 }
 

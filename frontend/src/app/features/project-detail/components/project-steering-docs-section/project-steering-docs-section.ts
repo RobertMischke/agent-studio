@@ -8,6 +8,7 @@ import {
   SteeringDocsSource,
   SteeringDocsWarning,
 } from '../../../../models/steering-docs.model';
+import { TaskState } from '../../../../models/task.model';
 import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
 
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -233,7 +234,7 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
           agent: 'claude',
           watchPath,
           promptMarkdown,
-          targetState: '1-preparation',
+          targetState: TaskState.Preparation,
         }).subscribe({
           next: (resp) => {
             this.busyAction.set(null);

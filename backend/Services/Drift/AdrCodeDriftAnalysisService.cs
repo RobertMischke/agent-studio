@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using OrchestratorApi.Models;
 using OrchestratorApi.Services.Analysis;
 using OrchestratorApi.Services.State;
 
@@ -59,8 +60,8 @@ public sealed class AdrCodeDriftAnalysisService
     /// </summary>
     public static readonly IReadOnlyList<string> RecentTaskLanes = new[]
     {
-        "5-human-review",
-        "6-completed",
+        TaskStates.HumanReview,
+        TaskStates.Completed,
     };
 
     private static readonly Regex JsonFenceRegex = new(

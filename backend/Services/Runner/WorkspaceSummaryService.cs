@@ -86,7 +86,7 @@ public sealed class WorkspaceSummaryService
                 .Where(o => string.Equals(o.Project, project, StringComparison.Ordinal))
                 .Select(o => new ExecutiveSummaryJobMove(
                     JobId: o.Slug,
-                    FromState: "3-progress",
+                    FromState: TaskStates.Progress,
                     ToState: o.TargetState,
                     At: o.At))
                 .ToList();
@@ -100,7 +100,7 @@ public sealed class WorkspaceSummaryService
             if (jobsByProject.TryGetValue(project, out var projectJobs))
             {
                 foreach (var job in projectJobs.Where(j =>
-                    j.State == "1-preparation" &&
+                    j.State == TaskStates.Preparation &&
                     j.Id.StartsWith("human-decision-needed-", StringComparison.OrdinalIgnoreCase)))
                 {
                     openHumanDecisions.Add(new ExecutiveSummaryOpenDecision(

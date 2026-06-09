@@ -21,7 +21,7 @@ public record CreateFollowupFromEvidenceRequest
 public record CreateFollowupFromEvidenceResponse
 {
     public string JobId { get; init; } = "";
-    public string TargetState { get; init; } = "1-preparation";
+    public string TargetState { get; init; } = TaskStates.Preparation;
 }
 
 public record MoveJobRequest

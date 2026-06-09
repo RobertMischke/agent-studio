@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { forkJoin } from 'rxjs';
-import { TaskInfo } from '../../../models/task.model';
+import { TaskInfo, TaskState } from '../../../models/task.model';
 import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
@@ -46,7 +46,7 @@ export class BoardMutationsService {
     // map back to the real state for the backend move; the orchestrator
     // intake loop is the only producer of the lane-defining `phase`
     // field, so a manual drag never has to write phase from the UI.
-    if (event.targetState === '2-ready-intake') event = { ...event, targetState: '2-ready' };
+    if (event.targetState === '2-ready-intake') event = { ...event, targetState: TaskState.Ready };
     // Same-state drops (drag onto a sibling card in the same lane) are a
     // no-op: the column-level drop handler already filters the common path,
     // this is defense in depth so a stray emit cannot trigger a wasted
@@ -268,7 +268,7 @@ export class BoardMutationsService {
     if (completed.length === 0) return;
     if (this.archiving()) return;
     this.archiving.set(true);
-    const moves = completed.map((job) => this.jobService.moveJob(job.id, '7-archive', job.watchPath));
+    const moves = completed.map((job) => this.jobService.moveJob(job.id, TaskState.Archive, job.watchPath));
     forkJoin(moves).subscribe({
       next: () => {
         this.archiving.set(false);

@@ -162,8 +162,8 @@ function buildMoreCommitsTooltip(rest: TaskCommitInfo[]): StructuredTooltip {
 // `review` variant; 3-progress shows the `full` variant that prefixes each row
 // with the ⏺ glyph so the working agent can correlate it with its own
 // auto-commit. Every other lane hides the chain entirely.
-const COMMIT_PILL_LANES = new Set(['3-progress', '4-auto-review', '5-human-review', '5e-escalated', '4-review']);
-const COMMIT_REVIEW_LANES = new Set(['4-auto-review', '5-human-review', '5e-escalated', '4-review']);
+const COMMIT_PILL_LANES = new Set<string>([TaskState.Progress, TaskState.AutoReview, TaskState.HumanReview, TaskState.Escalated, '4-review']);
+const COMMIT_REVIEW_LANES = new Set<string>([TaskState.AutoReview, TaskState.HumanReview, TaskState.Escalated, '4-review']);
 
 /** Which commit-chain variant a lane renders, or null when the lane shows no
  *  chain. Keeps the lane->variant policy in one testable place instead of as
@@ -418,18 +418,18 @@ const SUPPRESSED_CARD_TAG_TEXT = new Set([
 ]);
 
 const LANE_MIRROR_CARD_TAG_TEXT: Record<string, readonly string[]> = {
-  '0-backlog': ['backlog'],
-  '1-preparation': ['preparation', 'prep'],
-  '1a-orchestrator-prep': ['orchestratorprep', 'orchestratorpreparation', 'prep'],
-  '2-ready': ['ready'],
-  '3-progress': ['progress', 'inprogress'],
-  '3a-failed-pickup': ['failedpickup', 'pickupfailed'],
-  '4-auto-review': ['autoreview', 'review'],
+  [TaskState.Backlog]: ['backlog'],
+  [TaskState.Preparation]: ['preparation', 'prep'],
+  [TaskState.OrchestratorPrep]: ['orchestratorprep', 'orchestratorpreparation', 'prep'],
+  [TaskState.Ready]: ['ready'],
+  [TaskState.Progress]: ['progress', 'inprogress'],
+  [TaskState.FailedPickup]: ['failedpickup', 'pickupfailed'],
+  [TaskState.AutoReview]: ['autoreview', 'review'],
   '4-review': ['review', 'autoreview'],
-  '5-human-review': ['humanreview', 'review', 'reviewready', 'readytosignoff'],
-  '5e-escalated': ['escalated', 'escalate', 'humanreview', 'decisionneeded'],
-  '6-completed': ['completed', 'complete', 'done'],
-  '7-archive': ['archive', 'archived'],
+  [TaskState.HumanReview]: ['humanreview', 'review', 'reviewready', 'readytosignoff'],
+  [TaskState.Escalated]: ['escalated', 'escalate', 'humanreview', 'decisionneeded'],
+  [TaskState.Completed]: ['completed', 'complete', 'done'],
+  [TaskState.Archive]: ['archive', 'archived'],
 };
 
 function compactTagText(value: string): string {
@@ -645,7 +645,7 @@ export function buildExecutionBadge(job: TaskInfo): ExecutionBadge | null {
   // before the next round-trip. Without this guard, a card in 4-auto-review /
   // 5-human-review can flash "Running live" while the task is not actually
   // executing in this lane.
-  if (job.state !== '3-progress') return null;
+  if (job.state !== TaskState.Progress) return null;
 
   if (execution.status === 'running') {
     return { label: 'Running live', tone: 'running' };
@@ -705,7 +705,7 @@ export function buildReviewBadge(summaryState: TaskInfo['summaryState']): Review
 export interface AutoReviewProcessBadge { label: string; tone: 'active' | 'queued' | 'stale' | 'done'; tooltip: string; }
 
 export function buildAutoReviewProcessBadge(job: TaskInfo, status: AutoReviewStatusView | null, nowMs: number): AutoReviewProcessBadge | null {
-  if (job.state !== '4-auto-review') return null;
+  if (job.state !== TaskState.AutoReview) return null;
 
   const matchesCurrent = !!status?.currentJob
     && status.currentJob === job.id
@@ -747,7 +747,7 @@ export function buildAutoReviewProcessBadge(job: TaskInfo, status: AutoReviewSta
 // verdict the operator must act on. 4-auto-review is deliberately excluded — it
 // lives in the "active" column and already surfaces its verdict via the
 // auto-review process badge.
-const HUMAN_DECISION_LANES = new Set(['5-human-review', '5e-escalated', '4-review']);
+const HUMAN_DECISION_LANES = new Set<string>([TaskState.HumanReview, TaskState.Escalated, '4-review']);
 
 export interface HumanReviewBadge { label: string; tone: 'attention' | 'accept'; tooltip: string; }
 

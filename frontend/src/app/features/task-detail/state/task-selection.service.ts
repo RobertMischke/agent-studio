@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { TaskDetail, TaskInfo } from '../../../models/task.model';
+import { TaskDetail, TaskInfo, TaskState } from '../../../models/task.model';
 import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { NotificationService } from '../../../services/notification.service';
@@ -185,17 +185,17 @@ export class TaskSelectionService {
   peersForLane(state: string): TaskInfo[] {
     const g = this.boardFilters.filteredGrouped();
     switch (state) {
-      case '0-backlog':              return g.backlog ?? [];
-      case '1-preparation':          return g.preparation ?? [];
-      case '1a-orchestrator-prep':   return g.orchestratorPrep ?? [];
-      case '2-ready':                return g.ready ?? [];
-      case '3-progress':             return g.progress ?? [];
-      case '3a-failed-pickup':       return g.failedPickup ?? [];
-      case '4-auto-review':          return g.autoReview ?? [];
-      case '5-human-review':         return g.humanReview ?? [];
-      case '5e-escalated':           return g.escalated ?? [];
-      case '6-completed':            return g.completed ?? [];
-      case '7-archive':              return g.archive ?? [];
+      case TaskState.Backlog:          return g.backlog ?? [];
+      case TaskState.Preparation:      return g.preparation ?? [];
+      case TaskState.OrchestratorPrep: return g.orchestratorPrep ?? [];
+      case TaskState.Ready:            return g.ready ?? [];
+      case TaskState.Progress:         return g.progress ?? [];
+      case TaskState.FailedPickup:     return g.failedPickup ?? [];
+      case TaskState.AutoReview:       return g.autoReview ?? [];
+      case TaskState.HumanReview:      return g.humanReview ?? [];
+      case TaskState.Escalated:        return g.escalated ?? [];
+      case TaskState.Completed:        return g.completed ?? [];
+      case TaskState.Archive:          return g.archive ?? [];
       default:                       return [];
     }
   }

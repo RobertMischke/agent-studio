@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, input, output, signal } from '@angular/core';
 import type { AutoLoopSnapshot, TaskInfo, PendingIntent, EpicRollup } from '../../../../models/task.model';
+import { TaskState } from '../../../../models/task.model';
 import { GitSummaryService } from '../../../../services/git-summary.service';
 import { TaskService } from '../../../../services/task.service';
 import { ClientService } from '../../../../services/client.service';
@@ -127,7 +128,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   }
 
   /** True for cards where "Pick next" makes sense (front-of-queue promotion). */
-  readonly canPickNext = computed(() => this.job().state === '2-ready');
+  readonly canPickNext = computed(() => this.job().state === TaskState.Ready);
 
   onPickNextClick(event: Event) {
     event.stopPropagation();
@@ -148,8 +149,8 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   // someone else just switched to). Pre-work and post-review lanes carry
   // no useful per-task git context either, so the pill is suppressed
   // everywhere except 3-progress.
-  private static readonly LANES_WITH_GIT = new Set([
-    '3-progress',
+  private static readonly LANES_WITH_GIT = new Set<string>([
+    TaskState.Progress,
   ]);
 
   readonly gitPill = computed(() => {
@@ -311,7 +312,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   }
 
   readonly isRunning = computed(() =>
-    this.job().state === '3-progress' && this.job().execution?.status === 'running'
+    this.job().state === TaskState.Progress && this.job().execution?.status === 'running'
   );
 
   /**
@@ -333,7 +334,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     return deps.filter((dep) => {
       const st = stateByKey.get(dep.trim().toUpperCase());
       if (st === undefined) return false;
-      return st !== '6-completed' && st !== '7-archive';
+      return st !== TaskState.Completed && st !== TaskState.Archive;
     });
   });
 

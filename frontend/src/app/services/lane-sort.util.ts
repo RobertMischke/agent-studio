@@ -4,6 +4,8 @@
  * the backend `LaneSortStrategies` constants exactly; keep them in sync.
  */
 
+import { TaskState } from '../models/task.model';
+
 export interface LaneSortStrategyMeta {
   /** Strategy id sent to the backend (empty string clears the override). */
   value: string;
@@ -98,15 +100,15 @@ export interface SortableLaneMeta {
  * pipeline step (see PipelineCatalogue), so there is no lane to sort.
  */
 export const SORTABLE_LANES: readonly SortableLaneMeta[] = [
-  { state: '0-backlog', label: 'Backlog', icon: '🗒️' },
-  { state: '1-preparation', label: 'In Preparation', icon: '📋' },
-  { state: '2-ready', label: 'Ready', icon: '📦' },
-  { state: '3-progress', label: 'In Progress', icon: '🔵' },
-  { state: '4-auto-review', label: 'Post Processing', icon: '🤖' },
-  { state: '5-human-review', label: 'Review', icon: '👁️' },
-  { state: '5e-escalated', label: 'Escalated', icon: '⚠️' },
-  { state: '6-completed', label: 'Completed', icon: '🟢' },
-  { state: '7-archive', label: 'Archive', icon: '🗄️' },
+  { state: TaskState.Backlog, label: 'Backlog', icon: '🗒️' },
+  { state: TaskState.Preparation, label: 'In Preparation', icon: '📋' },
+  { state: TaskState.Ready, label: 'Ready', icon: '📦' },
+  { state: TaskState.Progress, label: 'In Progress', icon: '🔵' },
+  { state: TaskState.AutoReview, label: 'Post Processing', icon: '🤖' },
+  { state: TaskState.HumanReview, label: 'Review', icon: '👁️' },
+  { state: TaskState.Escalated, label: 'Escalated', icon: '⚠️' },
+  { state: TaskState.Completed, label: 'Completed', icon: '🟢' },
+  { state: TaskState.Archive, label: 'Archive', icon: '🗄️' },
 ];
 
 /**
@@ -116,6 +118,6 @@ export const SORTABLE_LANES: readonly SortableLaneMeta[] = [
  * single `2-ready` strategy.
  */
 export function displayStateToLaneKey(state: string): string {
-  if (state === '2-ready-intake') return '2-ready';
+  if (state === '2-ready-intake') return TaskState.Ready;
   return state;
 }

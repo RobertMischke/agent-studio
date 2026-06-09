@@ -2542,7 +2542,7 @@ public class ProjectRunner
         var jobId = jobKey[(sep + 2)..];
         // Most likely to find an active job in 3-progress; fall through
         // the rest of the lifecycle if not.
-        foreach (var lane in new[] { "3-progress", "3a-failed-pickup", "3b-code-not-complete", "4-auto-review", "5-human-review", "1-preparation", "2-ready", "0-backlog", "6-completed", "7-archive" })
+        foreach (var lane in new[] { TaskStates.Progress, TaskStates.FailedPickup, TaskStates.CodeNotComplete, TaskStates.AutoReview, TaskStates.HumanReview, TaskStates.Preparation, TaskStates.Ready, TaskStates.Backlog, TaskStates.Completed, TaskStates.Archive })
         {
             var candidate = System.IO.Path.Combine(watchPath, lane, jobId);
             if (System.IO.Directory.Exists(candidate)) return candidate;

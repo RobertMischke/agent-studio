@@ -156,7 +156,7 @@ public static class DesignSurfaceEndpoints
 
         // Refuse duplicate work in the open lanes (taxonomy: this honours
         // single-active-task-per-project without locking the runner).
-        var openLanes = new[] { "1-preparation", "1a-orchestrator-prep", "2-ready", "3-progress" };
+        var openLanes = new[] { TaskStates.Preparation, TaskStates.OrchestratorPrep, TaskStates.Ready, TaskStates.Progress };
         var existing = scanner.ScanAllJobs().FirstOrDefault(j =>
             string.Equals(j.WatchPath, entry.Path, StringComparison.OrdinalIgnoreCase) &&
             openLanes.Contains(j.State, StringComparer.OrdinalIgnoreCase) &&
@@ -186,14 +186,14 @@ public static class DesignSurfaceEndpoints
             Agent = "claude",
             CliType = "claude",
             WatchPath = entry.Path,
-            TargetState = "2-ready",
+            TargetState = TaskStates.Ready,
             PromptMarkdown = promptBuilder(projectName),
             OwnerClientId = string.IsNullOrWhiteSpace(ownerHeader) ? null : ownerHeader,
         };
         var jobId = mutations.CreateJob(req);
         if (jobId is null)
             return Results.Conflict(new { error = "create-failed", message = "Job already exists or invalid input." });
-        return Results.Ok(new DesignActionQueueResponse(jobId, "2-ready", req.Title));
+        return Results.Ok(new DesignActionQueueResponse(jobId, TaskStates.Ready, req.Title));
     }
 
     private static string BuildScreenshotCritiquePrompt(string projectName) =>

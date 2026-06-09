@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
-import { CliType, CLI_TYPES, PromoteToCodingResponse, TaskKind, TaskMode, WatchPathEntry } from '../../../models/task.model';
+import { CliType, CLI_TYPES, PromoteToCodingResponse, TaskKind, TaskMode, TaskState, WatchPathEntry } from '../../../models/task.model';
 import type { CliModelInfo } from '../../../features/cli';
 import type { PendingAttachment } from '../components/create-task-dialog/create-task-dialog.component';
 import { TaskService } from '../../../services/task.service';
@@ -40,7 +40,7 @@ export class CreateTaskFormService {
   newWatchPath = '';
   newAgent: CliType = 'copilot';
   newPrompt = '';
-  newTargetState = '1-preparation';
+  newTargetState: string = TaskState.Preparation;
   newTaskType = 'chore';
   newTags: string[] = [];
   /** Card kind: `task` (default) or `epic`. */
@@ -57,7 +57,7 @@ export class CreateTaskFormService {
   newAttachments: PendingAttachment[] = [];
 
   /** Allowed manual-create lanes (everything before 3-progress). */
-  static readonly ALLOWED_TARGET_STATES = ['0-backlog', '1-preparation', '2-ready'] as const;
+  static readonly ALLOWED_TARGET_STATES = [TaskState.Backlog, TaskState.Preparation, TaskState.Ready] as const;
 
   readonly availableModels = signal<CliModelInfo[]>([]);
 
@@ -71,7 +71,7 @@ export class CreateTaskFormService {
    * orchestrator runs / triage.
    */
   canAddTaskToGroup(state: string): boolean {
-    return state === '0-backlog' || state === '1-preparation' || state === '2-ready';
+    return state === TaskState.Backlog || state === TaskState.Preparation || state === TaskState.Ready;
   }
 
   // ---------- open entry points ----------
@@ -91,7 +91,7 @@ export class CreateTaskFormService {
     const requested = opts.targetState ?? '';
     this.newTargetState = (CreateTaskFormService.ALLOWED_TARGET_STATES as readonly string[]).includes(requested)
       ? requested
-      : '1-preparation';
+      : TaskState.Preparation;
     this.newWatchPath = pickCreateWatchPath(opts.watchPaths, opts.activeProjects);
     this.loadCreateModels(this.newCliType);
     this.visible.set(true);
@@ -107,7 +107,7 @@ export class CreateTaskFormService {
   ): void {
     const watchEntry = watchPaths.find((wp) => wp.name === event.projectName);
     if (!watchEntry) return;
-    this.newTargetState = '1-preparation';
+    this.newTargetState = TaskState.Preparation;
     this.newWatchPath = watchEntry.path;
     this.newPrompt = event.prefill;
     this.newTitle = `Security follow-up (${event.projectName})`;
@@ -126,7 +126,7 @@ export class CreateTaskFormService {
   ): void {
     const watchEntry = watchPaths.find((wp) => wp.name === event.projectName);
     if (!watchEntry) return;
-    this.newTargetState = '1-preparation';
+    this.newTargetState = TaskState.Preparation;
     this.newWatchPath = watchEntry.path;
     this.newPrompt = event.prefill;
     this.newTitle = event.title;
@@ -144,7 +144,7 @@ export class CreateTaskFormService {
   ): void {
     const watchEntry = watchPaths.find((wp) => wp.name === event.projectName);
     if (!watchEntry) return;
-    this.newTargetState = '1-preparation';
+    this.newTargetState = TaskState.Preparation;
     this.newWatchPath = watchEntry.path;
     this.newPrompt = event.promptText;
     this.newTitle = deriveDraftTitle(event.promptText);
@@ -170,7 +170,7 @@ export class CreateTaskFormService {
     this.newKind = 'task';
     this.newTargetState = (CreateTaskFormService.ALLOWED_TARGET_STATES as readonly string[]).includes(payload.targetState)
       ? payload.targetState
-      : '1-preparation';
+      : TaskState.Preparation;
     // Revoke any previews carried over from a prior open before replacing.
     for (const att of this.newAttachments) URL.revokeObjectURL(att.previewUrl);
     this.newAttachments = attachments;
@@ -213,7 +213,7 @@ export class CreateTaskFormService {
     this.newAgent = 'copilot';
     this.newTaskType = 'chore';
     this.newTags = [];
-    this.newTargetState = '1-preparation';
+    this.newTargetState = TaskState.Preparation;
     this.newKind = 'task';
     this.newEpicId = '';
     this.newMode = 'coding';

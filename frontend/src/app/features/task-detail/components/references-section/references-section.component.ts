@@ -14,6 +14,7 @@ import {
   TaskReferenceKind,
   TaskReferences,
   TASK_REFERENCE_KINDS,
+  TaskState,
 } from '../../../../models/task.model';
 import { TaskService } from '../../../../services/task.service';
 import { NotificationService } from '../../../../services/notification.service';
@@ -234,7 +235,7 @@ function cloneRefs(r: TaskReferences): TaskReferences {
 }
 
 function isTerminalState(state: string): boolean {
-  return state === '6-completed' || state === '7-archive';
+  return state === TaskState.Completed || state === TaskState.Archive;
 }
 
 function truncate(text: string, max: number): string {

@@ -20,6 +20,7 @@ import type {
   ReviewEvidenceEntry,
   CliType,
 } from '../../../../../models/task.model';
+import { TaskState } from '../../../../../models/task.model';
 import type { CliModelInfo } from '../../../../cli';
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import type { RunRecord } from '../../../../../features/run-timeline';
@@ -494,7 +495,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   // While the job is in 3-progress, the live Activity feed is what the user
   // came here to see — surface it as the leftmost tab. Outside that state we
   // keep the historical Protocol-first order so the summary stays primary.
-  readonly inProgress = computed(() => this.detail().info.state === '3-progress');
+  readonly inProgress = computed(() => this.detail().info.state === TaskState.Progress);
 
   /** Protocol / Activity tab strip for the shared pane-tabs component. */
   readonly protocolTabs = computed(() =>

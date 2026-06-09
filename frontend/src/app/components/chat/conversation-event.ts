@@ -22,6 +22,8 @@
  * to hide noise; it is not allowed to delete traceability.
  */
 
+import { TaskState } from '../../models/task.model';
+
 /** 1-based, inclusive line range into the source CLI log. */
 export interface RawLineRange {
   /** Logical key for the source log (e.g. job id or `cli-output.log`). */
@@ -405,7 +407,12 @@ export interface FeedbackQueuedEvent extends ConversationEventBase {
   /** Which composer mode produced this row. */
   mode: 'ask' | 'defer' | 'promote';
   /** Lane the parent task was in when the user pressed Send. */
-  parentLane: '4-auto-review' | '5-human-review' | '5e-escalated' | '6-completed' | '7-archive';
+  parentLane:
+    | typeof TaskState.AutoReview
+    | typeof TaskState.HumanReview
+    | typeof TaskState.Escalated
+    | typeof TaskState.Completed
+    | typeof TaskState.Archive;
   /**
    * Human-readable marker copy ("I'll get to this when there's bandwidth",
    * "answered inline · no code changes", "merged into follow-up #98"). Plain

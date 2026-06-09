@@ -15,6 +15,7 @@ import {
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { WatchPathEntry } from '../../../../models/task.model';
+import { TaskState } from '../../../../models/task.model';
 import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
 import { buildChatNavigationContext } from '../../../../features/orchestrator';
 import { ChatComponent } from '../../../../components/chat/chat/chat.component';
@@ -894,7 +895,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         agent: 'copilot',
         watchPath,
         promptMarkdown,
-        targetState: '0-backlog',
+        targetState: TaskState.Backlog,
         taskType: 'bug',
         tags: tags.length > 0 ? tags : undefined
       })
