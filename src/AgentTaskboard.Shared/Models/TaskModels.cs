@@ -608,8 +608,9 @@ public record SessionUsage
 }
 
 /// <summary>
-/// Per-job token rollup attached to the kanban card. Covers orchestrator
-/// LLM calls attributed to this job (via <c>OrchestratorLogEntry.JobId</c>).
+/// Per-job token rollup attached to the kanban card. Covers token-usage
+/// bus events attributed to this job, including coding-agent turns and
+/// orchestrator/supporting calls.
 /// The frontend renders a single colour-tiered "bubble" with the total,
 /// and a hover popover with the breakdown plus per-call rows.
 /// </summary>

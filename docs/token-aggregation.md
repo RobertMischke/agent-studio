@@ -118,15 +118,21 @@ All four shims have landed in this order:
    stable tie-breakers in the same change so insertion-order differences
    between JSONL and bus paths can no longer leak into the output.
 2. **Landed.** `TokenSummaryService.Summarize` read path.
-   `BusBackedTokenSummaryReader` queries `kind=token-usage` messages
-   attributed to the project's orchestrator participant
-   (`orchestrator:<project>`), converts each into a transient
-   `OrchestratorLogEntry`, and folds through the same pure
-   `TokenSummaryService.Summarize` overload. `TokenSummaryService.Aggregate`
-   was refactored so the workspace fold (`AggregateSummaries`) is a
-   static helper both readers reuse - the bus path and the legacy path
-   cannot disagree on cross-project rollup math. Parity test:
-   [`TokenSummaryBusParityTests`](../backend.Tests/TokenSummaryBusParityTests.cs).
+   `BusBackedTokenSummaryReader` now queries every project-scoped
+   `kind=token-usage` message, including `agent:*` coding-run turns,
+   `support:*` supporting calls, and `orchestrator:*` decisions. It
+   converts each message into a transient `OrchestratorLogEntry` with the
+   participant id preserved for runtime categorisation, then folds through
+   the same pure `TokenSummaryService` helpers. The legacy parity entry
+   point still queries `orchestrator:<project>` only so old
+   `orchestrator.jsonl` fixtures remain byte-comparable. The task-card
+   per-job summary prefers the latest `agent:*` model for the aggregate
+   model row and displays per-call model labels through
+   `ModelMetadataRegistry`. `TokenSummaryService.Aggregate` was
+   refactored so the workspace fold (`AggregateSummaries`) is a static
+   helper both readers reuse. Regression tests:
+   [`TokenSummaryBusParityTests`](../backend.Tests/TokenSummaryBusParityTests.cs)
+   and [`TokenSummaryTests`](../backend.Tests/TokenSummaryTests.cs).
 3. **Landed.** `WorkspaceTokensTimelineService.Build` read path.
    `BusBackedWorkspaceTimelineReader` walks every supplied project, pulls
    the orchestrator-attributed token-usage messages, and feeds them
@@ -137,14 +143,16 @@ All four shims have landed in this order:
    [`WorkspaceTokensTimelineBusParityTests`](../backend.Tests/WorkspaceTokensTimelineBusParityTests.cs).
 4. **Landed.** `ProjectTokenUsageService.BuildSummary` /
    `BuildHeatmap` / `BuildExpensiveJobs` / `BuildJobDetail` read paths.
-   `BusBackedProjectTokenUsageReader` reuses every static `*FromEntries`
-   overload on the legacy service so the Job / Supporting / Orchestrator
-   category split (`SupportingJobTitlePrefixes` lookup against
-   `JobScannerService.ScanAllJobs`) is byte-identical across the source
-   change. The canonical bus-native split (participantId `agent:*` vs
-   `support:*` vs `orchestrator:*`) is a follow-up once the legacy
-   surface retires - parity needed byte-exact equality first. Parity
-   test:
+   `BusBackedProjectTokenUsageReader` uses the bus-native participant
+   split for runtime reads: `agent:*` counts as Job, `support:*` counts as
+   Supporting, and `orchestrator:*` counts as Orchestrator. Legacy
+   `orchestrator.jsonl` entries with no participant id still use
+   `SupportingJobTitlePrefixes` against `JobScannerService.ScanAllJobs`,
+   which keeps old fixtures and historical logs readable. Per-job
+   expensive rows and drill-down rows display model labels through
+   `ModelMetadataRegistry`. Parity tests keep the old orchestrator-only
+   static entry points byte-comparable, while instance-reader tests lock
+   the bus-native participant path:
    [`ProjectTokenUsageBusParityTests`](../backend.Tests/ProjectTokenUsageBusParityTests.cs).
 
 Each parity test compares every numeric field plus the ordered breakdown

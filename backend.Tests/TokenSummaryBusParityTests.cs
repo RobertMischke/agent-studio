@@ -187,6 +187,56 @@ public sealed class TokenSummaryBusParityTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task InstanceSummarizePerJob_IncludesAgentTokenUsageAndPrefersRunModel()
+    {
+        var (_, bridge, store) = BuildStack();
+        const string jobId = "job-model-panel";
+        var startedAt = new DateTime(2026, 6, 9, 8, 0, 0, DateTimeKind.Utc);
+
+        await bridge.EmitTokenUsageRichAsync(
+            ProjectName,
+            jobId,
+            AgentMessageBusBridge.DeriveRunId(jobId, startedAt),
+            AgentMessageBusBridge.ParticipantForCli("codex"),
+            "codex-turn",
+            new ParsedTurnUsage("gpt-5-codex", 10_000, 800, 2_000, 0, null, null),
+            createdLatency(startedAt, startedAt.AddSeconds(12)));
+
+        await bridge.EmitTokenUsageAsync(
+            ProjectName,
+            jobId,
+            AgentMessageBusBridge.ParticipantOrchestratorFor(ProjectName),
+            "orchestrator-decision",
+            new OrchestratorTokenUsage
+            {
+                Model = "claude-haiku-4-5",
+                InputTokens = 1_000,
+                OutputTokens = 100,
+            },
+            createdAt: startedAt.AddMinutes(5));
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["TaskRepository"] = _workspace })
+            .Build();
+        var reader = new BusBackedTokenSummaryReader(store, config);
+
+        var perJob = reader.SummarizePerJob(ProjectName);
+        var summary = perJob[jobId];
+
+        Assert.Equal(13_900, summary.TotalTokens);
+        Assert.Equal("GPT-5 Codex", summary.LastModel);
+        Assert.Equal(2, summary.Entries.Count);
+        Assert.Contains(summary.Entries, e => e.Model == "GPT-5 Codex");
+        Assert.Contains(summary.Entries, e => e.Model == "Claude Haiku 4.5");
+
+        static AgentMessageLatency createdLatency(DateTime requestedAt, DateTime completedAt)
+            => new(
+                RequestedAt: requestedAt,
+                CompletedAt: completedAt,
+                TotalMs: (long)(completedAt - requestedAt).TotalMilliseconds);
+    }
+
     private static void AssertEquivalent(TokenSummary a, TokenSummary b)
     {
         Assert.Equal(a.Project,                         b.Project);

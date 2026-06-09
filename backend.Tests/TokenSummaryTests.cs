@@ -27,6 +27,29 @@ public class TokenSummaryTests
             }
         };
 
+    private static OrchestratorLogEntry JobEntry(
+        string? model,
+        long input,
+        long output,
+        DateTime ts,
+        string jobId = "job-a",
+        string? participantId = null)
+        => new()
+        {
+            Ts = ts,
+            Kind = OrchestratorLogKinds.Decision,
+            Topic = "test-token",
+            Summary = "test job entry",
+            JobId = jobId,
+            ParticipantId = participantId,
+            TokenUsage = new OrchestratorTokenUsage
+            {
+                Model = model,
+                InputTokens = (int)input,
+                OutputTokens = (int)output,
+            }
+        };
+
     [Fact]
     public void Summarize_NoEntries_ReturnsZeros()
     {
@@ -103,5 +126,49 @@ public class TokenSummaryTests
         var s = TokenSummaryService.Summarize("Demo", Array.Empty<OrchestratorLogEntry>());
         Assert.Contains("subscription", s.Disclaimer, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("comparison", s.Disclaimer, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SummarizePerJob_PrefersAgentModelAndUsesRegistryLabels()
+    {
+        var t = new DateTime(2026, 6, 9, 8, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            JobEntry("gpt-5-codex", 1_000, 100, t, participantId: "agent:codex"),
+            JobEntry("claude-haiku-4.5", 2_000, 200, t.AddMinutes(5), participantId: "orchestrator:Demo"),
+        };
+
+        var summary = TokenSummaryService.SummarizePerJob(entries)["job-a"];
+
+        Assert.Equal(3_300, summary.TotalTokens);
+        Assert.Equal("GPT-5 Codex", summary.LastModel);
+        Assert.Equal("GPT-5 Codex", summary.Entries[0].Model);
+        Assert.Equal("Claude Haiku 4.5", summary.Entries[1].Model);
+        Assert.Equal(t.AddMinutes(5), summary.LastUpdate);
+    }
+
+    [Fact]
+    public void WithModelFallback_FillsBlankAggregateAndRowsFromRegistry()
+    {
+        var summary = new TaskTokenSummary
+        {
+            Calls = 1,
+            InputTokens = 100,
+            TotalTokens = 100,
+            Entries =
+            [
+                new TaskTokenCall
+                {
+                    Ts = new DateTime(2026, 6, 9, 8, 0, 0, DateTimeKind.Utc),
+                    Model = null,
+                    InputTokens = 100,
+                }
+            ]
+        };
+
+        var filled = TokenSummaryService.WithModelFallback(summary, "claude-sonnet-4.6");
+
+        Assert.Equal("Claude Sonnet 4.6", filled.LastModel);
+        Assert.Equal("Claude Sonnet 4.6", filled.Entries[0].Model);
     }
 }

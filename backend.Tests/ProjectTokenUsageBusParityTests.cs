@@ -180,8 +180,8 @@ public sealed class ProjectTokenUsageBusParityTests : IDisposable
         await bridge.EmitTokenUsageAsync(
             project: ProjectName,
             jobId: "support-archived",
-            participantId: AgentMessageBusBridge.ParticipantOrchestratorFor(ProjectName),
-            topic: "orchestrator-decision",
+            participantId: "support:security-audit",
+            topic: "security-audit",
             usage: new OrchestratorTokenUsage
             {
                 Model = "claude-haiku-4-5",
@@ -189,7 +189,9 @@ public sealed class ProjectTokenUsageBusParityTests : IDisposable
                 OutputTokens = 1_000,
             },
             createdAt: Now);
-        await WaitForBusCountAsync(store, 1);
+        Assert.Single(store.Query(_workspace, ProjectName, new AgentMessageQuery(
+            ParticipantId: "support:security-audit",
+            Kind: "token-usage")));
 
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>

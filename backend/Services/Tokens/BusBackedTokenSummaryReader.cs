@@ -7,8 +7,8 @@ namespace OrchestratorApi.Services.Tokens;
 /// <summary>
 /// Phase-4 bus-backed read path for the per-project token summary
 /// (lifetime totals + per-model split + estimated USD). Queries the bus
-/// for the project's <c>kind=token-usage</c> messages emitted by the
-/// orchestrator participant, converts them into transient
+/// for the project's <c>kind=token-usage</c> messages emitted by coding,
+/// supporting, and orchestrator participants, converts them into transient
 /// <see cref="OrchestratorLogEntry"/> records, and folds them through the
 /// existing pure-function aggregator on <see cref="TokenSummaryService"/>.
 /// </summary>
@@ -41,7 +41,7 @@ public sealed class BusBackedTokenSummaryReader
     }
 
     /// <summary>
-    /// Read every orchestrator-driven <c>kind=token-usage</c> message for
+    /// Read every project-scoped <c>kind=token-usage</c> message for
     /// <paramref name="projectName"/> and fold them into a
     /// <see cref="TokenSummary"/>. Returns an empty summary when the
     /// workspace root is not configured.
@@ -51,7 +51,8 @@ public sealed class BusBackedTokenSummaryReader
         var workspace = _config["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace))
             return TokenSummaryService.Summarize(projectName, Array.Empty<OrchestratorLogEntry>());
-        return SummarizeFromStore(_store, workspace!, projectName);
+        var entries = BusTokenEntryConverter.LoadTokenUsageEntries(_store, workspace!, projectName);
+        return TokenSummaryService.Summarize(projectName, entries);
     }
 
     /// <summary>
@@ -63,7 +64,8 @@ public sealed class BusBackedTokenSummaryReader
         var workspace = _config["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace))
             return new Dictionary<string, TaskTokenSummary>(StringComparer.Ordinal);
-        return SummarizePerJobFromStore(_store, workspace!, projectName);
+        var entries = BusTokenEntryConverter.LoadTokenUsageEntries(_store, workspace!, projectName);
+        return TokenSummaryService.SummarizePerJob(entries);
     }
 
     /// <summary>
@@ -81,15 +83,16 @@ public sealed class BusBackedTokenSummaryReader
         {
             var summary = string.IsNullOrWhiteSpace(workspace)
                 ? TokenSummaryService.Summarize(name, Array.Empty<OrchestratorLogEntry>())
-                : SummarizeFromStore(_store, workspace!, name);
+                : TokenSummaryService.Summarize(name, BusTokenEntryConverter.LoadTokenUsageEntries(_store, workspace!, name));
             perProject.Add((name, summary));
         }
         return TokenSummaryService.AggregateSummaries(perProject, cache);
     }
 
     /// <summary>
-    /// Pure overload used by the parity test. Reads the bus directly and
-    /// folds through the legacy aggregator so divergence is impossible.
+    /// Pure overload used by the parity test. Reads the legacy
+    /// orchestrator-only bus projection and folds through the legacy
+    /// aggregator so parity with <c>orchestrator.jsonl</c> stays explicit.
     /// </summary>
     public static TokenSummary SummarizeFromStore(AgentMessageBusStore store, string workspaceRoot, string projectName)
     {

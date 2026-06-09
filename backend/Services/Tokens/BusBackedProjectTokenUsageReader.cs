@@ -9,19 +9,19 @@ namespace OrchestratorApi.Services.Tokens;
 /// Phase-4 bus-backed read path for the Project-Detail Token-Usage
 /// surfaces (lifetime + last-24h summary, per-job × per-day heatmap,
 /// top-N expensive jobs, per-call drill-down). Queries the bus for the
-/// project's orchestrator <c>kind=token-usage</c> messages, converts
-/// them into transient <see cref="OrchestratorLogEntry"/> records, and
-/// folds them through the existing pure-function aggregators on
+/// project's <c>kind=token-usage</c> messages across coding, supporting,
+/// and orchestrator participants, converts them into transient
+/// <see cref="OrchestratorLogEntry"/> records, and folds them through the
+/// existing pure-function aggregators on
 /// <see cref="ProjectTokenUsageService"/>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The Job / Supporting / Orchestrator category split stays driven by
-/// the legacy job-title-prefix lookup so the bus reader cannot disagree
-/// with <see cref="ProjectTokenUsageService"/> on categorisation. The
-/// canonical bus-native split (participantId <c>agent:*</c> vs
-/// <c>support:*</c> vs <c>orchestrator:*</c>) is a follow-up once the
-/// legacy surface retires - parity needs byte-exact equality first.
+/// Runtime reads use the bus-native participant split
+/// (participantId <c>agent:*</c> vs <c>support:*</c> vs
+/// <c>orchestrator:*</c>). The static <c>*FromStore</c> parity helpers
+/// intentionally keep the old orchestrator-only projection so historical
+/// <c>orchestrator.jsonl</c> fixtures remain byte-comparable.
 /// </para>
 /// <para>
 /// The parity test
@@ -117,7 +117,7 @@ public sealed class BusBackedProjectTokenUsageReader
     {
         var workspace = _config["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace)) return Array.Empty<OrchestratorLogEntry>();
-        return BusTokenEntryConverter.LoadOrchestratorEntries(_store, workspace!, projectName);
+        return BusTokenEntryConverter.LoadTokenUsageEntries(_store, workspace!, projectName);
     }
 
     private IReadOnlyDictionary<string, TaskInfo> BuildJobsById(string watchPath)

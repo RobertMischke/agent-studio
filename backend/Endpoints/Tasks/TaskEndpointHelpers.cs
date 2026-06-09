@@ -73,7 +73,7 @@ internal static class TaskEndpointHelpers
         TaskTokenSummary? tokens = null;
         if (tokensByJobId != null && tokensByJobId.TryGetValue(job.TaskKey, out var t) && t.TotalTokens > 0)
         {
-            tokens = t;
+            tokens = TokenSummaryService.WithModelFallback(t, exec?.Model ?? job.Model);
         }
         string? verdict = null;
         if (verdictsByJobKey != null && verdictsByJobKey.TryGetValue(job.TaskKey, out var v))

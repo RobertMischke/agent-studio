@@ -6,10 +6,10 @@ namespace OrchestratorApi.Services.Runner;
 
 /// <summary>
 /// Project-scoped token-usage rollups for slice 8 of the quality-system
-/// mockup (docs/mockups/quality-system/, "Token Usage" surface). Reads
-/// the project's <c>orchestrator.jsonl</c> through
-/// <see cref="OrchestratorLog"/> exactly once per call and folds the
-/// surviving entries into:
+/// mockup (docs/mockups/quality-system/, "Token Usage" surface). Runtime
+/// reads are bus-backed; the legacy fallback reads the project's
+/// <c>orchestrator.jsonl</c> through <see cref="OrchestratorLog"/> exactly
+/// once per call and folds the surviving entries into:
 /// <list type="bullet">
 ///   <item><b>Summary</b>: lifetime + last-24h totals plus a category
 ///   split (Job / Supporting / Orchestrator) per <c>taxonomy.md</c>.</item>
@@ -124,7 +124,7 @@ public class ProjectTokenUsageService
             var total = (long)u.InputTokens + u.OutputTokens + u.CacheReadTokens + u.CacheCreationTokens;
             if (total <= 0) continue;
 
-            var category = Categorize(entry.JobId, jobsById);
+            var category = Categorize(entry, jobsById);
             lifetime.Add(category, total);
             lifetimeTotal += total;
             callsLifetime++;
@@ -201,6 +201,7 @@ public class ProjectTokenUsageService
         var perJobTotal = new Dictionary<string, long>(StringComparer.Ordinal);
         var perJobCalls = new Dictionary<string, int>(StringComparer.Ordinal);
         var perJobLastActivity = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+        var perJobCategory = new Dictionary<string, string>(StringComparer.Ordinal);
 
         foreach (var entry in entries)
         {
@@ -223,6 +224,8 @@ public class ProjectTokenUsageService
             perJobCalls[jobId!] = pc + 1;
             if (!perJobLastActivity.TryGetValue(jobId!, out var lastAt) || ts > lastAt)
                 perJobLastActivity[jobId!] = ts;
+            var category = Categorize(entry, jobsById);
+            perJobCategory[jobId!] = PreferCategory(perJobCategory.GetValueOrDefault(jobId!), category);
         }
 
         var jobRows = perJobTotal
@@ -231,7 +234,6 @@ public class ProjectTokenUsageService
             {
                 var jobId = p.Key;
                 jobsById.TryGetValue(jobId, out var info);
-                var category = Categorize(jobId, jobsById);
                 var cells = new List<ProjectTokenHeatmapCell>(d);
                 for (var i = 0; i < d; i++)
                 {
@@ -248,7 +250,7 @@ public class ProjectTokenUsageService
                     JobId = jobId,
                     Title = info?.Title ?? jobId,
                     State = info?.State,
-                    Category = category,
+                    Category = perJobCategory.GetValueOrDefault(jobId) ?? Categorize(jobId, jobsById),
                     Total = p.Value,
                     Calls = perJobCalls.GetValueOrDefault(jobId),
                     LastActivity = perJobLastActivity.GetValueOrDefault(jobId).ToString("o"),
@@ -309,7 +311,21 @@ public class ProjectTokenUsageService
             acc.Calls++;
             var ts = entry.Ts.ToUniversalTime();
             if (ts > acc.LastActivity) acc.LastActivity = ts;
-            if (!string.IsNullOrWhiteSpace(u.Model)) acc.LastModel = u.Model;
+            acc.Category = PreferCategory(acc.Category, Categorize(entry, jobsById));
+            var displayModel = TokenModelDisplay.Label(u.Model);
+            if (!string.IsNullOrWhiteSpace(displayModel))
+            {
+                if (ts > acc.LastAnyModelAt)
+                {
+                    acc.LastAnyModelAt = ts;
+                    acc.LastAnyModel = displayModel;
+                }
+                if (TokenModelDisplay.IsAgentParticipant(entry.ParticipantId) && ts > acc.LastAgentModelAt)
+                {
+                    acc.LastAgentModelAt = ts;
+                    acc.LastAgentModel = displayModel;
+                }
+            }
         }
 
         return perJobTotal
@@ -324,11 +340,11 @@ public class ProjectTokenUsageService
                     JobId = jobId,
                     Title = info?.Title ?? jobId,
                     State = info?.State,
-                    Category = Categorize(jobId, jobsById),
+                    Category = p.Value.Category ?? Categorize(jobId, jobsById),
                     TotalTokens = p.Value.Total,
                     Calls = p.Value.Calls,
                     LastActivity = p.Value.LastActivity == default ? null : p.Value.LastActivity.ToString("o"),
-                    LastModel = p.Value.LastModel,
+                    LastModel = p.Value.LastAgentModel ?? p.Value.LastAnyModel,
                 };
             })
             .ToList();
@@ -365,6 +381,7 @@ public class ProjectTokenUsageService
         DateTime? firstAt = null;
         DateTime? lastAt = null;
         string? lastModel = null;
+        string? category = null;
         int index = 0;
 
         foreach (var entry in entries.OrderBy(e => e.Ts))
@@ -377,11 +394,12 @@ public class ProjectTokenUsageService
 
             var ts = entry.Ts.ToUniversalTime();
             var delta = rows.Count == 0 ? (long?)null : rowTotal - lastTotal;
+            var displayModel = TokenModelDisplay.Label(u.Model);
             rows.Add(new ProjectJobTokenRun
             {
                 Index = index++,
                 Ts = ts.ToString("o"),
-                Model = u.Model,
+                Model = displayModel,
                 InputTokens = u.InputTokens,
                 OutputTokens = u.OutputTokens,
                 CacheReadTokens = u.CacheReadTokens,
@@ -399,7 +417,12 @@ public class ProjectTokenUsageService
             lastTotal = rowTotal;
             if (firstAt == null) firstAt = ts;
             lastAt = ts;
-            if (!string.IsNullOrWhiteSpace(u.Model)) lastModel = u.Model;
+            category = PreferCategory(category, Categorize(entry, jobsById));
+            if (!string.IsNullOrWhiteSpace(displayModel))
+            {
+                if (TokenModelDisplay.IsAgentParticipant(entry.ParticipantId)) lastModel = displayModel;
+                else lastModel ??= displayModel;
+            }
         }
 
         if (rows.Count == 0) return null;
@@ -411,7 +434,7 @@ public class ProjectTokenUsageService
             JobId = jobId,
             Title = info?.Title ?? jobId,
             State = info?.State,
-            Category = Categorize(jobId, jobsById),
+            Category = category ?? Categorize(jobId, jobsById),
             TotalTokens = runningTotal,
             InputTokens = input,
             OutputTokens = output,
@@ -450,7 +473,15 @@ public class ProjectTokenUsageService
     /// lookup without going through the scanner's disk walk twice.
     /// </summary>
     public static string Categorize(string? jobId, IReadOnlyDictionary<string, TaskInfo> jobsById)
+        => Categorize(new OrchestratorLogEntry { JobId = jobId }, jobsById);
+
+    public static string Categorize(OrchestratorLogEntry entry, IReadOnlyDictionary<string, TaskInfo> jobsById)
     {
+        if (TokenModelDisplay.IsAgentParticipant(entry.ParticipantId)) return ProjectTokenCategory.Job;
+        if (TokenModelDisplay.IsSupportingParticipant(entry.ParticipantId)) return ProjectTokenCategory.Supporting;
+        if (TokenModelDisplay.IsOrchestratorParticipant(entry.ParticipantId)) return ProjectTokenCategory.Orchestrator;
+
+        var jobId = entry.JobId;
         if (string.IsNullOrWhiteSpace(jobId)) return ProjectTokenCategory.Orchestrator;
         if (jobsById.TryGetValue(jobId!, out var info))
         {
@@ -463,6 +494,20 @@ public class ProjectTokenUsageService
         }
         return ProjectTokenCategory.Job;
     }
+
+    private static string PreferCategory(string? current, string candidate)
+    {
+        if (string.IsNullOrWhiteSpace(current)) return candidate;
+        return CategoryRank(candidate) > CategoryRank(current) ? candidate : current;
+    }
+
+    private static int CategoryRank(string category) => category switch
+    {
+        ProjectTokenCategory.Job => 3,
+        ProjectTokenCategory.Supporting => 2,
+        ProjectTokenCategory.Orchestrator => 1,
+        _ => 0
+    };
 
     public static int ResolveDays(int requested) =>
         requested <= 0 ? DefaultHeatmapDays : Math.Min(requested, MaxHeatmapDays);
@@ -498,7 +543,11 @@ public class ProjectTokenUsageService
         public long Total;
         public int Calls;
         public DateTime LastActivity;
-        public string? LastModel;
+        public string? LastAnyModel;
+        public string? LastAgentModel;
+        public DateTime LastAnyModelAt;
+        public DateTime LastAgentModelAt;
+        public string? Category;
     }
 }
 

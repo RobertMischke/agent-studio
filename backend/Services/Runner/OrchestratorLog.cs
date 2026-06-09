@@ -131,6 +131,13 @@ public record OrchestratorLogEntry
     public string? JobId { get; init; }
 
     /// <summary>
+    /// Agent-message-bus participant that produced this token event, when the
+    /// entry was projected from the bus. Legacy orchestrator.jsonl entries
+    /// leave this null and keep their historical job-title categorisation.
+    /// </summary>
+    public string? ParticipantId { get; init; }
+
+    /// <summary>
     /// Token usage for this orchestrator action, when the orchestrator
     /// itself made an LLM call. Today most entries are written by the
     /// runner without an LLM call and leave this null.

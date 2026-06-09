@@ -21,7 +21,7 @@ internal static class BusTokenEntryConverter
     /// nullable on the bus; the legacy entry shape uses zero defaults so
     /// the folds short-circuit cleanly on missing cache counts.
     /// </summary>
-    public static OrchestratorLogEntry ToEntry(AgentMessage m)
+    public static OrchestratorLogEntry ToEntry(AgentMessage m, bool includeParticipant = true)
     {
         var t = m.Tokens;
         var usage = t is null
@@ -42,6 +42,7 @@ internal static class BusTokenEntryConverter
             Topic = m.Topic ?? OrchestratorLogTopics.General,
             Summary = m.Summary ?? string.Empty,
             JobId = m.JobId,
+            ParticipantId = includeParticipant ? m.ParticipantId : null,
             TokenUsage = usage,
         };
     }
@@ -65,6 +66,30 @@ internal static class BusTokenEntryConverter
         var participant = AgentMessageBusBridge.ParticipantOrchestratorFor(projectName);
         var messages = store.Query(workspaceRoot, projectName, new AgentMessageQuery(
             ParticipantId: participant,
+            Kind: "token-usage"));
+        var entries = new List<OrchestratorLogEntry>(messages.Count);
+        foreach (var m in messages)
+        {
+            entries.Add(ToEntry(m, includeParticipant: false));
+        }
+        return entries;
+    }
+
+    /// <summary>
+    /// Pull every project-scoped <c>kind=token-usage</c> message, regardless
+    /// of participant, and retain the participant id on the transient entry.
+    /// Runtime token panels use this bus-native shape so coding-agent turns
+    /// (<c>agent:*</c>) do not disappear behind orchestrator-only parity
+    /// shims.
+    /// </summary>
+    public static List<OrchestratorLogEntry> LoadTokenUsageEntries(
+        AgentMessageBusStore store,
+        string workspaceRoot,
+        string projectName)
+    {
+        if (string.IsNullOrWhiteSpace(workspaceRoot) || string.IsNullOrWhiteSpace(projectName))
+            return new List<OrchestratorLogEntry>();
+        var messages = store.Query(workspaceRoot, projectName, new AgentMessageQuery(
             Kind: "token-usage"));
         var entries = new List<OrchestratorLogEntry>(messages.Count);
         foreach (var m in messages)

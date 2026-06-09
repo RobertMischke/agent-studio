@@ -17,11 +17,9 @@ namespace OrchestratorApi.Services.Runner;
 /// CLI vendors with different quota models would mislead more than it
 /// helps. The frontend points at the quota endpoint with a link.</item>
 /// </list>
-/// Today this service summarizes the orchestrator log only. Per-job
-/// agent token totals are deliberately a separate surface (each job
-/// card already carries its own <c>lastUsage</c> string from the CLI's
-/// own footer; the formats vary across CLIs and combining them into one
-/// number would lose information).
+/// Legacy pure helpers still accept orchestrator-log entries, but the
+/// runtime read path is bus-backed and includes coding-agent token events
+/// alongside orchestrator/supporting calls.
 /// </summary>
 public sealed record TokenSummary(
     string Project,
@@ -130,15 +128,22 @@ public class TokenSummaryService
             bucket.Output += u.OutputTokens;
             bucket.CacheRead += u.CacheReadTokens;
             bucket.CacheCreate += u.CacheCreationTokens;
+            var displayModel = TokenModelDisplay.Label(u.Model);
             if (entry.Ts > (bucket.LastUpdate ?? DateTime.MinValue))
             {
                 bucket.LastUpdate = entry.Ts;
-                bucket.LastModel = u.Model;
+                bucket.LastAnyModel = displayModel;
+            }
+            if (TokenModelDisplay.IsAgentParticipant(entry.ParticipantId)
+                && entry.Ts > (bucket.LastAgentUpdate ?? DateTime.MinValue))
+            {
+                bucket.LastAgentUpdate = entry.Ts;
+                bucket.LastAgentModel = displayModel;
             }
             bucket.Entries.Add(new TaskTokenCall
             {
                 Ts = entry.Ts,
-                Model = u.Model,
+                Model = displayModel,
                 InputTokens = u.InputTokens,
                 OutputTokens = u.OutputTokens,
                 CacheReadTokens = u.CacheReadTokens,
@@ -158,12 +163,30 @@ public class TokenSummaryService
                 CacheReadTokens = b.CacheRead,
                 CacheCreationTokens = b.CacheCreate,
                 TotalTokens = total,
-                LastModel = b.LastModel,
+                LastModel = b.LastAgentModel ?? b.LastAnyModel,
                 LastUpdate = b.LastUpdate,
                 Entries = b.Entries.OrderBy(e => e.Ts).ToList()
             };
         }
         return result;
+    }
+
+    public static TaskTokenSummary WithModelFallback(TaskTokenSummary summary, string? modelId)
+    {
+        var fallback = TokenModelDisplay.Label(modelId);
+        if (string.IsNullOrWhiteSpace(fallback)) return summary;
+
+        var entries = summary.Entries
+            .Select(e => string.IsNullOrWhiteSpace(e.Model)
+                ? e with { Model = fallback }
+                : e)
+            .ToList();
+
+        return summary with
+        {
+            LastModel = string.IsNullOrWhiteSpace(summary.LastModel) ? fallback : summary.LastModel,
+            Entries = entries,
+        };
     }
 
     private sealed class Bucket
@@ -173,8 +196,10 @@ public class TokenSummaryService
         public long Output;
         public long CacheRead;
         public long CacheCreate;
-        public string? LastModel;
+        public string? LastAnyModel;
+        public string? LastAgentModel;
         public DateTime? LastUpdate;
+        public DateTime? LastAgentUpdate;
         public List<TaskTokenCall> Entries { get; } = [];
     }
 
