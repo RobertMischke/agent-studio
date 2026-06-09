@@ -1,0 +1,65 @@
+# Frontend Domain Map
+
+Version: 2026-06-09
+Status: System-of-record map for frontend changes.
+
+Use this when a change touches Angular code, visual design, task-detail,
+kanban, project pages, frontend polling, model selectors, menus, or Playwright
+coverage.
+
+## Entry Points
+
+- [frontend/AGENTS.md](../frontend/AGENTS.md) contains frontend-scoped agent
+  rules and wins for files under `frontend/`.
+- [frontend/e2e/README.md](../frontend/e2e/README.md) covers Playwright setup,
+  fixtures, screenshots, and conventions.
+- [docs/design-system.md](design-system.md) defines the visual contract.
+- [docs/style-guide/](style-guide/README.md) is the UI vocabulary and component
+  style source.
+- [docs/design-principles.md](design-principles.md) is the UX contract.
+- [docs/perf-frontend.md](perf-frontend.md) is the frontend performance
+  playbook.
+- [docs/frontend-architecture-review-2026-05-09.md](frontend-architecture-review-2026-05-09.md)
+  is the maintainability map for large components and service extraction.
+
+## Key Code
+
+- `frontend/src/app/features/board/`: kanban lanes, task cards, project tabs,
+  filters, and task creation.
+- `frontend/src/app/features/task-detail/`: task detail shell, protocol pane,
+  prompt pane, git pane, timeline, pipeline overview, and command surfaces.
+- `frontend/src/app/features/project-detail/`: project shell and project-level
+  quality, settings, architecture, runtime, drift, and supervisor panels.
+- `frontend/src/app/services/task.service.ts`: task API integration, optimistic
+  lane moves, reorder, and rollback.
+- `frontend/src/app/services/cli-catalog.store.ts`: boot-hydrated CLI model
+  catalog cache.
+- `frontend/src/app/components/menu/`: text-only menu component.
+- `frontend/src/app/components/cli-model-selector/`: shared CLI/model picker.
+- `frontend/src/app/features/polling/`: bounded polling services for detail
+  panes and runtime data.
+
+## Invariants
+
+- Angular components are standalone. Do not introduce NgModules.
+- State should use Angular signals and existing stores before new state
+  mechanisms.
+- Durable user-owned frontend mutations are optimistic by default: snapshot,
+  local signal update, fire request, rollback plus toast on error.
+- Destructive operations and runner side effects stay spinner-backed rather than
+  optimistic.
+- Menus are text-only. Do not add leading icons to menu rows.
+- Before adding visual variants, check the style guide and update it if a new
+  pattern is truly needed.
+- Use stable `data-testid` hooks for Playwright selectors.
+
+## Verification
+
+- Visual or behavioral changes require relevant Playwright specs. Add or extend
+  a spec when none covers the changed behavior.
+- Capture screenshots for review-relevant states and persist them in the task
+  `results/` folder when they must survive test cleanup.
+- UI performance regressions are measured in the browser using the helpers in
+  `frontend/e2e/helpers/timing.ts`.
+- Pure frontend refactors still need component or unit tests when they move
+  state, inputs, outputs, or service contracts.

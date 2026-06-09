@@ -1,18 +1,28 @@
 # Documentation Index
 
-Hierarchical lookup of every load-bearing document in this repository, with a one-line description of what's inside. Use this as the first stop when an agent or contributor needs to find the right file fast — not a table of contents you read top-to-bottom, but a map you grep against.
+Hierarchical lookup of every load-bearing document in this repository, with a one-line description of what's inside. Use this as the first stop when an agent or contributor needs to find the right file fast, not a table of contents you read top-to-bottom, but a map you grep against.
 
-The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This index is a navigation aid; if a rule and AGENTS.md disagree, AGENTS.md wins.
+The root agent navigation card lives in [AGENTS.md](../AGENTS.md). Domain maps below are the system-of-record entry points for their area; if a mandatory operating rule and a domain map disagree, AGENTS.md wins.
 
 ## Top-level entry points
 
 | File | What's inside |
 |---|---|
 | [README.md](../README.md) | Product pitch, install + run quickstart, primary directory tour. The "what is this and how do I get it running" file. |
-| [AGENTS.md](../AGENTS.md) | Single source of truth for agent instructions (Claude Code, Codex CLI, Copilot agent). Edit-only-dev rule, hard product boundaries, regression-proofing doctrine, shell policy, language policy. |
+| [AGENTS.md](../AGENTS.md) | Root navigation card for agent instructions (Claude Code, Codex CLI, Copilot agent): mandatory guardrails plus links to domain system-of-record maps. |
 | [ROADMAP.md](../ROADMAP.md) | Product thesis, near-term themes, hard non-goals, decision principles. Read before proposing direction-shifting changes. |
 | [CLAUDE.md](../CLAUDE.md) | 3-line compatibility shim that points Claude Code at AGENTS.md. Do not duplicate AGENTS content here. |
 | [.github/copilot-instructions.md](../.github/copilot-instructions.md) | 3-line shim for the GitHub Copilot coding agent. Same shape as CLAUDE.md. |
+
+## Agent domain maps
+
+| File | What's inside |
+|---|---|
+| [runner-domain.md](runner-domain.md) | Runner-side map: pickup, active execution, sentinels, outcome policy, reissue, crash recovery, and supervisor loops. |
+| [pipeline-domain.md](pipeline-domain.md) | Task-processing pipeline map: pre/core/post steps, catalogue, step contracts, history, cost, and verification. |
+| [tasks-domain.md](tasks-domain.md) | Task storage and API map: job folders, lanes, task access, API-first mutation, review evidence, and commit attribution. |
+| [frontend-domain.md](frontend-domain.md) | Frontend map: Angular surfaces, design system, style guide, optimistic mutations, polling, and Playwright proof. |
+| [cli-domain.md](cli-domain.md) | CLI adapter map: Claude, Codex, Copilot, Gemini, stream parsing, prompt handoff, quota probes, and model surfaces. |
 
 ## Architecture, decisions, and contracts
 
