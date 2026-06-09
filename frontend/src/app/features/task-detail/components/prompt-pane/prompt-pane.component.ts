@@ -246,7 +246,7 @@ export class PromptPaneComponent {
       case TaskState.AutoReview:       return 'Post Processing';
       case TaskState.HumanReview:      return 'Review';
       case TaskState.Escalated:        return 'Escalated';
-      case TaskState.Completed:        return 'Completed';
+      case TaskState.Completed:        return 'Delivered';
       case TaskState.Archive:          return 'Archive';
       default:                     return state ?? '';
     }

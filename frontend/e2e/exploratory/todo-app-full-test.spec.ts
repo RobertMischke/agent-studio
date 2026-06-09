@@ -244,7 +244,7 @@ test('full lifecycle: create → steer → complete (Playwright Test sandbox)', 
         if (await completeBtn.isVisible()) {
           await completeBtn.click();
           await page.waitForTimeout(1500);
-          await snapshot(page, ++seq, 'clicked Send to Complete');
+          await snapshot(page, ++seq, 'clicked Merge into Develop');
           completed = true;
           break;
         } else {

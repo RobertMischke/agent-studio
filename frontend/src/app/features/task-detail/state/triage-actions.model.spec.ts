@@ -14,11 +14,11 @@ describe('primaryActionFor — Enter-bound primary per source lane', () => {
     expect(primary!.intent).toEqual({ kind: 'move', targetState: '7-archive' });
   });
 
-  it('leaves the Review lane primary unchanged ("Send to Complete" → 6-completed)', () => {
+  it('labels the Review lane primary "Merge into Develop" (→ 6-completed acceptance signal)', () => {
     const primary = primaryActionFor('5-human-review');
     expect(primary).not.toBeNull();
     expect(primary!.id).toBe('mark-done');
-    expect(primary!.label).toBe('Send to Complete');
+    expect(primary!.label).toBe('Merge into Develop');
     expect(primary!.intent).toEqual({ kind: 'move', targetState: '6-completed' });
   });
 
@@ -56,7 +56,7 @@ describe('overflowActionsFor — Move to Completed / Move to Archive', () => {
   });
 
   it('skips Move to Completed when the lane already routes to 6-completed', () => {
-    // 5-human-review's primary "Send to Complete" targets 6-completed, so the
+    // 5-human-review's primary "Merge into Develop" targets 6-completed, so the
     // overflow must not add a duplicate. Move to Archive is still offered.
     const ids = overflowIds('5-human-review');
     expect(ids).not.toContain('move-to-completed');

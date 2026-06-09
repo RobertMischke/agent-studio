@@ -570,7 +570,7 @@ export class App implements OnInit, OnDestroy {
       { state: TaskState.AutoReview, title: 'Post Processing', icon: '🤖', jobs: grouped.autoReview },
       { state: TaskState.HumanReview, title: 'Review', icon: '👁️', jobs: grouped.humanReview },
       { state: TaskState.Escalated, title: 'Escalated', icon: '⚠️', jobs: grouped.escalated ?? [] },
-      { state: TaskState.Completed, title: 'Completed', icon: '🟢', jobs: grouped.completed },
+      { state: TaskState.Completed, title: 'Delivered', icon: '🟢', jobs: grouped.completed },
       { state: TaskState.Archive, title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
     );
     return lanes;
@@ -675,7 +675,7 @@ export class App implements OnInit, OnDestroy {
           // completed and archive in the user-owned tail.
           { state: TaskState.HumanReview, title: 'Review', icon: '👁️', jobs: grouped.humanReview },
           { state: TaskState.Escalated, title: 'Escalated', icon: '⚠️', jobs: grouped.escalated ?? [] },
-          { state: TaskState.Completed, title: 'Completed', icon: '🟢', jobs: grouped.completed },
+          { state: TaskState.Completed, title: 'Delivered', icon: '🟢', jobs: grouped.completed },
           { state: TaskState.Archive, title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
         ],
       },
@@ -727,7 +727,7 @@ export class App implements OnInit, OnDestroy {
     { state: TaskState.Ready,         label: 'Ready' },
     { state: TaskState.HumanReview,   label: 'Review' },
     { state: TaskState.Escalated,     label: 'Escalated' },
-    { state: TaskState.Completed,     label: 'Completed' },
+    { state: TaskState.Completed,     label: 'Delivered' },
     { state: TaskState.Archive,       label: 'Archive' },
   ];
 

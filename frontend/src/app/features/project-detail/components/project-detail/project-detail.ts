@@ -357,7 +357,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       { state: TaskState.AutoReview, label: 'Post Processing', count: c(grouped.autoReview ?? grouped.review) },
       { state: TaskState.HumanReview, label: 'Review',      count: c(grouped.humanReview ?? []) },
       { state: TaskState.Escalated,   label: 'Escalated',  count: c(grouped.escalated ?? []) },
-      { state: TaskState.Completed,   label: 'Completed',   count: c(grouped.completed) },
+      { state: TaskState.Completed,   label: 'Delivered',   count: c(grouped.completed) },
       { state: TaskState.Archive,     label: 'Archive',     count: c(grouped.archive) }
     ];
   });
@@ -377,7 +377,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       ['Post Processing', grouped.autoReview ?? grouped.review],
       ['Review', grouped.humanReview ?? []],
       ['Escalated', grouped.escalated ?? []],
-      ['Completed', grouped.completed],
+      ['Delivered', grouped.completed],
       ['Archive', grouped.archive],
     ];
     return lanes.find(([, jobs]) => jobs.some(j => j.id === activeId))?.[0] ?? null;

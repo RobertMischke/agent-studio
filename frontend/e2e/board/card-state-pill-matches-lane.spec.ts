@@ -78,7 +78,7 @@ const COMPLETED_TASK = makeTask('pill-lane-D-done', '6-completed', 'Pill lane co
 const NON_PROGRESS = [
   { task: AUTO_REVIEW_TASK, stateLabel: 'Post Processing' },
   { task: HUMAN_REVIEW_TASK, stateLabel: 'human review' },
-  { task: COMPLETED_TASK, stateLabel: 'completed' },
+  { task: COMPLETED_TASK, stateLabel: 'Delivered' },
 ];
 
 const GROUPED_PAYLOAD = {

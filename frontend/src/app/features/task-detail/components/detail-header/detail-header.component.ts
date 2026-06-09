@@ -127,7 +127,7 @@ export class DetailHeaderComponent {
     { state: TaskState.Ready,         label: 'Ready' },
     { state: TaskState.HumanReview,   label: 'Review' },
     { state: TaskState.Escalated,     label: 'Escalated' },
-    { state: TaskState.Completed,     label: 'Completed' },
+    { state: TaskState.Completed,     label: 'Delivered' },
     { state: TaskState.Archive,       label: 'Archive' },
   ];
 

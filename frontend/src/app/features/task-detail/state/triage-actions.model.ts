@@ -44,11 +44,11 @@ const PROMOTE_TO_READY_SKIP_PREP: TriageButton = { id: 'promote-ready-skip', lab
 const FORCE_TO_READY: TriageButton           = { id: 'force-to-ready',     label: 'Force to Ready',                   variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Ready } };
 const SEND_TO_BACKLOG: TriageButton          = { id: 'send-to-backlog',    label: 'Send to Backlog',                  variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Backlog } };
 const SEND_TO_PREP: TriageButton             = { id: 'send-to-prep',       label: 'Send to Preparation',              variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Preparation } };
-// "Move toward Completed / Archive" mirror "Send to Backlog": plain move
+// "Move toward Delivered / Archive" mirror "Send to Backlog": plain move
 // actions surfaced in the overflow menu from (almost) every lane so the
 // operator can park a card in 6-completed / 7-archive without opening the
 // lane dropdown. overflowActionsFor() handles dedup + current-lane skip.
-export const MOVE_TO_COMPLETED: TriageButton = { id: 'move-to-completed',   label: 'Move to Completed',                variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Completed } };
+export const MOVE_TO_COMPLETED: TriageButton = { id: 'move-to-completed',   label: 'Move to Delivered',                variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Completed } };
 export const MOVE_TO_ARCHIVE: TriageButton   = { id: 'move-to-archive',     label: 'Move to Archive',                  variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Archive } };
 export const EDIT_BUTTON: TriageButton       = { id: 'edit-prompt',        label: 'Edit prompt',                      variant: 'secondary', intent: { kind: 'editPrompt' } };
 export const DELETE_BUTTON: TriageButton     = { id: 'delete',             label: 'Delete task',                      variant: 'danger',    intent: { kind: 'delete' } };
@@ -100,7 +100,10 @@ export const LANE_ACTIONS: Record<string, TriageButton[]> = {
     { id: 'reissue',      label: 'Reissue (→ Progress)',          variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Progress } },
   ],
   [TaskState.HumanReview]: [
-    { id: 'mark-done',          label: 'Send to Complete',                          variant: 'primary',   intent: { kind: 'move', targetState: TaskState.Completed } },
+    // "Merge into Develop" is the operator acceptance signal: it accepts the
+    // task into 6-completed (the "Delivered" lane), which is the trigger the
+    // deferred Merge-into-Develop post-step hooks into.
+    { id: 'mark-done',          label: 'Merge into Develop',                        variant: 'primary',   intent: { kind: 'move', targetState: TaskState.Completed } },
     { id: 'send-back-to-ready', label: 'Send back to Ready (re-do)',                variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Ready } },
     SEND_TO_BACKLOG,
   ],
@@ -133,7 +136,7 @@ export const LANE_LABELS: Record<string, string> = {
   [TaskState.AutoReview]:       'Post Processing',
   [TaskState.HumanReview]:      'Review',
   [TaskState.Escalated]:        'Escalated',
-  [TaskState.Completed]:        'Completed',
+  [TaskState.Completed]:        'Delivered',
   [TaskState.Archive]:          'Archive',
 };
 
@@ -185,10 +188,10 @@ export function overflowActionsFor(state: string): TriageButton[] {
   const body = rest.filter(b => !isTail(b));
   const tail = rest.filter(isTail);
 
-  // "Move to Completed" / "Move to Archive" are guaranteed move actions,
+  // "Move to Delivered" / "Move to Archive" are guaranteed move actions,
   // added before the Edit/Delete cluster. Skip the target that equals the
   // current lane (a no-op) and any target a lane-specific action already
-  // covers, so e.g. 5-human-review's "Send to Complete" primary or
+  // covers, so e.g. 5-human-review's "Merge into Develop" primary or
   // 6-completed's "Archive" primary is not duplicated.
   const laneTargets = new Set(
     list

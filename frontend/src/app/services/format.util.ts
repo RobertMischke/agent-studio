@@ -40,6 +40,7 @@ export function formatResetIn(epochSeconds: number, now: number): string {
 
 export function stateLabel(state: string): string {
   if (state === TaskState.AutoReview) return 'Post Processing';
+  if (state === TaskState.Completed) return 'Delivered';
   return state.replace(/^\d+-/, '');
 }
 

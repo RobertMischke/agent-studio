@@ -110,7 +110,7 @@ async function openJobInDetail(page: Page, id: string, watchPath: string) {
  * studio slim tab-bar header); the spec resolves the user-visible one.
  */
 test.describe('Triage actions in detail header', () => {
-  test('primary "Send to Complete" lives top-right and moves the job out of the lane', async ({ page }) => {
+  test('primary "Merge into Develop" lives top-right and moves the job out of the lane', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const jobs = await plantHumanReviewJobs(wp, 1);
     try {

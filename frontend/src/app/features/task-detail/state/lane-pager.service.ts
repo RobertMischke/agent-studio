@@ -41,7 +41,7 @@ export const LANE_LABELS: Record<string, string> = {
   [TaskState.AutoReview]:       'Post Processing',
   [TaskState.HumanReview]:      'Review',
   [TaskState.Escalated]:        'Escalated',
-  [TaskState.Completed]:        'Completed',
+  [TaskState.Completed]:        'Delivered',
   [TaskState.Archive]:          'Archive',
 };
 
