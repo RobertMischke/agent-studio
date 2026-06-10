@@ -3,14 +3,10 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Registry;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Acceptance contract for the batch-move endpoint. The 2026-05-08 manual

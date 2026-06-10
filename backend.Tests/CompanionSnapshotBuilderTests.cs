@@ -1,8 +1,8 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Companion;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the snapshot fold the companion HostedService pushes to the relay.

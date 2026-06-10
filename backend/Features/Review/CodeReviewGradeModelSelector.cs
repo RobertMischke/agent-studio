@@ -1,12 +1,11 @@
-using OrchestratorApi.Services.Cli;
 
-namespace OrchestratorApi.Services.Review;
+namespace AgentStudio.Review;
 
 /// <summary>
 /// Resolves the model and CLI the automatic quality-grade code-review step
 /// (ASS-1657) runs with. The grade pass is deliberately quality-first: it
 /// defaults to Claude Opus 4.8 even though the four cheap aspect reviews stay
-/// on Haiku (<see cref="OrchestratorApi.Services.Runner.OrchestratorRunner.DefaultModel"/>).
+/// on Haiku (<see cref="AgentStudio.Runner.OrchestratorRunner.DefaultModel"/>).
 /// That asymmetry is the whole point — it resolves the ASS-855 (pulled the
 /// review onto Haiku for cost) vs ASS-916 (wanted it back on Opus) tension:
 /// the cheap aspect verdicts keep running on Haiku, but the operator-facing

@@ -1,10 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Configuration;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Tokens;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Projects;
 
 /// <summary>
 /// Body for <c>POST /api/watch-paths</c>. Only the display name is

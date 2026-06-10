@@ -1,7 +1,6 @@
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// One commit considered for attribution to a task. Carries everything the

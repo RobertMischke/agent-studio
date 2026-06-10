@@ -1,7 +1,7 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 
-namespace OrchestratorApi.Services.ProjectChat;
+namespace AgentStudio.ProjectChat;
 
 /// <summary>
 /// Per-project SQLite FTS5 index over the chat markdown corpus. The DB

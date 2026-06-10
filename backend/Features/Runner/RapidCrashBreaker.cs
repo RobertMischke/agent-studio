@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Pure decision library for the per-task rapid-crash governor — the missing

@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Pure text helpers behind "promote a finished planning task to a coding

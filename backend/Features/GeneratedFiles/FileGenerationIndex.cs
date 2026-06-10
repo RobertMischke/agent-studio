@@ -1,9 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Pipeline;
 
-namespace OrchestratorApi.Services.GeneratedFiles;
+namespace AgentStudio.GeneratedFiles;
 
 /// <summary>
 /// Per-job sidecar for generated Markdown provenance. Producers upsert the

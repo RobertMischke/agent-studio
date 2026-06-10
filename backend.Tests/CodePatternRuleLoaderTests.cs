@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Drift;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the contract for the docs/code-patterns.md loader: well-formed

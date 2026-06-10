@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Per-job state for the auto-mode "stuck loop" - the user's auto run

@@ -1,8 +1,8 @@
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Cli.Adapters;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the Claude stream-json -> CliRunEvent mapping. Each fixture

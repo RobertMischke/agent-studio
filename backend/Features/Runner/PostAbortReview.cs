@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// What the post-abort review (the "Abbruch-Review" LLM step) recommends

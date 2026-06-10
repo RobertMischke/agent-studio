@@ -1,6 +1,5 @@
-using OrchestratorApi.Services.Diagnostics;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Diagnostics;
 
 /// <summary>
 /// Read-only diagnostics surface that exposes operator-facing artefacts

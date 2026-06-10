@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.TaskAccess;
+namespace AgentStudio.TaskAccess;
 
 /// <summary>
 /// Optimistic-concurrency token for one indexed job. A monotonic

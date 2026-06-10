@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Hubs;
+namespace AgentStudio.Host;
 
 /// <summary>
 /// Bridges the in-process <see cref="TaskChangeNotifier"/> (and the

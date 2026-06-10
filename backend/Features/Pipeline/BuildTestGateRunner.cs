@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace OrchestratorApi.Services.Pipeline;
+namespace AgentStudio.Pipeline;
 
 public enum BuildTestGateVerdict
 {

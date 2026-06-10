@@ -2,7 +2,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Porta.Pty;
 
-namespace OrchestratorApi.Services.Pty;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Thin async wrapper around <see cref="IPtyConnection"/> tailored for driving

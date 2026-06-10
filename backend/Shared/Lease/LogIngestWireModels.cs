@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Wire contract for the Runner → Server log-ingestion API (Step 6). A remote

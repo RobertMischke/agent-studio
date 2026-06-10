@@ -1,8 +1,8 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the run-status -> CORE pipeline step status mapping.

@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Pure mapping from a terminal CLI run status to the CORE

@@ -30,4 +30,47 @@
     </ProjectReference>
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Namespace alignment: feature namespaces visible test-wide (plain
+         using OrchestratorApi.* lines were removed by the sweep). -->
+    <Using Include="Microsoft.Extensions.Logging" />
+    <Using Include="Microsoft.Extensions.Configuration" />
+    <Using Include="AgentStudio.AdHoc" />
+    <Using Include="AgentStudio.Admin" />
+    <Using Include="AgentStudio.Analysis" />
+    <Using Include="AgentStudio.Bus" />
+    <Using Include="AgentStudio.Cli" />
+    <Using Include="AgentStudio.Clients" />
+    <Using Include="AgentStudio.Companion" />
+    <Using Include="AgentStudio.Configuration" />
+    <Using Include="AgentStudio.Conversation" />
+    <Using Include="AgentStudio.Design" />
+    <Using Include="AgentStudio.Diagnostics" />
+    <Using Include="AgentStudio.Docs" />
+    <Using Include="AgentStudio.Drift" />
+    <Using Include="AgentStudio.GeneratedFiles" />
+    <Using Include="AgentStudio.Git" />
+    <Using Include="AgentStudio.Host" />
+    <Using Include="AgentStudio.Persistence" />
+    <Using Include="AgentStudio.Pipeline" />
+    <Using Include="AgentStudio.ProjectChat" />
+    <Using Include="AgentStudio.Projection" />
+    <Using Include="AgentStudio.Projects" />
+    <Using Include="AgentStudio.Prompts" />
+    <Using Include="AgentStudio.Registry" />
+    <Using Include="AgentStudio.RegressionRadar" />
+    <Using Include="AgentStudio.Review" />
+    <Using Include="AgentStudio.Runner" />
+    <Using Include="AgentStudio.Runtime" />
+    <Using Include="AgentStudio.Security" />
+    <Using Include="AgentStudio.Shared" />
+    <Using Include="AgentStudio.State" />
+    <Using Include="AgentStudio.Supervisor" />
+    <Using Include="AgentStudio.Tags" />
+    <Using Include="AgentStudio.TaskAccess" />
+    <Using Include="AgentStudio.Tasks" />
+    <Using Include="AgentStudio.Tests" />
+    <Using Include="AgentStudio.Tokens" />
+  </ItemGroup>
+
 </Project>

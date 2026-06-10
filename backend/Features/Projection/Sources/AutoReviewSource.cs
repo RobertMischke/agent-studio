@@ -1,8 +1,6 @@
 using System.Globalization;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Markdown;
 
-namespace OrchestratorApi.Services.Projection.Sources;
+namespace AgentStudio.Projection;
 
 /// <summary>
 /// Projects per-aspect verdict files (<c>aspect-*.md</c>) into structured

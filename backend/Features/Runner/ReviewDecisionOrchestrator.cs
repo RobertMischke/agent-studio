@@ -1,13 +1,8 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Pipeline;
-using OrchestratorApi.Services.RegressionRadar;
-using OrchestratorApi.Services.TaskAccess;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Background loop that reads the <c>4-auto-review</c> lane (ADR-0025) and
@@ -74,7 +69,7 @@ namespace OrchestratorApi.Services.Runner;
 /// <para>
 /// Off by default. Enable via <c>ReviewDecisionOrchestrator:Enabled = true</c>.
 /// Rate-limit reuses the same shape as
-/// <see cref="OrchestratorApi.Services.Supervisor.SoftReasoningHostedService"/>
+/// <see cref="AgentStudio.Supervisor.SoftReasoningHostedService"/>
 /// (calls per hour, default 30).
 /// </para>
 /// </summary>
@@ -136,8 +131,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     public Func<string, string, string, TimeSpan, CancellationToken, Task<string>> CliRunner { get; set; }
         = DefaultRunCliAsync;
 
-    private readonly OrchestratorApi.Services.AdHoc.AdHocUsageRecorder? _usage;
-    private readonly OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? _oneShotRegistry;
+    private readonly AgentStudio.AdHoc.AdHocUsageRecorder? _usage;
+    private readonly AgentStudio.Cli.CliOneShotRegistry? _oneShotRegistry;
     private readonly PipelineExecutionLog? _pipelineLog;
     private readonly ILintScssRunner? _lintScssRunner;
     private readonly IBuildTestGateRunner? _buildTestGateRunner;
@@ -159,7 +154,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     // The automatic code-review quality-grade step (ASS-1657). Optional so the
     // many stand-alone test constructors that wire the orchestrator without it
     // keep compiling; production DI always supplies the registered singleton.
-    private readonly OrchestratorApi.Services.Review.CodeReviewStepService? _codeReviewStep;
+    private readonly AgentStudio.Review.CodeReviewStepService? _codeReviewStep;
     // The system-escalation funnel. Used here only for the boot-time repair of
     // legacy 5-human-review cards that carry no verdict (RecordVerdictAndStatus,
     // no move). Optional so test fixtures that do not exercise the backfill keep
@@ -186,8 +181,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         AutoReviewStatusSnapshot statusSnapshot,
         IConfiguration configuration,
         ILogger<ReviewDecisionOrchestrator> logger,
-        OrchestratorApi.Services.AdHoc.AdHocUsageRecorder? usage = null,
-        OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? oneShotRegistry = null,
+        AgentStudio.AdHoc.AdHocUsageRecorder? usage = null,
+        AgentStudio.Cli.CliOneShotRegistry? oneShotRegistry = null,
         TaskSessionLog? sessions = null,
         GitService? git = null,
         PipelineExecutionLog? pipelineLog = null,
@@ -200,7 +195,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         HumanReviewEscalation? humanReviewEscalation = null,
         RegressionRadarService? regressionRadar = null,
         WorkspaceArtifactCommitService? workspaceArtifactCommits = null,
-        OrchestratorApi.Services.Review.CodeReviewStepService? codeReviewStep = null)
+        AgentStudio.Review.CodeReviewStepService? codeReviewStep = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -250,13 +245,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var oneShot = _oneShotRegistry?.Get("claude");
         if (oneShot == null) return await DefaultRunCliAsync(cli, model, prompt, timeout, ct);
 
-        var result = await oneShot.RunAsync(new OrchestratorApi.Services.Cli.OneShot.CliOneShotRequest(
+        var result = await oneShot.RunAsync(new AgentStudio.Cli.CliOneShotRequest(
             CliType: "claude",
             Model: model,
             Prompt: prompt)
         {
             Timeout = timeout,
-            Source = OrchestratorApi.Models.AdHocUsageSources.ReviewDecision,
+            Source = AgentStudio.Shared.AdHocUsageSources.ReviewDecision,
             RecordUsage = false,
         }, ct);
 
@@ -824,13 +819,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string response = string.Empty;
         try
         {
-            var sw = OrchestratorApi.Services.AdHoc.AdHocClaudeInvoker.StartTiming();
+            var sw = AgentStudio.AdHoc.AdHocClaudeInvoker.StartTiming();
             var rawResponse = await CliRunner(cliBinary, model, prompt, TimeSpan.FromSeconds(120), ct);
             sw.Stop();
-            var (parsedText, callUsage) = OrchestratorApi.Services.AdHoc.AdHocClaudeInvoker.ParseOrFallback(rawResponse, model);
-            OrchestratorApi.Services.AdHoc.AdHocClaudeInvoker.Record(
+            var (parsedText, callUsage) = AgentStudio.AdHoc.AdHocClaudeInvoker.ParseOrFallback(rawResponse, model);
+            AgentStudio.AdHoc.AdHocClaudeInvoker.Record(
                 _usage,
-                OrchestratorApi.Models.AdHocUsageSources.ReviewDecision,
+                AgentStudio.Shared.AdHocUsageSources.ReviewDecision,
                 model,
                 callUsage,
                 sw.ElapsedMilliseconds,
@@ -1065,13 +1060,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var prompt = BuildNoCompletionSignalPrompt(entry, pending, workspace);
             try
             {
-                var sw = OrchestratorApi.Services.AdHoc.AdHocClaudeInvoker.StartTiming();
+                var sw = AgentStudio.AdHoc.AdHocClaudeInvoker.StartTiming();
                 var rawResponse = await CliRunner(cliBinary, model, prompt, TimeSpan.FromSeconds(120), ct);
                 sw.Stop();
-                var (response, callUsage) = OrchestratorApi.Services.AdHoc.AdHocClaudeInvoker.ParseOrFallback(rawResponse, model);
-                OrchestratorApi.Services.AdHoc.AdHocClaudeInvoker.Record(
+                var (response, callUsage) = AgentStudio.AdHoc.AdHocClaudeInvoker.ParseOrFallback(rawResponse, model);
+                AgentStudio.AdHoc.AdHocClaudeInvoker.Record(
                     _usage,
-                    OrchestratorApi.Models.AdHocUsageSources.ReviewDecision,
+                    AgentStudio.Shared.AdHocUsageSources.ReviewDecision,
                     model,
                     callUsage,
                     sw.ElapsedMilliseconds,
@@ -2740,13 +2735,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // Quality over cost: the grade pass defaults to Opus 4.8 even though
             // the four cheap aspect reviews stay on Haiku. Configurable so a
             // deployment can dial the grade model without touching the aspects.
-            var (model, cli) = OrchestratorApi.Services.Review.CodeReviewGradeModelSelector.Resolve(
+            var (model, cli) = AgentStudio.Review.CodeReviewGradeModelSelector.Resolve(
                 _configuration["CodeReviewStep:DefaultModel"],
                 _configuration["CodeReviewStep:DefaultCli"]);
 
             var (diff, commitLabel) = BuildGradeDiff(entry.Name, entry.Path, job);
 
-            var request = new OrchestratorApi.Services.Review.CodeReviewStepRequest(
+            var request = new AgentStudio.Review.CodeReviewStepRequest(
                 Project: entry.Name,
                 JobId: job.Id,
                 JobTitle: job.Title ?? job.Id,
@@ -2756,7 +2751,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 CliType: cli!,
                 Model: model!)
             {
-                Mode = OrchestratorApi.Services.Review.CodeReviewMode.Grade,
+                Mode = AgentStudio.Review.CodeReviewMode.Grade,
                 Commit = commitLabel,
             };
 
@@ -2764,10 +2759,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
             var gradeToken = report.Grade is null
                 ? "?"
-                : OrchestratorApi.Services.Review.CodeReviewGradeParsing.GradeToken(report.Grade.Value);
+                : AgentStudio.Review.CodeReviewGradeParsing.GradeToken(report.Grade.Value);
             // A grade is reporting evidence, never a lane gate: a D records as a
             // Failed row so it stands out in the Overview; A-C record Passed.
-            var status = report.Grade == OrchestratorApi.Services.Review.CodeReviewGrade.D
+            var status = report.Grade == AgentStudio.Review.CodeReviewGrade.D
                 ? PipelineStepStatus.Failed
                 : PipelineStepStatus.Passed;
 
@@ -2845,15 +2840,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     .ToList();
             }
 
-            var scope = OrchestratorApi.Services.Review.CodeReviewScopeResolver.Resolve(
+            var scope = AgentStudio.Review.CodeReviewScopeResolver.Resolve(
                 overrideCommit: null, taskShas, _git.GetHeadSha(job.Id, watchPath));
 
             var diff = scope.Mode switch
             {
-                OrchestratorApi.Services.Review.CodeReviewScopeMode.WorkingTree =>
+                AgentStudio.Review.CodeReviewScopeMode.WorkingTree =>
                     "(no commit resolved; reviewing working-tree diff)\n\n" +
                     _git.GetDiff(job.Id, watchPath, path: null),
-                OrchestratorApi.Services.Review.CodeReviewScopeMode.AggregateCommits =>
+                AgentStudio.Review.CodeReviewScopeMode.AggregateCommits =>
                     _git.GetAggregateCommitDiff(job.Id, watchPath, scope.Shas, path: null),
                 _ => _git.GetCommitDiff(job.Id, watchPath, scope.Shas[0], path: null),
             };
@@ -4608,7 +4603,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     /// <summary>
     /// Legacy fallback for tests that construct the orchestrator without
-    /// a <see cref="OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry"/>.
+    /// a <see cref="AgentStudio.Cli.CliOneShotRegistry"/>.
     /// Stdin-piped — replaces the previous <c>-p &lt;prompt&gt;</c> argv path
     /// that caused the 2026-05-11 empty-reply incident on Windows.
     /// </summary>

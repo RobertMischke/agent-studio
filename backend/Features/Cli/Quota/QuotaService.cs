@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Quota;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Orchestrates the per-CLI <see cref="IQuotaProbe"/> instances:

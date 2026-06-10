@@ -1,6 +1,6 @@
 using System.Collections.Immutable;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Canonical recognizer for OS-level / sandbox-level blockers in raw CLI

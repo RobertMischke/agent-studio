@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli;
 
-namespace OrchestratorApi.Services.Runner;
+
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Recognises the Codex "silent completion" hang shape: a successful

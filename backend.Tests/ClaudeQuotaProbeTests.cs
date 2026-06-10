@@ -1,9 +1,8 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Quota;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public class ClaudeQuotaProbeTests
 {

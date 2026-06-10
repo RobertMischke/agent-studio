@@ -1,9 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Drift;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Supervisor;
 
-namespace OrchestratorApi.Services.Pipeline;
+
+namespace AgentStudio.Pipeline;
 
 /// <summary>
 /// Maps a catalogue <see cref="PipelineStep"/> to the runtime-default model its

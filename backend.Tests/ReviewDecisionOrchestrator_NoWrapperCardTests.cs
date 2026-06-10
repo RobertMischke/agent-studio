@@ -1,14 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Registry;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// ADR-0049 acceptance test: when the orchestrator cannot decide a
@@ -113,9 +108,9 @@ public class ReviewDecisionOrchestrator_NoWrapperCardTests : IDisposable
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var transitions = new TaskTransitionService(scanner, stateMachine, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
-        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+        var taskAccess = new AgentStudio.TaskAccess.TaskAccessService(
             scanner, mutations, stateMachine, transitions, indexCache,
-            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
+            NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
         var orchestrator = new ReviewDecisionOrchestrator(
             scanner, stateMachine, taskAccess, chatLog, prompts, aspectRunner, statusSnapshot, config,
             NullLogger<ReviewDecisionOrchestrator>.Instance,

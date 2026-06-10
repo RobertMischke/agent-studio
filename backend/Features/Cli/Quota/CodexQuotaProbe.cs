@@ -1,10 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Pty;
 
-namespace OrchestratorApi.Services.Quota;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Probes OpenAI's <c>codex</c> CLI for plan + 5h/weekly quota via the

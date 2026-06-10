@@ -1,8 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Companion;
+namespace AgentStudio.Companion;
 
 /// <summary>
 /// Translates one relay command into the matching in-process service call.

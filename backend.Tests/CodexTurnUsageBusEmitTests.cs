@@ -1,11 +1,10 @@
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the Codex streaming -&gt; agent message bus contract for per-turn

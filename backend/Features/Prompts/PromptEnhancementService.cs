@@ -1,11 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.AdHoc;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Cli.OneShot;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Prompts;
 
 /// <summary>
 /// One-shot prompt enhancer for the "Enhance" button on the Create-task

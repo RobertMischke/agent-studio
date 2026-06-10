@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runtime;
+namespace AgentStudio.Runtime;
 
 /// <summary>
 /// Validates <see cref="ProductRuntimeEvent"/> instances against the value

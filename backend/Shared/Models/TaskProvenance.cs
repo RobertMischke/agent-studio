@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Append-only commit-provenance record for one task (ASS-1724, epic ASS-1720).

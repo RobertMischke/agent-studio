@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.TaskAccess;
+namespace AgentStudio.TaskAccess;
 
 /// <summary>
 /// Single point of access for every read, list, mutation, transition,
@@ -12,8 +11,8 @@ namespace OrchestratorApi.Services.TaskAccess;
 /// <remarks>
 /// <para>
 /// Hard rule: no service, hosted service, endpoint, or test outside
-/// <see cref="OrchestratorApi.Services.TaskAccess"/> or
-/// <see cref="OrchestratorApi.Services.Tasks"/> may read or write the
+/// <see cref="AgentStudio.TaskAccess"/> or
+/// <see cref="AgentStudio.Tasks"/> may read or write the
 /// on-disk job folders. Outside callers go through this interface.
 /// </para>
 /// <para>
@@ -110,7 +109,7 @@ public interface ITaskAccess
     /// <c>task.json</c>) to <c>3a-failed-pickup</c> under
     /// <paramref name="destinationSlug"/>, optionally writing a
     /// <c>failed-pickup-reason.md</c> placard alongside it. The move
-    /// goes through <see cref="OrchestratorApi.Services.Tasks.TaskStateMachine"/>
+    /// goes through <see cref="AgentStudio.Tasks.TaskStateMachine"/>
     /// inside the layer.
     /// </summary>
     TaskMutationResult MoveOrphanToFailedPickup(
@@ -127,7 +126,7 @@ public interface ITaskAccess
     /// failed-pickup-elimination doctrine: a folder that is not a runnable
     /// task is cleaned up with its evidence intact, never parked in a
     /// failure lane. The move goes through
-    /// <see cref="OrchestratorApi.Services.Tasks.TaskStateMachine"/> inside
+    /// <see cref="AgentStudio.Tasks.TaskStateMachine"/> inside
     /// the layer.
     /// </summary>
     TaskMutationResult ArchiveOrphanFolder(

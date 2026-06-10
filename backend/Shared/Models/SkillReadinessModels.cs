@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// DTOs for the skill readiness check + skill catalog returned from

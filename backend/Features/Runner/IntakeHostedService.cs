@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Runner;
+
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Background loop that runs the orchestrator intake check on every

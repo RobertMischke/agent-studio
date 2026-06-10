@@ -1,7 +1,7 @@
 using Ganss.Xss;
 using Markdig;
 
-namespace OrchestratorApi.Services.Projection;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Renders markdown to safe HTML. The contract is intentionally narrow so

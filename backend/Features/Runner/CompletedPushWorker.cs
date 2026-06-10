@@ -1,7 +1,6 @@
 using System.Diagnostics;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Drains <see cref="CompletedPushQueue"/> and performs the completed-job

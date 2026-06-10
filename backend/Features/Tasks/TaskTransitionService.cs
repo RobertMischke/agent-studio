@@ -1,8 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Tasks;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Application-owned job state transitions that need side effects around the
@@ -19,8 +17,8 @@ public sealed class TaskTransitionService
     private readonly ILogger<TaskTransitionService> _logger;
     private readonly TaskSessionLog? _sessions;
     private readonly CompletedPushQueue? _pushQueue;
-    private readonly OrchestratorApi.Services.Drift.DriftPostStepRunner? _driftRunner;
-    private readonly OrchestratorApi.Services.Pipeline.MergeIntoDevelopRunner? _mergeRunner;
+    private readonly AgentStudio.Drift.DriftPostStepRunner? _driftRunner;
+    private readonly AgentStudio.Pipeline.MergeIntoDevelopRunner? _mergeRunner;
     private readonly CliRouter? _cliRouter;
     private readonly IAutoReviewPostProcessingQueue? _autoReviewQueue;
     private readonly TaskProvenanceService? _provenance;
@@ -46,10 +44,10 @@ public sealed class TaskTransitionService
         ILogger<TaskTransitionService> logger,
         TaskSessionLog? sessions = null,
         CompletedPushQueue? pushQueue = null,
-        OrchestratorApi.Services.Drift.DriftPostStepRunner? driftRunner = null,
+        AgentStudio.Drift.DriftPostStepRunner? driftRunner = null,
         CliRouter? cliRouter = null,
         IAutoReviewPostProcessingQueue? autoReviewQueue = null,
-        OrchestratorApi.Services.Pipeline.MergeIntoDevelopRunner? mergeRunner = null,
+        AgentStudio.Pipeline.MergeIntoDevelopRunner? mergeRunner = null,
         TaskProvenanceService? provenance = null)
     {
         _scanner = scanner;
@@ -294,7 +292,7 @@ public sealed class TaskTransitionService
                 Project = info.ProjectName,
                 Outcome = PostProcessingOutcomes.FindingsAdded,
                 Performer = PostProcessingPerformers.Orchestrator,
-                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.GitCommitAttributionStepId,
+                StepId = AgentStudio.Pipeline.PipelineCatalogue.GitCommitAttributionStepId,
                 Summary = "Entered orchestrator post-processing after task execution.",
                 EvidenceRef = "lifecycle.json"
             }, _logger);
@@ -471,7 +469,7 @@ public sealed class TaskTransitionService
 
     /// <summary>
     /// Triggers the deferred "Merge into Develop" post-step
-    /// (<see cref="OrchestratorApi.Services.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId"/>)
+    /// (<see cref="AgentStudio.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId"/>)
     /// on task acceptance. The runner performs the real
     /// <c>task/&lt;id&gt; -&gt; develop</c> merge and records the outcome into the
     /// pipeline view; it self-guards and never throws, so a conflict is made

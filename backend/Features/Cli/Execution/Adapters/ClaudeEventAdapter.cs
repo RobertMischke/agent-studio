@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace OrchestratorApi.Services.Cli.Adapters;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Maps Claude Code's <c>--output-format stream-json --verbose</c>

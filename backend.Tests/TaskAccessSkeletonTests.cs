@@ -1,8 +1,8 @@
 using System.Reflection;
-using OrchestratorApi.Services.TaskAccess;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Phase 1 contract pin for the Task Access Layer (ADR-0024). The

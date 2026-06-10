@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace OrchestratorApi.Services.ProjectChat;
+namespace AgentStudio.ProjectChat;
 
 /// <summary>
 /// One per-turn markdown document on disk. <c>Body</c> is verbatim

@@ -1,8 +1,6 @@
 using System.Diagnostics;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.AdHoc;
+namespace AgentStudio.AdHoc;
 
 /// <summary>
 /// Static helper that bundles the two pieces every ad-hoc Haiku call

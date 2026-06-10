@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 
-namespace OrchestratorApi.Services.Persistence;
+namespace AgentStudio.Persistence;
 
 /// <summary>
 /// Single point of code for "append one line to a JSONL file" — the

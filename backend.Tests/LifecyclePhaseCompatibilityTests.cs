@@ -1,11 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Tasks;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Backwards-compatibility coverage for the optional <c>phase</c> field added

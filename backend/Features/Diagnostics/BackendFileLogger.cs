@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 
-namespace OrchestratorApi.Services.Diagnostics;
+namespace AgentStudio.Diagnostics;
 
 /// <summary>
 /// Knobs for the rolling backend file logger. Bound from the

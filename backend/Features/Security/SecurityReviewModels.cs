@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Security;
+namespace AgentStudio.Security;
 
 /// <summary>
 /// One row in the security review history. Slice 1 of the quality-system

@@ -1,9 +1,6 @@
 using System.Collections.Concurrent;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Pipeline;
+namespace AgentStudio.Pipeline;
 
 /// <summary>
 /// Project-level rollup of pipeline step cost over time: "how it develops"

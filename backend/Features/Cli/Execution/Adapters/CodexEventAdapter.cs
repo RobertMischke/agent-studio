@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace OrchestratorApi.Services.Cli.Adapters;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Maps Codex's <c>codex exec --json</c> JSONL output onto the typed
@@ -128,7 +128,7 @@ public static class CodexEventAdapter
     /// <c>ToolStarted</c>/<c>ToolCompleted</c> for a "reasoning" tool, which
     /// would both pollute <c>tool-calls.jsonl</c> and mis-advance the phase to
     /// <see cref="RunPhase.ToolExecuting"/>. The marker-line twin
-    /// (<see cref="Rendering.CodexOutputRenderer"/>) independently suppresses
+    /// (<see cref="CodexOutputRenderer"/>) independently suppresses
     /// reasoning from the visible Activity Log; this is the watchdog side.
     /// </summary>
     private static bool IsReasoningItem(JsonElement root)

@@ -1,10 +1,9 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pins the F45 restscope acceptance criterion "Lane-Wechsel = reine

@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tags;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Tags;
 
 /// <summary>
 /// Workspace-level tag registry routes under <c>/api/tags</c>. Tags are a

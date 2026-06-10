@@ -1,6 +1,5 @@
-using OrchestratorApi.Services;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Docs;
 
 /// <summary>
 /// Project-level docs surface (prototype): security archive +

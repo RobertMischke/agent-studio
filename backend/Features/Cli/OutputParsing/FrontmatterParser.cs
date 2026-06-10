@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace OrchestratorApi.Services.Markdown;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Single point of code for "extract the YAML frontmatter block from a

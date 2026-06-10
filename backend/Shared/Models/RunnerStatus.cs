@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 public record WatchPathEntry
 {
@@ -46,7 +46,7 @@ public record ProjectRunnerStatus
     public List<string> QueuedJobIds { get; init; } = [];
     /// <summary>
     /// Reason recorded the last time the runner mode changed. Mirrors the
-    /// <c>reason</c> argument to <see cref="OrchestratorApi.Services.Runner.ProjectRunner.SetMode"/>;
+    /// <c>reason</c> argument to <see cref="AgentStudio.Runner.ProjectRunner.SetMode"/>;
     /// surfaces so the board can distinguish operator-initiated
     /// <c>manual</c> / <c>paused</c> transitions ("api-toggle", "api: POST /api/runner/{project}/stop")
     /// from system-initiated ones ("auto-failure circuit-breaker", "capture-fail circuit-breaker",
@@ -124,7 +124,7 @@ public record ProjectRunnerStatus
     public int OccupiedSlots { get; init; }
     /// <summary>
     /// ADR-0052: the most recent pick-gate rationale
-    /// (<see cref="OrchestratorApi.Services.Runner.SlotAdmission.Reason"/>) the
+    /// (<see cref="AgentStudio.Runner.SlotAdmission.Reason"/>) the
     /// runner recorded when it admitted a task into a slot. Mirrors the
     /// <c>runner_slot_admission</c> timeline event so the UI can show "why this
     /// task was picked" without re-deriving it.

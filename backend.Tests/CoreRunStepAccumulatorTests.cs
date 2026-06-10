@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the cumulative-duration arithmetic for the CORE "Agent execution"

@@ -1,8 +1,7 @@
 using System.Linq;
 using Microsoft.Extensions.Configuration;
-using OrchestratorApi.Services.Cli;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Per-phase silence budgets. Different phases tolerate different silences:

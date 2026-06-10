@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pins the long-op recogniser that feeds the watchdog's widened silence

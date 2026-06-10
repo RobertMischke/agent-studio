@@ -1,9 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Endpoints.Tasks;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Claude-specific live telemetry routes — kept separate so the

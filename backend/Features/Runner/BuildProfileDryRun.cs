@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>The kind of a dry-run step, for the timeline label / logs.</summary>
 public enum DryRunStepKind

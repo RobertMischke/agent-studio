@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Design;
+namespace AgentStudio.Design;
 
 /// <summary>
 /// Top-row counts + status for the project UX/UI panel (slice 6 of the

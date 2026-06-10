@@ -1,18 +1,8 @@
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Registry;
-using OrchestratorApi.Services.Pty;
-using OrchestratorApi.Services.Quota;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Tests.PerfBaseline;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Shared fixture that materializes a synthetic workspace under tempdir and
@@ -120,9 +110,9 @@ internal sealed class PerfBaselineFixture : IDisposable
         var infraBreaker = new CrossSlugInfraCircuitBreaker(Config, NullLogger<CrossSlugInfraCircuitBreaker>.Instance, infraHaltLog);
         var indexCache = new TaskIndexCache(Scanner, NullLogger<TaskIndexCache>.Instance, Config);
         Scanner.SetIndexCache(indexCache);
-        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+        var taskAccess = new AgentStudio.TaskAccess.TaskAccessService(
             Scanner, mutations, States, transitions, indexCache,
-            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
+            NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
 
         Runners = new TaskRunnerService(
             Config, NullLogger<TaskRunnerService>.Instance, Scanner, States, mutations, sessions,

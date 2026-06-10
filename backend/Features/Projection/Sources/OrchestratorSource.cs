@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Projection.Sources;
+namespace AgentStudio.Projection;
 
 /// <summary>
 /// Per-job orchestrator chat history → typed events.

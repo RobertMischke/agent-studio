@@ -4,9 +4,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
-using OrchestratorApi.Services.Persistence;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Appends one row per over-budget reroute to <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c>.
@@ -111,7 +110,7 @@ public sealed class PickupFailureLog
     /// Disambiguating destination slug for the dead-letter move. Format:
     /// <c>&lt;original&gt;-pickup-failed-&lt;yyyy-mm-dd&gt;</c>, with a numeric
     /// suffix on collisions. ADR-0028: destination is
-    /// <see cref="OrchestratorApi.Models.TaskStates.FailedPickup"/>; the
+    /// <see cref="AgentStudio.Shared.TaskStates.FailedPickup"/>; the
     /// existence-check callback is parameterised so the runner can inject the
     /// FailedPickup-folder check. Pure helper so tests can pin the format.
     /// </summary>
@@ -205,12 +204,12 @@ public static class PickupFailureKinds
 
 /// <summary>
 /// One folder on disk under a project's <c>3-progress</c> lane, paired with
-/// its measured mtime and (when available) its parsed <see cref="OrchestratorApi.Models.TaskInfo"/>.
+/// its measured mtime and (when available) its parsed <see cref="AgentStudio.Shared.TaskInfo"/>.
 /// Used by the strict-iteration progress-first picker; the picker walks
 /// these oldest-first by <see cref="Mtime"/>.
 /// </summary>
 public sealed record ProgressPickupCandidate(
     string FolderPath,
     string Slug,
-    OrchestratorApi.Models.TaskInfo? Info,
+    AgentStudio.Shared.TaskInfo? Info,
     DateTime Mtime);

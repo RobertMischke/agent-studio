@@ -1,9 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Pipeline;
 
-namespace OrchestratorApi.Endpoints.Tasks;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Pipeline read surface for one job. Returns the static

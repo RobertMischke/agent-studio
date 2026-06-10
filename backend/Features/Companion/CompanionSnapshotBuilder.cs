@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Companion;
+namespace AgentStudio.Companion;
 
 /// <summary>
 /// Pure function that folds the inputs already served to the desktop UI

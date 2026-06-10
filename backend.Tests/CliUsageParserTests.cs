@@ -1,8 +1,8 @@
 using System.Text.Json;
-using OrchestratorApi.Services.Bus;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the parse contract for both CLIs: a representative <c>usage</c>

@@ -1,7 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Lane change for the flat storage layout (F45 restscope) expressed as a pure

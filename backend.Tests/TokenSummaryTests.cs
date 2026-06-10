@@ -1,8 +1,8 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the per-project rollup math: the orchestrator-log entries

@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Drift;
+namespace AgentStudio.Drift;
 
 /// <summary>
 /// In-code validator that mirrors the value sets and required-field rules in
@@ -9,7 +8,7 @@ namespace OrchestratorApi.Services.Drift;
 /// same rejection set. Strict at append time so new garbage cannot enter the
 /// projection; lenient on read so one bad legacy line never breaks the
 /// projection (lenience is implemented in
-/// <see cref="OrchestratorApi.Services.State.InMemoryStore{T}"/>).
+/// <see cref="AgentStudio.State.InMemoryStore{T}"/>).
 /// </summary>
 /// <remarks>
 /// The schema is the boundary; the C# enums are the in-memory shape. The

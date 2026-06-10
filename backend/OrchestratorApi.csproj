@@ -30,14 +30,47 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Global usings preserved from the now-consolidated AgentTaskboard.Runner
-         project (its source files relied on these as project-level usings). -->
+    <!-- Project-wide usings. Microsoft.Extensions.* were project-level usings of the
+         dissolved AgentTaskboard.Runner; the AgentStudio.* set makes every feature
+         namespace visible app-wide after the namespace alignment (folders are the
+         isolation unit; the boundary arch test enforces structure, not usings). -->
     <Using Include="Microsoft.Extensions.Logging" />
     <Using Include="Microsoft.Extensions.Configuration" />
-    <!-- SilentCatch is the project-wide standard for previously-silent catch
-         blocks; expose it globally so the broad catch sweep does not need a
-         per-file using. -->
-    <Using Include="OrchestratorApi.Diagnostics" />
+    <Using Include="AgentStudio.AdHoc" />
+    <Using Include="AgentStudio.Admin" />
+    <Using Include="AgentStudio.Analysis" />
+    <Using Include="AgentStudio.Bus" />
+    <Using Include="AgentStudio.Cli" />
+    <Using Include="AgentStudio.Clients" />
+    <Using Include="AgentStudio.Companion" />
+    <Using Include="AgentStudio.Configuration" />
+    <Using Include="AgentStudio.Conversation" />
+    <Using Include="AgentStudio.Design" />
+    <Using Include="AgentStudio.Diagnostics" />
+    <Using Include="AgentStudio.Docs" />
+    <Using Include="AgentStudio.Drift" />
+    <Using Include="AgentStudio.GeneratedFiles" />
+    <Using Include="AgentStudio.Git" />
+    <Using Include="AgentStudio.Host" />
+    <Using Include="AgentStudio.Persistence" />
+    <Using Include="AgentStudio.Pipeline" />
+    <Using Include="AgentStudio.ProjectChat" />
+    <Using Include="AgentStudio.Projection" />
+    <Using Include="AgentStudio.Projects" />
+    <Using Include="AgentStudio.Prompts" />
+    <Using Include="AgentStudio.Registry" />
+    <Using Include="AgentStudio.RegressionRadar" />
+    <Using Include="AgentStudio.Review" />
+    <Using Include="AgentStudio.Runner" />
+    <Using Include="AgentStudio.Runtime" />
+    <Using Include="AgentStudio.Security" />
+    <Using Include="AgentStudio.Shared" />
+    <Using Include="AgentStudio.State" />
+    <Using Include="AgentStudio.Supervisor" />
+    <Using Include="AgentStudio.Tags" />
+    <Using Include="AgentStudio.TaskAccess" />
+    <Using Include="AgentStudio.Tasks" />
+    <Using Include="AgentStudio.Tokens" />
   </ItemGroup>
 
   <ItemGroup>

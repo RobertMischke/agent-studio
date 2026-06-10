@@ -1,8 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Builds the per-job <see cref="TaskPlanView"/> the plan strip renders by

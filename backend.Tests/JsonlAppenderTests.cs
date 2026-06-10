@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Persistence;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the IJsonlAppender contract: parent directories are created on

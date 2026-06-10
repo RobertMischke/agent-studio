@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// F33: per-project monotonic counter that mints the numeric tail of a

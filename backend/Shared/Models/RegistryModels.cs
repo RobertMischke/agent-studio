@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// F45a — top-level grouping for projects on the kanban board. Workspaces
@@ -7,7 +7,7 @@ namespace OrchestratorApi.Models;
 /// to exactly one workspace via its <see cref="ProjectRecord.WorkspaceId"/>.
 ///
 /// <para>This record is the F45 successor to the old "workspace == folder"
-/// model embodied by <see cref="OrchestratorApi.Services.Configuration.WorkspaceManagementService"/>;
+/// model embodied by <see cref="AgentStudio.Configuration.WorkspaceManagementService"/>;
 /// the legacy service stays in place and continues to manage per-project
 /// folders until F45c migrates the consumers over.</para>
 /// </summary>

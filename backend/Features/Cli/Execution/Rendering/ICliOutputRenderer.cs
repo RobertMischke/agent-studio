@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Cli.Rendering;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Translates one raw CLI stdout/stderr line into zero or more human-readable

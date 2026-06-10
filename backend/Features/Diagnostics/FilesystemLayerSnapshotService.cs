@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Xml.Linq;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Diagnostics;
 
 public record FilesystemLayerSnapshot(
     string SchemaVersion,

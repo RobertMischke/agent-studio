@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Time.Testing;
-using OrchestratorApi.Services.Supervisor;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the pause-then-wait contract for the meta-cycle: after PausePickup

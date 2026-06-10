@@ -5,21 +5,10 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Endpoints.Tasks;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Registry;
-using OrchestratorApi.Services.Pty;
-using OrchestratorApi.Services.Quota;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Tokens;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Regression test for the multi-second lag the user hit on /api/tasks and
@@ -432,9 +421,9 @@ public class JobsEndpointPerfTests : IDisposable
         var infraBreaker = new CrossSlugInfraCircuitBreaker(config, NullLogger<CrossSlugInfraCircuitBreaker>.Instance, infraHaltLog);
         var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
         scanner.SetIndexCache(indexCache);
-        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+        var taskAccess = new AgentStudio.TaskAccess.TaskAccessService(
             scanner, mutations, states, transitions, indexCache,
-            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
+            NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
 
         var runners = new TaskRunnerService(
             config, NullLogger<TaskRunnerService>.Instance, scanner, states, mutations, sessions,
@@ -536,8 +525,8 @@ internal static class TaskEndpointHelpersAccessor
     {
         // Reflection over the internal helper. Keeps the production access
         // modifier honest while still letting the test call into it.
-        var t = typeof(OrchestratorApi.Endpoints.Tasks.TaskCrudEndpoints).Assembly
-            .GetType("OrchestratorApi.Endpoints.Tasks.TaskEndpointHelpers")!;
+        var t = typeof(AgentStudio.Tasks.TaskCrudEndpoints).Assembly
+            .GetType("AgentStudio.Tasks.TaskEndpointHelpers")!;
         var m = t.GetMethod("WithRuntime",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
             new[] { typeof(TaskInfo), typeof(CliRouter), typeof(TaskRunnerService) })!;
@@ -546,8 +535,8 @@ internal static class TaskEndpointHelpersAccessor
 
     public static Dictionary<string, TaskTokenSummary> BuildTokenLookup(IEnumerable<TaskInfo> jobs, ITokenAggregator tokens)
     {
-        var t = typeof(OrchestratorApi.Endpoints.Tasks.TaskCrudEndpoints).Assembly
-            .GetType("OrchestratorApi.Endpoints.Tasks.TaskEndpointHelpers")!;
+        var t = typeof(AgentStudio.Tasks.TaskCrudEndpoints).Assembly
+            .GetType("AgentStudio.Tasks.TaskEndpointHelpers")!;
         var m = t.GetMethod("BuildTokenLookup",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
             new[] { typeof(IEnumerable<TaskInfo>), typeof(ITokenAggregator) })!;

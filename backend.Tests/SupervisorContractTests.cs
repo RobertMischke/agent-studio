@@ -1,8 +1,8 @@
 using System.Text.Json;
-using OrchestratorApi.Services.Supervisor;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the supervisor contract: advisory and intervention records round-trip

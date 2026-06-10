@@ -1,9 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Tags;
+namespace AgentStudio.Tags;
 
 /// <summary>
 /// Workspace-level tag registry. Tags are a flat namespace shared across the

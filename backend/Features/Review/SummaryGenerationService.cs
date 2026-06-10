@@ -2,14 +2,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.AdHoc;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Cli.OneShot;
-using OrchestratorApi.Services.GeneratedFiles;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Review;
 
 /// <summary>
 /// Builds the post-run <c>status.md</c> protocol by handing the tail of the CLI

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace OrchestratorApi.Services.ProjectChat;
+namespace AgentStudio.ProjectChat;
 
 /// <summary>
 /// Read/write surface over the per-month markdown files described in

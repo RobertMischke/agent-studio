@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Lifecycle phase a CLI run is in. Drives the phase-aware watchdog

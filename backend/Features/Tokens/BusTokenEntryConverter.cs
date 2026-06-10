@@ -1,8 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Tokens;
+
+namespace AgentStudio.Tokens;
 
 /// <summary>
 /// Adapter that turns the Agent Message Bus's <c>kind=token-usage</c>

@@ -1,8 +1,6 @@
 using System.Text;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Registry;
 
-namespace OrchestratorApi.Services.Tasks.Audit;
+namespace AgentStudio.Tasks;
 
 public enum ReEvaluateStatus
 {

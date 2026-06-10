@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Supervisor;
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// Pure static helpers for turning a parsed <see cref="CliOutputLine"/> stream

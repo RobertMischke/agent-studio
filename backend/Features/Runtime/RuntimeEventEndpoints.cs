@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runtime;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Runtime;
 
 /// <summary>
 /// Read API for the project-screen Product Runtime Observability panel.

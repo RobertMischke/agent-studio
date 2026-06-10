@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the structure of the CLI skill files under <c>docs/cli-skills/</c>.

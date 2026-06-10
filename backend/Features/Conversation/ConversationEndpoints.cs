@@ -1,6 +1,5 @@
-using OrchestratorApi.Services.Projection;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Conversation;
 
 /// <summary>
 /// Routes for the F22 conversation projection (server-rendered chat events).

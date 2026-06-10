@@ -1,10 +1,7 @@
 using System.Text.Json;
 using System.Text;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Typed outcome produced by <see cref="IntakeRunner"/>. Maps 1:1 to the

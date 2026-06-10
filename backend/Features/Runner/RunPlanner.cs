@@ -1,8 +1,6 @@
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Why an upcoming CLI run was triggered. The planner uses this single

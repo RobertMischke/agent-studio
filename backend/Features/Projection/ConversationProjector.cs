@@ -1,11 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
-using OrchestratorApi.Hubs;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Projection;
+namespace AgentStudio.Projection;
 
 /// <summary>
 /// Coordinator. Asks each <see cref="IConversationEventSource"/> for raw

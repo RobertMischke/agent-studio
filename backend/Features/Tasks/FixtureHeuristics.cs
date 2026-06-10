@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Pure-function classifier for "is this job folder almost certainly a

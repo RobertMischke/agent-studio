@@ -1,6 +1,5 @@
-using OrchestratorApi.Services.Cli;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Periodic safety net for orphaned CLI process trees. The startup reaper

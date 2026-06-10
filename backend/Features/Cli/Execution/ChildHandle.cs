@@ -1,7 +1,6 @@
 using System.Diagnostics;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Abstraction over a spawned CLI child process so the runner does not care

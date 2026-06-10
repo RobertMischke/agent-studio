@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Review;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pins the scope-resolution rules behind the user-triggered code review.

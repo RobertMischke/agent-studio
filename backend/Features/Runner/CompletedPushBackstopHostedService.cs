@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Runner;
+
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Periodic safety net for completed-job auto-push. The synchronous trigger

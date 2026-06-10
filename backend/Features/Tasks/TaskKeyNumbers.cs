@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Pure parser for the numeric tail of a task display key

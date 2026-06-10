@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Supervisor;
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// Pure check predicates run against a <see cref="SupervisorObservation"/> on

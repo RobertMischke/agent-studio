@@ -1,16 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Endpoints.Tasks;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Registry;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Pipeline;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Drives the <see cref="ReviewDecisionOrchestrator"/> tick against a temp
@@ -1737,7 +1730,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         return orchestrator;
     }
 
-    private static OrchestratorApi.Services.TaskAccess.TaskAccessService BuildTaskAccess(
+    private static AgentStudio.TaskAccess.TaskAccessService BuildTaskAccess(
         TaskScannerService scanner,
         TaskStateMachine stateMachine,
         IConfiguration config)
@@ -1748,9 +1741,9 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var transitions = new TaskTransitionService(scanner, stateMachine, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
-        return new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+        return new AgentStudio.TaskAccess.TaskAccessService(
             scanner, mutations, stateMachine, transitions, indexCache,
-            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
+            NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
     }
 
     private void SeedProgressJob(string slug)

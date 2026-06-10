@@ -1,8 +1,8 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pins the orchestrator-decision prompt content. The orchestrator runs

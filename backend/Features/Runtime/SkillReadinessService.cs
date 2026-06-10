@@ -1,9 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Runtime;
 
 /// <summary>
 /// Validates whether a watched project exposes the Agent Software Studio

@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Analysis;
+namespace AgentStudio.Analysis;
 
 /// <summary>
 /// In-code validator that mirrors the value sets and required-field rules in

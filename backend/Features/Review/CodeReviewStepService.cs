@@ -1,12 +1,6 @@
 using System.Diagnostics;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.AdHoc;
-using OrchestratorApi.Services.Cli.OneShot;
-using OrchestratorApi.Services.GeneratedFiles;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Review;
+namespace AgentStudio.Review;
 
 /// <summary>
 /// User-triggered code review step. Sits next to <see cref="AspectRunnerService"/>

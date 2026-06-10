@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Pipeline;
+
+namespace AgentStudio.Pipeline;
 
 /// <summary>
 /// Static catalogue of pipeline definitions. Phase 1 ships exactly one:
@@ -14,7 +13,7 @@ namespace OrchestratorApi.Services.Pipeline;
 /// (the load-bearing behavioural change in this phase), the
 /// git-commit-attribution slot (ADR "Commit-Attribution-Regel";
 /// behaviour implemented in
-/// <see cref="OrchestratorApi.Services.Tasks.CommitAttributionService"/>
+/// <see cref="AgentStudio.Tasks.CommitAttributionService"/>
 /// and run from the transition service, so the executor records it as
 /// planned), a <see cref="StepKind.Tool"/> lint-scss step, and an
 /// <see cref="StepKind.Orchestrator"/> decision step that reads the
@@ -56,7 +55,7 @@ public static class PipelineCatalogue
 
     /// <summary>
     /// Pre-step that surfaces the auto-mode Ralph-loop guard
-    /// (<c>OrchestratorApi.Services.Runner.StuckLoopGuard</c>) in the
+    /// (<c>AgentStudio.Runner.StuckLoopGuard</c>) in the
     /// pipeline table. It is the first row of <see cref="TaskPipeline.AllSteps"/>
     /// so a forming or stopped loop is visible early - before the core run and
     /// the aspect verdicts. Deterministic (no LLM); the recording lives in
@@ -74,7 +73,7 @@ public static class PipelineCatalogue
     /// in the pipeline table. It replaces the standalone
     /// <c>1a-orchestrator-prep</c> backlog lane: prep now runs in-place on
     /// <c>1-preparation</c> cards inside
-    /// <c>OrchestratorApi.Services.Supervisor.OrchestratorPrepHostedService</c>
+    /// <c>AgentStudio.Supervisor.OrchestratorPrepHostedService</c>
     /// and admits accepted cards straight to <c>2-ready</c>, so the active flow
     /// has prep before the coding run without a dedicated lane. It is a
     /// <see cref="StepKind.Module"/> deterministic heuristic today (no LLM) yet
@@ -100,7 +99,7 @@ public static class PipelineCatalogue
     /// <c>ProjectRunner</c> foreground those items into the run prompt + post an
     /// orchestrator intervention note rather than letting the orchestrator
     /// blindly restart. The decision logic lives in the pure
-    /// <see cref="OrchestratorApi.Services.Runner.ReissueOpenItemsPreCheck"/>;
+    /// <see cref="AgentStudio.Runner.ReissueOpenItemsPreCheck"/>;
     /// the recording is best-effort observability, never a state-machine input.
     /// It is deterministic (no LLM) and on by default - an unfinished re-issue
     /// is a correctness signal, not an opt-in pass.
@@ -165,7 +164,7 @@ public static class PipelineCatalogue
     /// <summary>
     /// Post-step that runs <c>npx stylelint</c> over the frontend SCSS tree
     /// after the agent run finishes. Verdict drives the
-    /// <see cref="OrchestratorApi.Services.Pipeline.LintScssRunner"/> mode
+    /// <see cref="AgentStudio.Pipeline.LintScssRunner"/> mode
     /// (off/warn/fail) and may trigger a reissue back to <c>2-ready</c>
     /// when configured to fail. See ASS-563.
     /// </summary>
@@ -176,7 +175,7 @@ public static class PipelineCatalogue
     /// and classifies each changed spec as intended / at-risk / drift. Reporting
     /// only - the verdict surfaces in the pipeline list but never triggers a
     /// reissue. Behaviour lives in
-    /// <see cref="OrchestratorApi.Services.RegressionRadar.RegressionRadarService"/>.
+    /// <see cref="AgentStudio.RegressionRadar.RegressionRadarService"/>.
     /// </summary>
     public const string RegressionRadarStepId = "post-regression-radar";
 
@@ -250,7 +249,7 @@ public static class PipelineCatalogue
     /// justification, so every pipelined task carries a grade visible in the
     /// Overview pipeline (status / duration / verdict / grade) rather than only
     /// in a log. It extends the existing user-triggered
-    /// <see cref="OrchestratorApi.Services.Review.CodeReviewStepService"/> (a
+    /// <see cref="AgentStudio.Review.CodeReviewStepService"/> (a
     /// grade mode), runs after the parallel aspect verdicts and before the final
     /// orchestrator decision, and uses a quality-first model
     /// (<c>CodeReviewStep:DefaultModel</c>, Claude Opus by default) rather than

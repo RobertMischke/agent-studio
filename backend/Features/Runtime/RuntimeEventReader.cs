@@ -1,8 +1,7 @@
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runtime;
+namespace AgentStudio.Runtime;
 
 /// <summary>
 /// Reads <see cref="ProductRuntimeEvent"/> records from a JSONL file (one

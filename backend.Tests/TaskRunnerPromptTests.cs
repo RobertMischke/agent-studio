@@ -1,10 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks in the runner prompt contract without embedding the full prompt text
@@ -426,14 +425,14 @@ public class TaskRunnerPromptTests
                 "Line one.\nLine two of the same paragraph.")]
     public void ExtractFirstParagraph_TrimsAndStopsAtBlankLine(string input, string expected)
     {
-        Assert.Equal(expected, OrchestratorApi.Services.GitService.ExtractFirstParagraph(input));
+        Assert.Equal(expected, AgentStudio.Git.GitService.ExtractFirstParagraph(input));
     }
 
     [Fact]
     public void ExtractFirstParagraph_BoundsLongParagraphs()
     {
         var body = new string('a', 2000);
-        var result = OrchestratorApi.Services.GitService.ExtractFirstParagraph(body);
+        var result = AgentStudio.Git.GitService.ExtractFirstParagraph(body);
 
         // Bounded to 1500 chars + ellipsis suffix, so the LLM call stays cheap.
         Assert.True(result.Length <= 1503, $"unexpected length: {result.Length}");

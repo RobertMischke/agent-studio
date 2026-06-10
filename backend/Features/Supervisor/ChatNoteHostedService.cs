@@ -1,11 +1,8 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Supervisor;
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// Periodic per-project ticker that pushes a single, low-frequency summary

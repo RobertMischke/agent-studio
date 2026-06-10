@@ -1,6 +1,5 @@
-using OrchestratorApi.Services;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Docs;
 
 /// <summary>
 /// Read-only routes for the in-product concept-docs (the markdown

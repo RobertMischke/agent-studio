@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Projection.Sources;
+namespace AgentStudio.Projection;
 
 /// <summary>
 /// Parser warnings, schema drifts, and taskboard-level system messages.

@@ -1,8 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Deterministic post-aspect gate that refuses to accept a run on a bare

@@ -1,8 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
-using OrchestratorApi.Services.Supervisor;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// HTTP surface for the per-project supervisor. Read-only in this first cut:

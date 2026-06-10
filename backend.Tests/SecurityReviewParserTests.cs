@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Security;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the contract of <see cref="SecurityReviewParser"/>: both

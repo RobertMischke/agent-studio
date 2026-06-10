@@ -1,7 +1,6 @@
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Projection.Sources;
+namespace AgentStudio.Projection;
 
 /// <summary>
 /// Projects <c>logs/cli-output.log</c> into typed conversation events.

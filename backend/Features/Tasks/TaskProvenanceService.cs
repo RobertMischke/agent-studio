@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Tasks;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Owns the task commit-provenance record (ASS-1724, epic ASS-1720): the

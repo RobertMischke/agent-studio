@@ -1,15 +1,12 @@
 using System.Text.Json;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Configuration;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Admin;
 
 /// <summary>
 /// Surface for the orchestrator + supervisor flag toggles. Read open
 /// (so the UI can render the panel without an X-Client-Id), write
 /// gated by the registration boundary in
-/// <see cref="OrchestratorApi.Services.Clients.ClientIdentityMiddleware"/>.
+/// <see cref="AgentStudio.Clients.ClientIdentityMiddleware"/>.
 /// All flags require a backend restart to take effect; the response
 /// surfaces that explicitly so the frontend can render the
 /// "saved and active" state.

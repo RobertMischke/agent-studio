@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Values for the <c>agent</c> field in <c>job.json</c>. The field controls

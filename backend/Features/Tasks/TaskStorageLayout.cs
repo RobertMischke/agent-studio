@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Pure path + bucket helpers for the flat, ID-named task storage layout

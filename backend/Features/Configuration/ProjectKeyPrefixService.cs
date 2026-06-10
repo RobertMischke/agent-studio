@@ -1,8 +1,7 @@
 using System.Globalization;
 using System.Text;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Configuration;
+namespace AgentStudio.Configuration;
 
 /// <summary>
 /// F33: maps a project name (the <see cref="WatchPathEntry.Name"/> field

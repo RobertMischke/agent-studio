@@ -1,10 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Analysis;
 
-namespace OrchestratorApi.Services.Drift;
+namespace AgentStudio.Drift;
 
 /// <summary>
 /// Pure, testable assembly logic for the **Docs / Marketing Drift** action -

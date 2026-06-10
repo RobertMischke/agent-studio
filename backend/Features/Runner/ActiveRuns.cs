@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// One in-flight coding run's claim state. At <c>MaxParallelism == 1</c> there

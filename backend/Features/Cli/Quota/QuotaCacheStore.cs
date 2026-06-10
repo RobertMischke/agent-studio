@@ -1,8 +1,7 @@
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Quota;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// File-backed snapshot store for <see cref="QuotaService"/>'s in-memory

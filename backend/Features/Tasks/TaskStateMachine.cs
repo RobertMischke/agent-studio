@@ -1,9 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Registry;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// State transitions for tasks in the flat storage layout: a lane change is
@@ -263,7 +260,7 @@ public class TaskStateMachine
     /// Surfaced as <c>POST /api/tasks/{id}/restore-from-failed-pickup</c>
     /// to close the gap that previously forced an operator to fall back
     /// to <c>mv</c> + manual rename - exactly the bypass the
-    /// <see cref="OrchestratorApi.Tests.Architecture.TaskFolderAccessIsolationTest"/>
+    /// <see cref="AgentStudio.Tests.TaskFolderAccessIsolationTest"/>
     /// and the AGENTS.md "API first" rule are meant to stop.
     ///
     /// <para>Single-state-machine principle: the move + the slug rewrite

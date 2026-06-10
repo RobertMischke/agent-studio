@@ -1,8 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Configuration;
-using OrchestratorApi.Services.Registry;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Registry;
 
 /// <summary>
 /// F45a — read-only surface for the workspace + project registries.

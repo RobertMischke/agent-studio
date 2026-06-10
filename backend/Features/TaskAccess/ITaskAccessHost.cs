@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.TaskAccess;
+namespace AgentStudio.TaskAccess;
 
 /// <summary>
 /// Lifecycle surface for the Task Access Layer: boot the index from

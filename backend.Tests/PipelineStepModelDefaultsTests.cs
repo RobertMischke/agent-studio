@@ -1,11 +1,8 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Drift;
-using OrchestratorApi.Services.Pipeline;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Supervisor;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Tests for <see cref="PipelineStepModelDefaults"/>: the pre-run effective

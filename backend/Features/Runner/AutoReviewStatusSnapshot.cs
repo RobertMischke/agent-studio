@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Rolling status snapshot of the multi-aspect auto-review tick.

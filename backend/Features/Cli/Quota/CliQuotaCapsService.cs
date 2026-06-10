@@ -1,7 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Quota;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// User-configurable per-CLI per-window usage caps. The user wants the runner

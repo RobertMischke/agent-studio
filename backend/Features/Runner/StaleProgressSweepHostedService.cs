@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Periodic safety net for stale <c>3-progress</c> folders. The boot sweep

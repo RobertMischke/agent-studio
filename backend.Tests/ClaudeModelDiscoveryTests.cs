@@ -1,9 +1,8 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Pty;
-using OrchestratorApi.Services.Runner;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public class ClaudeModelDiscoveryTests
 {

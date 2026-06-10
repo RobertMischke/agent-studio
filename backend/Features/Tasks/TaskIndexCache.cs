@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// In-memory snapshot cache of <see cref="TaskInfo"/> across all watch paths,

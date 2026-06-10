@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Pipeline;
+namespace AgentStudio.Pipeline;
 
 /// <summary>
 /// Applies the per-project pipeline-step order stored in

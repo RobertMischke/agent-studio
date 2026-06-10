@@ -1,11 +1,8 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Registry;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Field-level writes against an existing job: the per-field setters
@@ -264,7 +261,7 @@ public class TaskMutationService
 
     /// <summary>
     /// Stamp a UTC progress heartbeat onto the job's <c>task.json</c>. Written
-    /// on every CLI-output flush so <see cref="OrchestratorApi.Services.Runner.CrashRecoveryService"/>
+    /// on every CLI-output flush so <see cref="AgentStudio.Runner.CrashRecoveryService"/>
     /// can attribute orphan working-tree changes to the most-recently-active
     /// job in <c>3-progress</c> on the next backend boot. ADR-0020.
     /// </summary>

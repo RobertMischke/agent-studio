@@ -1,10 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Regression coverage for F42: the 2026-05-24 operator-screenshot
@@ -171,8 +170,8 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
             LastUsedAt: DateTime.UtcNow,
             LastError: null));
 
-        var summary = new OrchestratorApi.Services.SummaryGenerationService(
-            NullLogger<OrchestratorApi.Services.SummaryGenerationService>.Instance, config);
+        var summary = new AgentStudio.Review.SummaryGenerationService(
+            NullLogger<AgentStudio.Review.SummaryGenerationService>.Instance, config);
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var runner = new PipeClosedRunner("The pipe is being closed.");
         var bootstrap = new GlobalOrchestratorBootstrap(
@@ -238,8 +237,8 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
             LastUsedAt: DateTime.UtcNow,
             LastError: null));
 
-        var summary = new OrchestratorApi.Services.SummaryGenerationService(
-            NullLogger<OrchestratorApi.Services.SummaryGenerationService>.Instance, config);
+        var summary = new AgentStudio.Review.SummaryGenerationService(
+            NullLogger<AgentStudio.Review.SummaryGenerationService>.Instance, config);
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var runner = new ThrowingRunner(new IOException("The pipe is being closed."));
         var bootstrap = new GlobalOrchestratorBootstrap(
@@ -285,7 +284,7 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
 
         public override Task<OrchestratorDecisionResult> ResumeAsync(
             string sessionId, string prompt, string? model, string workingDirectory,
-            IReadOnlyList<OrchestratorApi.Services.Cli.OneShot.CliOneShotImage>? inlineImages,
+            IReadOnlyList<AgentStudio.Cli.CliOneShotImage>? inlineImages,
             CancellationToken ct = default)
             => Task.FromResult(new OrchestratorDecisionResult(
                 Success: false,
@@ -297,7 +296,7 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
 
         public override Task<OrchestratorDecisionResult> DecideAsync(
             string prompt, string? model, string workingDirectory,
-            IReadOnlyList<OrchestratorApi.Services.Cli.OneShot.CliOneShotImage>? inlineImages,
+            IReadOnlyList<AgentStudio.Cli.CliOneShotImage>? inlineImages,
             CancellationToken ct = default)
             => ResumeAsync("", prompt, model, workingDirectory, inlineImages, ct);
     }
@@ -319,13 +318,13 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
 
         public override Task<OrchestratorDecisionResult> ResumeAsync(
             string sessionId, string prompt, string? model, string workingDirectory,
-            IReadOnlyList<OrchestratorApi.Services.Cli.OneShot.CliOneShotImage>? inlineImages,
+            IReadOnlyList<AgentStudio.Cli.CliOneShotImage>? inlineImages,
             CancellationToken ct = default)
             => throw _exception;
 
         public override Task<OrchestratorDecisionResult> DecideAsync(
             string prompt, string? model, string workingDirectory,
-            IReadOnlyList<OrchestratorApi.Services.Cli.OneShot.CliOneShotImage>? inlineImages,
+            IReadOnlyList<AgentStudio.Cli.CliOneShotImage>? inlineImages,
             CancellationToken ct = default)
             => throw _exception;
     }

@@ -1,14 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Registry;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Tasks;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public sealed class AutoReviewPostProcessingWorkerTests : IDisposable
 {
@@ -118,13 +113,13 @@ public sealed class AutoReviewPostProcessingWorkerTests : IDisposable
             git,
             settings,
             NullLogger<TaskTransitionService>.Instance);
-        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+        var taskAccess = new AgentStudio.TaskAccess.TaskAccessService(
             scanner,
             mutations,
             stateMachine,
             transitions,
             indexCache,
-            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
+            NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var orchestrator = new ReviewDecisionOrchestrator(
             scanner,

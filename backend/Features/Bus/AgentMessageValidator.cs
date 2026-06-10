@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Bus;
+namespace AgentStudio.Bus;
 
 /// <summary>
 /// Validates <see cref="AgentMessage"/> instances against the value sets in

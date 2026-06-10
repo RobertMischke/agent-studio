@@ -2,12 +2,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.TaskAccess;
 
-namespace OrchestratorApi.Services.Supervisor;
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// Per-project hosted ticker that owns the pause-inspect-resume loop above

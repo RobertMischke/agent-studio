@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Generic;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the continuous-decision scanner contract (ADR-0027). Two

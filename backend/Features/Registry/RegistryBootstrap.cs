@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Registry;
+
+namespace AgentStudio.Registry;
 
 /// <summary>
 /// F45a — boot-time discovery pass. Runs once at startup before the

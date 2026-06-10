@@ -1,8 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.AdHoc;
-using OrchestratorApi.Services.Bus;
 
-namespace OrchestratorApi.Services.Tokens;
+
+namespace AgentStudio.Tokens;
 
 /// <summary>
 /// Phase-4 bus-backed read path for ad-hoc Haiku usage. Queries the workspace

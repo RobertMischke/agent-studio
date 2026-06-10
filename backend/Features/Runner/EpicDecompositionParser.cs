@@ -1,8 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Result of parsing an epic decomposition (planning) run's agent output.

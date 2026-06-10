@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Endpoints.Tasks;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Endpoints around the per-job review-evidence file

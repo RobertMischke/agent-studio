@@ -1,7 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Cli.Rendering;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Renders Codex <c>codex exec --json</c> JSONL frames into the SAME marker-line

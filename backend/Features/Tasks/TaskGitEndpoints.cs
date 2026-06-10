@@ -1,10 +1,8 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
+
+
 using System.Text;
 
-namespace OrchestratorApi.Endpoints.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Git surface scoped to one job: live status / diff against the

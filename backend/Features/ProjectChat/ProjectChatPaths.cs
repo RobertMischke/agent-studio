@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.ProjectChat;
+namespace AgentStudio.ProjectChat;
 
 /// <summary>
 /// Resolves on-disk locations for the per-project, file-backed chat

@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Dispatches calls to the right <see cref="ICliExecutionService"/> based on

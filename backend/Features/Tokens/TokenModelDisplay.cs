@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Tokens;
+namespace AgentStudio.Tokens;
 
 internal static class TokenModelDisplay
 {

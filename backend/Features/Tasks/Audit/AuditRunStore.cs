@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Tasks.Audit;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// In-memory store of completed-lane audit runs keyed by runId. Trades

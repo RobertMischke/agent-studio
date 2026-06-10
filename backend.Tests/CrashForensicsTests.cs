@@ -1,8 +1,8 @@
 using System.Text.Json;
-using OrchestratorApi.Services.Diagnostics;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the boot-time silent-death classifier — the only layer that can

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace OrchestratorApi.Services.Companion;
+namespace AgentStudio.Companion;
 
 /// <summary>
 /// Shape pushed to the relay on every tick. Mirrors the relay's

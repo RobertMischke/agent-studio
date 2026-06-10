@@ -1,10 +1,9 @@
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runtime;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the Product Runtime Observability capture surface: events round-trip

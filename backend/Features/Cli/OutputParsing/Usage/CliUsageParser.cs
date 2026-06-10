@@ -1,7 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Bus;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Single parsed snapshot a CLI's "turn completed" frame yields. Source of truth

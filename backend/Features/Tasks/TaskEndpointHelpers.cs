@@ -1,10 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Tokens;
 
-namespace OrchestratorApi.Endpoints.Tasks;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Internal helpers shared across the job endpoint groups: the

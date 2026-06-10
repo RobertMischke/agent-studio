@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace OrchestratorApi.Services.Cli.Adapters;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Maps Gemini's <c>gemini -o stream-json</c> NDJSON frames onto the

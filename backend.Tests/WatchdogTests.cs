@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Matrix lock for <see cref="Watchdog.DecideState"/>. The whole point of

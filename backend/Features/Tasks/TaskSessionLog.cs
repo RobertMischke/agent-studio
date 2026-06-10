@@ -1,8 +1,7 @@
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Everything that records "what happened to this job's CLI session":

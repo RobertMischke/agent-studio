@@ -1,9 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using OrchestratorApi.Services.Supervisor;
 
-namespace OrchestratorApi.Services.State;
+namespace AgentStudio.State;
 
 /// <summary>
 /// Typed, file-backed in-memory projection of one project's

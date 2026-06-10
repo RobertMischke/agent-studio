@@ -1,7 +1,6 @@
-using OrchestratorApi.Services.AdHoc;
-using OrchestratorApi.Services.Tokens;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.AdHoc;
 
 /// <summary>
 /// Read-only HTTP surface for the ad-hoc Haiku usage log. The

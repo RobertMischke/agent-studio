@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Cli;
+
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// In-memory inverse index <c>sessionId -> owning TaskInfo summary</c>. Built

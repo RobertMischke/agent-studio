@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Supervisor;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the advisory-to-action mapping. The auto-intervention policy is the

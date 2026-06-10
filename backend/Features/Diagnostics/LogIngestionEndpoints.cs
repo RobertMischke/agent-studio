@@ -1,8 +1,6 @@
 using System.Text;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Diagnostics;
 
 /// <summary>
 /// Runner → Server log-ingestion API under <c>/api/runner/logs</c> (Step 6).

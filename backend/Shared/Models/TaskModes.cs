@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Task execution mode - orthogonal to <see cref="TaskKinds"/> (task|epic). It

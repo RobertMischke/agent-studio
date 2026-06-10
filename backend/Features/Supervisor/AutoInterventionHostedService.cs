@@ -1,6 +1,5 @@
-using OrchestratorApi.Services.State;
 
-namespace OrchestratorApi.Services.Supervisor;
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// Optional supervisor extension that promotes selected advisories to

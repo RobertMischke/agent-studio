@@ -1,12 +1,8 @@
 using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.AdHoc;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Git;
 
 public record GitFileChange(string Status, string Path, int Added, int Removed);
 
@@ -524,7 +520,7 @@ public class GitService
 
     /// <summary>
     /// Resolve the repository root for a project by name without needing a
-    /// job context. Used by <see cref="OrchestratorApi.Services.Runner.CrashRecoveryService"/>
+    /// job context. Used by <see cref="AgentStudio.Runner.CrashRecoveryService"/>
     /// at boot time to inspect the working tree before any job has been
     /// loaded into the runtime.
     /// </summary>
@@ -562,7 +558,7 @@ public class GitService
     /// <summary>
     /// True when the repo at <paramref name="repoRoot"/> has any uncommitted
     /// modifications (staged, unstaged, or untracked). Cheap-by-design helper
-    /// for <see cref="OrchestratorApi.Services.Runner.CrashRecoveryService"/>.
+    /// for <see cref="AgentStudio.Runner.CrashRecoveryService"/>.
     /// </summary>
     public bool RepoHasUncommittedChanges(string repoRoot)
     {
@@ -712,7 +708,7 @@ public class GitService
 
     /// <summary>
     /// Commits the working tree with a fixed <c>crash-recovery</c> author tag.
-    /// Used by <see cref="OrchestratorApi.Services.Runner.CrashRecoveryService"/>
+    /// Used by <see cref="AgentStudio.Runner.CrashRecoveryService"/>
     /// to rescue uncommitted work that survived a backend crash; the distinctive
     /// author makes the commit easy to find in <c>git log</c> later (ADR-0020).
     /// Returns a clean <c>"Nothing to commit"</c> result when the tree is empty;
@@ -987,7 +983,7 @@ public class GitService
     /// <summary>
     /// Real change stat (files / +added / -removed) for a single
     /// already-recorded SHA via <c>git show --shortstat</c>. The persisted
-    /// <see cref="OrchestratorApi.Models.TaskCommitInfo"/> chain only caches a
+    /// <see cref="AgentStudio.Shared.TaskCommitInfo"/> chain only caches a
     /// file count, so an aspect-review diff summary built from that chain
     /// reports "+0/-0" even for a large commit; this re-derives the genuine
     /// line counts straight from git so the reviewer sees the real changeset.

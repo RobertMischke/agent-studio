@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Outcome of parsing the orchestrator's free-text reply for an auto-decision

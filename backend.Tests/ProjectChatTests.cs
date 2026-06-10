@@ -1,10 +1,10 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Services.ProjectChat;
+
 using Xunit;
 using Xunit.Abstractions;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks Slice D's storage + search foundation:
@@ -317,7 +317,7 @@ public sealed class ProjectChatMigrationTests : IDisposable
         // fans the call across scanner.GetWatchPaths(). Passing null! for
         // the scanner is safe at this seam and avoids dragging the full
         // config + summary-service stack into a storage-layer test.
-        var entry = new OrchestratorApi.Models.WatchPathEntry
+        var entry = new AgentStudio.Shared.WatchPathEntry
         {
             Name = "p1",
             Path = _projectFolder,

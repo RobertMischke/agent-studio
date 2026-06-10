@@ -1,8 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Pty;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Discovers the live Copilot CLI model catalog by driving the interactive

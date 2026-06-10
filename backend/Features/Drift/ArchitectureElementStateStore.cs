@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 
-namespace OrchestratorApi.Services.Drift;
+namespace AgentStudio.Drift;
 
 /// <summary>
 /// Tracking-state overrides for architecture-map elements. Drift reports are

@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Services;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pins the contract for the concept-docs loader: known topics resolve

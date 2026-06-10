@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pure-function tests for ADR-0026 orchestrator-prep rules. The rule

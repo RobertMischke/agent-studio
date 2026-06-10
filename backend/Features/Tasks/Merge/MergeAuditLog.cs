@@ -1,8 +1,7 @@
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Tasks.Merge;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Append-only JSONL audit log for every merge / undo operation. Lives at

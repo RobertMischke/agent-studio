@@ -1,8 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Shared;
 
 public static class TerminalRunOutcomeKinds
 {

@@ -1,11 +1,8 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Shared process-orchestration logic for the slim non-Copilot CLI backends
@@ -152,7 +149,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// surfaces the error to the runner, which records it as a pickup
     /// failure exactly as a process-start exception would. The cross-slug
     /// breaker
-    /// (<see cref="OrchestratorApi.Services.Runner.CrossSlugInfraCircuitBreaker"/>)
+    /// (<see cref="AgentStudio.Runner.CrossSlugInfraCircuitBreaker"/>)
     /// remains the safety net if heal itself is failing repeatedly.
     /// </para>
     /// </summary>

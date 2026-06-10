@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// ADR-0052 slice 2: the pure pick-gate that turns the sequential runner's

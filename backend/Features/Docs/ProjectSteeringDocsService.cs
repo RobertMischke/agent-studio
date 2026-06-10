@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services;
+
+namespace AgentStudio.Docs;
 
 /// <summary>
 /// Project-level Steering Docs surface. Lists the agent-facing instruction

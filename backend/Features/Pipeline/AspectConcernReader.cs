@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Markdown;
 
-namespace OrchestratorApi.Services.Pipeline;
+
+namespace AgentStudio.Pipeline;
 
 /// <summary>
 /// Read-time enrichment that lifts each aspect step's concern summary out

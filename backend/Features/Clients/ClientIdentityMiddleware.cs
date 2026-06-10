@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Clients;
+namespace AgentStudio.Clients;
 
 /// <summary>
 /// Registration boundary for the API. Reads <c>X-Client-Id</c> on every

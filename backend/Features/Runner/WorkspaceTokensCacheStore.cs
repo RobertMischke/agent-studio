@@ -1,8 +1,7 @@
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Endpoints;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// File-backed snapshots for the two workspace token rollups that
@@ -15,7 +14,7 @@ namespace OrchestratorApi.Services.Runner;
 /// disk scan, and the modal is the user's primary "is anything
 /// burning right now?" entry point. Persisting the last successful
 /// result mirrors <see cref="TokenSummaryCacheStore"/> and
-/// <see cref="OrchestratorApi.Services.Quota.QuotaCacheStore"/> so
+/// <see cref="AgentStudio.Cli.QuotaCacheStore"/> so
 /// the modal can render last-known numbers immediately on hover.
 /// </para>
 ///

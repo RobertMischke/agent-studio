@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Registry;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// F45a — covers the four documented derivation cases plus collision

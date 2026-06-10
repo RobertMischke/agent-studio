@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Bus;
+namespace AgentStudio.Bus;
 
 /// <summary>
 /// Canonical layout for Agent Message Bus files. See section 4 of

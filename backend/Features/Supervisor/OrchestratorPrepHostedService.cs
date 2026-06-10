@@ -1,9 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Pipeline;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Supervisor;
+
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// ADR-0026 orchestrator-prep loop, reshaped into the optional
@@ -32,7 +29,7 @@ namespace OrchestratorApi.Services.Supervisor;
 /// <c>1-preparation</c> and writes verdicts into <c>2-ready</c>.
 /// ADR-0001's boundary (one coding CLI per
 /// project at a time) is unchanged - that invariant is enforced inside
-/// <see cref="OrchestratorApi.Services.Runner.ProjectRunner.TickAsync"/> via
+/// <see cref="AgentStudio.Runner.ProjectRunner.TickAsync"/> via
 /// the active-job latch, not here. The runner consumes from <c>2-ready</c> on
 /// its own tick, so state mutations written by this service are picked up
 /// without explicit coordination.</para>

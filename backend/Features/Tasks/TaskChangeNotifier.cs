@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Central pub/sub fanout for fine-grained job mutation events. Replaces
@@ -10,7 +10,7 @@ namespace OrchestratorApi.Services.Tasks;
 /// <see cref="TaskTransitionService"/> (Move), <see cref="TaskStateMachine"/>
 /// (Delete + lane-wide reorder).</para>
 ///
-/// <para>Subscribers: <see cref="OrchestratorApi.Hubs.TaskHub"/> wiring in
+/// <para>Subscribers: <see cref="AgentStudio.Host.TaskHub"/> wiring in
 /// <c>Program.cs</c>, which broadcasts the typed methods
 /// <c>jobCreated</c> / <c>jobUpdated</c> / <c>jobMoved</c> / <c>jobDeleted</c>
 /// / <c>jobsReordered</c> to all connected clients.</para>

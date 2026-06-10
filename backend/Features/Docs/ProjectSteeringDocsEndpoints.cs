@@ -1,6 +1,5 @@
-using OrchestratorApi.Services;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Docs;
 
 /// <summary>
 /// Project Steering Docs surface: read-only inventory of agent-facing

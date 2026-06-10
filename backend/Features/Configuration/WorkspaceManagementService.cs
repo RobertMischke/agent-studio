@@ -1,9 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Configuration;
+namespace AgentStudio.Configuration;
 
 /// <summary>
 /// Create / delete watch-path entries in <c>appsettings.Local.json</c>'s

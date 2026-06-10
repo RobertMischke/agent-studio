@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Supervisor;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the pure check + action rules for the per-project meta-cycle.

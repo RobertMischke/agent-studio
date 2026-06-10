@@ -1,9 +1,8 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Cli;
 
 public static partial class CliOutputLogParser
 {

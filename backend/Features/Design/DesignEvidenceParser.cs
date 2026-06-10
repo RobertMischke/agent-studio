@@ -1,6 +1,5 @@
-using OrchestratorApi.Services.Security;
 
-namespace OrchestratorApi.Services.Design;
+namespace AgentStudio.Design;
 
 /// <summary>
 /// Parses the structured block in a design-evidence Markdown file (slice 6

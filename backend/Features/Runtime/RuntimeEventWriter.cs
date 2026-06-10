@@ -1,9 +1,8 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runtime;
+namespace AgentStudio.Runtime;
 
 /// <summary>
 /// Append-only writer for <see cref="ProductRuntimeEvent"/> JSONL files.

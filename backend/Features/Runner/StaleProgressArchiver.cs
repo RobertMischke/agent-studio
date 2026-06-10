@@ -4,12 +4,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Persistence;
-using OrchestratorApi.Services.TaskAccess;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Stale-progress sweep that surfaces <c>3-progress</c> folders the orchestrator

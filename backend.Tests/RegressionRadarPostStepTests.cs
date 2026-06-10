@@ -1,16 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Pipeline;
-using OrchestratorApi.Services.RegressionRadar;
-using OrchestratorApi.Services.Registry;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Covers the regression-radar post-step: the pure outcome mapping
@@ -228,9 +221,9 @@ public class RegressionRadarPostStepTests : IDisposable
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         configureSettings?.Invoke(settings);
         var transitions = new TaskTransitionService(scanner, stateMachine, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
-        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+        var taskAccess = new AgentStudio.TaskAccess.TaskAccessService(
             scanner, mutations, stateMachine, transitions, indexCache,
-            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
+            NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
 
         var pipelineLog = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
 

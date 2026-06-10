@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Drift;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pins the drift-report validator's required-field rules and cross-field

@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Tasks;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Builds the <see cref="AttributionInput"/> for a task from git + session

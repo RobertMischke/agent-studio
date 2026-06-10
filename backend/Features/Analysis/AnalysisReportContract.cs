@@ -1,7 +1,6 @@
 using System.Text.Json.Serialization;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Analysis;
+namespace AgentStudio.Analysis;
 
 /// <summary>
 /// Scope kind for one analysis report. Mirrors the schema's

@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Supervisor;
+
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// Read-only observation surface for the per-project supervisor. Returns a

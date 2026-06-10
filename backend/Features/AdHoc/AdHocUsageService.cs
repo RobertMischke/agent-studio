@@ -1,8 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Tokens;
 
-namespace OrchestratorApi.Services.AdHoc;
+
+namespace AgentStudio.AdHoc;
 
 /// <summary>
 /// Reads <see cref="AdHocUsageRecorder"/>'s JSONL log and produces a

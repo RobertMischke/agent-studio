@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Pipeline;
+
+namespace AgentStudio.Pipeline;
 
 /// <summary>
 /// Runs the deferred, operator-triggered "Merge into Develop" post-step
@@ -11,7 +10,7 @@ namespace OrchestratorApi.Services.Pipeline;
 /// <see cref="PipelineStep.Deferred"/> so it sits "pending" in the pipeline view
 /// until the operator accepts a done-green task via the "Merge into Develop"
 /// action (the <c>HumanReview -&gt; Completed</c> transition). That acceptance is
-/// the trigger; <see cref="OrchestratorApi.Services.Tasks.TaskTransitionService"/>
+/// the trigger; <see cref="AgentStudio.Tasks.TaskTransitionService"/>
 /// calls <see cref="Run"/> here.
 ///
 /// <para>

@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Docs;
 
 /// <summary>
 /// Read-only loader for the in-product concept-docs at

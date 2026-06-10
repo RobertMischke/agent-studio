@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Epics read + decomposition routes. An epic is a <see cref="TaskKinds.Epic"/>

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// One record on the Agent Message Bus. Mirrors
@@ -12,7 +12,7 @@ namespace OrchestratorApi.Models;
 /// schema's mixed casing (PascalCase severity, lowercase role, kebab-case kind
 /// and artifact kind) survives a round-trip without per-field converters.
 /// Validation against the allowed value sets lives in
-/// <see cref="OrchestratorApi.Services.Bus.AgentMessageValidator"/>.
+/// <see cref="AgentStudio.Bus.AgentMessageValidator"/>.
 /// </remarks>
 public sealed record AgentMessage
 {

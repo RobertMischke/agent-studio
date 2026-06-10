@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using OrchestratorApi.Services.Cli;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// End-to-end contract tests for the user's core stability ask:
@@ -15,7 +15,7 @@ namespace OrchestratorApi.Tests;
 ///
 /// <para>
 /// We test through the real <see cref="ClaudeCliService"/>,
-/// <see cref="OrchestratorApi.Services.TaskRunnerService"/>, and the
+/// <see cref="AgentStudio.Runner.TaskRunnerService"/>, and the
 /// real DI graph. Two probes:
 /// </para>
 /// <list type="number">

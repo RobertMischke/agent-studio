@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests.Architecture;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Architecture-level lock for the loop-inventory entry

@@ -1,10 +1,8 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Endpoints.Tasks;
+namespace AgentStudio.Tasks;
 
 internal sealed record TaskQueryRequest
 {

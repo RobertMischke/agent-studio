@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace OrchestratorApi.Tests.Architecture;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Architecture-level lock for the loop-inventory entry
@@ -8,7 +8,7 @@ namespace OrchestratorApi.Tests.Architecture;
 ///
 /// <list type="number">
 ///   <item>The breaker class and its budget constants live in code
-///   (see <see cref="OrchestratorApi.Services.Runner.CrossSlugInfraCircuitBreaker"/>).</item>
+///   (see <see cref="AgentStudio.Runner.CrossSlugInfraCircuitBreaker"/>).</item>
 ///   <item>The breaker test exists (this file plus
 ///   <c>CrossSlugInfraCircuitBreakerTests.cs</c> plus
 ///   <c>PickupLoopStrictIterationTests.CrossSlug_*</c>).</item>
@@ -26,7 +26,7 @@ public class CrossSlugInfraCircuitBreakerTest
     [Fact]
     public void BreakerType_Exists()
     {
-        var t = typeof(OrchestratorApi.Services.Runner.CrossSlugInfraCircuitBreaker);
+        var t = typeof(AgentStudio.Runner.CrossSlugInfraCircuitBreaker);
         Assert.NotNull(t);
     }
 
@@ -36,8 +36,8 @@ public class CrossSlugInfraCircuitBreakerTest
         // Pin the defaults documented in the loop inventory entry so a
         // drift between docs and code is caught here. Change both in
         // the same commit when tuning the budget.
-        Assert.Equal(2, OrchestratorApi.Services.Runner.CrossSlugInfraCircuitBreaker.DefaultSilentLimit);
-        Assert.Equal(10, OrchestratorApi.Services.Runner.CrossSlugInfraCircuitBreaker.DefaultWindowMinutes);
+        Assert.Equal(2, AgentStudio.Runner.CrossSlugInfraCircuitBreaker.DefaultSilentLimit);
+        Assert.Equal(10, AgentStudio.Runner.CrossSlugInfraCircuitBreaker.DefaultWindowMinutes);
     }
 
     [Fact]
@@ -45,6 +45,6 @@ public class CrossSlugInfraCircuitBreakerTest
     {
         Assert.Equal(
             "cross-slug-spawn-failed-cascade",
-            OrchestratorApi.Services.Runner.InfraHaltKinds.CrossSlugSpawnFailedCascade);
+            AgentStudio.Runner.InfraHaltKinds.CrossSlugSpawnFailedCascade);
     }
 }

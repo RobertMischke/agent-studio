@@ -1,9 +1,6 @@
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Pty;
 
-namespace OrchestratorApi.Services.Quota;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Shared scaffolding for PTY-based quota probes:

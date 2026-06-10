@@ -1,7 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Services.Bus;
 
-namespace OrchestratorApi.Services.Supervisor;
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// Per-project hosted ticker. Every <c>Supervisor:HardCheckIntervalSeconds</c>

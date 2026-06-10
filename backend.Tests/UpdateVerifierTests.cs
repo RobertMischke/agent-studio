@@ -2,7 +2,7 @@ extern alias UpdSvc;
 using UpdSvc::AgentTaskboard.UpdateService;
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pure-decision tests for <see cref="UpdateVerifier.EvaluateChecks"/> (phase

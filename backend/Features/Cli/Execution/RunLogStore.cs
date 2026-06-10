@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Per-run output log keyed by <b>stream</b>. Each logical stream of a run

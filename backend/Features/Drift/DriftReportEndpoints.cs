@@ -1,9 +1,6 @@
 using System.Text;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Analysis;
-using OrchestratorApi.Services.Drift;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Drift;
 
 /// <summary>
 /// Read + manual-trigger surface for the Drift project view (ROADMAP "Drift
@@ -625,7 +622,7 @@ public static class DriftReportEndpoints
 
         group.MapPost("/actions/code-pattern-drift", async (
             CodePatternDriftAnalysisService action,
-            OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? oneShotRegistry,
+            AgentStudio.Cli.CliOneShotRegistry? oneShotRegistry,
             bool? withLlmVerdict,
             CancellationToken ct) =>
         {

@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Common surface every CLI backend exposes (Copilot, Claude Code, Codex).
@@ -31,13 +30,13 @@ public interface ICliExecutionService
 
     /// <summary>
     /// Terminate the live process for <paramref name="taskKey"/>. The
-    /// <paramref name="reason"/> flows into <see cref="OrchestratorApi.Services.Runner.RunStatusClassifier"/>
+    /// <paramref name="reason"/> flows into <see cref="AgentStudio.Shared.RunStatusClassifier"/>
     /// so user pauses, follow-up pause-and-send, and watchdog kills are
     /// reported as <c>status = "stopped"</c> rather than the misleading
     /// <c>status = "failed", exitCode = -1</c> the legacy implementation
     /// produced. Returns false when no process is tracked under that key.
     /// </summary>
-    bool Stop(string jobKey, OrchestratorApi.Services.Runner.RunStopReason reason = OrchestratorApi.Services.Runner.RunStopReason.UserStop);
+    bool Stop(string jobKey, AgentStudio.Shared.RunStopReason reason = AgentStudio.Shared.RunStopReason.UserStop);
     bool SendInput(string jobKey, string input);
 
     List<CliOutputLine> GetOutput(string jobKey);
@@ -76,11 +75,11 @@ public interface ICliExecutionService
     /// <summary>
     /// Read / write the watchdog state previously announced for this run.
     /// Used by the runner's per-tick announcer to suppress same-state
-    /// repeats. Defaults to <see cref="OrchestratorApi.Services.Runner.WatchdogState.Healthy"/>
+    /// repeats. Defaults to <see cref="AgentStudio.Shared.WatchdogState.Healthy"/>
     /// for unknown runs.
     /// </summary>
-    OrchestratorApi.Services.Runner.WatchdogState GetWatchdogState(string jobKey);
-    void SetWatchdogState(string jobKey, OrchestratorApi.Services.Runner.WatchdogState state);
+    AgentStudio.Shared.WatchdogState GetWatchdogState(string jobKey);
+    void SetWatchdogState(string jobKey, AgentStudio.Shared.WatchdogState state);
 
     void ReattachOnStartup();
 

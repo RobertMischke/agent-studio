@@ -1,8 +1,8 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public class RunOutcomeContractTests
 {
@@ -38,7 +38,7 @@ public class RunOutcomeContractTests
         Assert.True(RunCompletionPolicy.ShouldMoveToReview(terminal));
         Assert.False(terminal.ShouldShowFailureToast);
 
-        var protocol = OrchestratorApi.Services.SummaryGenerationService.ApplyOutcomeResultLine(
+        var protocol = AgentStudio.Review.SummaryGenerationService.ApplyOutcomeResultLine(
             "# Status\n\n- Result: Failed\n- Duration: 4 sec\n",
             terminal.ProtocolResult);
         Assert.Contains($"- Result: {expectedProtocolResult}", protocol);
@@ -256,7 +256,7 @@ public class RunOutcomeContractTests
         Assert.Equal(expectedFailureToast, terminal.ShouldShowFailureToast);        // failure toast/modal gating
 
         // status.md is forced to the same outcome, never left at the Haiku guess.
-        var protocol = OrchestratorApi.Services.SummaryGenerationService.ApplyOutcomeResultLine(
+        var protocol = AgentStudio.Review.SummaryGenerationService.ApplyOutcomeResultLine(
             "# Status\n\n- Result: Failed\n- Duration: 4 sec\n",
             terminal.ProtocolResult);
         Assert.Contains($"- Result: {expectedProtocolResult}", protocol);
@@ -315,7 +315,7 @@ public class RunOutcomeContractTests
             - None.
             """;
 
-        var updated = OrchestratorApi.Services.SummaryGenerationService.ApplyOutcomeResultLine(summary, "NoOp");
+        var updated = AgentStudio.Review.SummaryGenerationService.ApplyOutcomeResultLine(summary, "NoOp");
 
         Assert.Contains("- Result: NoOp", updated);
         Assert.DoesNotContain("- Result: Failed", updated);
@@ -342,7 +342,7 @@ public class RunOutcomeContractTests
             - ![](attachments/input-wireframe.png)
             """;
 
-        var updated = OrchestratorApi.Services.SummaryGenerationService.ApplyOutcomeResultLine(summary, "Success");
+        var updated = AgentStudio.Review.SummaryGenerationService.ApplyOutcomeResultLine(summary, "Success");
 
         Assert.Contains("- Result: Success", updated);
         Assert.DoesNotContain("- Result: Failed", updated);
@@ -376,8 +376,8 @@ public class RunOutcomeContractTests
             "User supplied reference: attachments/input-wireframe.png",
             "Ignore non-image artifact: results/review-evidence.jsonl");
 
-        var updated = OrchestratorApi.Services.SummaryGenerationService.ApplyOutcomeResultLine(summary, "Success");
-        updated = OrchestratorApi.Services.SummaryGenerationService.ApplyProtocolImageReferences(updated, log, out var appendedCount);
+        var updated = AgentStudio.Review.SummaryGenerationService.ApplyOutcomeResultLine(summary, "Success");
+        updated = AgentStudio.Review.SummaryGenerationService.ApplyProtocolImageReferences(updated, log, out var appendedCount);
 
         Assert.Contains("- Result: Success", updated);
         Assert.DoesNotContain("- Result: Failed", updated);

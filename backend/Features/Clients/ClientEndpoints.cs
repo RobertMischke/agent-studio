@@ -1,8 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Clients;
 
 /// <summary>
 /// Routes for client identity registration, listing, lookup, and

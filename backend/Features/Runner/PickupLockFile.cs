@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Disk-backed lock that prevents two backends sharing the same workspace
@@ -11,7 +11,7 @@ namespace OrchestratorApi.Services.Runner;
 ///
 /// <para>
 /// The cross-process race this guards against: dev and stable point at
-/// <see cref="OrchestratorApi.Models.WatchPathEntry.RootPath"/> values that
+/// <see cref="AgentStudio.Shared.WatchPathEntry.RootPath"/> values that
 /// share an <c>agent-taskboard-workspace</c>. With both backends on
 /// auto-continuous, both pickup ticks see the same <c>3-progress</c> folder
 /// and both decide to start it. The role gate (see <see cref="RunnerRoles"/>)

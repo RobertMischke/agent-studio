@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Pipeline;
+namespace AgentStudio.Pipeline;
 
 /// <summary>
 /// Run-time facts about a finished task run that a

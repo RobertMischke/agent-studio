@@ -1,8 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>Result of running one dry-run command.</summary>
 public sealed record BuildCommandResult(int ExitCode, string Output)

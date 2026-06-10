@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Pure cumulative-duration arithmetic for the CORE "Agent execution"

@@ -1,10 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Regression coverage for the 2026-05-11 stuck-chat bug: the global
@@ -97,8 +96,8 @@ public class OrchestratorChatRejectionRecoveryTests : IDisposable
             LastError: null);
         sessionStore.Write(stale);
 
-        var summary = new OrchestratorApi.Services.SummaryGenerationService(
-            NullLogger<OrchestratorApi.Services.SummaryGenerationService>.Instance, config);
+        var summary = new AgentStudio.Review.SummaryGenerationService(
+            NullLogger<AgentStudio.Review.SummaryGenerationService>.Instance, config);
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
 
         var runner = new RejectThenSucceedRunner(
@@ -175,7 +174,7 @@ public class OrchestratorChatRejectionRecoveryTests : IDisposable
         // fast path). Overriding the 5-arg variants left them as dead code.
         public override Task<OrchestratorDecisionResult> ResumeAsync(
             string sessionId, string prompt, string? model, string workingDirectory,
-            IReadOnlyList<OrchestratorApi.Services.Cli.OneShot.CliOneShotImage>? inlineImages,
+            IReadOnlyList<AgentStudio.Cli.CliOneShotImage>? inlineImages,
             CancellationToken ct = default)
         {
             ResumeCalls++;
@@ -191,7 +190,7 @@ public class OrchestratorChatRejectionRecoveryTests : IDisposable
 
         public override Task<OrchestratorDecisionResult> DecideAsync(
             string prompt, string? model, string workingDirectory,
-            IReadOnlyList<OrchestratorApi.Services.Cli.OneShot.CliOneShotImage>? inlineImages,
+            IReadOnlyList<AgentStudio.Cli.CliOneShotImage>? inlineImages,
             CancellationToken ct = default)
         {
             DecideCalls++;

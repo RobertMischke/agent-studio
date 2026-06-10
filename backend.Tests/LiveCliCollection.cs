@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Serialises the test classes that drive the live claude / codex /

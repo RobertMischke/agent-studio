@@ -1,8 +1,8 @@
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Cli.Adapters;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the Gemini stream-json -> CliRunEvent mapping. Fixtures come

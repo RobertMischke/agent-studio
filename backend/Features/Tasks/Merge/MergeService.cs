@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Tasks.Merge;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Status codes for <see cref="MergeService"/> operations. Endpoint mappers

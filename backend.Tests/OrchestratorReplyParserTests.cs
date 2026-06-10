@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the orchestrator's reply contract: <c>{REPLY | STEER | BLOCK}</c>.
@@ -172,7 +172,7 @@ Options:
         // The prompts the runner sends are the contract behind the parser.
         // Lock the words "STEER", "Need:", and the preference rule so a
         // future edit does not silently drop the steering grammar.
-        var prompt = OrchestratorApi.Services.Runner.ProjectRunner.BuildOrchestratorPrompt(
+        var prompt = AgentStudio.Runner.ProjectRunner.BuildOrchestratorPrompt(
             FakeJob(),
             promptText: "do the work",
             lastAgentText: "should I ship A or B?",
@@ -185,13 +185,13 @@ Options:
         // Block must remain documented as the last-resort path.
         Assert.Contains("BLOCK", prompt);
 
-        var resume = OrchestratorApi.Services.Runner.ProjectRunner.BuildOrchestratorResumePrompt(
+        var resume = AgentStudio.Runner.ProjectRunner.BuildOrchestratorResumePrompt(
             FakeJob(), lastAgentText: "should I ship A or B?", attachmentsList: "(none)");
         Assert.Contains("STEER", resume);
         Assert.Contains("Need:", resume);
     }
 
-    private static OrchestratorApi.Models.TaskInfo FakeJob() => new()
+    private static AgentStudio.Shared.TaskInfo FakeJob() => new()
     {
         Id = "test-job",
         Title = "Test job",

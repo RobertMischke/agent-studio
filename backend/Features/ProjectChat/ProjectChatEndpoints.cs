@@ -1,8 +1,6 @@
 using System.Globalization;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.ProjectChat;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.ProjectChat;
 
 /// <summary>
 /// Slice D's read surface for project chat: search, single-turn fetch,

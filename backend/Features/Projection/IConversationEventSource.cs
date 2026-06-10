@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Projection;
+namespace AgentStudio.Projection;
 
 /// <summary>
 /// One pluggable producer of <see cref="RawSourceEvent"/>s for a given job.
@@ -16,7 +16,7 @@ public interface IConversationEventSource
     /// I/O errors are the source's responsibility to log and absorb.
     /// </summary>
     Task<IReadOnlyList<RawSourceEvent>> ReadAsync(
-        OrchestratorApi.Models.TaskInfo jobInfo,
+        AgentStudio.Shared.TaskInfo jobInfo,
         CancellationToken ct);
 
     /// <summary>
@@ -24,5 +24,5 @@ public interface IConversationEventSource
     /// hash into the cache key. <c>DateTime.MinValue</c> when nothing on disk
     /// matters or the source is empty for this job.
     /// </summary>
-    DateTime GetSourceMTimeUtc(OrchestratorApi.Models.TaskInfo jobInfo);
+    DateTime GetSourceMTimeUtc(AgentStudio.Shared.TaskInfo jobInfo);
 }

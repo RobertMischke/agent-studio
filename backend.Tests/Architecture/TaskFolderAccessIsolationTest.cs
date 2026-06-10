@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using Xunit;
 
-namespace OrchestratorApi.Tests.Architecture;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Mechanically enforces the rule from ADR-0024 and the queued task

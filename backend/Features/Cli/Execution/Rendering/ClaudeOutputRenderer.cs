@@ -1,7 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Cli.Rendering;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Renders Anthropic <c>claude</c> <c>stream-json</c> NDJSON frames into the

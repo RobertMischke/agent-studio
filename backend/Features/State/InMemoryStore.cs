@@ -3,12 +3,12 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OrchestratorApi.Services.State;
+namespace AgentStudio.State;
 
 /// <summary>
 /// File-backed, in-memory projection of one append-only JSONL document type
 /// per (workspace, project) pair. The pattern matches the Agent Message Bus
-/// store (see <c>OrchestratorApi.Services.Bus.AgentMessageBusStore</c>) and is
+/// store (see <c>AgentStudio.Bus.AgentMessageBusStore</c>) and is
 /// the shared implementation for everything that lands a typed schema in
 /// <c>docs/schemas/</c>.
 /// </summary>

@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// One ad-hoc Haiku CLI call recorded outside the main task-runner path.
@@ -63,7 +63,7 @@ public static class AdHocUsageSources
 
 /// <summary>
 /// Aggregated rollup of <see cref="AdHocUsageRecord"/> entries. Same
-/// shape conventions as <see cref="OrchestratorApi.Services.Runner.TokenSummary"/>:
+/// shape conventions as <see cref="AgentStudio.Runner.TokenSummary"/>:
 /// real token counts plus a theoretical USD estimate that does not
 /// reflect the user's actual subscription bill.
 /// </summary>

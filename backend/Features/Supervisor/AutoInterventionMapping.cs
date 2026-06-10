@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Supervisor;
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// Pure rule that maps a <see cref="SupervisorAdvisory"/> to an automatic

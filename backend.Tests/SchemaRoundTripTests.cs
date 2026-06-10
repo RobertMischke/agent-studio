@@ -1,16 +1,13 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Analysis;
-using OrchestratorApi.Services.Drift;
-using OrchestratorApi.Services.Supervisor;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the round-trip between the JSON schemas under
 /// <c>docs/schemas/</c> and the C# records that flow through
-/// <c>OrchestratorApi.Services.State</c>: every required field listed in the
+/// <c>AgentStudio.State</c>: every required field listed in the
 /// schema appears as a serialised property on a fresh canonical example, and
 /// every documented enum value parses back into its C# enum without loss.
 /// </summary>

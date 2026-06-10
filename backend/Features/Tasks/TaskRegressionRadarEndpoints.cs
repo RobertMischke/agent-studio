@@ -1,7 +1,6 @@
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.RegressionRadar;
 
-namespace OrchestratorApi.Endpoints.Tasks;
+
+namespace AgentStudio.Tasks;
 
 public static class TaskRegressionRadarEndpoints
 {

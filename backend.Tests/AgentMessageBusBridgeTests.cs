@@ -1,12 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Supervisor;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the Phase A bridge contract (docs/agent-message-bus.md section 9):
@@ -409,14 +406,14 @@ public sealed class AgentMessageBusBridgeTests : IDisposable
         // service slug or the bridge's kebab logic surfaces immediately.
         await _bridge.EmitSupportingAgentReportAsync(
             project: "agent-taskboard",
-            topic: OrchestratorApi.Services.Analysis.SteeringDocsSummaryDriftService.Topic,
+            topic: AgentStudio.Analysis.SteeringDocsSummaryDriftService.Topic,
             reportId: "01HXYZDOCSDRIFT",
             summary: "Steering surface drifted on shim contract.",
             severity: "Warn",
             parseStatus: "Structured",
             markdownPath: "/ws/logs/analysis/agent-taskboard/01HXYZDOCSDRIFT.md",
             jsonSidecarPath: "/ws/logs/analysis/agent-taskboard/01HXYZDOCSDRIFT.json",
-            skill: OrchestratorApi.Services.Analysis.SteeringDocsSummaryDriftService.Topic);
+            skill: AgentStudio.Analysis.SteeringDocsSummaryDriftService.Topic);
 
         var msg = Assert.Single(_store.Recent(_workspace, "agent-taskboard", 10));
         Assert.Equal("support:steering-docs-summary-and-drift", msg.ParticipantId);

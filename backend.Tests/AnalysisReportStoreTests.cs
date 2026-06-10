@@ -1,9 +1,9 @@
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Services.Analysis;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the contract of <see cref="AnalysisReportStore"/>: a structured

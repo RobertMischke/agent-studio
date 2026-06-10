@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Rollup view of one epic + its sub-tasks for <c>GET /api/epics</c>. The epic

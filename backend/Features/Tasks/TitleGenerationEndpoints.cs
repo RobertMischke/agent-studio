@@ -1,6 +1,5 @@
-using OrchestratorApi.Services;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// One-shot title generator. <c>POST /api/title/generate</c> hands a free-text

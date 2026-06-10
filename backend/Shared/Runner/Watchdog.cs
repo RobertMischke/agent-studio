@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Watchdog state for an active CLI run, derived purely from how long it

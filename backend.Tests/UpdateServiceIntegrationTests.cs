@@ -1,11 +1,11 @@
 extern alias UpdSvc;
 using System.Net.Http.Json;
 using System.Text.Json;
-using OrchestratorApi.Tests.Fixtures.UpdateService;
+
 using UpdSvc::AgentTaskboard.UpdateService;
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// ADR-0031 follow-up: full WebApplicationFactory integration suite for the

@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Cli;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the post-hoc token aggregation that reconstructs a Claude run's

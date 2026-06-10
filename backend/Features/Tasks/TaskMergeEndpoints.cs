@@ -1,8 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks.Audit;
-using OrchestratorApi.Services.Tasks.Merge;
 
-namespace OrchestratorApi.Endpoints.Tasks;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Merge / consolidation API for the

@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace OrchestratorApi.Services.Registry;
+namespace AgentStudio.Registry;
 
 /// <summary>
 /// F45a — derives a default <c>shortCode</c> from a display name and

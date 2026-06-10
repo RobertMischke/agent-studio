@@ -1,10 +1,8 @@
 using Microsoft.Extensions.Configuration;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Models;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks <see cref="CodexCliService"/>'s session-UUID capture path. The
@@ -376,8 +374,8 @@ public class CodexCliServiceTests
         return new CodexCliService(
             Microsoft.Extensions.Logging.Abstractions.NullLogger<CodexCliService>.Instance,
             cfg,
-            new OrchestratorApi.Services.Pty.CodexModelDiscovery(
-                Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Pty.CodexModelDiscovery>.Instance,
+            new AgentStudio.Cli.CodexModelDiscovery(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.CodexModelDiscovery>.Instance,
                 cfg),
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());

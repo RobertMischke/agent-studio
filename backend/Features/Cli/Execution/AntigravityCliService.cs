@@ -1,12 +1,11 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli.Adapters;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Driver for Google's Antigravity CLI (<c>agentapi</c>).

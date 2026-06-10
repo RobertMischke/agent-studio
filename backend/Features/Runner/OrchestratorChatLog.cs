@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
 
-namespace OrchestratorApi.Services.Runner;
+
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Lets the orchestrator speak directly into the chat transcript as a

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace OrchestratorApi.Services.Protocol;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// In-memory shape of the structured header carried at the top of a

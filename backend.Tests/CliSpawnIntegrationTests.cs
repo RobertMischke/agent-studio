@@ -5,7 +5,7 @@ using Microsoft.Extensions.Configuration.Memory;
 using Xunit;
 using Xunit.Sdk;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Integration regression tests for the CLI-spawn boundary.
@@ -99,7 +99,7 @@ public class CliSpawnIntegrationTests
         {
             var fromEnv = Environment.GetEnvironmentVariable("AGENTAPI_CMD") ?? Environment.GetEnvironmentVariable("ANTIGRAVITY_CMD");
             if (!string.IsNullOrWhiteSpace(fromEnv) && File.Exists(fromEnv)) return fromEnv;
-            var resolved = OrchestratorApi.Services.Cli.AntigravityCliService.ResolveExecutable("agentapi");
+            var resolved = AgentStudio.Cli.AntigravityCliService.ResolveExecutable("agentapi");
             if (resolved != "agentapi" && File.Exists(resolved)) return resolved;
             var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             var candidate = Path.Combine(appData, "npm", "agentapi.cmd");
@@ -316,8 +316,8 @@ public class CliSpawnIntegrationTests
             })
             .Build();
 
-        var svc = new OrchestratorApi.Services.Cli.ClaudeCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Cli.ClaudeCliService>.Instance,
+        var svc = new AgentStudio.Cli.ClaudeCliService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.ClaudeCliService>.Instance,
             cfg);
 
         var jobId = $"it-{Guid.NewGuid():N}";
@@ -371,11 +371,11 @@ public class CliSpawnIntegrationTests
             })
             .Build();
 
-        var svc = new OrchestratorApi.Services.Cli.ClaudeCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Cli.ClaudeCliService>.Instance,
+        var svc = new AgentStudio.Cli.ClaudeCliService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.ClaudeCliService>.Instance,
             cfg);
 
-        var lines = new List<OrchestratorApi.Models.CliOutputLine>();
+        var lines = new List<AgentStudio.Shared.CliOutputLine>();
         svc.OnOutput += (_, line) => { lock (lines) lines.Add(line); };
 
         var jobId = $"it-{Guid.NewGuid():N}";
@@ -430,8 +430,8 @@ public class CliSpawnIntegrationTests
                 ["TaskRepository"] = Path.Combine(Path.GetTempPath(), $"cli-it-{Guid.NewGuid():N}")
             })
             .Build();
-        var svc = new OrchestratorApi.Services.Cli.ClaudeCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Cli.ClaudeCliService>.Instance,
+        var svc = new AgentStudio.Cli.ClaudeCliService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.ClaudeCliService>.Instance,
             cfg);
 
         var streamingObserved = new List<int>();
@@ -488,7 +488,7 @@ public class CliSpawnIntegrationTests
     }
 
     /// <summary>
-    /// Codex parity probe: drives <see cref="OrchestratorApi.Services.Cli.CodexCliService.StartAsync"/>
+    /// Codex parity probe: drives <see cref="AgentStudio.Cli.CodexCliService.StartAsync"/>
     /// against the live <c>codex exec --json</c> CLI with a tiny prompt. Codex
     /// has no bundled .exe (it ships as <c>node.exe + codex.js</c> via the
     /// <c>codex.cmd</c> npm shim), so unlike Claude there is no underlying
@@ -511,15 +511,15 @@ public class CliSpawnIntegrationTests
             })
             .Build();
 
-        var svc = new OrchestratorApi.Services.Cli.CodexCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Cli.CodexCliService>.Instance,
+        var svc = new AgentStudio.Cli.CodexCliService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.CodexCliService>.Instance,
             cfg,
-            new OrchestratorApi.Services.Pty.CodexModelDiscovery(
-                Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Pty.CodexModelDiscovery>.Instance,
+            new AgentStudio.Cli.CodexModelDiscovery(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.CodexModelDiscovery>.Instance,
                 cfg),
-            new OrchestratorApi.Services.Bus.CliUsageParserRegistry(new OrchestratorApi.Services.Bus.ICliUsageParser[]
-                { new OrchestratorApi.Services.Bus.CodexUsageParser() }),
-            new OrchestratorApi.Services.Bus.CliModelRegistry());
+            new AgentStudio.Cli.CliUsageParserRegistry(new AgentStudio.Cli.ICliUsageParser[]
+                { new AgentStudio.Cli.CodexUsageParser() }),
+            new AgentStudio.Cli.CliModelRegistry());
 
         var jobId = $"it-{Guid.NewGuid():N}";
         var jobKey = $"::{jobId}";
@@ -560,7 +560,7 @@ public class CliSpawnIntegrationTests
     }
 
     /// <summary>
-    /// Antigravity parity probe: drives <see cref="OrchestratorApi.Services.Cli.AntigravityCliService.StartAsync"/>
+    /// Antigravity parity probe: drives <see cref="AgentStudio.Cli.AntigravityCliService.StartAsync"/>
     /// against the live <c>agentapi</c> CLI.
     /// </summary>
     [SkippableFact]
@@ -578,8 +578,8 @@ public class CliSpawnIntegrationTests
             })
             .Build();
 
-        var svc = new OrchestratorApi.Services.Cli.AntigravityCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Cli.AntigravityCliService>.Instance,
+        var svc = new AgentStudio.Cli.AntigravityCliService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.AntigravityCliService>.Instance,
             cfg);
 
         var jobId = $"it-{Guid.NewGuid():N}";

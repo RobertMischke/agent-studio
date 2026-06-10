@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace OrchestratorApi.Services.Projection;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Rewrites <c>&lt;img src="..."&gt;</c> attributes inside already-rendered

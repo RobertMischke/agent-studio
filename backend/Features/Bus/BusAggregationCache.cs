@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Bus;
+namespace AgentStudio.Bus;
 
 /// <summary>
 /// Token-spend rollup served by <c>GET /api/bus/{project}/token-aggregate</c>.

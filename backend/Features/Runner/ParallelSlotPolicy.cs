@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// ADR-0052 parallelisability facts the orchestrator-prep step stores on a task

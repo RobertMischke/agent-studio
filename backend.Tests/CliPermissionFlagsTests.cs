@@ -1,7 +1,7 @@
-using OrchestratorApi.Models;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Ticket test-path unit: the pure (cliType, mode) → flags mapper renders the

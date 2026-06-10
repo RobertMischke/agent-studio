@@ -1,6 +1,5 @@
-using OrchestratorApi.Services.RegressionRadar;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.RegressionRadar;
 
 public static class ProjectRegressionRadarEndpoints
 {

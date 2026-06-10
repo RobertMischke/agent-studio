@@ -1,12 +1,11 @@
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Services.State;
 
-namespace OrchestratorApi.Services.Drift;
+namespace AgentStudio.Drift;
 
 /// <summary>
 /// File-backed in-memory projection of one project's drift-report folder.
-/// Mirrors <see cref="OrchestratorApi.Services.Analysis.AnalysisReportStore"/>:
+/// Mirrors <see cref="AgentStudio.Analysis.AnalysisReportStore"/>:
 /// every <see cref="AppendAsync"/> writes the durable Markdown sibling, the
 /// JSON sidecar (always for drift reports - the structured shape is the
 /// triage signal), and appends the same record to the per-project index for

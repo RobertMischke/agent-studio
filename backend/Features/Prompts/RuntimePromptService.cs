@@ -1,8 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Prompts;
 
 /// <summary>
 /// Loads runtime prompt templates from Markdown files and renders simple

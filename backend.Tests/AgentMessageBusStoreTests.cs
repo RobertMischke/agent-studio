@@ -1,12 +1,11 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
+
 using Xunit;
 using Xunit.Abstractions;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the Agent Message Bus store contract: append round-trips through

@@ -1,10 +1,6 @@
 using System.Diagnostics;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.AdHoc;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Cli.OneShot;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Generates a short imperative English title from a free-text task

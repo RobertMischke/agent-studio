@@ -1,8 +1,8 @@
 using System.Diagnostics;
-using OrchestratorApi.Services.Cli;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public class AgentGitCommandGuardTests
 {

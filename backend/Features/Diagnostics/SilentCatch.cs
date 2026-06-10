@@ -1,7 +1,7 @@
 using Serilog;
 using Serilog.Events;
 
-namespace OrchestratorApi.Diagnostics;
+namespace AgentStudio.Diagnostics;
 
 /// <summary>
 /// Project-wide standard for catch blocks that used to swallow their exception

@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Wire contracts for the Runner ↔ Server lease API (Step 6). A Runner — local

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace OrchestratorApi.Services.Protocol;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Result of parsing a status.md document. Exactly one of these is

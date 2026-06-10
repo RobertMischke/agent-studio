@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using Xunit;
 
-namespace OrchestratorApi.Tests.Architecture;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Keeps runtime token-usage consumers on the canonical bus-backed surface.
@@ -31,7 +31,7 @@ public sealed class TokenAggregationCanonicalDependencyTest
     public void LegacyServiceDependencyRegex_MatchesInjectedConcreteTypes_AndIgnoresStaticCalls()
     {
         Assert.Matches(LegacyServiceDependency, "private readonly TokenSummaryService _tokens;");
-        Assert.Matches(LegacyServiceDependency, "OrchestratorApi.Services.AdHoc.AdHocUsageService usage,");
+        Assert.Matches(LegacyServiceDependency, "AgentStudio.AdHoc.AdHocUsageService usage,");
 
         Assert.DoesNotMatch(LegacyServiceDependency, "TokenSummaryService.Summarize(projectName, entries);");
         Assert.DoesNotMatch(LegacyServiceDependency, "builder.Services.AddSingleton<TokenSummaryService>();");

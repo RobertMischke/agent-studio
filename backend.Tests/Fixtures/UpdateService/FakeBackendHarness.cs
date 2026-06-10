@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace OrchestratorApi.Tests.Fixtures.UpdateService;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Hosted-in-process fake of the main backend, bound to a dynamic loopback

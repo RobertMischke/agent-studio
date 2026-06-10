@@ -1,8 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// The Runner ↔ Server lease API under <c>/api/runner/lease</c> (Step 6 of the

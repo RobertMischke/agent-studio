@@ -1,6 +1,5 @@
-using OrchestratorApi.Services;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Prompts;
 
 /// <summary>
 /// One-shot prompt enhancer. <c>POST /api/prompt/enhance</c> hands a

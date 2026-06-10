@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Quota;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public class CodexQuotaProbeTests
 {

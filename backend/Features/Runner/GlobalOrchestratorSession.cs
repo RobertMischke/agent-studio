@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Singleton orchestrator that lives above the per-project orchestrators.

@@ -1,8 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Pipeline;
+namespace AgentStudio.Pipeline;
 
 /// <summary>
 /// Per-job append-mostly writer for <c>pipeline-execution.json</c>. One

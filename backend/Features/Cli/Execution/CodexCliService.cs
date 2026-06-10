@@ -1,11 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Cli.Adapters;
-using OrchestratorApi.Services.Pty;
 
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Driver for the OpenAI <c>codex</c> CLI.
@@ -206,7 +202,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
     /// so per-CLI orchestrator guidance must be prepended to the positional
     /// prompt argument. This builds a short prefix with two prophylactic
     /// hints that complement the reactive
-    /// <see cref="OrchestratorApi.Services.Runner.AgentEnvironmentDetector"/>
+    /// <see cref="AgentStudio.Cli.AgentEnvironmentDetector"/>
     /// pipeline:
     /// <list type="number">
     ///   <item>Sentinel reminder. Codex's pass-through frame model means the
@@ -418,7 +414,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
     /// <para>
     /// This runs in <see cref="MapLineToRunEvents"/> on the RAW stdout line, not
     /// in <c>OnOutputLine</c>. <c>OnOutputLine</c> now receives the rendered
-    /// <c>● Session &lt;id&gt;</c> marker (see <see cref="Rendering.CodexOutputRenderer"/>),
+    /// <c>● Session &lt;id&gt;</c> marker (see <see cref="CodexOutputRenderer"/>),
     /// from which the original <c>thread_id</c> payload is no longer recoverable;
     /// capturing here keeps <see cref="TryExtractSessionId"/> reading the real
     /// JSON frame.
@@ -440,14 +436,14 @@ public sealed class CodexCliService : CliExecutionServiceBase
     /// Translate a single <c>codex exec --experimental-json</c> JSONL frame into the marker
     /// vocabulary the frontend activity-log parser classifies, e.g.
     /// <c>● Run &lt;cmd&gt;</c> or <c>● Edit &lt;path&gt;</c>. Delegates to the pure,
-    /// dependency-free <see cref="Rendering.CodexOutputRenderer"/> (the
+    /// dependency-free <see cref="CodexOutputRenderer"/> (the
     /// marker-line twin of <see cref="CodexEventAdapter"/>). Before this existed
     /// Codex had no override and raw JSONL leaked into the Activity Log.
     /// </summary>
     public override IEnumerable<CliOutputLine> TransformReadLine(CliOutputLine raw)
         => _renderer.Render(raw);
 
-    private static readonly Rendering.CodexOutputRenderer _renderer = new();
+    private static readonly CodexOutputRenderer _renderer = new();
 
     /// <summary>
     /// Parse a <c>turn.completed</c> frame's <c>usage</c> block via the

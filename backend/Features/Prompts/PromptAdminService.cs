@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Prompts;
 
 /// <summary>
 /// Admin surface over the runtime prompt templates: lists every template

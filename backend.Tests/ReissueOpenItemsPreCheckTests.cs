@@ -1,8 +1,8 @@
 using System.Linq;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pins the deterministic reissue open-items pre-check: it intervenes only when

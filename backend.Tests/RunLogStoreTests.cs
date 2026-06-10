@@ -1,10 +1,9 @@
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Step 5b: the executor's per-run output store keeps one append-only file +

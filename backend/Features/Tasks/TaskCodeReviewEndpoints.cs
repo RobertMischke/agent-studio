@@ -1,13 +1,6 @@
 using Microsoft.Extensions.Configuration;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.GeneratedFiles;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Review;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Endpoints.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// User-triggered code-review step. Posts a single review pass against
@@ -94,7 +87,7 @@ public static class TaskCodeReviewEndpoints
                         try
                         {
                             var content = File.ReadAllText(path);
-                            var fm = OrchestratorApi.Services.Markdown.FrontmatterParser.Parse(content);
+                            var fm = AgentStudio.Cli.FrontmatterParser.Parse(content);
                             var fields = fm.Ok ? fm.Fields : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                             entries.Add(new CodeReviewListEntry
                             {

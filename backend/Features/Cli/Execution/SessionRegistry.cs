@@ -1,8 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Reads each CLI's native on-disk session store and presents a unified view

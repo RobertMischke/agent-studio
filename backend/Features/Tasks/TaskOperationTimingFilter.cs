@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 
-namespace OrchestratorApi.Endpoints.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Adds lightweight timing around task API operations. The 30 ms budget is

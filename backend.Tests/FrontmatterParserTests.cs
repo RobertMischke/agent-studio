@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Markdown;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the canonical YAML frontmatter helper contract: leading

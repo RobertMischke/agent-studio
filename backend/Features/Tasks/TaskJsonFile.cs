@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Shared low-level helper for the job services in this folder. All four

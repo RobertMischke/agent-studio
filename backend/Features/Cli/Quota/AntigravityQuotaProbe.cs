@@ -1,10 +1,9 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Pty;
+
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 
-namespace OrchestratorApi.Services.Quota;
+namespace AgentStudio.Cli;
 
 public sealed class AntigravityQuotaProbe : QuotaProbeBase
 {

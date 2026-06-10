@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Pure parsing for the review-decision orchestrator's outputs.

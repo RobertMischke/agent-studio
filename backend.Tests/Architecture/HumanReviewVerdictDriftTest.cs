@@ -2,14 +2,14 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using Xunit;
 
-namespace OrchestratorApi.Tests.Architecture;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Mechanically enforces the rule behind the bug
 /// <c>karten-landen-in-5-human-review-ohne-verdict-und-ohne-statusmarkdown</c>:
 /// a card may only land in <c>5e-escalated</c> through a code path that also
 /// records an orchestrator verdict. A move into the human-review lane with no
-/// accompanying <see cref="OrchestratorApi.Services.Runner.ReviewDecisionRecord"/>
+/// accompanying <see cref="AgentStudio.Runner.ReviewDecisionRecord"/>
 /// produces a card the board cannot explain - <c>orchestratorVerdict == null</c>
 /// and an empty <c>status.md</c>.
 ///

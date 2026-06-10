@@ -1,11 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Threading.Channels;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Pipeline;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 public sealed record AutoReviewPostProcessingRequest(
     string ProjectName,

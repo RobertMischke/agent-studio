@@ -1,12 +1,11 @@
-using OrchestratorApi.Endpoints.Tasks;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Host;
 
 /// <summary>
 /// Composition root for all HTTP routes. <see cref="Program"/> calls
 /// <see cref="MapAllEndpoints"/> once at startup; this method does
 /// nothing on its own beyond delegating to the per-feature mappers
-/// in <see cref="OrchestratorApi.Endpoints.Tasks"/> and the sibling
+/// in <see cref="AgentStudio.Tasks"/> and the sibling
 /// classes in this namespace. Splitting the routes by feature keeps
 /// each file under ~150 lines and makes "where is the handler for
 /// X" answerable in one grep.

@@ -1,8 +1,7 @@
 using System.Linq;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Review;
+namespace AgentStudio.Review;
 
 /// <summary>
 /// Quality grade assigned by the automatic code-review pipeline step

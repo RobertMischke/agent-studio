@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Configuration;
-using OrchestratorApi.Endpoints.Tasks;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the resolution behind <c>GET /api/tasks/code-review/defaults</c>.

@@ -1,15 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Pipeline;
-using OrchestratorApi.Services.Registry;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Covers the ASS-563 lint-scss post-step end to end: config-layer
@@ -192,7 +186,7 @@ public class LintScssPostStepTests : IDisposable
         // as Failed so the FE badge can render "fail".
         var pipelineJson = File.ReadAllText(
             Path.Combine(_watchPath, TaskStates.Ready, "lint-broken",
-                OrchestratorApi.Services.Pipeline.PipelineExecutionLog.FileName));
+                AgentStudio.Pipeline.PipelineExecutionLog.FileName));
         Assert.Contains("\"stepId\": \"" + PipelineCatalogue.LintScssStepId + "\"", pipelineJson);
         Assert.Contains("\"verdict\": \"fail\"", pipelineJson);
 
@@ -234,7 +228,7 @@ public class LintScssPostStepTests : IDisposable
         // amber pill even though no reissue happened.
         var pipelineJson = File.ReadAllText(
             Path.Combine(_watchPath, TaskStates.HumanReview, "lint-warn-only",
-                OrchestratorApi.Services.Pipeline.PipelineExecutionLog.FileName));
+                AgentStudio.Pipeline.PipelineExecutionLog.FileName));
         Assert.Contains("\"verdict\": \"warn\"", pipelineJson);
     }
 
@@ -325,9 +319,9 @@ public class LintScssPostStepTests : IDisposable
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var transitions = new TaskTransitionService(scanner, stateMachine, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
-        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+        var taskAccess = new AgentStudio.TaskAccess.TaskAccessService(
             scanner, mutations, stateMachine, transitions, indexCache,
-            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
+            NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
 
         var pipelineLog = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance);
 

@@ -1,10 +1,6 @@
 using System.Text;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Analysis;
-using OrchestratorApi.Services.Bus;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Analysis;
 
 /// <summary>
 /// Read + manual-trigger surface for the Analysis Reports project view

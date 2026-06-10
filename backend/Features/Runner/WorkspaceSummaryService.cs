@@ -1,12 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.State;
-using OrchestratorApi.Services.Supervisor;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Workspace-level executive summary aggregator. Folds per-project

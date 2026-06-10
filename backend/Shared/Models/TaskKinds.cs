@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Card kinds. A <see cref="Task"/> is a runnable unit of work (the default).

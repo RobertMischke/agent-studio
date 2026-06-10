@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Runtime;
+namespace AgentStudio.Runtime;
 
 /// <summary>
 /// Canonical layout for Product Runtime Observability JSONL files. Mirrors the

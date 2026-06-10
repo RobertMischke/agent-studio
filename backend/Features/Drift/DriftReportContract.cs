@@ -1,12 +1,12 @@
 using System.Text.Json.Serialization;
 
-namespace OrchestratorApi.Services.Drift;
+namespace AgentStudio.Drift;
 
 /// <summary>
 /// In-code projection of <c>docs/schemas/drift-report.schema.json</c> and the
 /// prose contract in <c>docs/drift-reports.md</c>. Drift reports are a
 /// separate evidence pile from
-/// <see cref="OrchestratorApi.Services.Analysis.AnalysisReport"/>: drift is a
+/// <see cref="AgentStudio.Analysis.AnalysisReport"/>: drift is a
 /// project dimension beside Architecture (ROADMAP "Drift Control"), so the
 /// store, schema, and surfaces are intentionally distinct. The two contracts
 /// share the producer model, the Markdown-plus-JSON convention, and the

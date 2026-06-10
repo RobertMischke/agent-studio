@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Tasks;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Shared builder + in-progress projection for a job's commit aggregate.

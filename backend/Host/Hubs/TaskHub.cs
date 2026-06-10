@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
-using OrchestratorApi.Services.Projection;
 
-namespace OrchestratorApi.Hubs;
+namespace AgentStudio.Host;
 
 public class TaskHub : Hub
 {

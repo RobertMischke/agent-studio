@@ -1,18 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Registry;
-using OrchestratorApi.Services.Pty;
-using OrchestratorApi.Services.Quota;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the contract added for the wedge bug where moving the active job
@@ -234,7 +225,7 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
         OrchestratorRunner OrchestratorRunner,
         OrchestratorSessionStore OrchestratorSessions,
         CliRouter Router,
-        OrchestratorApi.Services.TaskAccess.ITaskAccess TaskAccess);
+        AgentStudio.TaskAccess.ITaskAccess TaskAccess);
 
     private Deps BuildDeps()
     {
@@ -262,9 +253,9 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
         var orchestratorLog = new OrchestratorLog(NullLogger<OrchestratorLog>.Instance);
         var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
         scanner.SetIndexCache(indexCache);
-        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+        var taskAccess = new AgentStudio.TaskAccess.TaskAccessService(
             scanner, mutations, states, transitions, indexCache,
-            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
+            NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
 
         var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
         var copilot = new CopilotCliService(

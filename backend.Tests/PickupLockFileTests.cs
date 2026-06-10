@@ -1,9 +1,9 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Unit coverage for the cross-process pickup lock (ADR-0044). The lock is the

@@ -2,11 +2,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Pty;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Cli;
 
 public class CopilotCliService : ICliExecutionService
 {
@@ -222,7 +219,7 @@ public class CopilotCliService : ICliExecutionService
         return (execution, null);
     }
 
-    public bool Stop(string jobKey, OrchestratorApi.Services.Runner.RunStopReason reason = OrchestratorApi.Services.Runner.RunStopReason.UserStop)
+    public bool Stop(string jobKey, AgentStudio.Shared.RunStopReason reason = AgentStudio.Shared.RunStopReason.UserStop)
     {
         if (!_processes.TryGetValue(jobKey, out var info)) return false;
 
@@ -420,12 +417,12 @@ public class CopilotCliService : ICliExecutionService
     public DateTime? GetLastStreamedAt(string jobKey)
         => _processes.TryGetValue(jobKey, out var info) ? info.LastStreamedAt : null;
 
-    public OrchestratorApi.Services.Runner.WatchdogState GetWatchdogState(string jobKey)
+    public AgentStudio.Shared.WatchdogState GetWatchdogState(string jobKey)
         => _processes.TryGetValue(jobKey, out var info)
             ? info.LastWatchdogState
-            : OrchestratorApi.Services.Runner.WatchdogState.Healthy;
+            : AgentStudio.Shared.WatchdogState.Healthy;
 
-    public void SetWatchdogState(string jobKey, OrchestratorApi.Services.Runner.WatchdogState state)
+    public void SetWatchdogState(string jobKey, AgentStudio.Shared.WatchdogState state)
     {
         if (_processes.TryGetValue(jobKey, out var info)) info.LastWatchdogState = state;
     }
@@ -465,13 +462,13 @@ public class CopilotCliService : ICliExecutionService
         }
         catch (OperationCanceledException)
         {
-            Stop(jobKey, OrchestratorApi.Services.Runner.RunStopReason.Cancelled);
+            Stop(jobKey, AgentStudio.Shared.RunStopReason.Cancelled);
         }
 
         var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
         int? exitCode = null;
         try { exitCode = process.ExitCode; } catch (Exception __ex) { SilentCatch.Note(__ex, "CopilotCliService: reattached process may deny ExitCode access"); /* reattached process may deny ExitCode access */ }
-        var status = OrchestratorApi.Services.Runner.RunStatusClassifier.Classify(exitCode, info.StopReason);
+        var status = AgentStudio.Shared.RunStatusClassifier.Classify(exitCode, info.StopReason);
 
         var finalExecution = info.Execution with
         {
@@ -502,7 +499,7 @@ public class CopilotCliService : ICliExecutionService
         // runs too.
         try
         {
-            CliRunEvent terminal = info.StopReason != OrchestratorApi.Services.Runner.RunStopReason.None
+            CliRunEvent terminal = info.StopReason != AgentStudio.Shared.RunStopReason.None
                 ? new CliRunEvent.Killed(info.StopReason.ToString()) { TaskKey = jobKey }
                 : new CliRunEvent.ProcessExited(exitCode, status, duration) { TaskKey = jobKey };
             OnRunEvent?.Invoke(jobKey, terminal);
@@ -837,9 +834,9 @@ public class CopilotCliService : ICliExecutionService
         public string? OutputLogPath { get; init; }
         public RunLogStore OutputLog { get; init; } = null!;
         public DateTime LastStreamedAt { get; set; }
-        public OrchestratorApi.Services.Runner.WatchdogState LastWatchdogState { get; set; } = OrchestratorApi.Services.Runner.WatchdogState.Healthy;
+        public AgentStudio.Shared.WatchdogState LastWatchdogState { get; set; } = AgentStudio.Shared.WatchdogState.Healthy;
         /// <summary>See <c>CliExecutionServiceBase.ProcInfo.StopReason</c> for the rationale.</summary>
-        public OrchestratorApi.Services.Runner.RunStopReason StopReason { get; set; } = OrchestratorApi.Services.Runner.RunStopReason.None;
+        public AgentStudio.Shared.RunStopReason StopReason { get; set; } = AgentStudio.Shared.RunStopReason.None;
 
         public CliProcessInfo(Process process, CliExecution execution, string workingDirectory)
         {

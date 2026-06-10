@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Supervisor;
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// Pure summariser for the periodic supervisor chat-note. Reads a window of

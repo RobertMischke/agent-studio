@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 public record ProjectSettings
 {
@@ -581,7 +581,7 @@ public static class IntegrationStrategies
 /// Onboarding lifecycle of a project's <see cref="BuildProfile"/> (Slice P /
 /// ASS-1663). A project only becomes <see cref="PipelineReady"/> after a green
 /// validation dry-run (fresh worktree -&gt; install -&gt; build). Until then the
-/// runner refuses auto-pickup (<see cref="OrchestratorApi.Services.Runner.BuildProfileGate"/>).
+/// runner refuses auto-pickup (<see cref="AgentStudio.Runner.BuildProfileGate"/>).
 /// A project that has never declared a profile carries no profile at all (null)
 /// and keeps the legacy "pickup allowed" behaviour, so existing projects are
 /// untouched.
@@ -666,7 +666,7 @@ public record BuildProfile
     /// Lockfile paths (worktree-relative, e.g. <c>["package-lock.json",
     /// "frontend/package-lock.json"]</c>) whose content hash decides whether a
     /// recycled worktree must re-install. Feeds the deps-ensure pre-step
-    /// (<see cref="OrchestratorApi.Services.Runner.DepsState"/>).
+    /// (<see cref="AgentStudio.Runner.DepsState"/>).
     /// </summary>
     public IReadOnlyList<string>? Lockfiles { get; init; }
 

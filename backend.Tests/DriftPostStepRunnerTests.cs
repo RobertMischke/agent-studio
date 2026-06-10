@@ -1,14 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Analysis;
-using OrchestratorApi.Services.Drift;
-using OrchestratorApi.Services.Pipeline;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the DRIFT-Nachtrag post-step coordinator: drift dimensions default

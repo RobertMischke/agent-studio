@@ -1,23 +1,5 @@
-using OrchestratorApi.Endpoints;
-using OrchestratorApi.Hubs;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Drift;
-using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Companion;
-using OrchestratorApi.Services.Configuration;
-using OrchestratorApi.Services.Diagnostics;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.ProjectChat;
-using OrchestratorApi.Services.Projection;
-using OrchestratorApi.Services.Projection.Sources;
-using OrchestratorApi.Services.Pty;
-using OrchestratorApi.Services.Quota;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Security;
-using OrchestratorApi.Services.Supervisor;
+
+
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Diagnostics;
 using Serilog;
@@ -198,12 +180,12 @@ builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
 builder.Services.AddSingleton<TaskScannerService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.ITaskScanner>(sp => sp.GetRequiredService<TaskScannerService>());
+builder.Services.AddSingleton<AgentStudio.Shared.ITaskScanner>(sp => sp.GetRequiredService<TaskScannerService>());
 // F45a: workspace / project registries + jobKey resolver. Additive layer;
 // not yet load-bearing for the existing lane-folder code paths (F45c).
-builder.Services.AddSingleton<OrchestratorApi.Services.Registry.WorkspaceRegistry>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Registry.ProjectRegistry>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.TaskKeyResolver>();
+builder.Services.AddSingleton<AgentStudio.Registry.WorkspaceRegistry>();
+builder.Services.AddSingleton<AgentStudio.Registry.ProjectRegistry>();
+builder.Services.AddSingleton<AgentStudio.Tasks.TaskKeyResolver>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
 // F21: per-project write mutex for the lane tree. Must be registered
 // before TaskStateMachine / TaskMutationService / TaskAccessService so
@@ -224,12 +206,12 @@ builder.Services.AddSingleton<TaskFileHistoryService>();
 // <TaskRepository>/.audit/merges.jsonl. AuditRunStore is in-memory so
 // in-flight audit runs are lost on restart (the persistent trail is the
 // per-card quality_loop_reopened events in each timeline.jsonl).
-builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.Merge.MergeAuditLog>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.Merge.MergeCandidateFinder>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.Merge.MergeService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.Audit.AcceptanceEvidenceDetector>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.Audit.AuditRunStore>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.Audit.CompletedLaneAuditService>();
+builder.Services.AddSingleton<AgentStudio.Tasks.MergeAuditLog>();
+builder.Services.AddSingleton<AgentStudio.Tasks.MergeCandidateFinder>();
+builder.Services.AddSingleton<AgentStudio.Tasks.MergeService>();
+builder.Services.AddSingleton<AgentStudio.Tasks.AcceptanceEvidenceDetector>();
+builder.Services.AddSingleton<AgentStudio.Tasks.AuditRunStore>();
+builder.Services.AddSingleton<AgentStudio.Tasks.CompletedLaneAuditService>();
 builder.Services.AddSingleton<FixtureMigrationService>();
 builder.Services.AddSingleton<TaskSessionLog>();
 builder.Services.AddSingleton<TimelineLog>();
@@ -266,11 +248,11 @@ builder.Services.AddSingleton<JobStatsMetadataCache>();
 // TaskScannerService / TaskMutationService / TaskStateMachine /
 // TaskTransitionService. Outside callers (endpoints, runner, supervisor)
 // resolve ITaskAccess so the lane-folder shape stays inside this layer.
-builder.Services.AddSingleton<OrchestratorApi.Services.TaskAccess.TaskAccessService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.TaskAccess.ITaskAccess>(sp =>
-    sp.GetRequiredService<OrchestratorApi.Services.TaskAccess.TaskAccessService>());
-builder.Services.AddSingleton<OrchestratorApi.Services.TaskAccess.ITaskAccessHost>(sp =>
-    sp.GetRequiredService<OrchestratorApi.Services.TaskAccess.TaskAccessService>());
+builder.Services.AddSingleton<AgentStudio.TaskAccess.TaskAccessService>();
+builder.Services.AddSingleton<AgentStudio.TaskAccess.ITaskAccess>(sp =>
+    sp.GetRequiredService<AgentStudio.TaskAccess.TaskAccessService>());
+builder.Services.AddSingleton<AgentStudio.TaskAccess.ITaskAccessHost>(sp =>
+    sp.GetRequiredService<AgentStudio.TaskAccess.TaskAccessService>());
 builder.Services.AddSingleton<CopilotCliEnvironment>();
 builder.Services.AddSingleton<CopilotModelDiscovery>();
 builder.Services.AddSingleton<CodexModelDiscovery>();
@@ -289,8 +271,8 @@ builder.Services.AddSingleton<RuntimePromptService>();
 builder.Services.AddSingleton<PromptAdminService>();
 builder.Services.AddSingleton<TitleGenerationService>();
 builder.Services.AddSingleton<PromptEnhancementService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.AdHoc.AdHocUsageRecorder>();
-builder.Services.AddSingleton<OrchestratorApi.Services.AdHoc.AdHocUsageService>();
+builder.Services.AddSingleton<AgentStudio.AdHoc.AdHocUsageRecorder>();
+builder.Services.AddSingleton<AgentStudio.AdHoc.AdHocUsageService>();
 builder.Services.AddSingleton<PickupLockFile>();
 builder.Services.AddSingleton<IntegrationLeaseService>();
 builder.Services.AddSingleton<TaskRunnerService>();
@@ -307,30 +289,30 @@ builder.Services.AddSingleton<ICliUsageParser, ClaudeUsageParser>();
 builder.Services.AddSingleton<ICliUsageParser, CodexUsageParser>();
 builder.Services.AddSingleton<CliUsageParserRegistry>();
 builder.Services.AddSingleton<BusAggregationCache>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Tokens.BusBackedAdHocUsageReader>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Tokens.BusBackedTokenSummaryReader>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Tokens.BusBackedWorkspaceTimelineReader>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Tokens.BusBackedProjectTokenUsageReader>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Tokens.ITokenAggregator, OrchestratorApi.Services.Tokens.TokenAggregationService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Cli.OneShot.ICliOneShot, OrchestratorApi.Services.Cli.OneShot.ClaudeOneShot>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry>();
+builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedAdHocUsageReader>();
+builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedTokenSummaryReader>();
+builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedWorkspaceTimelineReader>();
+builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedProjectTokenUsageReader>();
+builder.Services.AddSingleton<AgentStudio.Tokens.ITokenAggregator, AgentStudio.Tokens.TokenAggregationService>();
+builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot, AgentStudio.Cli.ClaudeOneShot>();
+builder.Services.AddSingleton<AgentStudio.Cli.CliOneShotRegistry>();
 builder.Services.AddSingleton<CodePatternDriftAnalysisService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Persistence.IJsonlAppender, OrchestratorApi.Services.Persistence.JsonlAppender>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Runtime.ProductRuntimeEventStore>();
-builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorAdvisoryStore>();
-builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorInterventionStore>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Analysis.AnalysisReportStore>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Analysis.RoadmapAlignmentReviewService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Analysis.SteeringDocsSummaryDriftService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.RegressionRadar.RegressionRadarService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Drift.DriftReportStore>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Drift.AdrCodeDriftAnalysisService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Drift.DocsMarketingDriftAnalysisService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Drift.SpecTaskDriftAnalysisService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Drift.SoftwareArchitectureDriftAnalysisService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Drift.ArchitectureElementStateStore>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Drift.DriftPostStepRunner>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Tags.TagRegistryService>();
+builder.Services.AddSingleton<AgentStudio.Persistence.IJsonlAppender, AgentStudio.Persistence.JsonlAppender>();
+builder.Services.AddSingleton<AgentStudio.Runtime.ProductRuntimeEventStore>();
+builder.Services.AddSingleton<AgentStudio.State.SupervisorAdvisoryStore>();
+builder.Services.AddSingleton<AgentStudio.State.SupervisorInterventionStore>();
+builder.Services.AddSingleton<AgentStudio.Analysis.AnalysisReportStore>();
+builder.Services.AddSingleton<AgentStudio.Analysis.RoadmapAlignmentReviewService>();
+builder.Services.AddSingleton<AgentStudio.Analysis.SteeringDocsSummaryDriftService>();
+builder.Services.AddSingleton<AgentStudio.RegressionRadar.RegressionRadarService>();
+builder.Services.AddSingleton<AgentStudio.Drift.DriftReportStore>();
+builder.Services.AddSingleton<AgentStudio.Drift.AdrCodeDriftAnalysisService>();
+builder.Services.AddSingleton<AgentStudio.Drift.DocsMarketingDriftAnalysisService>();
+builder.Services.AddSingleton<AgentStudio.Drift.SpecTaskDriftAnalysisService>();
+builder.Services.AddSingleton<AgentStudio.Drift.SoftwareArchitectureDriftAnalysisService>();
+builder.Services.AddSingleton<AgentStudio.Drift.ArchitectureElementStateStore>();
+builder.Services.AddSingleton<AgentStudio.Drift.DriftPostStepRunner>();
+builder.Services.AddSingleton<AgentStudio.Tags.TagRegistryService>();
 builder.Services.AddSingleton<ProjectObservationService>();
 builder.Services.AddSingleton<FilesystemLayerSnapshotService>();
 builder.Services.AddSingleton<SupervisorInterventionService>();
@@ -340,22 +322,22 @@ builder.Services.AddHostedService<AutoInterventionHostedService>();
 builder.Services.AddHostedService<MetaCycleHostedService>();
 builder.Services.AddHostedService<OrchestratorPrepHostedService>();
 builder.Services.AddHostedService<ChatNoteHostedService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.PipelineExecutionLog>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.MergeIntoDevelopRunner>();
-builder.Services.AddSingleton<OrchestratorApi.Services.GeneratedFiles.FileGenerationIndex>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.ProjectPipelineCostService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.ILintScssRunner,
-    OrchestratorApi.Services.Pipeline.LintScssRunner>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.IBuildTestGateRunner,
-    OrchestratorApi.Services.Pipeline.BuildTestGateRunner>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.WikiMaintenancePostStepRunner>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.WikiLearningsPostStepRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineExecutionLog>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.MergeIntoDevelopRunner>();
+builder.Services.AddSingleton<AgentStudio.GeneratedFiles.FileGenerationIndex>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ProjectPipelineCostService>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ILintScssRunner,
+    AgentStudio.Pipeline.LintScssRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IBuildTestGateRunner,
+    AgentStudio.Pipeline.BuildTestGateRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.WikiMaintenancePostStepRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.WikiLearningsPostStepRunner>();
 builder.Services.AddSingleton<AspectRunnerService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Review.CodeReviewStepService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.WorkspaceArtifactCommitService>();
+builder.Services.AddSingleton<AgentStudio.Review.CodeReviewStepService>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactCommitService>();
 // Intelligente Abbruch-Bewertung (ADR-0032): the post-abort LLM review step.
 // Forwarded into ProjectRunner via TaskRunnerService; default-OFF per project.
-builder.Services.AddSingleton<OrchestratorApi.Services.Runner.PostAbortReviewStepService>();
+builder.Services.AddSingleton<AgentStudio.Runner.PostAbortReviewStepService>();
 builder.Services.AddSingleton<AutoReviewStatusSnapshot>();
 builder.Services.AddSingleton<ReviewDecisionOrchestrator>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ReviewDecisionOrchestrator>());
@@ -391,7 +373,7 @@ builder.Services.AddSingleton<ProjectSteeringDocsService>();
 builder.Services.AddSingleton<SkillReadinessService>();
 builder.Services.AddSingleton<ConceptDocsService>();
 builder.Services.AddSingleton<SecurityReviewService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Design.DesignEvidenceService>();
+builder.Services.AddSingleton<AgentStudio.Design.DesignEvidenceService>();
 // Quota probes: each CLI gets its own probe instance, all surfaced through QuotaService.
 builder.Services.AddSingleton<IQuotaProbe, CopilotQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, ClaudeQuotaProbe>();
@@ -436,7 +418,7 @@ builder.Services.AddSignalR();
 // (jobCreated / jobUpdated / jobMoved / jobDeleted / jobsReordered /
 // jobsBulkChanged). Resolved + move-source-attached during startup wiring
 // below so the notifier subscriptions are live before the first mutation.
-builder.Services.AddSingleton<OrchestratorApi.Hubs.TaskHubBroadcaster>();
+builder.Services.AddSingleton<AgentStudio.Host.TaskHubBroadcaster>();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -508,9 +490,9 @@ app.Services.GetRequiredService<TaskStateMachine>().EnsureStateFoldersAndMigrate
 // <TaskRepository>/.metadata/. Safe to run on every boot - idempotent.
 try
 {
-    OrchestratorApi.Services.Registry.RegistryBootstrap.Run(
-        app.Services.GetRequiredService<OrchestratorApi.Services.Registry.WorkspaceRegistry>(),
-        app.Services.GetRequiredService<OrchestratorApi.Services.Registry.ProjectRegistry>(),
+    AgentStudio.Registry.RegistryBootstrap.Run(
+        app.Services.GetRequiredService<AgentStudio.Registry.WorkspaceRegistry>(),
+        app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>(),
         app.Services.GetRequiredService<TaskScannerService>(),
         app.Services.GetRequiredService<ILogger<Program>>());
 }
@@ -648,7 +630,7 @@ watcher.OnJobChanged += _ => hubContext.Clients.All.SendAsync("jobsChanged");
 // jobDeleted / jobsReordered / jobsBulkChanged). Resolving the singleton
 // attaches its TaskChangeNotifier subscriptions; AttachMoveSource hooks the
 // transition service's move event. See backend/Hubs/TaskHubBroadcaster.cs.
-var jobHubBroadcaster = app.Services.GetRequiredService<OrchestratorApi.Hubs.TaskHubBroadcaster>();
+var jobHubBroadcaster = app.Services.GetRequiredService<AgentStudio.Host.TaskHubBroadcaster>();
 jobHubBroadcaster.AttachMoveSource(app.Services.GetRequiredService<TaskTransitionService>());
 
 // Cycle 1: bind the in-memory snapshot cache. TaskScannerService.ScanAllJobs
@@ -669,7 +651,7 @@ watcher.OnJobChanged += _ => jobStatsMetadataCache.Invalidate();
 // request. The host's other lifecycle calls (ReloadProjectAsync,
 // ShutdownAsync) are wired through the typed interface and used by
 // callers, not at startup.
-_ = app.Services.GetRequiredService<OrchestratorApi.Services.TaskAccess.ITaskAccessHost>()
+_ = app.Services.GetRequiredService<AgentStudio.TaskAccess.ITaskAccessHost>()
     .BootAsync();
 
 // Pre-warm AgentMessageBusStore projections for every watched project
@@ -767,7 +749,7 @@ cliRouter.OnFinished += (cliType, jobId, exec) =>
 // the same job identifier as cliOutput so the frontend correlates identically.
 cliRouter.OnRunEvent += (cliType, jobId, evt) =>
 {
-    if (evt is OrchestratorApi.Services.Cli.CliRunEvent.PlanUpdated)
+    if (evt is AgentStudio.Cli.CliRunEvent.PlanUpdated)
         hubContext.Clients.All.SendAsync("planUpdated", jobId, cliType);
 };
 

@@ -39,16 +39,27 @@ Hosts talk via DTOs only. No physical technical layers — feature folders, frac
 Result: ONE backend project, fully feature-foldered, CLI consolidated, endpoints
 with their features. No endpoint/route change.
 
-### NEXT PHASES (deliberately deferred — higher risk, do with review)
-4. **Namespace alignment** `OrchestratorApi.*` → `AgentStudio.<Host>.<Feature>`,
-   and the legacy `*Info`/`*Model` → domain / `Response` renames. Mechanical but
-   touches every file + every `using`; do per-feature, build-gated.
-5. **`.Api` + `.Core` project split** per host, then the **3-host process split**
-   (Studio ⟂ TaskServer ⟂ UpdateServer). This changes startup/DI/deploy and is the
-   riskiest step — must keep the system runnable at every increment.
-6. **Boundary/arch test** enforcing §1 of the styleguide (fail on a technical-role
-   folder under `Features/`, or a cross-host domain leak).
+### DONE (2026-06-10, phase 2)
+4. **Namespace alignment** `OrchestratorApi.*` → **`AgentStudio.<Feature>`** —
+   namespace now follows the folder exactly (one namespace per top-level
+   feature; sub-feature folders share it). 696 files, scripted sweep,
+   build-gated. Feature namespaces are project-wide global usings (folders are
+   the isolation unit, not usings). The **assembly name stays `OrchestratorApi`**
+   on purpose: start/stop/watchdog scripts match the process name.
+   The `<Host>` namespace segment is deliberately deferred to the host split —
+   host membership is decided when the `.Api`/`.Core` projects exist, so no
+   guess gets baked in now (inserting one segment is then per-project trivial).
+6. **Boundary/arch test** `backend.Tests/Architecture/FeatureFolderBoundaryTests`:
+   forbids technical-role folders under `Features/` at any depth, enforces
+   namespace==folder, and pins the retirement of the `OrchestratorApi` namespace.
 
-> Folders were moved without changing namespaces (build-safe). Until phase 4,
-> a file's namespace (`OrchestratorApi.Services.*`) may lag its folder
-> (`Features/<domain>`); that is expected and is the next phase's job.
+### NEXT PHASES (deferred — need operator review)
+5. **`.Api` + `.Core` project split** per host, then the **3-host process split**
+   (Studio ⟂ TaskServer ⟂ UpdateServer) with DTO contracts at the host boundary.
+   Riskiest step (startup/DI/deploy change); requires the host classification of
+   the shared features (Tasks, Git, Bus, Tokens, Projects are used by both
+   Studio and TaskServer today — the contested cut needs an operator decision).
+7. **`*Info`/`*Model` → domain renames** (e.g. `TaskCommitInfo` → `Commit`).
+   Wire-safe (JSON property names don't change), but `TaskInfo` → `Task`
+   collides with `System.Threading.Tasks.Task` — the domain word for it
+   (e.g. `TaskCard`?) is an operator pick before the rename runs.

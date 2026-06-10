@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Projection.Sources;
+namespace AgentStudio.Projection;
 
 /// <summary>
 /// Runner state changes (move into/out of 3-progress, watchdog kills,

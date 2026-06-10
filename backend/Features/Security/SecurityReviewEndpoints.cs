@@ -1,8 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Security;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Security;
 
 /// <summary>
 /// Read + manual-trigger surface for the project Security panel (slice 1

@@ -1,8 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Projects;
 
 /// <summary>
 /// Per-project preferences that persist across restarts (auto-commit toggle today;

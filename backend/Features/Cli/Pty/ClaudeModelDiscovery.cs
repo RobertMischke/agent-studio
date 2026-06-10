@@ -1,8 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Pty;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Discovers Claude Code's model picker through the interactive /model command.

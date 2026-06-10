@@ -1,12 +1,11 @@
 using System.Text.RegularExpressions;
-using OrchestratorApi.Services.Registry;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// F45a — translates between the canonical F45 jobKey format
 /// (<c>PROJ-001::job-slug</c>) and the legacy <c>&lt;path&gt;::&lt;slug&gt;</c>
-/// form produced by <see cref="OrchestratorApi.Models.TaskIdentity.CreateKey"/>.
+/// form produced by <see cref="AgentStudio.Shared.TaskIdentity.CreateKey"/>.
 ///
 /// <para>F45a is additive: existing code still mints legacy keys; this
 /// service is the one place that knows both formats so future call sites

@@ -1,9 +1,8 @@
 using System.Diagnostics;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks in the contract for <see cref="SessionToTaskIndex"/>: orphan ids

@@ -1,10 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.GeneratedFiles;
-using OrchestratorApi.Services.Pipeline;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public sealed class FileGenerationIndexTests : IDisposable
 {

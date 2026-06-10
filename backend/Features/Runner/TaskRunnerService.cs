@@ -1,19 +1,13 @@
 using System.Collections.Concurrent;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Quota;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// DI-singleton background service that owns one <see cref="ProjectRunner"/>
 /// per watched workspace, ticks them on a 5 s loop for auto-pickup, and
 /// fans out the public start / stop / continue / status API used by the
 /// HTTP endpoints. The per-project lifecycle and the per-run decision tree
-/// live in <see cref="OrchestratorApi.Services.Runner"/>; this class is
+/// live in <see cref="AgentStudio.Runner"/>; this class is
 /// intentionally kept to routing + cross-project orchestration so the three
 /// concerns can be read independently.
 /// </summary>
@@ -46,19 +40,19 @@ public class TaskRunnerService : BackgroundService
     // directly, in which case ProjectRunner builds its own workspace-less fallback.
     private readonly HumanReviewEscalation? _humanReviewEscalation;
     private readonly AgentMessageBusBridge? _bus;
-    private readonly OrchestratorApi.Services.TaskAccess.ITaskAccess _taskAccess;
+    private readonly AgentStudio.TaskAccess.ITaskAccess _taskAccess;
     private readonly PickupLockFile? _pickupLock;
     private readonly IntegrationLeaseService? _integrationLeases;
     private readonly TimelineLog? _timeline;
-    private readonly OrchestratorApi.Services.Pipeline.PipelineExecutionLog? _pipelineLog;
+    private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
     // Forwarded to each ProjectRunner. DI injects the registered singleton; the
     // step is default-OFF per project, so a wired-but-disabled step changes
     // nothing. Null only when a test fixture builds the service directly.
-    private readonly OrchestratorApi.Services.Runner.PostAbortReviewStepService? _postAbortReview;
+    private readonly AgentStudio.Runner.PostAbortReviewStepService? _postAbortReview;
     // Forwarded to each ProjectRunner for post-hoc Claude token reconstruction
     // from session transcripts. DI injects the registered singleton; null only
     // when a test fixture builds the service directly.
-    private readonly OrchestratorApi.Services.Cli.ClaudeSessionInspector? _sessionInspector;
+    private readonly AgentStudio.Cli.ClaudeSessionInspector? _sessionInspector;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -103,15 +97,15 @@ public class TaskRunnerService : BackgroundService
         GitService git,
         PickupFailureLog pickupFailures,
         CrossSlugInfraCircuitBreaker infraBreaker,
-        OrchestratorApi.Services.TaskAccess.ITaskAccess taskAccess,
+        AgentStudio.TaskAccess.ITaskAccess taskAccess,
         AgentMessageBusBridge? bus = null,
         PickupLockFile? pickupLock = null,
         IntegrationLeaseService? integrationLeases = null,
         TimelineLog? timeline = null,
-        OrchestratorApi.Services.Pipeline.PipelineExecutionLog? pipelineLog = null,
+        AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null,
         HumanReviewEscalation? humanReviewEscalation = null,
-        OrchestratorApi.Services.Runner.PostAbortReviewStepService? postAbortReview = null,
-        OrchestratorApi.Services.Cli.ClaudeSessionInspector? sessionInspector = null)
+        AgentStudio.Runner.PostAbortReviewStepService? postAbortReview = null,
+        AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null)
     {
         _config = config;
         _logger = logger;

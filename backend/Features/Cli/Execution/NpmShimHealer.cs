@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Self-heal for half-installed npm CLI shims on Windows (the

@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Cross-slug Pre-Guard for infra-shaped pickup failures
@@ -332,16 +332,16 @@ public sealed class InfraHaltLog
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<InfraHaltLog> _logger;
-    private readonly OrchestratorApi.Services.Persistence.IJsonlAppender _appender;
+    private readonly AgentStudio.Persistence.IJsonlAppender _appender;
 
     public InfraHaltLog(
         IConfiguration configuration,
         ILogger<InfraHaltLog> logger,
-        OrchestratorApi.Services.Persistence.IJsonlAppender? appender = null)
+        AgentStudio.Persistence.IJsonlAppender? appender = null)
     {
         _configuration = configuration;
         _logger = logger;
-        _appender = appender ?? new OrchestratorApi.Services.Persistence.JsonlAppender();
+        _appender = appender ?? new AgentStudio.Persistence.JsonlAppender();
     }
 
     public void Append(InfraHaltRecord record)

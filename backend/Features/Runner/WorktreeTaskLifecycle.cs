@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>Result of the worktree pre-step: an isolated worktree on a fresh task branch.</summary>
 public sealed record WorktreePreparation(bool Success, string? WorktreePath, string? Branch, string? Error);

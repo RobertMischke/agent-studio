@@ -1,12 +1,11 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli;
+
 using Xunit;
 using System.Linq;
 using System;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public class AntigravityCliServiceTests
 {

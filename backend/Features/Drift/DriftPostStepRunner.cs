@@ -1,11 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Analysis;
-using OrchestratorApi.Services.Cli.OneShot;
-using OrchestratorApi.Services.GeneratedFiles;
-using OrchestratorApi.Services.Pipeline;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Drift;
+
+namespace AgentStudio.Drift;
 
 /// <summary>
 /// Runs the opt-in drift dimensions as automatic post-steps after a task

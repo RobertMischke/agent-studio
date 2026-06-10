@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Supervisor;
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// Per-project meta-cycle data shapes. The full design is in

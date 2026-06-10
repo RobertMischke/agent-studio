@@ -1,9 +1,8 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Pipeline;
-using OrchestratorApi.Services.Runner;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Tests for <see cref="AspectConcernReader"/>: the read-time enrichment

@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Why <c>ProjectRunner</c> declined to spawn a CLI run for the
@@ -37,7 +36,7 @@ public sealed record RunRejection(
     string? BusyJobTitle = null);
 
 /// <summary>
-/// Thrown by <c>OrchestratorApi.Services.TaskRunnerService</c> when a
+/// Thrown by <c>AgentStudio.Runner.TaskRunnerService</c> when a
 /// continue / start request cannot be honored AND the failure is not the
 /// busy-project-queue case (which becomes a 202). Carries an HTTP status
 /// hint for the endpoint layer.

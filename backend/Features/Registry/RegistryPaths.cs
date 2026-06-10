@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Registry;
+namespace AgentStudio.Registry;
 
 /// <summary>
 /// F45a — single source of truth for the on-disk locations of

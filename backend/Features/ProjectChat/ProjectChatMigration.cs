@@ -1,8 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.ProjectChat;
+namespace AgentStudio.ProjectChat;
 
 /// <summary>
 /// One-shot migration that reads the legacy

@@ -1,8 +1,6 @@
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Design;
+namespace AgentStudio.Design;
 
 /// <summary>
 /// Read + accept surface for the project UX/UI panel (slice 6 of the

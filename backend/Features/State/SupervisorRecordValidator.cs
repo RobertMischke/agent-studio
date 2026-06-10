@@ -1,6 +1,5 @@
-using OrchestratorApi.Services.Supervisor;
 
-namespace OrchestratorApi.Services.State;
+namespace AgentStudio.State;
 
 /// <summary>
 /// In-code validator that mirrors the value sets and required-field rules in

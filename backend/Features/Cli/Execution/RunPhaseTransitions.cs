@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Pure-function library that maps a current <see cref="RunPhase"/> +

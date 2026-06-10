@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Runtime;
 
 /// <summary>
 /// Body for <c>POST /api/projects/{projectName}/skill-readiness/fix-task</c>.

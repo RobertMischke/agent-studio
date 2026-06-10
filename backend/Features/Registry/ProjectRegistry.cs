@@ -1,8 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Registry;
+namespace AgentStudio.Registry;
 
 /// <summary>
 /// F45a — in-memory cache plus persistence for the project catalog under

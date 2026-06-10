@@ -2,12 +2,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Diagnostics;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Persistence;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Boot-time recovery doctrine: after a backend crash mid-job, the next

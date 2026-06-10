@@ -1,7 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Pipeline;
+namespace AgentStudio.Pipeline;
 
 /// <summary>
 /// Three-mode verdict policy for a configurable post-step (ASS-563 /

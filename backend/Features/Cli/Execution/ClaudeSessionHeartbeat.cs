@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Side-channel liveness watcher for the Claude CLI. Claude writes one

@@ -1,8 +1,8 @@
-namespace OrchestratorApi.Services.Drift;
+namespace AgentStudio.Drift;
 
 /// <summary>
 /// Canonical layout for drift reports. Mirrors
-/// <see cref="OrchestratorApi.Services.Analysis.AnalysisReportPaths"/> but
+/// <see cref="AgentStudio.Analysis.AnalysisReportPaths"/> but
 /// keeps drift evidence in its own pile under
 /// <c>{workspaceRoot}/logs/drift/{projectSlug}/</c> because Drift is a
 /// first-class project dimension, not an Analysis Reports filter

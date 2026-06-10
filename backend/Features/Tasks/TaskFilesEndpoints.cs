@@ -1,10 +1,9 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Tasks;
+
+
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 
-namespace OrchestratorApi.Endpoints.Tasks;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Read/write of files inside a job folder: <c>prompt.md</c> /

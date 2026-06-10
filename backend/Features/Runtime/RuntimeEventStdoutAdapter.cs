@@ -1,7 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runtime;
+namespace AgentStudio.Runtime;
 
 /// <summary>
 /// Adapter that turns a stream of raw stdout/stderr lines from the built

@@ -1,13 +1,10 @@
 using System.Diagnostics;
-using OrchestratorApi.Endpoints.Tasks;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Tests; // for TaskEndpointHelpersAccessor
+
+// TaskEndpointHelpersAccessor lives in AgentStudio.Tests (this namespace)
 using Xunit;
 using Xunit.Abstractions;
 
-namespace OrchestratorApi.Tests.PerfBaseline;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Captures the BACKEND baseline numbers the perf overhaul measures itself

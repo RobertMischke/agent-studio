@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace OrchestratorApi.Services.Configuration;
+namespace AgentStudio.Configuration;
 
 /// <summary>
 /// Read / write surface for the per-checkout orchestrator + supervisor

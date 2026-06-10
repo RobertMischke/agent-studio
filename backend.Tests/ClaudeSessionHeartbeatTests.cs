@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Cli;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pin the path-encoding rule that turns a Windows working directory

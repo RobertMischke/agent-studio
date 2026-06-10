@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Why a CLI run finished. Carried alongside the OS exit code so the

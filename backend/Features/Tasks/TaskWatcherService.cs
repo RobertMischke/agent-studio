@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Watches the resolved job-folder paths configured under

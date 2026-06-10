@@ -1,8 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Cli.OneShot;
+
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Single point of code for one-shot CLI calls (Claude/Codex/Gemini in

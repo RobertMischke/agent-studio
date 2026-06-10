@@ -1,8 +1,8 @@
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Token usage for a single orchestrator / one-shot LLM call. Lives in
-/// Shared (namespace preserved as <c>OrchestratorApi.Services.Runner</c>)
+/// Shared (now <c>AgentStudio.Shared</c>)
 /// so both the server-side orchestrator log and the executor-side
 /// <c>ICliOneShot</c> result envelope can reference it without the executor
 /// depending on the server's orchestrator-log types.

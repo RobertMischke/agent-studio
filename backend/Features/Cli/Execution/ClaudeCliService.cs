@@ -1,13 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Cli.Adapters;
-using OrchestratorApi.Services.Pty;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Live rate-limit snapshot derived from Anthropic's <c>rate_limit_event</c>
@@ -419,7 +414,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         }
         foreach (var kv in psi.Environment) envBlock[kv.Key] = kv.Value;
 
-        var result = Win.WindowsHandleScrubSpawner.Spawn(
+        var result = WindowsHandleScrubSpawner.Spawn(
             exePath: psi.FileName,
             argList: argList,
             cwd: psi.WorkingDirectory,
@@ -589,18 +584,18 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     ///
     /// <para>
     /// The frame-mapping logic itself lives in the pure, dependency-free
-    /// <see cref="Rendering.ClaudeOutputRenderer"/> (ADR-0013 marker-line twin
+    /// <see cref="ClaudeOutputRenderer"/> (ADR-0013 marker-line twin
     /// of the <c>*EventAdapter</c> classes). This override is a thin delegate so
     /// the renderer can be unit-tested with a plain <c>new()</c> - no process,
     /// no constructor graph - and a new CLI plugs in by implementing
-    /// <see cref="Rendering.ICliOutputRenderer"/>. Session-id capture stays in
+    /// <see cref="ICliOutputRenderer"/>. Session-id capture stays in
     /// <c>OnOutputLine</c> below; it reads the rendered <c>● Session</c> marker.
     /// </para>
     /// </summary>
     public override IEnumerable<CliOutputLine> TransformReadLine(CliOutputLine raw)
         => _renderer.Render(raw);
 
-    private static readonly Rendering.ClaudeOutputRenderer _renderer = new();
+    private static readonly ClaudeOutputRenderer _renderer = new();
 
     // Claude's `-r` flag expects a session UUID written by the CLI itself.
     // Slug-style names from another CLI (e.g. Copilot's "taskboard-...") cause

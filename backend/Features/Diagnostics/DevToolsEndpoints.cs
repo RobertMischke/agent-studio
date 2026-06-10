@@ -1,9 +1,7 @@
 using System.Diagnostics;
 using System.Text;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Diagnostics;
 
 /// <summary>
 /// Tool-development-only routes guarded by per-checkout config flags

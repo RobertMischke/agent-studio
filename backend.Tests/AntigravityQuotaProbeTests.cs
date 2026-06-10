@@ -1,11 +1,10 @@
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Services.Quota;
-using OrchestratorApi.Services.Pty;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public class AntigravityQuotaProbeTests
 {

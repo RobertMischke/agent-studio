@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Centralises filesystem layout under a job folder. Every consumer of

@@ -1,8 +1,8 @@
 using System.Text;
-using OrchestratorApi.Services.Drift;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the contract of <see cref="SpecTaskDriftAnalysisService"/>:

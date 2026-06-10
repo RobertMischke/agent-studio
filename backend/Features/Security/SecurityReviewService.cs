@@ -1,8 +1,6 @@
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Security;
+namespace AgentStudio.Security;
 
 /// <summary>
 /// Read surface for the project Security panel (slice 1 of the

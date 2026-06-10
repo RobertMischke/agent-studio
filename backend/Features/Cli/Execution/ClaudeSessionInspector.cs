@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 public record ClaudeSessionInfo(
     string SessionId,

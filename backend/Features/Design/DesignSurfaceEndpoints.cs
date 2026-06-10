@@ -1,8 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Design;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Design;
 
 /// <summary>
 /// Read + manual-trigger surface for the project UX/UI panel (slice 6 of

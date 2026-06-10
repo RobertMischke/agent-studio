@@ -1,7 +1,7 @@
-using OrchestratorApi.Services;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public class CliOutputLogParserTests
 {

@@ -1,12 +1,7 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Tokens;
-using static OrchestratorApi.Endpoints.Tasks.TaskEndpointHelpers;
 
-namespace OrchestratorApi.Endpoints.Tasks;
+
+using static AgentStudio.Tasks.TaskEndpointHelpers;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Job CRUD + state transitions: list, detail, create, delete, move,

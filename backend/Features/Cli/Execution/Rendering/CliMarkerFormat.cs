@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Cli.Rendering;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Low-level string primitives shared by every <see cref="ICliOutputRenderer"/>.

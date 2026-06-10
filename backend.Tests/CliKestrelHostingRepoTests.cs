@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using OrchestratorApi.Services.Cli;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Reproduction probes for the original "agent silent after init" hang
@@ -119,7 +119,7 @@ public class CliKestrelHostingRepoTests : IClassFixture<WebApplicationFactory<Pr
     /// <summary>
     /// Pins the R5 (Win32 handle-scrub) spawn path. With
     /// <c>ClaudeCli:UseHandleScrub=true</c>, claude is spawned via
-    /// <see cref="OrchestratorApi.Services.Cli.Win.WindowsHandleScrubSpawner"/>
+    /// <see cref="AgentStudio.Cli.WindowsHandleScrubSpawner"/>
     /// (CreateProcessW + STARTUPINFOEX + curated handle list +
     /// \\.\NUL-as-stdin when no payload). This test exists because
     /// commit c5cfc63's first scrub wiring broke init-frame delivery

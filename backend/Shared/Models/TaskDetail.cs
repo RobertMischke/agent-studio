@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 public record TaskDetail
 {
@@ -127,7 +127,7 @@ public record TaskPromptHistoryEntry
 
 /// <summary>
 /// One entry in the task's title-revision timeline. Written by
-/// <see cref="OrchestratorApi.Services.Tasks.TaskMutationService.SetJobTitle"/>
+/// <see cref="AgentStudio.Tasks.TaskMutationService.SetJobTitle"/>
 /// to <c>title-history.json</c> in the job folder whenever the title
 /// actually changes (no-op renames are not recorded). The current title
 /// stays on <see cref="TaskInfo.Title"/>; this is the audit trail of what

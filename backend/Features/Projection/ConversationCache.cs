@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace OrchestratorApi.Services.Projection;
+namespace AgentStudio.Projection;
 
 /// <summary>
 /// In-memory snapshot store for projected conversations.

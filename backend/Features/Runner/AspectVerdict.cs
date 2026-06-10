@@ -2,7 +2,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Wire shape for one structured aspect finding written into a timeline
@@ -242,12 +242,12 @@ public static class AspectVerdictParsing
     /// Read back the frontmatter status token from a previously written
     /// aspect report. Tolerant of missing frontmatter (returns null).
     /// Uses the canonical
-    /// <see cref="OrchestratorApi.Services.Markdown.FrontmatterParser"/>
+    /// <see cref="AgentStudio.Cli.FrontmatterParser"/>
     /// so the regex+block-detection lives in exactly one place.
     /// </summary>
     public static AspectStatus? ReadStatusFromReport(string content)
     {
-        var result = OrchestratorApi.Services.Markdown.FrontmatterParser.Parse(content);
+        var result = AgentStudio.Cli.FrontmatterParser.Parse(content);
         if (!result.Ok) return null;
         if (!result.Fields.TryGetValue("status", out var value)) return null;
         return value.ToLowerInvariant() switch

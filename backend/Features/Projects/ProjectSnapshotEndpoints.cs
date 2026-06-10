@@ -1,10 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.TaskAccess;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Projects;
 
 /// <summary>
 /// Cycle 5: <c>GET /api/projects/{projectName}/snapshot</c>. One round-trip

@@ -1,10 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Pty;
-using OrchestratorApi.Services.Quota;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Cross-CLI configuration and observability surface:

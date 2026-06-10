@@ -1,13 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Crash-recovery marker dropped into a job folder once the runner has
 /// decided the job's CLI run is complete (sentinel matched, status terminal)
-/// and is about to call <see cref="OrchestratorApi.Services.Tasks.TaskTransitionService.MoveAsync"/>.
+/// and is about to call <see cref="AgentStudio.Tasks.TaskTransitionService.MoveAsync"/>.
 /// The marker survives a backend crash so the next boot can finish the
 /// transition without losing the agent's evidence. See
 /// <see cref="CrashRecoveryService"/> for the boot-time scan and ADR-0020

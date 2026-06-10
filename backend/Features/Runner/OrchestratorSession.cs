@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Per-project orchestrator session: a long-lived Claude session UUID

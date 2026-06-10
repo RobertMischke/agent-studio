@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Supervisor;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the parser for soft-reasoning sentinels. The CLI wrapping these

@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// One row in <c>logs/timeline.jsonl</c>. The unified per-task ledger that

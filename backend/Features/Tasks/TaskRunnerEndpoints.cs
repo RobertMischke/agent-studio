@@ -1,9 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Endpoints.Tasks;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// CLI execution surface for one job: <c>start</c>, <c>stop</c>,
@@ -49,9 +46,9 @@ public static class TaskRunnerEndpoints
             // fall back to UserStop rather than rejecting the request.
             var parsed = (reason ?? "user").Trim().ToLowerInvariant() switch
             {
-                "followup" or "followup-pause" => OrchestratorApi.Services.Runner.RunStopReason.FollowupPause,
-                "watchdog" => OrchestratorApi.Services.Runner.RunStopReason.Watchdog,
-                _ => OrchestratorApi.Services.Runner.RunStopReason.UserStop
+                "followup" or "followup-pause" => AgentStudio.Shared.RunStopReason.FollowupPause,
+                "watchdog" => AgentStudio.Shared.RunStopReason.Watchdog,
+                _ => AgentStudio.Shared.RunStopReason.UserStop
             };
             var success = runner.StopJob(jobId, watchPath, parsed);
             return success ? Results.Ok() : Results.NotFound();

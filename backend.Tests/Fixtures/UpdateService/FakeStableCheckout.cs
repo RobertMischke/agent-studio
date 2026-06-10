@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace OrchestratorApi.Tests.Fixtures.UpdateService;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Isolated on-disk layout that lets the Update Service integration suite

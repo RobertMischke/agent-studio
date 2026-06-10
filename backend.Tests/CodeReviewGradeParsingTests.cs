@@ -1,8 +1,8 @@
-using OrchestratorApi.Services.Review;
-using OrchestratorApi.Services.Runner;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pure-parser tests for the quality-grade reviewer (ASS-1657). Mirrors the

@@ -1,8 +1,8 @@
 using System.Text;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Regression coverage for the navigation-context block the project chat

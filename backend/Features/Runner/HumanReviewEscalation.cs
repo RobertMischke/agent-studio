@@ -1,9 +1,6 @@
 using Microsoft.Extensions.Configuration;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Pipeline;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Categories for a system-initiated escalation to <c>5e-escalated</c>. The

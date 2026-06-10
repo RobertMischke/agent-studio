@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace OrchestratorApi.Services.Security;
+namespace AgentStudio.Security;
 
 /// <summary>
 /// Pure parser for the structured block in a security review Markdown file.
@@ -76,11 +76,11 @@ public static class SecurityReviewParser
         }
 
         // Frontmatter detection now goes through the shared
-        // OrchestratorApi.Services.Markdown.FrontmatterParser so the regex
+        // AgentStudio.Cli.FrontmatterParser so the regex
         // is defined exactly once across the codebase. Value coercion
         // (typed scalars, nested maps) stays service-specific because the
         // shared helper returns strings only.
-        var rawFrontmatter = Markdown.FrontmatterParser.TryExtractRawFrontmatter(markdown);
+        var rawFrontmatter = FrontmatterParser.TryExtractRawFrontmatter(markdown);
         if (rawFrontmatter is not null)
         {
             try

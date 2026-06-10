@@ -2,9 +2,8 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Pipeline;
+namespace AgentStudio.Pipeline;
 
 /// <summary>One distilled per-aspect orchestrator-review finding for the learnings page.</summary>
 public sealed record WikiLearningFinding(string Aspect, string Verdict, string Reason);

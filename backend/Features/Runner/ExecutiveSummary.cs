@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Workspace-level executive summary returned by

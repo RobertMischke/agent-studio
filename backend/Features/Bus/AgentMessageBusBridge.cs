@@ -1,12 +1,9 @@
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Supervisor;
 
-namespace OrchestratorApi.Services.Bus;
+namespace AgentStudio.Bus;
 
-// TaskPaths is internal in the OrchestratorApi.Services namespace; same assembly,
+// TaskPaths is internal in AgentStudio.Tasks; same assembly,
 // so the bridge can reference it without exposing it publicly.
 
 /// <summary>
@@ -224,7 +221,7 @@ public sealed class AgentMessageBusBridge
     /// <summary>
     /// Mirror a <see cref="SupervisorIntervention"/>. The intervention only
     /// records intent + reason; the actual side effect was applied by the
-    /// runner via <see cref="OrchestratorApi.Services.TaskRunnerService.StopJob"/>
+    /// runner via <see cref="AgentStudio.Runner.TaskRunnerService.StopJob"/>
     /// or <c>SetMode</c>. We tag the message accordingly so the timeline shows
     /// what was triggered and by whom.
     /// </summary>

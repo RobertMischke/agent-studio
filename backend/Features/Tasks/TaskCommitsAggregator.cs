@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Tasks;
+
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// One commit attributed to a job, augmented with the run index it was

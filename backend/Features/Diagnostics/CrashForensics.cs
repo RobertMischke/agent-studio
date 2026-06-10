@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Diagnostics;
+namespace AgentStudio.Diagnostics;
 
 /// <summary>
 /// How the <i>previous</i> backend run ended, decided at the next boot by

@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Tasks.Audit;
+namespace AgentStudio.Tasks;
 
 /// <summary>
 /// Cheap heuristic detector for the "agent claimed done but isn't"

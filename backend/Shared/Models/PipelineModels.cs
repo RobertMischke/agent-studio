@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// First-class description of how a task is processed end-to-end:
@@ -9,7 +9,7 @@ namespace OrchestratorApi.Models;
 /// per job and records per-step execution into a sibling
 /// <see cref="PipelineExecutionRecord"/>. The first concrete pipeline
 /// is <c>standard-task-pipeline</c> in
-/// <see cref="OrchestratorApi.Services.Pipeline.PipelineCatalogue"/>;
+/// <see cref="AgentStudio.Pipeline.PipelineCatalogue"/>;
 /// the four 4-auto-review aspect runs are explicit
 /// <see cref="StepKind.Aspect"/> post-steps that today's
 /// <c>AspectRunnerService</c> consumes.
@@ -82,14 +82,14 @@ public sealed record PipelineStep
     /// real <c>task/&lt;id&gt; -&gt; develop</c> merge only when the operator
     /// runs the "Merge into Develop" action, so it sits in the pipeline as a
     /// not-yet-run step until then. Implemented by
-    /// <c>OrchestratorApi.Services.Pipeline.MergeIntoDevelopRunner</c>.
+    /// <c>AgentStudio.Pipeline.MergeIntoDevelopRunner</c>.
     /// </summary>
     public bool Deferred { get; init; }
     /// <summary>
     /// Whether the step runs when a project has no explicit override for it.
     /// Most steps default on; the opt-in drift post-steps default off because
     /// a drift run is an expensive extra LLM pass the operator turns on per
-    /// project. <see cref="OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.IsEnabled(ProjectSettings?, PipelineStep)"/>
+    /// project. <see cref="AgentStudio.Pipeline.PipelineStepConfigResolver.IsEnabled(ProjectSettings?, PipelineStep)"/>
     /// resolves the project override against this default.
     /// </summary>
     public bool DefaultEnabled { get; init; } = true;

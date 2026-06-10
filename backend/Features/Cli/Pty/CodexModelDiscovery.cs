@@ -1,8 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Pty;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Discovers the live Codex CLI model catalog by asking the local CLI for its

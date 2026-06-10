@@ -4,7 +4,7 @@ using System.Runtime.Versioning;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 
-namespace OrchestratorApi.Services.Cli.Win;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Win32-native child-process spawn that curates which parent handles

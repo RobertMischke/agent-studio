@@ -1,9 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.TaskAccess;
+namespace AgentStudio.TaskAccess;
 
 /// <summary>
 /// Phase 2-4 implementation of <see cref="ITaskAccess"/> and

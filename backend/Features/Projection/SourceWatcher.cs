@@ -1,10 +1,8 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services;
 
-namespace OrchestratorApi.Services.Projection;
+namespace AgentStudio.Projection;
 
 /// <summary>
 /// Bridges the existing per-watch-path <see cref="TaskWatcherService"/> into

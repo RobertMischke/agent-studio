@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace OrchestratorApi.Services.Pty;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Manages persistent state in <c>~/.copilot/{config,settings}.json</c> so that

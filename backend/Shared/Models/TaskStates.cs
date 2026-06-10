@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// String constants and helpers for the optional <c>phase</c> substate on
@@ -264,7 +264,7 @@ public static class PostProcessingPerformers
 }
 
 /// <summary>
-/// Wire shape for <see cref="OrchestratorApi.Services.Runner.StuckLoopState"/>
+/// Wire shape for <see cref="AgentStudio.Runner.StuckLoopState"/>
 /// served to the frontend. A separate record so the wire contract is
 /// stable even if the in-memory record gains internal fields.
 /// </summary>
@@ -390,7 +390,7 @@ public static class TaskStates
     /// <summary>
     /// Numbered legacy lane names that pre-date ADR-0025 (three-stage review
     /// pipeline). The boot-time migration in
-    /// <see cref="OrchestratorApi.Services.Tasks.TaskStateMachine.EnsureStateFoldersAndMigrate"/>
+    /// <see cref="AgentStudio.Tasks.TaskStateMachine.EnsureStateFoldersAndMigrate"/>
     /// uses this to rename folders and rewrite job.json state fields.
     /// </summary>
     public static readonly Dictionary<string, string> NumberedLegacyMap = new()

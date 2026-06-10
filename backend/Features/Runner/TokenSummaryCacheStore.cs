@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Aggregate (workspace-wide) token rollup persisted to disk so the
@@ -10,7 +10,7 @@ namespace OrchestratorApi.Services.Runner;
 ///
 /// <para>
 /// Mirrors the file-cache pattern used by
-/// <see cref="OrchestratorApi.Services.Quota.QuotaCacheStore"/>: stored
+/// <see cref="AgentStudio.Cli.QuotaCacheStore"/>: stored
 /// at <c>&lt;TaskRepository&gt;/.runtime/token-aggregate-cache.json</c>
 /// (or <c>AppContext.BaseDirectory/runtime/</c> when no TaskRepository
 /// is configured), atomic write via .tmp + rename, tolerant to

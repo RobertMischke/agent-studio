@@ -1,8 +1,8 @@
 using System.Text;
-using OrchestratorApi.Services.Pty;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Regression: <see cref="PtySession"/> captures a child program's raw stdout

@@ -1,8 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Clients;
+namespace AgentStudio.Clients;
 
 /// <summary>
 /// Single writer for client identity files under

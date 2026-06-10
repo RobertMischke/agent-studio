@@ -1,11 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.AdHoc;
-using OrchestratorApi.Services.Cli.OneShot;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// The "Abbruch-Review" pipeline step: a single LLM pass that runs after a
@@ -28,7 +25,7 @@ namespace OrchestratorApi.Services.Runner;
 /// </para>
 ///
 /// <para>
-/// Mirrors <see cref="OrchestratorApi.Services.Review.CodeReviewStepService"/>'s
+/// Mirrors <see cref="AgentStudio.Review.CodeReviewStepService"/>'s
 /// CLI seam so tests substitute a deterministic runner without a subprocess,
 /// and never touches lane state - the orchestrator owns transitions.
 /// </para>

@@ -1,9 +1,8 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Bus;
+namespace AgentStudio.Bus;
 
 /// <summary>
 /// File-backed, in-memory projection of the Agent Message Bus. Disk is the

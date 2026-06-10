@@ -1,12 +1,8 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.AdHoc;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Cli.OneShot;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Canonical Claude one-shot CLI runner. Stdin-piped prompt, JSON output

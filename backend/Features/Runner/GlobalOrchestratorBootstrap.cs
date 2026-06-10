@@ -1,8 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services.Runner;
+
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Boots the singleton <see cref="GlobalOrchestratorSession"/> at app

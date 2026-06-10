@@ -1,10 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.State;
 
-namespace OrchestratorApi.Services.Analysis;
+namespace AgentStudio.Analysis;
 
 /// <summary>
 /// Pure, testable assembly logic for the **Steering Docs Summary and Drift

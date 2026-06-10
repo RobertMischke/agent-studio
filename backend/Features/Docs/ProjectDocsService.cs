@@ -1,9 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
 
-namespace OrchestratorApi.Services;
+namespace AgentStudio.Docs;
 
 /// <summary>
 /// Project-level docs surface: security archive (free-form MD files +

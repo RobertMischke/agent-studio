@@ -1,9 +1,8 @@
 using System.Text;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Regression coverage for the AUTHORITATIVE project-state snapshot the

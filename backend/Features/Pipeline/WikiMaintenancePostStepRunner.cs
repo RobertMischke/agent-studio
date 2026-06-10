@@ -2,9 +2,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Pipeline;
+namespace AgentStudio.Pipeline;
 
 public sealed record WikiMaintenanceResult(
     WikiMaintenanceVerdict Verdict,
@@ -99,7 +98,7 @@ public sealed partial class WikiMaintenancePostStepRunner
                 LongTerm: "Promote the confirmed root cause into measures.md and close the entry when fixed.");
         }
 
-        var logPath = OrchestratorApi.Services.TaskPaths.CliOutputLog(task.FolderPath);
+        var logPath = AgentStudio.Tasks.TaskPaths.CliOutputLog(task.FolderPath);
         var log = TryReadTail(logPath, maxChars: 80_000);
         if (string.IsNullOrWhiteSpace(log)) return null;
 

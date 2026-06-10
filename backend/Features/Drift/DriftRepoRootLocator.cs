@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Drift;
+namespace AgentStudio.Drift;
 
 /// <summary>
 /// Resolves the source repository root for drift scope selection by walking up

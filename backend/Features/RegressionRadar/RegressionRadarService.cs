@@ -1,9 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.RegressionRadar;
+namespace AgentStudio.RegressionRadar;
 
 /// <summary>
 /// Analyzes spec-file changes across a task's attributed commits and classifies
@@ -197,7 +195,7 @@ public sealed class RegressionRadarService
         };
     }
 
-    internal static List<string> ResolveTaskCommitShas(Models.TaskInfo info)
+    internal static List<string> ResolveTaskCommitShas(TaskInfo info)
     {
         var shas = info.Commits
             .Select(c => c.Sha)

@@ -1,8 +1,8 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pure-function tests for <see cref="JobCommitsAggregation.WithReconstructedInProgressCommits(TaskInfo, TaskCommitsAggregate)"/>

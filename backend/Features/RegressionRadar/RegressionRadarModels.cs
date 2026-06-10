@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.RegressionRadar;
+namespace AgentStudio.RegressionRadar;
 
 /// <summary>
 /// Classification of a spec file change within a task's attributed commits.

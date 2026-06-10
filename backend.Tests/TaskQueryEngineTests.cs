@@ -1,9 +1,8 @@
 using Microsoft.AspNetCore.Http;
-using OrchestratorApi.Endpoints.Tasks;
-using OrchestratorApi.Models;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public class TaskQueryEngineTests : IDisposable
 {

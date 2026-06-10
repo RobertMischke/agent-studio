@@ -12,7 +12,7 @@ using BackendProbe = UpdSvc::AgentTaskboard.UpdateService.BackendProbe;
 using IBackendProbe = UpdSvc::AgentTaskboard.UpdateService.IBackendProbe;
 using UpdateStatusStore = UpdSvc::AgentTaskboard.UpdateService.UpdateStatusStore;
 
-namespace OrchestratorApi.Tests.Fixtures.UpdateService;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// WebApplicationFactory wrapper around the standalone Update Service so the

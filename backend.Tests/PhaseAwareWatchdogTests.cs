@@ -1,9 +1,8 @@
 using Microsoft.Extensions.Configuration;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the per-phase watchdog budget matrix. Pure-function library,

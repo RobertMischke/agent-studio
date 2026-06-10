@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Analysis;
+namespace AgentStudio.Analysis;
 
 /// <summary>
 /// Canonical layout for analysis reports under the watched workspace's
@@ -11,7 +11,7 @@ namespace OrchestratorApi.Services.Analysis;
 /// The log root is the watched workspace, NOT the app repository. Analysis
 /// reports are project evidence; they live next to the project, not next to
 /// source. Mirrors the convention in
-/// <see cref="OrchestratorApi.Services.Supervisor.SupervisorLogPaths"/>.
+/// <see cref="AgentStudio.Supervisor.SupervisorLogPaths"/>.
 /// </remarks>
 public static class AnalysisReportPaths
 {

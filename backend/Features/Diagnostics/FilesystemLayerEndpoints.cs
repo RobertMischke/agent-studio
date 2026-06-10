@@ -1,6 +1,5 @@
-using OrchestratorApi.Services;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Diagnostics;
 
 public static class FilesystemLayerEndpoints
 {

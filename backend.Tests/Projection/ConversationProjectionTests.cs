@@ -1,12 +1,10 @@
 using System.IO;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Projection;
-using OrchestratorApi.Services.Projection.Sources;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests.Projection;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// F22 backend foundation. Covers the markdown renderer, image rewriter,

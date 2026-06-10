@@ -1,8 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Tokens;
 
-namespace OrchestratorApi.Services.Runner;
+
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Project-scoped token-usage rollups for slice 8 of the quality-system
@@ -34,7 +32,7 @@ namespace OrchestratorApi.Services.Runner;
 /// Performance: O(N) over orchestrator-log entries plus O(M) over the
 /// project's job folders. Both happen at most once per request; no
 /// per-job disk I/O. Locked by
-/// <see cref="OrchestratorApi.Tests.ProjectTokenUsageEndpointPerfTests"/>.
+/// <see cref="AgentStudio.Tests.ProjectTokenUsageEndpointPerfTests"/>.
 /// </para>
 /// </summary>
 public class ProjectTokenUsageService

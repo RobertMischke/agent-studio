@@ -1,7 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Bus;
 
 /// <summary>
 /// Read API for the project-screen Agent Message Bus panel. Backed by

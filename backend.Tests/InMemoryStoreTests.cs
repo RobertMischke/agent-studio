@@ -1,10 +1,9 @@
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Services.State;
-using OrchestratorApi.Services.Supervisor;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the contract of <see cref="InMemoryStore{T}"/> through its first two

@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 
-namespace OrchestratorApi.Services.Diagnostics;
+namespace AgentStudio.Diagnostics;
 
 /// <summary>
 /// Records a fatal exception to two surfaces simultaneously: a full

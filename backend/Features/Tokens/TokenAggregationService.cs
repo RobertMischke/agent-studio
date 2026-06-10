@@ -1,9 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.AdHoc;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.Tokens;
+
+namespace AgentStudio.Tokens;
 
 /// <summary>
 /// Phase-4 implementation of <see cref="ITokenAggregator"/>. Every per-project

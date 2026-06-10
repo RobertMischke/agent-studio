@@ -1,11 +1,10 @@
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using OrchestratorApi.Services.Cli.OneShot;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Regression coverage for the orchestrator-chat multimodal fast path: when

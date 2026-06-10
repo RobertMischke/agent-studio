@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Runtime;
+namespace AgentStudio.Runtime;
 
 /// <summary>
 /// File-backed, in-memory projection of Product Runtime Observability events

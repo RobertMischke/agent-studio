@@ -1,7 +1,6 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Registry;
+namespace AgentStudio.Registry;
 
 /// <summary>
 /// F45a — in-memory cache plus persistence for the workspace catalog.

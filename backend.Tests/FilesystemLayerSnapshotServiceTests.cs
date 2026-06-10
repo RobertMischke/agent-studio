@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Services;
+
 using System.Diagnostics;
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 public class FilesystemLayerSnapshotServiceTests : IDisposable
 {

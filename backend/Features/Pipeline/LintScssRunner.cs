@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace OrchestratorApi.Services.Pipeline;
+namespace AgentStudio.Pipeline;
 
 /// <summary>
 /// Verdict returned by <see cref="LintScssRunner"/> for one pipeline run.

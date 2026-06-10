@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// ASS-734 traceability half: every steering step the orchestrator drives must

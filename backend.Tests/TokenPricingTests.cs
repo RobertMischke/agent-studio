@@ -1,8 +1,8 @@
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Models;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pins the per-model price math so a future price update has an exact

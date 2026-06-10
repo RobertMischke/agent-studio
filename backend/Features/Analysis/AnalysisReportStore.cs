@@ -1,8 +1,7 @@
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Services.State;
 
-namespace OrchestratorApi.Services.Analysis;
+namespace AgentStudio.Analysis;
 
 /// <summary>
 /// Typed, file-backed in-memory projection of one project's analysis-report

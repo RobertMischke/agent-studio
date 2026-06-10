@@ -2,10 +2,8 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Tokens;
 
-namespace OrchestratorApi.Services.Companion;
+namespace AgentStudio.Companion;
 
 /// <summary>
 /// Outbound-only companion sync. Every <see cref="CompanionSyncOptions.SyncIntervalSeconds"/>
@@ -25,7 +23,7 @@ public sealed class CompanionSyncService : BackgroundService
     private readonly IOptionsMonitor<CompanionSyncOptions> _options;
     private readonly TaskScannerService _jobs;
     private readonly TaskRunnerService _runner;
-    private readonly OrchestratorApi.Services.Quota.QuotaService _quota;
+    private readonly AgentStudio.Cli.QuotaService _quota;
     private readonly ITokenAggregator _tokens;
     private readonly CompanionCommandDispatcher _dispatcher;
     private readonly ILogger<CompanionSyncService> _log;
@@ -40,7 +38,7 @@ public sealed class CompanionSyncService : BackgroundService
         IOptionsMonitor<CompanionSyncOptions> options,
         TaskScannerService jobs,
         TaskRunnerService runner,
-        OrchestratorApi.Services.Quota.QuotaService quota,
+        AgentStudio.Cli.QuotaService quota,
         ITokenAggregator tokens,
         CompanionCommandDispatcher dispatcher,
         IHttpClientFactory httpFactory,
@@ -141,17 +139,17 @@ public sealed class CompanionSyncService : BackgroundService
         return CompanionSnapshotBuilder.Build(jobs, runner, quota, tokens, host, DateTimeOffset.UtcNow);
     }
 
-    private IReadOnlyList<OrchestratorApi.Models.TaskInfo> SafeScan()
+    private IReadOnlyList<AgentStudio.Shared.TaskInfo> SafeScan()
     {
         try { return _jobs.ScanAllJobs(); }
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Companion: ScanAllJobs failed; sending empty job list");
-            return Array.Empty<OrchestratorApi.Models.TaskInfo>();
+            return Array.Empty<AgentStudio.Shared.TaskInfo>();
         }
     }
 
-    private OrchestratorApi.Models.QuotaReport? SafeQuota()
+    private AgentStudio.Shared.QuotaReport? SafeQuota()
     {
         try { return _quota.GetCached(); }
         catch (Exception ex)

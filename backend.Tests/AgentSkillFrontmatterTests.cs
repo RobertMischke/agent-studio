@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Drift guard for the portable skill library under <c>.agents/skills/</c>.
@@ -15,7 +15,7 @@ namespace OrchestratorApi.Tests;
 /// frontmatter block ("missing YAML frontmatter delimited by ---"). Two
 /// skills (<c>job-api</c>, <c>regenerate-readme</c>) shipped without that
 /// block and produced an ERROR on every Codex run. The backend skill
-/// catalog (<see cref="OrchestratorApi.Services.SkillReadinessService"/>)
+/// catalog (<see cref="AgentStudio.Runtime.SkillReadinessService"/>)
 /// also reads <c>name</c> + <c>description</c> from the same block.
 /// </para>
 /// <para>

@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace OrchestratorApi.Endpoints;
+namespace AgentStudio.Diagnostics;
 
 /// <summary>
 /// ADR-0031 phase-6 db-touch sentinel: a POST endpoint that round-trips

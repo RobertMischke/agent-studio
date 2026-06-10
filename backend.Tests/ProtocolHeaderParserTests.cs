@@ -1,7 +1,7 @@
-using OrchestratorApi.Services.Protocol;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Tolerance contract for the protocol-header parser. The parser is the

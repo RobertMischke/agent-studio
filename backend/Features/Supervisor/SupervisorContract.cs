@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Supervisor;
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// Severity of a supervisor advisory. Informational by default; the supervisor

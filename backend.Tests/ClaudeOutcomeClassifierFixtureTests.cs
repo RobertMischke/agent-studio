@@ -1,9 +1,8 @@
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Runner;
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Drives real-shaped <c>claude</c> run transcripts (stored as NDJSON fixtures

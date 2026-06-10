@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Review;
+namespace AgentStudio.Review;
 
 /// <summary>
 /// How a code-review pass should scope the diff it reviews.

@@ -1,6 +1,6 @@
 using System;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Recognises shell commands that legitimately stay stdout-silent for

@@ -1,9 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli.OneShot;
 
-namespace OrchestratorApi.Services.Drift;
+namespace AgentStudio.Drift;
 
 /// <summary>
 /// Detects code-pattern drift: where one canonical implementation pattern
@@ -32,7 +30,7 @@ namespace OrchestratorApi.Services.Drift;
 /// Markdown sibling. Callers persist via <see cref="DriftReportStore"/>
 /// (same shape as the other drift services) and emit a
 /// <c>kind:observation</c> bus message via
-/// <see cref="OrchestratorApi.Services.Bus.AgentMessageBusBridge"/>.
+/// <see cref="AgentStudio.Bus.AgentMessageBusBridge"/>.
 /// </para>
 /// </remarks>
 public sealed class CodePatternDriftAnalysisService
@@ -88,7 +86,7 @@ public sealed class CodePatternDriftAnalysisService
             Id: "cli-one-shot-stdin",
             Title: "Claude one-shot CLI invocation must pipe prompt via stdin",
             CanonicalDescription:
-                "Use OrchestratorApi.Services.Cli.OneShot.ICliOneShot (or stdin-piped Process.Start where DI is unavailable). " +
+                "Use AgentStudio.Cli.ICliOneShot (or stdin-piped Process.Start where DI is unavailable). " +
                 "Multi-KB prompts passed as `-p <prompt>` argv fail silently on Windows shim layers — verified 2026-05-11.",
             FilePattern: @"\.cs$",
             ExcludeFilePattern: @"(?:OneShot[/\\]ClaudeOneShot\.cs|backend\.Tests[/\\]|/bin/|/obj/|UsersrmiscAppDataLocalTemp)",
@@ -110,7 +108,7 @@ public sealed class CodePatternDriftAnalysisService
             Id: "jsonl-append-locked",
             Title: "JSONL append uses IJsonlAppender or a per-file semaphore",
             CanonicalDescription:
-                "Append to a JSONL file should go through OrchestratorApi.Services.Persistence.IJsonlAppender " +
+                "Append to a JSONL file should go through AgentStudio.Persistence.IJsonlAppender " +
                 "(or wrap FileMode.Append in a per-path SemaphoreSlim). Without locking, concurrent writers can " +
                 "interleave bytes when records exceed the OS atomic-write threshold.",
             FilePattern: @"\.cs$",

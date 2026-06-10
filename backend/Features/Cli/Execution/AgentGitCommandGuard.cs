@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace OrchestratorApi.Services.Cli;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Worker CLI subprocess guard for the platform-owned git boundary.

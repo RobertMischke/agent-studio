@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Services.Companion;
+namespace AgentStudio.Companion;
 
 /// <summary>
 /// Bound from the <c>Companion</c> section of <c>appsettings*.json</c>. Default

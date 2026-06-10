@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Services.Drift;
+
 using Xunit;
 using Xunit.Abstractions;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Diagnostic test that runs the deterministic drift detector against

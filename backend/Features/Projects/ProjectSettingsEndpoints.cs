@@ -1,10 +1,6 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Pipeline;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Projects;
 
 /// <summary>
 /// Body for <c>PUT /api/projects/{name}/intake</c>. Enables or disables the

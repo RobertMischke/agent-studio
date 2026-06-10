@@ -1,14 +1,8 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.AdHoc;
-using OrchestratorApi.Services.Cli.OneShot;
-using OrchestratorApi.Services.GeneratedFiles;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Pipeline;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Runs the multi-aspect quality pass over a 4-auto-review job whose

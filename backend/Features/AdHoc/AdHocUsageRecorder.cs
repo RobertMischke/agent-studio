@@ -1,10 +1,7 @@
 using System.Text;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Runner;
 
-namespace OrchestratorApi.Services.AdHoc;
+namespace AgentStudio.AdHoc;
 
 /// <summary>
 /// Workspace-wide append-only log of ad-hoc Haiku CLI invocations.

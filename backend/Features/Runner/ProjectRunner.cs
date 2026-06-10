@@ -1,14 +1,10 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Quota;
+
+
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 public sealed record RunnerCircuitBreakerOptions(
     int PerTaskFailureThreshold,
@@ -93,13 +89,13 @@ public class ProjectRunner
     private readonly TaskSessionLog _sessions;
     // ADR-0049: per-job timeline.jsonl ledger. Optional so existing test
     // fixtures keep working; production DI always supplies an instance.
-    private readonly OrchestratorApi.Services.Tasks.TimelineLog? _timeline;
+    private readonly AgentStudio.Tasks.TimelineLog? _timeline;
     // Records the core agent run into pipeline-execution.json so the Overview
     // pipeline table shows the CORE "Agent execution" step live (Running at
     // spawn) and completed (Passed/Failed + duration/times) at exit, instead
     // of a permanent "- -". Optional so test fixtures that build the runner
     // directly keep working; production DI always supplies an instance.
-    private readonly OrchestratorApi.Services.Pipeline.PipelineExecutionLog? _pipelineLog;
+    private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
@@ -124,7 +120,7 @@ public class ProjectRunner
     // still fire; the journal append is skipped when no workspace root is known).
     private readonly HumanReviewEscalation _humanReviewEscalation;
     private readonly AgentMessageBusBridge? _bus;
-    private readonly OrchestratorApi.Services.TaskAccess.ITaskAccess _taskAccess;
+    private readonly AgentStudio.TaskAccess.ITaskAccess _taskAccess;
     // "Intelligente Abbruch-Bewertung" (ADR-0032): the LLM abort-review step.
     // Optional + default-OFF per project. When null (every existing
     // construction site / test fixture) or disabled, OnCliFinishedAsync keeps
@@ -135,7 +131,7 @@ public class ProjectRunner
     // token usage post-hoc when the CLI never reported a footer (always, for
     // Claude) or the run was killed before emitting one. Null in tests that
     // construct the runner without it.
-    private readonly OrchestratorApi.Services.Cli.ClaudeSessionInspector? _sessionInspector;
+    private readonly AgentStudio.Cli.ClaudeSessionInspector? _sessionInspector;
     // Per-job count of automatic abort-review reruns already spent. The
     // breaker: budget remaining = DefaultRerunBudget - used. Cleared when the
     // job leaves the loop (accepted, moved to review, or escalated).
@@ -346,17 +342,17 @@ public class ProjectRunner
         GitService git,
         PickupFailureLog pickupFailures,
         CrossSlugInfraCircuitBreaker infraBreaker,
-        OrchestratorApi.Services.TaskAccess.ITaskAccess taskAccess,
+        AgentStudio.TaskAccess.ITaskAccess taskAccess,
         AgentMessageBusBridge? bus = null,
         RunnerRole role = RunnerRole.Orchestrator,
         PickupLockFile? pickupLock = null,
         PickupLockOwner? pickupLockOwner = null,
         IntegrationLeaseService? integrationLeases = null,
-        OrchestratorApi.Services.Tasks.TimelineLog? timeline = null,
-        OrchestratorApi.Services.Pipeline.PipelineExecutionLog? pipelineLog = null,
+        AgentStudio.Tasks.TimelineLog? timeline = null,
+        AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null,
         HumanReviewEscalation? humanReviewEscalation = null,
         PostAbortReviewStepService? postAbortReview = null,
-        OrchestratorApi.Services.Cli.ClaudeSessionInspector? sessionInspector = null)
+        AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -471,7 +467,7 @@ public class ProjectRunner
     ///   and applies the queued value on the next active-job clear.</item>
     /// </list>
     /// Invalid mode strings produce <see cref="ModeChangeOutcome.Invalid"/>; the
-    /// caller (typically <see cref="OrchestratorApi.Services.TaskRunnerService.SetMode"/>)
+    /// caller (typically <see cref="AgentStudio.Runner.TaskRunnerService.SetMode"/>)
     /// turns that into a 400.
     /// </summary>
     public ModeChangeResult RequestModeChange(string mode, string? reason = null)
@@ -1505,7 +1501,7 @@ public class ProjectRunner
             var now = DateTime.UtcNow;
             _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
             {
-                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.WorktreeContainmentStepId,
+                StepId = AgentStudio.Pipeline.PipelineCatalogue.WorktreeContainmentStepId,
                 Kind = StepKind.Tool,
                 Status = status,
                 StartedAt = now,
@@ -1529,7 +1525,7 @@ public class ProjectRunner
         DateTime startedAt)
         => RecordPipelineStep(
             info,
-            OrchestratorApi.Services.Pipeline.PipelineCatalogue.IntegrateMergeStepId,
+            AgentStudio.Pipeline.PipelineCatalogue.IntegrateMergeStepId,
             StepKind.Tool,
             status,
             verdict,
@@ -1546,7 +1542,7 @@ public class ProjectRunner
         string? model = null)
         => RecordPipelineStep(
             info,
-            OrchestratorApi.Services.Pipeline.PipelineCatalogue.ConflictResolutionStepId,
+            AgentStudio.Pipeline.PipelineCatalogue.ConflictResolutionStepId,
             StepKind.Orchestrator,
             status,
             verdict,
@@ -2358,7 +2354,7 @@ public class ProjectRunner
     /// snapshot onto the agent message bus as a <c>kind:token-usage</c>
     /// message attributed to <c>agent:&lt;cli&gt;</c>. The CLI driver parses
     /// the frame (Codex uses <see cref="CodexUsageParser"/>) and stashes a
-    /// <see cref="OrchestratorApi.Services.Bus.ParsedTurnUsage"/>; the runner
+    /// <see cref="AgentStudio.Cli.ParsedTurnUsage"/>; the runner
     /// reads it here when the matching typed event arrives.
     /// <para>
     /// Without this, <c>BusAggregationCache.OnAppended</c> never sees the
@@ -3133,7 +3129,7 @@ public class ProjectRunner
     /// <summary>
     /// Open (or resume) the job's pipeline-execution record and mark the CORE
     /// "Agent execution" step <see cref="PipelineStepStatus.Running"/> at spawn,
-    /// stamping its start time. <see cref="OrchestratorApi.Services.Pipeline.PipelineExecutionLog.EnsureAgentRunStart"/>
+    /// stamping its start time. <see cref="AgentStudio.Pipeline.PipelineExecutionLog.EnsureAgentRunStart"/>
     /// begins a fresh record when the prior run completed or reached core/post
     /// before a short-circuit moved it back to Ready, so a re-issue surfaces as
     /// a new record rather than overwriting silently.
@@ -3147,8 +3143,8 @@ public class ProjectRunner
         {
             var record = _pipelineLog.EnsureAgentRunStart(
                 info.FolderPath,
-                OrchestratorApi.Services.Pipeline.ProjectPipelineOrder.Apply(
-                    OrchestratorApi.Services.Pipeline.PipelineCatalogue.ForMode(info.Mode),
+                AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
+                    AgentStudio.Pipeline.PipelineCatalogue.ForMode(info.Mode),
                     _projectSettings.Get(ProjectName)),
                 ProjectName,
                 info.Id);
@@ -3161,7 +3157,7 @@ public class ProjectRunner
             var accumulatedMs = priorCore?.DurationMs ?? 0;
             _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
             {
-                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
+                StepId = AgentStudio.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
                 Kind = StepKind.Core,
                 Model = execution.Model ?? info.Model,
                 Status = PipelineStepStatus.Running,
@@ -3188,7 +3184,7 @@ public class ProjectRunner
 
     /// <summary>
     /// Record the auto-mode loop guard (<see cref="StuckLoopGuard"/>) as the
-    /// pipeline's <see cref="OrchestratorApi.Services.Pipeline.PipelineCatalogue.LoopGuardStepId"/>
+    /// pipeline's <see cref="AgentStudio.Pipeline.PipelineCatalogue.LoopGuardStepId"/>
     /// step so a forming or stopped Ralph-loop is visible in the Overview pipeline
     /// table - early, ahead of the core run and the aspect verdicts. The status
     /// drives the row icon (Passed = healthy / forming under budget, Failed =
@@ -3209,7 +3205,7 @@ public class ProjectRunner
             var now = DateTime.UtcNow;
             _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
             {
-                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.LoopGuardStepId,
+                StepId = AgentStudio.Pipeline.PipelineCatalogue.LoopGuardStepId,
                 Kind = StepKind.Module,
                 Status = status,
                 StartedAt = startedAt ?? now,
@@ -3244,12 +3240,12 @@ public class ProjectRunner
             // be a re-issued attempt even when it was short-circuited before
             // Complete() stamped it, as long as it already crossed core/post.
             var prior = _pipelineLog?.Read(info.FolderPath);
-            var pipeline = OrchestratorApi.Services.Pipeline.ProjectPipelineOrder.Apply(
-                OrchestratorApi.Services.Pipeline.PipelineCatalogue.ForMode(info.Mode),
+            var pipeline = AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
+                AgentStudio.Pipeline.PipelineCatalogue.ForMode(info.Mode),
                 _projectSettings.Get(ProjectName));
             var priorRunExists = prior != null
                 && (prior.IsComplete
-                    || OrchestratorApi.Services.Pipeline.PipelineExecutionLog.HasReachedAgentRunBoundary(prior, pipeline));
+                    || AgentStudio.Pipeline.PipelineExecutionLog.HasReachedAgentRunBoundary(prior, pipeline));
 
             var followUpPath = Path.Combine(info.FolderPath, "orchestrator-follow-up.md");
             var followUpText = File.Exists(followUpPath) ? File.ReadAllText(followUpPath) : string.Empty;
@@ -3292,7 +3288,7 @@ public class ProjectRunner
     private static IReadOnlyList<string> GatherAspectConcernSummaries(string jobFolderPath)
     {
         var summaries = new List<string>();
-        foreach (var stepId in OrchestratorApi.Services.Pipeline.PipelineCatalogue.AspectStepIds)
+        foreach (var stepId in AgentStudio.Pipeline.PipelineCatalogue.AspectStepIds)
         {
             var path = Path.Combine(jobFolderPath, stepId + ".md");
             if (!File.Exists(path)) continue;
@@ -3303,7 +3299,7 @@ public class ProjectRunner
             var status = AspectVerdictParsing.ReadStatusFromReport(text);
             if (status is not (AspectStatus.Concerns or AspectStatus.Block)) continue;
 
-            var fm = OrchestratorApi.Services.Markdown.FrontmatterParser.Parse(text);
+            var fm = AgentStudio.Cli.FrontmatterParser.Parse(text);
             if (fm.Ok && fm.Fields.TryGetValue("summary", out var summary) && !string.IsNullOrWhiteSpace(summary))
                 summaries.Add(summary.Trim());
         }
@@ -3313,7 +3309,7 @@ public class ProjectRunner
     /// <summary>
     /// Lift the one-line summaries from the previous run's user-triggered
     /// code-review reports (<c>code-review-*.md</c>, written by
-    /// <see cref="OrchestratorApi.Services.Review.CodeReviewStepService"/>) so a
+    /// <see cref="AgentStudio.Review.CodeReviewStepService"/>) so a
     /// re-issue foregrounds them as open items. These reports carry a
     /// <c>verdict:</c> frontmatter field (not the aspect reports' <c>status:</c>),
     /// so they need their own gather; <c>pass</c> verdicts and unreadable files
@@ -3337,7 +3333,7 @@ public class ProjectRunner
             try { text = File.ReadAllText(path); }
             catch { continue; }
 
-            var fm = OrchestratorApi.Services.Markdown.FrontmatterParser.Parse(text);
+            var fm = AgentStudio.Cli.FrontmatterParser.Parse(text);
             if (!fm.Ok) continue;
             if (!fm.Fields.TryGetValue("verdict", out var verdict)) continue;
             var token = verdict.Trim().ToLowerInvariant();
@@ -3351,7 +3347,7 @@ public class ProjectRunner
 
     /// <summary>
     /// Record the reissue open-items pre-check as the pipeline's
-    /// <see cref="OrchestratorApi.Services.Pipeline.PipelineCatalogue.PreReissueOpenItemsStepId"/>
+    /// <see cref="AgentStudio.Pipeline.PipelineCatalogue.PreReissueOpenItemsStepId"/>
     /// step: <see cref="PipelineStepStatus.Passed"/> with an <c>open-items</c>
     /// verdict when it foregrounded items, <see cref="PipelineStepStatus.Failed"/>
     /// with an <c>escalate</c> verdict past the bounce budget, and a clean
@@ -3379,7 +3375,7 @@ public class ProjectRunner
             var now = DateTime.UtcNow;
             _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
             {
-                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.PreReissueOpenItemsStepId,
+                StepId = AgentStudio.Pipeline.PipelineCatalogue.PreReissueOpenItemsStepId,
                 Kind = StepKind.Module,
                 Status = status,
                 StartedAt = startedAt,
@@ -3477,7 +3473,7 @@ public class ProjectRunner
             var synthetic = new SessionUsage
             {
                 At = DateTime.UtcNow,
-                Tokens = OrchestratorApi.Services.Cli.ClaudeSessionInspector.FormatUsageString(agg),
+                Tokens = AgentStudio.Cli.ClaudeSessionInspector.FormatUsageString(agg),
             };
             if (_sessions.UpdateLastUsage(jobId, synthetic, Entry.Path))
             {
@@ -3529,8 +3525,8 @@ public class ProjectRunner
             // step still lands and the row is never left blank.
             var record = _pipelineLog.EnsureRun(
                 folder,
-                OrchestratorApi.Services.Pipeline.ProjectPipelineOrder.Apply(
-                    OrchestratorApi.Services.Pipeline.PipelineCatalogue.ForMode(info?.Mode),
+                AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
+                    AgentStudio.Pipeline.PipelineCatalogue.ForMode(info?.Mode),
                     _projectSettings.Get(ProjectName)),
                 ProjectName,
                 jobId);
@@ -3576,7 +3572,7 @@ public class ProjectRunner
 
             _pipelineLog.RecordStep(folder, new PipelineStepExecution
             {
-                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
+                StepId = AgentStudio.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
                 Kind = StepKind.Core,
                 Model = execution.Model ?? info?.Model,
                 Status = coreStatus,
@@ -3608,7 +3604,7 @@ public class ProjectRunner
     private static PipelineStepExecution? CoreStep(PipelineExecutionRecord? record)
         => record?.Steps.FirstOrDefault(s => string.Equals(
                s.StepId,
-               OrchestratorApi.Services.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
+               AgentStudio.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
                StringComparison.OrdinalIgnoreCase));
 
     private static string? CombineTokenUsageSource(string? existing, string? current)
@@ -3763,7 +3759,6 @@ public class ProjectRunner
                 _sessions.UpdateLastUsage(jobId, usage, Entry.Path);
             }
             var coreUsage = ResolveCoreAgentUsage(cli, jobKey, usage);
-
 
             // Mirror run-finish + agent-side token usage onto the bus. We emit
             // these even before the post-run policy and lane move so a crash
@@ -4225,7 +4220,7 @@ public class ProjectRunner
                 // is the abort path (Aborted = true) with the run's exit code
                 // and the task's own type/tags in scope, so a project can scope
                 // abort-review to e.g. only non-zero exits or only bug tasks.
-                var abortConditionContext = new OrchestratorApi.Services.Pipeline.PipelineStepConditionContext
+                var abortConditionContext = new AgentStudio.Pipeline.PipelineStepConditionContext
                 {
                     Aborted = true,
                     ExitCode = execution.ExitCode,
@@ -4242,9 +4237,9 @@ public class ProjectRunner
                     // re-running this task. Both go directly to human review.
                     && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
                     && _postAbortReview != null
-                    && OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.ShouldRun(
+                    && AgentStudio.Pipeline.PipelineStepConfigResolver.ShouldRun(
                         _projectSettings.Get(ProjectName),
-                        OrchestratorApi.Services.Pipeline.PipelineCatalogue.AbortReviewStep,
+                        AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep,
                         abortConditionContext))
                 {
                     var handled = await TryRunAbortReviewAsync(
@@ -4720,13 +4715,13 @@ public class ProjectRunner
         var settings = _projectSettings.Get(ProjectName);
         var used = _abortReviewRerunsUsed.TryGetValue(jobId, out var u) ? u : 0;
         var budgetRemaining = Math.Max(0, PostAbortReviewDecider.DefaultRerunBudget - used);
-        var model = OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.ResolveModel(
+        var model = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveModel(
             settings,
-            OrchestratorApi.Services.Pipeline.PipelineCatalogue.AbortReviewStep,
+            AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep,
             runtimeDefault: execution.Model ?? activeInfo.Model ?? ModelIds.ClaudeHaiku45);
-        var thinkingLevel = OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.ResolveThinkingLevel(
+        var thinkingLevel = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveThinkingLevel(
             settings,
-            OrchestratorApi.Services.Pipeline.PipelineCatalogue.AbortReviewStep,
+            AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep,
             cliType,
             model,
             execution.ThinkingLevel ?? activeInfo.ThinkingLevel);
@@ -4837,7 +4832,7 @@ public class ProjectRunner
             var reasoning = report.Verdict?.Reasoning;
             _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
             {
-                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.PostAbortReviewStepId,
+                StepId = AgentStudio.Pipeline.PipelineCatalogue.PostAbortReviewStepId,
                 Kind = StepKind.Orchestrator,
                 Model = report.Model,
                 Status = parsed ? PipelineStepStatus.Passed : PipelineStepStatus.Failed,
@@ -6102,19 +6097,19 @@ public class ProjectRunner
             // Conflict (file lock) lets the next tick retry; Rejected
             // (access denied) is logged once for the operator.
             var deleteResult = _taskAccess.DeleteLaneFolder(Entry.Path, TaskStates.Progress, slug);
-            if (deleteResult.Status == OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Applied)
+            if (deleteResult.Status == AgentStudio.TaskAccess.TaskMutationStatus.Applied)
             {
                 _logger.LogInformation(
                     "[taskboard] cleaned up post-move skeleton for {Slug} on {Project} (real job lives in {Lane})",
                     slug, ProjectName, locatedLane);
             }
-            else if (deleteResult.Status == OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Conflict)
+            else if (deleteResult.Status == AgentStudio.TaskAccess.TaskMutationStatus.Conflict)
             {
                 _logger.LogDebug(
                     "[taskboard] post-move skeleton {Folder} for {Slug} still locked; will retry next tick ({Msg})",
                     candidate.FolderPath, slug, deleteResult.Message);
             }
-            else if (deleteResult.Status == OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Rejected)
+            else if (deleteResult.Status == AgentStudio.TaskAccess.TaskMutationStatus.Rejected)
             {
                 _logger.LogWarning(
                     "[taskboard] post-move skeleton {Folder} for {Slug} cannot be deleted (access denied); manual cleanup required ({Msg})",
@@ -6130,7 +6125,7 @@ public class ProjectRunner
 
         var moveResult = _taskAccess.ArchiveOrphanFolder(
             Entry.Path, TaskStates.Progress, slug, destinationSlug);
-        if (moveResult.Status != OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Applied)
+        if (moveResult.Status != AgentStudio.TaskAccess.TaskMutationStatus.Applied)
         {
             _logger.LogWarning(
                 "Progress orphan archive refused for {Slug} on {Project}: {Status} {Message}",
@@ -6807,7 +6802,7 @@ public enum ModeChangeOutcome
 
 /// <summary>
 /// Typed return for <see cref="ProjectRunner.RequestModeChange"/>. The same
-/// shape is also returned by <see cref="OrchestratorApi.Services.TaskRunnerService.RequestModeChange"/>
+/// shape is also returned by <see cref="AgentStudio.Runner.TaskRunnerService.RequestModeChange"/>
 /// so the endpoint can produce its response body from a single record.
 /// <para>
 /// <see cref="CurrentMode"/> is whatever <c>_mode</c> reads as <i>after</i>

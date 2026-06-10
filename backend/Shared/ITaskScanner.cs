@@ -1,6 +1,5 @@
-using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Tasks;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Abstraction over the task scanner that the executor (Runner) side depends

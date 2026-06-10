@@ -1,11 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Bus;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Cli.OneShot;
 
-namespace OrchestratorApi.Services.Runner;
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Result of an orchestrator decision call: the orchestrator's reply text

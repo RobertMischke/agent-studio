@@ -1,9 +1,8 @@
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Review;
-using OrchestratorApi.Services.Runner;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pins the load-bearing model invariant of the automatic quality-grade

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OrchestratorApi.Tests.PerfBaseline;
+namespace AgentStudio.Tests;
 
 internal sealed record PerfStats(
     int Iterations,

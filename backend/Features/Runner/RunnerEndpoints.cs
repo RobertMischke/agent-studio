@@ -1,16 +1,12 @@
-using OrchestratorApi.Models;
-using OrchestratorApi.Services;
-using OrchestratorApi.Services.Tasks;
-using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Services.Tokens;
 
-namespace OrchestratorApi.Endpoints;
+
+namespace AgentStudio.Runner;
 
 /// <summary>
 /// Project-runner control surface under <c>/api/runner</c>: the
 /// status snapshot the board polls plus the manual mode / start /
 /// stop toggles. Per-job execution lives in
-/// <see cref="OrchestratorApi.Endpoints.Tasks.TaskRunnerEndpoints"/> —
+/// <see cref="AgentStudio.Tasks.TaskRunnerEndpoints"/> —
 /// these routes operate at project granularity.
 /// </summary>
 public static class RunnerEndpoints

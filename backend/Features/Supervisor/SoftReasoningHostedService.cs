@@ -1,10 +1,7 @@
 using System.Diagnostics;
 using System.Text;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.AdHoc;
-using OrchestratorApi.Services.Bus;
 
-namespace OrchestratorApi.Services.Supervisor;
+namespace AgentStudio.Supervisor;
 
 /// <summary>
 /// CLI-driven soft reasoning. Per project, every
@@ -29,7 +26,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
     private readonly ILogger<SoftReasoningHostedService> _logger;
     private readonly AgentMessageBusBridge? _bus;
     private readonly AdHocUsageRecorder? _usage;
-    private readonly OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? _oneShotRegistry;
+    private readonly AgentStudio.Cli.CliOneShotRegistry? _oneShotRegistry;
 
     private readonly Queue<DateTime> _callTimestamps = new();
 
@@ -41,7 +38,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
         ILogger<SoftReasoningHostedService> logger,
         AgentMessageBusBridge? bus = null,
         AdHocUsageRecorder? usage = null,
-        OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? oneShotRegistry = null)
+        AgentStudio.Cli.CliOneShotRegistry? oneShotRegistry = null)
     {
         _taskRunner = taskRunner;
         _observe = observe;
@@ -165,7 +162,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
         $"Project: {v["project"]}\nState: {v["runner_status"]} active={v["current_job_id"]}\nLast progress: {v["last_progress_at"]}\n\nRecent samples:\n{v["recent_samples"]}\n\nEmit observations as [[SUPERVISOR_OBSERVATION: severity=<info|warn|high>; topic=<tag>; message=<one-line>]] then [[TASK_DONE]].";
 
     /// <summary>
-    /// Route to <see cref="OrchestratorApi.Services.Cli.OneShot.ICliOneShot"/>
+    /// Route to <see cref="AgentStudio.Cli.ICliOneShot"/>
     /// when the registry is wired; fall back to a local stdin-piped variant
     /// for test setups that build the service without DI. We removed the
     /// previous <c>-p &lt;prompt&gt;</c> argv path that caused the
@@ -176,7 +173,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
         var oneShot = _oneShotRegistry?.Get("claude");
         if (oneShot != null)
         {
-            var r = await oneShot.RunAsync(new OrchestratorApi.Services.Cli.OneShot.CliOneShotRequest(
+            var r = await oneShot.RunAsync(new AgentStudio.Cli.CliOneShotRequest(
                 CliType: "claude", Model: model, Prompt: prompt)
             {
                 Timeout = timeout,

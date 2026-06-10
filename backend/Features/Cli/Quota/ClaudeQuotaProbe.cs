@@ -1,10 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using OrchestratorApi.Models;
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Pty;
 
-namespace OrchestratorApi.Services.Quota;
+namespace AgentStudio.Cli;
 
 /// <summary>
 /// Probes Anthropic's <c>claude</c> CLI for plan + quota info via the <c>/usage</c>

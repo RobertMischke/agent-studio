@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace OrchestratorApi.Services.Projection;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Severity classification carried by structured chat events. The frontend

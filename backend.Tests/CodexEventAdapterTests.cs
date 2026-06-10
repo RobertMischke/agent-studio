@@ -1,9 +1,8 @@
-using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Cli.Adapters;
-using OrchestratorApi.Services.Runner;
+
+
 using Xunit;
 
-namespace OrchestratorApi.Tests;
+namespace AgentStudio.Tests;
 
 /// <summary>
 /// Locks the Codex JSONL -> CliRunEvent mapping. Fixtures are real frame

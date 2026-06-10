@@ -1,4 +1,4 @@
-namespace OrchestratorApi.Models;
+namespace AgentStudio.Shared;
 
 /// <summary>
 /// Body for <c>POST /api/tasks/{id}/review-evidence/{evidenceId}/follow-up</c>.
@@ -49,7 +49,7 @@ public enum MoveJobStatus
 }
 
 /// <summary>
-/// Result of a <see cref="OrchestratorApi.Services.Tasks.TaskStateMachine.MoveJob"/>
+/// Result of a <see cref="AgentStudio.Tasks.TaskStateMachine.MoveJob"/>
 /// call. <paramref name="NewFolderPath"/> is populated only on
 /// <see cref="MoveJobStatus.Success"/> and carries the absolute path of the
 /// post-move job folder. Callers that want to write into the moved folder
