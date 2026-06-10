@@ -110,6 +110,21 @@ If the CLI emits plain text already in a parser-friendly shape, `TransformReadLi
 
 **Authentication.** Most CLIs auth out-of-band (browser login, env var, gh-cli token). The task processor does **not** drive login flows — if `TestCliPath` succeeds but the CLI is logged out, the failure surfaces when the first quota probe or job starts. New CLIs should make the failure mode obvious in their error message.
 
+### 2.8 Execution context (read-only observability)
+
+**Contract.** Every CLI loads context beyond the prompt the runner hands it — a memory / instruction-file chain walked up from the working directory, a session/transcript store, a global config directory, and (Claude) wired-in MCP servers. `DescribeContextSources(string jobKey)` returns a `CliExecutionContext` describing those sources for the live (or just-finished, still-tracked) run, plus the scalar header (model, effective permission mode, cwd). This is a **read-only** surface (ASS-1739 / T1a): producing it must never change what the CLI loads — policy changes are a separate task (T1b). The base implementation derives everything from the adapter invocation plus each CLI's documented config-path conventions and sets `Source = "convention"`; a driver with a richer self-report (Claude's stream-json `init` frame) overrides `DescribeContextSources`, merges the init-frame model / permission mode / cwd / MCP list on top, and sets `Source = "init-frame"`. Returns `null` for an unknown run; the interface default is a no-op so test stubs and not-yet-wired drivers stay compilable.
+
+**Code.**
+- Model: [`CliExecutionContext` / `CliContextSource` / `CliContextSourceKinds`](../backend/Shared/Models/CliExecutionContext.cs).
+- Contract + base/convention implementation: [`ICliExecutionService.DescribeContextSources`](../backend/Features/Cli/Execution/ICliExecutionService.cs) and [`CliExecutionServiceBase`](../backend/Features/Cli/Execution/CliExecutionServiceBase.cs) (`BuildConventionContext`).
+- Pure convention builder (per-CLI path conventions, filesystem-probed): [`CliContextConventions`](../backend/Features/Cli/Execution/CliContextConventions.cs).
+- Claude init-frame override + parser: [`ClaudeCliService.DescribeContextSources`](../backend/Features/Cli/Execution/ClaudeCliService.cs) and [`ClaudeInitContextParser`](../backend/Features/Cli/Execution/Adapters/ClaudeInitContextParser.cs).
+- Persistence: the runner calls `DescribeContextSources` at run finish (while the per-run `ProcInfo` is still alive) and stamps the result onto the latest `SessionEvent` via [`TaskSessionLog.BackfillLatestSessionEventExecutionContext`](../backend/Features/Tasks/TaskSessionLog.cs); the run-detail "Execution Context" panel and a slim timeline marker read it back (`RunTimeline`).
+
+**Test.** `CliContextConventionsTests` (pure path conventions), `ClaudeInitContextParserTests` (init-frame parse), `DescribeContextSourcesTests` (service wiring for the convention CLIs + untracked-run null), `SessionEventsTests.BackfillLatestSessionEventExecutionContext_*` (durable JSONL round-trip), and `RunTimelineBuilderTests.ExecutionContext_IsCarriedFromEventOntoRunRecord` (timeline projection) together cover the producer → persistence → projection data path.
+
+**New CLI note.** The convention branch in `CliContextConventions.For` is the only thing a new sessionless/init-frame-less CLI needs; add its memory-file name and config-path conventions there. A driver that emits its own startup frame can override `DescribeContextSources` like Claude does.
+
 ---
 
 ## 3. Currently supported CLIs
@@ -219,6 +234,7 @@ Use this as a PR template. Tick each box; missing items must be justified in sec
 - [ ] Register the service as a singleton in [`Program.cs`](../backend/Program.cs).
 - [ ] Add it to [`CliRouter`](../backend/Services/Cli/CliRouter.cs)'s constructor and dispatch table.
 - [ ] Add a `BuildXxxProjects()` branch in [`SessionRegistry`](../backend/Services/Cli/SessionRegistry.cs) — return `[]` if the CLI has no on-disk sessions.
+- [ ] Add a `Xxx(cwd, home)` branch in [`CliContextConventions`](../backend/Features/Cli/Execution/CliContextConventions.cs) for the read-only execution-context surface (§2.8) — the CLI's memory-file name and config-path conventions. Override `DescribeContextSources` only if the CLI emits its own startup frame.
 - [ ] Implement `XxxQuotaProbe : QuotaProbeBase` in `backend/Services/Quota/`.
 - [ ] Register the probe: `services.AddSingleton<IQuotaProbe, XxxQuotaProbe>()` in `Program.cs`.
 - [ ] Add a backend xUnit test for `BuildStartInfo` argument composition.

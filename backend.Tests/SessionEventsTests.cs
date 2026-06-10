@@ -165,6 +165,107 @@ public class SessionEventsTests : IDisposable
         Assert.Equal("task-tip", events[1].HeadShaAfter);
     }
 
+    /// <summary>
+    /// Persistence link of the read-only execution-context data path
+    /// (ASS-1739 / T1a): the snapshot the adapter's
+    /// <c>DescribeContextSources</c> produces is stamped onto the <i>latest</i>
+    /// session-event row at run finish and round-trips back through
+    /// <see cref="TaskSessionLog.ReadSessionEvents"/> with its scalar header and
+    /// per-source list intact, while the earlier event is left untouched. This
+    /// closes the gap between the producer tests (DescribeContextSourcesTests /
+    /// CliContextConventionsTests / ClaudeInitContextParserTests) and the
+    /// timeline projection test (RunTimelineBuilderTests): without it nothing
+    /// proves the context actually survives the durable JSONL it is persisted to.
+    /// </summary>
+    [Fact]
+    public void BackfillLatestSessionEventExecutionContext_RewritesLatestRowOnly()
+    {
+        WriteJob(TaskStates.Progress, "demo-task");
+        var (_, sessions) = BuildServices();
+        sessions.AppendSessionEvent("demo-task", new SessionEvent
+        {
+            Ts = DateTime.UtcNow.AddMinutes(-2),
+            Kind = "start",
+            Cli = "claude"
+        }, _watchPath);
+        sessions.AppendSessionEvent("demo-task", new SessionEvent
+        {
+            Ts = DateTime.UtcNow.AddMinutes(-1),
+            Kind = "continue",
+            Cli = "claude"
+        }, _watchPath);
+
+        var ctx = new CliExecutionContext
+        {
+            Cli = "claude",
+            Model = "claude-opus-4-8",
+            PermissionMode = "bypassPermissions",
+            Cwd = @"C:\work\checkout",
+            CapturedAt = new DateTime(2026, 6, 10, 9, 0, 0, DateTimeKind.Utc),
+            Source = "init-frame",
+            Sources =
+            [
+                new CliContextSource
+                {
+                    Kind = CliContextSourceKinds.Memory,
+                    Label = "Project memory",
+                    Path = @"C:\work\checkout\CLAUDE.md",
+                    Exists = true
+                },
+                new CliContextSource
+                {
+                    Kind = CliContextSourceKinds.Mcp,
+                    Label = "gmail",
+                    Detail = "connected"
+                }
+            ]
+        };
+
+        var ok = sessions.BackfillLatestSessionEventExecutionContext("demo-task", ctx, _watchPath);
+
+        Assert.True(ok);
+        var events = sessions.ReadSessionEvents("demo-task", _watchPath);
+        Assert.Equal(2, events.Count);
+        Assert.Null(events[0].ExecutionContext); // first event untouched
+
+        var stored = events[1].ExecutionContext;
+        Assert.NotNull(stored);
+        Assert.Equal("claude", stored!.Cli);
+        Assert.Equal("claude-opus-4-8", stored.Model);
+        Assert.Equal("bypassPermissions", stored.PermissionMode);
+        Assert.Equal(@"C:\work\checkout", stored.Cwd);
+        Assert.Equal("init-frame", stored.Source);
+        Assert.Contains(stored.Sources, s =>
+            s.Kind == CliContextSourceKinds.Memory &&
+            s.Path == @"C:\work\checkout\CLAUDE.md" &&
+            s.Exists == true);
+        Assert.Contains(stored.Sources, s =>
+            s.Kind == CliContextSourceKinds.Mcp &&
+            s.Label == "gmail" &&
+            s.Detail == "connected");
+    }
+
+    /// <summary>
+    /// A null context (the adapter returned nothing - unknown run, no init
+    /// frame, no convention sources) is a no-op: the backfill reports false and
+    /// leaves the latest row's <see cref="SessionEvent.ExecutionContext"/> unset
+    /// rather than blanking an already-recorded snapshot.
+    /// </summary>
+    [Fact]
+    public void BackfillLatestSessionEventExecutionContext_NullContext_IsNoOp()
+    {
+        WriteJob(TaskStates.Progress, "demo-task");
+        var (_, sessions) = BuildServices();
+        sessions.AppendSessionEvent("demo-task", new SessionEvent { Ts = DateTime.UtcNow, Kind = "start", Cli = "claude" }, _watchPath);
+
+        var ok = sessions.BackfillLatestSessionEventExecutionContext("demo-task", null, _watchPath);
+
+        Assert.False(ok);
+        var events = sessions.ReadSessionEvents("demo-task", _watchPath);
+        Assert.Single(events);
+        Assert.Null(events[0].ExecutionContext);
+    }
+
     [Fact]
     public void AppendSessionToChain_ExtendsChainAndUpdatesSessionName()
     {
