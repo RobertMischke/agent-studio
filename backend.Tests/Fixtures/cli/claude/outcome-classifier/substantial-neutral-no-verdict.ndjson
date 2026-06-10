@@ -1,0 +1,3 @@
+{"stream":"system","text":"[taskboard] Started claude CLI for task ASS-demo"}
+{"stream":"stdout","text":"The orchestration layer routes each inbound request through a thin dispatch boundary before it reaches the persistence seam. State for a task lives in a single folder, and the transition machine owns every lane move so that no two surfaces disagree about where a task currently sits."}
+{"stream":"stdout","text":"The classifier sits one level below that, turning each run into a typed verdict that downstream policy can act on without re-scanning the raw buffer. This keeps the contract narrow and the surface area small for the next person who walks through it."}

@@ -1,0 +1,7 @@
+{"stream":"system","text":"[taskboard] Started claude CLI for task ASS-demo"}
+{"stream":"stdout","text":"I implemented the change end to end."}
+{"stream":"stdout","text":"## Summary of changes"}
+{"stream":"stdout","text":"- Updated TaskTransitionService to scope the auto-commit to the task's own files."}
+{"stream":"stdout","text":"- Added a regression test that proves the foreign dirty paths stay uncommitted."}
+{"stream":"stdout","text":"- Verified the full backend suite is green."}
+{"stream":"stdout","text":"Everything is ready for review."}

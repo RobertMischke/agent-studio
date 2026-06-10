@@ -1,0 +1,6 @@
+{"stream":"system","text":"[taskboard] Started claude CLI for task ASS-demo"}
+{"stream":"stdout","text":"I'll add the missing null-guard in the request handler and a regression test."}
+{"stream":"stdout","text":"Edited src/Handlers/RequestHandler.cs and added RequestHandlerTests.cs."}
+{"stream":"stdout","text":"Ran the suite: 142 passed, 0 failed. Build is clean."}
+{"stream":"stdout","text":"## Summary\nGuarded the null path and locked it with a test."}
+{"stream":"stdout","text":"[[TASK_DONE]]"}

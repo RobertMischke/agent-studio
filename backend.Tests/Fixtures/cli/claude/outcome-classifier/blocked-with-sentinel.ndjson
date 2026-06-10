@@ -1,0 +1,4 @@
+{"stream":"system","text":"[taskboard] Started claude CLI for task ASS-demo"}
+{"stream":"stdout","text":"I looked into wiring the integration but the upstream credentials are not present in this environment."}
+{"stream":"stdout","text":"I cannot proceed without the API token that only the operator can provision."}
+{"stream":"stdout","text":"[[TASK_BLOCKED: missing upstream API token]]"}

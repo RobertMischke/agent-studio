@@ -20,6 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Fixtures\cli\claude\outcome-classifier\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\backend\OrchestratorApi.csproj" />
     <ProjectReference Include="..\update-service\UpdateService.csproj">
       <Aliases>UpdSvc</Aliases>
