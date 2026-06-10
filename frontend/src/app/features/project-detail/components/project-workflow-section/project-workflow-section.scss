@@ -1,0 +1,181 @@
+// Workflow / Lanes page - stage 1 (T6a). Token-only: colours via --studio-*
+// tokens + color-mix, spacing via --studio-spacing-*. No hex / raw rgba.
+
+:host {
+  display: block;
+}
+
+.wf__group {
+  margin-bottom: var(--studio-spacing-6);
+}
+
+.wf__group h3 {
+  display: flex;
+  align-items: baseline;
+  gap: var(--studio-spacing-2);
+  margin: 0 0 var(--studio-spacing-3);
+  padding-bottom: var(--studio-spacing-1);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--studio-fg-dim);
+  border-bottom: 1px solid var(--studio-border-muted);
+}
+
+.wf__hint {
+  margin: var(--studio-spacing-2) 0 0;
+  color: var(--studio-fg-muted);
+  font-size: 0.78rem;
+}
+
+.wf__hint--lead {
+  margin: 0 0 var(--studio-spacing-3);
+}
+
+// ---- Lane list (read-only, board order) ----
+.wf__lanes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+}
+
+.wf__lane-row {
+  display: grid;
+  grid-template-columns: 1.4rem minmax(7rem, auto) 1fr;
+  align-items: center;
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-1) 0;
+}
+
+.wf__lane-icon {
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.wf__lane-label {
+  color: var(--studio-fg);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.wf__lane-role {
+  color: var(--studio-fg-muted);
+  font-size: 0.8rem;
+}
+
+// ---- Sort order per lane (the only writeable controls) ----
+.wf__lane-sort {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-2);
+}
+
+.wf__lane-sort-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--studio-spacing-3);
+}
+
+.wf__lane-sort-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+  color: var(--studio-fg-dim);
+  font-size: 0.85rem;
+}
+
+.wf__lane-sort-icon {
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+
+.wf__lane-sort-select {
+  flex: 0 0 auto;
+  min-width: 150px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-overlay);
+  color: var(--studio-fg);
+  font-size: 0.85rem;
+}
+
+// ---- Read-only transitions ----
+.wf__transitions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-2);
+}
+
+.wf__transition {
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--studio-fg-dim) 4%, transparent);
+}
+
+.wf__transition-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-2);
+}
+
+.wf__transition-facet {
+  color: var(--studio-fg);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.wf__transition-hop {
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 999px;
+  border: 1px solid var(--studio-border-muted);
+  color: var(--studio-fg-muted);
+  font-size: 0.72rem;
+}
+
+.wf__transition-state {
+  margin-left: auto;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--studio-accent) 36%, transparent);
+  background: color-mix(in srgb, var(--studio-accent) 12%, transparent);
+  color: var(--studio-accent-strong);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.wf__transition-detail {
+  margin: var(--studio-spacing-2) 0 0;
+  color: var(--studio-fg-dim);
+  font-size: 0.8rem;
+}
+
+.wf__transition-config {
+  margin: var(--studio-spacing-1) 0 0;
+  color: var(--studio-fg-muted);
+  font-size: 0.75rem;
+}
+
+.wf__transition-config strong {
+  color: var(--studio-fg-dim);
+}
+
+// ---- Stage 2/3 placeholders ----
+.wf__group--placeholder h3 {
+  color: var(--studio-fg-muted);
+}
+
+.wf__soon {
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--studio-warn) 34%, transparent);
+  background: color-mix(in srgb, var(--studio-warn) 14%, transparent);
+  color: var(--studio-warn);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

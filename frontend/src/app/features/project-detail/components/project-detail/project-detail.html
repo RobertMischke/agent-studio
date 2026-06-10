@@ -238,32 +238,7 @@
   }
 
   @if (view() === 'workflow') {
-    <section class="proj-detail__group">
-      <h3>Sort order per lane</h3>
-      <div class="proj-detail__lane-sort" data-testid="project-detail-lane-sort">
-        @for (lane of sortableLanes; track lane.state) {
-          <div class="proj-detail__lane-sort-row"
-               [attr.data-testid]="'lane-sort-row-' + lane.state">
-            <span class="proj-detail__lane-sort-name">
-              <span class="proj-detail__lane-sort-icon" aria-hidden="true">{{ lane.icon }}</span>
-              {{ lane.label }}
-            </span>
-            <select class="proj-detail__lane-sort-select"
-                    [attr.data-testid]="'lane-sort-select-' + lane.state"
-                    [appTooltip]="laneSortMeta(laneSortDraft[lane.state]).hint"
-                    [(ngModel)]="laneSortDraft[lane.state]"
-                    (ngModelChange)="onLaneSortChange(lane.state)">
-              @for (opt of laneSortOptions; track opt.value) {
-                <option [value]="opt.value">{{ opt.icon }} {{ opt.label }}</option>
-              }
-            </select>
-          </div>
-        }
-      </div>
-      <p class="proj-detail__hint">
-        Controls the order cards appear in each board lane. <strong>Manual</strong> enables drag-and-drop reordering; the other strategies sort automatically and disable drag on that lane. The auto-pickup runner always uses its own priority order regardless of this setting.
-      </p>
-    </section>
+    <app-project-workflow-section [projectName]="projectName()" />
   }
 
   @if (view() === 'pipeline') {

@@ -260,8 +260,8 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     group: 'config',
     label: 'Workflow',
     panelTitle: 'Workflow / Lanes',
-    description: 'Lanes, ordering, and transitions; later per-transition Git integration.',
-    empty: 'Workflow shell — navigation only. Step 2 (T5b) moves the lane sort-order controls here unchanged. The transition view (stage 1) and Git integration (stage 2, after the Git concept decision) land in step 3 (T6a) and step 4.',
+    description: 'The lane model and per-lane ordering, plus a read-only view of what the platform does at each transition today. Per-transition Git integration comes after the Git concept decision.',
+    empty: 'Workflow / Lanes — the lane list, per-lane sort order, and a read-only transition view. Per-transition Git profiles and MR / team workflow stay placeholders until the Git concept is decided.',
     icon: '⇄',
   },
   {
