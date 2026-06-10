@@ -247,6 +247,14 @@
       } @else {
         <div class="git-view__summary">
           <span class="git-view__branch">⎇ {{ g.branch || '(detached)' }}</span>
+          <span class="git-view__location"
+                data-testid="git-run-location"
+                [class.git-view__location--worktree]="g.isWorktree"
+                [appTooltip]="g.isWorktree
+                  ? 'Live changes read from the task worktree.'
+                  : 'Live changes read from the main checkout.'">
+            {{ g.isWorktree ? '(Worktree)' : '(Haupt-Checkout)' }}
+          </span>
           <span class="git-view__count" data-testid="git-files-count">{{ g.filesChanged }} files</span>
           <span class="git-view__diffstat">+{{ g.totalAdded }} / −{{ g.totalRemoved }}</span>
         </div>

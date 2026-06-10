@@ -21,6 +21,14 @@ export interface GitStatus {
   totalRemoved: number;
   files: GitFileChange[];
   error: string | null;
+  /**
+   * True when the live status was read from the task's own `task/<id>`
+   * worktree (ASS-1731) rather than the project's main checkout. Drives the
+   * header location label so the user can see *where* the shown tree lives:
+   * `task/<id> (Worktree)` vs `<branch> (Haupt-Checkout)`. Defaults false for
+   * sequential runs and after the worktree is torn down.
+   */
+  isWorktree: boolean;
 }
 
 export interface GitProjectSummary {

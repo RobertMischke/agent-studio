@@ -15,11 +15,16 @@ public static class TaskGitEndpoints
 {
     public static void MapTaskGitEndpoints(this RouteGroupBuilder group)
     {
+        // preferRunLocation: the live per-task Git view must read the task's own
+        // run-location - its task/<id> worktree when it has one - not the shared
+        // main checkout, so a parallel run's dirty files are never cross-attributed
+        // to this task (ASS-1731). Falls back to the main checkout when the task
+        // has no live worktree.
         group.MapGet("/{jobId}/git/status", (string jobId, string? watchPath, GitService git) =>
-            Results.Ok(git.GetStatus(jobId, watchPath)));
+            Results.Ok(git.GetStatus(jobId, watchPath, preferRunLocation: true)));
 
         group.MapGet("/{jobId}/git/diff", (string jobId, string? watchPath, string? path, GitService git) =>
-            DiffTextResult(git.GetDiffResult(jobId, watchPath, path)));
+            DiffTextResult(git.GetDiffResult(jobId, watchPath, path, preferRunLocation: true)));
 
         group.MapPost("/{jobId}/git/commit", (string jobId, string? watchPath, GitCommitRequest req, GitService git) =>
         {

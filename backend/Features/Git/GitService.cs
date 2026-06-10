@@ -13,7 +13,8 @@ public record GitStatusResult(
     int TotalAdded,
     int TotalRemoved,
     List<GitFileChange> Files,
-    string? Error);
+    string? Error,
+    bool IsWorktree = false);
 
 public record GitCommitResult(bool Success, string? Sha, string? Error);
 public record GitPushResult(bool Success, string Sha, string Status, string? Error);
@@ -519,6 +520,48 @@ public class GitService
     }
 
     /// <summary>
+    /// The resolved location a task's LIVE Git view should read: the task's own
+    /// worktree when it is running in one (parallel model, ADR-0052), otherwise
+    /// the project's main checkout. <see cref="Root"/> is the directory git is
+    /// invoked in; <see cref="IsWorktree"/> tells the view which it is so the
+    /// header can label it (<c>task/&lt;id&gt; (Worktree)</c> vs
+    /// <c>develop (Haupt-Checkout)</c>).
+    /// </summary>
+    private sealed record RunLocation(string Configured, string? Root, string? Branch, bool IsWorktree);
+
+    /// <summary>
+    /// Resolves the run-location for a task's live status/diff view. A task that
+    /// runs in its own <c>task/&lt;id&gt;</c> worktree must show THAT worktree's
+    /// branch + dirty tree, never the shared main checkout's - otherwise the view
+    /// cross-attributes a sibling run's uncommitted files to this task (the bug
+    /// this method exists to fix). Reuses the existing
+    /// <see cref="WorktreePathForBranch"/> lookup rather than re-deriving the
+    /// path. Falls back to the project's main checkout (toplevel) when the task
+    /// has no live worktree - a sequential run, or after the worktree was torn
+    /// down (the provenance/landed-state view then owns "where the work went").
+    /// Returns null only when the job or its configured repository can't be
+    /// resolved at all, mirroring <see cref="ResolveRepoRoot"/>'s null contract.
+    /// </summary>
+    private RunLocation? ResolveRunLocation(string jobId, string? watchPath)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return null;
+        var entry = _scanner.GetWatchPaths().FirstOrDefault(e => e.Name == info.ProjectName);
+        var configured = entry == null ? null : ResolveConfiguredRepositoryPath(entry);
+        if (string.IsNullOrWhiteSpace(configured)) return null;
+
+        var mainRoot = ResolveGitToplevel(configured);
+        if (mainRoot == null) return new RunLocation(configured, null, null, false);
+
+        var branch = WorktreeTaskLifecycle.BranchFor(info.Id);
+        var worktree = WorktreePathForBranch(mainRoot, branch);
+        if (!string.IsNullOrEmpty(worktree) && Directory.Exists(worktree))
+            return new RunLocation(configured, worktree, branch, true);
+
+        return new RunLocation(configured, mainRoot, null, false);
+    }
+
+    /// <summary>
     /// Resolve the repository root for a project by name without needing a
     /// job context. Used by <see cref="AgentStudio.Runner.CrashRecoveryService"/>
     /// at boot time to inspect the working tree before any job has been
@@ -587,8 +630,26 @@ public class GitService
                 .Where(l => !string.IsNullOrWhiteSpace(l))
                 .OrderBy(l => l, StringComparer.Ordinal));
 
-    public GitStatusResult GetStatus(string jobId, string? watchPath)
+    /// <summary>
+    /// Live working-tree status for a task. With <paramref name="preferRunLocation"/>
+    /// the view reads the task's own worktree when it has one (see
+    /// <see cref="ResolveRunLocation"/>) so a parallel run never shows a sibling
+    /// run's dirty files; the per-task Git pane passes true. Internal callers that
+    /// pair the status with the main-checkout root (auto-commit scoping,
+    /// read-only containment) leave it false and keep reading the main checkout.
+    /// </summary>
+    public GitStatusResult GetStatus(string jobId, string? watchPath, bool preferRunLocation = false)
     {
+        if (preferRunLocation)
+        {
+            var loc = ResolveRunLocation(jobId, watchPath);
+            if (loc == null)
+                return new GitStatusResult(false, null, 0, 0, 0, [], "Job not found or project has no RootPath configured.");
+            if (loc.Root == null)
+                return new GitStatusResult(false, null, 0, 0, 0, [], $"Not a git repository: {loc.Configured}");
+            return ReadStatusAtRoot(loc.Root, loc.IsWorktree);
+        }
+
         var configured = ResolveRepoRoot(jobId, watchPath);
         if (configured == null)
             return new GitStatusResult(false, null, 0, 0, 0, [], "Job not found or project has no RootPath configured.");
@@ -610,11 +671,11 @@ public class GitService
         return ReadStatusAtRoot(root);
     }
 
-    private GitStatusResult ReadStatusAtRoot(string root)
+    private GitStatusResult ReadStatusAtRoot(string root, bool isWorktree = false)
     {
         var (statusOut, statusErr, statusCode) = RunGit(root, "status --porcelain=v1");
         if (statusCode != 0)
-            return new GitStatusResult(true, null, 0, 0, 0, [], statusErr.Trim());
+            return new GitStatusResult(true, null, 0, 0, 0, [], statusErr.Trim(), isWorktree);
 
         var (branchOut, _, _) = RunGit(root, "rev-parse --abbrev-ref HEAD");
         var branch = branchOut.Trim();
@@ -671,21 +732,39 @@ public class GitService
             files.Sum(f => f.Added),
             files.Sum(f => f.Removed),
             files,
-            null);
+            null,
+            isWorktree);
     }
 
-    public string GetDiff(string jobId, string? watchPath, string? path)
+    public string GetDiff(string jobId, string? watchPath, string? path, bool preferRunLocation = false)
     {
-        var result = GetDiffResult(jobId, watchPath, path);
+        var result = GetDiffResult(jobId, watchPath, path, preferRunLocation);
         return result.Success ? result.Diff : result.Error ?? "";
     }
 
-    public GitDiffLookupResult GetDiffResult(string jobId, string? watchPath, string? path)
+    /// <summary>
+    /// Live working-tree diff for a task. With <paramref name="preferRunLocation"/>
+    /// the diff is read from the task's own worktree when it has one, matching
+    /// <see cref="GetStatus"/> so the per-task Git pane's file list and diffs come
+    /// from the same checkout. Defaults to the main checkout for internal callers.
+    /// </summary>
+    public GitDiffLookupResult GetDiffResult(string jobId, string? watchPath, string? path, bool preferRunLocation = false)
     {
-        var configured = ResolveRepoRoot(jobId, watchPath);
-        if (configured == null) return new GitDiffLookupResult(false, "", "Could not resolve repo root.");
-        var root = ResolveGitToplevel(configured);
-        if (root == null) return new GitDiffLookupResult(false, "", $"Not a git repository: {configured}");
+        string? root;
+        if (preferRunLocation)
+        {
+            var loc = ResolveRunLocation(jobId, watchPath);
+            if (loc == null) return new GitDiffLookupResult(false, "", "Could not resolve repo root.");
+            if (loc.Root == null) return new GitDiffLookupResult(false, "", $"Not a git repository: {loc.Configured}");
+            root = loc.Root;
+        }
+        else
+        {
+            var configured = ResolveRepoRoot(jobId, watchPath);
+            if (configured == null) return new GitDiffLookupResult(false, "", "Could not resolve repo root.");
+            root = ResolveGitToplevel(configured);
+            if (root == null) return new GitDiffLookupResult(false, "", $"Not a git repository: {configured}");
+        }
         // HEAD diff catches both staged and unstaged. For untracked files we
         // fall back to showing the file body so the panel isn't empty.
         var (output, err, code) = string.IsNullOrWhiteSpace(path)

@@ -26,6 +26,14 @@
   color: var(--studio-fg);
 }
 .git-view__branch { color: var(--severity-info); }
+// Run-location label (ASS-1731): text-only "where" marker next to the branch.
+// Dimmed for the main checkout, accented when the live tree is the task's own
+// worktree so a parallel run is visibly distinct at a glance.
+.git-view__location {
+  color: var(--studio-fg-dim);
+  font-size: 11px;
+  &--worktree { color: var(--severity-info); font-weight: 600; }
+}
 .git-view__count  { color: var(--studio-fg-strong); font-weight: 600; }
 .git-view__diffstat { color: var(--studio-fg-dim); font-family: var(--font-mono, monospace); }
 .git-view__empty {

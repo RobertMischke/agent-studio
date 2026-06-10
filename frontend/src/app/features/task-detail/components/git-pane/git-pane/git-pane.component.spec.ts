@@ -7,7 +7,7 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { GitPaneComponent } from './git-pane.component';
 import { GitPaneService } from '../../../services/git-pane.service';
-import type { GitFileChange, TaskCommitDetail, TaskCommitInfo } from '../../../../git';
+import type { GitFileChange, GitStatus, TaskCommitDetail, TaskCommitInfo, TaskProvenanceView } from '../../../../git';
 import { LARGE_DIFF_LINE_THRESHOLD } from '../../../../../utils/large-diff-gate';
 import { formatCompactDateTime, formatDateTime, formatTime } from '../../../../../services/format.util';
 
@@ -43,20 +43,34 @@ const files: GitFileChange[] = [
   },
 ];
 
-function makeGitPaneMock() {
+function worktreeStatus(isWorktree: boolean): GitStatus {
+  return {
+    isRepo: true,
+    branch: isWorktree ? 'task/demo-task' : 'develop',
+    filesChanged: 0,
+    totalAdded: 0,
+    totalRemoved: 0,
+    files: [],
+    error: null,
+    isWorktree,
+  };
+}
+
+function makeGitPaneMock(options?: { viewMode?: 'commit' | 'worktree'; status?: GitStatus | null }) {
   const selectedCommitSha = signal<string | null>(null);
   const commitChain = signal<TaskCommitInfo[]>(commits);
   const commitFiles = signal<GitFileChange[]>(files);
   const commitDetail = signal<TaskCommitDetail | null>(null);
 
   return {
-    viewMode: signal<'commit' | 'worktree'>('commit'),
+    viewMode: signal<'commit' | 'worktree'>(options?.viewMode ?? 'commit'),
     commitChain,
     selectedCommitSha,
     selectedDiffPath: signal<string | null>('src/one.ts'),
     diffText: signal(''),
     loading: signal(false),
-    status: signal(null),
+    status: signal<GitStatus | null>(options?.status ?? null),
+    provenance: signal<TaskProvenanceView | null>(null),
     commitFiles,
     commitDetail,
     isAggregate: computed(() => commitChain().length > 1 && selectedCommitSha() === null),
@@ -190,5 +204,52 @@ describe('GitPaneComponent', () => {
 
     expect(fixture.componentInstance.diffGated()).toBe(false);
     expect(root.querySelector('[data-testid="git-diff-gated"]')).toBeNull();
+  });
+
+  it('labels the run-location as the task worktree when the live status is worktree-scoped (ASS-1731)', async () => {
+    const git = makeGitPaneMock({ viewMode: 'worktree', status: worktreeStatus(true) });
+    await TestBed.configureTestingModule({
+      imports: [GitPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: GitPaneService, useValue: git },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const location = root.querySelector('[data-testid="git-run-location"]');
+    expect(location?.textContent?.trim()).toBe('(Worktree)');
+    expect(location?.classList.contains('git-view__location--worktree')).toBe(true);
+    expect(root.textContent).toContain('task/demo-task');
+  });
+
+  it('labels the run-location as the main checkout when the live status is not worktree-scoped (ASS-1731)', async () => {
+    const git = makeGitPaneMock({ viewMode: 'worktree', status: worktreeStatus(false) });
+    await TestBed.configureTestingModule({
+      imports: [GitPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: GitPaneService, useValue: git },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const location = root.querySelector('[data-testid="git-run-location"]');
+    expect(location?.textContent?.trim()).toBe('(Haupt-Checkout)');
+    expect(location?.classList.contains('git-view__location--worktree')).toBe(false);
   });
 });
