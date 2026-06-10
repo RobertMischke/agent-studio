@@ -134,6 +134,7 @@ public sealed class SummaryGenerationService
             var target = Path.Combine(info.FolderPath, "status.md");
             WriteAllTextWithRetry(target, summary);
             RegisterGeneratedStatus(info, result);
+            RecordBrokenImageReferences(info, summary);
 
             _states[key] = new TaskSummaryState
             {
@@ -348,6 +349,59 @@ public sealed class SummaryGenerationService
         }
     }
 
+    /// <summary>
+    /// Validates the image references in the freshly written <c>status.md</c>
+    /// against the files on disk and appends a review-evidence finding for
+    /// every broken reference so a missing screenshot surfaces as a visible
+    /// review finding instead of a silently empty image. Findings carry a
+    /// stable per-path id so a regenerate over the same broken reference does
+    /// not stack duplicate rows (the reader folds latest-per-id). Best-effort:
+    /// a failure here never fails summary generation.
+    /// </summary>
+    private void RecordBrokenImageReferences(TaskInfo info, string statusMarkdown)
+    {
+        try
+        {
+            var broken = ProtocolImageReferenceValidator.FindBrokenReferences(statusMarkdown, info.FolderPath);
+            if (broken.Count == 0) return;
+
+            var knownIds = new HashSet<string>(
+                ReviewEvidenceLog.ReadLatestPerId(info.FolderPath, _logger).Select(e => e.Id),
+                StringComparer.Ordinal);
+
+            var appended = 0;
+            foreach (var rel in broken)
+            {
+                var id = $"broken-image-ref:{rel}";
+                if (!knownIds.Add(id)) continue;
+                ReviewEvidenceLog.Append(info.FolderPath, new ReviewEvidenceEntry
+                {
+                    Id = id,
+                    Source = ReviewEvidenceSources.TaskCheck,
+                    Severity = ReviewEvidenceSeverities.Warn,
+                    Title = $"Broken screenshot reference: {rel}",
+                    Body = $"status.md links the image `{rel}`, but no such file exists under the job folder. "
+                        + "The protocol would render a silently empty image. Fix the path or capture the "
+                        + "screenshot into `results/`.",
+                    CreatedAt = DateTime.UtcNow,
+                    Artifacts = [rel],
+                });
+                appended++;
+            }
+
+            if (appended > 0)
+            {
+                _logger.LogWarning(
+                    "status.md for {JobId} references {Count} missing image file(s): {Paths}",
+                    info.Id, appended, string.Join(", ", broken));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to validate status.md image references for {JobId}", info.Id);
+        }
+    }
+
     private static string SanitizeMarkdown(string raw)
     {
         var trimmed = raw.Trim();
@@ -405,7 +459,7 @@ public sealed class SummaryGenerationService
 
         var lines = markdown.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').ToList();
         var imagesIndex = lines.FindIndex(l => string.Equals(l.Trim(), "## Images", StringComparison.OrdinalIgnoreCase));
-        var additions = missing.Select(path => $"- ![]({path})").ToList();
+        var additions = missing.Select(path => $"- ![]({path}){SourceHintSuffix(path)}").ToList();
 
         if (imagesIndex < 0)
         {
@@ -423,6 +477,27 @@ public sealed class SummaryGenerationService
 
         lines.InsertRange(insertIndex, additions);
         return string.Join(Environment.NewLine, lines).TrimEnd() + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// Appends a plain-text source hint to a deterministically-injected image
+    /// bullet so the reviewer can read the provenance straight from
+    /// <c>status.md</c> (the same label the Task-Detail strip shows). The hint
+    /// is derived purely from the filename suffix; an unlabeled filename gets no
+    /// hint, so the protocol never claims a source it cannot prove.
+    /// </summary>
+    private static string SourceHintSuffix(string path)
+    {
+        var info = ScreenshotSourceParser.Parse(Path.GetFileName(path));
+        return info.Source switch
+        {
+            ScreenshotSources.Real => " (source: real)",
+            ScreenshotSources.Mocked => " (source: mocked)",
+            ScreenshotSources.Composite => info.Parts.Count > 0
+                ? $" (source: composite of {string.Join(", ", info.Parts)})"
+                : " (source: composite)",
+            _ => "" // unlabeled: do not claim a source
+        };
     }
 
     private static List<string> ExtractProtocolImageReferences(string text)

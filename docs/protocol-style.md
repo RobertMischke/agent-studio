@@ -88,6 +88,7 @@ Hard rules:
 - Paths and commands in single backticks.
 - No marketing tone, no recap of what the user already asked for.
 - No em dashes.
+- A deterministically-appended `## Images` bullet may carry a plain-text source hint (`(source: real|mocked|composite ...)`); the grammar and where it comes from are in §4.4.
 - The application enforces the `Result` line from the deterministic run-outcome contract after summarization, so the protocol, lane routing, and failure toast share one classification.
 
 If you change the prompt, mirror the change here and bump the example.
@@ -231,6 +232,26 @@ The `**/attachments/` and `**/results/` patterns are broad on purpose: any folde
 
 Already-committed images are not retroactively untracked by adding these rules. If a workspace has historical images in git, run `git rm --cached <path>` once to stop tracking them; the files stay on disk.
 
+### 4.4 Screenshot source labels and reference validation
+
+Evidence screenshots are only trustworthy if the reviewer can tell **how** each was captured and can trust that every link resolves. Two conventions make that explicit; both are honoured by the screenshot strip, the lightbox, and `SummaryGenerationService`.
+
+**Source label (filename suffix).** A screenshot declares its provenance through the final `--`-delimited segment of its filename, before the extension:
+
+| Filename | Source | Meaning |
+|----------|--------|---------|
+| `dashboard--real.png` | `real` | Captured against a running backend. The recommended evidence for UI-acceptance claims. |
+| `dashboard--mocked.png` | `mocked` | Captured from an e2e run whose API routes were mocked (for example Playwright `page.route`). Allowed, but labelled so nobody mistakes it for live proof. |
+| `before-after--composite.png` | `composite` | A stitched image; parts unspecified. |
+| `before-after--composite-real-mocked.png` | `composite` | A stitched image whose parts are a `real` shot and a `mocked` shot, in that order. |
+| `dashboard.png` | `unlabeled` | No recognised suffix. The UI makes no real/mocked claim. |
+
+The base name may contain single dashes (`before-after`); only the `--` boundary introduces the source segment, so pre-existing filenames are always `unlabeled`. The parser lives in [`ScreenshotSourceParser`](../backend/Shared/Models/ScreenshotSource.cs); the label is surfaced text-only next to each thumbnail caption and in the lightbox. A composite spells out its part sources (for example `composite (real, mocked)`).
+
+**Recommendation, not compulsion.** Mocked-route screenshots stay allowed; they are the right evidence for some changes. But for **UI-acceptance** evidence, prefer a shot against a running backend and name it `--real`. Composite / stitched before-after images are explicitly welcome; just label the parts. When `SummaryGenerationService` deterministically appends an image to the protocol's `## Images` section, it annotates the bullet with a plain-text source hint (for example `- ![](results/dashboard--mocked.png) (source: mocked)`) so the provenance reads straight from `status.md`. Unlabeled files get no hint; the protocol never claims a source it cannot prove.
+
+**Reference validation.** Every regenerate runs [`ProtocolImageReferenceValidator`](../backend/Features/Review/ProtocolImageReferenceValidator.cs) over the finished `status.md`. Any job-local image link (`results/...`, `attachments/...`, or a bare filename resolved under `results/`) that points at a missing file is recorded as a `warn`-severity `review-evidence.jsonl` finding (`id = broken-image-ref:<path>`) instead of rendering as a silently empty `<img>`. The reviewer sees the broken link in the evidence panel; external URLs, `data:` URIs, and rooted/absolute paths are left alone.
+
 ---
 
 ## 5. Changing this contract
@@ -241,5 +262,6 @@ Before you touch any of the moving parts:
 2. If you change the **marker-line vocabulary**, update §2.1 here and the corresponding row in [docs/supported-clis.md §2.5](supported-clis.md).
 3. If you add a new **image folder** convention, add a row to §4 and a resolver branch in `protocol-pane.component.ts`.
 4. If you add a new **CLI**, fill in its row in §4.1 with observed behaviour, not assumptions.
+5. If you change the **screenshot source-label grammar** or the **reference validator**, update §4.4 here alongside `ScreenshotSourceParser` and `ProtocolImageReferenceValidator` in the same PR.
 
 The single-source-of-truth rule from [AGENTS.md](../AGENTS.md): if the doc and the code disagree, the doc is wrong. Fix it.
