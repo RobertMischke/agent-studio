@@ -1,0 +1,53 @@
+<div class="gallery" data-testid="git-state-gallery">
+  <header class="gallery__head">
+    <h1>Git-state pill — lifecycle ground truth</h1>
+    <p class="gallery__sub">
+      ASS-1752 · BEFORE = old lane-only badge (lied for landed / sequential / reissue) ·
+      AFTER = provenance-driven badge (ASS-1724 ground truth)
+    </p>
+  </header>
+
+  @for (s of scenarios; track s.id) {
+    <section class="gallery__row" [attr.data-scenario]="s.id">
+      <div class="gallery__meta">
+        <div class="gallery__title">{{ s.title }}</div>
+        <div class="gallery__lane">lane: <code>{{ s.lane }}</code></div>
+        <div class="gallery__truth">{{ s.truth }}</div>
+      </div>
+
+      <div class="gallery__cell gallery__cell--before">
+        <div class="gallery__cell-label">BEFORE (lane guess)</div>
+        <div class="card-surface" [attr.data-testid]="'before-' + s.id">
+          @if (before(s.job); as gsb) {
+            <span class="task-card__git-state-pill"
+                  [class]="'task-card__git-state-pill--' + gsb.kind"
+                  data-testid="task-card-git-state">
+              <span class="task-card__git-state-glyph" aria-hidden="true">{{ gsb.glyph }}</span>
+              {{ gsb.label }}
+            </span>
+          } @else {
+            <span class="gallery__none">— no pill —</span>
+          }
+        </div>
+      </div>
+
+      <div class="gallery__arrow" aria-hidden="true">→</div>
+
+      <div class="gallery__cell gallery__cell--after">
+        <div class="gallery__cell-label">AFTER (provenance truth)</div>
+        <div class="card-surface" [attr.data-testid]="'after-' + s.id">
+          @if (after(s.job); as gsb) {
+            <span class="task-card__git-state-pill"
+                  [class]="'task-card__git-state-pill--' + gsb.kind"
+                  data-testid="task-card-git-state">
+              <span class="task-card__git-state-glyph" aria-hidden="true">{{ gsb.glyph }}</span>
+              {{ gsb.label }}
+            </span>
+          } @else {
+            <span class="gallery__none">— no pill —</span>
+          }
+        </div>
+      </div>
+    </section>
+  }
+</div>
