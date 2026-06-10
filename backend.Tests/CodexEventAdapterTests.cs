@@ -1,5 +1,6 @@
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Cli.Adapters;
+using OrchestratorApi.Services.Runner;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
@@ -132,6 +133,82 @@ public class CodexEventAdapterTests
         """;
         var plan = Assert.Single(CodexEventAdapter.Map(frame, Jk).OfType<CliRunEvent.PlanUpdated>().ToList());
         Assert.Equal("Title via content alias", plan.Items[0].Title);
+    }
+
+    [Fact]
+    public void ItemCompletedReasoning_EmitsHeartbeat_NotToolCompleted()
+    {
+        // ASS-1671: a Codex reasoning block is a liveness ping, not a tool.
+        // It must reset the watchdog silence clock (Heartbeat is an activity
+        // signal) without being logged as a phantom "reasoning" tool call.
+        const string frame = """{"type":"item.completed","item":{"type":"reasoning","text":"Let me think about this..."}}""";
+        var evt = Assert.Single(CodexEventAdapter.Map(frame, Jk).ToList());
+        Assert.IsType<CliRunEvent.Heartbeat>(evt);
+        Assert.IsNotType<CliRunEvent.ToolCompleted>(evt);
+        Assert.Equal(Jk, evt.TaskKey);
+        Assert.True(RunPhaseTransitions.IsActivitySignal(evt),
+            "A reasoning Heartbeat must reset the silence clock.");
+    }
+
+    [Fact]
+    public void ItemStartedReasoning_EmitsHeartbeat_NotToolStarted()
+    {
+        const string frame = """{"type":"item.started","item":{"type":"reasoning"}}""";
+        var evt = Assert.Single(CodexEventAdapter.Map(frame, Jk).ToList());
+        Assert.IsType<CliRunEvent.Heartbeat>(evt);
+        Assert.IsNotType<CliRunEvent.ToolStarted>(evt);
+    }
+
+    [Fact]
+    public void ReasoningHeartbeat_KeepsPhaseUnchanged_NoFalseToolExecuting()
+    {
+        // The reasoning ping must not advance the phase: during pre-turn xhigh
+        // reasoning the run is still PromptConsumed, and mis-advancing to
+        // ToolExecuting would mask a genuine pre-turn hang under the wider
+        // tool budget.
+        const string frame = """{"type":"item.completed","item":{"type":"reasoning","text":"thinking"}}""";
+        var evt = Assert.Single(CodexEventAdapter.Map(frame, Jk).ToList());
+        Assert.Equal(RunPhase.PromptConsumed,
+            RunPhaseTransitions.Apply(RunPhase.PromptConsumed, evt));
+    }
+
+    [Fact]
+    public void ReasoningPings_KeepXhighRunHealthy_WhileNoFramesGetsKilled()
+    {
+        // Acceptance (ASS-1671): an xhigh run that reasons silently for >7 min
+        // is NOT killed because each reasoning frame resets the silence clock -
+        // not merely because the PromptConsumed budget is wide. A run that
+        // emits NO frames at all over the same window is still killed.
+        var cfg = new WatchdogConfig(
+            Enabled: true, WarmUpGraceSeconds: 0, QuietSeconds: 30,
+            SuspiciousSeconds: 60, HungSeconds: 120, TickIntervalSeconds: 5);
+
+        // Simulate 8 minutes of pre-turn reasoning: a reasoning frame every
+        // 90 s. Track the silence clock exactly as ProjectRunner.OnRunEventReceived
+        // does (reset on every IsActivitySignal event).
+        const string reasoning = """{"type":"item.completed","item":{"type":"reasoning","text":"step"}}""";
+        var lastActivity = 0.0;
+        var phase = RunPhase.PromptConsumed;
+        for (var t = 90.0; t <= 480.0; t += 90.0)
+        {
+            // Before the ping arrives, silence has only grown to the inter-frame
+            // gap - well under the 1200 s kill backstop, never Hung.
+            var silenceBeforePing = t - lastActivity;
+            var state = PhaseAwareWatchdog.DecideState(silenceBeforePing, t, phase, cfg);
+            Assert.NotEqual(WatchdogState.Hung, state);
+
+            var evt = Assert.Single(CodexEventAdapter.Map(reasoning, Jk).ToList());
+            phase = RunPhaseTransitions.Apply(phase, evt);
+            if (RunPhaseTransitions.IsActivitySignal(evt)) lastActivity = t;
+        }
+        // After 8 min of pings the run never went Hung and is still PromptConsumed.
+        Assert.Equal(RunPhase.PromptConsumed, phase);
+
+        // Counter-case: the SAME 480 s window with NO frames at all is killed -
+        // the silence clock is never reset, so it crosses the 1200 s backstop
+        // eventually and is Suspicious well before that. Prove it would die.
+        Assert.Equal(WatchdogState.Hung,
+            PhaseAwareWatchdog.DecideState(1250, 1400, RunPhase.PromptConsumed, cfg));
     }
 
     [Fact]

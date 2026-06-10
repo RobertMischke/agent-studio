@@ -55,14 +55,17 @@ public sealed record PhaseBudget(
         //
         // 2026-06-09 Extra-High (xhigh) calibration: Codex at xhigh reasons
         // SILENTLY for many minutes BEFORE it emits its first turn frame, so
-        // it stays in PromptConsumed the whole time and emits no stdout that
-        // resets the silence clock (reasoning frames are not yet wired to a
-        // liveness ping - see follow-up task). The 420 s kill auto-cancelled
-        // healthy xhigh runs mid-think (observed ASS-1670: killed at 423 s in
-        // PromptConsumed while still reasoning, zero work produced). Widen the
-        // kill backstop to 20 min so xhigh's pre-turn reasoning is not killed
-        // as a hang; the Suspicious warning still fires early (5 min) so the
-        // stall stays loud, not silent.
+        // it stays in PromptConsumed the whole time and emits no OutputDelta.
+        // The 420 s kill auto-cancelled healthy xhigh runs mid-think (observed
+        // ASS-1670: killed at 423 s in PromptConsumed while still reasoning,
+        // zero work produced). As of ASS-1671 the real liveness fix is wired:
+        // Codex reasoning items now map to CliRunEvent.Heartbeat in
+        // CodexEventAdapter, so each reasoning frame resets the silence clock
+        // (Heartbeat is an IsActivitySignal) and a healthy xhigh think no
+        // longer relies on this wide backstop alone. This wide budget stays as
+        // the backstop that still kills a genuinely wedged pre-turn run that
+        // emits no frames at all (not even reasoning); the Suspicious warning
+        // still fires early (5 min) so a real stall stays loud, not silent.
         RunPhase.PromptConsumed       => new PhaseBudget(SuspiciousSeconds: 300, HungSeconds: 1200),
         // Inside a turn we expect output deltas every few seconds; under
         // xhigh, Codex can interleave long silent reasoning between deltas,

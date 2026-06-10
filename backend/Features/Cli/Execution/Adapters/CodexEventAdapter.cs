@@ -18,6 +18,7 @@ namespace OrchestratorApi.Services.Cli.Adapters;
 ///   <item><c>item.completed</c> with <c>item.type=agent_message</c> -&gt; <see cref="CliRunEvent.OutputDelta"/> (carries <c>item.text</c>).</item>
 ///   <item><c>item.completed</c> with <c>item.type=command_call</c> / <c>file_change</c> / etc. -&gt; <see cref="CliRunEvent.ToolCompleted"/>.</item>
 ///   <item><c>item.started</c> when applicable -&gt; <see cref="CliRunEvent.ToolStarted"/>.</item>
+///   <item><c>item.started</c> / <c>item.completed</c> with <c>item.type=reasoning</c> -&gt; <see cref="CliRunEvent.Heartbeat"/> (liveness ping; see <see cref="IsReasoningItem"/>).</item>
 ///   <item><c>turn.completed</c> with <c>usage</c> -&gt; <see cref="CliRunEvent.TurnCompleted"/>.</item>
 ///   <item><c>turn.failed</c> -&gt; <see cref="CliRunEvent.TurnFailed"/>.</item>
 ///   <item><c>session_meta</c> (legacy shape) -&gt; <see cref="CliRunEvent.SessionStarted"/>.</item>
@@ -78,6 +79,11 @@ public static class CodexEventAdapter
             {
                 if (TryExtractPlan(root, out var startItems))
                     yield return new CliRunEvent.PlanUpdated("codex/update_plan", startItems) { TaskKey = jobKey };
+                if (IsReasoningItem(root))
+                {
+                    yield return new CliRunEvent.Heartbeat { TaskKey = jobKey };
+                    yield break;
+                }
                 var (kind, name, arg) = ClassifyItem(root);
                 if (kind == "tool")
                     yield return new CliRunEvent.ToolStarted(name, arg) { TaskKey = jobKey };
@@ -87,6 +93,11 @@ public static class CodexEventAdapter
             {
                 if (TryExtractPlan(root, out var doneItems))
                     yield return new CliRunEvent.PlanUpdated("codex/update_plan", doneItems) { TaskKey = jobKey };
+                if (IsReasoningItem(root))
+                {
+                    yield return new CliRunEvent.Heartbeat { TaskKey = jobKey };
+                    yield break;
+                }
                 var (kind, name, arg) = ClassifyItem(root);
                 if (kind == "agent_message")
                 {
@@ -104,6 +115,28 @@ public static class CodexEventAdapter
                 yield return new CliRunEvent.Unknown(Truncate(jsonLine, 200) ?? "") { TaskKey = jobKey };
                 yield break;
         }
+    }
+
+    /// <summary>
+    /// True when the frame's nested <c>item</c> is a Codex <c>reasoning</c>
+    /// block. Codex at higher reasoning efforts (notably <c>xhigh</c>) thinks
+    /// silently for minutes - emitting only reasoning items - before its first
+    /// turn frame, so the run sits in <see cref="RunPhase.PromptConsumed"/>
+    /// producing no <see cref="CliRunEvent.OutputDelta"/>. A reasoning item is
+    /// therefore mapped to a <see cref="CliRunEvent.Heartbeat"/> liveness ping
+    /// (it resets the watchdog silence clock) rather than to a phantom
+    /// <c>ToolStarted</c>/<c>ToolCompleted</c> for a "reasoning" tool, which
+    /// would both pollute <c>tool-calls.jsonl</c> and mis-advance the phase to
+    /// <see cref="RunPhase.ToolExecuting"/>. The marker-line twin
+    /// (<see cref="Rendering.CodexOutputRenderer"/>) independently suppresses
+    /// reasoning from the visible Activity Log; this is the watchdog side.
+    /// </summary>
+    private static bool IsReasoningItem(JsonElement root)
+    {
+        if (!root.TryGetProperty("item", out var item) || item.ValueKind != JsonValueKind.Object)
+            return false;
+        var itemType = item.TryGetProperty("type", out var ity) ? ity.GetString() : null;
+        return string.Equals(itemType, "reasoning", StringComparison.Ordinal);
     }
 
     /// <summary>
