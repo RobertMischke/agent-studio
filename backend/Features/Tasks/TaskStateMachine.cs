@@ -27,13 +27,19 @@ public class TaskStateMachine
     // supplies it; when null the SignalR push is simply skipped (the
     // coarse file-watcher jobsChanged event still covers the change).
     private readonly TaskChangeNotifier? _notifier;
+    // T2b (ASS-1740): tee a lane_changed row into the per-task ledger on every
+    // transition so the lane-move HISTORY is captured append-only, not just the
+    // enteredLaneAt of the latest move. Optional for the same test-compat reason
+    // as _notifier; when null the move still lands, just without a ledger row.
+    private readonly TimelineLog? _timeline;
 
     public TaskStateMachine(
         TaskScannerService scanner,
         ILogger<TaskStateMachine> logger,
         LaneMutexRegistry? laneMutex = null,
         TaskChangeNotifier? notifier = null,
-        ProjectRegistry? projectRegistry = null)
+        ProjectRegistry? projectRegistry = null,
+        TimelineLog? timeline = null)
     {
         _scanner = scanner;
         _logger = logger;
@@ -43,9 +49,18 @@ public class TaskStateMachine
         _laneMutex = laneMutex ?? LaneMutexRegistry.NullSingleton;
         _notifier = notifier;
         _projectRegistry = projectRegistry;
+        _timeline = timeline;
     }
 
-    public MoveJobOutcome MoveJob(string jobId, string targetState, string? watchPath = null)
+    /// <param name="cause">
+    /// T2b: coarse trigger for the lane-change ledger row (the "ausloeser").
+    /// One of <see cref="TimelineActors"/> (or <c>human:&lt;email&gt;</c>);
+    /// null is recorded as <see cref="TimelineActors.System"/>. Threaded from
+    /// the caller that knows who initiated the move (operator drag, orchestrator
+    /// decision, runner pickup); the default keeps every existing call site
+    /// compiling.
+    /// </param>
+    public MoveJobOutcome MoveJob(string jobId, string targetState, string? watchPath = null, string? cause = null)
     {
         if (!TaskStates.All.Contains(targetState))
             return new MoveJobOutcome(MoveJobStatus.Failure, $"Invalid state: {targetState}");
@@ -85,6 +100,7 @@ public class TaskStateMachine
                 {
                     TaskJsonFile.UpdateField(recheck.FolderPath, "enteredLaneAt", DateTime.UtcNow.ToString("o"), _logger);
                     ClearIncompatiblePhase(recheck.FolderPath, targetState);
+                    RecordLaneChange(recheck.FolderPath, recheck.State, targetState, cause);
                     _scanner.InvalidateCache();
                 }
                 return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: recheck.FolderPath);
@@ -143,6 +159,9 @@ public class TaskStateMachine
             // (newest entry on top). Migration paths deliberately skip this.
             TaskJsonFile.UpdateField(targetDir, "enteredLaneAt", DateTime.UtcNow.ToString("o"), _logger);
             ClearIncompatiblePhase(targetDir, targetState);
+            // T2b: write the lane-change ledger row to the *new* folder (the
+            // source folder is gone after the move above).
+            RecordLaneChange(targetDir, recheck.State, targetState, cause);
             // Keep the canonical id in lockstep with the (possibly suffixed)
             // folder name so FindJob resolves the moved folder immediately,
             // without waiting for the scanner's self-heal pass.
@@ -433,6 +452,10 @@ public class TaskStateMachine
                 // lane changes, so re-stamp the entry time like a normal move.
                 TaskJsonFile.UpdateField(targetDir, "enteredLaneAt", enteredLaneAt, _logger);
                 ClearIncompatiblePhase(targetDir, targetState);
+                // T2b: archive / dead-letter / restore are real lane crossings;
+                // record them in the ledger like a normal move. From-lane is the
+                // source folder's parent directory name.
+                RecordLaneChange(targetDir, Path.GetFileName(stateDir) ?? "", targetState, cause: null);
             }
             else if (writePlaceholderJobJson)
             {
@@ -572,6 +595,39 @@ public class TaskStateMachine
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to clear incompatible phase in {Folder}", folderPath);
+        }
+    }
+
+    /// <summary>
+    /// T2b (ASS-1740): append one <see cref="TimelineEventKinds.LaneChanged"/> row
+    /// to the task's ledger for a lane crossing. This is the append-only HISTORY
+    /// the task.json <c>enteredLaneAt</c> field could only ever hold for the latest
+    /// move. The row carries from / to / when (the event <c>Ts</c>) and the trigger
+    /// (the <see cref="TimelineEvent.Actor"/>); the ASS-1724 branch-tip /
+    /// work-branch-head anchors are recorded alongside in <c>task.json.provenance</c>
+    /// and meshed back in at read time by the unified task reader. Best-effort and
+    /// fully guarded - a ledger write must never undo the move that already landed.
+    /// </summary>
+    private void RecordLaneChange(string jobFolderPath, string fromState, string toState, string? cause)
+    {
+        if (_timeline == null) return;
+        try
+        {
+            var actor = string.IsNullOrWhiteSpace(cause) ? TimelineActors.System : cause!.Trim();
+            _timeline.Append(
+                jobFolderPath,
+                TimelineEventKinds.LaneChanged,
+                actor,
+                summary: $"{fromState} → {toState}",
+                details: new Dictionary<string, string>
+                {
+                    ["from"] = fromState ?? "",
+                    ["to"] = toState ?? "",
+                });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to record lane-change ledger row for {Folder}", jobFolderPath);
         }
     }
 

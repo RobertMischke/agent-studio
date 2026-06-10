@@ -210,7 +210,11 @@ public static class TaskCrudEndpoints
             var validation = ValidateTargetState(req.TargetState);
             if (validation != null) return validation;
 
-            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct, req.TargetIndex));
+            // T2b: these two routes are the operator-initiated move (board drag /
+            // detail-view lane button), so the lane-change ledger trigger is the
+            // human. Auto paths (runner pickup, orchestrator, sweeps) reach
+            // MoveJob without a cause and are recorded as system.
+            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct, req.TargetIndex, cause: TimelineActors.Human("")));
         });
 
         group.MapPost("/{jobId}/move", async (string jobId, string? watchPath, MoveJobRequest req,
@@ -220,7 +224,7 @@ public static class TaskCrudEndpoints
             var validation = ValidateTargetState(req.TargetState);
             if (validation != null) return validation;
 
-            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct, req.TargetIndex));
+            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct, req.TargetIndex, cause: TimelineActors.Human("")));
         });
 
         // Batch move / restore. Per-item atomic: a failure on item N must

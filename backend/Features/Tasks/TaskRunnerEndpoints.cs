@@ -144,24 +144,13 @@ public static class TaskRunnerEndpoints
         // can render line-spans for drill-down. See docs/design-principles.md
         // for the contract this surface has to honour: top-level summary +
         // always-available drill-down.
-        group.MapGet("/{jobId}/runs", (string jobId, string? watchPath, TaskScannerService scanner, TaskSessionLog sessions) =>
+        group.MapGet("/{jobId}/runs", (string jobId, string? watchPath, TaskReader reader) =>
         {
-            var detail = scanner.GetJobDetail(jobId, watchPath);
-            if (detail == null) return Results.NotFound(new { error = "Job not found" });
-            var info = detail.Info;
-            var events = sessions.ReadSessionEvents(jobId, watchPath);
-            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
-            var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
-            timeline = timeline with
-            {
-                PromptEntries = RunPromptTimelineBuilder.Build(
-                    timeline.Runs,
-                    info.FolderPath,
-                    detail.PromptMarkdown,
-                    detail.PromptHistory,
-                    detail.ContextUsage)
-            };
-            return Results.Ok(timeline);
+            // T2b (ASS-1740): the run timeline is now one projection of the
+            // unified per-task read model instead of a private parse here.
+            var model = reader.Read(jobId, watchPath);
+            if (model == null) return Results.NotFound(new { error = "Job not found" });
+            return Results.Ok(model.BuildRunTimeline());
         });
 
         // The unified per-task event ledger (logs/timeline.jsonl, ADR-0049):
@@ -170,11 +159,13 @@ public static class TaskRunnerEndpoints
         // one greppable, time-ordered stream. Drives the Overview attempt
         // indicator and the Timeline tab. Read-only and tolerant of torn
         // trailing lines.
-        group.MapGet("/{jobId}/timeline", (string jobId, string? watchPath, TaskScannerService scanner, TimelineLog timeline) =>
+        group.MapGet("/{jobId}/timeline", (string jobId, string? watchPath, TaskReader reader) =>
         {
-            var info = scanner.FindJob(jobId, watchPath);
-            if (info == null) return Results.NotFound(new { error = "Job not found" });
-            return Results.Ok(timeline.ReadAll(info.FolderPath));
+            // T2b (ASS-1740): the same unified read model also projects the
+            // ledger, meshing each lane_changed row with its ASS-1724 anchor.
+            var model = reader.Read(jobId, watchPath);
+            if (model == null) return Results.NotFound(new { error = "Job not found" });
+            return Results.Ok(model.BuildLedger());
         });
 
         // Per-run software-side change set: the commits authored during
@@ -188,11 +179,11 @@ public static class TaskRunnerEndpoints
         // test pins. Index is 1-based to match RunRecord.Index.
         group.MapGet("/{jobId}/runs/{index:int}/commits", (
             string jobId, int index, string? watchPath,
-            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
+            TaskReader reader, GitService git) =>
         {
-            var info = scanner.FindJob(jobId, watchPath);
-            if (info == null) return Results.NotFound(new { error = "Job not found" });
-            var run = ResolveRun(info, sessions, jobId, watchPath, index, out var error);
+            var model = reader.Read(jobId, watchPath);
+            if (model == null) return Results.NotFound(new { error = "Job not found" });
+            var run = model.ResolveRun(index, out var error);
             if (run == null) return Results.NotFound(new { error });
 
             var commits = !string.IsNullOrWhiteSpace(run.HeadShaBefore) && !string.IsNullOrWhiteSpace(run.HeadShaAfter)
@@ -218,11 +209,11 @@ public static class TaskRunnerEndpoints
         // counts. Drives the file-tree side of the run's git viewer.
         group.MapGet("/{jobId}/runs/{index:int}/files", (
             string jobId, int index, string? watchPath,
-            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
+            TaskReader reader, GitService git) =>
         {
-            var info = scanner.FindJob(jobId, watchPath);
-            if (info == null) return Results.NotFound(new { error = "Job not found" });
-            var run = ResolveRun(info, sessions, jobId, watchPath, index, out var error);
+            var model = reader.Read(jobId, watchPath);
+            if (model == null) return Results.NotFound(new { error = "Job not found" });
+            var run = model.ResolveRun(index, out var error);
             if (run == null) return Results.NotFound(new { error });
 
             if (string.IsNullOrWhiteSpace(run.HeadShaBefore) || string.IsNullOrWhiteSpace(run.HeadShaAfter))
@@ -252,11 +243,11 @@ public static class TaskRunnerEndpoints
         // can consume it without re-parsing.
         group.MapGet("/{jobId}/runs/{index:int}/diff", (
             string jobId, int index, string? path, string? watchPath,
-            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
+            TaskReader reader, GitService git) =>
         {
-            var info = scanner.FindJob(jobId, watchPath);
-            if (info == null) return Results.NotFound(new { error = "Job not found" });
-            var run = ResolveRun(info, sessions, jobId, watchPath, index, out var error);
+            var model = reader.Read(jobId, watchPath);
+            if (model == null) return Results.NotFound(new { error = "Job not found" });
+            var run = model.ResolveRun(index, out var error);
             if (run == null) return Results.NotFound(new { error });
 
             if (string.IsNullOrWhiteSpace(run.HeadShaBefore) || string.IsNullOrWhiteSpace(run.HeadShaAfter))
@@ -276,11 +267,12 @@ public static class TaskRunnerEndpoints
         // match RunRecord.Index.
         group.MapGet("/{jobId}/runs/{index:int}/context", (
             string jobId, int index, string? watchPath,
-            TaskScannerService scanner, TaskSessionLog sessions) =>
+            TaskReader reader) =>
         {
-            var info = scanner.FindJob(jobId, watchPath);
-            if (info == null) return Results.NotFound(new { error = "Job not found" });
-            var run = ResolveRun(info, sessions, jobId, watchPath, index, out var error);
+            var model = reader.Read(jobId, watchPath);
+            if (model == null) return Results.NotFound(new { error = "Job not found" });
+            var info = model.Info;
+            var run = model.ResolveRun(index, out var error);
             if (run == null) return Results.NotFound(new { error });
 
             if (string.IsNullOrWhiteSpace(run.ContextRef))
@@ -365,28 +357,5 @@ public static class TaskRunnerEndpoints
                 ? Results.Ok(snapshot)
                 : Results.BadRequest(new { error = error ?? "Cannot refresh context usage" });
         });
-    }
-
-    /// <summary>
-    /// Builds the run timeline for <paramref name="info"/> and returns
-    /// the run at <paramref name="index"/> (1-based), or null + a
-    /// 404-friendly error string. Lifted into a helper so the three
-    /// per-run endpoints share the same lookup path and never drift
-    /// in how they bound or pair runs.
-    /// </summary>
-    private static RunRecord? ResolveRun(
-        TaskInfo info, TaskSessionLog sessions,
-        string jobId, string? watchPath, int index, out string error)
-    {
-        error = "";
-        var events = sessions.ReadSessionEvents(jobId, watchPath);
-        var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
-        var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
-        if (index < 1 || index > timeline.Runs.Count)
-        {
-            error = $"Run #{index} not in this job's timeline (have {timeline.Runs.Count}).";
-            return null;
-        }
-        return timeline.Runs[index - 1];
     }
 }

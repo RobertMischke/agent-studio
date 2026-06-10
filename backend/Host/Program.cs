@@ -215,6 +215,11 @@ builder.Services.AddSingleton<AgentStudio.Tasks.CompletedLaneAuditService>();
 builder.Services.AddSingleton<FixtureMigrationService>();
 builder.Services.AddSingleton<TaskSessionLog>();
 builder.Services.AddSingleton<TimelineLog>();
+// T2b (ASS-1740): the single per-task read layer. Loads all raw sources
+// (detail, session-events, cli-output, timeline ledger) once and projects the
+// run timeline + meshed ledger so the /runs and /timeline views stop
+// re-parsing the same files independently.
+builder.Services.AddSingleton<AgentStudio.Tasks.TaskReader>();
 builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();
 builder.Services.AddSingleton<OrchestratorChat>();

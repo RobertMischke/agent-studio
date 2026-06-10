@@ -78,7 +78,8 @@ public sealed class TaskTransitionService
         string targetState,
         string? watchPath,
         CancellationToken ct = default,
-        int? targetIndex = null)
+        int? targetIndex = null,
+        string? cause = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
@@ -125,7 +126,7 @@ public sealed class TaskTransitionService
         }
 
         ReleaseCliOutputResourcesBeforeMove(info);
-        var outcome = _states.MoveJob(jobId, targetState, watchPath);
+        var outcome = _states.MoveJob(jobId, targetState, watchPath, cause);
         if (outcome.Status == MoveJobStatus.Success && commitToStamp != null)
         {
             var moved = _scanner.FindJob(jobId, watchPath);
