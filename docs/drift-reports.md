@@ -234,9 +234,9 @@ The Task Access Layer (ADR-0024) is in phase 1 (contract only) at the time of wr
 
 - Schema: [`docs/schemas/drift-report.schema.json`](schemas/drift-report.schema.json).
 - Schema index: [`docs/schemas/README.md`](schemas/README.md).
-- Backend records: `OrchestratorApi.Services.Drift.DriftReport`, `DriftDimension`, `DriftFinding`, `DriftScoreInputs`, `DriftArchitectureModel`, `DriftArchitectureElement`, `DriftFollowUpTaskSuggestion`.
-- Backend validator: `OrchestratorApi.Services.Drift.DriftReportValidator`.
-- Disk paths: `OrchestratorApi.Services.Drift.DriftReportPaths`.
+- Backend records: `AgentStudio.Drift.DriftReport`, `DriftDimension`, `DriftFinding`, `DriftScoreInputs`, `DriftArchitectureModel`, `DriftArchitectureElement`, `DriftFollowUpTaskSuggestion`.
+- Backend validator: `AgentStudio.Drift.DriftReportValidator`.
+- Disk paths: `AgentStudio.Drift.DriftReportPaths`.
 - Tests: `backend.Tests/SchemaRoundTripTests.cs` (`DriftReport_*`), `backend.Tests/DriftReportValidatorTests.cs`.
 
 ## 10. Open questions

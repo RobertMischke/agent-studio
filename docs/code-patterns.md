@@ -2,7 +2,7 @@
 
 > **Maintained by agents and humans.** Add a new rule by appending a YAML
 > document below. The deterministic
-> [`CodePatternDriftAnalysisService`](../backend/Services/Drift/CodePatternDriftAnalysisService.cs)
+> [`CodePatternDriftAnalysisService`](../backend/Features/Drift/CodePatternDriftAnalysisService.cs)
 > reads this file on every analysis pass and merges its rules with the
 > hardcoded `DefaultRules`. Adding a rule does not require a rebuild.
 
@@ -126,11 +126,11 @@ id: token-aggregation-canonical
 title: Token aggregation goes through ITokenAggregator
 description: >
   Token roll-ups (per-job/per-day/per-model totals over OrchestratorLogEntry.TokenUsage
-  or AgentMessageTokens) belong in OrchestratorApi.Services.Tokens or
-  OrchestratorApi.Services.Bus. Rolling a private aggregator elsewhere drifts
+  or AgentMessageTokens) belong in AgentStudio.Tokens or
+  AgentStudio.Bus. Rolling a private aggregator elsewhere drifts
   from the canonical aggregator and produces inconsistent surface numbers.
 filePattern: backend/.*\.cs$
-excludeFilePattern: backend\.Tests|Services[/\\]Tokens[/\\]|Services[/\\]Bus[/\\]|Services[/\\]Runner[/\\](ProjectTokenUsageService|WorkspaceTokensTimelineService|TokenSummary|TokenSummaryCacheStore|OrchestratorLog|OrchestratorRunner|OrchestratorChat|OrchestratorSession|GlobalOrchestratorSession|StuckLoopGuard)\.cs|Services[/\\]AdHoc[/\\]
+excludeFilePattern: backend\.Tests|Features[/\\]Tokens[/\\]|Features[/\\]Bus[/\\]|Features[/\\]Runner[/\\](ProjectTokenUsageService|WorkspaceTokensTimelineService|TokenSummary|TokenSummaryCacheStore|OrchestratorLog|OrchestratorRunner|OrchestratorChat|OrchestratorSession|GlobalOrchestratorSession|StuckLoopGuard)\.cs|Features[/\\]AdHoc[/\\]|OutputParsing[/\\]Usage[/\\]CliUsageParser\.cs|Shared[/\\]Models[/\\]AgentBus\.cs
 candidateMarker: \.TokenUsage\b|AgentMessageTokens\b|TokenAggregateBucket\b
 goodVariant: ITokenAggregator|TokenAggregationService|BusAggregationCache
 severityIfBad: Warn
@@ -147,11 +147,12 @@ id: frontmatter-canonical-helper
 title: YAML frontmatter parsing uses FrontmatterParser
 description: >
   Markdown files with `---` frontmatter at the top should be parsed via
-  OrchestratorApi.Services.Markdown.FrontmatterParser. Rolling a private
+  AgentStudio.Cli.FrontmatterParser
+  (backend/Features/Cli/OutputParsing/FrontmatterParser.cs). Rolling a private
   regex risks drift on edge cases (folded scalars, quote stripping,
   CRLF handling).
 filePattern: \.cs$
-excludeFilePattern: backend\.Tests|Markdown[/\\]FrontmatterParser\.cs|CodePatternRuleLoader\.cs
+excludeFilePattern: backend\.Tests|OutputParsing[/\\]FrontmatterParser\.cs|CodePatternRuleLoader\.cs
 candidateMarker: \\A---\\s\*\\r\?\\n
 goodVariant: FrontmatterParser\b
 severityIfBad: Warn
@@ -174,7 +175,7 @@ description: >
   encapsulates the recovery in one place; missing it means the caller will
   loop forever on a stale session id until the backend restarts.
 filePattern: \.cs$
-excludeFilePattern: backend\.Tests|Services[/\\]Runner[/\\]OrchestratorRunner\.cs
+excludeFilePattern: backend\.Tests|Features[/\\]Runner[/\\]OrchestratorRunner\.cs
 candidateMarker: (_runner|_orchestratorRunner)\.Resume(WithFallback)?Async\s*\(
 badVariant: (_runner|_orchestratorRunner)\.ResumeAsync\s*\(
 goodVariant: (_runner|_orchestratorRunner)\.ResumeWithFallbackAsync\s*\(
@@ -199,11 +200,12 @@ description: >
   Recognition of OS-level / sandbox-level blockers (Codex Windows sandbox,
   CreateProcessAsUserW 1312, EACCES/EPERM/Access-is-denied, claude tool
   permission denial, codex sandbox_permissions) must go through
-  OrchestratorApi.Services.Runner.AgentEnvironmentDetector. Rolling a private
+  AgentStudio.Cli.AgentEnvironmentDetector
+  (backend/Features/Cli/OutputParsing/AgentEnvironmentDetector.cs). Rolling a private
   substring check elsewhere re-introduces the 2026-05-11 failure mode where
   a host-level error read as a generic "missing-terminal-sentinel".
 filePattern: backend/.*\.cs$
-excludeFilePattern: backend\.Tests|Services[/\\]Runner[/\\]AgentEnvironmentDetector\.cs|Services[/\\]Runner[/\\]AgentOutcomeAnalyzer\.cs|Services[/\\]Cli[/\\]CliExecutionServiceBase\.cs|Services[/\\]Jobs[/\\]JobScannerService\.cs
+excludeFilePattern: backend\.Tests|OutputParsing[/\\]AgentEnvironmentDetector\.cs|Shared[/\\]Runner[/\\]AgentOutcomeAnalyzer\.cs|Execution[/\\]CliExecutionServiceBase\.cs|Features[/\\]Tasks[/\\]TaskScannerService\.cs
 candidateMarker: windows sandbox: runner error|CreateProcessAsUserW failed: 1312|sandbox_permissions|Permission denied and could not request permission from user|EACCES\b|EPERM\b|Access is denied
 goodVariant: AgentEnvironmentDetector\b
 severityIfBad: High
@@ -216,7 +218,7 @@ severityIfBad: High
 # `cliType=codex` but left `agent=claude`. The kanban card reads the icon
 # from `cliType` and the text label from `agent`, so the cards rendered the
 # Codex icon next to a "claude" label until the file was hand-edited. Only
-# the canonical writer in JobMutationService.SetJobCliType may touch
+# the canonical writer in TaskMutationService.SetJobCliType may touch
 # `cliType` on its own; everywhere else that calls UpdateField with
 # `"cliType"` must also update `"agent"` in the same call site.
 # ---------------------------------------------------------------------------
@@ -227,9 +229,9 @@ description: >
   the matching `agent` field in the same method. The two fields address the
   same logical concept (the supported CLIs map 1:1 to agent labels); a write
   to only one of them drifts the kanban card's icon away from its text label.
-  The canonical writer is JobMutationService.SetJobCliType.
+  The canonical writer is TaskMutationService.SetJobCliType.
 filePattern: backend/.*\.cs$
-excludeFilePattern: backend\.Tests|Services[/\\]Jobs[/\\]JobMutationService\.cs|Services[/\\]Jobs[/\\]JobJsonFile\.cs
+excludeFilePattern: backend\.Tests|Features[/\\]Tasks[/\\]TaskMutationService\.cs|Features[/\\]Tasks[/\\]TaskJsonFile\.cs
 candidateMarker: UpdateField\s*\([^,]+,\s*"cliType"
 goodVariant: UpdateField\s*\([^,]+,\s*"agent"
 severityIfBad: High
@@ -248,7 +250,7 @@ severityIfBad: High
 # stays the single owner of "what is currently running".
 # ---------------------------------------------------------------------------
 id: lane-write-3-progress-forbidden
-title: MoveJob to JobStates.Progress is reserved for the runner pickup path
+title: MoveJob to TaskStates.Progress is reserved for the runner pickup path
 description: >
   Only ProjectRunner.TickAsync (the pickup loop) may move a job into
   3-progress. Auto-review reissues, supervisor interventions, and meta-cycle
@@ -257,9 +259,9 @@ description: >
   fired during a pickup gap can leave two jobs in 3-progress and silently
   park whichever the runner had just started.
 filePattern: backend/.*\.cs$
-excludeFilePattern: backend\.Tests|\.claude[/\\]|Services[/\\]Runner[/\\]ProjectRunner\.cs|Services[/\\]Jobs[/\\]JobStateMachine\.cs|Services[/\\]Jobs[/\\]JobTransitionService\.cs
+excludeFilePattern: backend\.Tests|\.claude[/\\]|Features[/\\]Runner[/\\]ProjectRunner\.cs|Features[/\\]Tasks[/\\]TaskStateMachine\.cs|Features[/\\]Tasks[/\\]TaskTransitionService\.cs
 candidateMarker: \.MoveJob\s*\(
-badVariant: \.MoveJob\s*\([^,]+,\s*(?:JobStates\.Progress\b|"3-progress")
+badVariant: \.MoveJob\s*\([^,]+,\s*(?:TaskStates\.Progress\b|"3-progress")
 severityIfBad: High
 ```
 
@@ -323,7 +325,7 @@ description: >
   into a phantom card. The canonical helpers are
   `StaleProgressArchiver.TryFindSlugInLaterLane` and
   `CrashRecoveryService.SlugExistsInDownstreamLane`.
-filePattern: backend/Services/Runner/(StaleProgressArchiver|CrashRecoveryService)\.cs$
+filePattern: backend/Features/Runner/(StaleProgressArchiver|CrashRecoveryService)\.cs$
 candidateMarker: \b(?:ArchiveAsDebris|ArchiveDebrisFolder|MoveOrphanToFailedPickup|FindMostRecentlyActiveProgressJob)\b
 goodVariant: SlugExistsIn(?:Lane|DownstreamLane)|TryFindSlugInLaterLane|DownstreamLanesForOrphanReconciliation
 severityIfBad: High

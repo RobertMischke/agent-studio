@@ -173,10 +173,10 @@ The Task Access Layer (ADR-0024) is in phase 1 (contract only) at the time of wr
 
 - Schema: [`docs/schemas/analysis-report.schema.json`](schemas/analysis-report.schema.json).
 - Schema index: [`docs/schemas/README.md`](schemas/README.md).
-- Backend record: `OrchestratorApi.Services.Analysis.AnalysisReport`.
-- Backend validator: `OrchestratorApi.Services.Analysis.AnalysisReportValidator`.
-- Backend store: `OrchestratorApi.Services.Analysis.AnalysisReportStore` (extends `InMemoryStore<AnalysisReportRecord>`).
-- Disk paths: `OrchestratorApi.Services.Analysis.AnalysisReportPaths`.
+- Backend record: `AgentStudio.Analysis.AnalysisReport`.
+- Backend validator: `AgentStudio.Analysis.AnalysisReportValidator`.
+- Backend store: `AgentStudio.Analysis.AnalysisReportStore` (extends `InMemoryStore<AnalysisReportRecord>`).
+- Disk paths: `AgentStudio.Analysis.AnalysisReportPaths`.
 - Tests: `backend.Tests/AnalysisReportStoreTests.cs`, `backend.Tests/SchemaRoundTripTests.cs`.
 
 ## 10. Named producers
@@ -187,7 +187,7 @@ Named producers wrap one topic with its own scope-selection, prompt, and parse l
 
 Answers the recurring user question "are we on track?". Compares the active queue (`1-preparation`, `2-ready`, `3-progress`, `4-review`) against `README.md`, `ROADMAP.md`, `AGENTS.md`, ADR titles, design principles, mockup folders, and recent analysis reports.
 
-- Service: `OrchestratorApi.Services.Analysis.RoadmapAlignmentReviewService` - pure scope selection, prompt rendering, and JSON parse fallback. No clock or id concerns.
+- Service: `AgentStudio.Analysis.RoadmapAlignmentReviewService` - pure scope selection, prompt rendering, and JSON parse fallback. No clock or id concerns.
 - Prompt template: [`prompts/runtime/roadmap-alignment-review.md`](../prompts/runtime/roadmap-alignment-review.md). Editable Markdown so wording does not require a recompile.
 - Endpoints (under `/api/analysis/{project}/actions/roadmap-alignment`):
   - `GET .../prompt` returns the assembled scope summary plus the rendered prompt. Use this from a CLI agent session or the future inline runner.
@@ -207,7 +207,7 @@ When the agent narrative is supplied (POST with `agentResponse`), the endpoint r
 
 Answers "what are agents told today, and where has that drifted?". Inventories the canonical steering surface (`AGENTS.md`, project AGENTS, frontend AGENTS, README, ROADMAP, task contract, skills lookup, ADRs, runtime prompts), samples recent jobs per inspected lane as drift evidence, and surfaces typed findings plus proposed text changes.
 
-- Service: `OrchestratorApi.Services.Analysis.SteeringDocsSummaryDriftService` - pure scope selection, prompt rendering, and JSON parse fallback. No clock or id concerns. Topic slug: `steering-docs-summary-and-drift` (exposed as the `Topic` constant).
+- Service: `AgentStudio.Analysis.SteeringDocsSummaryDriftService` - pure scope selection, prompt rendering, and JSON parse fallback. No clock or id concerns. Topic slug: `steering-docs-summary-and-drift` (exposed as the `Topic` constant).
 - Prompt template: [`prompts/runtime/steering-docs-summary-and-drift.md`](../prompts/runtime/steering-docs-summary-and-drift.md). Editable Markdown so wording does not require a recompile.
 - Endpoints (under `/api/analysis/{project}/actions/steering-docs-drift`):
   - `GET .../prompt` returns the assembled scope summary plus the rendered prompt.
