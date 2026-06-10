@@ -36,6 +36,7 @@ public sealed class PromptAdminService
             var meta = PromptDescriptionCatalog.Describe(name);
             var hasOverride = _prompts.HasOverride(name);
             var defaultContent = _prompts.TryReadDefault(name);
+            var effective = _prompts.TryReadOverride(name) ?? defaultContent;
             items.Add(new PromptCatalogItem
             {
                 Name = name,
@@ -45,6 +46,8 @@ public sealed class PromptAdminService
                 HasOverride = hasOverride,
                 HasDefault = defaultContent != null,
                 DefaultChangedSinceOverride = hasOverride && DefaultChanged(name, defaultContent),
+                Slots = RuntimePromptService.ExtractSlots(effective).ToList(),
+                UsageCount = PromptUsageCatalog.For(name).Count,
             });
         }
         return new PromptCatalogResponse
@@ -69,6 +72,7 @@ public sealed class PromptAdminService
         var sidecar = ReadSidecar(name);
         var defaultSha = defaultContent == null ? null : Sha(defaultContent);
 
+        var effective = overrideContent ?? defaultContent ?? string.Empty;
         return new PromptDetail
         {
             Name = name,
@@ -80,13 +84,81 @@ public sealed class PromptAdminService
             DefaultContent = defaultContent,
             OverrideContent = overrideContent,
             BaseDefaultContent = hasOverride ? sidecar?.BaseDefaultContent : null,
-            EffectiveContent = overrideContent ?? defaultContent ?? string.Empty,
+            EffectiveContent = effective,
             DefaultSha = defaultSha,
             BaseDefaultSha = hasOverride ? sidecar?.BaseDefaultSha : null,
             DefaultChangedSinceOverride =
                 hasOverride && sidecar?.BaseDefaultSha != null && defaultSha != null
                 && !string.Equals(sidecar.BaseDefaultSha, defaultSha, StringComparison.OrdinalIgnoreCase),
             OverrideUpdatedAt = hasOverride ? sidecar?.UpdatedAt : null,
+            Slots = RuntimePromptService.ExtractSlots(effective).ToList(),
+            Usages = PromptUsageCatalog.For(name).ToList(),
+        };
+    }
+
+    /// <summary>
+    /// Renders the effective template (override -&gt; default), or an explicit
+    /// draft when <paramref name="content"/> is supplied, against the given slot
+    /// values. This is the registry's "Probelauf": it shows exactly what the
+    /// renderer would emit, including which declared slots were filled vs left
+    /// empty, without persisting anything. Null when the name is unknown and no
+    /// draft content was supplied.
+    /// </summary>
+    public PromptPreviewResult? Preview(string name, IReadOnlyDictionary<string, string?>? values, string? content = null)
+    {
+        string? template = content;
+        if (template == null)
+        {
+            if (!IsKnown(name)) return null;
+            template = _prompts.TryReadOverride(name) ?? _prompts.TryReadDefault(name);
+        }
+        if (template == null) return null;
+
+        var slots = RuntimePromptService.ExtractSlots(template);
+        var supplied = values ?? new Dictionary<string, string?>();
+        bool Filled(string slot) => supplied.TryGetValue(slot, out var v) && !string.IsNullOrEmpty(v);
+
+        return new PromptPreviewResult
+        {
+            Name = name,
+            Rendered = RuntimePromptService.RenderContent(template, supplied),
+            Slots = slots.ToList(),
+            FilledSlots = slots.Where(Filled).ToList(),
+            MissingSlots = slots.Where(s => !Filled(s)).ToList(),
+        };
+    }
+
+    /// <summary>
+    /// The coverage surface: which prompt-source sites are template-backed
+    /// (registered) versus still assembling instruction text inline. The
+    /// inline-migration (T3a) cleared the four core runner/review files; the
+    /// pending entries are the deliberately-surfaced remaining sites a follow-up
+    /// guard task (T3b) is meant to close. Hand-curated, because a literal scan
+    /// can't reliably tell prose assembly from data assembly.
+    /// </summary>
+    public PromptCoverageResponse GetCoverage()
+    {
+        var items = new List<PromptCoverageItem>
+        {
+            new() { Component = "backend/Features/Runner/ProjectRunner.cs", Status = "covered",
+                Detail = "Conflict-resolution, project-boot and orchestrator-decision prompts moved to runtime templates." },
+            new() { Component = "backend/Features/Runner/ReviewDecisionOrchestrator.cs", Status = "covered",
+                Detail = "Review-decision, no-completion-signal, fallback and reissue-follow-up prompts are template-backed." },
+            new() { Component = "backend/Features/Runner/GlobalOrchestratorBootstrap.cs", Status = "covered",
+                Detail = "Global boot prompt, self-modification note and task-snapshot block moved to runtime templates." },
+            new() { Component = "backend/Features/Drift/CodePatternDriftAnalysisService.cs", Status = "covered",
+                Detail = "Code-pattern drift review prompt and canonical-sites block moved to runtime templates." },
+            new() { Component = "backend/Features/Runner/OrchestratorChat.cs", Status = "pending",
+                Detail = "Per-turn '=== CURRENT USER PREFERENCES ===' block is still assembled inline (AppendCurrentUserPreferences). T3b guard target." },
+            new() { Component = "agent-rules/core.md", Status = "pending",
+                Detail = "Static agent-rules core text is consumed via config CorePath and is not yet exposed through the runtime prompt registry." },
+        };
+        return new PromptCoverageResponse
+        {
+            Items = items,
+            TotalSites = items.Count,
+            CoveredSites = items.Count(i => string.Equals(i.Status, "covered", StringComparison.OrdinalIgnoreCase)),
+            PendingSites = items.Count(i => string.Equals(i.Status, "pending", StringComparison.OrdinalIgnoreCase)),
         };
     }
 
@@ -206,6 +278,8 @@ public sealed class PromptCatalogItem
     public bool HasDefault { get; set; }
     public bool HasOverride { get; set; }
     public bool DefaultChangedSinceOverride { get; set; }
+    public List<string> Slots { get; set; } = new();
+    public int UsageCount { get; set; }
 }
 
 public sealed class PromptDetail

@@ -36,8 +36,17 @@ public sealed partial class RuntimePromptService
     }
 
     public string Render(string templateName, IReadOnlyDictionary<string, string?> values)
+        => RenderContent(Load(templateName), values);
+
+    /// <summary>
+    /// Applies the same <c>{{slot}}</c> substitution as <see cref="Render"/> to a
+    /// raw template string instead of a file. Unmatched placeholders are left
+    /// intact; a slot present with a null value renders empty. The registry's
+    /// "Probelauf" uses this to preview an unsaved draft without writing it.
+    /// </summary>
+    public static string RenderContent(string? template, IReadOnlyDictionary<string, string?> values)
     {
-        var template = Load(templateName);
+        if (string.IsNullOrEmpty(template)) return string.Empty;
         return PlaceholderRegex().Replace(template, match =>
         {
             var key = match.Groups["key"].Value.Trim();
@@ -214,6 +223,25 @@ public sealed partial class RuntimePromptService
     {
         if (templateName == null) _cache.Clear();
         else _cache.TryRemove(templateName, out _);
+    }
+
+    /// <summary>
+    /// The distinct <c>{{slot}}</c> placeholder names a template declares, in
+    /// first-seen order. This is the contract between the template text and the
+    /// code that fills it: the registry surfaces it so an operator editing an
+    /// override knows exactly which names the renderer will substitute.
+    /// </summary>
+    public static IReadOnlyList<string> ExtractSlots(string? content)
+    {
+        if (string.IsNullOrEmpty(content)) return Array.Empty<string>();
+        var seen = new List<string>();
+        var known = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match m in PlaceholderRegex().Matches(content))
+        {
+            var key = m.Groups["key"].Value.Trim();
+            if (known.Add(key)) seen.Add(key);
+        }
+        return seen;
     }
 
     [GeneratedRegex(@"\{\{\s*(?<key>[A-Za-z0-9_]+)\s*\}\}", RegexOptions.Compiled)]

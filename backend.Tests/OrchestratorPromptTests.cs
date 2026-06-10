@@ -1,4 +1,6 @@
 
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 using Xunit;
 
@@ -21,10 +23,34 @@ public class OrchestratorPromptTests
         FolderPath = @"C:\jobs\fix-layout"
     };
 
+    private static RuntimePromptService Prompts()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["PromptTemplates:RuntimePath"] = FindPromptRoot()
+            })
+            .Build();
+        return new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+    }
+
+    private static string FindPromptRoot()
+    {
+        var dir = new System.IO.DirectoryInfo(System.AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = System.IO.Path.Combine(dir.FullName, "prompts", "runtime");
+            if (System.IO.Directory.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+        throw new System.IO.DirectoryNotFoundException("Could not locate prompts/runtime from test base directory.");
+    }
+
     [Fact]
     public void OneShotPrompt_NoAttachments_OmitsAttachmentsBlock()
     {
         var prompt = ProjectRunner.BuildOrchestratorPrompt(
+            Prompts(),
             Job(),
             promptText: "fix the spacing",
             lastAgentText: "Should rows be evenly distributed?",
@@ -39,6 +65,7 @@ public class OrchestratorPromptTests
     {
         const string list = "- `screenshot.png` → `C:\\jobs\\fix-layout\\attachments\\screenshot.png`";
         var prompt = ProjectRunner.BuildOrchestratorPrompt(
+            Prompts(),
             Job(),
             promptText: "Die Zeilen sind nicht gleichmaessig verteilt",
             lastAgentText: "Which column is wrong? Could you mark it?",
@@ -55,7 +82,7 @@ public class OrchestratorPromptTests
     public void ResumePrompt_NoAttachments_OmitsAttachmentsBlock()
     {
         var prompt = ProjectRunner.BuildOrchestratorResumePrompt(
-            Job(), lastAgentText: "any preference?", attachmentsList: "(none)");
+            Prompts(), Job(), lastAgentText: "any preference?", attachmentsList: "(none)");
 
         Assert.DoesNotContain("Attachments on this task", prompt, System.StringComparison.Ordinal);
     }
@@ -65,7 +92,7 @@ public class OrchestratorPromptTests
     {
         const string list = "- `mockup.png` → `C:\\jobs\\fix-layout\\attachments\\mockup.png`";
         var prompt = ProjectRunner.BuildOrchestratorResumePrompt(
-            Job(), lastAgentText: "any preference?", attachmentsList: list);
+            Prompts(), Job(), lastAgentText: "any preference?", attachmentsList: list);
 
         Assert.Contains("Attachments on this task", prompt, System.StringComparison.Ordinal);
         Assert.Contains("mockup.png", prompt, System.StringComparison.Ordinal);

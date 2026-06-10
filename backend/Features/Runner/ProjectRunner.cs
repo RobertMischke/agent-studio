@@ -99,6 +99,18 @@ public class ProjectRunner
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
+
+    // Runtime prompt-registry template names. Every instruction/role prose
+    // string ProjectRunner emits lives in one of these files under
+    // prompts/runtime so the text is inspectable and project-overridable;
+    // code only fills the named slots.
+    public const string ConflictResolutionTemplate = "orchestrator-conflict-resolution.md";
+    public const string ProjectBootTemplate = "orchestrator-project-boot.md";
+    public const string DecisionResumeTemplate = "orchestrator-decision-resume.md";
+    public const string DecisionAttachmentsResumeTemplate = "orchestrator-decision-attachments-resume.md";
+    public const string DecisionOneshotTemplate = "orchestrator-decision-oneshot.md";
+    public const string DecisionAttachmentsOneshotTemplate = "orchestrator-decision-attachments-oneshot.md";
+
     private readonly TaskTransitionService _transitions;
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
@@ -1434,7 +1446,7 @@ public class ProjectRunner
         }
     }
 
-    private static string BuildConflictResolutionPrompt(
+    private string BuildConflictResolutionPrompt(
         TaskInfo info,
         ActiveRun run,
         string workBranch,
@@ -1443,20 +1455,15 @@ public class ProjectRunner
         var files = conflict.ConflictedFiles is { Count: > 0 }
             ? string.Join(Environment.NewLine, conflict.ConflictedFiles.Select(f => $"- {f}"))
             : "- none reported; run git diff --name-only --diff-filter=U";
-        return
-            "You are the orchestrator-owned merge conflict resolver for a parallel task branch.\n" +
-            $"Task: {info.Id} - {info.Title}\n" +
-            $"Task branch: {run.Branch}\n" +
-            $"Integration branch: {workBranch}\n" +
-            $"Worktree: {run.WorktreePath}\n\n" +
-            "Resolve the rebase/merge conflict from outside the core task agent. Work only in this worktree. " +
-            "A rebase is expected to be paused here already; resolve the conflict files, stage the resolutions, " +
-            "and run `git rebase --continue`. If no rebase is active, rebase the task branch onto the integration branch yourself. " +
-            "Run focused verification if practical, and leave the task branch clean and ready for a fast-forward merge into the integration branch. " +
-            "Do not force-push, do not force-merge, and do not edit the shared main checkout.\n\n" +
-            "Conflicted files from the failed integration attempt:\n" +
-            files + "\n\n" +
-            "End with a concise summary. The pipeline harness will perform the final fast-forward merge.";
+        return _prompts.Render(ConflictResolutionTemplate, new Dictionary<string, string?>
+        {
+            ["job_id"] = info.Id,
+            ["job_title"] = info.Title,
+            ["task_branch"] = run.Branch,
+            ["integration_branch"] = workBranch,
+            ["worktree"] = run.WorktreePath,
+            ["conflicted_files"] = files,
+        }).TrimEnd('\r', '\n');
     }
 
     private static string IntegrationSummary(
@@ -2779,40 +2786,35 @@ public class ProjectRunner
     /// </summary>
     private string BuildOrchestratorBootPrompt()
     {
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"You are the orchestrator for the project \"{ProjectName}\" running in Agent Software Studio.");
-        sb.AppendLine();
-        sb.AppendLine("Project context:");
-        sb.AppendLine($"- Watch path: {Entry.Path}");
-        sb.AppendLine($"- Working directory: {Entry.RootPath}");
+        var context = new System.Text.StringBuilder();
+        context.Append($"- Watch path: {Entry.Path}");
+        context.Append($"\n- Working directory: {Entry.RootPath}");
         if (!string.IsNullOrWhiteSpace(Entry.RepositoryPath))
-            sb.AppendLine($"- Git repository: {Entry.RepositoryPath}");
-        sb.AppendLine();
+            context.Append($"\n- Git repository: {Entry.RepositoryPath}");
 
-        AppendDocSnippet(sb, "AGENTS.md", Entry.RootPath, 2_000);
-        AppendDocSnippet(sb, "README.md", Entry.RootPath, 2_000);
-        AppendDocSnippet(sb, "ROADMAP.md", Entry.RootPath, 1_500);
+        var docs = new System.Text.StringBuilder();
+        AppendDocSnippet(docs, "AGENTS.md", Entry.RootPath, 2_000);
+        AppendDocSnippet(docs, "README.md", Entry.RootPath, 2_000);
+        AppendDocSnippet(docs, "ROADMAP.md", Entry.RootPath, 1_500);
 
         // Recent orchestrator activity, last 10 entries newest-first.
+        var activity = new System.Text.StringBuilder();
         var entries = _orchestratorLog.Read(Entry.Path);
         if (entries.Count > 0)
         {
-            sb.AppendLine("Recent orchestrator activity (newest first, latest 10):");
+            activity.AppendLine("Recent orchestrator activity (newest first, latest 10):");
             foreach (var e in entries.AsEnumerable().Reverse().Take(10))
-                sb.AppendLine($"- [{e.Kind}/{e.Topic}] {e.Summary}");
-            sb.AppendLine();
+                activity.AppendLine($"- [{e.Kind}/{e.Topic}] {e.Summary}");
+            activity.AppendLine();
         }
 
-        sb.AppendLine("Your role:");
-        sb.AppendLine("- When the runner sends you a NEEDS_INPUT decision request, you have three reply shapes:");
-        sb.AppendLine("  1) REPLY: plain text, the user-style follow-up to send back to the agent (default).");
-        sb.AppendLine("  2) STEER: when you cannot decide alone but a small piece of evidence (a screenshot, a choice between options, a link to a doc) would unblock the user. Format: a leading STEER line, then Need: <one sentence>, Why: <one sentence>, optional Options: list with A) / B) bullets. Prefer STEER over BLOCK whenever a concrete unblocking ask exists.");
-        sb.AppendLine("  3) BLOCK: last resort, when you cannot even formulate a steering message. Reply exactly: BLOCK");
-        sb.AppendLine("- When the runner sends you a status query, summarize concisely.");
-        sb.AppendLine("- The conversation history accumulated in this session is your memory across decisions; you do not need to be re-briefed each turn.");
-        sb.AppendLine();
-        sb.AppendLine("Acknowledge readiness with a single short sentence describing which docs you saw on boot. The first real decision request will follow.");
-        return sb.ToString();
+        return _prompts.Render(ProjectBootTemplate, new Dictionary<string, string?>
+        {
+            ["project_name"] = ProjectName,
+            ["project_context"] = context.ToString(),
+            ["doc_snippets"] = docs.ToString(),
+            ["activity_block"] = activity.ToString(),
+        });
     }
 
     private static void AppendDocSnippet(System.Text.StringBuilder sb, string fileName, string root, int maxChars)
@@ -2903,7 +2905,7 @@ public class ProjectRunner
             var lastAgentText = outcome.Summary ?? "(no agent summary captured)";
             var attachmentsList = BuildAttachmentsList(info.FolderPath);
 
-            var orchestratorPrompt = BuildOrchestratorPrompt(info, promptText, lastAgentText, attachmentsList);
+            var orchestratorPrompt = BuildOrchestratorPrompt(_prompts, info, promptText, lastAgentText, attachmentsList);
             var modelOverride = _projectSettings.Get(info.ProjectName).OrchestratorModel;
 
             // Resume the long-lived session if one is on disk; the
@@ -2920,7 +2922,7 @@ public class ProjectRunner
             OrchestratorDecisionResult result;
             if (session != null && !string.IsNullOrWhiteSpace(session.SessionId))
             {
-                var resumePrompt = BuildOrchestratorResumePrompt(info, lastAgentText, attachmentsList);
+                var resumePrompt = BuildOrchestratorResumePrompt(_prompts, info, lastAgentText, attachmentsList);
                 // Rejection-recovery lives on the runner (ResumeWithFallbackAsync)
                 // so the per-job and global-chat orchestrator paths cannot drift
                 // apart again - see docs/code-patterns.md "orchestrator-resume-with-fallback".
@@ -3154,36 +3156,28 @@ public class ProjectRunner
     /// context lives in an image.
     /// </para>
     /// </summary>
-    internal static string BuildOrchestratorResumePrompt(TaskInfo info, string lastAgentText, string attachmentsList)
+    internal static string BuildOrchestratorResumePrompt(RuntimePromptService prompts, TaskInfo info, string lastAgentText, string attachmentsList)
     {
         var attachmentsBlock = AttachmentsHasFiles(attachmentsList)
-            ? $"\n\nAttachments on this task (read with your Read tool if relevant - the agent's question often hinges on these):\n{attachmentsList}"
+            ? "\n\n" + prompts.Render(DecisionAttachmentsResumeTemplate, new Dictionary<string, string?>
+              { ["attachments_list"] = attachmentsList }).TrimEnd('\r', '\n')
             : string.Empty;
-        return
-            $"NEEDS_INPUT decision request for task \"{info.Title}\" (id: {info.Id})." +
-            attachmentsBlock +
-            "\n\nThe agent's last message you need to answer:\n" +
-            lastAgentText +
-            "\n\nYou have three reply shapes:\n" +
-            "1) REPLY (default): plain text, the user-style follow-up to send back to the agent.\n" +
-            "2) STEER: when you cannot decide alone but a small piece of evidence (a screenshot, a choice between options, a link to a doc) would unblock. Use this format exactly:\n" +
-            "STEER\n" +
-            "Need: <one-sentence specific ask>\n" +
-            "Why: <one-sentence reasoning>\n" +
-            "Options: (optional)\n" +
-            "  A) ...\n" +
-            "  B) ...\n" +
-            "Prefer STEER over BLOCK whenever a screenshot or a choice would unblock the run.\n" +
-            "3) BLOCK (last resort): reply with exactly BLOCK only when you have no idea what is going on and cannot even formulate a steering message.\n\n" +
-            "Reply now. No markdown headings other than the STEER block above.";
+        return prompts.Render(DecisionResumeTemplate, new Dictionary<string, string?>
+        {
+            ["task_title"] = info.Title,
+            ["task_id"] = info.Id,
+            ["attachments_block"] = attachmentsBlock,
+            ["last_agent_text"] = lastAgentText,
+        }).TrimEnd('\r', '\n');
     }
 
     /// <summary>
-    /// Build the prompt the orchestrator's one-shot Claude call sees. Kept
-    /// here instead of in a runtime template file because the framing is
-    /// load-bearing for the decision contract: the orchestrator must know
-    /// it can return BLOCK to defer, and must reply in the user's voice
-    /// not the orchestrator's.
+    /// Build the prompt the orchestrator's one-shot Claude call sees. The
+    /// framing is load-bearing for the decision contract: the orchestrator
+    /// must know it can return BLOCK to defer, and must reply in the user's
+    /// voice not the orchestrator's. The text lives in the runtime prompt
+    /// registry (orchestrator-decision-oneshot.md) so it can be inspected and
+    /// overridden per project; code only fills the named slots.
     /// <para>
     /// Attachments: when the user attached files to the task (typically a
     /// screenshot that the agent's question hinges on), we list the
@@ -3192,40 +3186,20 @@ public class ProjectRunner
     /// context lives in an image.
     /// </para>
     /// </summary>
-    internal static string BuildOrchestratorPrompt(TaskInfo info, string promptText, string lastAgentText, string attachmentsList)
+    internal static string BuildOrchestratorPrompt(RuntimePromptService prompts, TaskInfo info, string promptText, string lastAgentText, string attachmentsList)
     {
         var attachmentsBlock = AttachmentsHasFiles(attachmentsList)
-            ? $"\n\nAttachments on this task (read with your Read tool if the agent's question hinges on them - e.g. a screenshot the agent referenced):\n{attachmentsList}"
+            ? "\n\n" + prompts.Render(DecisionAttachmentsOneshotTemplate, new Dictionary<string, string?>
+              { ["attachments_list"] = attachmentsList }).TrimEnd('\r', '\n')
             : string.Empty;
-        return
-            "You are the project orchestrator for Agent Software Studio. " +
-            "The user has set this project to auto mode and stepped away. " +
-            "The active task agent just asked for input and is waiting. " +
-            "Your job: decide what the user would have replied, in one short paragraph, in the user's voice. " +
-            "The reply will be sent back to the agent as a Continue follow-up.\n\n" +
-            $"Project: {info.ProjectName}\n" +
-            $"Task: {info.Title}\n\n" +
-            "Original task description:\n" +
-            (string.IsNullOrWhiteSpace(promptText) ? "(empty)" : promptText) +
-            attachmentsBlock +
-            "\n\nThe agent's last message you need to answer:\n" +
-            lastAgentText +
-            "\n\nReasoning style:\n" +
-            "- If the agent's question has an obvious right answer in context, give it directly (REPLY).\n" +
-            "- If the question is ambiguous and multiple paths are reasonable, pick the simpler path and say why in one short sentence (REPLY).\n" +
-            "- Before deferring, check whether reading an attached file (e.g. a screenshot) would resolve the ambiguity; if yes, read it and decide.\n" +
-            "- When you cannot decide alone but a small piece of evidence would unblock the user, prefer STEER over BLOCK. STEER is a productive escalation: a one-sentence ask, a one-sentence reason, optionally a small set of labelled options.\n" +
-            "- BLOCK is the last resort, only when you cannot even formulate a steering message.\n\n" +
-            "Reply shapes:\n" +
-            "1) REPLY (default): plain text, the user-style follow-up directly. Do not preface with \"I would say\" or similar. No markdown headings.\n" +
-            "2) STEER: use exactly this format:\n" +
-            "STEER\n" +
-            "Need: <one-sentence specific ask, e.g. \"screenshot of the affected column\" or \"pick option A vs B\">\n" +
-            "Why: <one-sentence reasoning>\n" +
-            "Options: (optional)\n" +
-            "  A) ...\n" +
-            "  B) ...\n" +
-            "3) BLOCK: reply with exactly the single word BLOCK on its own.";
+        return prompts.Render(DecisionOneshotTemplate, new Dictionary<string, string?>
+        {
+            ["project_name"] = info.ProjectName,
+            ["task_title"] = info.Title,
+            ["task_description"] = string.IsNullOrWhiteSpace(promptText) ? "(empty)" : promptText,
+            ["attachments_block"] = attachmentsBlock,
+            ["last_agent_text"] = lastAgentText,
+        }).TrimEnd('\r', '\n');
     }
 
     private static bool AttachmentsHasFiles(string attachmentsList)

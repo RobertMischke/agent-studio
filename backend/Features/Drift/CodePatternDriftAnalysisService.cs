@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentStudio.Drift;
 
@@ -38,15 +39,25 @@ public sealed class CodePatternDriftAnalysisService
     /// <summary>Topic slug used to label the report on bus + on disk.</summary>
     public const string Topic = "code-pattern-drift";
 
+    /// <summary>Runtime prompt template that frames the Phase-2 LLM verdict.</summary>
+    public const string ReviewTemplate = "code-pattern-drift-review.md";
+
+    /// <summary>Conditional sub-block listing the canonical reference sites.</summary>
+    public const string CanonicalSitesTemplate = "code-pattern-drift-canonical-sites.md";
+
     private readonly ILogger<CodePatternDriftAnalysisService> _logger;
     private readonly IReadOnlyList<CodePatternRule> _rules;
+    private readonly RuntimePromptService _prompts;
 
     public CodePatternDriftAnalysisService(
         ILogger<CodePatternDriftAnalysisService> logger,
-        IReadOnlyList<CodePatternRule>? rules = null)
+        IReadOnlyList<CodePatternRule>? rules = null,
+        RuntimePromptService? prompts = null)
     {
         _logger = logger;
         _rules = rules ?? DefaultRules;
+        _prompts = prompts ?? new RuntimePromptService(
+            new ConfigurationBuilder().Build(), NullLogger<RuntimePromptService>.Instance);
     }
 
     /// <summary>
@@ -375,30 +386,27 @@ public sealed class CodePatternDriftAnalysisService
 
     private string BuildLlmPrompt(CodePatternFinding finding, string repoRoot)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("You are reviewing a code-pattern drift finding.");
-        sb.AppendLine();
-        sb.AppendLine($"Pattern: {finding.Title}");
-        sb.AppendLine($"Canonical description: {finding.CanonicalDescription}");
-        sb.AppendLine();
-
         var drifters = finding.Hits.Where(h => h.IsDrift).Take(5).ToList();
         var canonicals = finding.Hits.Where(h => !h.IsDrift).Take(2).ToList();
 
-        if (canonicals.Count > 0)
+        var canonicalBlock = canonicals.Count > 0
+            ? _prompts.Render(CanonicalSitesTemplate, new Dictionary<string, string?>
+              {
+                  ["canonical_sites"] = FormatSites(canonicals),
+              })
+            : string.Empty;
+
+        return _prompts.Render(ReviewTemplate, new Dictionary<string, string?>
         {
-            sb.AppendLine("Canonical sites (use as reference):");
-            foreach (var c in canonicals) sb.AppendLine($"- {c.FilePath}:{c.LineNumber}  →  {c.Snippet}");
-            sb.AppendLine();
-        }
-        sb.AppendLine("Sites flagged as drift:");
-        foreach (var d in drifters) sb.AppendLine($"- {d.FilePath}:{d.LineNumber}  →  {d.Snippet}");
-        sb.AppendLine();
-        sb.AppendLine("Decide whether the drift detector got it right. Answer in one short paragraph (under 80 words).");
-        sb.AppendLine("End with exactly one sentinel on its own line:");
-        sb.AppendLine("[[VERDICT: status=<real-drift|false-positive|unclear>; reasoning=<one-line>]]");
-        return sb.ToString();
+            ["pattern_title"] = finding.Title,
+            ["canonical_description"] = finding.CanonicalDescription,
+            ["canonical_sites_block"] = canonicalBlock,
+            ["drift_sites"] = FormatSites(drifters),
+        });
     }
+
+    private static string FormatSites(IEnumerable<CodePatternHit> hits) =>
+        string.Join("\n", hits.Select(h => $"- {h.FilePath}:{h.LineNumber}  →  {h.Snippet}"));
 
     private static readonly Regex LlmVerdictRegex = new(
         @"\[\[VERDICT:\s*(?<body>[^\]]+)\]\]",
