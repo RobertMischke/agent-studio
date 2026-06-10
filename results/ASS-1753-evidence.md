@@ -137,3 +137,15 @@ Production:
 
 Tests:
 - `backend.Tests/RunnerSlotWiringTests.cs`, `ProjectRunnerModeTests.cs`, `ProjectSettingsServiceTests.cs`, `TaskRunActivityClassifierTests.cs`
+
+## Re-verification (reissue run, 2026-06-10)
+
+Completion-gate flagged the prior run for only *announcing* a build. Re-ran the
+green-gate to confirm the committed work (05e2bb18) actually compiles and passes:
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| Backend build | `dotnet build backend/OrchestratorApi.csproj` | **0 errors** (4 pre-existing warnings) |
+| Test project build | `dotnet build backend.Tests/OrchestratorApi.Tests.csproj` | **0 errors** |
+| Update-service build | `dotnet build update-service/UpdateService.csproj` | **0 errors / 0 warnings** |
+| Targeted regression tests | `dotnet test --filter "RunnerSlotWiringTests\|ProjectSettingsServiceTests\|ProjectRunnerModeTests\|TaskRunActivityClassifierTests"` | **80 passed / 0 failed** |
