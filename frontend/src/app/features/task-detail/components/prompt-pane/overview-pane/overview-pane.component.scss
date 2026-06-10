@@ -1317,19 +1317,26 @@
 // stay legible. OK / fail counts source the central semantic success / error
 // tokens so the colour vocabulary matches the rest of the studio. Older runs
 // fold behind a "+N older" toggle so the strip never overflows at 10+ runs.
-.ov-runs-switcher {
+// Runs chip strip (ASS-1735): one line by default. The current run is written
+// out as an accent pill (status dot + number + Current badge + OK/fail +
+// duration); prior runs are compact mini chips docked to the right. The strip
+// stays nowrap while collapsed; expanding wraps the chip row onto more lines
+// rather than reverting to a card grid.
+.ov-runs-strip {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  flex-wrap: nowrap;
   gap: var(--studio-spacing-2);
   margin: var(--studio-spacing-1) 0 var(--studio-spacing-3);
+  min-width: 0;
 
-  &__head {
-    display: flex;
-    align-items: baseline;
-    gap: var(--studio-spacing-2);
+  &--expanded {
+    flex-wrap: wrap;
+    align-items: flex-start;
   }
 
   &__label {
+    flex: 0 0 auto;
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
@@ -1337,28 +1344,119 @@
     color: var(--studio-fg-dim);
   }
 
-  &__total {
+  // The current / latest run, written out. Primary anchor: accent surface and
+  // stronger text so it always wins the hierarchy over history. One unbroken
+  // line.
+  &__current {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--studio-spacing-2);
+    flex: 0 1 auto;
+    min-width: 0;
+    padding: var(--studio-spacing-1) var(--studio-spacing-3);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--studio-accent) 12%, var(--studio-surface));
+    border: 1px solid color-mix(in srgb, var(--studio-accent) 42%, var(--studio-border-strong));
+    color: var(--studio-fg-strong);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+
+    &:hover {
+      border-color: color-mix(in srgb, var(--studio-accent) 60%, var(--studio-border-strong));
+    }
+
+    &:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--studio-accent) 60%, transparent);
+      outline-offset: 1px;
+    }
+
+    // The actively-inspected run (whose steps populate the table below) gets a
+    // ring so selection reads distinctly from "current".
+    &--active {
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--studio-accent) 50%, transparent);
+    }
+  }
+
+  &__dot {
+    font-size: 9px;
+    line-height: 1;
+    color: var(--studio-fg-dim);
+
+    &[data-kind='pass'] { color: var(--studio-success); }
+    &[data-kind='fail'] { color: var(--studio-error); }
+  }
+
+  &__num {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  &__current-badge {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: var(--studio-spacing-1) var(--studio-spacing-2);
+    border-radius: 999px;
+    color: var(--studio-accent-strong);
+    background: color-mix(in srgb, var(--studio-accent) 18%, transparent);
+  }
+
+  &__sep {
+    color: var(--studio-fg-dim);
     font-size: 10px;
   }
 
-  &__list {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: stretch;
+  &__outcome {
+    display: inline-flex;
+    align-items: center;
     gap: var(--studio-spacing-2);
+    font-size: 11px;
+    font-weight: 600;
   }
 
-  &__run {
+  &__pass { color: var(--studio-success); }
+  &__fail { color: var(--studio-error); }
+
+  &__pending {
+    color: var(--studio-fg-dim);
+    font-style: italic;
+  }
+
+  &__duration {
+    font-size: 11px;
+    color: var(--studio-fg-dim);
+  }
+
+  // History chips, docked to the right of the current run. Nowrap while
+  // collapsed (one line); wraps when the strip is expanded.
+  &__chips {
     display: inline-flex;
-    flex-direction: column;
+    align-items: center;
+    flex-wrap: nowrap;
     gap: var(--studio-spacing-1);
-    min-width: 92px;
-    padding: var(--studio-spacing-2) var(--studio-spacing-3);
-    border-radius: 10px;
+    margin-left: auto;
+    min-width: 0;
+  }
+
+  &--expanded &__chips {
+    flex-wrap: wrap;
+    margin-left: var(--studio-spacing-2);
+  }
+
+  &__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--studio-spacing-1);
+    flex: 0 0 auto;
+    padding: var(--studio-spacing-1) var(--studio-spacing-2);
+    border-radius: 999px;
     background: var(--studio-surface-muted);
     border: 1px solid var(--studio-border-muted);
     color: var(--studio-fg-dim);
-    text-align: left;
+    font-size: 11px;
+    line-height: 1.2;
     cursor: pointer;
     transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 
@@ -1372,26 +1470,12 @@
       outline-offset: 1px;
     }
 
-    // History run that failed: a faint red edge flags a bad older attempt at a
+    // A failed older run gets a faint red edge so a bad attempt reads at a
     // glance without shouting over the current run.
-    &--failed {
+    &[data-kind='fail'] {
       border-color: color-mix(in srgb, var(--studio-error) 34%, var(--studio-border-muted));
     }
 
-    // The current / final run is the primary anchor: brand accent surface and
-    // stronger text so it always wins the hierarchy over history.
-    &--current {
-      color: var(--studio-fg-strong);
-      background: color-mix(in srgb, var(--studio-accent) 12%, var(--studio-surface));
-      border-color: color-mix(in srgb, var(--studio-accent) 42%, var(--studio-border-strong));
-
-      &:hover {
-        border-color: color-mix(in srgb, var(--studio-accent) 60%, var(--studio-border-strong));
-      }
-    }
-
-    // The actively-inspected run (whose steps populate the table below) gets a
-    // ring so selection reads distinctly from "current".
     &--active {
       color: var(--studio-fg-strong);
       border-color: color-mix(in srgb, var(--studio-accent) 55%, var(--studio-border-strong));
@@ -1399,68 +1483,28 @@
     }
   }
 
-  &__run-top {
-    display: flex;
-    align-items: center;
-    gap: var(--studio-spacing-2);
-  }
-
-  &__run-name {
-    font-size: 12px;
+  &__chip-num {
     font-weight: 600;
     color: inherit;
   }
 
-  &__current {
-    font-size: 9px;
+  &__chip-glyph {
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: var(--studio-spacing-1) var(--studio-spacing-2);
-    border-radius: 999px;
-    color: var(--studio-accent-strong);
-    background: color-mix(in srgb, var(--studio-accent) 18%, transparent);
   }
 
-  &__run-meta {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--studio-spacing-1);
-    font-size: 10px;
-  }
+  &__chip[data-kind='pass'] &__chip-glyph { color: var(--studio-success); }
+  &__chip[data-kind='fail'] &__chip-glyph { color: var(--studio-error); }
 
-  &__outcome {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--studio-spacing-1);
-    font-size: 10px;
-    font-weight: 600;
-  }
-
-  &__pass {
-    color: var(--studio-success);
-  }
-
-  &__fail {
-    color: var(--studio-error);
-  }
-
-  &__pending {
+  &__ellipsis {
+    flex: 0 0 auto;
     color: var(--studio-fg-dim);
-    font-style: italic;
-  }
-
-  &__time,
-  &__duration,
-  &__sep {
-    font-size: 10px;
+    font-size: 11px;
   }
 
   &__more {
-    align-self: center;
-    min-height: 28px;
-    padding: var(--studio-spacing-1) var(--studio-spacing-3);
+    flex: 0 0 auto;
+    min-height: 24px;
+    padding: var(--studio-spacing-1) var(--studio-spacing-2);
     border-radius: 999px;
     background: transparent;
     border: 1px dashed var(--studio-border-strong);

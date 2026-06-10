@@ -27,10 +27,8 @@ import type {
   PipelineCostSummary,
   PipelineStepCost,
   PipelineStep,
-  PipelineStepExecution,
   PipelineStepStatus,
   PipelineModelUsageSummary,
-  PipelineRunTokenUsage,
   StepKind,
   StepRunMode,
 } from '../../../../task-pipeline';
@@ -200,30 +198,25 @@ interface TokenBreakdownRowVm {
 }
 
 /**
- * One row in the "Previous runs" strip below the pipeline steps. A restart
- * archives the prior run's record; this is the compact summary the operator
- * scans to tell an old run apart from the current one.
+ * One run in the Runs chip strip. The current run is written out (number,
+ * status dot, OK/fail counter, duration); prior runs render as compact
+ * clickable mini chips, newest first. Per-run tokens / cost live in the
+ * dedicated tokens-by-model section, so the strip only needs the at-a-glance
+ * outcome and timing.
  */
 interface PipelineRunOptionVm {
   attempt: number;
   current: boolean;
   startedAt: string | null;
-  completedAt: string | null;
   durationMs: number;
   passed: number;
   failed: number;
-  /**
-   * Total tokens recorded for this run, joined from the per-run usage rollup
-   * with a fall back to summing the run's step tokens for older archives that
-   * predate the rollup. 0 when nothing was recorded.
-   */
-  totalTokens: number;
-  /** API-price estimate for this run; only meaningful when {@link costKnown}. */
-  totalCostUsd: number;
-  /** False when no priced usage row exists (older run or unpriced model). */
-  costKnown: boolean;
-  /** Structured tooltip: duration, tokens, cost, verdict, per-step outcomes. */
-  tooltip: StructuredTooltip | null;
+  /** Text result glyph for the mini chip: '✓' clean, '✗' had failures, '·' nothing ran. */
+  glyph: string;
+  /** Outcome class driving the chip / status-dot colour. */
+  kind: 'pass' | 'fail' | 'pending';
+  /** Compact hover summary: "N OK M fail · 3m34s · 6h ago". */
+  tooltip: StructuredTooltip;
 }
 
 /** Short unique id for a seeded create-modal attachment (mirrors the dialog's own). */
@@ -1461,49 +1454,52 @@ export class OverviewPaneComponent {
   );
 
   /**
-   * Compact summaries for the run switcher. The current run stays first, then
-   * prior runs follow most-recent first so an operator can swap the step table
-   * between attempts after a restart. Per-run tokens and cost are joined from
-   * the per-run usage rollup so the hover card can surface them without
-   * overloading the inline pill.
+   * Compact summaries for the Runs chip strip. The current run stays first,
+   * then prior runs follow most-recent first so an operator can swap the step
+   * table between attempts after a restart.
    */
   readonly pipelineRunOptions = computed<PipelineRunOptionVm[]>(() => {
     const current = this.pipelineExecution();
     if (current == null) return [];
-    const usageByAttempt = new Map<number, PipelineRunTokenUsage>();
-    for (const run of this.pipelineTokenUsage()?.runs ?? []) {
-      usageByAttempt.set(run.attempt, run);
-    }
     return [
-      this.toPipelineRunOptionVm(current, true, usageByAttempt),
-      ...(current.previousAttempts ?? []).map(rec => this.toPipelineRunOptionVm(rec, false, usageByAttempt)),
+      this.toPipelineRunOptionVm(current, true),
+      ...(current.previousAttempts ?? []).map(rec => this.toPipelineRunOptionVm(rec, false)),
     ];
   });
 
-  /**
-   * Default number of run pills the switcher renders before the older runs
-   * fold behind a "+N older" toggle. Keeps the Overview from overflowing once a
-   * heavily re-issued task accrues many runs while still showing the current
-   * run plus recent history at a glance.
-   */
-  private static readonly RUN_SWITCHER_COLLAPSED_LIMIT = 6;
+  /** The current / latest run, written out at the head of the chip strip. */
+  readonly currentRunOption = computed<PipelineRunOptionVm | null>(
+    () => this.pipelineRunOptions()[0] ?? null,
+  );
 
-  /** Whether the switcher is showing every run vs the collapsed recent window. */
-  readonly runSwitcherExpanded = signal(false);
-
-  readonly runSwitcherLimit = computed<number>(
-    () => OverviewPaneComponent.RUN_SWITCHER_COLLAPSED_LIMIT,
+  /** Prior runs, newest first, rendered as compact clickable mini chips. */
+  readonly historyRunOptions = computed<PipelineRunOptionVm[]>(
+    () => this.pipelineRunOptions().slice(1),
   );
 
   /**
-   * Run pills to render. Collapsed by default to the most recent
-   * {@link RUN_SWITCHER_COLLAPSED_LIMIT} runs (the current run is always index
-   * 0, so it is never hidden); the rest fold behind the "+N older" toggle. The
-   * actively-inspected run is kept visible even past the window so collapsing
-   * never hides the run whose steps are shown below.
+   * Default number of history chips the strip renders before older runs fold
+   * behind a "+N more" toggle. Keeps the strip to a single line even on a
+   * heavily re-issued task; expanding wraps the full chip row rather than
+   * reverting to a card grid.
    */
-  readonly visibleRunOptions = computed<PipelineRunOptionVm[]>(() => {
-    const all = this.pipelineRunOptions();
+  private static readonly RUN_HISTORY_COLLAPSED_LIMIT = 8;
+
+  /** Whether the strip is showing every history chip vs the collapsed window. */
+  readonly runSwitcherExpanded = signal(false);
+
+  readonly runSwitcherLimit = computed<number>(
+    () => OverviewPaneComponent.RUN_HISTORY_COLLAPSED_LIMIT,
+  );
+
+  /**
+   * History chips to render. Collapsed by default to the most recent
+   * {@link RUN_HISTORY_COLLAPSED_LIMIT}; the rest fold behind the "+N more"
+   * toggle. The actively-inspected run is kept visible even past the window so
+   * collapsing never hides the run whose steps populate the table below.
+   */
+  readonly visibleHistoryChips = computed<PipelineRunOptionVm[]>(() => {
+    const all = this.historyRunOptions();
     const limit = this.runSwitcherLimit();
     if (this.runSwitcherExpanded() || all.length <= limit) return all;
     const head = all.slice(0, limit);
@@ -1515,50 +1511,35 @@ export class OverviewPaneComponent {
     return head;
   });
 
-  /** Count of runs hidden by the collapse window (0 when expanded or short). */
+  /** Count of history chips hidden by the collapse window (0 when expanded). */
   readonly hiddenRunCount = computed<number>(() => {
     if (this.runSwitcherExpanded()) return 0;
-    return Math.max(0, this.pipelineRunOptions().length - this.runSwitcherLimit());
+    return Math.max(0, this.historyRunOptions().length - this.runSwitcherLimit());
   });
 
   toggleRunSwitcher(): void {
     this.runSwitcherExpanded.update(v => !v);
   }
 
-  private toPipelineRunOptionVm(
-    rec: PipelineExecutionRecord,
-    current: boolean,
-    usageByAttempt: Map<number, PipelineRunTokenUsage>,
-  ): PipelineRunOptionVm {
+  private toPipelineRunOptionVm(rec: PipelineExecutionRecord, current: boolean): PipelineRunOptionVm {
     const steps = rec.steps ?? [];
     const passed = steps.filter(s => s.status === 'passed').length;
     const failed = steps.filter(s => s.status === 'failed').length;
     const durationMs = this.recordDurationMs(rec);
     const attempt = rec.attempt ?? 1;
-    const usage = usageByAttempt.get(attempt) ?? null;
-    // Older archives predate the per-run usage rollup, so fall back to summing
-    // the run's own step token fields to still show a token figure on hover.
-    const stepTokens = steps.reduce(
-      (sum, s) =>
-        sum + (s.inputTokens ?? 0) + (s.outputTokens ?? 0) +
-        (s.cacheReadTokens ?? 0) + (s.cacheCreationTokens ?? 0),
-      0,
-    );
-    const totalTokens = usage?.totalTokens ?? stepTokens;
-    const totalCostUsd = usage?.totalCostUsd ?? 0;
-    const costKnown = usage != null && !usage.anyModelUnknown;
+    const startedAt = rec.startedAt ?? null;
+    const kind: PipelineRunOptionVm['kind'] = failed > 0 ? 'fail' : passed > 0 ? 'pass' : 'pending';
+    const glyph = kind === 'fail' ? '✗' : kind === 'pass' ? '✓' : '·';
     return {
       attempt,
       current,
-      startedAt: rec.startedAt ?? null,
-      completedAt: rec.completedAt ?? null,
+      startedAt,
       durationMs,
       passed,
       failed,
-      totalTokens,
-      totalCostUsd,
-      costKnown,
-      tooltip: this.buildPreviousRunTooltip(rec, current, steps, durationMs, totalTokens, totalCostUsd, costKnown),
+      glyph,
+      kind,
+      tooltip: this.buildRunChipTooltip(attempt, current, passed, failed, durationMs, startedAt),
     };
   }
 
@@ -1571,40 +1552,28 @@ export class OverviewPaneComponent {
     return Math.max(0, end - start);
   }
 
-  private buildPreviousRunTooltip(
-    rec: PipelineExecutionRecord,
+  /**
+   * Terse hover summary for a run (chip or the written-out current run):
+   * "N OK M fail · 3m34s · 6h ago". Per-run token / cost detail lives in the
+   * tokens-by-model section, so this stays a single at-a-glance line.
+   */
+  private buildRunChipTooltip(
+    attempt: number,
     current: boolean,
-    steps: PipelineStepExecution[],
+    passed: number,
+    failed: number,
     durationMs: number,
-    totalTokens: number,
-    totalCostUsd: number,
-    costKnown: boolean,
-  ): StructuredTooltip | null {
-    const lines: string[] = [];
-    if (rec.startedAt) lines.push(`Started: ${this.formatAbsoluteTime(rec.startedAt)}`);
-    if (durationMs > 0) lines.push(`Duration: ${this.formatStepDuration(durationMs)}`);
-    if (totalTokens > 0) {
-      lines.push(`Tokens: ${this.formatTokens(totalTokens)}`);
-      lines.push(costKnown ? `Cost (API est.): ${this.formatCost(totalCostUsd)}` : 'Cost (API est.): n/a');
-    }
-    const passed = steps.filter(s => s.status === 'passed').length;
-    const failed = steps.filter(s => s.status === 'failed').length;
-    if (passed > 0 || failed > 0) {
-      lines.push(`Verdict: ${passed} passed${failed > 0 ? `, ${failed} failed` : ''}`);
-    }
-    const ran = steps.filter(s =>
-      s.status === 'passed' || s.status === 'failed' || s.status === 'skipped',
-    );
-    if (ran.length > 0) {
-      lines.push('');
-      for (const s of ran) {
-        lines.push(`${this.stepStatusIcon(s.status)} ${s.stepId}`);
-      }
-    }
-    if (lines.length === 0) return null;
+    startedAt: string | null,
+  ): StructuredTooltip {
+    const outcome: string[] = [];
+    if (passed > 0) outcome.push(`${passed} OK`);
+    if (failed > 0) outcome.push(`${failed} fail`);
+    const parts: string[] = [outcome.length > 0 ? outcome.join(' ') : 'pending'];
+    if (durationMs > 0) parts.push(this.formatStepDuration(durationMs));
+    if (startedAt) parts.push(this.formatRelativeTime(startedAt));
     return {
-      title: `Run #${rec.attempt ?? 1}${current ? ' · current' : ''}`,
-      body: lines.join('\n'),
+      title: `Run #${attempt}${current ? ' · Current' : ''}`,
+      body: parts.join(' · '),
     };
   }
 

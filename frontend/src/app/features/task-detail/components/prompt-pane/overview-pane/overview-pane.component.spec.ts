@@ -528,7 +528,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.selectedPipelineIsCurrent()).toBe(true);
   });
 
-  it('run switcher: collapses to a recent window past the limit and expands on demand (ASS-1705)', async () => {
+  it('runs chip strip: collapses history past 8 chips behind a "+N more" toggle and expands by wrapping (ASS-1735)', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     const pipe = agentPipeline('claude-opus-4-8');
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -553,7 +553,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     });
     pipe.execution = {
       ...pipe.execution!,
-      attempt: 10,
+      attempt: 13,
       startedAt: '2026-06-10T10:00:00.000Z',
       completedAt: null,
       steps: [
@@ -563,56 +563,81 @@ describe('OverviewPaneComponent (smoke)', () => {
           inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
         },
       ],
-      previousAttempts: [9, 8, 7, 6, 5, 4, 3, 2, 1].map(archivedAttempt),
+      // Newest-first: 12 archived runs (12 .. 1) trail the current run #13.
+      previousAttempts: [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(archivedAttempt),
     };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
     try { fixture.detectChanges(); } catch { /* ignore */ }
 
     const c = fixture.componentInstance;
-    expect(c.pipelineRunOptions().length).toBe(10);
-    expect(c.runSwitcherLimit()).toBe(6);
-    expect(c.visibleRunOptions().length).toBe(6);
+    expect(c.pipelineRunOptions().length).toBe(13);
+    expect(c.runSwitcherLimit()).toBe(8);
+    // Current run is written out; 12 prior runs collapse to the most-recent 8.
+    expect(c.historyRunOptions().length).toBe(12);
+    expect(c.visibleHistoryChips().length).toBe(8);
     expect(c.hiddenRunCount()).toBe(4);
-    // Current/final run is always the first, visible, primary anchor.
-    expect(c.visibleRunOptions()[0].attempt).toBe(10);
-    expect(c.visibleRunOptions()[0].current).toBe(true);
+    expect(c.visibleHistoryChips().map(r => r.attempt)).toEqual([12, 11, 10, 9, 8, 7, 6, 5]);
 
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelectorAll('[data-testid="overview-pipeline-run-option"]').length).toBe(6);
+    // One line: written-out current (1) + 8 collapsed chips = 9 run-options.
+    expect(host.querySelectorAll('[data-testid="overview-pipeline-run-option"]').length).toBe(9);
     const more = host.querySelector<HTMLButtonElement>('[data-testid="overview-pipeline-run-more"]');
     expect(more).not.toBeNull();
-    expect(more!.textContent?.trim()).toBe('+4 older');
+    expect(more!.textContent?.trim()).toBe('+4 more');
 
     more!.click();
     try { fixture.detectChanges(); } catch { /* ignore */ }
     expect(c.runSwitcherExpanded()).toBe(true);
     expect(c.hiddenRunCount()).toBe(0);
-    expect(host.querySelectorAll('[data-testid="overview-pipeline-run-option"]').length).toBe(10);
+    // Expanded: every run is a clickable option (wrapping, never a card grid).
+    expect(host.querySelectorAll('[data-testid="overview-pipeline-run-option"]').length).toBe(13);
     expect(host.querySelector('[data-testid="overview-pipeline-run-more"]')).toBeNull();
     expect(host.querySelector('[data-testid="overview-pipeline-run-less"]')).not.toBeNull();
 
     host.querySelector<HTMLButtonElement>('[data-testid="overview-pipeline-run-less"]')!.click();
     try { fixture.detectChanges(); } catch { /* ignore */ }
     expect(c.runSwitcherExpanded()).toBe(false);
-    expect(host.querySelectorAll('[data-testid="overview-pipeline-run-option"]').length).toBe(6);
+    expect(host.querySelectorAll('[data-testid="overview-pipeline-run-option"]').length).toBe(9);
   });
 
-  it('run switcher: per-run tokens + cost join from the usage rollup, with a step-sum fallback (ASS-1705)', async () => {
+  it('runs chip strip: current run is written out; history reads as newest-first mini chips with result glyphs and a terse tooltip (ASS-1735)', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     const pipe = agentPipeline('claude-opus-4-8');
     pipe.execution = {
       ...pipe.execution!,
-      attempt: 2,
-      startedAt: '2026-06-09T09:00:00.000Z',
-      completedAt: null,
+      attempt: 3,
+      startedAt: '2026-06-10T10:00:00.000Z',
+      completedAt: '2026-06-10T10:02:00.000Z',
       steps: [
         {
-          stepId: 'core-agent-run', kind: 'core', model: 'claude-opus-4-8', status: 'running',
-          startedAt: '2026-06-09T09:00:00.000Z', completedAt: null, durationMs: 0,
+          stepId: 'core-agent-run', kind: 'core', model: 'claude-opus-4-8', status: 'passed',
+          startedAt: '2026-06-10T10:00:00.000Z', completedAt: '2026-06-10T10:01:00.000Z', durationMs: 60_000,
+          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+        },
+        {
+          stepId: 'aspect-code-quality', kind: 'aspect', model: 'claude-haiku-4-5', status: 'passed',
+          startedAt: '2026-06-10T10:01:00.000Z', completedAt: '2026-06-10T10:02:00.000Z', durationMs: 60_000,
           inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
         },
       ],
       previousAttempts: [
+        {
+          pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+          attempt: 2, startedAt: '2026-06-09T09:00:00.000Z', completedAt: '2026-06-09T09:03:34.000Z',
+          previousAttempts: [],
+          steps: [
+            {
+              stepId: 'core-agent-run', kind: 'core', model: 'claude-opus-4-8', status: 'passed',
+              startedAt: '2026-06-09T09:00:00.000Z', completedAt: '2026-06-09T09:01:00.000Z', durationMs: 60_000,
+              inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+            },
+            {
+              stepId: 'aspect-code-quality', kind: 'aspect', model: 'claude-haiku-4-5', status: 'failed',
+              startedAt: '2026-06-09T09:01:00.000Z', completedAt: '2026-06-09T09:03:34.000Z', durationMs: 154_000,
+              inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'concerns',
+            },
+          ],
+        },
         {
           pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
           attempt: 1, startedAt: '2026-06-08T08:00:00.000Z', completedAt: '2026-06-08T08:03:00.000Z',
@@ -620,47 +645,75 @@ describe('OverviewPaneComponent (smoke)', () => {
           steps: [
             {
               stepId: 'core-agent-run', kind: 'core', model: 'claude-opus-4-8', status: 'passed',
-              startedAt: '2026-06-08T08:00:00.000Z', completedAt: '2026-06-08T08:03:00.000Z',
-              durationMs: 180_000, inputTokens: 10, outputTokens: 20, cacheReadTokens: 0, cacheCreationTokens: 0,
+              startedAt: '2026-06-08T08:00:00.000Z', completedAt: '2026-06-08T08:03:00.000Z', durationMs: 180_000,
+              inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
             },
           ],
         },
       ],
     };
-    // Usage rollup carries a priced row for the current run only; the archived
-    // run has no rollup row and must fall back to summing its step tokens.
-    pipe.tokensByModel = {
-      runs: [
-        {
-          attempt: 2, current: true, startedAt: '2026-06-09T09:00:00.000Z', completedAt: null,
-          models: [], totalTokens: 5_000, totalCostUsd: 0.42, anyModelUnknown: false,
-        },
-      ],
-      totalByModel: [],
-      totalTokens: 5_000,
-      totalCostUsd: 0.42,
-      anyModelUnknown: false,
-    };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
     try { fixture.detectChanges(); } catch { /* ignore */ }
 
     const c = fixture.componentInstance;
-    const opts = c.pipelineRunOptions();
-    const cur = opts.find(o => o.attempt === 2)!;
-    const prev = opts.find(o => o.attempt === 1)!;
+    // Current run first, prior runs newest-first.
+    expect(c.pipelineRunOptions().map(o => o.attempt)).toEqual([3, 2, 1]);
+    expect(c.historyRunOptions().map(o => o.attempt)).toEqual([2, 1]);
 
-    expect(cur.totalTokens).toBe(5_000);
-    expect(cur.totalCostUsd).toBeCloseTo(0.42);
-    expect(cur.costKnown).toBe(true);
-    expect(cur.tooltip?.body).toContain('Tokens:');
-    expect(cur.tooltip?.body).toContain('Cost (API est.):');
+    const cur = c.currentRunOption()!;
+    expect(cur.attempt).toBe(3);
+    expect(cur.current).toBe(true);
+    expect(cur.passed).toBe(2);
+    expect(cur.failed).toBe(0);
 
-    // Fallback path: step-token sum (10 + 20), cost unknown -> "n/a".
-    expect(prev.totalTokens).toBe(30);
-    expect(prev.costKnown).toBe(false);
-    expect(prev.totalCostUsd).toBe(0);
-    expect(prev.tooltip?.body).toContain('Cost (API est.): n/a');
-    expect(prev.tooltip?.body).toContain('Verdict: 1 passed');
+    const [run2, run1] = c.historyRunOptions();
+    // A run with any failure reads as ✗; an all-pass run reads as ✓.
+    expect(run2.kind).toBe('fail');
+    expect(run2.glyph).toBe('✗');
+    expect(run1.kind).toBe('pass');
+    expect(run1.glyph).toBe('✓');
+
+    // Terse hover summary: outcome + duration; no token/cost detail (that lives
+    // in the tokens-by-model section).
+    expect(run2.tooltip.title).toBe('Run #2');
+    expect(run2.tooltip.body).toContain('1 fail');
+    expect(run2.tooltip.body).toContain('3m 34s');
+    expect(run2.tooltip.body).not.toContain('Tokens:');
+    expect(run2.tooltip.body).not.toContain('Cost');
+
+    const host = fixture.nativeElement as HTMLElement;
+    // Current run is written out: dot, number, Current badge, OK counter, duration.
+    const current = host.querySelector<HTMLButtonElement>(
+      '[data-testid="overview-pipeline-run-option"][data-current="true"]',
+    )!;
+    expect(current.getAttribute('data-attempt')).toBe('3');
+    expect(current.querySelector('[data-testid="overview-pipeline-run-current"]')?.textContent?.trim())
+      .toBe('Current');
+    expect(current.textContent).toContain('#3');
+    expect(current.textContent).toContain('2 OK');
+    expect(current.textContent).toContain('2m');
+
+    // History renders as compact chips, newest first, each number + glyph.
+    const chips = Array.from(
+      host.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="overview-pipeline-run-option"]:not([data-current="true"])',
+      ),
+    );
+    expect(chips.map(b => b.getAttribute('data-attempt'))).toEqual(['2', '1']);
+    expect(chips[0].textContent?.replace(/\s+/g, '')).toBe('#2✗');
+    expect(chips[1].textContent?.replace(/\s+/g, '')).toBe('#1✓');
+
+    // The current run is selected by default; clicking a chip swaps the detail.
+    expect(c.selectedPipelineAttemptNumber()).toBe(3);
+    expect(c.selectedPipelineIsCurrent()).toBe(true);
+    chips[0].click();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    expect(c.selectedPipelineAttemptNumber()).toBe(2);
+    expect(c.selectedPipelineIsCurrent()).toBe(false);
+    expect(
+      host.querySelector('[data-testid="overview-pipeline-run-option"][aria-selected="true"]')
+        ?.getAttribute('data-attempt'),
+    ).toBe('2');
   });
 
   it('pipeline block: CORE CLI-footer tokens render with source, API-price tooltip, run count, and SUM footer', async () => {
