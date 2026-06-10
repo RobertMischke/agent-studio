@@ -27,6 +27,14 @@ async function findJobWithOutput(): Promise<{ id: string; watchPath: string } | 
  * because the per-kind filter checkboxes added more friction than value.
  */
 test.describe('Activity log — conversation mode', () => {
+  // This suite exercises the LEGACY activity-log-view's conversation/trace
+  // modes. `Frontend:NextGenChat` is default-ON now and would replace that
+  // host with the next-gen conversation view, so pin the flag off ('0', not
+  // key-removal) to keep the legacy host mounted.
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('atp.flag.nextGenChat', '0'));
+  });
+
   test('conversation mode renders agent / user / tool turns', async ({ page }) => {
     const target = await findJobWithOutput();
     if (!target) {

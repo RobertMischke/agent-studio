@@ -70,8 +70,11 @@ interface EventProbe {
   durablePath?: string;
   expectedKind?: string;
   expectedSchema?: string;
+  explanation?: string;
   fallback?: string;
   failures?: number;
+  label?: string;
+  nextStep?: string;
   families: { edit?: number; read?: number; search?: number };
   files: readonly string[];
   headline?: string;
@@ -234,6 +237,54 @@ describe('projectConversation', () => {
     expect(events).toHaveLength(1);
     expect(events[0].kind).toBe('agent.needsInput');
     expect(probe(events[0]).question).toMatch(/CLI/);
+  });
+
+  it('parses a standalone agent [[TASK_DONE]] sentinel into a result status chip', () => {
+    const events = projectConversation({ source: SOURCE, lines: [line('[[TASK_DONE]]')] });
+    expect(events).toHaveLength(1);
+    expect(events[0].kind).toBe('system.status');
+    expect(probe(events[0]).category).toBe('result');
+    expect(probe(events[0]).severity).toBe('info');
+    expect(probe(events[0]).label).toMatch(/complete/i);
+  });
+
+  it('keeps agent prose and strips the sentinel when both share a line', () => {
+    const events = projectConversation({ source: SOURCE, lines: [line('All checks pass. [[TASK_DONE]]')] });
+    const msg = events.find((e) => e.kind === 'message.taskAgent');
+    const status = events.find((e) => e.kind === 'system.status');
+    expect(msg).toBeDefined();
+    expect(probe(msg).body).toContain('All checks pass.');
+    expect(probe(msg).body).not.toContain('[[TASK_DONE]]');
+    expect(status).toBeDefined();
+    expect(probe(status).category).toBe('result');
+    // Nothing leaks the raw bracket text into any event body.
+    for (const ev of events) {
+      expect(probe(ev).body ?? '').not.toContain('[[TASK_DONE]]');
+    }
+  });
+
+  it('parses [[TASK_BLOCKED:reason]] into an error result carrying the reason', () => {
+    const events = projectConversation({ source: SOURCE, lines: [line('[[TASK_BLOCKED: backend is down]]')] });
+    expect(events).toHaveLength(1);
+    expect(events[0].kind).toBe('system.status');
+    expect(probe(events[0]).category).toBe('result');
+    expect(probe(events[0]).severity).toBe('error');
+    expect(probe(events[0]).explanation).toContain('backend is down');
+  });
+
+  it('parses [[TASK_NOOP]] into an informational "no action" result chip', () => {
+    const events = projectConversation({ source: SOURCE, lines: [line('[[TASK_NOOP]]')] });
+    expect(events).toHaveLength(1);
+    expect(events[0].kind).toBe('system.status');
+    expect(probe(events[0]).category).toBe('result');
+    expect(probe(events[0]).label).toMatch(/no action/i);
+  });
+
+  it('parses an agent-stream [[TASK_NEEDS_INPUT:...]] into agent.needsInput', () => {
+    const events = projectConversation({ source: SOURCE, lines: [line('[[TASK_NEEDS_INPUT: which port should I use?]]')] });
+    expect(events).toHaveLength(1);
+    expect(events[0].kind).toBe('agent.needsInput');
+    expect(probe(events[0]).question).toMatch(/port/i);
   });
 
   it('classifies a write-to-results edit as a toolBurst with file path captured', () => {

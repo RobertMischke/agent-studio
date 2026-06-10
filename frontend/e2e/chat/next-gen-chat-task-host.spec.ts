@@ -164,9 +164,11 @@ async function installMocks(
 }
 
 async function setFlag(page: Page, on: boolean): Promise<void> {
+  // `nextGenChat` is default-ON now: a missing key reads as opt-in, so the
+  // off-state must be written explicitly as '0' (mirrors writeExplicit in
+  // FeatureFlagsService) rather than removing the key.
   await page.addInitScript((enable) => {
-    if (enable) localStorage.setItem('atp.flag.nextGenChat', '1');
-    else localStorage.removeItem('atp.flag.nextGenChat');
+    localStorage.setItem('atp.flag.nextGenChat', enable ? '1' : '0');
   }, on);
 }
 

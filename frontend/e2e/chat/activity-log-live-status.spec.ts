@@ -102,6 +102,14 @@ async function installRunningJobMocks(page: Page, target: { id: string; watchPat
 }
 
 test.describe('Activity log - live status indicator', () => {
+  // The live-status row belongs to the LEGACY activity-log-view. With
+  // `Frontend:NextGenChat` default-ON the Activity tab would mount the
+  // next-gen conversation view instead, so pin the flag off ('0', not
+  // key-removal) to keep the legacy host — and its live row — rendered.
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('atp.flag.nextGenChat', '0'));
+  });
+
   test('renders a pulsing live row that names the current tool action', async ({ page }) => {
     const target = await pickAnyJob();
     if (!target) {

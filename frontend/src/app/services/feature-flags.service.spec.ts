@@ -54,8 +54,36 @@ describe('FeatureFlagsService — vsCodeLayout default ON', () => {
     expect(svc.vsCodeLayout()).toBe(true);
   });
 
-  it('other flags (nextGenChat) keep their default-off semantics', () => {
+  it('reads nextGenChat as true when the key is absent (new default)', () => {
+    const svc = build();
+    expect(svc.nextGenChat()).toBe(true);
+  });
+
+  it('reads nextGenChat as true when the key is "1"', () => {
+    localStorage.setItem(KEY_NEXT_GEN_CHAT, '1');
+    const svc = build();
+    expect(svc.nextGenChat()).toBe(true);
+  });
+
+  it('reads nextGenChat as false when the key is explicit "0"', () => {
+    localStorage.setItem(KEY_NEXT_GEN_CHAT, '0');
     const svc = build();
     expect(svc.nextGenChat()).toBe(false);
+  });
+
+  it('setNextGenChat(false) persists "0" so the next reload stays off', () => {
+    const svc = build();
+    svc.setNextGenChat(false);
+    expect(localStorage.getItem(KEY_NEXT_GEN_CHAT)).toBe('0');
+    expect(svc.nextGenChat()).toBe(false);
+  });
+
+  it('setNextGenChat(true) persists "1"', () => {
+    localStorage.setItem(KEY_NEXT_GEN_CHAT, '0');
+    const svc = build();
+    expect(svc.nextGenChat()).toBe(false);
+    svc.setNextGenChat(true);
+    expect(localStorage.getItem(KEY_NEXT_GEN_CHAT)).toBe('1');
+    expect(svc.nextGenChat()).toBe(true);
   });
 });

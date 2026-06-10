@@ -110,6 +110,9 @@ test('Codex JSONL Activity Log Conversation renders readable agent text and summ
   await page.setViewportSize({ width: 1500, height: 980 });
   await page.addInitScript(() => {
     localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: true, git: false }));
+    // Exercises the LEGACY activity-log-view's conversation mode; pin
+    // Frontend:NextGenChat off ('0') now that it defaults ON.
+    localStorage.setItem('atp.flag.nextGenChat', '0');
   });
   await installRoutes(page);
 

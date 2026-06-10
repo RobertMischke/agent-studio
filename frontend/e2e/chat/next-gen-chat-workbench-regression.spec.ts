@@ -24,10 +24,11 @@ const EVIDENCE_DIR = path.resolve(
 );
 
 async function setFlag(page: Page, key: string, value: '0' | '1'): Promise<void> {
+  // Write the value explicitly. `nextGenChat` is default-ON, so removing the
+  // key would read as opt-in; the off-state ('0') must be persisted verbatim.
   await page.addInitScript(
     ({ k, v }) => {
-      if (v === '1') localStorage.setItem(k, '1');
-      else localStorage.removeItem(k);
+      localStorage.setItem(k, v);
     },
     { k: key, v: value }
   );

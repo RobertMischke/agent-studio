@@ -89,6 +89,10 @@ test.describe('Orchestrator steering', () => {
     // already selected by default once the detail panel opens; click it
     // anyway with `force: true` because the inspector header re-renders
     // mid-load and a "stable" wait flakes against background polling.
+    // Steer card lives in the LEGACY activity-log-view's conversation mode;
+    // pin Frontend:NextGenChat off ('0') now that it defaults ON so the
+    // mode toggle and steer card still render.
+    await page.addInitScript(() => localStorage.setItem('atp.flag.nextGenChat', '0'));
     await page.goto(`/?job=${encodeURIComponent(created.id)}&watchPath=${encodeURIComponent(wp.path)}`);
     const activityTab = page.getByTestId('inspector-tab-activity');
     await expect(activityTab).toBeVisible({ timeout: 10_000 });

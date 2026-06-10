@@ -27,6 +27,14 @@ async function findJobWithToolBurst(): Promise<{ id: string; watchPath: string }
  * so the technical tool noise does not crowd out the agent reply.
  */
 test.describe('Activity log — tool chips', () => {
+  // These specs exercise the LEGACY activity-log-view's conversation mode
+  // (`activity-log-mode-conversation`). `Frontend:NextGenChat` is default-ON
+  // now and would swap that host for the next-gen conversation view, so pin
+  // the flag off ('0', not key-removal) to keep the legacy host mounted.
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('atp.flag.nextGenChat', '0'));
+  });
+
   test('tool burst renders per-kind weight chips with a duration', async ({ page }) => {
     const target = await findJobWithToolBurst();
     if (!target) {

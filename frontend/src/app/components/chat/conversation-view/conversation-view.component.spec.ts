@@ -671,4 +671,95 @@ describe('ConversationViewComponent', () => {
     expect(badges.length).toBe(1);
     expect(badges[0].textContent?.trim()).toBe('claude-opus-4-8');
   });
+
+  it('surfaces the full date behind the message timestamp on hover (criterion: dated times)', async () => {
+    // The visible <time> shows only the clock; the date lives in the tooltip
+    // so an operator can tell which calendar day a turn happened.
+    const fixture = await makeFixture([agentMsg('a1', 1, 'dated turn')]);
+    const el: HTMLElement = fixture.nativeElement;
+    const time = el.querySelector('[data-testid="conversation-message-time"]');
+    expect(time).toBeTruthy();
+    // The visible clock label omits the calendar date.
+    expect(time?.textContent ?? '').not.toMatch(/2026/);
+    // The tooltip the template binds (groupTimeTooltip) carries the full date.
+    const inst = fixture.componentInstance;
+    const group = inst.rows().find((r) => r.kind === 'messageGroup');
+    expect(group).toBeTruthy();
+    const dated = inst.groupTimeTooltip(group as never);
+    expect(dated).toMatch(/2026/);
+    expect(dated).toMatch(/May/);
+  });
+
+  it('formatDateTime returns a calendar+clock string and formatTime stays clock-only', async () => {
+    const fixture = await makeFixture([agentMsg('a1', 1, 'x')]);
+    const inst = fixture.componentInstance;
+    const iso = '2026-05-05T12:00:01.000Z';
+    expect(inst.formatDateTime(iso)).toMatch(/2026/);
+    expect(inst.formatDateTime(iso)).toMatch(/May/);
+    expect(inst.formatTime(iso)).not.toMatch(/2026/);
+    // Empty / invalid inputs degrade gracefully.
+    expect(inst.formatDateTime('')).toBe('');
+    expect(inst.formatDateTime('not-a-date')).toBe('');
+  });
+
+  function decision(decisionType: string, severity?: 'info' | 'warn' | 'error') {
+    return {
+      id: `dec-${decisionType}`,
+      kind: 'decision.orchestrator' as const,
+      timestamp: '2026-05-05T12:01:00.000Z',
+      rawRange: range(50, 55),
+      decisionType,
+      reason: `orchestrator chose ${decisionType}`,
+      action: 'continue',
+      ...(severity ? { severity } : {}),
+    };
+  }
+
+  it('renders an orchestrator decision with a humanised type label and accent rail (criterion: upgraded decisions)', async () => {
+    const fixture = await makeFixture([decision('auto-review')]);
+    const el: HTMLElement = fixture.nativeElement;
+    const row = el.querySelector('[data-testid="conversation-decision-orchestrator"]');
+    expect(row).toBeTruthy();
+    expect(row?.getAttribute('data-decision-type')).toBe('auto-review');
+    // The raw kebab kind never leaks into the visible label.
+    const type = el.querySelector('[data-testid="conversation-decision-type"]');
+    expect(type?.textContent?.trim()).toBe('Auto-Review');
+    expect(type?.textContent).not.toContain('auto-review');
+    // The decision keeps its own prominent accent rail, set apart from a
+    // plain agent bubble.
+    expect(row?.querySelector('.decision__rail')).toBeTruthy();
+    expect(el.querySelector('[data-testid="conversation-message-message.taskAgent"]')).toBeFalsy();
+  });
+
+  it('maps every known decision kind to a presentable label and title-cases unknown kinds', async () => {
+    const fixture = await makeFixture([decision('auto-review')]);
+    const inst = fixture.componentInstance;
+    expect(inst.decisionTypeLabel('auto-review')).toBe('Auto-Review');
+    expect(inst.decisionTypeLabel('reissue')).toBe('Reissue');
+    expect(inst.decisionTypeLabel('reissue-open-items')).toBe('Reissue · Open items');
+    expect(inst.decisionTypeLabel('accept')).toBe('Accept');
+    expect(inst.decisionTypeLabel('escalate')).toBe('Escalate');
+    expect(inst.decisionTypeLabel('worktree-containment')).toBe('Worktree containment');
+    expect(inst.decisionTypeLabel('environment-blocker')).toBe('Environment blocker');
+    // Unknown kind falls back to a title-cased version of the kebab/snake form.
+    expect(inst.decisionTypeLabel('some_new-kind')).toBe('Some New Kind');
+    // Null / undefined degrade to a neutral label.
+    expect(inst.decisionTypeLabel(undefined)).toBe('Decision');
+    expect(inst.decisionTypeLabel(null)).toBe('Decision');
+  });
+
+  it('carries the decision severity onto the row so the accent can shift (warn/error/accept)', async () => {
+    const fixture = await makeFixture([
+      decision('escalate', 'error'),
+      decision('accept'),
+    ]);
+    const el: HTMLElement = fixture.nativeElement;
+    const rows = el.querySelectorAll('[data-testid="conversation-decision-orchestrator"]');
+    expect(rows.length).toBe(2);
+    expect(rows[0].getAttribute('data-severity')).toBe('error');
+    expect(rows[0].getAttribute('data-decision-type')).toBe('escalate');
+    // No explicit severity → default 'info'; the type still drives the accent.
+    expect(rows[1].getAttribute('data-severity')).toBe('info');
+    expect(rows[1].getAttribute('data-decision-type')).toBe('accept');
+  });
 });

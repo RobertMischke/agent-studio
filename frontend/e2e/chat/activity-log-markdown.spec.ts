@@ -85,6 +85,14 @@ async function findMarkdownProbeJob(): Promise<MarkdownProbeJob | null> {
 }
 
 test.describe('Activity log — Conversation markdown rendering', () => {
+  // Exercises the LEGACY activity-log-view's conversation mode. With
+  // `Frontend:NextGenChat` default-ON the Activity tab would mount the
+  // next-gen conversation view instead, so pin the flag off ('0', not
+  // key-removal) to keep the legacy host rendered.
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('atp.flag.nextGenChat', '0'));
+  });
+
   test('agent turn renders lists / code / links via markdown', async ({ page }) => {
     const target = await findMarkdownProbeJob();
     if (!target) {

@@ -48,15 +48,18 @@ export class FeatureFlagsService {
   /**
    * `Frontend:NextGenChat` - production rollout flag for the next-gen chat
    * conversation grammar inside the existing task Activity tab and project
-   * side sheet. Independent from `Frontend:VsCodeLayout`. Default off; when
-   * off every host must render exactly as before. The flag exists so the
-   * shared `ConversationEvent` projection can land before any visible
-   * replacement renderer is wired into a host.
+   * side sheet. Independent from `Frontend:VsCodeLayout`.
+   *
+   * Default ON now that the single-pane conversation renderer is the
+   * best-in-class chat view (single shared pane, coalesced agent turns,
+   * parsed marker chips, CLI-agnostic tool runs, upgraded orchestrator
+   * decisions). Absence of the storage key counts as opt-in; set the key
+   * to '0' to fall back to the legacy activity-log view.
    *
    * See docs/mockups/chat-window-next-gen/integration-plan.md and
    * docs/mockups/chat-window-next-gen/host-inventory.md.
    */
-  readonly nextGenChat = signal<boolean>(this.read(FeatureFlagsService.KEY_NEXT_GEN_CHAT));
+  readonly nextGenChat = signal<boolean>(this.readWithDefault(FeatureFlagsService.KEY_NEXT_GEN_CHAT, true));
 
   setVsCodeLayout(on: boolean): void {
     this.vsCodeLayout.set(on);
@@ -77,7 +80,9 @@ export class FeatureFlagsService {
 
   setNextGenChat(on: boolean): void {
     this.nextGenChat.set(on);
-    this.write(FeatureFlagsService.KEY_NEXT_GEN_CHAT, on);
+    // Default is ON now, so off must be written explicitly as '0' instead of
+    // removing the key (a missing key is read as "use the default").
+    this.writeExplicit(FeatureFlagsService.KEY_NEXT_GEN_CHAT, on);
   }
 
   private read(key: string): boolean {

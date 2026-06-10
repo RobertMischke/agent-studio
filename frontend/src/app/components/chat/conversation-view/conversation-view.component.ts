@@ -544,6 +544,31 @@ export class ConversationViewComponent {
     }
   }
 
+  /** Human-readable labels for the orchestrator's decision kinds. */
+  private static readonly DECISION_LABELS: Record<string, string> = {
+    'auto-review': 'Auto-Review',
+    reissue: 'Reissue',
+    'reissue-open-items': 'Reissue · Open items',
+    accept: 'Accept',
+    escalate: 'Escalate',
+    intervention: 'Intervention',
+    'worktree-containment': 'Worktree containment',
+    'environment-blocker': 'Environment blocker',
+    decision: 'Decision'
+  };
+
+  /**
+   * Map a raw decision type (`auto-review`, `reissue-open-items`, …) to a
+   * presentable label. Unknown kinds are title-cased from their kebab/snake
+   * form so a new orchestrator decision still reads cleanly without code.
+   */
+  decisionTypeLabel(type: string | undefined | null): string {
+    if (!type) return 'Decision';
+    const known = ConversationViewComponent.DECISION_LABELS[type.toLowerCase()];
+    if (known) return known;
+    return type.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
   emitOpenTrace(range?: RawLineRange | null): void {
     this.openTrace.emit(range ?? null);
   }
@@ -585,6 +610,37 @@ export class ConversationViewComponent {
     const last = this.formatTime(group.lastTs);
     if (!last || last === first) return first;
     return `${first}–${last}`;
+  }
+
+  /**
+   * Full date + time for hover/click disclosure. The visible `<time>` shows
+   * only the clock; this surfaces the calendar date so an operator can tell
+   * which day a turn happened without leaving the chat.
+   */
+  formatDateTime(iso: string): string {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleString([], {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return '';
+    }
+  }
+
+  /** Tooltip text for a message group's `<time>`: full date(s) behind the clock. */
+  groupTimeTooltip(group: MessageGroupRow): string {
+    const first = this.formatDateTime(group.firstTs);
+    if (group.items.length <= 1) return first;
+    const last = this.formatDateTime(group.lastTs);
+    if (!last || last === first) return first;
+    return `${first} – ${last}`;
   }
 
   formatSessionIdShort(sessionId: string | undefined): string {
@@ -650,13 +706,13 @@ export class ConversationViewComponent {
       lines.push(`<div><strong>Session</strong> <code>${escapeHtml(group.meta.sessionIdFull)}</code></div>`);
     }
     if (group.meta.sessionInitAt) {
-      lines.push(`<div><strong>Init</strong> ${escapeHtml(this.formatTime(group.meta.sessionInitAt))}</div>`);
+      lines.push(`<div><strong>Init</strong> ${escapeHtml(this.formatDateTime(group.meta.sessionInitAt))}</div>`);
     }
     if (group.meta.rateLimitText) {
       lines.push(`<div><strong>Rate limit</strong> <small>${escapeHtml(group.meta.rateLimitText)}</small></div>`);
     }
     lines.push(
-      `<div><small>First ${escapeHtml(this.formatTime(group.firstTs))} · Last ${escapeHtml(this.formatTime(group.lastTs))}</small></div>`
+      `<div><small>First ${escapeHtml(this.formatDateTime(group.firstTs))} · Last ${escapeHtml(this.formatDateTime(group.lastTs))}</small></div>`
     );
     return { title: this.actorLabel(group.actor), body: lines.join('') };
   }

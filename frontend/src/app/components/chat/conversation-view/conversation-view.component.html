@@ -84,7 +84,9 @@
                     <span class="msg__count"
                           data-testid="conversation-message-count">{{ row.items.length }} events</span>
                   }
-                  <time class="msg__time">{{ formatGroupTime(row) }}</time>
+                  <time class="msg__time"
+                        data-testid="conversation-message-time"
+                        [appTooltip]="groupTimeTooltip(row)">{{ formatGroupTime(row) }}</time>
                   @if (row.model) {
                     <span class="msg__model"
                           data-testid="conversation-message-model"
@@ -176,7 +178,8 @@
             @if (row.event.cli || row.event.model) {
               <span class="marker__meta">{{ row.event.cli }}{{ row.event.cli && row.event.model ? ' · ' : '' }}{{ row.event.model }}</span>
             }
-            <time class="marker__time">{{ formatTime(row.event.timestamp) }}</time>
+            <time class="marker__time"
+                  [appTooltip]="formatDateTime(row.event.timestamp)">{{ formatTime(row.event.timestamp) }}</time>
           </li>
         }
 
@@ -187,7 +190,8 @@
             <span class="marker__dot" aria-hidden="true">◆</span>
             <span class="marker__label">{{ row.event.title }}</span>
             <span class="marker__meta">{{ row.event.marker }}@if (row.event.lane) {<span> · {{ row.event.lane }}</span>}</span>
-            <time class="marker__time">{{ formatTime(row.event.timestamp) }}</time>
+            <time class="marker__time"
+                  [appTooltip]="formatDateTime(row.event.timestamp)">{{ formatTime(row.event.timestamp) }}</time>
           </li>
         }
 
@@ -197,20 +201,26 @@
               [attr.data-decision-type]="row.event.decisionType"
               [attr.data-severity]="row.event.severity ?? 'info'">
             <div class="decision">
-              <span class="decision__actor"><span aria-hidden="true">🛰</span> Orchestrator</span>
-              <span class="decision__type">{{ row.event.decisionType }}</span>
-              <span class="decision__reason">{{ row.event.reason }}</span>
-              @if (row.event.action) {
-                <span class="decision__action">→ {{ row.event.action }}</span>
-              }
-              @if (row.event.retryBudget) {
-                <span class="decision__budget">retry {{ row.event.retryBudget.used }}/{{ row.event.retryBudget.max }}</span>
-              }
-              <button type="button"
-                      class="decision__trace"
-                      data-testid="conversation-decision-open-trace"
-                      [appTooltip]="'Open the source range in Trace mode'"
-                      (click)="emitOpenTrace(row.event.rawRange)">trace</button>
+              <span class="decision__rail" aria-hidden="true"></span>
+              <div class="decision__body">
+                <div class="decision__head">
+                  <span class="decision__actor"><span aria-hidden="true">🛰</span> Orchestrator</span>
+                  <span class="decision__type"
+                        data-testid="conversation-decision-type">{{ decisionTypeLabel(row.event.decisionType) }}</span>
+                  @if (row.event.retryBudget) {
+                    <span class="decision__budget">retry {{ row.event.retryBudget.used }}/{{ row.event.retryBudget.max }}</span>
+                  }
+                  <button type="button"
+                          class="decision__trace"
+                          data-testid="conversation-decision-open-trace"
+                          [appTooltip]="'Open the source range in Trace mode'"
+                          (click)="emitOpenTrace(row.event.rawRange)">trace</button>
+                </div>
+                <span class="decision__reason">{{ row.event.reason }}</span>
+                @if (row.event.action) {
+                  <span class="decision__action">→ {{ row.event.action }}</span>
+                }
+              </div>
             </div>
           </li>
         }

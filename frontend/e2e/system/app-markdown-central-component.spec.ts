@@ -63,6 +63,14 @@ async function openDetail(page: Page, id: string, watchPath: string): Promise<vo
 }
 
 test.describe('<app-markdown> central component', () => {
+  // The "agent turn in activity-log" test below opens the LEGACY
+  // activity-log-view's conversation mode. With Frontend:NextGenChat
+  // default-ON the Activity tab would mount the next-gen conversation view,
+  // so pin the flag off ('0') for the suite.
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('atp.flag.nextGenChat', '0'));
+  });
+
   test('prompt-history entry renders into a .markdown-body div via <app-markdown>', async ({ page }) => {
     const target = await plantJobWithHistory();
     try {

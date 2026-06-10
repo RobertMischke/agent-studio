@@ -25,6 +25,7 @@ import {
 } from '../../features/task-detail/activity-log';
 import type {
   ConversationEvent,
+  ConversationEventSeverity,
   RawLineRange,
   ToolCommandExecution,
   ToolOutputHit,
@@ -376,6 +377,60 @@ function projectGroup(
         body: group.title
       }
     ];
+  }
+
+  // Terminal sentinels (`[[TASK_DONE]]`, `[[TASK_BLOCKED:…]]`, `[[TASK_NOOP]]`,
+  // `[[TASK_NEEDS_INPUT:…]]`) are run-completion markers the agent prints on its
+  // final line. They must never leak into the chat as raw text. Parse them into
+  // a semantic result chip (or a needs-input prompt) and surface any
+  // human-readable text the agent wrote alongside the marker as a normal agent
+  // message so nothing is lost.
+  const agentBody = joinGroupBody(group);
+  const sentinel = parseTerminalSentinel(agentBody);
+  if (sentinel) {
+    const out: ConversationEvent[] = [];
+    if (sentinel.strippedBody) {
+      out.push({
+        id: `${baseId}:agent`,
+        kind: 'message.taskAgent',
+        timestamp: ts,
+        runId,
+        model,
+        rawRange: range,
+        actor: 'Agent',
+        body: sentinel.strippedBody
+      });
+    }
+    if (sentinel.kind === 'needs-input') {
+      out.push({
+        id: `${baseId}:needs-input`,
+        kind: 'agent.needsInput',
+        timestamp: ts,
+        runId,
+        rawRange: range,
+        severity: 'warn',
+        question: sentinel.detail ?? 'The agent is waiting for input.',
+        loopIndex: 0,
+        loopLimit: 0,
+        answerSource: null,
+        nextAction: 'await-human'
+      });
+    } else {
+      const meta = TERMINAL_RESULT_META[sentinel.kind];
+      out.push({
+        id: `${baseId}:result`,
+        kind: 'system.status',
+        timestamp: ts,
+        runId,
+        rawRange: range,
+        severity: meta.severity,
+        category: 'result',
+        label: meta.label,
+        explanation: sentinel.detail ?? meta.explanation,
+        nextStep: meta.nextStep
+      });
+    }
+    return out;
   }
 
   if (isCodexDebugGroup(group)) {
@@ -841,6 +896,62 @@ function extractNeedsInputQuestion(text: string): string | null {
   const idx = text.toLowerCase().indexOf('needs-input');
   if (idx >= 0) return text.slice(idx + 'needs-input'.length).replace(/^[:\s-]+/, '').trim();
   return null;
+}
+
+type TerminalSentinelKind = 'done' | 'blocked' | 'noop' | 'needs-input';
+
+interface TerminalSentinel {
+  kind: TerminalSentinelKind;
+  /** Reason / question payload from BLOCKED / NEEDS_INPUT, when present. */
+  detail: string | null;
+  /** The group body with every recognised sentinel token removed. */
+  strippedBody: string;
+}
+
+const TERMINAL_SENTINEL_RE = /\[\[TASK_(DONE|NOOP|BLOCKED|NEEDS_INPUT)(?::([^\]]*))?\]\]/i;
+const TERMINAL_SENTINEL_RE_GLOBAL = /\[\[TASK_(?:DONE|NOOP|BLOCKED|NEEDS_INPUT)(?::[^\]]*)?\]\]/gi;
+
+const TERMINAL_RESULT_META: Record<
+  'done' | 'blocked' | 'noop',
+  { label: string; explanation: string; severity: ConversationEventSeverity; nextStep?: string }
+> = {
+  done: {
+    label: 'Task complete',
+    explanation: 'The agent reported the task finished successfully.',
+    severity: 'info'
+  },
+  blocked: {
+    label: 'Task blocked',
+    explanation: 'The agent stopped and needs a human decision to continue.',
+    severity: 'error',
+    nextStep: 'Review the blocker, then re-queue or re-scope the task.'
+  },
+  noop: {
+    label: 'No action needed',
+    explanation: 'The agent determined no changes were required.',
+    severity: 'info'
+  }
+};
+
+/**
+ * Detect a terminal sentinel anywhere in an agent group body and return the
+ * classified outcome plus the body with every sentinel token stripped. Returns
+ * `null` when no sentinel is present so the caller falls through to a regular
+ * agent message turn.
+ */
+function parseTerminalSentinel(body: string): TerminalSentinel | null {
+  const match = TERMINAL_SENTINEL_RE.exec(body);
+  if (!match) return null;
+  const token = match[1].toUpperCase();
+  const kind: TerminalSentinelKind =
+    token === 'DONE' ? 'done' : token === 'NOOP' ? 'noop' : token === 'BLOCKED' ? 'blocked' : 'needs-input';
+  const detail = match[2]?.trim() || null;
+  const strippedBody = body
+    .replace(TERMINAL_SENTINEL_RE_GLOBAL, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { kind, detail, strippedBody };
 }
 
 function extractUserTarget(text: string): string | undefined {
