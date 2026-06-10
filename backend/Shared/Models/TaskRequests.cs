@@ -518,6 +518,17 @@ public record SetJobEpicRequest
 public record SetRunnerModeRequest
 {
     public string Mode { get; init; } = "manual";
+
+    /// <summary>
+    /// Optional cause of the change, threaded into the runner's structured log
+    /// and <c>ClassifyModeSource</c>. The UI toggle omits it (defaults to the
+    /// operator "api:" reason → source <c>user</c>). The update-service sends
+    /// <c>update-quiesce</c> / <c>update-resume</c> so its transient flip to
+    /// manual classifies as <c>system</c> and does not overwrite the operator's
+    /// durable <see cref="AgentStudio.Shared.ProjectSettings.DesiredRunnerMode"/>
+    /// (ASS-1753).
+    /// </summary>
+    public string? Reason { get; init; }
 }
 
 public record SetCliPathRequest

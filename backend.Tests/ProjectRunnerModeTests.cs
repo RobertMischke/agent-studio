@@ -383,6 +383,65 @@ public sealed class ProjectRunnerModeTests : IDisposable
         Assert.Equal("auto-continuous", runner.GetStatus().Mode);
     }
 
+    /// <summary>
+    /// ASS-1753 Directive 2: the persist hook must receive the classified mode
+    /// SOURCE, not just the mode string, so the settings layer can tell an
+    /// operator toggle from a system-driven flip. An <c>update-quiesce</c> flip
+    /// to manual (the update-service stopping runners before a deploy) classifies
+    /// as <c>system</c>; without this the quiesce would persist as the operator's
+    /// durable mode and clobber auto-continuous across the restart.
+    /// </summary>
+    [Fact]
+    public void SetMode_UpdateQuiesceFlip_FiresPersistHookWithSystemSource()
+    {
+        var runner = BuildRunner();
+        var captured = new List<(string Mode, string Source)>();
+        runner.OnModePersist += (mode, source) => captured.Add((mode, source));
+
+        runner.SetMode("manual", "update-quiesce");
+
+        Assert.Contains(("manual", "system"), captured);
+        Assert.Equal("system", runner.GetStatus().ModeSource);
+    }
+
+    /// <summary>
+    /// Counterpart to the quiesce test: a genuine operator toggle (the API path,
+    /// reason "api-toggle") classifies as <c>user</c> so the durable
+    /// DesiredRunnerMode advances. This is the signal the settings layer keys on
+    /// to know the operator actually chose auto-continuous.
+    /// </summary>
+    [Fact]
+    public void SetMode_ApiToggle_FiresPersistHookWithUserSource()
+    {
+        var runner = BuildRunner();
+        var captured = new List<(string Mode, string Source)>();
+        runner.OnModePersist += (mode, source) => captured.Add((mode, source));
+
+        runner.SetMode("auto-continuous", "api-toggle");
+
+        Assert.Contains(("auto-continuous", "user"), captured);
+        Assert.Equal("user", runner.GetStatus().ModeSource);
+    }
+
+    /// <summary>
+    /// RestoreMode (the boot path that re-applies the saved mode) must NOT fire
+    /// the persist hook - the value already came from disk, and re-persisting it
+    /// on every boot would risk a write loop and could re-classify the restored
+    /// mode under a default source. Locks the "restore is silent" contract.
+    /// </summary>
+    [Fact]
+    public void RestoreMode_DoesNotFirePersistHook()
+    {
+        var runner = BuildRunner();
+        var fired = 0;
+        runner.OnModePersist += (_, _) => fired++;
+
+        runner.RestoreMode("auto-continuous");
+
+        Assert.Equal(0, fired);
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+    }
+
     private void WriteJob(string state, string slug)
     {
         var dir = Path.Combine(_watchPath, state, slug);

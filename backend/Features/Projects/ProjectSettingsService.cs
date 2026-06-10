@@ -219,14 +219,32 @@ public class ProjectSettingsService
     /// <summary>
     /// Persists the runner mode for a project so the auto-pickup toggle survives
     /// a backend restart. Null clears the persisted value (revert to default).
+    /// <para>
+    /// <paramref name="source"/> is the <c>ClassifyModeSource</c> bucket of the
+    /// change (<c>user</c> / <c>circuit-breaker</c> / <c>supervisor</c> /
+    /// <c>system</c>). <see cref="ProjectSettings.RunnerMode"/> always mirrors
+    /// the live mode (the supervisor meta-cycle reads it for drift detection),
+    /// but <see cref="ProjectSettings.DesiredRunnerMode"/> - the value restored
+    /// at boot - is only advanced for a <c>user</c>-sourced change. A
+    /// system-driven flip (update-quiesce, circuit-breaker pause) therefore
+    /// records the manual it imposed without erasing the operator's durable
+    /// auto-continuous intent, which is what kept getting clobbered across a
+    /// deploy-restart (ASS-1753). Default <c>user</c> preserves the legacy
+    /// behaviour for any caller that does not classify its source.
+    /// </para>
     /// </summary>
-    public void SetRunnerMode(string projectName, string? mode)
+    public void SetRunnerMode(string projectName, string? mode, string source = "user")
     {
         EnsureLoaded();
         lock (_lock)
         {
             var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
-            _cache[projectName] = current with { RunnerMode = mode };
+            var isUser = string.Equals(source, "user", StringComparison.OrdinalIgnoreCase);
+            _cache[projectName] = current with
+            {
+                RunnerMode = mode,
+                DesiredRunnerMode = isUser ? mode : current.DesiredRunnerMode,
+            };
             Persist();
         }
     }

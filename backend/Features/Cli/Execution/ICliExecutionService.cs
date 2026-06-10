@@ -87,6 +87,17 @@ public interface ICliExecutionService
     bool IsRunningForProject(string rootPath);
 
     /// <summary>
+    /// Currently-tracked live runs (OS process alive and the run still marked
+    /// <c>running</c>) as <c>(jobKey, execution)</c> pairs. Used by the runner's
+    /// post-restart slot reconcile (ASS-1753) to re-book runs this CLI still
+    /// owns into the in-memory slot registry, whose contents a restart cleared.
+    /// The default is empty so test stubs and backends that do not track live
+    /// runs stay compilable and contribute nothing to the reconcile.
+    /// </summary>
+    IReadOnlyList<(string JobKey, CliExecution Execution)> RunningExecutions()
+        => Array.Empty<(string, CliExecution)>();
+
+    /// <summary>
     /// Describe the context sources this CLI loaded for the live (or
     /// just-finished, still-tracked) run under <paramref name="jobKey"/> -
     /// memory / session paths, the instruction-file chain, global config, MCP

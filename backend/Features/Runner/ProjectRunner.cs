@@ -213,6 +213,13 @@ public class ProjectRunner
     private RunPlan? _activePlan => _activeRuns.Single?.Plan;
     private int _activeReissueAttempt => _activeRuns.Single?.ReissueAttempt ?? 0;
     private bool _processing;
+    // ASS-1753: latches the one-shot post-restart slot reconcile. A backend
+    // restart clears _activeRuns, but the CLI router can still own live runs
+    // for this project (a CLI that reattaches on startup, or a process that
+    // outlived the restart and is still tracked). The first tick re-books those
+    // into the registry so occupied slots == genuinely-tracked live runs; after
+    // that the normal claim/release path keeps the count accurate.
+    private bool _recoveredRunsReconciled;
     // ADR-0052 slice 2: worktree-isolated parallel execution. Lazily built from
     // the injected GitService. _integrateLock is the per-project merge-queue:
     // it serializes integrations into the work branch so concurrent slot merges
@@ -326,11 +333,16 @@ public class ProjectRunner
     public event Action<ProjectRunnerStatus>? OnStatusChanged;
     /// <summary>
     /// Raised whenever the mode changes through any path (explicit
-    /// <see cref="SetMode"/> or implicit auto-single → manual revert).
-    /// Wired by <see cref="TaskRunnerService"/> to persist the new mode.
-    /// Restoration via <see cref="RestoreMode"/> does NOT fire this event.
+    /// <see cref="SetMode"/> or implicit auto-single → manual revert). The
+    /// arguments are the new mode and its <see cref="ClassifyModeSource"/>
+    /// classification (<c>user</c> / <c>circuit-breaker</c> / <c>supervisor</c>
+    /// / <c>system</c>). The source lets the persistence layer tell an operator
+    /// toggle apart from a system-driven flip (update-quiesce, circuit-breaker)
+    /// so the latter does not clobber the operator's durable mode intent
+    /// (ASS-1753). Wired by <see cref="TaskRunnerService"/> to persist the new
+    /// mode. Restoration via <see cref="RestoreMode"/> does NOT fire this event.
     /// </summary>
-    public event Action<string>? OnModePersist;
+    public event Action<string, string>? OnModePersist;
 
     public ProjectRunner(
         string projectName,
@@ -448,7 +460,8 @@ public class ProjectRunner
         var effectiveReason = string.IsNullOrWhiteSpace(reason) ? "api-toggle" : reason!;
         _modeReason = effectiveReason;
         _modeChangedAt = DateTime.UtcNow;
-        _modeSource = ClassifyModeSource(effectiveReason);
+        var modeSource = ClassifyModeSource(effectiveReason);
+        _modeSource = modeSource;
         // A direct, fully-applied SetMode supersedes any deferred change still
         // waiting on the active job. Clear the pending slot so the status DTO
         // does not advertise a "MANUAL (after current)" pill that will never
@@ -459,7 +472,7 @@ public class ProjectRunner
         _logger.LogInformation(
             "Runner '{Project}' mode '{From}' -> '{To}' because '{Reason}' (source={Source})",
             ProjectName, fromMode, mode, effectiveReason, _modeSource);
-        try { OnModePersist?.Invoke(mode); }
+        try { OnModePersist?.Invoke(mode, modeSource); }
         catch (Exception ex) { _logger.LogWarning(ex, "OnModePersist subscriber threw for {Project}", ProjectName); }
         NotifyStatus();
     }
@@ -546,6 +559,14 @@ public class ProjectRunner
             return "circuit-breaker";
         if (reason.StartsWith("supervisor", StringComparison.OrdinalIgnoreCase))
             return "supervisor";
+        // The update-service quiesces runners to manual before an update and
+        // restores them afterwards (reason "update-quiesce" / "update-resume").
+        // That transient flip is NOT operator intent, so it must classify as
+        // system - otherwise the persistence layer would record manual as the
+        // operator's durable mode and a failed/early-returning update would
+        // leave auto-continuous clobbered across the restart (ASS-1753).
+        if (reason.StartsWith("update-", StringComparison.OrdinalIgnoreCase))
+            return "system";
         if (reason.StartsWith("api", StringComparison.OrdinalIgnoreCase))
             return "user";
         return "system";
@@ -669,6 +690,14 @@ public class ProjectRunner
         // wedged. Covers external-script moves and the boot-time stuck-folder
         // sweep where no API event fired to clear us synchronously.
         ReconcileActiveJobAgainstDisk();
+
+        // ASS-1753: one-shot post-restart slot reconcile. A restart cleared the
+        // in-memory slot registry; re-book any run the CLI router still tracks
+        // as live so occupied slots reflect the genuinely-running runs again.
+        // Runs before the role gate so a test-subject backend's reattached runs
+        // are still accounted for, and before the pickup gate so a recovered run
+        // both blocks a duplicate pick and surfaces "Run aktiv" on the board.
+        ReconcileRecoveredRunsIntoSlots();
 
         // Role gate (ADR-0044 / AGENTS.md "Dev backend lifecycle: Playwright-
         // only"). A test-subject backend never auto-picks: watchdog,
@@ -2698,6 +2727,96 @@ public class ProjectRunner
         DateTime? backoffUntil = _rapidCrashBackoffUntil.TryGetValue(jobId, out var until) ? until : null;
         var failures = _consecutiveFailNoProgress.TryGetValue(jobId, out var n) ? n : 0;
         return new RunActivityFacts(slotActive, backoffUntil, failures);
+    }
+
+    /// <summary>
+    /// ASS-1753: re-book a CLI-tracked live run into the in-memory slot registry
+    /// after a backend restart cleared it. Idempotent - a no-op when the job
+    /// already holds a slot (e.g. it was re-picked or resumed in the meantime),
+    /// so a per-tick / per-boot caller can run it freely. Additive only: this
+    /// claims a slot but NEVER releases one (release stays owned by the
+    /// run-finish path), so it cannot race the spawn-time claim. Returns true
+    /// only when this call booked a fresh slot.
+    /// </summary>
+    internal bool RegisterRecoveredRun(string jobId, string? cliType)
+    {
+        if (string.IsNullOrWhiteSpace(jobId)) return false;
+        if (_activeRuns.Contains(jobId)) return false;
+
+        var claimed = _activeRuns.TryClaim(new ActiveRun
+        {
+            JobId = jobId,
+            CliType = cliType,
+            Intent = RunIntent.AutoPickup,
+        });
+        if (!claimed) return false;
+
+        var slotMax = ParallelSlotPolicy.ClampMax(_projectSettings.Get(ProjectName).MaxParallelism);
+        _logger.LogInformation(
+            "[taskboard] recovered live run re-booked into slot for {JobId} on {Project} (cli={Cli}); occupancy {Occupied}/{Max}",
+            jobId, ProjectName, cliType ?? "unknown", _activeRuns.Count, slotMax);
+
+        TaskInfo? info = null;
+        try { info = _scanner.FindJob(jobId, Entry.Path); }
+        catch (Exception ex) { _logger.LogDebug(ex, "RegisterRecoveredRun: FindJob threw for {JobId}", jobId); }
+        if (info != null && !string.IsNullOrWhiteSpace(info.FolderPath))
+        {
+            _timeline?.Append(
+                info.FolderPath,
+                TimelineEventKinds.RunnerSlotAdmission,
+                TimelineActors.System,
+                summary: $"Slot {_activeRuns.Count}/{slotMax} recovered after restart: re-booked live {cliType ?? "cli"} run",
+                details: new()
+                {
+                    ["recovered"] = "true",
+                    ["cli"] = cliType ?? string.Empty,
+                    ["occupied"] = _activeRuns.Count.ToString(),
+                    ["maxParallelism"] = slotMax.ToString(),
+                });
+        }
+
+        NotifyStatus();
+        return true;
+    }
+
+    /// <summary>
+    /// One-shot post-restart slot reconcile (ASS-1753). A restart clears the
+    /// in-memory slot registry, but the CLI router can still own live runs for
+    /// this project's tasks - a CLI that reattaches on startup (Copilot), or a
+    /// run whose OS process outlived the restart and is still tracked. Re-book
+    /// those into the registry so occupied slots == genuinely-tracked live runs.
+    /// Without this the pickup gate under-counts occupancy and, at
+    /// MaxParallelism &gt; 1 (where the sequential <c>IsRunningForProject</c>
+    /// guard is bypassed), could admit a duplicate run against a still-live
+    /// task; the 3-progress badge also mis-renders a running task as "no active
+    /// run". Runs once per process; the normal claim/release path keeps the
+    /// registry accurate from then on.
+    /// </summary>
+    private void ReconcileRecoveredRunsIntoSlots()
+    {
+        if (_recoveredRunsReconciled) return;
+        _recoveredRunsReconciled = true;
+
+        // jobKey == "<watchPath>::<jobId>"; build the project-scoped prefix once
+        // so only this project's tracked live runs are considered.
+        var prefix = TaskIdentity.CreateKey(Entry.Path, string.Empty);
+        foreach (var cli in _router.All)
+        {
+            IReadOnlyList<(string JobKey, CliExecution Execution)> running;
+            try { running = cli.RunningExecutions(); }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "ReconcileRecoveredRunsIntoSlots: RunningExecutions threw for {Cli}", cli.CliType);
+                continue;
+            }
+
+            foreach (var (jobKey, _) in running)
+            {
+                if (!jobKey.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                var jobId = jobKey.Substring(prefix.Length);
+                RegisterRecoveredRun(jobId, cli.CliType);
+            }
+        }
     }
 
     private static bool IsAutoMode(string mode)

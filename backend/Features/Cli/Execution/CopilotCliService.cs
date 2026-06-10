@@ -377,6 +377,21 @@ public class CopilotCliService : ICliExecutionService
         return _processes.Values.Any(p => p.WorkingDirectory == rootPath && !p.Process.HasExited);
     }
 
+    public IReadOnlyList<(string JobKey, CliExecution Execution)> RunningExecutions()
+    {
+        var result = new List<(string, CliExecution)>();
+        foreach (var kv in _processes)
+        {
+            var info = kv.Value;
+            if (info.Process.HasExited) continue;
+            var exec = info.Execution;
+            if (exec == null) continue;
+            if (!string.Equals(exec.Status, "running", StringComparison.OrdinalIgnoreCase)) continue;
+            result.Add((kv.Key, exec));
+        }
+        return result;
+    }
+
     /// <summary>
     /// Copilot execution context (ASS-1739 / T1a): convention-only. Copilot has
     /// no stream-json init frame, so the model / permission / cwd header and the

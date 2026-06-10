@@ -268,13 +268,24 @@ public class TaskRunnerService : BackgroundService
             };
             // Persist every mode change so the auto-pickup toggle survives
             // backend restarts. Includes implicit transitions like "auto-single
-            // → manual" after a job completes.
-            runner.OnModePersist += mode => _projectSettings.SetRunnerMode(entry.Name, mode);
+            // → manual" after a job completes. The source is threaded so a
+            // system-driven flip (update-quiesce, circuit-breaker) updates the
+            // live RunnerMode mirror without clobbering the operator's durable
+            // DesiredRunnerMode intent (ASS-1753).
+            runner.OnModePersist += (mode, source) => _projectSettings.SetRunnerMode(entry.Name, mode, source);
             _runners[entry.Name] = runner;
 
             // Restore last saved mode (if any) after wiring the persist hook so
-            // the restore itself is idempotent and doesn't double-write.
-            var savedMode = _projectSettings.Get(entry.Name).RunnerMode;
+            // the restore itself is idempotent and doesn't double-write. Prefer
+            // the operator's durable DesiredRunnerMode over the live RunnerMode
+            // mirror so a restart that happened while a transient system-manual
+            // was in effect (e.g. mid-update) still comes back up in the mode the
+            // operator actually asked for (ASS-1753). Legacy records that predate
+            // DesiredRunnerMode fall back to RunnerMode.
+            var savedSettings = _projectSettings.Get(entry.Name);
+            var savedMode = string.IsNullOrWhiteSpace(savedSettings.DesiredRunnerMode)
+                ? savedSettings.RunnerMode
+                : savedSettings.DesiredRunnerMode;
             if (!string.IsNullOrWhiteSpace(savedMode) && savedMode != "manual")
             {
                 runner.RestoreMode(savedMode!);

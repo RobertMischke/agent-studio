@@ -34,7 +34,7 @@ public static class RunnerEndpoints
 
         runnerGroup.MapPut("/{projectName}/mode", (string projectName, SetRunnerModeRequest req, TaskRunnerService runner) =>
         {
-            var result = runner.RequestModeChange(projectName, req.Mode);
+            var result = runner.RequestModeChange(projectName, req.Mode, req.Reason);
             if (result == null)
                 return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
             if (result.Outcome == ModeChangeOutcome.Invalid)

@@ -90,16 +90,22 @@ public sealed class BackendProbe : IBackendProbe
         }
     }
 
-    public async Task<bool> SetModeAsync(string projectName, string mode, CancellationToken ct = default)
+    public async Task<bool> SetModeAsync(string projectName, string mode, string? reason = null, CancellationToken ct = default)
     {
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(5));
             var encoded = Uri.EscapeDataString(projectName);
+            // Send the reason so the backend classifies this as a system-driven
+            // flip (ClassifyModeSource), not an operator toggle. Without it the
+            // quiesce-to-manual would be recorded as the operator's durable mode
+            // and clobber auto-continuous across the restart (ASS-1753).
             using var req = new HttpRequestMessage(HttpMethod.Put, $"{_baseUrl}/api/runner/{encoded}/mode")
             {
-                Content = JsonContent.Create(new { mode })
+                Content = string.IsNullOrWhiteSpace(reason)
+                    ? JsonContent.Create(new { mode })
+                    : JsonContent.Create(new { mode, reason })
             };
             req.Headers.Add("X-Client-Id", _clientId);
             using var resp = await _http.SendAsync(req, cts.Token);

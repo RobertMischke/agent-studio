@@ -465,6 +465,90 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         Assert.Null(svc.Get("new-project").BuildProfile);
     }
 
+    // --- ASS-1753: runner-mode durability across restart -----------------
+
+    /// <summary>
+    /// A <c>user</c>-sourced mode change (the operator toggle) advances BOTH the
+    /// live <see cref="ProjectSettings.RunnerMode"/> mirror and the durable
+    /// <see cref="ProjectSettings.DesiredRunnerMode"/> that boot restores from.
+    /// </summary>
+    [Fact]
+    public void SetRunnerMode_UserSourced_AdvancesLiveMirrorAndDurableDesired()
+    {
+        var svc = Build();
+
+        svc.SetRunnerMode("runbook", "auto-continuous", source: "user");
+
+        var s = svc.Get("runbook");
+        Assert.Equal("auto-continuous", s.RunnerMode);
+        Assert.Equal("auto-continuous", s.DesiredRunnerMode);
+    }
+
+    /// <summary>
+    /// The core ASS-1753 regression: a system-driven flip to manual (the
+    /// update-service quiescing runners before a deploy) must mirror the live
+    /// mode without clobbering the operator's durable auto-continuous intent.
+    /// The boot-restore preference (DesiredRunnerMode over RunnerMode) therefore
+    /// still resolves to auto-continuous, so a restart that lands mid-quiesce
+    /// comes back up in the mode the operator actually asked for.
+    /// </summary>
+    [Fact]
+    public void SetRunnerMode_SystemFlipToManual_PreservesDurableDesiredIntent()
+    {
+        var svc = Build();
+        svc.SetRunnerMode("runbook", "auto-continuous", source: "user");
+
+        // update-quiesce / circuit-breaker style flip: NOT operator intent.
+        svc.SetRunnerMode("runbook", "manual", source: "system");
+
+        var s = svc.Get("runbook");
+        Assert.Equal("manual", s.RunnerMode);                 // live mirror reflects reality
+        Assert.Equal("auto-continuous", s.DesiredRunnerMode); // durable intent untouched
+
+        // Boot restore prefers DesiredRunnerMode -> auto-continuous survives.
+        var bootMode = string.IsNullOrWhiteSpace(s.DesiredRunnerMode) ? s.RunnerMode : s.DesiredRunnerMode;
+        Assert.Equal("auto-continuous", bootMode);
+    }
+
+    [Fact]
+    public void SetRunnerMode_SystemFlip_PreservesDesiredAcrossReload()
+    {
+        var svc = Build();
+        svc.SetRunnerMode("runbook", "auto-continuous", source: "user");
+        svc.SetRunnerMode("runbook", "manual", source: "system");
+
+        var reloaded = Build().Get("runbook");
+
+        Assert.Equal("manual", reloaded.RunnerMode);
+        Assert.Equal("auto-continuous", reloaded.DesiredRunnerMode);
+    }
+
+    /// <summary>
+    /// Migration guard: a legacy record that predates DesiredRunnerMode has only
+    /// RunnerMode on disk. Boot must fall back to RunnerMode so existing projects
+    /// keep their persisted auto mode until the operator's next toggle records a
+    /// durable DesiredRunnerMode.
+    /// </summary>
+    [Fact]
+    public void Get_LegacyRecordWithoutDesired_BootFallsBackToRunnerMode()
+    {
+        File.WriteAllText(StorePath(), """
+        {
+          "runbook": {
+            "RunnerMode": "auto-continuous"
+          }
+        }
+        """);
+        var svc = Build();
+
+        var s = svc.Get("runbook");
+        Assert.Equal("auto-continuous", s.RunnerMode);
+        Assert.Null(s.DesiredRunnerMode);
+
+        var bootMode = string.IsNullOrWhiteSpace(s.DesiredRunnerMode) ? s.RunnerMode : s.DesiredRunnerMode;
+        Assert.Equal("auto-continuous", bootMode);
+    }
+
     private ProjectSettingsService Build()
     {
         var config = new ConfigurationBuilder()

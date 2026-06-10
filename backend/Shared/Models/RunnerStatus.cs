@@ -93,9 +93,11 @@ public static class TaskRunActivityClassifier
 {
     /// <summary>
     /// Classify a Progress-lane task. Precedence: a live slot wins (active),
-    /// then an unexpired backoff (failed-backoff), then any evidence of a
-    /// prior failure (failed-idle), else no-active-run. <paramref name="now"/>
-    /// is injected so tests are deterministic.
+    /// then a live CLI execution still reporting <c>running</c> even when the
+    /// in-memory slot registry has lost track of it (active — the post-restart
+    /// desync guard, ASS-1753), then an unexpired backoff (failed-backoff),
+    /// then any evidence of a prior failure (failed-idle), else no-active-run.
+    /// <paramref name="now"/> is injected so tests are deterministic.
     /// </summary>
     public static TaskRunActivity Classify(
         RunActivityFacts facts,
@@ -106,7 +108,14 @@ public static class TaskRunActivityClassifier
         var attempt = facts.ConsecutiveFailures < 0 ? 0 : facts.ConsecutiveFailures;
         var lastError = string.IsNullOrWhiteSpace(outcomeIssue?.Summary) ? null : outcomeIssue!.Summary;
 
-        if (facts.SlotActive)
+        // A slot wins, but a live execution that is still "running" is an
+        // equally authoritative "this task is alive" signal. After a backend
+        // restart the in-memory slot registry can be empty while the CLI router
+        // still tracks a live execution (or a recovery-resume re-booked the run
+        // a tick later) - trusting only the slot would paint a running task as
+        // "no active run". Prefer the live signal from either source. ASS-1753.
+        var executionRunning = string.Equals(execution?.Status, "running", StringComparison.OrdinalIgnoreCase);
+        if (facts.SlotActive || executionRunning)
         {
             return new TaskRunActivity
             {

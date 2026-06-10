@@ -47,6 +47,36 @@ public sealed class TaskRunActivityClassifierTests
     }
 
     [Fact]
+    public void Active_when_execution_running_even_though_slot_registry_lost_it()
+    {
+        // ASS-1753: after a backend restart the in-memory slot registry can be
+        // empty (SlotActive=false) while the CLI router still tracks a live
+        // "running" execution. Trusting only the slot would paint the running
+        // task as "no active run"; the live execution signal must promote it
+        // back to Active and surface the pid.
+        var facts = new RunActivityFacts(SlotActive: false, BackoffUntil: null, ConsecutiveFailures: 0);
+
+        var result = TaskRunActivityClassifier.Classify(facts, Exec("running", pid: 5151), null, Now);
+
+        Assert.Equal(TaskRunActivityKinds.Active, result.Kind);
+        Assert.Equal(5151, result.ProcessId);
+        Assert.Null(result.BackoffUntil);
+    }
+
+    [Fact]
+    public void Active_from_running_execution_outranks_a_stale_backoff()
+    {
+        // A live "running" execution is authoritative even if a stale backoff
+        // deadline is still armed from an earlier failed attempt.
+        var facts = new RunActivityFacts(false, Now.AddMinutes(5), ConsecutiveFailures: 2);
+
+        var result = TaskRunActivityClassifier.Classify(facts, Exec("running", pid: 8), null, Now);
+
+        Assert.Equal(TaskRunActivityKinds.Active, result.Kind);
+        Assert.Equal(8, result.ProcessId);
+    }
+
+    [Fact]
     public void FailedBackoff_when_backoff_in_future_and_no_slot()
     {
         var until = Now.AddSeconds(60);

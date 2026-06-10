@@ -170,7 +170,7 @@ public sealed class UpdateOrchestrator
                 SetPhase("pausing-runners", $"pausing {preModes.Count} project runner(s)", runId, startedAt);
                 foreach (var kv in preModes)
                     if (kv.Value != "manual")
-                        await _backend.SetModeAsync(kv.Key, "manual", ct);
+                        await _backend.SetModeAsync(kv.Key, "manual", "update-quiesce", ct);
             }
             else
             {
@@ -471,7 +471,7 @@ public sealed class UpdateOrchestrator
         var resumeOut = new StringBuilder();
         foreach (var (project, prev) in modes)
         {
-            var ok = await _backend.SetModeAsync(project, prev, ct);
+            var ok = await _backend.SetModeAsync(project, prev, "update-resume", ct);
             resumeOut.AppendLine($"{project} -> {prev}: {(ok ? "ok" : "FAIL")}");
         }
         folder.WriteOutput(outputName, resumeOut.ToString());

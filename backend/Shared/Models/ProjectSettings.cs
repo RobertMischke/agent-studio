@@ -13,11 +13,27 @@ public record ProjectSettings
     public string AutoPushStrategy { get; init; } = AutoPushStrategies.OnCompleted;
 
     /// <summary>
-    /// Last runner mode chosen by the user for this project ("manual", "auto-single",
-    /// "auto-continuous", "paused"). Restored at backend startup so the auto-pickup
-    /// toggle survives self-rebuild / restart. Null means "use the default (manual)".
+    /// Last <i>live</i> runner mode for this project ("manual", "auto-single",
+    /// "auto-continuous", "paused"), updated on every mode change regardless of
+    /// who caused it (operator, circuit-breaker, supervisor, update-quiesce).
+    /// The supervisor meta-cycle reads this to detect runner-mode drift, so it
+    /// must keep mirroring the actual live mode. Null means "use the default
+    /// (manual)". Boot restore prefers <see cref="DesiredRunnerMode"/> over this
+    /// so a transient system flip does not become the restored mode (ASS-1753).
     /// </summary>
     public string? RunnerMode { get; init; }
+
+    /// <summary>
+    /// The operator's durable auto-pickup intent - the last mode set by a
+    /// <i>user</i>-sourced change (the API toggle), never overwritten by a
+    /// system-driven flip such as the update-service quiesce or a
+    /// circuit-breaker pause. This is what the backend restores at startup so
+    /// "auto-continuous" survives a self-rebuild / restart even when the runner
+    /// was sitting at a system-imposed manual when the process went down
+    /// (ASS-1753). Null falls back to <see cref="RunnerMode"/> for legacy
+    /// records written before this field existed.
+    /// </summary>
+    public string? DesiredRunnerMode { get; init; }
 
     /// <summary>
     /// Model the orchestrator uses when it makes decisions on behalf of the

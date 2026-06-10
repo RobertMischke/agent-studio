@@ -677,6 +677,21 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     public bool IsRunningForProject(string rootPath) =>
         _processes.Values.Any(p => p.WorkingDirectory == rootPath && !p.Process.HasExited);
 
+    public IReadOnlyList<(string JobKey, CliExecution Execution)> RunningExecutions()
+    {
+        var result = new List<(string, CliExecution)>();
+        foreach (var kv in _processes)
+        {
+            var info = kv.Value;
+            if (info.Process.HasExited) continue;
+            var exec = info.Execution;
+            if (exec == null) continue;
+            if (!string.Equals(exec.Status, "running", StringComparison.OrdinalIgnoreCase)) continue;
+            result.Add((kv.Key, exec));
+        }
+        return result;
+    }
+
     /// <summary>
     /// Default convention-based execution context (ASS-1739 / T1a): scalar
     /// header from the run's <see cref="ProcInfo"/> plus the per-CLI
