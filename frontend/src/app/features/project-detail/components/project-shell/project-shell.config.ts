@@ -27,6 +27,12 @@ export type ProjectRailKey =
   | 'steering-docs'
   | 'steering'
   | 'wiki'
+  // Nav-rebuild step 1 (T5a): three reachable shells that get their real
+  // content in step 2 (T5b). 'pipeline' ← T4, 'workflow' ← T6, 'prompts' ← T3.
+  // Until then they render as the project-shell placeholder panel.
+  | 'pipeline'
+  | 'workflow'
+  | 'prompts'
   | 'runtime-prompts'
   | 'audits'
   | 'jobs'
@@ -234,6 +240,38 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Instruction files agents read on their own (AGENTS.md and the agent-facing domain docs), with human summary and drift warnings',
     empty: 'No agent-doc inventory yet. The slice lists AGENTS.md, frontend/AGENTS.md, README, ROADMAP, the task contract, the skills lookup, and the ADR archive.',
     icon: '🧭',
+  },
+  // ---- Nav-rebuild shells (T5a step 1) ----
+  // Target navigation (Zielbild §F2): Board · Wiki · Pipeline · Workflow ·
+  // Prompts · Einstellungen at project level. These three are reachable
+  // placeholder shells now; step 2 (T5b) moves the existing functionality
+  // here unchanged. Nothing is moved in this step — the source pages stay put.
+  {
+    key: 'pipeline',
+    group: 'config',
+    label: 'Pipeline',
+    panelTitle: 'Pipeline',
+    description: 'Run pipeline steps (pre / core / post): activation, order, per-step model and prompt binding, and cost.',
+    empty: 'Pipeline shell — navigation only. Step 2 (T5b) moves the pipeline sections currently in Project Settings here unchanged: per-step activation and order, model + prompt binding (→ Prompts), and token/cost view. Step 3 (T4a) then redesigns this page.',
+    icon: '⫶',
+  },
+  {
+    key: 'workflow',
+    group: 'config',
+    label: 'Workflow',
+    panelTitle: 'Workflow / Lanes',
+    description: 'Lanes, ordering, and transitions; later per-transition Git integration.',
+    empty: 'Workflow shell — navigation only. Step 2 (T5b) moves the lane sort-order controls here unchanged. The transition view (stage 1) and Git integration (stage 2, after the Git concept decision) land in step 3 (T6a) and step 4.',
+    icon: '⇄',
+  },
+  {
+    key: 'prompts',
+    group: 'config',
+    label: 'Prompts',
+    panelTitle: 'Prompts',
+    description: 'Prompt registry for this project: inventory, source / override matrix, and coverage.',
+    empty: 'Prompts shell — navigation only. Step 2 (T5b) moves the prompt-admin surface here unchanged: registry inventory, source/override matrix, and coverage. Distinct from Runtime Prompts below, which is the read-only browse over prompts/runtime/*.md.',
+    icon: '✎',
   },
   {
     // Runtime prompts are a SEPARATE main point from the agent-read docs above:

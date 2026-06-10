@@ -50,3 +50,49 @@ describe('StudioActivityBarComponent (smoke)', () => {
     }
   });
 });
+
+/**
+ * T5a nav-rebuild step 1: the activity bar gains a bottom-pinned Admin
+ * destination (Zielbild §F2 workspace group: CLI & Modelle + System).
+ */
+describe('StudioActivityBarComponent admin destination', () => {
+  function mount() {
+    TestBed.configureTestingModule({
+      imports: [StudioActivityBarComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const fixture = TestBed.createComponent(StudioActivityBarComponent);
+    fixture.componentRef.setInput('items', []);
+    fixture.componentRef.setInput('activePanel', 'explorer');
+    fixture.componentRef.setInput('sidebarVisible', true);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('renders an Admin button that emits the admin panel key', () => {
+    const fixture = mount();
+    const host = fixture.nativeElement as HTMLElement;
+    const btn = host.querySelector<HTMLElement>('[data-testid="studio-ab-admin"]');
+    expect(btn).toBeTruthy();
+
+    const emitted: string[] = [];
+    fixture.componentInstance.panelToggle.subscribe(k => emitted.push(k));
+    btn!.click();
+
+    expect(emitted).toEqual(['admin']);
+  });
+
+  it('highlights the Admin button only while its panel is active and visible', () => {
+    const fixture = mount();
+    fixture.componentRef.setInput('activePanel', 'admin');
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const btn = host.querySelector<HTMLElement>('[data-testid="studio-ab-admin"]')!;
+    expect(btn.classList.contains('studio-ab__btn--active')).toBe(true);
+  });
+});

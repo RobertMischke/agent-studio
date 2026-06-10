@@ -32,7 +32,7 @@ export class StudioActivityBarComponent {
   readonly epicsActive = input<boolean>(false);
   /** Whether any epics exist. The Epics button is hidden when false. */
   readonly hasEpics = input<boolean>(false);
-  readonly panelToggle = output<StudioActivityPanelKey | 'settings'>();
+  readonly panelToggle = output<StudioActivityPanelKey | 'settings' | 'admin'>();
   /** Fires when the user clicks the always-visible Backlog button. */
   readonly openBacklogRequest = output<void>();
   /** Fires when the user clicks the Epics button (shown only when epics exist). */

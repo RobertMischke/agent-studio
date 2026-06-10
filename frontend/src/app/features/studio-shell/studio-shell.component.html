@@ -335,6 +335,34 @@
                 </button>
               </section>
             }
+            @case ('admin') {
+              <section class="studio-admin" data-testid="studio-admin-panel">
+                <app-section-header title="Admin" />
+                <p class="studio-empty studio-empty--note">
+                  Workspace admin (Zielbild §F2). Navigation only for now — the
+                  live surfaces still open in their existing overlays; step 2
+                  (T5b) moves their content under these entries unchanged.
+                </p>
+                <app-section-header title="CLI & Modelle" [divider]="true" />
+                <p class="studio-empty studio-empty--note">
+                  CLI types, quota, completion contracts, and per-CLI working memory (← T7).
+                </p>
+                <button type="button" class="studio-button studio-button--ghost"
+                        data-testid="studio-admin-open-cli"
+                        (click)="openCliAdmin.emit()">
+                  Open CLI & Modelle
+                </button>
+                <app-section-header title="System" [divider]="true" />
+                <p class="studio-empty studio-empty--note">
+                  Orchestrator config and diagnostics (AdminConfig).
+                </p>
+                <button type="button" class="studio-button studio-button--ghost"
+                        data-testid="studio-admin-open-system"
+                        (click)="openOrchSettings.emit()">
+                  Open System
+                </button>
+              </section>
+            }
             @case ('settings') {
               <section class="studio-settings">
                 <app-section-header title="Appearance" />

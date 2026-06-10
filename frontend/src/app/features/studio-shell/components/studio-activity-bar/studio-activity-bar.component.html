@@ -74,6 +74,20 @@
     </button>
   }
   <span class="studio-ab__spacer"></span>
+  <!-- Workspace Admin (Zielbild §F2): groups CLI & Modelle + System. Pinned
+       to the bottom with Settings — workspace-level config destinations. -->
+  <button type="button"
+          class="studio-ab__btn"
+          [class.studio-ab__btn--active]="activePanel() === 'admin' && sidebarVisible()"
+          appTooltip="Admin"
+          data-testid="studio-ab-admin"
+          (click)="panelToggle.emit('admin')">
+    <svg class="studio-ab__svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+         aria-hidden="true">
+      <path d="M12 3l7 3v5c0 4.2-2.8 7.6-7 9-4.2-1.4-7-4.8-7-9V6z" />
+    </svg>
+  </button>
   <button type="button"
           class="studio-ab__btn"
           [class.studio-ab__btn--active]="activePanel() === 'settings' && sidebarVisible()"

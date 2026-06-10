@@ -124,6 +124,44 @@ describe('ProjectShellComponent rail IA', () => {
     expect(host.querySelector('.proj-shell__rail-icon')).toBeNull();
   });
 
+  // T5a nav-rebuild step 1: the target navigation gains three reachable
+  // shells (Pipeline / Workflow / Prompts) at project level. They live in
+  // Config and render the generic placeholder panel until step 2 moves real
+  // content in.
+  it('exposes the Pipeline / Workflow / Prompts shells as reachable Config rows', () => {
+    const host = mount().nativeElement as HTMLElement;
+    for (const key of ['pipeline', 'workflow', 'prompts']) {
+      const row = railEl(host, key);
+      expect(row, `rail row ${key}`).toBeTruthy();
+      // Top-level points in Config, not nested containers (no twisty).
+      expect(host.querySelector(`[data-testid="project-shell-twisty-${key}"]`)).toBeNull();
+    }
+  });
+
+  it('clicking a new shell row emits its key', () => {
+    const fixture = mount('overview');
+    const host = fixture.nativeElement as HTMLElement;
+    const emitted: ProjectRailKey[] = [];
+    fixture.componentInstance.railChange.subscribe(k => emitted.push(k));
+
+    railEl(host, 'pipeline')!.click();
+    railEl(host, 'workflow')!.click();
+    railEl(host, 'prompts')!.click();
+    fixture.detectChanges();
+
+    expect(emitted).toEqual(['pipeline', 'workflow', 'prompts']);
+  });
+
+  it('renders the placeholder panel (title + empty hint) for a new shell when active', () => {
+    const host = mount('pipeline').nativeElement as HTMLElement;
+    const panel = host.querySelector('[data-testid="project-shell-panel-pipeline"]');
+    expect(panel).toBeTruthy();
+    expect(host.querySelector('[data-testid="project-shell-panel-title"]')!.textContent)
+      .toContain('Pipeline');
+    expect(host.querySelector('[data-testid="project-shell-panel-empty"]')!.textContent)
+      .toContain('Step 2');
+  });
+
   it('clicking a leaf rail emits its key; re-clicking the active rail is a no-op', () => {
     const fixture = mount('overview');
     const host = fixture.nativeElement as HTMLElement;

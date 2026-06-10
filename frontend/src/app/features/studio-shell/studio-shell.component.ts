@@ -1031,7 +1031,7 @@ export class StudioShellComponent {
     this.pickProject(ev.id === '__all__' ? null : ev.id);
   }
 
-  togglePanel(panel: StudioActivityPanelKey | 'settings'): void {
+  togglePanel(panel: StudioActivityPanelKey | 'settings' | 'admin'): void {
     this.panelState.toggle(panel);
   }
 
