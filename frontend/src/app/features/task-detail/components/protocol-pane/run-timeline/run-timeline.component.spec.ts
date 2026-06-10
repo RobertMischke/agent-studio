@@ -179,6 +179,86 @@ describe('RunTimelineComponent (smoke)', () => {
     http.verify();
   });
 
+  it('shows the clean-mode badge and the isolated temp paths in the panel (T1b / ASS-1742)', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RunTimelineComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RunTimelineComponent);
+    fixture.componentRef.setInput('job', taskInfo());
+    fixture.componentRef.setInput('runs', [
+      { ...runRecord(1, 'start', 'completed', null, 20), executionContext: cleanExecContext() },
+    ]);
+    fixture.detectChanges();
+
+    const runButton = fixture.nativeElement.querySelector('[data-testid="run-icon-1"]') as HTMLButtonElement;
+    runButton.click();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(r => r.url.endsWith('/tasks/task-1/runs/1/commits')).flush({ commits: [] });
+    fixture.detectChanges();
+
+    // The context-mode badge reads 'clean'.
+    const badge = fixture.nativeElement.querySelector('[data-testid="run-exec-context-mode-1"]') as HTMLElement;
+    expect(badge).not.toBeNull();
+    expect(badge.textContent).toContain('context');
+    expect(badge.textContent).toContain('clean');
+
+    // The panel surfaces the isolated per-run temp home + the seeded temp paths
+    // (the explicit acceptance criterion: "Panel zeigt Temp-Pfade").
+    const panel = fixture.nativeElement.querySelector('[data-testid="run-exec-context-1"]') as HTMLElement;
+    const text = panel.textContent as string;
+    expect(text).toContain('Environment');
+    expect(text).toContain('CLAUDE_CONFIG_DIR');
+    expect(text).toContain('C:/Temp/atp-clean-context/claude-abc123');
+    expect(text).toContain('isolated clean-context home seeded for this run');
+    expect(text).toContain('Global config');
+    expect(text).toContain('Seeded .credentials.json');
+    expect(text).toContain('C:/Temp/atp-clean-context/claude-abc123/.credentials.json');
+
+    // The temp path is rendered as a real source-path code element, not just text.
+    const paths = Array.from(
+      panel.querySelectorAll('code.exec-context__source-path'),
+    ).map(el => el.textContent);
+    expect(paths).toContain('C:/Temp/atp-clean-context/claude-abc123');
+    http.verify();
+  });
+
+  it('shows the shared-mode badge when the run used the operator state (T1b / ASS-1742)', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RunTimelineComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RunTimelineComponent);
+    fixture.componentRef.setInput('job', taskInfo());
+    fixture.componentRef.setInput('runs', [
+      { ...runRecord(1, 'start', 'completed', null, 20), executionContext: { ...execContext(), contextMode: 'shared' } },
+    ]);
+    fixture.detectChanges();
+
+    const runButton = fixture.nativeElement.querySelector('[data-testid="run-icon-1"]') as HTMLButtonElement;
+    runButton.click();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(r => r.url.endsWith('/tasks/task-1/runs/1/commits')).flush({ commits: [] });
+    fixture.detectChanges();
+
+    const badge = fixture.nativeElement.querySelector('[data-testid="run-exec-context-mode-1"]') as HTMLElement;
+    expect(badge).not.toBeNull();
+    expect(badge.textContent).toContain('shared');
+    http.verify();
+  });
+
   it('hides the execution-context panel when nothing was captured', async () => {
     await TestBed.configureTestingModule({
       imports: [RunTimelineComponent],
@@ -300,6 +380,49 @@ function execContext(): CliExecutionContext {
       { kind: 'mcp', label: 'gmail', path: null, exists: null, detail: 'connected' },
       { kind: 'memory', label: 'Project memory', path: 'C:/work/repo/CLAUDE.md', exists: true, detail: null },
       { kind: 'global-config', label: 'Global config', path: 'C:/Users/x/.claude/settings.json', exists: false, detail: null },
+    ],
+  };
+}
+
+/**
+ * A clean-mode execution context as the backend `CleanContextPreparer` surfaces
+ * it (T1b / ASS-1742): `contextMode: 'clean'` plus an `env` source for the
+ * relocated `CLAUDE_CONFIG_DIR` temp home and a `global-config` source for each
+ * file seeded into that temp home. Mirrors the real source shape so the panel
+ * assertions prove what an operator actually sees for an isolated run.
+ */
+function cleanExecContext(): CliExecutionContext {
+  const tempHome = 'C:/Temp/atp-clean-context/claude-abc123';
+  return {
+    cli: 'claude',
+    model: 'claude-opus-4-8',
+    permissionMode: 'bypassPermissions',
+    cwd: 'C:/work/repo',
+    contextMode: 'clean',
+    capturedAt: '2026-06-08T10:01:00Z',
+    source: 'init-frame',
+    sources: [
+      {
+        kind: 'env',
+        label: 'CLAUDE_CONFIG_DIR',
+        path: tempHome,
+        exists: true,
+        detail: 'isolated clean-context home seeded for this run',
+      },
+      {
+        kind: 'global-config',
+        label: 'Seeded .credentials.json',
+        path: `${tempHome}/.credentials.json`,
+        exists: true,
+        detail: 'copied from C:/Users/x/.claude/.credentials.json',
+      },
+      {
+        kind: 'global-config',
+        label: 'Seeded settings.json',
+        path: `${tempHome}/settings.json`,
+        exists: true,
+        detail: 'copied from C:/Users/x/.claude/settings.json',
+      },
     ],
   };
 }
