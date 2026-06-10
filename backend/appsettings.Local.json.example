@@ -18,10 +18,12 @@
     "DeleteE2EJobsEnabled": true
   },
 
-  "//TaskRepository": "Workspace root. Job folders live under <TaskRepository>/projects/<projectKey>/<lane>/<slug>/. The registry metadata also lives here under <TaskRepository>/.metadata/{workspaces.json,projects.json} (ADR-0042).",
+  "//TaskRepository": "Workspace root. Job folders live under <TaskRepository>/projects/<projectKey>/tasks/<bucket>/<KEY>/. The registry metadata also lives here under <TaskRepository>/.metadata/{workspaces.json,projects.json} (ADR-0042).",
+  "//TaskRepository.dev-vs-stable": "ADR-0056: the dev checkout points at its OWN slim demo store, NOT the heavy production workspace. STABLE keeps the production root below. DEV: set this to C:\\Projects\\agent-taskboard-workspace-demo and seed it once with `node scripts/seed-demo-workspace.mjs` (re-run any time to reset to a clean, deterministic demo stand). A separate demo store keeps dev start/memory slim and lets dev run in parallel with stable (no shared-workspace race; see ADR-0044).",
   "TaskRepository": "C:\\Projects\\agent-taskboard-workspace",
 
   "//WatchPaths": "ADR-0042: BOOTSTRAP discovery source only - ignored after first run for any RootPath that already has a registry record. Each entry seeds a project record on first boot. After the registry record exists, this entry can be removed without losing the project, and renaming Name here will not propagate to the registry's DisplayName. Use the (forthcoming F45b) /api/projects mutation endpoints to rename, archive, reassign workspace, or change color. Removing an entry here does NOT delete its registry record.",
+  "//WatchPaths.dev-demo": "ADR-0056: on the DEV checkout, after `node scripts/seed-demo-workspace.mjs`, point WatchPaths at the seeded demo project folders via an explicit `Path` (the scanner reads <Path>/tasks/<bucket>/<KEY>/). The block below is the STABLE / real-repo pattern (RootPath = CLI working dir, resolved to <TaskRepository>/projects/<projectKey> via a .orchestrator.yml pointer). DEV example instead: [ { \"Name\": \"Demo App\", \"Path\": \"C:\\\\Projects\\\\agent-taskboard-workspace-demo\\\\projects\\\\demo-app\" }, { \"Name\": \"Demo Platform\", \"Path\": \"C:\\\\Projects\\\\agent-taskboard-workspace-demo\\\\projects\\\\demo-platform\" } ].",
   "WatchPaths": [
     {
       "//comment": "RootPath is the working directory for CLI runs. RepositoryPath is optional; set it when git operations should run from a parent folder of RootPath.",
