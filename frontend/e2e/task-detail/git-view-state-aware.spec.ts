@@ -444,6 +444,86 @@ test.describe('F55: Git View state-aware display', () => {
     }
   });
 
+  // ASS-1731: the live Git view must be scoped to the task's RUN-LOCATION, not
+  // the shared repo root. When the task runs in its own `task/<id>` worktree the
+  // backend status carries isWorktree=true + the worktree's branch; the pane
+  // must label it `(Worktree)` and show that branch — never a sibling run's
+  // dirty files from the main checkout (the cross-attribution bug).
+  test('Git pane labels the run-location as (Worktree) and shows the task branch', async ({
+    page,
+  }) => {
+    const gitStatus = {
+      isRepo: true,
+      branch: 'task/git-view-state-test',
+      filesChanged: 1,
+      totalAdded: 5,
+      totalRemoved: 0,
+      files: [{ status: 'A', path: 'src/this-task-work.ts', added: 5, removed: 0 }],
+      error: null,
+      isWorktree: true,
+    };
+
+    await installRoutes(page, '3-progress', false, gitStatus, JOB_ID);
+    await page.goto(
+      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    );
+
+    await dismissErrorDialog(page);
+    await page.getByTestId('studio-pane-toggle-git').click();
+
+    const paneGit = page.getByTestId('pane-git');
+    await expect(paneGit).toBeVisible({ timeout: 10_000 });
+
+    const location = page.getByTestId('git-run-location');
+    await expect(location).toHaveText('(Worktree)', { timeout: 10_000 });
+    await expect(location).toHaveClass(/git-view__location--worktree/);
+    await expect(paneGit).toContainText('task/git-view-state-test');
+    await expect(paneGit).toContainText('this-task-work.ts');
+
+    if (RESULTS_DIR) {
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, 'ass-1731-git-pane-worktree-label.png'),
+      });
+    }
+  });
+
+  test('Git pane labels the run-location as (Haupt-Checkout) when no worktree exists', async ({
+    page,
+  }) => {
+    const gitStatus = {
+      isRepo: true,
+      branch: 'develop',
+      filesChanged: 1,
+      totalAdded: 2,
+      totalRemoved: 0,
+      files: [{ status: 'M', path: 'src/main-checkout.ts', added: 2, removed: 0 }],
+      error: null,
+      isWorktree: false,
+    };
+
+    await installRoutes(page, '3-progress', false, gitStatus, JOB_ID);
+    await page.goto(
+      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    );
+
+    await dismissErrorDialog(page);
+    await page.getByTestId('studio-pane-toggle-git').click();
+
+    const paneGit = page.getByTestId('pane-git');
+    await expect(paneGit).toBeVisible({ timeout: 10_000 });
+
+    const location = page.getByTestId('git-run-location');
+    await expect(location).toHaveText('(Haupt-Checkout)', { timeout: 10_000 });
+    await expect(location).not.toHaveClass(/git-view__location--worktree/);
+    await expect(paneGit).toContainText('develop');
+
+    if (RESULTS_DIR) {
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, 'ass-1731-git-pane-main-checkout-label.png'),
+      });
+    }
+  });
+
   test('Git pane suppresses the worktree for a non-active task', async ({ page }) => {
     const gitStatus = {
       isRepo: true,
