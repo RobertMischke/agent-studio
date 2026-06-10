@@ -59,8 +59,22 @@ pipeline view.
 - `backend/Services/Review/CodeReviewGradeModelSelector.cs`: resolves the grade
   model/CLI from `CodeReviewStep:DefaultModel` / `CodeReviewStep:DefaultCli`,
   defaulting to Claude Opus 4.8.
-- `backend/Endpoints/Tasks/TaskPipelineEndpoints.cs`: API surface for task
-  pipeline data.
+- `backend/Features/Cli/Routing/OneShot/PromptLoggingCliOneShot.cs`: the
+  central-dispatch decorator over `ICliOneShot.RunAsync` that captures the raw
+  final prompt of every one-shot step-call. `backend/Host/Program.cs` registers
+  `ICliOneShot` as this decorator wrapping `ClaudeOneShot`, so wrapping the
+  single seam captures every step that opts in by setting `JobFolderPath` +
+  `StepId` on its `CliOneShotRequest` (today: the review aspects via
+  `AspectRunnerService` and the code-review-grade / verdict passes via
+  `CodeReviewStepService`).
+- `backend/Features/Cli/Routing/OneShot/StepPromptLog.cs`: the per-job
+  append/read writer for `.metadata/prompts.jsonl` (see filesystem-contract).
+  Writes through the shared `IJsonlAppender` (concurrent aspect fan-out cannot
+  interleave bytes); reads parse the file back into the step-prompt read-model,
+  skipping blank / unparseable lines.
+- `backend/Features/Tasks/TaskPipelineEndpoints.cs`: API surface for task
+  pipeline data, including `GET /{jobId}/step-prompts`, the read-model the
+  Overview "Prompt" affordance parses from `.metadata/prompts.jsonl`.
 - `frontend/src/app/features/task-pipeline/` and the task-detail Overview:
   pipeline presentation.
 
@@ -96,6 +110,15 @@ pipeline view.
   tree is left clean, never silently resolved.
 - Pipeline history is per run. Re-opened tasks append a new attempt and keep
   earlier attempts addressable.
+- Raw step-call prompts are captured once, at central dispatch, into
+  `.metadata/prompts.jsonl` ("Rohdaten komplett, Herleitung als Lesemodell").
+  The capture happens BEFORE the inner CLI call so a timed-out / failed step
+  still leaves its prompt; it is best-effort and must never propagate an IO
+  failure into the run. Only one-shot step-calls that set both `JobFolderPath`
+  and `StepId` are recorded; the main run and its follow-ups are deliberately
+  excluded (already in `prompt.md` / chat) so there is no double bookkeeping.
+  The UI derives, never re-stores: it reads `GET /step-prompts` rather than
+  writing a second copy.
 - If a new step emits a disk or wire shape, add or update a schema and the
   corresponding fixture tests.
 
@@ -112,5 +135,8 @@ pipeline view.
   Haiku regression guard), `CodeReviewGradeParsingTests` (sentinel grammar), and
   `ReviewDecisionOrchestratorGradeStepTests` (end-to-end: the step executes,
   invokes Opus 4.8 not Haiku, and stamps the `code-review:grade-*` tag).
+- Raw step-prompt capture changes need `StepPromptLogTests` (writer/reader
+  round-trip with provenance, dedup for main-run shape, capture-before-failure)
+  and the `overview-pane.component.spec.ts` step-prompt read-model assertion.
 - Frontend pipeline rendering changes need Playwright or component coverage plus
   screenshots when the user-facing view changes.

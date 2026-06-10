@@ -85,6 +85,8 @@ Each job folder uses this structure:
   lifecycle.json    # Optional: richer phase history (intake / post-processing checks)
   post-processing-outcomes.jsonl
                     # Optional: typed Post Processing outcomes
+  .metadata/        # Application-owned sidecars (pipeline-execution.json, files.json, ...)
+                    # Optional: .metadata/prompts.jsonl (raw step-call prompts)
   attachments/      # Input files supplied with the task
   results/          # Output evidence such as screenshots
                     # Optional: results/review-evidence.jsonl (audit / review findings)
@@ -190,6 +192,33 @@ Hard rules:
 - **No state-machine effects.** Findings are review evidence, not blockers. `JobTransitionService` does not consult this file. The user can still move the job through `4-auto-review -> 5-human-review -> 6-completed` while findings are open.
 - **Mutating an existing finding** (acknowledging it, attaching a follow-up id) is done by appending a new line with the same `id` and the updated fields. Readers fold the file into latest-per-id; the file stays append-only.
 - **Storage location.** Inside the job folder, never inside `agent-taskboard-dev/` itself. Meta-level documentation (decisions, ADRs, doctrine) goes in source; task-level evidence stays beside the job.
+
+### .metadata/prompts.jsonl (optional)
+
+Append-only JSON-Lines file holding the **raw final prompt of every one-shot step-call** dispatched for the task (review aspects, the code-review-grade pass, and any other step routed through the central one-shot CLI seam). It closes the "Rohdaten komplett" gap: these step prompts are rendered at run time and otherwise land in no durable file at the task, unlike the main run / follow-up prompts which already live in `prompt.md` and the chat. The capture is written at central dispatch *before* the CLI call (so a prompt survives a later timeout / failure), is best-effort (an IO failure is logged and swallowed, never propagated into the run), and is keyed to the pipeline step so the task-detail Overview can show the exact prompt a step sent. Main-run prompts and follow-ups are deliberately **not** written here — recording them again would be double bookkeeping.
+
+```jsonl
+{"at":"2026-06-10T10:00:00Z","stepId":"aspect-requirement-fit","templateRef":"review-aspect-requirement-fit.md","model":"claude-haiku-4-5","cli":"claude","source":"review-aspect","prompt":"Assess the requirement fit of this change.\n..."}
+{"at":"2026-06-10T10:01:12Z","stepId":"post-code-review-grade","templateRef":"code-review-grade.md","model":"claude-opus-4-8","cli":"claude","source":"review-decision","prompt":"Grade this change A/B/C/D.\n..."}
+```
+
+Schema, per line:
+
+| Field         | Type            | Required | Notes |
+|---------------|-----------------|----------|-------|
+| `at`          | ISO-8601 string | yes      | UTC dispatch time (when the prompt was sent to the CLI). |
+| `stepId`      | string          | yes      | Pipeline step id, e.g. `aspect-requirement-fit` or `post-code-review-grade`. The read-model keys off this to show the prompt next to the matching step. |
+| `templateRef` | string          | no       | Runtime prompt template the final text was rendered from. Null when the prompt is built inline. |
+| `model`       | string          | yes      | Model the prompt was sent to. |
+| `cli`         | string          | yes      | CLI the prompt was sent through (lowercase, e.g. `claude`). |
+| `source`      | string          | no       | Usage-attribution source tag (e.g. `review-decision`) when the call site supplied one. |
+| `prompt`      | string          | yes      | The final, raw prompt text exactly as piped to the CLI. Literal newlines are JSON-escaped so each record stays a single line. |
+
+Hard rules:
+
+- **The endpoint and the UI must never break on a malformed line.** Skip blank and non-parseable JSON lines with a warning; surface the rest (mirrors `results/review-evidence.jsonl`).
+- **No state-machine effects.** This is raw provenance, not a gate. No transition consults it.
+- **Read model only.** The task-detail Overview parses this file via `GET /api/tasks/{id}/step-prompts`; it never duplicates the derivation into another stored file ("Rohdaten komplett, Herleitung als Lesemodell").
 
 ### prompt.md
 
