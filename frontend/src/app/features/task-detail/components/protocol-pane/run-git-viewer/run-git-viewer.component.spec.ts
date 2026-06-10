@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { RunGitViewerComponent } from './run-git-viewer.component';
+import type { RunFileChange } from '../../../../../features/run-timeline';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -36,5 +37,92 @@ describe('RunGitViewerComponent (smoke)', () => {
       console.warn('[smoke] RunGitViewerComponent initial render skipped:', (e as Error).message);
     }
     expect(fixture.componentInstance).toBeTruthy();
+  });
+});
+
+describe('RunGitViewerComponent keyboard navigation', () => {
+  const FILES: RunFileChange[] = [
+    { status: 'M', path: 'backend/Foo.cs', added: 3, removed: 1 },
+    { status: 'M', path: 'frontend/src/app.ts', added: 5, removed: 0 },
+  ];
+
+  async function makeComponent(): Promise<RunGitViewerComponent> {
+    await TestBed.configureTestingModule({
+      imports: [RunGitViewerComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RunGitViewerComponent);
+    const c = fixture.componentInstance;
+    c.files.set(FILES);
+    // Expand every folder so the file rows are part of the visible list.
+    c.expanded.set(new Set(['', 'backend', 'frontend', 'frontend/src']));
+    return c;
+  }
+
+  /** A detached tree element with one `.rgv__node` per visible row so the
+   *  component's roving-focus call has something real to focus. */
+  function fakeTree(rowCount: number): HTMLElement {
+    const aside = document.createElement('aside');
+    for (let i = 0; i < rowCount; i++) {
+      const div = document.createElement('div');
+      div.className = 'rgv__node';
+      div.tabIndex = -1;
+      aside.appendChild(div);
+    }
+    document.body.appendChild(aside);
+    return aside;
+  }
+
+  function press(c: RunGitViewerComponent, tree: HTMLElement, key: string): void {
+    c.onTreeKeydown({ key, preventDefault() {}, currentTarget: tree } as unknown as KeyboardEvent);
+  }
+
+  it('flattens the visible tree and defaults the roving path to the first row', async () => {
+    const c = await makeComponent();
+    const paths = c.visibleNodes().map((r) => r.node.fullPath);
+    expect(paths).toEqual([
+      'backend',
+      'backend/Foo.cs',
+      'frontend',
+      'frontend/src',
+      'frontend/src/app.ts',
+    ]);
+    expect(c.rovingPath()).toBe('backend');
+  });
+
+  it('ArrowDown walks the rows and selects files (loading their diff)', async () => {
+    const c = await makeComponent();
+    const tree = fakeTree(c.visibleNodes().length);
+
+    press(c, tree, 'ArrowDown'); // backend -> backend/Foo.cs (file → selected)
+    expect(c.selectedPath()).toBe('backend/Foo.cs');
+
+    press(c, tree, 'ArrowDown'); // -> frontend (folder → focus only)
+    expect(c.selectedPath()).toBe('backend/Foo.cs');
+
+    press(c, tree, 'ArrowDown'); // -> frontend/src (folder → focus only)
+    expect(c.selectedPath()).toBe('backend/Foo.cs');
+
+    press(c, tree, 'ArrowDown'); // -> frontend/src/app.ts (file → selected)
+    expect(c.selectedPath()).toBe('frontend/src/app.ts');
+  });
+
+  it('ArrowLeft collapses the focused folder and ArrowRight re-expands it', async () => {
+    const c = await makeComponent();
+    const tree = fakeTree(c.visibleNodes().length);
+
+    press(c, tree, 'Home');      // focus "backend" folder
+    press(c, tree, 'ArrowLeft'); // collapse it
+    expect(c.expanded().has('backend')).toBe(false);
+    expect(c.visibleNodes().some((r) => r.node.fullPath === 'backend/Foo.cs')).toBe(false);
+
+    press(c, tree, 'ArrowRight'); // expand it again
+    expect(c.expanded().has('backend')).toBe(true);
+    expect(c.visibleNodes().some((r) => r.node.fullPath === 'backend/Foo.cs')).toBe(true);
   });
 });

@@ -57,6 +57,9 @@ export class GitFileTreeComponent {
   readonly fill = input<boolean>(false);
   readonly selectRequest = output<string>();
 
+  /** Path of the row that currently owns keyboard focus (roving tabindex). */
+  private readonly activePath = signal<string | null>(null);
+
   readonly tree = computed<TreeNode[]>(() => buildTree(this.files()));
 
   /**
@@ -94,16 +97,116 @@ export class GitFileTreeComponent {
     return out;
   });
 
+  /**
+   * The single row that is reachable by Tab (roving tabindex). Prefers the
+   * row the user last interacted with, then the selected file, then the
+   * first visible row so the tree is always focusable from the keyboard.
+   */
+  readonly rovingPath = computed<string | null>(() => {
+    const rows = this.visibleRows();
+    if (rows.length === 0) return null;
+    const active = this.activePath();
+    if (active && rows.some((r) => r.path === active)) return active;
+    const sel = this.selected();
+    if (sel && rows.some((r) => r.path === sel)) return sel;
+    return rows[0].path;
+  });
+
+  ariaLevel(node: TreeNode): number {
+    return node.depth + 1;
+  }
+
   onClick(node: TreeNode): void {
+    this.activePath.set(node.path);
     if (node.isFile) {
       this.selectRequest.emit(node.path);
       return;
     }
+    this.setExpanded(node.path, !this.expanded().has(node.path));
+  }
+
+  /**
+   * Keyboard navigation for the file tree (roving tabindex + ARIA `tree`).
+   * Bound on the `<ul>`, so it only runs while focus is inside the tree and
+   * never competes with the global scroll / shortcut handling. ↑/↓ move the
+   * selection through the visible rows; landing on a file loads its diff on
+   * the right, matching the click behaviour. ←/→ collapse / expand folders.
+   */
+  onKeydown(event: KeyboardEvent): void {
+    const rows = this.visibleRows();
+    if (rows.length === 0) return;
+    const tree = event.currentTarget as HTMLElement;
+    let index = rows.findIndex((r) => r.path === this.rovingPath());
+    if (index < 0) index = 0;
+    const node = rows[index];
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        this.focusRowAt(Math.min(index + 1, rows.length - 1), rows, tree);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        this.focusRowAt(Math.max(index - 1, 0), rows, tree);
+        break;
+      case 'ArrowRight':
+        event.preventDefault();
+        if (!node.isFile) {
+          if (!this.expanded().has(node.path)) this.setExpanded(node.path, true);
+          else if (node.children.length) this.focusRowAt(index + 1, rows, tree);
+        }
+        break;
+      case 'ArrowLeft':
+        event.preventDefault();
+        if (!node.isFile && this.expanded().has(node.path)) {
+          this.setExpanded(node.path, false);
+        } else {
+          const parent = parentIndex(rows, index);
+          if (parent >= 0) this.focusRowAt(parent, rows, tree);
+        }
+        break;
+      case 'Enter':
+      case ' ':
+        event.preventDefault();
+        this.onClick(node);
+        break;
+      case 'Home':
+        event.preventDefault();
+        this.focusRowAt(0, rows, tree);
+        break;
+      case 'End':
+        event.preventDefault();
+        this.focusRowAt(rows.length - 1, rows, tree);
+        break;
+    }
+  }
+
+  private focusRowAt(index: number, rows: TreeNode[], tree: HTMLElement): void {
+    const node = rows[index];
+    if (!node) return;
+    this.activePath.set(node.path);
+    // Moving onto a file selects it so the diff loads on the right; folders
+    // only take focus (expand / collapse stays an explicit ←/→/Enter action).
+    if (node.isFile && this.selected() !== node.path) {
+      this.selectRequest.emit(node.path);
+    }
+    tree.querySelectorAll<HTMLElement>('li.git-tree__row')[index]?.focus();
+  }
+
+  private setExpanded(path: string, on: boolean): void {
     const files = this.files();
     const next = new Set(this.expanded());
-    if (next.has(node.path)) next.delete(node.path); else next.add(node.path);
+    if (on) next.add(path); else next.delete(path);
     this.userExpanded.set({ files, set: next });
   }
+}
+
+/** Index of the nearest preceding shallower row (the folder that contains `index`). */
+function parentIndex(rows: readonly TreeNode[], index: number): number {
+  const depth = rows[index].depth;
+  for (let i = index - 1; i >= 0; i--) {
+    if (rows[i].depth < depth) return i;
+  }
+  return -1;
 }
 
 function buildTree(files: readonly GitFileChange[]): TreeNode[] {

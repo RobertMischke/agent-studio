@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { GitFileTreeComponent } from './git-file-tree.component';
+import type { GitFileChange } from '../../../../../features/git';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -70,5 +71,97 @@ describe('GitFileTreeComponent (smoke)', () => {
     fixture.componentRef.setInput('fill', false);
     fixture.detectChanges();
     expect(host.getAttribute('data-fill')).toBeNull();
+  });
+});
+
+describe('GitFileTreeComponent keyboard navigation', () => {
+  const FILES: GitFileChange[] = [
+    { status: 'M', path: 'backend/Foo.cs', added: 3, removed: 1 },
+    { status: 'M', path: 'frontend/src/app.ts', added: 5, removed: 0 },
+  ];
+
+  async function mount(): Promise<ComponentFixture<GitFileTreeComponent>> {
+    await TestBed.configureTestingModule({
+      imports: [GitFileTreeComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(GitFileTreeComponent);
+    fixture.componentRef.setInput('files', FILES);
+    fixture.componentRef.setInput('selected', null);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  function rows(fixture: ComponentFixture<GitFileTreeComponent>): HTMLElement[] {
+    return Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('li.git-tree__row'),
+    );
+  }
+
+  it('exposes ARIA tree roles with a single roving tabindex', async () => {
+    const fixture = await mount();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('ul.git-tree')?.getAttribute('role')).toBe('tree');
+    const items = rows(fixture);
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((el) => el.getAttribute('role') === 'treeitem')).toBe(true);
+
+    // Roving tabindex: exactly one row is tab-focusable (defaults to the first).
+    const tabbable = items.filter((el) => el.getAttribute('tabindex') === '0');
+    expect(tabbable.length).toBe(1);
+    expect(items.filter((el) => el.getAttribute('tabindex') === '-1').length).toBe(items.length - 1);
+
+    // Folders advertise expansion state; files advertise selection state.
+    const folder = items.find((el) => el.getAttribute('data-testid') === 'git-tree-folder');
+    const file = items.find((el) => el.getAttribute('data-testid') === 'git-tree-file');
+    expect(folder?.getAttribute('aria-expanded')).toBeTruthy();
+    expect(file?.getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('moves the selection with ArrowDown and loads the focused file diff', async () => {
+    const fixture = await mount();
+    const ul = (fixture.nativeElement as HTMLElement).querySelector('ul.git-tree') as HTMLElement;
+
+    const emitted: string[] = [];
+    fixture.componentInstance.selectRequest.subscribe((p) => emitted.push(p));
+
+    // Roving start is the first row (folder "backend"); first ArrowDown lands
+    // on the file inside it and selects it (loads the diff on the right).
+    ul.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(emitted).toEqual(['backend/Foo.cs']);
+
+    // Next ArrowDown moves onto the "frontend/src" folder: focus only, no select.
+    ul.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(emitted).toEqual(['backend/Foo.cs']);
+
+    // Final ArrowDown reaches the second file and selects it.
+    ul.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(emitted).toEqual(['backend/Foo.cs', 'frontend/src/app.ts']);
+  });
+
+  it('collapses and expands folders with ArrowLeft / ArrowRight', async () => {
+    const fixture = await mount();
+    const ul = (fixture.nativeElement as HTMLElement).querySelector('ul.git-tree') as HTMLElement;
+
+    // Focus the first folder, then collapse it: its child file disappears.
+    ul.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    ul.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    fixture.detectChanges();
+    expect(
+      rows(fixture).some((el) => el.getAttribute('data-path') === 'backend/Foo.cs'),
+    ).toBe(false);
+
+    // Re-expand it: the child file is visible again.
+    ul.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    fixture.detectChanges();
+    expect(
+      rows(fixture).some((el) => el.getAttribute('data-path') === 'backend/Foo.cs'),
+    ).toBe(true);
   });
 });

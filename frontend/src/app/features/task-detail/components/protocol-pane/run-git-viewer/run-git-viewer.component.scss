@@ -55,6 +55,7 @@
 
 .rgv__node { display: flex; align-items: center; gap: 6px; padding: 3px 12px 3px 8px; cursor: pointer; user-select: none; }
 .rgv__node:hover { background: var(--studio-bg-hover); }
+.rgv__node:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -2px; }
 .rgv__node--selected { background: var(--studio-bg-selected); }
 .rgv__node-glyph { width: 16px; flex: 0 0 16px; color: var(--studio-fg-dim); text-align: center; font-size: 11px; }
 .rgv__node-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

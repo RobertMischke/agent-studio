@@ -35,7 +35,7 @@
     </header>
 
     <div class="rgv__body" [class.rgv__body--new-file]="isNewFile()">
-      <aside class="rgv__tree" data-testid="rgv-tree">
+      <aside class="rgv__tree" data-testid="rgv-tree" role="tree" aria-label="Changed files" (keydown)="onTreeKeydown($event)">
         @if (filesState() === 'loading') {
           <div class="rgv__placeholder">Loading file list…</div>
         } @else if (filesState() === 'error') {
@@ -49,14 +49,17 @@
         <ng-template #treeTpl let-nodes let-depth="depth">
           @for (n of nodes; track n.fullPath) {
             <div class="rgv__node"
+                 role="treeitem"
+                 [attr.aria-level]="depth + 1"
+                 [attr.aria-expanded]="n.isFolder ? expanded().has(n.fullPath) : null"
+                 [attr.aria-selected]="n.isFolder ? null : (selectedPath() === n.fullPath)"
                  [class.rgv__node--folder]="n.isFolder"
                  [class.rgv__node--file]="!n.isFolder"
                  [class.rgv__node--selected]="!n.isFolder && selectedPath() === n.fullPath"
                  [style.padding-left.px]="8 + depth * 14"
-                 tabindex="0"
-                 (click)="onNodeClick(n)"
-                 (keydown.enter)="onNodeClick(n)"
-                 (keydown.space)="onNodeClick(n); $event.preventDefault()">
+                 [attr.data-path]="n.fullPath"
+                 [attr.tabindex]="rovingPath() === n.fullPath ? 0 : -1"
+                 (click)="onNodeClick(n)">
               <span class="rgv__node-glyph">
                 @if (n.isFolder) {
                   {{ expanded().has(n.fullPath) ? '▾' : '▸' }}

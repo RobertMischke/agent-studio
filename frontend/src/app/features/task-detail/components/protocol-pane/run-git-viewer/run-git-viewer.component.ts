@@ -47,6 +47,8 @@ export class RunGitViewerComponent implements DoCheck {
   readonly filesState = signal<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   readonly filesError = signal<string | null>(null);
   readonly selectedPath = signal<string | null>(null);
+  /** Path of the tree node that currently owns keyboard focus (roving tabindex). */
+  private readonly activePath = signal<string | null>(null);
   readonly diffText = signal<string>('');
   readonly diffState = signal<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   readonly diffError = signal<string | null>(null);
@@ -57,6 +59,33 @@ export class RunGitViewerComponent implements DoCheck {
   readonly totalRemoved = computed(() => this.files().reduce((s, f) => s + f.removed, 0));
   readonly totalFiles = computed(() => this.files().length);
   readonly rootChildren = computed<TreeNode[]>(() => buildTree(this.files()));
+
+  /** Flattened list of the rows the user can currently see, honouring the
+   *  expanded folders. Drives both keyboard navigation and roving tabindex. */
+  readonly visibleNodes = computed<{ node: TreeNode; depth: number }[]>(() => {
+    const out: { node: TreeNode; depth: number }[] = [];
+    const expanded = this.expanded();
+    const walk = (nodes: TreeNode[], depth: number): void => {
+      for (const n of nodes) {
+        out.push({ node: n, depth });
+        if (n.isFolder && expanded.has(n.fullPath)) walk(n.children, depth + 1);
+      }
+    };
+    walk(this.rootChildren(), 0);
+    return out;
+  });
+
+  /** The single node reachable by Tab (roving tabindex): last-focused, else
+   *  the selected file, else the first visible node. */
+  readonly rovingPath = computed<string | null>(() => {
+    const rows = this.visibleNodes();
+    if (rows.length === 0) return null;
+    const active = this.activePath();
+    if (active && rows.some((r) => r.node.fullPath === active)) return active;
+    const sel = this.selectedPath();
+    if (sel && rows.some((r) => r.node.fullPath === sel)) return sel;
+    return rows[0].node.fullPath;
+  });
   readonly diffLines = computed<DiffLine[]>(() => splitDiff(this.diffText()));
   readonly highlightedLines = signal<HighlightedLine[] | null>(null);
   readonly isNewFile = computed<boolean>(() => detectNewFile(this.diffText()));
@@ -118,15 +147,87 @@ export class RunGitViewerComponent implements DoCheck {
   }
 
   onNodeClick(node: TreeNode): void {
+    this.activePath.set(node.fullPath);
     if (node.isFolder) {
-      const next = new Set(this.expanded());
-      if (next.has(node.fullPath)) next.delete(node.fullPath); else next.add(node.fullPath);
-      this.expanded.set(next);
+      this.setExpanded(node.fullPath, !this.expanded().has(node.fullPath));
       return;
     }
     if (!node.change || this.selectedPath() === node.fullPath) return;
     this.selectedPath.set(node.fullPath);
     this.loadDiff(node.fullPath);
+  }
+
+  /**
+   * Keyboard navigation for the run diff tree (roving tabindex + ARIA `tree`).
+   * Bound on the tree container so it only fires while focus is inside the
+   * tree. ↑/↓ move the selection through the visible rows and load the
+   * focused file's diff; ←/→ collapse / expand folders.
+   */
+  onTreeKeydown(event: KeyboardEvent): void {
+    const rows = this.visibleNodes();
+    if (rows.length === 0) return;
+    const tree = event.currentTarget as HTMLElement;
+    let index = rows.findIndex((r) => r.node.fullPath === this.rovingPath());
+    if (index < 0) index = 0;
+    const { node, depth } = rows[index];
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        this.focusNodeAt(Math.min(index + 1, rows.length - 1), tree);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        this.focusNodeAt(Math.max(index - 1, 0), tree);
+        break;
+      case 'ArrowRight':
+        event.preventDefault();
+        if (node.isFolder) {
+          if (!this.expanded().has(node.fullPath)) this.setExpanded(node.fullPath, true);
+          else if (node.children.length) this.focusNodeAt(index + 1, tree);
+        }
+        break;
+      case 'ArrowLeft':
+        event.preventDefault();
+        if (node.isFolder && this.expanded().has(node.fullPath)) {
+          this.setExpanded(node.fullPath, false);
+        } else {
+          for (let i = index - 1; i >= 0; i--) {
+            if (rows[i].depth < depth) { this.focusNodeAt(i, tree); break; }
+          }
+        }
+        break;
+      case 'Enter':
+      case ' ':
+        event.preventDefault();
+        this.onNodeClick(node);
+        break;
+      case 'Home':
+        event.preventDefault();
+        this.focusNodeAt(0, tree);
+        break;
+      case 'End':
+        event.preventDefault();
+        this.focusNodeAt(rows.length - 1, tree);
+        break;
+    }
+  }
+
+  private focusNodeAt(index: number, tree: HTMLElement): void {
+    const entry = this.visibleNodes()[index];
+    if (!entry) return;
+    this.activePath.set(entry.node.fullPath);
+    // Landing on a file selects it so its diff loads on the right.
+    if (!entry.node.isFolder && entry.node.change && this.selectedPath() !== entry.node.fullPath) {
+      this.selectedPath.set(entry.node.fullPath);
+      this.loadDiff(entry.node.fullPath);
+    }
+    tree.querySelectorAll<HTMLElement>('.rgv__node')[index]?.focus();
+  }
+
+  private setExpanded(path: string, on: boolean): void {
+    const next = new Set(this.expanded());
+    if (on) next.add(path); else next.delete(path);
+    this.expanded.set(next);
   }
 
   private loadFiles(): void {
