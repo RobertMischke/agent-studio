@@ -73,10 +73,17 @@ public sealed class RunPipelineCommitAdvancedRegressionTests : IDisposable
         catch { /* best-effort */ }
     }
 
-    [Fact]
-    public async Task CompletedRunWithAgentEdit_CommitLands_IsAttributed_AndTaskAdvances()
+    // The promise must hold for BOTH supported CLIs (task scope: "pro CLI:
+    // codex UND claude"). The commit-landing/attribution/advance seam is
+    // agent-agnostic, so the same walk is pinned for each agent string.
+    [Theory]
+    [InlineData("claude")]
+    [InlineData("codex")]
+    public async Task CompletedRunWithAgentEdit_CommitLands_IsAttributed_AndTaskAdvances(string agent)
     {
-        // 1) Outcome stage: the run ended with a claude-style done sign-off.
+        var slug = "task-a-" + agent;
+
+        // 1) Outcome stage: the run ended with a done sign-off.
         //    The pipeline only drives a run to auto-review when it is reviewable,
         //    so pin the classifier verdict that gates the advance.
         var runOutput = Lines(
@@ -88,9 +95,9 @@ public sealed class RunPipelineCommitAdvancedRegressionTests : IDisposable
         Assert.True(outcome.MatchedSentinel);
 
         // 2) The task is in progress and its run started cleanly.
-        WriteJob(TaskStates.Progress, "task-a");
+        WriteJob(TaskStates.Progress, slug, agent);
         var firstActivity = DateTime.UtcNow;
-        AppendSessionEvent("task-a", firstActivity);
+        AppendSessionEvent(slug, firstActivity, agent);
 
         // 3) The agent edited a file DURING the run (mtime > first activity).
         var edited = Path.Combine(_repoRoot, "work.txt");
@@ -101,7 +108,7 @@ public sealed class RunPipelineCommitAdvancedRegressionTests : IDisposable
 
         // 4) Pipeline transition: progress -> auto-review.
         var deps = BuildDeps();
-        var move = await deps.Transitions.MoveAsync("task-a", TaskStates.AutoReview, _watchPath);
+        var move = await deps.Transitions.MoveAsync(slug, TaskStates.AutoReview, _watchPath);
         Assert.Equal(MoveJobStatus.Success, move.Status);
 
         // Commit LANDED: repository HEAD moved.
@@ -109,7 +116,7 @@ public sealed class RunPipelineCommitAdvancedRegressionTests : IDisposable
         Assert.NotEqual(headBefore, headAfter);
 
         // Commit is stamped on the task and attributed (records the edited file).
-        var moved = ReadJob(TaskStates.AutoReview, "task-a");
+        var moved = ReadJob(TaskStates.AutoReview, slug);
         Assert.NotNull(moved);
         Assert.NotNull(moved!.Commit);
         Assert.False(string.IsNullOrWhiteSpace(moved.Commit!.Sha));
@@ -117,7 +124,7 @@ public sealed class RunPipelineCommitAdvancedRegressionTests : IDisposable
 
         // Task ADVANCED: it now lives in auto-review, not stuck in progress.
         Assert.Equal(TaskStates.AutoReview, moved.State);
-        Assert.Null(ReadJob(TaskStates.Progress, "task-a"));
+        Assert.Null(ReadJob(TaskStates.Progress, slug));
     }
 
     [Fact]
@@ -195,15 +202,15 @@ public sealed class RunPipelineCommitAdvancedRegressionTests : IDisposable
         return new Deps(scanner, transitions, git, settings);
     }
 
-    private void WriteJob(string state, string slug)
+    private void WriteJob(string state, string slug, string agent = "claude")
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "task.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"{agent}\"}}");
     }
 
-    private void AppendSessionEvent(string slug, DateTime ts)
+    private void AppendSessionEvent(string slug, DateTime ts, string agent = "claude")
     {
         var logsDir = Path.Combine(_watchPath, TaskStates.Progress, slug, "logs");
         Directory.CreateDirectory(logsDir);
@@ -211,7 +218,7 @@ public sealed class RunPipelineCommitAdvancedRegressionTests : IDisposable
         {
             Ts = ts,
             Kind = "start",
-            Cli = "claude",
+            Cli = agent,
             HeadShaBefore = null,
             HeadShaAfter = null
         }) + Environment.NewLine;
