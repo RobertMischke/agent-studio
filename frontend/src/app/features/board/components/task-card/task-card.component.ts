@@ -26,6 +26,7 @@ import {
   buildOwnerChip,
   buildPendingTooltip,
   buildPhaseBadge,
+  buildPipelineDots,
   buildReviewBadge,
   buildTagChips,
   buildTaskTypeChip,
@@ -113,6 +114,8 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   private stopPolling: (() => void) | null = null;
 
   readonly taskTypeChip = computed(() => buildTaskTypeChip(this.job().taskType));
+
+  readonly issueLabel = computed(() => this.job().key || this.job().id);
 
   /**
    * Mode badge (planning / research). Null for coding so the board stays quiet
@@ -224,6 +227,34 @@ export class TaskCardComponent implements OnInit, OnDestroy {
    * `state` key rename and no new backend field — see {@link buildGitStateBadge}.
    */
   readonly gitStateBadge = computed(() => buildGitStateBadge(this.job()));
+
+  readonly pipelineDots = computed(() => buildPipelineDots(this.job()));
+
+  readonly changeContext = computed(() => {
+    const live = this.gitPill();
+    const gitState = this.gitStateBadge();
+    const commits = this.commitChainView();
+    const empty = this.commitEmptyBadge();
+    if (!live && !gitState && !commits && !empty) return null;
+
+    const kind = live ? 'worktree' : gitState?.kind === 'tagged' ? 'archive' : 'branch';
+    const label = live ? 'WT' : gitState?.kind === 'tagged' ? 'TAG' : 'BR';
+    const value = live?.branch || gitState?.label || '';
+    const summary = live
+      ? live.filesChanged === 0 ? 'clean' : `${live.filesChanged} ${live.filesChanged === 1 ? 'file' : 'files'}`
+      : commits ? `${commits.totalCount} ${commits.totalCount === 1 ? 'commit' : 'commits'}`
+        : empty?.label ?? null;
+    const stat = live && (live.totalAdded || live.totalRemoved)
+      ? `+${live.totalAdded}/-${live.totalRemoved}`
+      : null;
+    const tooltip = [
+      live ? this.gitTooltip() : null,
+      gitState?.tooltip ?? null,
+      empty?.tooltip ?? null,
+    ].filter((part): part is string => !!part).join('\n\n');
+
+    return { kind, label, value, summary, stat, tooltip };
+  });
 
   /**
    * Host-level "this card needs a human" flag. Drives the red uniform ring +
