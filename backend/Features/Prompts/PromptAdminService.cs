@@ -298,6 +298,40 @@ public sealed class PromptDetail
     public string? BaseDefaultSha { get; set; }
     public bool DefaultChangedSinceOverride { get; set; }
     public DateTimeOffset? OverrideUpdatedAt { get; set; }
+    public List<string> Slots { get; set; } = new();
+    public List<PromptUsageRef> Usages { get; set; } = new();
+}
+
+/// <summary>
+/// Result of a non-persisting "Probelauf" render: the rendered output plus
+/// which declared slots were filled vs left empty for the supplied values.
+/// </summary>
+public sealed class PromptPreviewResult
+{
+    public string Name { get; set; } = "";
+    public string Rendered { get; set; } = "";
+    public List<string> Slots { get; set; } = new();
+    public List<string> FilledSlots { get; set; } = new();
+    public List<string> MissingSlots { get; set; } = new();
+}
+
+/// <summary>
+/// Coverage roll-up: which prompt-source sites are template-backed (covered)
+/// vs still assembling instruction text inline (pending), with totals.
+/// </summary>
+public sealed class PromptCoverageResponse
+{
+    public List<PromptCoverageItem> Items { get; set; } = new();
+    public int TotalSites { get; set; }
+    public int CoveredSites { get; set; }
+    public int PendingSites { get; set; }
+}
+
+public sealed class PromptCoverageItem
+{
+    public string Component { get; set; } = "";
+    public string Status { get; set; } = "";
+    public string Detail { get; set; } = "";
 }
 
 internal sealed class PromptOverrideSidecar

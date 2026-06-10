@@ -56,6 +56,38 @@
           }
         </div>
 
+        <section class="prompts__meta" data-testid="prompt-admin-meta">
+          <div class="prompts__meta-col">
+            <div class="prompts__meta-head">Slots</div>
+            @if (d.slots.length) {
+              <div class="prompts__slots">
+                @for (slot of d.slots; track slot) {
+                  <code class="prompts__slot" [attr.data-testid]="'prompt-admin-slot-' + slot">{{ '{{' + slot + '}}' }}</code>
+                }
+              </div>
+            } @else {
+              <span class="prompts__muted">No named slots — static template.</span>
+            }
+          </div>
+          <div class="prompts__meta-col">
+            <div class="prompts__meta-head">Used by</div>
+            @if (d.usages.length) {
+              <table class="prompts__usage" data-testid="prompt-admin-usage">
+                <tbody>
+                  @for (use of d.usages; track use.component + use.member) {
+                    <tr>
+                      <td><code>{{ use.component }}.{{ use.member }}</code></td>
+                      <td class="prompts__muted">{{ use.purpose }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            } @else {
+              <span class="prompts__muted">No recorded usage in the registry.</span>
+            }
+          </div>
+        </section>
+
         @if (d.defaultChangedSinceOverride) {
           <div class="prompts__banner prompts__banner--warn" data-testid="prompt-admin-drift-banner">
             <div>
@@ -108,6 +140,43 @@
           }
         </div>
 
+        <section class="prompts__probe" data-testid="prompt-admin-probe">
+          <div class="prompts__compare-head">Probelauf — render the current draft against slot values</div>
+          @if (d.slots.length) {
+            <div class="prompts__probe-slots">
+              @for (slot of d.slots; track slot) {
+                <label class="prompts__probe-field">
+                  <span class="prompts__probe-slot-name">{{ slot }}</span>
+                  <input
+                    type="text"
+                    class="prompts__probe-input"
+                    [attr.data-testid]="'prompt-admin-probe-input-' + slot"
+                    [value]="slotValues()[slot]"
+                    (input)="setSlotValue(slot, $any($event.target).value)"
+                    [placeholder]="'value for {{' + slot + '}}'" />
+                </label>
+              }
+            </div>
+          } @else {
+            <span class="prompts__muted">No slots — the Probelauf renders the template verbatim.</span>
+          }
+          <div class="prompts__actions">
+            <button type="button" class="prompts__btn"
+                    data-testid="prompt-admin-probe-run"
+                    [disabled]="previewBusy()" (click)="runPreview()">Run Probelauf</button>
+          </div>
+          @if (previewResult(); as p) {
+            <div class="prompts__probe-result" data-testid="prompt-admin-probe-result">
+              @if (p.missingSlots.length) {
+                <div class="prompts__muted" data-testid="prompt-admin-probe-missing">
+                  Unfilled slots: {{ p.missingSlots.join(', ') }}
+                </div>
+              }
+              <pre class="prompts__default">{{ p.rendered }}</pre>
+            </div>
+          }
+        </section>
+
         @if (d.defaultChangedSinceOverride && diffLines().length) {
           <div class="prompts__compare" data-testid="prompt-admin-diff-view">
             <div class="prompts__compare-head">Diff: current shipped default vs your override</div>
@@ -133,6 +202,32 @@
         }
       } @else {
         <div class="prompts__empty">Select a prompt to view and edit it.</div>
+      }
+
+      @if (coverage(); as cov) {
+        <section class="prompts__coverage" data-testid="prompt-admin-coverage">
+          <div class="prompts__coverage-head">
+            <span>Inline-migration coverage</span>
+            <span class="prompts__muted" data-testid="prompt-admin-coverage-count">
+              {{ cov.coveredSites }} / {{ cov.totalSites }} prompt sites template-backed
+            </span>
+          </div>
+          <table class="prompts__usage">
+            <tbody>
+              @for (item of cov.items; track item.component) {
+                <tr [attr.data-testid]="'prompt-admin-coverage-row-' + item.status">
+                  <td>
+                    <span class="prompts__pill"
+                          [class.prompts__pill--ok]="item.status === 'covered'"
+                          [class.prompts__pill--warn]="item.status === 'pending'">{{ item.status }}</span>
+                  </td>
+                  <td><code>{{ item.component }}</code></td>
+                  <td class="prompts__muted">{{ item.detail }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </section>
       }
     </main>
   </div>

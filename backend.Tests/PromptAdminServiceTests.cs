@@ -83,6 +83,64 @@ public sealed class PromptAdminServiceTests
         Assert.Equal("Override only", detail.EffectiveContent);
     }
 
+    [Fact]
+    public void Detail_ExposesSlotsAndRegisteredUsages()
+    {
+        using var home = new PromptTestHome();
+        const string name = "runner-fresh-start.md";
+        home.WriteDefault(name, "Hello {{name}}, task {{taskId}}.");
+
+        var admin = home.CreateAdminService(home.CreatePromptService());
+
+        var detail = admin.GetDetail(name);
+
+        Assert.NotNull(detail);
+        Assert.Equal(new[] { "name", "taskId" }, detail.Slots);
+        // runner-fresh-start.md is registered in PromptUsageCatalog with usages.
+        Assert.NotEmpty(detail.Usages);
+        Assert.Contains(detail.Usages, u => u.Component == "ProjectRunner");
+    }
+
+    [Fact]
+    public void Preview_RendersDraftAndReportsFilledAndMissingSlots()
+    {
+        using var home = new PromptTestHome();
+        const string name = "runner-fresh-start.md";
+        home.WriteDefault(name, "saved {{a}} {{b}}");
+
+        var admin = home.CreateAdminService(home.CreatePromptService());
+
+        var result = admin.Preview(
+            name,
+            new Dictionary<string, string?> { ["a"] = "X" },
+            content: "draft {{a}} {{b}}");
+
+        Assert.NotNull(result);
+        Assert.Equal("draft X {{b}}", result.Rendered);
+        Assert.Equal(new[] { "a", "b" }, result.Slots);
+        Assert.Equal(new[] { "a" }, result.FilledSlots);
+        Assert.Equal(new[] { "b" }, result.MissingSlots);
+    }
+
+    [Fact]
+    public void Coverage_ReportsTheFourMigratedSitesAsCovered()
+    {
+        using var home = new PromptTestHome();
+        var admin = home.CreateAdminService(home.CreatePromptService());
+
+        var coverage = admin.GetCoverage();
+
+        Assert.True(coverage.TotalSites >= 4);
+        Assert.Equal(coverage.Items.Count, coverage.TotalSites);
+        Assert.Equal(
+            coverage.CoveredSites + coverage.PendingSites,
+            coverage.TotalSites);
+        Assert.Contains(coverage.Items, i =>
+            i.Component.EndsWith("ReviewDecisionOrchestrator.cs") && i.Status == "covered");
+        Assert.Contains(coverage.Items, i =>
+            i.Component.EndsWith("CodePatternDriftAnalysisService.cs") && i.Status == "covered");
+    }
+
     private sealed class PromptTestHome : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), $"prompt-admin-tests-{Guid.NewGuid():N}");

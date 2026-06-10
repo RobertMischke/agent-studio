@@ -46,10 +46,24 @@ public static class AdminConfigEndpoints
 
         prompts.MapGet("", (PromptAdminService svc) => Results.Ok(svc.GetCatalog()));
 
+        // Coverage roll-up: which prompt-source sites are template-backed vs
+        // still inline. Static path registered before "/{name}" so it is not
+        // shadowed by the detail route.
+        prompts.MapGet("/coverage", (PromptAdminService svc) => Results.Ok(svc.GetCoverage()));
+
         prompts.MapGet("/{name}", (string name, PromptAdminService svc) =>
         {
             var detail = svc.GetDetail(name);
             return detail == null ? Results.NotFound(new { error = $"Unknown prompt '{name}'." }) : Results.Ok(detail);
+        });
+
+        // Non-persisting "Probelauf": renders the effective template (or an
+        // explicit draft) against supplied slot values and reports filled vs
+        // missing slots.
+        prompts.MapPost("/{name}/preview", (string name, PreviewPromptRequest? req, PromptAdminService svc) =>
+        {
+            var result = svc.Preview(name, req?.Values, req?.Content);
+            return result == null ? Results.NotFound(new { error = $"Unknown prompt '{name}'." }) : Results.Ok(result);
         });
 
         prompts.MapPut("/{name}", (string name, SavePromptOverrideRequest req, PromptAdminService svc) =>
@@ -112,5 +126,14 @@ public sealed class UpdateOrchestratorConfigRequest
 
 public sealed class SavePromptOverrideRequest
 {
+    public string? Content { get; set; }
+}
+
+public sealed class PreviewPromptRequest
+{
+    /// <summary>Slot values to render with; missing/empty slots are reported back.</summary>
+    public Dictionary<string, string?>? Values { get; set; }
+
+    /// <summary>Optional draft template to preview instead of the saved effective content.</summary>
     public string? Content { get; set; }
 }
