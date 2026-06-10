@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-06-09
+Version: 2026-06-10
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -46,7 +46,19 @@ pipeline view.
   `backend/Services/Runner/PostAbortReview.cs`: abort-review contract and
   deterministic decider.
 - `backend/Services/Runner/ReviewDecisionOrchestrator.cs`: post-core review and
-  final orchestrator decision recording.
+  final orchestrator decision recording. `RunCodeReviewGradePostStepAsync` wires
+  the automatic quality-grade step (see below) after the aspect fan-out.
+- `backend/Services/Review/CodeReviewStepService.cs`: the shared code-review
+  engine. `CodeReviewMode.Verdict` is the legacy user-triggered pass/concerns/block
+  review; `CodeReviewMode.Grade` is the automatic pipeline pass that assigns an
+  A/B/C/D quality grade and writes a rendered `code-review-grade-<ts>.md`.
+- `backend/Services/Review/CodeReviewGrade.cs`: grade enum, the
+  `[[CODE_REVIEW_GRADE: grade=<A|B|C|D>; summary=<short>]]` sentinel parser, the
+  `code-review:grade-{a..d}` tag mapping, and the grade->pass/concerns/block
+  severity mapping.
+- `backend/Services/Review/CodeReviewGradeModelSelector.cs`: resolves the grade
+  model/CLI from `CodeReviewStep:DefaultModel` / `CodeReviewStep:DefaultCli`,
+  defaulting to Claude Opus 4.8.
 - `backend/Endpoints/Tasks/TaskPipelineEndpoints.cs`: API surface for task
   pipeline data.
 - `frontend/src/app/features/task-pipeline/` and the task-detail Overview:
@@ -57,6 +69,19 @@ pipeline view.
 - `post-orchestrator-review` is an early completeness gate. It must never render
   as a final verdict.
 - `post-orchestrator-decision` is the single final orchestrator verdict.
+- `post-code-review-grade` is the automatic quality-grade step (ASS-1657). It is
+  `DefaultEnabled`, runs after the four aspect reviews and before
+  `post-orchestrator-decision`, and assigns every pipelined task an A/B/C/D grade
+  with the rubric: A solves the goal completely with tests/evidence, B is solid
+  with small gaps, C has concerns (half-done/unclear), D misses the goal or
+  redundantly redoes existing code. It is reporting-only and never gates the lane:
+  the grade surfaces as a `code-review:grade-{a..d}` card tag plus a rendered
+  detail file, a D records a `Failed` step row so it stands out in the Overview,
+  and A-C record `Passed`. The grade model is quality-first: it defaults to Claude
+  Opus 4.8 (`CodeReviewStep:DefaultModel`, CLI `CodeReviewStep:DefaultCli`) while
+  the four cheap aspect reviews stay on Haiku - the deliberate ASS-855/ASS-916
+  asymmetry. Opt out per deployment with `CodeReviewStep:AutoGrade=false`. An
+  unparseable reply degrades to grade C, never silently A.
 - Abort review is contract-bounded: the model returns a verdict, while
   `PostAbortReviewDecider` owns the binding action and rerun budget.
 - The read-only pipeline drops git steps. Planning and research tasks must not
@@ -82,5 +107,10 @@ pipeline view.
   `PipelineStepConditionTests`, and `PipelineStepModelDefaultsTests` coverage.
 - Review and abort-review changes need `ReviewDecisionOrchestrator*Tests`,
   `PostAbortReviewDeciderTests`, and `PostAbortReviewStepServiceTests`.
+- Quality-grade step changes need `CodeReviewStepServiceTests` (grade parsing,
+  tagging, MD render), `CodeReviewGradeModelSelectorTests` (Opus-4.8 default vs
+  Haiku regression guard), `CodeReviewGradeParsingTests` (sentinel grammar), and
+  `ReviewDecisionOrchestratorGradeStepTests` (end-to-end: the step executes,
+  invokes Opus 4.8 not Haiku, and stamps the `code-review:grade-*` tag).
 - Frontend pipeline rendering changes need Playwright or component coverage plus
   screenshots when the user-facing view changes.
