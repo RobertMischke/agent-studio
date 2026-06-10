@@ -41,6 +41,16 @@ internal sealed class ActiveRun
     public string? Branch { get; set; }
 
     /// <summary>
+    /// True when this run RE-USED an existing task worktree (resume / reissue /
+    /// recovery) rather than freshly cutting one. A recorded CLI session may only
+    /// be resumed when its cwd matches this run's working directory: a reused
+    /// worktree carries the same cwd the session was born in, so resume is safe; a
+    /// fresh cut means the prior session lived in a different directory (the old
+    /// main checkout) and must NOT be resumed (it would hang).
+    /// </summary>
+    public bool WorktreeReused { get; set; }
+
+    /// <summary>
     /// Main-checkout git status captured immediately before an isolated run
     /// starts. Used as a containment guard: worktree runs may mutate their
     /// worktree only, never the shared checkout.

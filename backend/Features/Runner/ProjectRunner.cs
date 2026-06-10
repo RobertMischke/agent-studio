@@ -1784,20 +1784,23 @@ public class ProjectRunner
                 Plan = plan,
                 ReissueAttempt = reissueAttempt,
             });
-            // ADR-0052 slice 2: isolate ADDITIONAL concurrent runs in a git
-            // worktree off the work branch so concurrent agents never share a
-            // checkout. Only the 2nd+ slot is isolated: the first/primary active
-            // run stays in Entry.RootPath because it may be a progress RESUME
-            // whose CLI session was created in the main checkout - resuming that
-            // session inside a fresh worktree leaves `claude --resume` unable to
-            // find it and the spawn hangs (observed: occ=1 phantom, no CLI start,
-            // 2nd slot never runs). `_activeRuns.Count` already includes this
-            // just-claimed run, so Count>1 means another run is already
-            // executing => this is a genuine additional slot. The worktree is
-            // per-TASK, not per-run: a resume/reissue REUSES the existing
-            // task/<id> worktree+branch (PrepareOrReuse). Sequential (max==1) and
-            // the primary slot stay in Entry.RootPath, byte-identical to before.
-            if (SlotMax() > 1 && _activeRuns.Count > 1 && _activeRuns.Get(jobId) is { } claimed)
+            // ASS-1732 "always-worktree": a CODING run mutates the source tree, so
+            // it ALWAYS executes in its own isolated task/<id> worktree - the
+            // primary/sequential slot included, and for every intent (fresh
+            // pickup, reissue, resume, crash-recovery requeue). The shared main
+            // checkout is read-only reference + the integration target; letting an
+            // agent coding run touch it cross-contaminates `develop` with another
+            // task's work and lets a resume run land on someone else's dirty tree
+            // (the bug this fixes). The worktree is per-TASK, not per-run: a
+            // resume/reissue REUSES the existing task/<id> worktree+branch
+            // (PrepareOrReuse) so the run continues where it left off instead of
+            // opening a second independent landing. Read-only modes
+            // (planning/research) and epic planning runs write nothing, so they
+            // legitimately run in-place; a non-git workspace has no worktree
+            // machinery and also runs in-place (the only path left in Entry.RootPath).
+            var requiresWorktree = WorktreeRunPolicy.RequiresWorktree(info.Mode, isEpicPlanningRun)
+                                   && _git.IsGitRepo(Entry.RootPath);
+            if (requiresWorktree && _activeRuns.Get(jobId) is { } claimed)
             {
                 claimed.Parallelism = PredictParallelism(info);
                 var wtSettings = _projectSettings.Get(ProjectName);
@@ -1807,17 +1810,21 @@ public class ProjectRunner
                 {
                     claimed.WorktreePath = prep.WorktreePath;
                     claimed.Branch = prep.Branch;
-                    _logger.LogInformation("[taskboard] parallel slot for {Job}: worktree {Path} on {Branch}", jobId, prep.WorktreePath, prep.Branch);
+                    claimed.WorktreeReused = prep.Reused;
+                    _logger.LogInformation(
+                        "[taskboard] worktree for {Job}: {Path} on {Branch} ({Mode})",
+                        jobId, prep.WorktreePath, prep.Branch, prep.Reused ? "reused" : "fresh-cut");
                 }
                 else
                 {
-                    // NEVER fall back to the shared main checkout at max>1: two
-                    // tasks running in Entry.RootPath would overwrite each other
-                    // (the failure this fix exists to prevent). Release the slot
-                    // and serialize - the next auto-pickup tick retries once a
+                    // NEVER fall back to the shared main checkout for a coding run:
+                    // two tasks (or a resume + a fresh pickup) running in
+                    // Entry.RootPath overwrite each other on `develop` - the
+                    // cross-contamination this fix exists to prevent. Release the
+                    // slot and serialize; the next auto-pickup tick retries once a
                     // worktree can be prepared/reused.
                     _logger.LogWarning(
-                        "[taskboard] worktree prepare/reuse failed for {Job}: {Err} - serializing (refusing shared main checkout at max>1)",
+                        "[taskboard] worktree prepare/reuse failed for {Job}: {Err} - serializing (refusing shared main checkout for a coding run)",
                         jobId, prep.Error);
                     _activeRuns.Release(jobId);
                     ReleasePickupLockIfHeld();
@@ -1830,7 +1837,7 @@ public class ProjectRunner
                     NotifyStatus();
                     return RunOutcome.Reject(new RunRejection(
                         Reason: RunRejectReason.ProjectBusy,
-                        Message: $"Worktree isolation unavailable for '{jobId}' ({prep.Error}); deferring to keep parallel runs off the shared checkout.",
+                        Message: $"Worktree isolation unavailable for '{jobId}' ({prep.Error}); deferring to keep the coding run off the shared checkout.",
                         BusyJobId: jobId,
                         BusyJobTitle: info.Title));
                 }
@@ -1852,6 +1859,45 @@ public class ProjectRunner
             // path and hiding shared-checkout fallbacks in the log.)
             var runWorkingDir = _activeRuns.Get(jobId)?.WorktreePath ?? Entry.RootPath;
             _logger.LogInformation("[taskboard] using working directory {Path}", runWorkingDir);
+
+            // ASS-1732 guard (defense-in-depth): a coding run that REQUIRES a
+            // worktree must never start with its working directory pointed at the
+            // shared main checkout. The gate above already rejects on a failed
+            // worktree prepare/reuse, so reaching here with runWorkingDir ==
+            // Entry.RootPath means a worktree was silently skipped - an invariant
+            // violation we refuse loudly + escalate rather than let the agent
+            // dirty `develop`. Read-only / planning runs (requiresWorktree==false)
+            // legitimately run in the main checkout and never trip this.
+            if (WorktreeRunPolicy.IsMainCheckoutViolation(requiresWorktree, runWorkingDir, Entry.RootPath))
+            {
+                var violation = $"Coding run {jobId} resolved to the shared main checkout `{Entry.RootPath}` without an isolated worktree; refusing to start (worktree isolation is mandatory for coding runs).";
+                _logger.LogError("[taskboard] worktree isolation guard tripped for {Job}: {Violation}", jobId, violation);
+                _chatLog.Append(info, OrchestratorMessageKind.WorktreeContainment,
+                    "[worktree-containment] " + violation);
+                _timeline?.Append(
+                    info.FolderPath,
+                    TimelineEventKinds.OrchestratorEscalated,
+                    TimelineActors.System,
+                    summary: "Worktree isolation guard refused a coding run targeting the shared main checkout.",
+                    details: new()
+                    {
+                        ["jobId"] = jobId,
+                        ["mainCheckout"] = Entry.RootPath ?? string.Empty,
+                        ["mode"] = info.Mode ?? string.Empty,
+                    });
+                _activeRuns.Release(jobId);
+                ReleasePickupLockIfHeld();
+                _mutations.RollbackStashedPendingIntent(info.FolderPath);
+                if (movedToProgressThisCall)
+                    RevertFailedStartFromProgress(jobId, info, intent);
+                NotifyStatus();
+                return RunOutcome.Reject(new RunRejection(
+                    Reason: RunRejectReason.ProjectBusy,
+                    Message: violation,
+                    BusyJobId: jobId,
+                    BusyJobTitle: info.Title));
+            }
+
             if (_activeRuns.Get(jobId) is { IsWorktreeRun: true } worktreeRun)
                 worktreeRun.MainCheckoutStatusBefore = _git.GetPorcelainStatus(Entry.RootPath);
 
@@ -1979,20 +2025,31 @@ public class ProjectRunner
             // YOLO). Reading the live ProjectSettingsService here is what makes
             // a toggle take effect on the next run without a backend restart.
             var permissionMode = _projectSettings.ResolveCliMode(ProjectName, cli.CliType).Mode;
-            // ADR-0052 slice 2: an ADDITIONAL parallel slot runs in a fresh git
-            // worktree cut off the work branch. The CLI session captured in the
-            // main checkout does NOT exist inside that worktree, so `--resume
-            // <id>` waits for a session marker that never comes -> StartAsync
-            // never returns -> `_processing` stays latched -> no further slots
-            // are ever admitted (observed: occ stuck at 1, 2nd slot never spawns).
-            // Worktree runs therefore ALWAYS start FRESH: the agent re-derives
-            // context from the task spec + the current code in the worktree
-            // (per the design assumption that agent conversation carry-over is
-            // not required for an isolated parallel run). The primary slot
-            // (main checkout) keeps its normal resume behaviour unchanged.
-            var isWorktreeRun = _activeRuns.Get(jobId)?.IsWorktreeRun == true;
-            var effSessionToResume = isWorktreeRun ? null : plan.SessionToResume;
-            var effResumeFlag = isWorktreeRun ? false : plan.ResumeFlag;
+            // ASS-1732: the CLI keys `--resume <id>` by working directory - it
+            // looks for the session marker under the cwd it is launched in. A
+            // session is therefore resumable only when this run's cwd matches the
+            // one the session was born in:
+            //  - non-worktree run (read-only / non-git): always the same place ->
+            //    resume normally.
+            //  - REUSED worktree (resume / reissue / crash-recovery requeue of a
+            //    task whose worktree already existed): same canonical worktree
+            //    path the prior worktree run used -> the session lives there, so
+            //    resume continues the conversation in the worktree.
+            //  - FRESH-CUT worktree (first isolation for this task, incl. the
+            //    one-time migration of a task whose old session was born in the
+            //    main checkout): any recorded session lived in a DIFFERENT
+            //    directory; `--resume` would wait for a marker that never appears
+            //    and StartAsync would hang. Start FRESH; the agent re-derives
+            //    context from the task spec + the code in the worktree.
+            var activeRunForSpawn = _activeRuns.Get(jobId);
+            var isWorktreeRun = activeRunForSpawn?.IsWorktreeRun == true;
+            var canResumeSession = WorktreeRunPolicy.CanResumeSession(
+                isWorktreeRun, activeRunForSpawn?.WorktreeReused == true);
+            var effSessionToResume = canResumeSession ? plan.SessionToResume : null;
+            var effResumeFlag = canResumeSession && plan.ResumeFlag;
+            if (isWorktreeRun && !canResumeSession && plan.ResumeFlag)
+                _logger.LogInformation(
+                    "[taskboard] {Job}: starting FRESH session in freshly-cut worktree (prior session cwd was not this worktree)", jobId);
             var (execution, cliError) = await cli.StartAsync(
                 jobId, GetJobKey(jobId), prompt, runWorkingDir,
                 effSessionToResume, effResumeFlag, runModel, runThinkingLevel, info.FolderPath, permissionMode, ct);

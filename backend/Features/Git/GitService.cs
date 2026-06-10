@@ -599,6 +599,14 @@ public class GitService
     }
 
     /// <summary>
+    /// True when <paramref name="path"/> lives inside a git working tree (so the
+    /// worktree machinery is available). The runner gates its "always-worktree"
+    /// requirement on this: a non-git workspace has no worktree primitives and
+    /// runs in-place. Cheap: a single <c>rev-parse --show-toplevel</c>.
+    /// </summary>
+    public bool IsGitRepo(string? path) => ResolveGitToplevel(path ?? string.Empty) != null;
+
+    /// <summary>
     /// True when the repo at <paramref name="repoRoot"/> has any uncommitted
     /// modifications (staged, unstaged, or untracked). Cheap-by-design helper
     /// for <see cref="AgentStudio.Runner.CrashRecoveryService"/>.

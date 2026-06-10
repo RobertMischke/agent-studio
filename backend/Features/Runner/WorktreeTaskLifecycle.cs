@@ -3,7 +3,14 @@ using Microsoft.Extensions.Logging;
 namespace AgentStudio.Runner;
 
 /// <summary>Result of the worktree pre-step: an isolated worktree on a fresh task branch.</summary>
-public sealed record WorktreePreparation(bool Success, string? WorktreePath, string? Branch, string? Error);
+/// <param name="Reused">
+/// True when an EXISTING branch/worktree was re-used (resume / reissue / recovery);
+/// false when a fresh <c>task/&lt;id&gt;</c> branch was cut. The runner uses this to
+/// decide whether a recorded CLI session may be resumed: a session born in this same
+/// worktree can be resumed, but a fresh cut must start a new session (the old session's
+/// cwd was the main checkout and would hang on <c>--resume</c>).
+/// </param>
+public sealed record WorktreePreparation(bool Success, string? WorktreePath, string? Branch, string? Error, bool Reused = false);
 
 public enum IntegrationOutcome
 {
@@ -128,7 +135,7 @@ public sealed class WorktreeTaskLifecycle
         if (!string.IsNullOrEmpty(live) && Directory.Exists(live))
         {
             _logger.LogInformation("Reusing live worktree for task {TaskId}: branch {Branch} at {Path}", taskId, branch, live);
-            return new WorktreePreparation(true, live, branch, null);
+            return new WorktreePreparation(true, live, branch, null, Reused: true);
         }
 
         // 2) Branch exists but is detached from any worktree -> re-attach it.
@@ -141,7 +148,7 @@ public sealed class WorktreeTaskLifecycle
             if (attach.Success)
             {
                 _logger.LogInformation("Re-attached worktree for task {TaskId}: existing branch {Branch} at {Path}", taskId, branch, attach.Path);
-                return new WorktreePreparation(true, attach.Path, branch, null);
+                return new WorktreePreparation(true, attach.Path, branch, null, Reused: true);
             }
             _logger.LogWarning("Re-attach of existing branch {Branch} for task {TaskId} failed: {Error}", branch, taskId, attach.Error);
             return new WorktreePreparation(false, null, branch, attach.Error);

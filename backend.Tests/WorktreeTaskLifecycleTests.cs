@@ -47,6 +47,7 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
 
         Assert.True(prep.Success, prep.Error);
         Assert.Equal("task/ATP-101", prep.Branch);
+        Assert.False(prep.Reused); // a fresh cut, not a reuse
         Assert.True(Directory.Exists(prep.WorktreePath));
         Assert.Equal(0, RunGit(repo, "rev-parse --verify task/ATP-101").Code);
         // Branch was cut from develop, not main: its merge-base is develop's tip.
@@ -343,6 +344,7 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
 
         Assert.True(prep.Success, prep.Error);
         Assert.Equal("task/ATP-201", prep.Branch);
+        Assert.False(prep.Reused); // no prior branch/worktree -> fresh cut
         Assert.True(Directory.Exists(prep.WorktreePath));
         Assert.Equal(0, RunGit(repo, "rev-parse --verify task/ATP-201").Code);
     }
@@ -358,6 +360,7 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
 
         var first = life.PrepareOrReuse(repo, "task-resume", "develop", wtRoot);
         Assert.True(first.Success, first.Error);
+        Assert.False(first.Reused); // first run cuts the worktree fresh
         File.WriteAllText(Path.Combine(first.WorktreePath!, "work.txt"), "run 1 work");
         Commit(first.WorktreePath!, "feat: run 1");
         var tipAfterRun1 = RunGit(first.WorktreePath!, "rev-parse HEAD").Out.Trim();
@@ -367,6 +370,7 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
         Assert.True(second.Success, second.Error);
         Assert.Equal(first.WorktreePath, second.WorktreePath);
         Assert.Equal("task/task-resume", second.Branch);
+        Assert.True(second.Reused); // resume re-uses the live worktree -> session may resume
         // The reused worktree still carries run 1's commit (history preserved).
         Assert.Equal(tipAfterRun1, RunGit(second.WorktreePath!, "rev-parse HEAD").Out.Trim());
         Assert.True(File.Exists(Path.Combine(second.WorktreePath!, "work.txt")));
@@ -395,6 +399,7 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
 
         Assert.True(second.Success, second.Error);
         Assert.Equal("task/task-reattach", second.Branch);
+        Assert.True(second.Reused); // re-attaching an existing branch is a reuse
         // Re-attached the SAME branch with its commit, not a fresh cut off develop.
         Assert.Equal(tip, RunGit(second.WorktreePath!, "rev-parse HEAD").Out.Trim());
     }
@@ -415,6 +420,7 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
 
         Assert.True(prep.Success, prep.Error);
         Assert.Equal(WorktreeTaskLifecycle.BranchFor(taskId), prep.Branch);
+        Assert.True(prep.Reused); // pre-existing branch re-attached -> reuse, not fresh cut
         Assert.Equal(orphanPath, prep.WorktreePath);
         Assert.False(File.Exists(Path.Combine(orphanPath, "orphan.txt")));
         Assert.Equal(WorktreeTaskLifecycle.BranchFor(taskId), RunGit(prep.WorktreePath!, "branch --show-current").Out.Trim());
