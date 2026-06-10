@@ -2740,11 +2740,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // Quality over cost: the grade pass defaults to Opus 4.8 even though
             // the four cheap aspect reviews stay on Haiku. Configurable so a
             // deployment can dial the grade model without touching the aspects.
-            var model = _configuration["CodeReviewStep:DefaultModel"];
-            if (string.IsNullOrWhiteSpace(model))
-                model = OrchestratorApi.Services.Cli.ClaudeCliService.DefaultOpusModel;
-            var cli = _configuration["CodeReviewStep:DefaultCli"];
-            if (string.IsNullOrWhiteSpace(cli)) cli = "claude";
+            var (model, cli) = OrchestratorApi.Services.Review.CodeReviewGradeModelSelector.Resolve(
+                _configuration["CodeReviewStep:DefaultModel"],
+                _configuration["CodeReviewStep:DefaultCli"]);
 
             var (diff, commitLabel) = BuildGradeDiff(entry.Name, entry.Path, job);
 
