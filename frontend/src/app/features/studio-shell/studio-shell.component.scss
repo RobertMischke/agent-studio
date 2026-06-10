@@ -1697,13 +1697,24 @@
   }
 
   // Canonical active/selected treatment shared by every tab-bar button
-  // group (board toggles + pane toggles). A soft accent-tinted fill plus a
-  // full accent border on all four sides reads as a centred pill that
-  // follows the 4px radius symmetrically — deliberately NOT a one-sided
-  // bottom underline, which looked crooked against the rounded corners.
-  &--active {
+  // group (board toggles + pane-toggle icons). A soft accent-tinted fill
+  // plus a full accent border on all four sides reads as a centred pill
+  // that follows the 4px radius symmetrically — deliberately NOT a
+  // one-sided bottom underline, which looked crooked against the rounded
+  // corners.
+  //
+  // Scoped to `.studio` on purpose: the shell's `.studio button` reset
+  // (specificity 0,1,1 — it zeroes background/border and sets color:inherit)
+  // beats a bare single-class `.studio-tab-action--active` (0,1,0), so the
+  // pill only rendered on :hover (which adds a class) and was invisible at
+  // REST. `.studio .studio-tab-action--active` is (0,2,0) and outranks the
+  // reset, so the centred pill shows at rest for board AND pane toggles.
+  // `border` (shorthand) — not just `border-color` — because the reset also
+  // sets `border: 0`; the shorthand restores width + style so the 4-sided
+  // pill border actually draws.
+  .studio &--active {
     background: color-mix(in srgb, var(--studio-accent) 15%, transparent);
-    border-color: color-mix(in srgb, var(--studio-accent) 42%, transparent);
+    border: 1px solid color-mix(in srgb, var(--studio-accent) 42%, transparent);
     color: var(--studio-accent-strong, var(--studio-accent));
 
     &:hover {
