@@ -1,0 +1,216 @@
+<!doctype html>
+<!--
+  ASS-1753 UI evidence harness (backend-free, Directive 3).
+
+  Reproduces the real run-activity pill exactly:
+   - markup verbatim from src/mockups/run-activity-pill/.../run-activity-gallery.component.html
+     (which itself copies the production task-card pill markup 1:1), and
+   - pill SCSS copied 1:1 from task-card.component.scss / the gallery component, and
+   - the badge LABELS / tooltip copy computed by a faithful vanilla-JS port of the
+     shipped pure function buildRunActivityBadge() (run-activity.util.ts). No transcription:
+     the same switch produces the same strings the product renders.
+
+  Why this proves Directive 3: after a backend restart the slot registry is empty, so the
+  old classifier painted a live run as "kein aktiver Run". The fixed backend classifier
+  (TaskRunActivityClassifier.Classify, unit-tested) now emits kind='active' whenever a CLI
+  execution still reports `running`, even with an empty slot. The frontend pill renders that
+  kind='active' as the cyan **"Run aktiv"** pill shown below — the exact copy the acceptance
+  asks for. The contrasting **"kein aktiver Run"** row is the false state the bug produced.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<title>ASS-1753 — Run-activity badge: "Run aktiv" für laufende Runs</title>
+<style>
+  html, body { margin: 0; }
+  body {
+    background: #0b0f17;
+    color: #e2e8f0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 28px 32px;
+  }
+  .gallery__head { margin-bottom: 22px; }
+  .gallery__head h1 { margin: 0 0 6px; font-size: 18px; font-weight: 700; }
+  .gallery__sub { margin: 0; max-width: 760px; font-size: 12px; line-height: 1.45; color: #94a3b8; }
+  .gallery__sub code { color: #cbd5e1; }
+  .gallery__sub b { color: #cbd5e1; }
+
+  .gallery__row {
+    display: grid;
+    grid-template-columns: 380px 240px 1fr;
+    align-items: center;
+    gap: 24px;
+    padding: 18px 0;
+    border-top: 1px solid rgba(148, 163, 184, 0.18);
+  }
+  .gallery__row[data-scenario="active"] { background: rgba(56, 189, 248, 0.06); border-radius: 12px; }
+
+  .gallery__meta { display: flex; flex-direction: column; gap: 4px; }
+  .gallery__title { font-size: 13px; font-weight: 600; }
+  .gallery__truth { font-size: 11px; color: #94a3b8; line-height: 1.4; }
+  .gallery__cell-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #94a3b8; margin-bottom: 7px; }
+
+  .card-surface {
+    display: inline-flex;
+    align-items: center;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: #161b26;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+  }
+
+  .tooltip-preview {
+    max-width: 460px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: #0f1320;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .tooltip-preview__title { font-weight: 700; margin-bottom: 4px; }
+  .tooltip-preview__body { color: #cbd5e1; }
+
+  /* ---- Pill rules copied VERBATIM from task-card.component.scss / gallery scss ---- */
+  .task-card__run-activity-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--studio-spacing-1, 4px);
+    min-height: var(--studio-card-pill-height, 22px);
+    padding: 0 var(--studio-card-pill-padding-x, 8px);
+    border-radius: 999px;
+    font-size: var(--studio-card-meta-size, 11px);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border: 1px solid transparent;
+    cursor: help;
+    white-space: nowrap;
+  }
+  .task-card__run-activity-dot {
+    width: 7px; height: 7px; border-radius: 999px; background: currentColor; flex: 0 0 auto;
+  }
+  .task-card__run-activity-pill--active {
+    color: var(--studio-accent-3-strong, #7dd3fc);
+    background: color-mix(in srgb, var(--studio-accent-3, #38bdf8) 14%, var(--studio-bg-elevated, #161b26));
+    border-color: color-mix(in srgb, var(--studio-accent-3, #38bdf8) 34%, transparent);
+  }
+  .task-card__run-activity-pill--failed {
+    color: var(--studio-accent-6-strong, #fca5a5);
+    background: color-mix(in srgb, var(--studio-accent-6, #f87171) 12%, var(--studio-bg-elevated, #161b26));
+    border-color: color-mix(in srgb, var(--studio-accent-6, #f87171) 32%, transparent);
+  }
+  .task-card__run-activity-pill--idle {
+    color: var(--studio-fg-muted, #94a3b8);
+    background: color-mix(in srgb, var(--studio-fg-dim, #64748b) 10%, var(--studio-bg-elevated, #161b26));
+    border-color: color-mix(in srgb, var(--studio-fg-dim, #64748b) 26%, transparent);
+  }
+</style>
+</head>
+<body>
+<div class="gallery" data-testid="run-activity-gallery">
+  <header class="gallery__head">
+    <h1>ASS-1753 — Run-activity badge nach Backend-Restart (Directive 3)</h1>
+    <p class="gallery__sub">
+      Nach einem Restart ist die Slot-Registry leer. Der korrigierte Backend-Classifier
+      (<code>TaskRunActivityClassifier.Classify</code>) liefert <b>kind=active</b>, sobald eine
+      CLI-Execution noch <code>running</code> meldet — auch ohne belegten Slot. Das Pill rendert das als
+      <b>"Run aktiv"</b> (oben, cyan). Die Zeile <b>"kein aktiver Run"</b> ist der falsche Zustand,
+      den der Bug zeigte. Produktion-Markup + SCSS, Labels vom echten <code>buildRunActivityBadge</code>.
+    </p>
+  </header>
+  <div id="rows"></div>
+</div>
+
+<script>
+// ---- Faithful vanilla-JS port of buildRunActivityBadge (run-activity.util.ts) ----
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function formatClock(iso) {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return null;
+  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+function buildRunActivityBadge(activity, nowMs) {
+  if (!activity) return null;
+  const attemptLine = activity.attempt > 0 ? `<div><b>Versuch:</b> ${activity.attempt}</div>` : '';
+  const errorLine = activity.lastError ? `<div><b>Letzter Fehler:</b> ${escapeHtml(activity.lastError)}</div>` : '';
+  switch (activity.kind) {
+    case 'active': {
+      const pid = typeof activity.processId === 'number' && activity.processId > 0 ? activity.processId : null;
+      return { kind: activity.kind, label: 'Run aktiv', tone: 'active',
+        tooltip: { title: 'Run aktiv (PID lebt)',
+          body: `<div>Ein Run-Prozess läuft und belegt einen Slot.</div>${pid !== null ? `<div><b>PID:</b> ${pid}</div>` : ''}${attemptLine}${errorLine}` } };
+    }
+    case 'failed-backoff': {
+      const clock = activity.backoffUntil ? formatClock(activity.backoffUntil) : null;
+      const future = activity.backoffUntil ? Date.parse(activity.backoffUntil) > nowMs : false;
+      const label = clock && future ? `failed · Backoff bis ${clock}` : 'failed · wartet auf Reissue';
+      return { kind: activity.kind, label, tone: 'failed',
+        tooltip: { title: 'failed — wartet auf Reissue/Review',
+          body: `<div>Der letzte Run ist fehlgeschlagen; ein Rapid-Crash-Backoff hält das Re-Pickup${clock && future ? ` bis <b>${clock}</b>` : ''} zurück.</div>${attemptLine}${errorLine}` } };
+    }
+    case 'failed-idle': {
+      return { kind: activity.kind, label: 'failed · kein aktiver Run', tone: 'failed',
+        tooltip: { title: 'failed — kein aktiver Run',
+          body: `<div>Der letzte Run ist fehlgeschlagen und aktuell läuft nichts; der Task ist wieder aufnahmebereit.</div>${attemptLine}${errorLine}` } };
+    }
+    case 'no-active-run':
+    default: {
+      return { kind: 'no-active-run', label: 'kein aktiver Run', tone: 'idle',
+        tooltip: { title: 'kein aktiver Run',
+          body: `<div>Kein Run bearbeitet diesen Task gerade. Er liegt in 3-progress und wartet auf Aufnahme — z. B. wurde ein früherer Run durch einen Backend-Neustart beendet.</div>${attemptLine}${errorLine}` } };
+    }
+  }
+}
+
+const NOW = Date.parse('2026-06-10T12:00:00');
+const SCENARIOS = [
+  { id: 'active', title: '(Directive 3) Run aktiv — PID lebt, Slot nach Restart noch leer',
+    truth: 'Live-Execution meldet running; Classifier liefert kind=active auch ohne belegten Slot. Badge: "Run aktiv".',
+    activity: { kind: 'active', processId: 48213, attempt: 0 } },
+  { id: 'no-active-run', title: 'Bug-Zustand: kein aktiver Run — Restart-/Recovery-Waise',
+    truth: 'Run vom Backend-Neustart gekillt, noch nicht re-picked. Liegt rum, aber kein Prozess.',
+    activity: { kind: 'no-active-run', attempt: 0 } },
+  { id: 'failed-backoff', title: 'failed + Rapid-Crash-Backoff aktiv',
+    truth: 'Letzter Run failed; Re-Pickup ist bis 12:03 gesperrt. Versuch 3, letzter Fehler sichtbar.',
+    activity: { kind: 'failed-backoff', backoffUntil: new Date(NOW + 3 * 60000).toISOString(), attempt: 3, lastError: 'git push rejected (non-fast-forward)' } },
+  { id: 'failed-idle', title: 'failed · kein aktiver Run (kein Backoff)',
+    truth: 'Letzter Run failed, nichts läuft mehr, kein Backoff — wieder aufnahmebereit.',
+    activity: { kind: 'failed-idle', attempt: 1, lastError: 'missing [[TASK_DONE]] sentinel' } },
+];
+
+const root = document.getElementById('rows');
+for (const s of SCENARIOS) {
+  const ra = buildRunActivityBadge(s.activity, NOW);
+  const row = document.createElement('section');
+  row.className = 'gallery__row';
+  row.setAttribute('data-scenario', s.id);
+  row.innerHTML = `
+    <div class="gallery__meta">
+      <div class="gallery__title">${escapeHtml(s.title)}</div>
+      <div class="gallery__truth">${escapeHtml(s.truth)}</div>
+    </div>
+    <div class="gallery__cell">
+      <div class="gallery__cell-label">Badge (Karte / Detail-Header)</div>
+      <div class="card-surface" data-testid="pill-${s.id}">
+        <span class="task-card__run-activity-pill task-card__run-activity-pill--${ra.tone}"
+              data-testid="task-card-run-activity" data-run-activity-kind="${ra.kind}">
+          <span class="task-card__run-activity-dot"></span>${escapeHtml(ra.label)}
+        </span>
+      </div>
+    </div>
+    <div class="gallery__cell">
+      <div class="gallery__cell-label">Tooltip (Details)</div>
+      <div class="tooltip-preview" data-testid="tooltip-${s.id}">
+        <div class="tooltip-preview__title">${escapeHtml(ra.tooltip.title)}</div>
+        <div class="tooltip-preview__body">${ra.tooltip.body}</div>
+      </div>
+    </div>`;
+  root.appendChild(row);
+}
+</script>
+</body>
+</html>

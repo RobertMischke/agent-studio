@@ -9,11 +9,48 @@ Operator report (2026-06-10 ~20:10, directly after a deploy-restart):
 2. `RunnerMode` repeatedly flipped back to `manual` / `auto-single` after the
    restart even though the operator had set `auto-continuous`.
 
-This is a backend fix (no UI re-implementation). A running-backend visual capture
-is not runnable in this managed run (the dev backend is off-limits/shared, and
-booting it would auto-commit the tree), so the deterministic substitute is the
-unit/regression suite below, which exercises the exact in-memory facts the
-endpoint and badge read.
+This is mostly a backend fix; the UI-visible part is **Directive 3** — the
+3-progress run-activity badge. The dev backend is off-limits/shared (booting it
+would auto-commit the tree), so the visual evidence is captured **backend-free**
+from the production pill markup + SCSS, driven by the real shipped
+`buildRunActivityBadge` copy — the same precedent as the accepted ASS-1707
+`model-badge-harness.html`.
+
+## Visual evidence (Directive 3 — badge reads "Run aktiv")
+
+| Artifact | Shows |
+| --- | --- |
+| `results/ASS-1753-run-activity-pill-gallery--mocked.png` | All four pill states with tooltip detail |
+| `results/ASS-1753-run-activity-active--mocked.png` | Close-up of the cyan **"Run aktiv"** pill for a live run |
+
+![Run-activity pill states](ASS-1753-run-activity-pill-gallery--mocked.png)
+
+![Run aktiv close-up](ASS-1753-run-activity-active--mocked.png)
+
+Harness + capture script (tracked, re-runnable):
+`results/ui-evidence/ASS-1753-run-activity-harness.html` and
+`results/ui-evidence/capture-ass-1753.mjs`. The harness reproduces the production
+pill markup (verbatim from `task-card.component`) and SCSS, and computes the
+labels with a faithful vanilla-JS port of the pure `buildRunActivityBadge`. The
+capture run logged the rendered labels, proving the exact product copy:
+
+```
+scenario active         -> kind=active         label="Run aktiv"
+scenario no-active-run  -> kind=no-active-run  label="kein aktiver Run"
+scenario failed-backoff -> kind=failed-backoff label="failed · Backoff bis 12:03"
+scenario failed-idle    -> kind=failed-idle    label="failed · kein aktiver Run"
+```
+
+Why this proves the fix: after a restart the slot registry is empty, so the old
+classifier painted a live run as "kein aktiver Run". The corrected
+`TaskRunActivityClassifier.Classify` (unit-tested below) now emits `kind=active`
+whenever a CLI execution still reports `running`, even with an empty slot, and the
+pill renders that as the **"Run aktiv"** badge above — the exact copy the
+acceptance asks for. The contrasting "kein aktiver Run" row is the false state the
+bug produced.
+
+The deterministic backend substitute for the in-memory facts the endpoint and
+badge read is the unit/regression suite below.
 
 ## Directive 1 - Slot-accounting reflects ACTUALLY running runs
 
@@ -149,3 +186,15 @@ green-gate to confirm the committed work (05e2bb18) actually compiles and passes
 | Test project build | `dotnet build backend.Tests/OrchestratorApi.Tests.csproj` | **0 errors** |
 | Update-service build | `dotnet build update-service/UpdateService.csproj` | **0 errors / 0 warnings** |
 | Targeted regression tests | `dotnet test --filter "RunnerSlotWiringTests\|ProjectSettingsServiceTests\|ProjectRunnerModeTests\|TaskRunActivityClassifierTests"` | **80 passed / 0 failed** |
+
+## Re-verification (evidence-gate reissue, 2026-06-10)
+
+Auto-review accepted the code (grade **A**, all aspects pass) but the evidence gate
+blocked on **missing visual proof** for this UI/bug task. This run adds the visual
+evidence (see "Visual evidence" section above) and re-confirms the green-gate:
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| Backend build | `dotnet build backend/OrchestratorApi.csproj -c Debug` | **0 errors** (4 pre-existing warnings) |
+| Targeted regression tests | `dotnet test backend.Tests/OrchestratorApi.Tests.csproj --filter "...RunnerSlotWiringTests\|...ProjectSettingsServiceTests\|...ProjectRunnerModeTests\|...TaskRunActivityClassifierTests"` | **80 passed / 0 failed** |
+| Visual evidence | `node results/ui-evidence/capture-ass-1753.mjs` (Playwright chromium) | 2 PNGs written under `results/`, labels match product copy |
