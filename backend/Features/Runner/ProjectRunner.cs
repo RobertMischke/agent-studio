@@ -2027,7 +2027,12 @@ public class ProjectRunner
             // YOLO). Reading the live ProjectSettingsService here is what makes
             // a toggle take effect on the next run without a backend restart.
             var permissionMode = _projectSettings.ResolveCliMode(ProjectName, cli.CliType).Mode;
-<<<<<<< HEAD
+            // T1b / ASS-1742: resolve the per-task / per-project context mode at
+            // spawn time (default CLEAN). The adapter seeds an isolated config
+            // home only when the run resolves to clean AND the CLI supports it;
+            // shared-only CLIs run shared regardless. Resolving live here (like
+            // permissionMode) makes a toggle take effect on the next run.
+            var contextMode = _projectSettings.ResolveContextMode(ProjectName, cli.CliType, info.ContextMode).Mode;
             // ASS-1732: the CLI keys `--resume <id>` by working directory - it
             // looks for the session marker under the cwd it is launched in. A
             // session is therefore resumable only when this run's cwd matches the
@@ -2053,28 +2058,6 @@ public class ProjectRunner
             if (isWorktreeRun && !canResumeSession && plan.ResumeFlag)
                 _logger.LogInformation(
                     "[taskboard] {Job}: starting FRESH session in freshly-cut worktree (prior session cwd was not this worktree)", jobId);
-=======
-            // T1b / ASS-1742: resolve the per-task / per-project context mode at
-            // spawn time (default CLEAN). The adapter seeds an isolated config
-            // home only when the run resolves to clean AND the CLI supports it;
-            // shared-only CLIs run shared regardless. Resolving live here (like
-            // permissionMode) makes a toggle take effect on the next run.
-            var contextMode = _projectSettings.ResolveContextMode(ProjectName, cli.CliType, info.ContextMode).Mode;
-            // ADR-0052 slice 2: an ADDITIONAL parallel slot runs in a fresh git
-            // worktree cut off the work branch. The CLI session captured in the
-            // main checkout does NOT exist inside that worktree, so `--resume
-            // <id>` waits for a session marker that never comes -> StartAsync
-            // never returns -> `_processing` stays latched -> no further slots
-            // are ever admitted (observed: occ stuck at 1, 2nd slot never spawns).
-            // Worktree runs therefore ALWAYS start FRESH: the agent re-derives
-            // context from the task spec + the current code in the worktree
-            // (per the design assumption that agent conversation carry-over is
-            // not required for an isolated parallel run). The primary slot
-            // (main checkout) keeps its normal resume behaviour unchanged.
-            var isWorktreeRun = _activeRuns.Get(jobId)?.IsWorktreeRun == true;
-            var effSessionToResume = isWorktreeRun ? null : plan.SessionToResume;
-            var effResumeFlag = isWorktreeRun ? false : plan.ResumeFlag;
->>>>>>> 5276990a (T1b: contextMode=clean|shared pro Projekt/Task - Default CLEAN (PrepareCleanContext je CLI-Adapter))
             var (execution, cliError) = await cli.StartAsync(
                 jobId, GetJobKey(jobId), prompt, runWorkingDir,
                 effSessionToResume, effResumeFlag, runModel, runThinkingLevel, info.FolderPath, permissionMode, contextMode, ct);
