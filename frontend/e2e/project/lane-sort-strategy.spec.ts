@@ -81,8 +81,10 @@ test.afterAll(async () => {
   await setLaneSort(AUTO_LANE, originalAutoOverride ?? '');
 });
 
-test('settings: per-lane dropdowns render resolved strategy and persist a change', async ({ page }) => {
-  await page.goto(`/#/projects/${projectSlug}/settings`);
+test('workflow: per-lane dropdowns render resolved strategy and persist a change', async ({ page }) => {
+  // Nav-rebuild step 2 (T5b): the per-lane sort section moved out of Project
+  // Settings onto the Workflow rail; same dropdowns, same PUT, new mount.
+  await page.goto(`/#/projects/${projectSlug}/workflow`);
   await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
 
   const section = page.getByTestId('project-detail-lane-sort');

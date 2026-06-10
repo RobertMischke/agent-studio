@@ -102,11 +102,13 @@ test.afterAll(async () => {
   });
 });
 
-test('settings: pipeline-step section renders and a per-step model change persists', async ({ page }) => {
+test('pipeline: pipeline-step section renders and a per-step model change persists', async ({ page }) => {
   // Start from a clean override so the model select begins on Inherit.
   await setStep({ stepId: STEP, enabled: null, cliType: null, model: null, thinkingLevel: null, prompt: null, mode: null });
 
-  await page.goto(`/#/projects/${projectSlug}/settings`);
+  // Nav-rebuild step 2 (T5b): the pipeline-steps section moved out of Project
+  // Settings onto the Pipeline rail; identical rows/controls, new mount.
+  await page.goto(`/#/projects/${projectSlug}/pipeline`);
   await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
 
   const section = page.getByTestId('project-detail-pipeline');
@@ -135,8 +137,8 @@ test('settings: pipeline-step section renders and a per-step model change persis
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-step-model-haiku.png'), fullPage: true });
 });
 
-test('settings: disabling a step persists enabled=false and line-through styling', async ({ page }) => {
-  await page.goto(`/#/projects/${projectSlug}/settings`);
+test('pipeline: disabling a step persists enabled=false and line-through styling', async ({ page }) => {
+  await page.goto(`/#/projects/${projectSlug}/pipeline`);
   await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
 
   const section = page.getByTestId('project-detail-pipeline');
@@ -156,11 +158,11 @@ test('settings: disabling a step persists enabled=false and line-through styling
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, '03-step-disabled.png'), fullPage: true });
 });
 
-test('settings: abort-review exposes a run-condition control that persists', async ({ page }) => {
+test('pipeline: abort-review exposes a run-condition control that persists', async ({ page }) => {
   // Start from a clean abort-review override (opt-in step, default off).
   await setStep({ stepId: ABORT_STEP, enabled: null, model: null, mode: null, condition: null });
 
-  await page.goto(`/#/projects/${projectSlug}/settings`);
+  await page.goto(`/#/projects/${projectSlug}/pipeline`);
   await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
 
   const section = page.getByTestId('project-detail-pipeline');

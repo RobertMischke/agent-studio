@@ -1,0 +1,119 @@
+import { test, expect } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
+import { api } from '../helpers/api';
+
+/**
+ * Nav-rebuild step 2 (T5b) — relocation smoke.
+ *
+ * The task is a pure move (Funktions-Diff = 0): four surfaces leave Project
+ * Settings / the legacy admin entry and re-home onto the new project rails +
+ * the workspace Admin panel. This spec is the acceptance "e2e-Smoke": every
+ * moved function is reachable at its NEW location, and the OLD location
+ * (Project Settings) no longer renders it.
+ *
+ *   lane sort-order    Settings → Workflow rail   (project-detail-lane-sort)
+ *   pipeline steps     Settings → Pipeline rail   (project-detail-pipeline)
+ *   prompt-admin       (ASS-1651) → Prompts rail  (prompt-admin-panel)
+ *   CLI permission     Settings → Admin / CLI     (project-detail-cli-modes)
+ *
+ * Runs against the dedicated Playwright project so nothing is mutated; the
+ * spec only navigates and asserts presence/absence, then captures a shot of
+ * each new home.
+ */
+
+interface WatchPath { name: string; path: string }
+
+const SCREENSHOT_DIR = (() => {
+  const fromEnv = process.env.JOB_RESULTS_DIR || process.env.PROJECT_SHELL_RESULTS_DIR;
+  if (fromEnv && fromEnv.trim()) return path.join(fromEnv, 'nav-rebuild-t5b');
+  return path.resolve(__dirname, '..', '..', 'playwright-screenshots', 'nav-rebuild-t5b');
+})();
+
+let projectName = '';
+let projectSlug = '';
+
+function slugFor(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+test.beforeAll(async () => {
+  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+  const paths = await api<WatchPath[]>('/api/watch-paths');
+  const preferred = paths.find(p => /playwright/i.test(p.name)) ?? paths[0];
+  expect(preferred, 'needs at least one watched project').toBeTruthy();
+  projectName = preferred.name;
+  projectSlug = slugFor(projectName);
+});
+
+test('Project Settings no longer hosts the relocated sections', async ({ page }) => {
+  await page.goto(`/#/projects/${projectSlug}/settings`);
+  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+
+  // The settings panel still renders (runner mode, auto-commit, etc.) ...
+  await expect(page.getByTestId('project-settings-panel')).toBeVisible();
+
+  // ... but the three moved sections are gone from this location.
+  await expect(page.getByTestId('project-detail-lane-sort')).toHaveCount(0);
+  await expect(page.getByTestId('project-detail-pipeline')).toHaveCount(0);
+  await expect(page.getByTestId('project-detail-cli-modes')).toHaveCount(0);
+
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01-settings-shrunk.png'), fullPage: true });
+});
+
+test('Workflow rail hosts the per-lane sort order', async ({ page }) => {
+  await page.goto(`/#/projects/${projectSlug}/workflow`);
+  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+
+  const laneSort = page.getByTestId('project-detail-lane-sort');
+  await expect(laneSort).toBeVisible();
+  await laneSort.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-workflow-lane-sort.png'), fullPage: true });
+});
+
+test('Pipeline rail hosts the pipeline-step config', async ({ page }) => {
+  await page.goto(`/#/projects/${projectSlug}/pipeline`);
+  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+
+  const pipeline = page.getByTestId('project-detail-pipeline');
+  await expect(pipeline).toBeVisible();
+  await pipeline.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '03-pipeline-steps.png'), fullPage: true });
+});
+
+test('Prompts rail hosts the prompt-admin surface', async ({ page }) => {
+  await page.goto(`/#/projects/${projectSlug}/prompts`);
+  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+
+  await expect(page.getByTestId('prompt-admin-panel')).toBeVisible({ timeout: 10_000 });
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04-prompts-admin.png'), fullPage: true });
+});
+
+test('Admin / CLI & Modelle hosts the per-project CLI permission modes', async ({ page }) => {
+  // Seed the studio tab state so `projectName` is the sole active project; the
+  // active-tab effect runs setSoleProject, which is what scopes the embedded
+  // CLI-modes control in the Admin panel.
+  await page.goto('/');
+  await page.evaluate((name) => {
+    localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+      v: 1,
+      tabs: [
+        { kind: 'board', projectName: '__all__', sticky: true },
+        { kind: 'board', projectName: name },
+      ],
+      activeKey: `board:${name}`,
+    }));
+    localStorage.setItem('activeProjects', JSON.stringify([name]));
+    location.hash = '';
+  }, projectName);
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+
+  await page.getByTestId('studio-ab-admin').click();
+  const adminCliModes = page.getByTestId('studio-admin-cli-modes');
+  await expect(adminCliModes).toBeVisible({ timeout: 10_000 });
+  await expect(adminCliModes.getByTestId('project-detail-cli-modes')).toBeVisible();
+
+  await adminCliModes.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '05-admin-cli-modes.png'), fullPage: true });
+});

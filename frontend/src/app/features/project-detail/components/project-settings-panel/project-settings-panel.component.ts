@@ -39,9 +39,14 @@ interface CapSummaryRow {
  * they render read-only with a deep-link affordance into the matching global
  * Workspace-settings section (`overview` for the default agent, `caps` for the
  * usage caps). The per-project settings that DO override globals (runner mode,
- * orchestrator model, auto-commit / auto-push, lane sort, pipeline steps, CLI
- * permission modes) keep living in the embedded `<app-project-detail>` below,
- * so nothing the operator already relied on moves.
+ * orchestrator model, auto-commit / auto-push) keep living in the embedded
+ * `<app-project-detail view="settings">` below.
+ *
+ * Nav-rebuild step 2 (T5b) relocated three formerly-embedded sections to their
+ * own project rails — lane sort → Workflow, pipeline steps → Pipeline, CLI
+ * permission modes → workspace Admin / CLI & Modelle — so Settings shrinks to
+ * the rest. The controls are unchanged (Funktions-Diff = 0); only the mount
+ * location moved.
  */
 @Component({
   selector: 'app-project-settings-panel',

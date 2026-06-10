@@ -235,6 +235,9 @@
       </p>
     </section>
 
+  }
+
+  @if (view() === 'workflow') {
     <section class="proj-detail__group">
       <h3>Sort order per lane</h3>
       <div class="proj-detail__lane-sort" data-testid="project-detail-lane-sort">
@@ -261,7 +264,9 @@
         Controls the order cards appear in each board lane. <strong>Manual</strong> enables drag-and-drop reordering; the other strategies sort automatically and disable drag on that lane. The auto-pickup runner always uses its own priority order regardless of this setting.
       </p>
     </section>
+  }
 
+  @if (view() === 'pipeline') {
     @if (pipelineRows().length > 0) {
       <section class="proj-detail__group">
         <h3>Pipeline steps</h3>
@@ -373,7 +378,9 @@
         </p>
       </section>
     }
+  }
 
+  @if (view() === 'cli') {
     <section class="proj-detail__group">
       <h3>CLI permission modes</h3>
       <p class="proj-detail__warn" data-testid="project-detail-cli-mode-warning">

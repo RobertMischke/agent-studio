@@ -95,6 +95,29 @@
       <app-project-wiki-section [projectName]="projectName()" />
     }
   }
+  @defer (when activeRail() === 'pipeline') {
+    @if (activeRail() === 'pipeline') {
+      <app-project-detail
+        [projectName]="projectName()"
+        view="pipeline"
+        (openFeed)="openFeedFromDetail($event)"
+        (openReport)="openReport($event)" />
+    }
+  }
+  @defer (when activeRail() === 'workflow') {
+    @if (activeRail() === 'workflow') {
+      <app-project-detail
+        [projectName]="projectName()"
+        view="workflow"
+        (openFeed)="openFeedFromDetail($event)"
+        (openReport)="openReport($event)" />
+    }
+  }
+  @defer (when activeRail() === 'prompts') {
+    @if (activeRail() === 'prompts') {
+      <app-prompt-admin-panel />
+    }
+  }
   @defer (when isSettingsRail(activeRail())) {
     @if (isSettingsRail(activeRail())) {
       <app-project-settings-panel [projectName]="projectName()" />

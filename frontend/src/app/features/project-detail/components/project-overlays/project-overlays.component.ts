@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, output } from '@angular/core';
 import { ProjectOverlaysService } from '../../state/project-overlays.service';
 import { ModalStackService } from '../../../../services/modal-stack.service';
-import { OrchestratorFeedComponent } from '../../../orchestrator';
+import { OrchestratorFeedComponent, PromptAdminPanelComponent } from '../../../orchestrator';
 import { ProjectDetailComponent } from '../project-detail/project-detail';
 import { ProjectSettingsPanelComponent } from '../project-settings-panel/project-settings-panel.component';
 import { ProjectShellComponent } from '../project-shell/project-shell.component';
@@ -49,6 +49,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
     ProjectWikiSectionComponent,
     AnalysisReportDrilldownComponent,
     WorkspaceScreenshotsComponent,
+    PromptAdminPanelComponent,
     TooltipDirective,
     OverlayPortalDirective
   ],
@@ -84,6 +85,12 @@ export class ProjectOverlaysComponent {
       || rail === 'steering'
       || rail === 'wiki'
       || rail === 'settings'
+      // Nav-rebuild step 2 (T5b): pipeline / workflow / prompts now host the
+      // real content relocated out of Project Settings + the prompt-admin
+      // surface, so they render their own panel (not the shell placeholder).
+      || rail === 'pipeline'
+      || rail === 'workflow'
+      || rail === 'prompts'
       || rail === 'orchestrator'
       || rail === 'activity';
   }

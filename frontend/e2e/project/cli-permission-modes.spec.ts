@@ -42,12 +42,7 @@ const CLI = 'codex';
 const TARGET_MODE = 'read-only';
 
 let projectName = '';
-let projectSlug = '';
 let originalOverride = '';
-
-function slugFor(name: string): string {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
 
 function enc(name: string): string {
   return encodeURIComponent(name);
@@ -68,13 +63,42 @@ async function probe(cli: string): Promise<EffectiveModeResponse> {
   return api<EffectiveModeResponse>(`/api/cli/${cli}/effective-mode?project=${enc(projectName)}`);
 }
 
+/**
+ * Nav-rebuild step 2 (T5b): per-project CLI permission modes moved out of
+ * Project Settings into the workspace Admin → CLI & Modelle surface, where
+ * the same control renders scoped to the active project. Seed the studio tab
+ * state so `projectName` is the sole active project (the active-tab effect
+ * runs setSoleProject), open the Admin panel, and return its CLI-modes block.
+ */
+async function openAdminCliModes(page: import('@playwright/test').Page) {
+  await page.goto('/');
+  await page.evaluate((name) => {
+    localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+      v: 1,
+      tabs: [
+        { kind: 'board', projectName: '__all__', sticky: true },
+        { kind: 'board', projectName: name },
+      ],
+      activeKey: `board:${name}`,
+    }));
+    localStorage.setItem('activeProjects', JSON.stringify([name]));
+    location.hash = '';
+  }, projectName);
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+
+  await page.getByTestId('studio-ab-admin').click();
+  const adminCliModes = page.getByTestId('studio-admin-cli-modes');
+  await expect(adminCliModes).toBeVisible({ timeout: 10_000 });
+  return adminCliModes;
+}
+
 test.beforeAll(async () => {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
   const paths = await api<WatchPath[]>('/api/watch-paths');
   const preferred = paths.find(p => /playwright/i.test(p.name)) ?? paths[0];
   expect(preferred, 'needs at least one watched project').toBeTruthy();
   projectName = preferred.name;
-  projectSlug = slugFor(projectName);
 
   originalOverride = (await getCliModes()).overrides[CLI] ?? '';
 });
@@ -85,13 +109,12 @@ test.afterAll(async () => {
   await setCliMode(CLI, originalOverride);
 });
 
-test('settings: CLI modes render with YOLO default + warning banner, toggle reaches the probe', async ({ page }) => {
+test('admin: CLI modes render with YOLO default + warning banner, toggle reaches the probe', async ({ page }) => {
   // Start from a clean slate so the default-source assertion is deterministic
   // regardless of what a prior run left behind.
   await setCliMode(CLI, '');
 
-  await page.goto(`/#/projects/${projectSlug}/settings`);
-  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+  await openAdminCliModes(page);
 
   const section = page.getByTestId('project-detail-cli-modes');
   await expect(section).toBeVisible();

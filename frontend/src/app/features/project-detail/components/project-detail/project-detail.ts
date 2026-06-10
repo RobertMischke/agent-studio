@@ -80,6 +80,14 @@ export type ProjectDetailView =
   | 'overview'
   | 'jobs'
   | 'settings'
+  // Nav-rebuild step 2 (T5b): three sections that used to live inside the
+  // 'settings' view now render under their own view so the project-shell rails
+  // (Pipeline / Workflow) and the workspace Admin → CLI & Modelle surface can
+  // mount them unchanged. Same controls, same backend writes — only the mount
+  // location moved (Funktions-Diff = 0).
+  | 'pipeline'
+  | 'workflow'
+  | 'cli'
   | 'orchestrator'
   | 'activity'
   | 'architecture'

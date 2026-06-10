@@ -45,7 +45,7 @@ test.beforeAll(async () => {
   projectSlug = slugFor(preferred.name);
 });
 
-test('settings: drift dimensions appear as opt-in post-steps that default OFF', async ({ page }) => {
+test('pipeline: drift dimensions appear as opt-in post-steps that default OFF', async ({ page }) => {
   // Augment the catalogue with the drift steps the new backend emits. Existing
   // steps get defaultEnabled=true so they keep rendering enabled; drift steps
   // get defaultEnabled=false (opt-in).
@@ -73,7 +73,9 @@ test('settings: drift dimensions appear as opt-in post-steps that default OFF', 
     });
   });
 
-  await page.goto(`/#/projects/${projectSlug}/settings`);
+  // Nav-rebuild step 2 (T5b): pipeline-steps moved from Project Settings onto
+  // the Pipeline rail; identical rows, new mount.
+  await page.goto(`/#/projects/${projectSlug}/pipeline`);
   await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
 
   const section = page.getByTestId('project-detail-pipeline');

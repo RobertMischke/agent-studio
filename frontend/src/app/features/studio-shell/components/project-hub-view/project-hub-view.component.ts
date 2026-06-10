@@ -14,6 +14,7 @@ import {
   ProjectWikiSectionComponent,
 } from '../../../project-detail';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
+import { PromptAdminPanelComponent } from '../../../orchestrator';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
@@ -36,6 +37,12 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   'steering',
   'wiki',
   'jobs',
+  // Nav-rebuild step 2 (T5b): the Pipeline / Workflow / Prompts shells now
+  // host real content moved out of Project Settings (pipeline steps, lane
+  // sort) and the application-wide prompt-admin surface.
+  'pipeline',
+  'workflow',
+  'prompts',
   'settings',
   // Settings tree sub-pages render the same real settings panel.
   'settings-defaults',
@@ -72,6 +79,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     ProjectSteeringDocsSectionComponent,
     ProjectSkillReadinessSectionComponent,
     ProjectWikiSectionComponent,
+    PromptAdminPanelComponent,
     WorkspaceScreenshotsComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,

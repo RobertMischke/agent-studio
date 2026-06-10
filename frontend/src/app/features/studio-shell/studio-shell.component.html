@@ -352,6 +352,20 @@
                         (click)="openCliAdmin.emit()">
                   Open CLI & Modelle
                 </button>
+                <!-- T5b: the per-project CLI permission modes moved out of
+                     Project Settings to this Admin → CLI & Modelle entry. The
+                     same control renders unchanged, scoped to the active
+                     project (Funktions-Diff = 0). With no project active there
+                     is nothing to scope to, so we prompt for a selection. -->
+                @if (activeProjectName(); as proj) {
+                  <div class="studio-admin__cli-modes" data-testid="studio-admin-cli-modes">
+                    <app-project-detail [projectName]="proj" view="cli" />
+                  </div>
+                } @else {
+                  <p class="studio-empty studio-empty--note" data-testid="studio-admin-cli-modes-empty">
+                    Open a project to configure its CLI permission modes.
+                  </p>
+                }
                 <app-section-header title="System" [divider]="true" />
                 <p class="studio-empty studio-empty--note">
                   Orchestrator config and diagnostics (AdminConfig).

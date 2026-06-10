@@ -27,10 +27,6 @@ interface EffectiveModeResponse {
 
 let projectName = '';
 
-function slugFor(name: string): string {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
-
 async function setCliMode(project: string, cliType: string, mode: string): Promise<void> {
   await api(`/api/projects/${encodeURIComponent(project)}/cli-mode`, {
     method: 'PUT',
@@ -44,6 +40,36 @@ async function effectiveMode(project: string, cliType: string): Promise<Effectiv
   );
 }
 
+/**
+ * Nav-rebuild step 2 (T5b): per-project CLI permission modes moved out of
+ * Project Settings into the workspace Admin → CLI & Modelle surface, scoped
+ * to the active project. Seed the studio tab state so `projectName` is the
+ * sole active project (the active-tab effect runs setSoleProject), open the
+ * Admin panel, and return its CLI-modes block.
+ */
+async function openAdminCliModes(page: import('@playwright/test').Page) {
+  await page.goto('/');
+  await page.evaluate((name) => {
+    localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+      v: 1,
+      tabs: [
+        { kind: 'board', projectName: '__all__', sticky: true },
+        { kind: 'board', projectName: name },
+      ],
+      activeKey: `board:${name}`,
+    }));
+    localStorage.setItem('activeProjects', JSON.stringify([name]));
+    location.hash = '';
+  }, projectName);
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+
+  await page.getByTestId('studio-ab-admin').click();
+  const adminCliModes = page.getByTestId('studio-admin-cli-modes');
+  await expect(adminCliModes).toBeVisible({ timeout: 10_000 });
+  return adminCliModes;
+}
+
 test.beforeAll(async () => {
   const paths = await api<WatchPath[]>('/api/watch-paths');
   expect(paths.length).toBeGreaterThanOrEqual(1);
@@ -51,15 +77,14 @@ test.beforeAll(async () => {
   projectName = preferred.name;
 });
 
-test('Project Settings toggles Codex to YOLO and the effective-mode probe reloads it', async ({ page }) => {
+test('Admin CLI & Modelle toggles Codex to YOLO and the effective-mode probe reloads it', async ({ page }) => {
   const before = await api<CliModesResponse>(`/api/projects/${encodeURIComponent(projectName)}/cli-modes`);
   const originalOverride = before.overrides?.codex;
 
   await setCliMode(projectName, 'codex', 'read-only');
 
   try {
-    await page.goto(`/#/projects/${slugFor(projectName)}/settings`);
-    await expect(page.getByTestId('project-settings-panel')).toBeVisible({ timeout: 10_000 });
+    await openAdminCliModes(page);
 
     const row = page.getByTestId('cli-mode-row-codex');
     await expect(row).toBeVisible();
