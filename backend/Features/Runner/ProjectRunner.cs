@@ -4315,9 +4315,14 @@ public class ProjectRunner
                     var attemptNo = used + 1;
                     var issueTopic = ToIssueTopic(action.IssueKind);
 
-                    _chatLog.Append(activeInfo, OrchestratorMessageKind.Reissue,
-                        $"Completion-loop: transient abort ({issueTopic}). Auto-restarting this run " +
-                        $"(attempt {attemptNo} of {CompletionRetriggerDecider.DefaultBudget}) instead of parking it in human review.");
+                    _chatLog.Append(activeInfo, OrchestratorMessageKind.Recovery,
+                        RecoveryChatLine.Format(
+                            RecoveryChatLine.ReasonWatchdog,
+                            "silence timeout",
+                            "reissue",
+                            attempt: attemptNo,
+                            maxAttempts: CompletionRetriggerDecider.DefaultBudget,
+                            sessionResumed: true));
                     _orchestratorLog.Append(activeInfo.WatchPath, new OrchestratorLogEntry
                     {
                         Kind = OrchestratorLogKinds.Action,

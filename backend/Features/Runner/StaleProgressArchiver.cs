@@ -636,17 +636,10 @@ public sealed class StaleProgressArchiver
                 };
             }
 
-            var moved = _scanner.FindJob(jobId, entry.Path);
-            if (moved != null)
-            {
-                _chatLog.AppendSupervisor(
-                    moved,
-                    "requeued-from-stuck-progress",
-                    "Stale-progress sweep found this task in 3-progress past the resume window with no completion " +
-                    "sentinel. The run was interrupted, not failed; requeued to 2-ready so the orchestrator " +
-                    "retries the same task. This interruption does not count as a task failure.");
-            }
-
+            // The single compact [recovery] line was written by
+            // WriteRequeueDiagnostic before the move and travels with the folder
+            // to 2-ready; the long-form rationale lives in orphan-recoveries.jsonl
+            // (AppendOrphanRecoveryEntry). No second chat note here.
             return new StaleProgressDecision
             {
                 At = now,
@@ -744,13 +737,11 @@ public sealed class StaleProgressArchiver
             var logsDir = Path.Combine(jobFolder, TaskPaths.LogsDirName);
             Directory.CreateDirectory(logsDir);
             var logPath = Path.Combine(logsDir, TaskPaths.CliOutputLogFileName);
-            var lastSeen = lastActivity > DateTime.MinValue.ToUniversalTime()
-                ? lastActivity.ToString("u", CultureInfo.InvariantCulture)
-                : "unknown";
-            var line =
-                $"[{sweepAt:HH:mm:ss.fff}] [system] [taskboard] Stale-progress sweep found this run stuck in 3-progress " +
-                $"(last activity {lastSeen}, no completion sentinel). Requeued to 2-ready to retry the same task; " +
-                "this interruption does not count as a task failure.";
+            var line = RecoveryChatLine.PersistedLine(
+                sweepAt,
+                RecoveryChatLine.ReasonHostRestart,
+                "run stuck in 3-progress after restart",
+                $"requeued to {TaskStates.Ready}");
             if (File.Exists(logPath) && new FileInfo(logPath).Length > 0)
                 File.AppendAllText(logPath, Environment.NewLine + line, Encoding.UTF8);
             else

@@ -569,6 +569,17 @@
 .conv__row--system-status[data-category='result'] .status-row__chip {
   background: color-mix(in srgb, currentColor 14%, transparent);
 }
+/* Recovery notice (crash / watchdog / host-restart / system-sleep): one calm,
+ * informational line drawn from the central info severity token. Deliberately
+ * low-contrast and text-only - a recognizable system decision, not an alarm. */
+.conv__row--system-status[data-category='recovery'][data-severity='info'] {
+  border-color: color-mix(in srgb, var(--severity-info) 28%, transparent);
+  background: color-mix(in srgb, var(--severity-info) 7%, transparent);
+}
+.conv__row--system-status[data-category='recovery'] .status-row__chip {
+  background: color-mix(in srgb, var(--severity-info) 16%, transparent);
+  color: var(--severity-info);
+}
 .status-row__chip {
   padding: 1px 7px;
   border-radius: 999px;

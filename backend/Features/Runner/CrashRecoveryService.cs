@@ -572,9 +572,10 @@ public sealed class CrashRecoveryService
     }
 
     /// <summary>
-    /// Append a one-line interrupted-run note to the job's cli-output.log so an
-    /// operator reading the Activity Log sees why the run stopped and was
-    /// requeued, instead of an empty logs/ dir. Best-effort.
+    /// Append the one compact recovery line to the job's cli-output.log so an
+    /// operator reading the Activity Log sees the run was requeued, instead of
+    /// an empty logs/ dir. The long form (which backend / pid held the stale
+    /// lock) stays in recovery.jsonl — not the chat. Best-effort.
     /// </summary>
     private void WriteInterruptedRunDiagnostic(string jobFolder, PickupLockInfo lockInfo)
     {
@@ -583,11 +584,11 @@ public sealed class CrashRecoveryService
             var logsDir = Path.Combine(jobFolder, TaskPaths.LogsDirName);
             Directory.CreateDirectory(logsDir);
             var logPath = Path.Combine(logsDir, TaskPaths.CliOutputLogFileName);
-            var now = DateTime.UtcNow;
-            var line =
-                $"[{now:HH:mm:ss.fff}] [system] [taskboard] Run interrupted by a backend restart " +
-                $"(stale pickup lock from {lockInfo.BackendName} pid={lockInfo.Pid}, acquired {lockInfo.AcquiredAt:u}). " +
-                "Requeued to 2-ready; this interruption does not count as a task failure.";
+            var line = RecoveryChatLine.PersistedLine(
+                DateTime.UtcNow,
+                RecoveryChatLine.ReasonCrash,
+                "backend restart during run",
+                $"requeued to {TaskStates.Ready}");
             if (File.Exists(logPath) && new FileInfo(logPath).Length > 0)
                 File.AppendAllText(logPath, Environment.NewLine + line, Encoding.UTF8);
             else

@@ -696,6 +696,17 @@ function parseOrchestratorStatus(text: string): ParsedStatus | null {
         nextStep: 'Keep review inside the task worktree boundary.',
         severity: 'warn'
       };
+    case 'recovery':
+      // One calm line per recovery (crash / watchdog / host-restart /
+      // system-sleep). The full rationale lives in the run/lifecycle
+      // artifacts, so there is deliberately no nextStep and the severity stays
+      // informational - it reads as a system decision, not an alarm.
+      return {
+        category,
+        label: 'Recovery',
+        explanation: body || 'The platform recovered an interrupted run.',
+        severity: 'info'
+      };
     default:
       return null;
   }

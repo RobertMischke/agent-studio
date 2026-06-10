@@ -248,7 +248,13 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         // incident had an empty logs/ dir and no cli-output.log at all.
         var cliLog = Path.Combine(readyFolder, TaskPaths.LogsDirName, TaskPaths.CliOutputLogFileName);
         Assert.True(File.Exists(cliLog), "interrupted-run diagnostic must be written to cli-output.log");
-        Assert.Contains("Run interrupted", File.ReadAllText(cliLog));
+        // One compact recovery line on the [orchestrator] stream so the chat
+        // renders it as a calm [recovery] notice (not a fat lock-detail block).
+        var cliText = File.ReadAllText(cliLog);
+        Assert.Contains($"[{RecoveryChatLine.RecoveryTag}] {RecoveryChatLine.ReasonCrash}", cliText);
+        Assert.Contains($"requeued to {TaskStates.Ready}", cliText);
+        // The long form (which backend / pid held the stale lock) stays out of chat.
+        Assert.DoesNotContain("pid=", cliText);
 
         var decision = Assert.Single(decisions, d => d.Kind == RecoveryDecisionKinds.RunInterruptedRequeued);
         Assert.Equal("interrupted-task", decision.JobId);

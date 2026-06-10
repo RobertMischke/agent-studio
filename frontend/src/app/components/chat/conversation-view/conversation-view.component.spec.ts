@@ -215,6 +215,32 @@ describe('ConversationViewComponent', () => {
     expect(warning?.textContent).not.toContain('codex_core::tools::router');
   });
 
+  it('renders a recovery status as one calm info row (category + severity hooks, no next-step)', async () => {
+    const events: ConversationEvent[] = [
+      {
+        id: 'recovery-1',
+        kind: 'system.status',
+        timestamp: '2026-05-05T12:00:20.000Z',
+        rawRange: range(40, 40),
+        severity: 'info',
+        category: 'recovery',
+        label: 'Recovery',
+        explanation: 'watchdog: silence timeout -> reissue (attempt 1/2, session resumed)',
+      },
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+
+    const status = el.querySelector('[data-testid="conversation-system-status"]');
+    // The central-token recovery styling keys off these two attributes.
+    expect(status?.getAttribute('data-category')).toBe('recovery');
+    expect(status?.getAttribute('data-severity')).toBe('info');
+    expect(status?.textContent).toContain('Recovery');
+    expect(status?.textContent).toContain('watchdog: silence timeout -> reissue');
+    // No escalating next-step span on a calm recovery line.
+    expect(status?.querySelector('.status-row__next')).toBeNull();
+  });
+
   it('emits openTrace when the user clicks the Trace header button', async () => {
     const fixture = await makeFixture([userMessage()]);
     const emissions: (RawLineRange | null)[] = [];

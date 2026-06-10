@@ -112,9 +112,13 @@ public sealed class StaleProgressArchiverTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.FailedPickup, "no-sentinel")),
             "failed-pickup elimination: nothing may land in 3a-failed-pickup");
 
-        // A supervisor chat note travels with the folder so the requeue is never silent.
+        // Exactly one compact recovery line travels with the folder so the
+        // requeue is never silent, but the chat is not flooded with a fat block.
         var log = File.ReadAllText(Path.Combine(requeued, "logs", "cli-output.log"));
-        Assert.Contains("retries the same task", log);
+        Assert.Contains($"[{RecoveryChatLine.RecoveryTag}] {RecoveryChatLine.ReasonHostRestart}", log);
+        Assert.Contains($"requeued to {TaskStates.Ready}", log);
+        // The legacy duplicate supervisor note is gone (one line per recovery).
+        Assert.DoesNotContain("[requeued-from-stuck-progress]", log);
 
         var jsonl = File.ReadAllText(Path.Combine(_workspaceRoot, "logs", "orphan-recoveries.jsonl"));
         Assert.Contains("requeued-to-ready", jsonl);

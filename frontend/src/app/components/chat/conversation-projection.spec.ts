@@ -200,6 +200,39 @@ describe('projectConversation', () => {
     expect(probe(events[0]).severity).toBe('warn');
   });
 
+  it('renders a [recovery] line as one calm info status with no next-step', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: [
+        line('[recovery] watchdog: silence timeout -> reissue (attempt 1/2, session resumed)', 'orchestrator')
+      ]
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].kind).toBe('system.status');
+    expect(probe(events[0]).category).toBe('recovery');
+    expect(probe(events[0]).severity).toBe('info');
+    expect(probe(events[0]).label).toBe('Recovery');
+    // The body is the compact recovery line; the long-form rationale lives in
+    // run artifacts, so the chat row carries no escalating next-step.
+    expect(probe(events[0]).explanation).toContain('watchdog: silence timeout -> reissue');
+    expect(probe(events[0]).nextStep).toBeUndefined();
+  });
+
+  it('does not let a [recovery] watchdog line trip the watchdog interceptor', () => {
+    // The watchdog interceptor keys off a literal "[watchdog...]" bracket; a
+    // recovery line only mentions watchdog in its body, so it must stay a
+    // single system.status (not a supervisor.wait).
+    const events = projectConversation({
+      source: SOURCE,
+      lines: [
+        line('[recovery] watchdog: silence timeout -> reissue (attempt 2/2, session resumed)', 'orchestrator')
+      ]
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].kind).toBe('system.status');
+    expect(probe(events[0]).category).toBe('recovery');
+  });
+
   it('emits a supervisor.wait quiet event then resumed event for watchdog quiet/resume', () => {
     const events = projectConversation({ source: SOURCE, lines: watchdogQuietResumeFragment() });
     expect(events.map((e) => e.kind)).toEqual(['supervisor.wait', 'supervisor.wait']);

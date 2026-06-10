@@ -226,7 +226,14 @@ public enum OrchestratorMessageKind
     /// <summary>
     /// The runner could not push a finished task branch to origin after retry.
     /// </summary>
-    TaskBranchUnpushed
+    TaskBranchUnpushed,
+    /// <summary>
+    /// The platform recovered an interrupted run (crash requeue, watchdog
+    /// reissue, host-restart resume, system-sleep wake). Renders as one calm
+    /// <c>[recovery]</c> line; the long-form rationale stays in the run /
+    /// lifecycle artifacts. Body is built by <see cref="RecoveryChatLine"/>.
+    /// </summary>
+    Recovery
 }
 
 internal static class OrchestratorMessageKindExtensions
@@ -256,6 +263,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.IntegrationConflict => "integration-conflict",
         OrchestratorMessageKind.IntegrationError  => "integration-error",
         OrchestratorMessageKind.TaskBranchUnpushed => "task-branch-unpushed",
+        OrchestratorMessageKind.Recovery          => RecoveryChatLine.RecoveryTag,
         _ => "info"
     };
 
