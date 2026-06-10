@@ -437,7 +437,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             SessionName = sessionName,
             LastStreamedAt = execution.StartedAt,
             KillOverride = child.KillOverride,
-            ChildStdin = child.Stdin
+            ChildStdin = child.Stdin,
+            PermissionMode = permissionMode
         };
         try { info.OutputLog.Reset(); }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log dir {Path}", logDir); }
@@ -645,6 +646,44 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
     public bool IsRunningForProject(string rootPath) =>
         _processes.Values.Any(p => p.WorkingDirectory == rootPath && !p.Process.HasExited);
+
+    /// <summary>
+    /// Default convention-based execution context (ASS-1739 / T1a): scalar
+    /// header from the run's <see cref="ProcInfo"/> plus the per-CLI
+    /// convention sources from <see cref="CliContextConventions"/>. CLIs with a
+    /// richer self-report (Claude's init frame) override this and merge.
+    /// Returns null when the run is unknown.
+    /// </summary>
+    public virtual AgentStudio.Shared.CliExecutionContext? DescribeContextSources(string jobKey)
+        => _processes.TryGetValue(jobKey, out var info) ? BuildConventionContext(info) : null;
+
+    /// <summary>
+    /// Build the convention-only context for a tracked run. Shared by the base
+    /// <see cref="DescribeContextSources"/> and the Claude override (which adds
+    /// init-frame data on top). The scalar permission mode is the
+    /// platform mode the runner resolved, surfaced via its display name.
+    /// </summary>
+    protected AgentStudio.Shared.CliExecutionContext BuildConventionContext(ProcInfo info)
+        => new()
+        {
+            Cli = CliType,
+            Model = info.Execution.Model,
+            PermissionMode = info.PermissionMode is { } m ? CliPermissionModes.DisplayName(m) : null,
+            Cwd = info.WorkingDirectory,
+            CapturedAt = DateTime.UtcNow,
+            Source = "convention",
+            Sources = CliContextConventions.For(CliType, info.WorkingDirectory, ResolveUserHome()),
+        };
+
+    /// <summary>
+    /// The user-profile home used to root the convention probes
+    /// (<c>~/.claude</c>, <c>~/.codex</c>, ...). Matches the resolution the
+    /// session inspectors use so the probed paths line up with what the CLIs
+    /// actually read.
+    /// </summary>
+    protected static string? ResolveUserHome()
+        => Environment.GetEnvironmentVariable("USERPROFILE")
+           ?? Environment.GetEnvironmentVariable("HOME");
 
     public DateTime? GetLastStreamedAt(string jobKey) =>
         _processes.TryGetValue(jobKey, out var info) ? info.LastStreamedAt : null;
@@ -1472,6 +1511,25 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         /// <summary>For Claude: the latest <c>rate_limit_event</c> frame parsed
         /// from the stream-json output. Null until the first event arrives.</summary>
         public ClaudeRateLimitSnapshot? LastRateLimit { get; set; }
+
+        /// <summary>
+        /// Resolved platform permission mode the runner handed this run
+        /// (<c>CliPermissionModes</c>). Captured at spawn so the read-only
+        /// execution-context surface (ASS-1739 / T1a) can report the effective
+        /// posture for CLIs that have no init frame of their own. Null when the
+        /// runner injected no explicit mode (defer to the CLI's global config).
+        /// </summary>
+        public string? PermissionMode { get; set; }
+
+        /// <summary>
+        /// For Claude: the parsed stream-json init frame (model, cwd,
+        /// permission mode, MCP servers, ...). Populated by
+        /// <c>ClaudeCliService</c>'s output hook the moment the frame arrives;
+        /// consumed by <c>DescribeContextSources</c> so the execution-context
+        /// panel shows what the CLI itself reported it loaded. Null for other
+        /// CLIs and before the init frame is seen.
+        /// </summary>
+        public ClaudeInitContext? ClaudeInit { get; set; }
 
         /// <summary>
         /// UTC timestamp of the most recent <b>real</b> streamed line - lines

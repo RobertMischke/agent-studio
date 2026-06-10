@@ -170,6 +170,19 @@ public class TaskSessionLog
             evt => evt with { HeadShaBefore = beforeSha, HeadShaAfter = afterSha });
     }
 
+    /// <summary>
+    /// Records the read-only execution-context snapshot on the most recent
+    /// session event (ASS-1739 / T1a). Called from <c>OnCliFinished</c> while
+    /// the per-run process info is still alive, in lockstep with the
+    /// captured-session-id backfill. Best-effort: a null context or a missing /
+    /// unparseable last line is ignored.
+    /// </summary>
+    public bool BackfillLatestSessionEventExecutionContext(string jobId, CliExecutionContext? context, string? watchPath = null)
+    {
+        if (context == null) return false;
+        return MutateLatestSessionEvent(jobId, watchPath, evt => evt with { ExecutionContext = context });
+    }
+
     private bool MutateLatestSessionEvent(string jobId, string? watchPath, Func<SessionEvent, SessionEvent> mutate)
     {
         var info = _scanner.FindJob(jobId, watchPath);

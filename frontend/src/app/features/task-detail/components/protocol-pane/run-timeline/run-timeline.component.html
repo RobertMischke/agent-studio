@@ -133,6 +133,53 @@
                 }
               </div>
 
+              @if (hasExecutionContext(r)) {
+                <div class="run-card__row run-card__row--exec-context">
+                  <span class="run-card__row-label">Execution context</span>
+                  <div class="exec-context" [attr.data-testid]="'run-exec-context-' + r.index">
+                    <div class="exec-context__scalars">
+                      @if (r.executionContext?.model) {
+                        <span class="exec-context__scalar"><small>model</small><code>{{ r.executionContext?.model }}</code></span>
+                      }
+                      @if (r.executionContext?.permissionMode) {
+                        <span class="exec-context__scalar"><small>permission</small><code>{{ r.executionContext?.permissionMode }}</code></span>
+                      }
+                      @if (r.executionContext?.cwd) {
+                        <span class="exec-context__scalar"><small>cwd</small><code>{{ r.executionContext?.cwd }}</code></span>
+                      }
+                      <span class="exec-context__origin" [appTooltip]="executionSourceLabel(r.executionContext)">
+                        {{ r.executionContext?.source }}
+                      </span>
+                    </div>
+                    @for (group of executionGroups(r); track group.kind) {
+                      <div class="exec-context__group" [attr.data-kind]="group.kind">
+                        <span class="exec-context__group-label">{{ group.label }}</span>
+                        <ul class="exec-context__list">
+                          @for (s of group.sources; track $index) {
+                            <li class="exec-context__source"
+                                [class.exec-context__source--missing]="s.exists === false"
+                                [attr.data-exists]="s.exists">
+                              <span class="exec-context__source-label">{{ s.label }}</span>
+                              @if (s.path) {
+                                <code class="exec-context__source-path" [appTooltip]="s.path">{{ s.path }}</code>
+                              }
+                              @if (s.exists === true) {
+                                <span class="exec-context__source-flag exec-context__source-flag--ok">present</span>
+                              } @else if (s.exists === false) {
+                                <span class="exec-context__source-flag exec-context__source-flag--missing">absent</span>
+                              }
+                              @if (s.detail) {
+                                <span class="exec-context__source-detail">{{ s.detail }}</span>
+                              }
+                            </li>
+                          }
+                        </ul>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+
               @if (r.reason) {
                 <div class="run-card__row"><span class="run-card__row-label">Verdict</span><span>{{ r.reason }}</span></div>
               }

@@ -43,6 +43,38 @@ export interface RunRecord {
    * timeline renders the value only when present.
    */
   tokenSummary?: TaskTokenSummary | null;
+  /**
+   * Read-only snapshot of the context sources the run's CLI loaded beyond the
+   * prompt (ASS-1739 / T1a). Older payloads omit it; the Execution Context
+   * panel renders only when present.
+   */
+  executionContext?: CliExecutionContext | null;
+}
+
+/** One context input the CLI loaded for a run. Mirrors backend `CliContextSource`. */
+export interface CliContextSource {
+  /** 'memory' | 'instruction-file' | 'session' | 'global-config' | 'mcp' | 'env'. */
+  kind: string;
+  label: string;
+  path: string | null;
+  exists: boolean | null;
+  detail: string | null;
+}
+
+/**
+ * Read-only execution-context snapshot for one run. Mirrors backend
+ * `CliExecutionContext`: the scalar header (model / permission mode / cwd) plus
+ * the grouped context sources the CLI loaded. `source` is 'init-frame' (parsed
+ * from the CLI's own startup frame) or 'convention' (adapter + config paths).
+ */
+export interface CliExecutionContext {
+  cli: string;
+  model: string | null;
+  permissionMode: string | null;
+  cwd: string | null;
+  capturedAt: string;
+  source: string;
+  sources: CliContextSource[];
 }
 
 export interface RunPromptContextSnapshot {

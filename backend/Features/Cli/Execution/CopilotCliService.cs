@@ -182,7 +182,8 @@ public class CopilotCliService : ICliExecutionService
         var info = new CliProcessInfo(process, execution, workingDirectory)
         {
             OutputLogPath = outputLogDir,
-            OutputLog = new RunLogStore(outputLogDir)
+            OutputLog = new RunLogStore(outputLogDir),
+            PermissionMode = permissionMode
         };
         try { info.OutputLog.Reset(); }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log dir {Path}", outputLogDir); }
@@ -371,6 +372,31 @@ public class CopilotCliService : ICliExecutionService
     public bool IsRunningForProject(string rootPath)
     {
         return _processes.Values.Any(p => p.WorkingDirectory == rootPath && !p.Process.HasExited);
+    }
+
+    /// <summary>
+    /// Copilot execution context (ASS-1739 / T1a): convention-only. Copilot has
+    /// no stream-json init frame, so the model / permission / cwd header and the
+    /// instruction-file (<c>.github/copilot-instructions.md</c>) + AGENTS.md
+    /// chain + <c>~/.copilot</c> config come from
+    /// <see cref="CliContextConventions"/>. Read-only: probing never changes what
+    /// the run loads. Returns null when the run is unknown.
+    /// </summary>
+    public AgentStudio.Shared.CliExecutionContext? DescribeContextSources(string jobKey)
+    {
+        if (!_processes.TryGetValue(jobKey, out var info)) return null;
+        var home = Environment.GetEnvironmentVariable("USERPROFILE")
+                   ?? Environment.GetEnvironmentVariable("HOME");
+        return new AgentStudio.Shared.CliExecutionContext
+        {
+            Cli = CliType,
+            Model = info.Execution.Model,
+            PermissionMode = info.PermissionMode is { } m ? AgentStudio.Shared.CliPermissionModes.DisplayName(m) : null,
+            Cwd = info.WorkingDirectory,
+            CapturedAt = DateTime.UtcNow,
+            Source = "convention",
+            Sources = CliContextConventions.For(CliType, info.WorkingDirectory, home),
+        };
     }
 
     private async Task ReadStreamAsync(string jobKey, System.IO.StreamReader reader, string stream, CliProcessInfo info, CancellationToken ct)
@@ -837,6 +863,8 @@ public class CopilotCliService : ICliExecutionService
         public AgentStudio.Shared.WatchdogState LastWatchdogState { get; set; } = AgentStudio.Shared.WatchdogState.Healthy;
         /// <summary>See <c>CliExecutionServiceBase.ProcInfo.StopReason</c> for the rationale.</summary>
         public AgentStudio.Shared.RunStopReason StopReason { get; set; } = AgentStudio.Shared.RunStopReason.None;
+        /// <summary>Resolved platform permission mode for the run (ASS-1739 / T1a).</summary>
+        public string? PermissionMode { get; set; }
 
         public CliProcessInfo(Process process, CliExecution execution, string workingDirectory)
         {

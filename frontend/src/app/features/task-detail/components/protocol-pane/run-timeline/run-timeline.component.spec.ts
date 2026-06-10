@@ -5,7 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { RunTimelineComponent } from './run-timeline.component';
-import type { RunPromptEntry, RunRecord } from '../../../../../features/run-timeline';
+import type { CliExecutionContext, RunPromptEntry, RunRecord } from '../../../../../features/run-timeline';
 import type { TaskInfo } from '../../../../../models/task.model';
 
 /**
@@ -136,6 +136,75 @@ describe('RunTimelineComponent (smoke)', () => {
     http.verify();
   });
 
+  it('renders the execution-context panel with scalars and grouped sources (ASS-1739)', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RunTimelineComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RunTimelineComponent);
+    fixture.componentRef.setInput('job', taskInfo());
+    fixture.componentRef.setInput('runs', [
+      { ...runRecord(1, 'start', 'completed', null, 20), executionContext: execContext() },
+    ]);
+    fixture.detectChanges();
+
+    const runButton = fixture.nativeElement.querySelector('[data-testid="run-icon-1"]') as HTMLButtonElement;
+    runButton.click();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(r => r.url.endsWith('/tasks/task-1/runs/1/commits')).flush({ commits: [] });
+    fixture.detectChanges();
+
+    const panel = fixture.nativeElement.querySelector('[data-testid="run-exec-context-1"]') as HTMLElement;
+    expect(panel).not.toBeNull();
+    const text = panel.textContent as string;
+    // Scalar header from the init frame.
+    expect(text).toContain('claude-opus-4-8');
+    expect(text).toContain('bypassPermissions');
+    expect(text).toContain('C:/work/repo');
+    expect(text).toContain('init-frame');
+    // Grouped sources: MCP server + memory file with existence flags.
+    expect(text).toContain('MCP servers');
+    expect(text).toContain('gmail');
+    expect(text).toContain('connected');
+    expect(text).toContain('Memory');
+    expect(text).toContain('CLAUDE.md');
+    expect(text).toContain('present');
+    expect(text).toContain('absent');
+    http.verify();
+  });
+
+  it('hides the execution-context panel when nothing was captured', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RunTimelineComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RunTimelineComponent);
+    fixture.componentRef.setInput('job', taskInfo());
+    fixture.componentRef.setInput('runs', [runRecord(1, 'start', 'completed', null, 20)]);
+    fixture.detectChanges();
+
+    const runButton = fixture.nativeElement.querySelector('[data-testid="run-icon-1"]') as HTMLButtonElement;
+    runButton.click();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(r => r.url.endsWith('/tasks/task-1/runs/1/commits')).flush({ commits: [] });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="run-exec-context-1"]')).toBeNull();
+    http.verify();
+  });
+
   it('shows the full prompt-history text even when the run also has captured context', async () => {
     await TestBed.configureTestingModule({
       imports: [RunTimelineComponent],
@@ -217,6 +286,22 @@ function taskInfo(): TaskInfo {
     execution: null,
     commit: null,
   } as TaskInfo;
+}
+
+function execContext(): CliExecutionContext {
+  return {
+    cli: 'claude',
+    model: 'claude-opus-4-8',
+    permissionMode: 'bypassPermissions',
+    cwd: 'C:/work/repo',
+    capturedAt: '2026-06-08T10:01:00Z',
+    source: 'init-frame',
+    sources: [
+      { kind: 'mcp', label: 'gmail', path: null, exists: null, detail: 'connected' },
+      { kind: 'memory', label: 'Project memory', path: 'C:/work/repo/CLAUDE.md', exists: true, detail: null },
+      { kind: 'global-config', label: 'Global config', path: 'C:/Users/x/.claude/settings.json', exists: false, detail: null },
+    ],
+  };
 }
 
 function promptEntry(

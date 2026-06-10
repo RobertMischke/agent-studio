@@ -267,6 +267,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         if (_processes.TryGetValue(jobKey, out var info))
         {
             TryCaptureTurnUsage(info, line);
+            TryCaptureInitContext(info, line);
         }
 
         return ClaudeEventAdapter.Map(line.Text, jobKey);
@@ -369,6 +370,66 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         if (!_processes.TryGetValue(jobKey, out var info)) return null;
         if (info.LastParsedUsage == null || info.LastParsedUsageAt == null) return null;
         return (info.LastParsedUsage, info.LastParsedUsageAt.Value, info.Execution.StartedAt);
+    }
+
+    /// <summary>
+    /// Stash the parsed init frame onto <see cref="CliExecutionServiceBase.ProcInfo"/>
+    /// the first time we see it. The frame Claude already emits carries the
+    /// model, effective permission mode, cwd, and wired-in MCP servers - all of
+    /// it discarded today except the session id. Capturing it here (next to
+    /// <see cref="TryCaptureTurnUsage"/>) lets <see cref="DescribeContextSources"/>
+    /// report what the CLI itself said it loaded (ASS-1739 / T1a). Read-only:
+    /// parsing the frame never changes what the run loads. Best-effort - a
+    /// missing or malformed frame leaves the snapshot null and the surface falls
+    /// back to convention.
+    /// </summary>
+    private void TryCaptureInitContext(ProcInfo info, CliOutputLine line)
+    {
+        if (info.ClaudeInit != null) return; // first init frame wins
+        var text = line.Text?.TrimStart();
+        if (string.IsNullOrEmpty(text) || text![0] != '{') return;
+        if (!text.Contains("\"init\"", StringComparison.Ordinal)) return;
+        try
+        {
+            if (ClaudeInitContextParser.TryParse(text, out var ctx) && ctx != null)
+                info.ClaudeInit = ctx;
+        }
+        catch (Exception ex) { _logger.LogDebug(ex, "Claude init-context capture skipped"); }
+    }
+
+    /// <summary>
+    /// Claude execution context (ASS-1739 / T1a): prefer the CLI's own init
+    /// frame for the scalar header (model / permission mode / cwd) and the MCP
+    /// server list, then layer the convention sources (memory chain, session
+    /// store, global config) underneath. Falls back to the base
+    /// convention-only context when no init frame was captured (e.g. the run
+    /// died before the frame, or a non-stream-json invocation).
+    /// </summary>
+    public override AgentStudio.Shared.CliExecutionContext? DescribeContextSources(string jobKey)
+    {
+        if (!_processes.TryGetValue(jobKey, out var info)) return null;
+        var convention = BuildConventionContext(info);
+        var init = info.ClaudeInit;
+        if (init == null) return convention;
+
+        var sources = new List<AgentStudio.Shared.CliContextSource>();
+        foreach (var mcp in init.McpServers)
+            sources.Add(new AgentStudio.Shared.CliContextSource
+            {
+                Kind = AgentStudio.Shared.CliContextSourceKinds.Mcp,
+                Label = mcp.Name,
+                Detail = mcp.Status,
+            });
+        sources.AddRange(convention.Sources);
+
+        return convention with
+        {
+            Model = string.IsNullOrWhiteSpace(init.Model) ? convention.Model : init.Model,
+            PermissionMode = string.IsNullOrWhiteSpace(init.PermissionMode) ? convention.PermissionMode : init.PermissionMode,
+            Cwd = string.IsNullOrWhiteSpace(init.Cwd) ? convention.Cwd : init.Cwd,
+            Source = "init-frame",
+            Sources = sources,
+        };
     }
 
     /// <summary>

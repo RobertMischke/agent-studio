@@ -3863,6 +3863,42 @@ public class ProjectRunner
                 AntigravityCliService gemini => gemini.GetCapturedSessionId(jobKey),
                 _ => null
             };
+
+            // ASS-1739 / T1a: snapshot the read-only execution context (memory /
+            // session paths, instruction-file chain, global config, MCP servers,
+            // plus model / permission mode / cwd) while the per-run process info
+            // is still alive - DescribeContextSources reads the same _processes
+            // entry GetCapturedSessionId just used, which the post-run cleanup
+            // evicts later. Persist it onto the run's session event and mirror a
+            // slim line onto the unified timeline. Best-effort: a null context or
+            // a write failure never affects the run's outcome.
+            try
+            {
+                if (cli.DescribeContextSources(jobKey) is { } execContext)
+                {
+                    _sessions.BackfillLatestSessionEventExecutionContext(jobId, execContext, Entry.Path);
+                    if (finishedInfo != null)
+                    {
+                        var mcpCount = execContext.Sources.Count(s => s.Kind == AgentStudio.Shared.CliContextSourceKinds.Mcp);
+                        _timeline?.Append(
+                            finishedInfo.FolderPath,
+                            TimelineEventKinds.ExecutionContext,
+                            TimelineActors.System,
+                            summary: $"{cliType} context: {execContext.Sources.Count} sources" +
+                                     (string.IsNullOrWhiteSpace(execContext.Model) ? "" : $", model {execContext.Model}") +
+                                     (string.IsNullOrWhiteSpace(execContext.PermissionMode) ? "" : $", {execContext.PermissionMode}"),
+                            runId: planSnapshot?.EventInputSessionId,
+                            details: new()
+                            {
+                                ["cli"] = cliType ?? string.Empty,
+                                ["source"] = execContext.Source,
+                                ["sources"] = execContext.Sources.Count.ToString(),
+                                ["mcp"] = mcpCount.ToString(),
+                            });
+                    }
+                }
+            }
+            catch (Exception ex) { _logger.LogDebug(ex, "Execution-context capture failed for {JobId}", jobId); }
             // Post-hoc token reconstruction (ASS-626 / ASS-665): the Claude
             // CLI never reports a terminal usage footer the way Copilot does,
             // so `usage` above is always null for Claude - and a killed run

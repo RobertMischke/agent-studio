@@ -53,6 +53,15 @@ public sealed record RunRecord
     /// <c>GET /api/tasks/{id}/runs/{index}/context</c>, never inlined here.
     /// </summary>
     public string? ContextRef { get; init; }
+    /// <summary>
+    /// The read-only execution context this run's CLI loaded beyond the prompt
+    /// (ASS-1739 / T1a): memory / session paths, the instruction-file chain,
+    /// global config, MCP servers, plus model / permission mode / cwd. Copied
+    /// straight from <see cref="SessionEvent.ExecutionContext"/>; null for runs
+    /// recorded before the capture existed. Drives the run-detail "Execution
+    /// Context" panel.
+    /// </summary>
+    public AgentStudio.Shared.CliExecutionContext? ExecutionContext { get; init; }
 }
 
 /// <summary>
@@ -379,7 +388,8 @@ public static class RunTimelineBuilder
                 LineEnd = lineEnd,
                 HeadShaBefore = evt.HeadShaBefore,
                 HeadShaAfter = evt.HeadShaAfter,
-                ContextRef = evt.ContextRef
+                ContextRef = evt.ContextRef,
+                ExecutionContext = evt.ExecutionContext
             });
         }
 

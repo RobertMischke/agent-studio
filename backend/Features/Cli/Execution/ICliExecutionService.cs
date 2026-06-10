@@ -63,6 +63,24 @@ public interface ICliExecutionService
     bool IsRunningForProject(string rootPath);
 
     /// <summary>
+    /// Describe the context sources this CLI loaded for the live (or
+    /// just-finished, still-tracked) run under <paramref name="jobKey"/> -
+    /// memory / session paths, the instruction-file chain, global config, MCP
+    /// servers, plus model / effective permission mode / cwd. This is a
+    /// <b>read-only observability</b> surface (ASS-1739 / T1a): producing it
+    /// never changes what the CLI loads. For Claude the scalar header and MCP
+    /// list come from the stream-json init frame the CLI already emits; for
+    /// Codex / Copilot / Gemini they are derived from the adapter invocation
+    /// plus each CLI's documented config-path conventions. The runner calls
+    /// this at run finish (while the per-run process info is still alive) and
+    /// persists the result onto the run's <see cref="AgentStudio.Shared.SessionEvent"/>.
+    /// Returns null when the run is unknown or no context could be derived;
+    /// the default no-op keeps test stubs implementing this interface directly
+    /// compilable.
+    /// </summary>
+    AgentStudio.Shared.CliExecutionContext? DescribeContextSources(string jobKey) => null;
+
+    /// <summary>
     /// UTC timestamp of the last <b>real</b> streamed line from this run
     /// (not synthetic taskboard / orchestrator / watchdog markers), or
     /// null if the run is unknown / has finished. The watchdog uses this

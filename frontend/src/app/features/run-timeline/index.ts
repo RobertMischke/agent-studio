@@ -10,4 +10,6 @@ export type {
   RunFilesResponse,
   RunDiffResponse,
   RunContextResponse,
+  CliContextSource,
+  CliExecutionContext,
 } from './models/run-timeline.model';

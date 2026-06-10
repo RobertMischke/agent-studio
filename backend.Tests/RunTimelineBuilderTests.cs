@@ -176,6 +176,54 @@ public class RunTimelineBuilderTests
     }
 
     [Fact]
+    public void ExecutionContext_IsCarriedFromEventOntoRunRecord()
+    {
+        // The per-run execution-context surface (ASS-1739 / T1a) is backfilled
+        // onto the SessionEvent at run finish; the builder must copy it verbatim
+        // onto the RunRecord so the protocol-pane "Execution Context" panel can
+        // read it. A null event context stays null.
+        var ctx = new AgentStudio.Shared.CliExecutionContext
+        {
+            Cli = "claude",
+            Model = "claude-opus-4-8",
+            PermissionMode = "bypassPermissions",
+            Cwd = "C:/work/repo",
+            CapturedAt = T0.AddSeconds(60),
+            Source = "init-frame",
+            Sources =
+            [
+                new() { Kind = AgentStudio.Shared.CliContextSourceKinds.Memory, Label = "Project memory", Path = "C:/work/repo/CLAUDE.md", Exists = true },
+                new() { Kind = AgentStudio.Shared.CliContextSourceKinds.Mcp, Label = "gmail", Detail = "connected" },
+            ],
+        };
+        var events = new List<SessionEvent>
+        {
+            new() { Ts = T0, Kind = "start", Cli = "claude", ExecutionContext = ctx },
+            new() { Ts = T0.AddSeconds(120), Kind = "continue", Cli = "claude", Resumed = true, InputSessionId = "uuid-1" }
+        };
+        var lines = new List<CliOutputLine>
+        {
+            Sys(0, "[taskboard] Started claude CLI (PID 1234)"),
+            Sys(50, "[taskboard] claude CLI exited: status=completed, exitCode=0, duration=50s"),
+            User(110, "Keep going"),
+            Sys(120, "[taskboard] Started claude CLI (PID 1235)"),
+            Sys(180, "[taskboard] claude CLI exited: status=completed, exitCode=0, duration=60s")
+        };
+
+        var t = RunTimelineBuilder.Build(events, lines, T0.AddSeconds(200));
+
+        Assert.Equal(2, t.RunCount);
+        var first = t.Runs[0].ExecutionContext;
+        Assert.NotNull(first);
+        Assert.Equal("init-frame", first!.Source);
+        Assert.Equal("claude-opus-4-8", first.Model);
+        Assert.Equal("bypassPermissions", first.PermissionMode);
+        Assert.Equal(2, first.Sources.Count);
+        Assert.Contains(first.Sources, s => s.Kind == AgentStudio.Shared.CliContextSourceKinds.Mcp && s.Label == "gmail");
+        Assert.Null(t.Runs[1].ExecutionContext);
+    }
+
+    [Fact]
     public void PromptEntries_ListInitialAndExtensionPromptsWithTokenSnapshots()
     {
         var jobFolder = Path.Combine(Path.GetTempPath(), "run-prompt-timeline-" + Guid.NewGuid().ToString("N"));

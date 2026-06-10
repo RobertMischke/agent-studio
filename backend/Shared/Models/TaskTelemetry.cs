@@ -97,6 +97,18 @@ public record SessionEvent
     /// the polled runs list.
     /// </summary>
     public string? ContextRef { get; init; }
+
+    /// <summary>
+    /// The context sources this run's CLI loaded beyond the prompt - memory /
+    /// session paths, the instruction-file chain, global config, MCP servers,
+    /// plus model / effective permission mode / cwd (ASS-1739 / T1a).
+    /// Backfilled at run finish from
+    /// <c>ICliExecutionService.DescribeContextSources</c> while the per-run
+    /// process info is still alive. Null for runs recorded before this capture
+    /// existed, or when the CLI returned no context. Flows through
+    /// <c>RunTimelineBuilder</c> into the run-detail "Execution Context" panel.
+    /// </summary>
+    public CliExecutionContext? ExecutionContext { get; init; }
 }
 
 /// <summary>

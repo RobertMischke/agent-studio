@@ -158,6 +158,16 @@ public static class TimelineEventKinds
     /// mode and the (capped) file list. Emitted by the runner at run-finish.
     /// </summary>
     public const string ReadOnlyContainmentViolation = "read_only_containment_violation";
+    /// <summary>
+    /// The read-only execution-context snapshot for one run was captured
+    /// (ASS-1739 / T1a): the context sources the CLI loaded beyond the prompt -
+    /// memory / session paths, instruction-file chain, global config, MCP
+    /// servers, plus model / permission mode / cwd. <see cref="TimelineEvent.Summary"/>
+    /// carries a one-line count ("N sources, model X"); the canonical record is
+    /// the run's <see cref="SessionEvent.ExecutionContext"/>, surfaced in full
+    /// by the run-detail panel. Emitted by the runner at run-finish.
+    /// </summary>
+    public const string ExecutionContext = "execution_context";
 }
 
 /// <summary>
