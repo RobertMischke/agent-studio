@@ -930,7 +930,7 @@ public class ProjectRunner
             //    on the task branch before the merge reads them - in a managed run
             //    the agent itself does not commit, so without this the branch tip
             //    stays at develop and Integrate would merge nothing.
-            var commit = _git.CrashRecoveryCommit(ProjectName, run.WorktreePath!,
+            var commit = _git.WorktreeRunCommit(ProjectName, run.WorktreePath!,
                 $"{info.Title}\n\n{GitService.WorktreeRunCommitTrailer(run.JobId)}");
             if (commit.Success)
                 _logger.LogInformation("[taskboard] parallel run {Job} committed agent edits on {Branch} at {Sha}",
@@ -1433,7 +1433,7 @@ public class ProjectRunner
                 return lost;
             }
 
-            var commit = _git.CrashRecoveryCommit(ProjectName, run.WorktreePath!,
+            var commit = _git.WorktreeRunCommit(ProjectName, run.WorktreePath!,
                 $"{info.Title}\n\n[conflict-resolution; jobId={run.JobId}]");
             if (commit.Success)
                 _logger.LogInformation("[taskboard] conflict resolver committed changes for {Job} at {Sha}",
@@ -3958,8 +3958,12 @@ public class ProjectRunner
             if (_activeRuns.Get(jobId) is not { } run) return;
             if (run.CliType != null && !string.Equals(cliType, run.CliType, StringComparison.OrdinalIgnoreCase)) return;
 
-            _logger.LogInformation("Job {JobId} finished in project '{Project}' on {Cli} with status {Status}",
-                jobId, ProjectName, cliType, execution.Status);
+            // no-silent-death: every run's exit is logged with code + status +
+            // duration on entry to finalization, so even if a downstream step
+            // below throws (see the catch) the run's exit context is on record.
+            _logger.LogInformation(
+                "Job {JobId} finished in project '{Project}' on {Cli}: status={Status}, exitCode={ExitCode}, duration={Duration:F1}s",
+                jobId, ProjectName, cliType, execution.Status, execution.ExitCode, execution.DurationSeconds ?? 0.0);
 
             WorktreeCommitRange? worktreeCommitRange = null;
             // ADR-0052 slice 2: a parallel (worktree) run commits its edits on the
@@ -4769,7 +4773,13 @@ public class ProjectRunner
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Runner finalization crashed for {JobId}", jobId);
+            // no-silent-death: a throw here abandons the run's outcome processing
+            // (completion, lane move, re-issue). Log the full exit context with
+            // the cause so the abandoned run is never silent - the orphan changes
+            // it leaves are exactly what the boot-time crash-recovery net rescues.
+            _logger.LogError(ex,
+                "Runner finalization crashed for {JobId} on {Cli}: status={Status}, exitCode={ExitCode}, duration={Duration:F1}s; run outcome abandoned (reason={Reason})",
+                jobId, cliType, execution.Status, execution.ExitCode, execution.DurationSeconds ?? 0.0, ex.Message);
         }
         finally
         {

@@ -245,6 +245,21 @@ public class TaskMutationService
     {
         try
         {
+            // No-wipe guard: never shrink a non-empty persisted chain to empty.
+            // A run that crashes seconds into a resume (before it re-derives the
+            // commit set) can reach this replace-all write with an empty chain;
+            // overwriting would erase the task's landed-commit metadata. An empty
+            // attribution result is never legitimate when commits already exist
+            // (the aggregator folds the persisted chain in), so refuse and log
+            // instead of silently wiping. ADR-0020 / crash-recovery hygiene.
+            if (chain.Count == 0 && ReadPersistedCommitCount(folderPath) > 0)
+            {
+                _logger.LogWarning(
+                    "Refused to wipe non-empty commit chain in {Folder}: incoming attribution was empty (likely a resume-crash race). Keeping existing commits.",
+                    folderPath);
+                return false;
+            }
+
             TaskJsonFile.UpdateField(folderPath, "commits", chain, _logger);
             TaskJsonFile.UpdateField(folderPath, "commit", chain.Count > 0 ? chain[^1] : null, _logger);
             // Drop the obsolete operator-override array (removed feature) so the
@@ -256,6 +271,52 @@ public class TaskMutationService
         {
             _logger.LogError(ex, "Failed to write commit state to {Folder}", folderPath);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Count of distinct commits currently persisted in a job's
+    /// <c>task.json</c> (the <c>commits</c> array, or the legacy singular
+    /// <c>commit</c> field). Used by the no-wipe guard in
+    /// <see cref="WriteCommitState"/>; a parse failure reports 0 so the guard
+    /// fails open to the normal write path.
+    /// </summary>
+    private static int ReadPersistedCommitCount(string folderPath)
+    {
+        try
+        {
+            var jobJsonPath = Path.Combine(folderPath, "task.json");
+            if (!File.Exists(jobJsonPath)) return 0;
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                File.ReadAllText(jobJsonPath), TaskJsonFile.ReadOpts);
+            if (doc == null) return 0;
+
+            // Mirror AppendJobCommitOnFolder's parsing (case-insensitive via
+            // ReadOpts) so the count matches what a reader would actually see.
+            if (doc.TryGetValue("commits", out var commitsEl) && commitsEl.ValueKind == JsonValueKind.Array)
+            {
+                var count = 0;
+                foreach (var item in commitsEl.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object) continue;
+                    var parsed = JsonSerializer.Deserialize<TaskCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
+                    if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) count++;
+                }
+                return count;
+            }
+            if (doc.TryGetValue("commit", out var legacyEl) && legacyEl.ValueKind == JsonValueKind.Object)
+            {
+                var parsed = JsonSerializer.Deserialize<TaskCommitInfo>(legacyEl.GetRawText(), TaskJsonFile.ReadOpts);
+                return parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha) ? 1 : 0;
+            }
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            // Fail open to the normal write path: the guard is a safety net, not
+            // a gate. A read failure here must not block a legitimate write.
+            SilentCatch.Note(ex, "TaskMutationService: best-effort persisted-commit count for the no-wipe guard.");
+            return 0;
         }
     }
 

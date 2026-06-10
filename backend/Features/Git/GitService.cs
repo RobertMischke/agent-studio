@@ -855,6 +855,51 @@ public class GitService
         return new GitCommitResult(true, sha.Trim(), null);
     }
 
+    /// <summary>
+    /// Platform-owned landing commit for a per-task worktree run. Same add-all +
+    /// fixed-body mechanics as <see cref="CrashRecoveryCommit"/>, but it does NOT
+    /// stamp the <c>Crash Recovery</c> author: the regular completion path must
+    /// land under the configured git identity so a normal landing is
+    /// distinguishable from a genuine boot-time orphan rescue.
+    ///
+    /// <para>
+    /// Reusing <see cref="CrashRecoveryCommit"/> here was the root cause of every
+    /// landing showing <c>author='Crash Recovery'</c> once Always-Worktree routed
+    /// all runs through <c>ProjectRunner.IntegrateWorktreeRunAsync</c>: the
+    /// recovery author is the exception net's marker and must never appear on a
+    /// regular landing. The <see cref="WorktreeRunCommitTrailer"/> still lives in
+    /// the body, so the per-task history reconstruction (ASS-1712) is unaffected.
+    /// </para>
+    /// Returns a clean <c>"Nothing to commit"</c> result when the tree is empty;
+    /// callers treat that as success-with-info.
+    /// </summary>
+    public GitCommitResult WorktreeRunCommit(
+        string projectName,
+        string repoRoot,
+        string message)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitCommitResult(false, null, $"Repo root missing: {repoRoot}");
+
+        var (_, addErr, addCode) = RunGit(repoRoot, "add -A");
+        if (addCode != 0) return new GitCommitResult(false, null, $"git add failed: {addErr.Trim()}");
+
+        var (stagedOut, _, _) = RunGit(repoRoot, "diff --cached --name-only");
+        if (string.IsNullOrWhiteSpace(stagedOut))
+            return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
+
+        // No --author override: the configured git identity owns the landing.
+        var (_, commitErr, commitCode) = RunGit(repoRoot, "commit -F -", stdin: message);
+        if (commitCode != 0)
+        {
+            if (commitErr.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
+                return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
+            return new GitCommitResult(false, null, commitErr.Trim());
+        }
+        var (sha, _, _) = RunGit(repoRoot, "rev-parse HEAD");
+        return new GitCommitResult(true, sha.Trim(), null);
+    }
+
     public GitCommitResult Commit(string jobId, string? watchPath, string message,
         IReadOnlyCollection<string>? pathspecs = null)
     {

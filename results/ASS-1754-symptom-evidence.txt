@@ -1,0 +1,34 @@
+ASS-1754 symptom evidence — landing-commit author distribution (captured 2026-06-10)
+Source: git log --no-merges on the integration branch of this checkout
+
+## Author counts, last 40 non-merge commits
+     37 Crash Recovery
+      3 Robert Mischke
+
+## Recent landings (author | time | subject)
+c263528f | Crash Recovery | 06-10 22:10 | Nav-Umbau Schritt 3: Pipeline-Seite ueberarbeiten (Steps, Modelle, Prompt-Bindung, Kosten)
+f6d9ec30 | Crash Recovery | 06-10 21:31 | BUG: Slot-Accounting nach Restart desync (occupied=1 bei N lebenden Runs) + RunnerMode-Flip auf manual
+6ae79db8 | Crash Recovery | 06-10 21:22 | Nav-Umbau Schritt 3: Workflow/Lanes-Seite Stufe 1 (Lane-Liste, Sort, read-only Uebergangs-Anzeige)
+c31c5030 | Crash Recovery | 06-10 21:12 | BUG: Slot-Accounting nach Restart desync (occupied=1 bei N lebenden Runs) + RunnerMode-Flip auf manual
+05e2bb18 | Crash Recovery | 06-10 21:09 | BUG: Slot-Accounting nach Restart desync (occupied=1 bei N lebenden Runs) + RunnerMode-Flip auf manual
+b64c2594 | Crash Recovery | 06-10 21:07 | Nav-Umbau Schritt 3: Workflow/Lanes-Seite Stufe 1 (Lane-Liste, Sort, read-only Uebergangs-Anzeige)
+b1996d66 | Robert Mischke | 06-10 21:03 | feat(board): refine task card signals
+948f4892 | Crash Recovery | 06-10 20:52 | Nav-Umbau Schritt 3: Workflow/Lanes-Seite Stufe 1 (Lane-Liste, Sort, read-only Uebergangs-Anzeige)
+c599fb5c | Crash Recovery | 06-10 18:59 | UI: 3-progress selbsterklaerend - Badge 'failed/Backoff bis HH:MM' vs 'Run aktiv' vs 'kein aktiver Run'
+9c411e07 | Crash Recovery | 06-10 18:54 | BUG: Epic-Aufklappen in der Task-View jumpy/funktioniert nicht (Expand-State + Layout-Shift)
+a2254a46 | Crash Recovery | 06-10 18:46 | Evidenz-Screenshots: Quellen-Label (real/mocked), Composite erwuenscht, kaputte Bild-Referenzen als Finding
+6471f558 | Crash Recovery | 06-10 18:34 | T3a: Prompt-Registry + Inline-Migration (Code-Instruktionen -> Templates mit Slots) + Prompts-Seite (Projekt-Ebene)
+9dd7f161 | Crash Recovery | 06-10 18:29 | UI: 3-progress selbsterklaerend - Badge 'failed/Backoff bis HH:MM' vs 'Run aktiv' vs 'kein aktiver Run'
+0a52c533 | Crash Recovery | 06-10 18:21 | BUG: Epic-Aufklappen in der Task-View jumpy/funktioniert nicht (Expand-State + Layout-Shift)
+87fb5d44 | Crash Recovery | 06-10 18:15 | T3a: Prompt-Registry + Inline-Migration (Code-Instruktionen -> Templates mit Slots) + Prompts-Seite (Projekt-Ebene)
+2693ccab | Crash Recovery | 06-10 18:01 | T3a: Prompt-Registry + Inline-Migration (Code-Instruktionen -> Templates mit Slots) + Prompts-Seite (Projekt-Ebene)
+
+## Proof the flood is NOT boot-rescue: a flooded commit's body carries a runtime worktree/conflict trailer
+c263528f Nav-Umbau Schritt 3: Pipeline-Seite ueberarbeiten (Steps, Modelle, Prompt-Bindung, Kosten)
+[conflict-resolution; jobId=t4a-pipeline-seite-ueberarbeiten-steps-modelle-prompt-bindung-kosten]
+
+
+## Genuine boot-rescue commits look different (correct shape, kept as exception net)
+24ef35d0 chore(crash-recovery): rescue orphan changes for bug-page-not-scoped-to-active-project-shows-foreign-elements
+50e21a26 chore(crash-recovery): rescue orphan changes for extend-deletejob-to-remove-jobjson-less-orphan-folders
+7b4a7930 chore(crash-recovery): rescue orphan changes for extend-deletejob-to-remove-jobjson-less-orphan-folders
