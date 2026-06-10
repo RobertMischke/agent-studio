@@ -905,6 +905,48 @@ export class OverviewPaneComponent {
 
   readonly hasPipeline = computed(() => this.pipelineRows().length > 0);
 
+  /**
+   * Latest raw step-call prompt per pipeline step, keyed by lowercased step id.
+   * Fed from `GET /step-prompts` (the `.metadata/prompts.jsonl` read-model) so
+   * the Overview "Prompt" affordance on a step can show the exact prompt that
+   * step dispatched to the CLI. Empty until the first fetch resolves.
+   */
+  private readonly stepPrompts = signal<ReadonlyMap<string, string>>(new Map());
+
+  /**
+   * Most recent recorded prompt markdown for a step, or `''` when none was
+   * captured (deterministic steps, the main run, or before the step has
+   * dispatched). The popover hides its own trigger on empty text, so a row
+   * without a recorded prompt shows no affordance.
+   */
+  stepPromptMarkdown(stepId: string): string {
+    return this.stepPrompts().get(stepId.toLowerCase()) ?? '';
+  }
+
+  /**
+   * Pull the raw step prompts for this task. Re-runs when the task changes or
+   * a new run completes ({@link runCount}) so freshly dispatched step prompts
+   * surface without a manual refresh. Best-effort: an error leaves the prior
+   * map in place and the triggers simply stay hidden.
+   */
+  private readonly loadStepPromptsEffect = effect(() => {
+    const job = this.job();
+    this.runCount();
+    if (!job.id) return;
+    this.jobService.getStepPrompts(job.id, job.watchPath).subscribe({
+      next: (res) => {
+        const map = new Map<string, string>();
+        for (const p of res.prompts ?? []) {
+          if (!p?.stepId) continue;
+          // Last write wins so a re-run step shows its most recent prompt.
+          map.set(p.stepId.toLowerCase(), p.prompt ?? '');
+        }
+        this.stepPrompts.set(map);
+      },
+      error: () => { /* keep prior map; trigger stays hidden */ },
+    });
+  });
+
   readonly selectedTokenRow = computed<PipelineRowVm | null>(() => {
     const id = this.selectedTokenStepId();
     if (!id) return null;

@@ -62,6 +62,7 @@ import type {
   PipelineCatalogue,
   PipelineStepSetting,
   PipelineStepCondition,
+  StepPromptsResponse,
 } from '../features/task-pipeline';
 import type { TaskScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
 import type { ExecutiveSummaryResponse } from '../features/summary';
@@ -1090,6 +1091,20 @@ export class TaskService {
   getJobPipeline(jobId: string, watchPath?: string) {
     return this.http.get<TaskPipelineResponse>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/pipeline`,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * Raw step-call prompts captured at central dispatch into
+   * `.metadata/prompts.jsonl` (aspects, code-review-grade, ...). The Overview
+   * "Prompt" affordance on a pipeline step reads this to show the exact prompt
+   * that step sent to the CLI. Main-run prompts / follow-ups are deliberately
+   * absent here — they already live in `prompt.md` / chat.
+   */
+  getStepPrompts(jobId: string, watchPath?: string) {
+    return this.http.get<StepPromptsResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/step-prompts`,
       this.withWatchPath(watchPath),
     );
   }

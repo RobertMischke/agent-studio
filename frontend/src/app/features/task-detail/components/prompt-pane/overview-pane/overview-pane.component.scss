@@ -845,7 +845,18 @@
     text-align: left;
   }
 
+  // Name + per-step prompt trigger share grid column 3. The name flexes and
+  // truncates; the prompt affordance never shrinks so it stays clickable.
+  &__name-cell {
+    grid-column: 3;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
   &__name {
+    flex: 1 1 auto;
     min-width: 0;
     color: var(--studio-fg);
     overflow: hidden;
@@ -854,6 +865,12 @@
     // The name carries the "what does this step do" explanation tooltip;
     // the help cursor signals it is hoverable.
     cursor: help;
+  }
+
+  &__prompt {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
   }
 
   &__parallel-note { grid-column: 4; }

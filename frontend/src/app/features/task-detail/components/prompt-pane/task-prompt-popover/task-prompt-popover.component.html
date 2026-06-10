@@ -4,13 +4,13 @@
       type="button"
       class="prompt-pop__trigger"
       [class.prompt-pop__trigger--open]="open()"
-      data-testid="overview-prompt-trigger"
+      [attr.data-testid]="triggerTestid()"
       [attr.aria-expanded]="open()"
-      aria-label="Show task prompt"
-      [appTooltip]="'Show the task prompt (prompt.md) rendered as Markdown'"
+      [attr.aria-label]="'Show ' + title()"
+      [appTooltip]="triggerTooltip()"
       (click)="toggle($event)">
       <span class="prompt-pop__trigger-icon" aria-hidden="true">¶</span>
-      Prompt
+      {{ triggerLabel() }}
     </button>
 
     @if (open()) {
@@ -26,14 +26,14 @@
           class="prompt-pop__modal"
           role="dialog"
           aria-modal="true"
-          aria-label="Task prompt"
+          [attr.aria-label]="title()"
           data-testid="overview-prompt-popover"
           tabindex="-1"
           (click)="$event.stopPropagation()"
           (keydown.enter)="$event.stopPropagation()"
           (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
           <header class="prompt-pop__head">
-            <h4 class="prompt-pop__title">Task prompt</h4>
+            <h4 class="prompt-pop__title">{{ title() }}</h4>
             <button
               type="button"
               class="prompt-pop__close"

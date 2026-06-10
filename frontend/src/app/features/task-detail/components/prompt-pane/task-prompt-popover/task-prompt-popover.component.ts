@@ -44,6 +44,18 @@ export class TaskPromptPopoverComponent {
   readonly jobId = input<string | null>(null);
   readonly watchPath = input<string | null>(null);
 
+  /** Modal heading + dialog aria-label. Defaults to the task-prompt wording;
+   *  the per-step reuse passes "Step prompt". */
+  readonly title = input<string>('Task prompt');
+  /** Trigger button caption. */
+  readonly triggerLabel = input<string>('Prompt');
+  /** Trigger hover tooltip. */
+  readonly triggerTooltip = input<string>('Show the task prompt (prompt.md) rendered as Markdown');
+  /** Trigger test id, made unique per step when reused in the pipeline rows. */
+  readonly triggerTestid = input<string>('overview-prompt-trigger');
+  /** Modal-stack key so Escape arbitration can tell instances apart. */
+  readonly modalStackId = input<string>('task-prompt-popover');
+
   readonly open = signal(false);
 
   /** True only when there is non-empty prompt text to show. */
@@ -76,7 +88,7 @@ export class TaskPromptPopoverComponent {
   private readonly stackEffect = effect(() => {
     const isOpen = this.open();
     if (isOpen && !this.modalStackDispose) {
-      this.modalStackDispose = this.modalStack.push('task-prompt-popover', () => {
+      this.modalStackDispose = this.modalStack.push(this.modalStackId(), () => {
         this.close();
         return true;
       });

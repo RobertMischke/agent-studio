@@ -267,6 +267,36 @@ export interface PipelineStepSetting {
   condition?: PipelineStepCondition | null;
 }
 
+/**
+ * One raw step-call prompt recorded at central dispatch into
+ * `.metadata/prompts.jsonl` (the "Rohdaten" side of the prompt-completeness
+ * principle). Captures the final prompt text a one-shot step (aspect,
+ * code-review-grade, ...) handed to the CLI plus the provenance needed to
+ * attribute it to a pipeline step. Keyed to the matching Overview step row
+ * via {@link stepId}.
+ */
+export interface StepPromptEntry {
+  /** UTC dispatch time (ISO-8601). */
+  at: string;
+  /** Pipeline step id this prompt belongs to, e.g. `aspect-requirement-fit`. */
+  stepId: string;
+  /** Runtime template the prompt was rendered from; null when built inline. */
+  templateRef?: string | null;
+  /** Model the prompt was sent to. */
+  model?: string | null;
+  /** CLI the prompt was sent through (lowercase). */
+  cli?: string | null;
+  /** Usage-attribution source tag, when the call site supplied one. */
+  source?: string | null;
+  /** The final, raw prompt text exactly as piped to the CLI. */
+  prompt: string;
+}
+
+/** Envelope of `GET /api/tasks/{id}/step-prompts`. */
+export interface StepPromptsResponse {
+  prompts: StepPromptEntry[];
+}
+
 /** Full response envelope of the pipeline read endpoint. */
 export interface TaskPipelineResponse {
   pipeline: TaskPipeline;

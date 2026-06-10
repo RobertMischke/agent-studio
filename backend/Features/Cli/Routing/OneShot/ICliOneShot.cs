@@ -93,6 +93,34 @@ public sealed record CliOneShotRequest(
     /// field today and fall back to text-only stdin.
     /// </summary>
     public IReadOnlyList<CliOneShotImage>? InlineImages { get; init; }
+
+    /// <summary>
+    /// Absolute path to the task's job folder. When set together with
+    /// <see cref="StepId"/>, the central dispatch decorator
+    /// (<see cref="PromptLoggingCliOneShot"/>) records the final
+    /// <see cref="Prompt"/> raw into <c>.metadata/prompts.jsonl</c> in this
+    /// folder before the call runs - the "Rohdaten" capture for step-call
+    /// prompts that otherwise land in no raw file at the task. Leave null for
+    /// the main run and follow-ups (already logged in the task's
+    /// <c>prompt.md</c> / chat) so the prompt is not double-booked.
+    /// </summary>
+    public string? JobFolderPath { get; init; }
+
+    /// <summary>
+    /// Pipeline step id this call belongs to, e.g.
+    /// <c>aspect-requirement-fit</c> or <c>post-code-review-grade</c>. Keys
+    /// the recorded prompt to the matching step so the UI can show it next to
+    /// the step / timeline entry. Required (with <see cref="JobFolderPath"/>)
+    /// for prompt logging to fire.
+    /// </summary>
+    public string? StepId { get; init; }
+
+    /// <summary>
+    /// Runtime prompt template the final prompt was rendered from, e.g.
+    /// <c>review-aspect-requirement-fit.md</c>. Recorded as provenance
+    /// alongside the prompt. Null when the prompt is built inline.
+    /// </summary>
+    public string? TemplateRef { get; init; }
 }
 
 /// <summary>

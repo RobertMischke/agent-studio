@@ -81,5 +81,24 @@ public static class TaskPipelineEndpoints
                 config,
             });
         });
+
+        // Read-model for the raw step-call prompts captured at central
+        // dispatch into .metadata/prompts.jsonl. The UI 'Prompt ansehen'
+        // action on a step / timeline entry parses this to show the exact
+        // prompt the aspect / code-review-grade / ... step sent to the CLI.
+        // Main-run prompts and follow-ups are intentionally absent here -
+        // they already live in the task's prompt.md / chat.
+        group.MapGet("/{jobId}/step-prompts", (
+            string jobId,
+            string? watchPath,
+            TaskScannerService scanner,
+            AgentStudio.Cli.StepPromptLog promptLog) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+
+            var prompts = promptLog.ReadForJob(info.FolderPath);
+            return Results.Ok(new { prompts });
+        });
     }
 }

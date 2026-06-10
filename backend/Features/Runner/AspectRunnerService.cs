@@ -42,7 +42,7 @@ public sealed class AspectRunnerService
     public Func<string, string, string, string, TimeSpan, CancellationToken, Task<string>> CliRunner { get; set; }
         = DefaultRunCliAsync;
 
-    private Func<string, string, string, string, string?, TimeSpan, CancellationToken, Task<string>>? _thinkingAwareCliRunner;
+    private Func<string, string, string, string, string?, TimeSpan, string, CancellationToken, Task<string>>? _thinkingAwareCliRunner;
 
     private readonly AdHocUsageRecorder? _usage;
     private readonly CliOneShotRegistry? _oneShotRegistry;
@@ -75,7 +75,7 @@ public sealed class AspectRunnerService
         }
     }
 
-    private async Task<string> RunViaOneShotAsync(string aspectId, string cli, string model, string prompt, string? thinkingLevel, TimeSpan timeout, CancellationToken ct)
+    private async Task<string> RunViaOneShotAsync(string aspectId, string cli, string model, string prompt, string? thinkingLevel, TimeSpan timeout, string jobFolderPath, CancellationToken ct)
     {
         var oneShot = _oneShotRegistry?.Get("claude");
         if (oneShot == null) return await DefaultRunCliAsync(aspectId, cli, model, prompt, timeout, ct);
@@ -89,6 +89,11 @@ public sealed class AspectRunnerService
             Timeout = timeout,
             Source = AdHocUsageSources.ReviewDecision,
             RecordUsage = false, // RunAsync caller (this service) records via AdHocClaudeInvoker.Record below
+            // Raw-prompt capture: the central dispatch decorator writes the
+            // final prompt to .metadata/prompts.jsonl keyed on this step id.
+            JobFolderPath = jobFolderPath,
+            StepId = $"aspect-{aspectId}",
+            TemplateRef = Catalogue.TryGetValue(aspectId, out var def) ? def.PromptTemplate : null,
         }, ct);
 
         if (!result.Ok)
@@ -260,7 +265,7 @@ public sealed class AspectRunnerService
                 var sw = AdHocClaudeInvoker.StartTiming();
                 var rawResponse = _thinkingAwareCliRunner is null
                     ? await CliRunner(def.Id, cliBinary, model, prompt, perAspectTimeout, ct)
-                    : await _thinkingAwareCliRunner(def.Id, cliBinary, model, prompt, thinkingLevel, perAspectTimeout, ct);
+                    : await _thinkingAwareCliRunner(def.Id, cliBinary, model, prompt, thinkingLevel, perAspectTimeout, inputs.JobFolderPath, ct);
                 sw.Stop();
                 durationMs = sw.ElapsedMilliseconds;
                 var parsed = AdHocClaudeInvoker.ParseOrFallback(rawResponse, model);

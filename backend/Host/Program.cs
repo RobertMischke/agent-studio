@@ -308,7 +308,17 @@ builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedTokenSummaryReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedWorkspaceTimelineReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedProjectTokenUsageReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.ITokenAggregator, AgentStudio.Tokens.TokenAggregationService>();
-builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot, AgentStudio.Cli.ClaudeOneShot>();
+// Central step-call dispatch: the concrete Claude runner is wrapped by the
+// PromptLoggingCliOneShot decorator so every one-shot step prompt (aspects,
+// code-review-grade, orchestrator-decision, drift, ...) is captured raw into
+// the task's .metadata/prompts.jsonl when the call site sets JobFolderPath +
+// StepId. ICliOneShot resolves to the decorator; the registry enumerates it.
+builder.Services.AddSingleton<AgentStudio.Cli.StepPromptLog>();
+builder.Services.AddSingleton<AgentStudio.Cli.ClaudeOneShot>();
+builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot>(sp =>
+    new AgentStudio.Cli.PromptLoggingCliOneShot(
+        sp.GetRequiredService<AgentStudio.Cli.ClaudeOneShot>(),
+        sp.GetRequiredService<AgentStudio.Cli.StepPromptLog>()));
 builder.Services.AddSingleton<AgentStudio.Cli.CliOneShotRegistry>();
 builder.Services.AddSingleton<CodePatternDriftAnalysisService>();
 builder.Services.AddSingleton<AgentStudio.Persistence.IJsonlAppender, AgentStudio.Persistence.JsonlAppender>();

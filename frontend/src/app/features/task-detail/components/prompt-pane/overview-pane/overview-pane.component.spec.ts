@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
@@ -340,6 +340,56 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.pipelineTotal()).toEqual(expect.objectContaining({ totalTokens: 1200, totalCostUsd: 0.002, anyModelUnknown: false }));
     expect(c.formatCost(0.002)).toBe('$0.0020');
     expect(c.formatCost(1.5)).toBe('$1.50');
+  });
+
+  it('pipeline block: step rows surface a per-step prompt trigger fed from the step-prompts read-model', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'aspect-requirement-fit', displayName: 'Requirement fit', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+          { id: 'aspect-code-quality', displayName: 'Code quality', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+        steps: [
+          { stepId: 'aspect-requirement-fit', kind: 'aspect', model: 'm', status: 'passed', durationMs: 1, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'pass' },
+          { stepId: 'aspect-code-quality', kind: 'aspect', model: 'm', status: 'passed', durationMs: 1, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'pass' },
+        ],
+      },
+      cost: emptyCost(),
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    // The load effect fetches the raw step prompts; only code-quality recorded one.
+    const httpMock = TestBed.inject(HttpTestingController);
+    for (const req of httpMock.match(r => r.url.includes('/step-prompts'))) {
+      req.flush({
+        prompts: [
+          { at: '2026-06-10T10:00:00.000Z', stepId: 'aspect-code-quality', templateRef: 'review/code-quality.md', model: 'claude-haiku-4-5', prompt: '# Review prompt\n\nGrade the code.' },
+        ],
+      });
+    }
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    // Read-model lookup is case-insensitive on the step id.
+    expect(c.stepPromptMarkdown('aspect-code-quality')).toContain('Grade the code.');
+    expect(c.stepPromptMarkdown('ASPECT-CODE-QUALITY')).toContain('Grade the code.');
+    // A step with no recorded prompt yields empty text so the trigger stays hidden.
+    expect(c.stepPromptMarkdown('aspect-requirement-fit')).toBe('');
+
+    const host = fixture.nativeElement as HTMLElement;
+    // The step with a recorded prompt renders the per-step "Prompt" trigger.
+    expect(host.querySelector('[data-testid="overview-pipeline-step-prompt-aspect-code-quality"]')).not.toBeNull();
+    // The step without one renders no trigger.
+    expect(host.querySelector('[data-testid="overview-pipeline-step-prompt-aspect-requirement-fit"]')).toBeNull();
   });
 
   it('pipeline block: run switcher shows archived attempts from pipeline history', async () => {

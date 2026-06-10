@@ -293,9 +293,21 @@
                   [appTooltip]="stepStatusLabel(row.status)"
                   aria-hidden="true">{{ stepStatusIcon(row.status) }}</span>
             <span class="ov-pl-step__kind">{{ stepKindLabel(row.kind) }}</span>
-            <span class="ov-pl-step__name"
-                  data-testid="overview-pipeline-step-name"
-                  [appTooltip]="row.explanation">{{ row.label }}</span>
+            <span class="ov-pl-step__name-cell">
+              <span class="ov-pl-step__name"
+                    data-testid="overview-pipeline-step-name"
+                    [appTooltip]="row.explanation">{{ row.label }}</span>
+              <app-task-prompt-popover
+                class="ov-pl-step__prompt"
+                [markdown]="stepPromptMarkdown(row.id)"
+                [jobId]="job().id"
+                [watchPath]="job().watchPath"
+                title="Step prompt"
+                triggerLabel="Prompt"
+                [triggerTooltip]="'Show the exact prompt this step sent to the CLI (raw .metadata/prompts.jsonl record)'"
+                [triggerTestid]="'overview-pipeline-step-prompt-' + row.id"
+                modalStackId="step-prompt-popover" />
+            </span>
             @if (row.runMode === 'parallel') {
               <span class="ov-pl-step__parallel-note"
                     data-testid="overview-pipeline-step-parallel"

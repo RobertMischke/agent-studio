@@ -40,7 +40,7 @@ public sealed class CodeReviewStepService
     /// </summary>
     public Func<string, string, string, TimeSpan, CancellationToken, Task<string>> CliRunner { get; set; }
         = DefaultRunCliAsync;
-    private Func<string, string, string, string?, TimeSpan, CancellationToken, Task<string>>? _thinkingAwareCliRunner;
+    private Func<string, string, string, string?, TimeSpan, string, string, string?, CancellationToken, Task<string>>? _thinkingAwareCliRunner;
 
     public CodeReviewStepService(
         RuntimePromptService prompts,
@@ -89,6 +89,14 @@ public sealed class CodeReviewStepService
 
         var prompt = BuildPrompt(request);
 
+        // Raw-prompt capture provenance: the grade pass is the
+        // post-code-review-grade pipeline step; the legacy verdict pass is the
+        // user-triggered code-review. Both render from a known runtime template.
+        var promptStepId = request.Mode == CodeReviewMode.Grade
+            ? AgentStudio.Pipeline.PipelineCatalogue.CodeReviewGradeStepId
+            : "code-review";
+        var promptTemplateRef = request.Mode == CodeReviewMode.Grade ? GradePromptTemplate : PromptTemplate;
+
         string rawResponse;
         AspectStatus status;
         string summary;
@@ -99,7 +107,7 @@ public sealed class CodeReviewStepService
         {
             rawResponse = _thinkingAwareCliRunner is null
                 ? await CliRunner(request.CliType, request.Model, prompt, request.Timeout, ct)
-                : await _thinkingAwareCliRunner(request.CliType, request.Model, prompt, request.ThinkingLevel, request.Timeout, ct);
+                : await _thinkingAwareCliRunner(request.CliType, request.Model, prompt, request.ThinkingLevel, request.Timeout, request.JobFolderPath, promptStepId, promptTemplateRef, ct);
             sw.Stop();
             var (parsedText, parsedUsage) = AdHocClaudeInvoker.ParseOrFallback(rawResponse, request.Model);
             rawResponse = parsedText;
@@ -384,7 +392,7 @@ public sealed class CodeReviewStepService
         return oneLine;
     }
 
-    private async Task<string> RunViaOneShotAsync(string cliType, string model, string prompt, string? thinkingLevel, TimeSpan timeout, CancellationToken ct)
+    private async Task<string> RunViaOneShotAsync(string cliType, string model, string prompt, string? thinkingLevel, TimeSpan timeout, string jobFolderPath, string stepId, string? templateRef, CancellationToken ct)
     {
         var oneShot = _oneShotRegistry?.Get(cliType);
         if (oneShot == null) return await DefaultRunCliAsync(cliType, model, prompt, timeout, ct);
@@ -398,6 +406,11 @@ public sealed class CodeReviewStepService
             Timeout = timeout,
             Source = UsageSource,
             RecordUsage = false, // RunAsync caller (this service) records via AdHocClaudeInvoker.Record
+            // Raw-prompt capture: central dispatch decorator writes the final
+            // prompt to .metadata/prompts.jsonl keyed on this step id.
+            JobFolderPath = jobFolderPath,
+            StepId = stepId,
+            TemplateRef = templateRef,
         }, ct);
 
         if (!result.Ok)
