@@ -32,6 +32,122 @@ public static class TaskIdentity
     public static string CreateKey(string watchPath, string jobId) => $"{watchPath}::{jobId}";
 }
 
+/// <summary>
+/// Read-time visibility projection (ASS-1751) that disambiguates the three ways
+/// a <c>3-progress</c> task can look "untouched" on the board: a live run that
+/// occupies a slot, a failed run waiting out the rapid-crash backoff before it
+/// can be re-picked, and an orphan whose run was killed by a backend restart and
+/// has not been re-picked yet. Purely additive and never persisted - it is
+/// folded onto <see cref="TaskInfo"/> at endpoint-read time from the project
+/// runner's in-memory state and only for Progress-lane tasks. Carries NO
+/// behavior; the UI renders a small, quiet status pill from it.
+/// </summary>
+public record TaskRunActivity
+{
+    /// <summary>One of the <see cref="TaskRunActivityKinds"/> constants.</summary>
+    public string Kind { get; init; } = TaskRunActivityKinds.NoActiveRun;
+    /// <summary>OS process id of the live run; set only when <see cref="Kind"/> is <see cref="TaskRunActivityKinds.Active"/>.</summary>
+    public int? ProcessId { get; init; }
+    /// <summary>UTC instant the rapid-crash backoff expires; set only when <see cref="Kind"/> is <see cref="TaskRunActivityKinds.FailedBackoff"/>.</summary>
+    public DateTime? BackoffUntil { get; init; }
+    /// <summary>Consecutive fail-without-progress attempts recorded by the runner for this task (0 when none).</summary>
+    public int Attempt { get; init; }
+    /// <summary>One-line last-error summary mirrored from <see cref="TaskOutcomeIssue.Summary"/>; null when no issue is known.</summary>
+    public string? LastError { get; init; }
+}
+
+/// <summary>
+/// String constants for <see cref="TaskRunActivity.Kind"/>. Kept as literals so
+/// the JSON wire format is stable and the frontend can switch on the same
+/// tokens. See <see cref="TaskRunActivityClassifier"/> for the rules that pick
+/// one.
+/// </summary>
+public static class TaskRunActivityKinds
+{
+    /// <summary>The run process is alive and occupies a parallelism slot.</summary>
+    public const string Active = "active";
+    /// <summary>Last run failed and a rapid-crash backoff is still in effect; the task waits for re-pickup.</summary>
+    public const string FailedBackoff = "failed-backoff";
+    /// <summary>Last run failed (or a fail-without-progress attempt is recorded) but no backoff is active and nothing is running.</summary>
+    public const string FailedIdle = "failed-idle";
+    /// <summary>No live run, no backoff, no recorded failure - e.g. an orphan after a backend restart awaiting re-pickup.</summary>
+    public const string NoActiveRun = "no-active-run";
+}
+
+/// <summary>
+/// In-memory facts a project runner exposes about one task's current run, the
+/// raw input to <see cref="TaskRunActivityClassifier"/>. All fields are cleared
+/// on a backend restart (the recovery boundary), so an orphaned task naturally
+/// classifies as <see cref="TaskRunActivityKinds.NoActiveRun"/>.
+/// </summary>
+public readonly record struct RunActivityFacts(bool SlotActive, DateTime? BackoffUntil, int ConsecutiveFailures);
+
+/// <summary>
+/// Pure rules that map the runner's in-memory <see cref="RunActivityFacts"/>
+/// (plus the read-time execution status and outcome issue) onto a
+/// <see cref="TaskRunActivity"/>. Kept side-effect-free and standalone so the
+/// three-state classification is directly unit-testable without spinning up a
+/// runner. ASS-1751.
+/// </summary>
+public static class TaskRunActivityClassifier
+{
+    /// <summary>
+    /// Classify a Progress-lane task. Precedence: a live slot wins (active),
+    /// then an unexpired backoff (failed-backoff), then any evidence of a
+    /// prior failure (failed-idle), else no-active-run. <paramref name="now"/>
+    /// is injected so tests are deterministic.
+    /// </summary>
+    public static TaskRunActivity Classify(
+        RunActivityFacts facts,
+        CliExecution? execution,
+        TaskOutcomeIssue? outcomeIssue,
+        DateTime now)
+    {
+        var attempt = facts.ConsecutiveFailures < 0 ? 0 : facts.ConsecutiveFailures;
+        var lastError = string.IsNullOrWhiteSpace(outcomeIssue?.Summary) ? null : outcomeIssue!.Summary;
+
+        if (facts.SlotActive)
+        {
+            return new TaskRunActivity
+            {
+                Kind = TaskRunActivityKinds.Active,
+                ProcessId = execution is { ProcessId: > 0 } ? execution.ProcessId : null,
+                Attempt = attempt,
+                LastError = lastError,
+            };
+        }
+
+        if (facts.BackoffUntil is { } until && until > now)
+        {
+            return new TaskRunActivity
+            {
+                Kind = TaskRunActivityKinds.FailedBackoff,
+                BackoffUntil = until,
+                Attempt = attempt,
+                LastError = lastError,
+            };
+        }
+
+        var execFailed = string.Equals(execution?.Status, "failed", StringComparison.OrdinalIgnoreCase);
+        if (execFailed || attempt > 0)
+        {
+            return new TaskRunActivity
+            {
+                Kind = TaskRunActivityKinds.FailedIdle,
+                Attempt = attempt,
+                LastError = lastError,
+            };
+        }
+
+        return new TaskRunActivity
+        {
+            Kind = TaskRunActivityKinds.NoActiveRun,
+            Attempt = attempt,
+            LastError = lastError,
+        };
+    }
+}
+
 public record RunnerStatus
 {
     public Dictionary<string, ProjectRunnerStatus> Projects { get; init; } = new();

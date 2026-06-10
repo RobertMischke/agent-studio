@@ -47,6 +47,7 @@ import { TokenPopoverDirective } from './token-popover.directive';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { stateLabel } from '../../../../services/format.util';
+import { buildRunActivityBadge } from '../../../../services/run-activity.util';
 import { BoardFiltersService } from '../../state/board-filters.service';
 import { EpicExpansionStore } from '../../state/epic-expansion.service';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
@@ -202,6 +203,15 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   phaseBadge() { return buildPhaseBadge(this.job().phase); }
 
   executionBadge() { return buildExecutionBadge(this.job()); }
+
+  /**
+   * ASS-1751: run-activity pill for 3-progress cards — distinguishes a live run,
+   * a failed run waiting out the rapid-crash backoff (with the retry time), and
+   * an orphan whose run was ended by a backend restart. Re-evaluates with the
+   * shared 30s tick so the "retry at HH:MM" copy stays fresh without re-reading
+   * Date.now() during change detection.
+   */
+  readonly runActivityBadge = computed(() => buildRunActivityBadge(this.job(), nowTick()));
 
   readonly reviewBadge = computed(() => buildReviewBadge(this.job().summaryState));
 

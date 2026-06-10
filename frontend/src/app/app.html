@@ -129,6 +129,17 @@
                  activity link + pager + complete. Replaces the wide
                  detail-header row that the reference design folded into
                  the tab bar. -->
+            @if (studioRunActivityBadge(); as ra) {
+              <span class="studio-tab-action__run-activity"
+                    [class]="'studio-tab-action__run-activity studio-tab-action__run-activity--' + ra.tone"
+                    [appTooltip]="ra.tooltip"
+                    data-testid="studio-run-activity"
+                    [attr.data-run-activity-kind]="ra.kind">
+                <span class="studio-tab-action__run-activity-dot"></span>
+                {{ ra.label }}
+              </span>
+              <span class="studio-tab-actions-sep" aria-hidden="true"></span>
+            }
             <div class="studio-tab-action__pane-toggles"
                  data-testid="studio-pane-toggles"
                  role="group"

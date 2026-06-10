@@ -494,6 +494,7 @@
       margin-bottom: var(--studio-card-section-gap);
     }
     .task-card__execution-pill,
+    .task-card__run-activity-pill,
     .task-card__pending-pill,
     .task-card__waiting-pill,
     .task-card__mode-pill,
@@ -831,6 +832,38 @@
     @keyframes pulse-running {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.35; }
+    }
+    /* ASS-1751: run-activity pill for 3-progress cards. Deliberately quiet — no
+       alarm design. It only disambiguates a state that otherwise looks
+       untouched: blue for a live run, red (calm, not loud) for a failed run
+       waiting out backoff, and a muted neutral chip for an orphan/idle card. */
+    .task-card__run-activity-pill {
+      border: 1px solid transparent;
+    }
+    .task-card__run-activity-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: currentColor;
+      flex: 0 0 auto;
+    }
+    .task-card__run-activity-pill--active {
+      color: var(--studio-accent-3-strong);
+      background: color-mix(in srgb, var(--studio-accent-3) 14%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-3) 34%, transparent);
+    }
+    .task-card__run-activity-pill--active .task-card__run-activity-dot {
+      animation: pulse-running 1.3s infinite;
+    }
+    .task-card__run-activity-pill--failed {
+      color: var(--studio-accent-6-strong);
+      background: color-mix(in srgb, var(--studio-accent-6) 12%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-6) 32%, transparent);
+    }
+    .task-card__run-activity-pill--idle {
+      color: var(--studio-fg-muted);
+      background: color-mix(in srgb, var(--studio-fg-dim) 10%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-fg-dim) 26%, transparent);
     }
     /* Lifecycle phase chip (ready-orchestrator-intake-lane). Distinct
        palette per outcome so the Ready group reads at a glance: blue for

@@ -258,6 +258,16 @@ public record TaskInfo
     /// legacy <c>task.json</c> files that predate the field.
     /// </summary>
     public TaskProvenance? Provenance { get; init; }
+
+    /// <summary>
+    /// Read-time visibility projection (ASS-1751) for <c>3-progress</c> tasks
+    /// that disambiguates a live run, a failed run waiting out the rapid-crash
+    /// backoff, and an orphaned run killed by a backend restart. Folded on by
+    /// <c>WithRuntime</c> only when <see cref="State"/> is
+    /// <see cref="TaskStates.Progress"/>; null otherwise. Never persisted to
+    /// <c>job.json</c>; carries no behavior. See <see cref="TaskRunActivity"/>.
+    /// </summary>
+    public TaskRunActivity? RunActivity { get; init; }
 }
 
 public record TaskOutcomeIssue

@@ -253,6 +253,14 @@ export interface TaskInfo {
    * guessing from the lane. Null on legacy `task.json` that predate the field.
    */
   provenance?: TaskProvenanceRecord | null;
+
+  /**
+   * ASS-1751: read-time run-activity classification for `3-progress` cards,
+   * distinguishing a live run, a failed run waiting out the rapid-crash
+   * backoff, and an orphan killed by a backend restart. Present only on
+   * Progress-lane tasks; null/absent on every other lane. Pure visibility.
+   */
+  runActivity?: TaskRunActivity | null;
 }
 
 export interface TaskOutcomeIssue {
@@ -839,6 +847,37 @@ export interface CliExecution {
   model: string | null;
   thinkingLevel?: string | null;
   runOutcome?: string | null;
+}
+
+/**
+ * ASS-1751: the four ways a `3-progress` card can look "untouched", as
+ * classified by the backend at read time:
+ * - `active` — a run process is alive and occupies a parallelism slot.
+ * - `failed-backoff` — the last run failed and a rapid-crash backoff is still
+ *   in effect; the task is waiting for re-pickup (carries `backoffUntil`).
+ * - `failed-idle` — the last run failed (or a fail-without-progress streak is
+ *   recorded) but no backoff is active and nothing is running.
+ * - `no-active-run` — no live run, no backoff, no recorded failure; e.g. an
+ *   orphan after a backend restart awaiting re-pickup.
+ */
+export type TaskRunActivityKind = 'active' | 'failed-backoff' | 'failed-idle' | 'no-active-run';
+
+/**
+ * Read-time visibility projection for a `3-progress` task (ASS-1751). Purely
+ * informational — it carries no behavior; the kanban card and the task-detail
+ * header render a small, quiet status pill from it. Present only on
+ * Progress-lane tasks; absent (null/undefined) on every other lane.
+ */
+export interface TaskRunActivity {
+  kind: TaskRunActivityKind;
+  /** OS process id of the live run; set only when `kind === 'active'`. */
+  processId?: number | null;
+  /** UTC ISO instant the rapid-crash backoff expires; set only when `kind === 'failed-backoff'`. */
+  backoffUntil?: string | null;
+  /** Consecutive fail-without-progress attempts recorded for this task (0 when none). */
+  attempt: number;
+  /** One-line last-error summary mirrored from the outcome issue; null when unknown. */
+  lastError?: string | null;
 }
 
 export interface CliOutputLine {

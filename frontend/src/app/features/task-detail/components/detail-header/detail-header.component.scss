@@ -141,6 +141,51 @@
   border: 0;
 }
 
+/* ASS-1751: run-activity pill in the header meta row. Mirrors the board
+   card pill — deliberately quiet, no alarm design. Blue for a live run,
+   a calm red for a failed run waiting out backoff, muted neutral for an
+   orphan/idle card. Central design tokens only. */
+:host .detail__run-activity-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+:host .detail__run-activity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+:host .detail__run-activity-pill--active {
+  color: var(--studio-accent-3-strong);
+  background: color-mix(in srgb, var(--studio-accent-3) 14%, var(--studio-bg-elevated));
+  border-color: color-mix(in srgb, var(--studio-accent-3) 34%, transparent);
+}
+:host .detail__run-activity-pill--active .detail__run-activity-dot {
+  animation: detail-run-activity-pulse 1.3s infinite;
+}
+:host .detail__run-activity-pill--failed {
+  color: var(--studio-accent-6-strong);
+  background: color-mix(in srgb, var(--studio-accent-6) 12%, var(--studio-bg-elevated));
+  border-color: color-mix(in srgb, var(--studio-accent-6) 32%, transparent);
+}
+:host .detail__run-activity-pill--idle {
+  color: var(--studio-fg-muted);
+  background: color-mix(in srgb, var(--studio-fg-dim) 10%, var(--studio-bg-elevated));
+  border-color: color-mix(in srgb, var(--studio-fg-dim) 26%, transparent);
+}
+@keyframes detail-run-activity-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 :host .detail__title-row {
   display: flex;
   align-items: center;

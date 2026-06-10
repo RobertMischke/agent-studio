@@ -708,6 +708,22 @@ public class TaskRunnerService : BackgroundService
             : null;
     }
 
+    /// <summary>
+    /// In-memory run facts for one Progress-lane task (ASS-1751), resolved O(1)
+    /// via the project name exactly like <see cref="GetStuckLoopStateForJob"/>.
+    /// Returns default facts (no slot / no backoff / zero failures) when the
+    /// project has no live runner - which is also the orphan case after a
+    /// backend restart. The endpoint overlay classifies these into a
+    /// <see cref="TaskRunActivity"/>.
+    /// </summary>
+    public RunActivityFacts GetRunActivityForJob(string jobId, string projectName)
+    {
+        if (string.IsNullOrEmpty(projectName)) return default;
+        return _runners.TryGetValue(projectName, out var runner)
+            ? runner.GetRunActivity(jobId)
+            : default;
+    }
+
     private static WatchdogConfig LoadWatchdogConfig(IConfiguration cfg)
     {
         var section = cfg.GetSection("Watchdog");

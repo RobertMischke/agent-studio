@@ -2683,6 +2683,23 @@ public class ProjectRunner
     public StuckLoopState? GetStuckLoopState(string jobId) =>
         _stuckLoops.TryGetValue(jobId, out var s) ? s : null;
 
+    /// <summary>
+    /// In-memory run facts for one task (ASS-1751): whether it occupies a live
+    /// slot, the rapid-crash backoff deadline (if armed), and the
+    /// fail-without-progress streak. Read-only snapshot of the same dictionaries
+    /// the pickup loop consults; all are cleared on a backend restart, so an
+    /// orphaned task naturally reports no slot / no backoff / zero failures. The
+    /// endpoint overlay maps these onto a <see cref="TaskRunActivity"/> via
+    /// <see cref="TaskRunActivityClassifier"/>.
+    /// </summary>
+    public RunActivityFacts GetRunActivity(string jobId)
+    {
+        var slotActive = _activeRuns.Contains(jobId);
+        DateTime? backoffUntil = _rapidCrashBackoffUntil.TryGetValue(jobId, out var until) ? until : null;
+        var failures = _consecutiveFailNoProgress.TryGetValue(jobId, out var n) ? n : 0;
+        return new RunActivityFacts(slotActive, backoffUntil, failures);
+    }
+
     private static bool IsAutoMode(string mode)
         => string.Equals(mode, "auto-continuous", StringComparison.OrdinalIgnoreCase)
         || string.Equals(mode, "auto-single", StringComparison.OrdinalIgnoreCase);

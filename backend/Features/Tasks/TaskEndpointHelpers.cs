@@ -85,10 +85,23 @@ internal static class TaskEndpointHelpers
             job.OutcomeIssue, verdictAccepted: string.Equals(verdict, "accept", StringComparison.Ordinal))
             ? null
             : job.OutcomeIssue;
+        // ASS-1751: classify why a 3-progress card looks "untouched" — a live
+        // run, a failed run waiting out the rapid-crash backoff, or an orphan
+        // killed by a backend restart. Gated on the Progress lane (same O(1)
+        // runner lookup as the auto-loop snapshot above) so the perf contract
+        // holds; pure visibility, no behavior. Null on every other lane.
+        TaskRunActivity? runActivity = job.State == TaskStates.Progress
+            ? TaskRunActivityClassifier.Classify(
+                runners.GetRunActivityForJob(job.Id, job.ProjectName),
+                exec,
+                outcomeIssue,
+                DateTime.UtcNow)
+            : null;
         return job with
         {
             Execution = exec,
             OutcomeIssue = outcomeIssue,
+            RunActivity = runActivity,
             AutoLoop = loop == null ? null : new AutoLoopSnapshot
             {
                 Iteration = loop.IterationCount,

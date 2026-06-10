@@ -108,6 +108,8 @@ import { UpdateClientService } from './services/update.service';
 import { UpdateNotificationBridge } from './services/update-notification-bridge.service';
 import { projectIdentity } from './services/project-identity.util';
 import { displayStateToLaneKey, allowsDragReorder } from './services/lane-sort.util';
+import { buildRunActivityBadge } from './services/run-activity.util';
+import { NowTickService } from './services/now-tick.service';
 import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { TaskCompletionSoundService } from './services/task-completion-sound.service';
@@ -209,6 +211,7 @@ export class App implements OnInit, OnDestroy {
   private readonly _updateBridge = inject(UpdateNotificationBridge);
   readonly studioTabState = inject(StudioTabStateService);
   private readonly studioPanelState = inject(StudioPanelStateService);
+  private readonly nowTick = inject(NowTickService).now;
 
   /**
    * Cycle 9j: selection state (selected detail, triage toast, lane
@@ -223,6 +226,13 @@ export class App implements OnInit, OnDestroy {
   private readonly lanePager = inject(LanePagerService);
   readonly selectedJob = this.jobSelection.selected;
   readonly triageToast = this.jobSelection.triageToast;
+  // ASS-1751: run-activity pill for the slim studio tab-bar header. The
+  // studio shell hides <app-detail-header>, so the open task's run state is
+  // surfaced here (the kanban side-panel keeps its own header pill).
+  readonly studioRunActivityBadge = computed(() => {
+    const detail = this.selectedJob();
+    return detail ? buildRunActivityBadge(detail.info, this.nowTick()) : null;
+  });
   readonly epicTabTaskDetail = signal<TaskDetail | null>(null);
   readonly epicTabSubTaskPeers = computed<TaskInfo[]>(() => {
     const epic = this.selectedJob();

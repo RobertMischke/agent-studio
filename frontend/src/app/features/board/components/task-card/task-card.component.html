@@ -165,6 +165,16 @@
         {{ badge.label }}
       </span>
     }
+    @if (runActivityBadge(); as ra) {
+      <span class="task-card__run-activity-pill"
+            [class]="'task-card__run-activity-pill--' + ra.tone"
+            [appTooltip]="ra.tooltip"
+            data-testid="task-card-run-activity"
+            [attr.data-run-activity-kind]="ra.kind">
+        <span class="task-card__run-activity-dot"></span>
+        {{ ra.label }}
+      </span>
+    }
     @if (job().pendingIntent; as pi) {
       <span class="task-card__pending-pill"
             [appTooltip]="pendingTooltip(pi)"
