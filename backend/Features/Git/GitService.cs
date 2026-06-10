@@ -2505,6 +2505,162 @@ public class GitService
         return string.IsNullOrWhiteSpace(name) ? null : name;
     }
 
+    // -------- Wiki file operations (content at a revision + commit-backed CRUD) --------
+
+    /// <summary>
+    /// Reads a file's content as it existed at <paramref name="sha"/> via
+    /// <c>git show &lt;sha&gt;:&lt;path&gt;</c>. Backs the wiki "view old revision"
+    /// action. The SHA is validated through <see cref="IsLikelyShaOrRef"/> first
+    /// so a crafted ref can't smuggle shell-meaningful input; the path is
+    /// forward-slashed for git's object syntax. Returns null when the repo, sha,
+    /// or path can't be resolved.
+    /// </summary>
+    public string? GetFileAtCommit(string repoRoot, string sha, string repoRelPath)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || string.IsNullOrWhiteSpace(repoRelPath)) return null;
+        if (string.IsNullOrWhiteSpace(sha) || !IsLikelyShaOrRef(sha)) return null;
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        if (!Directory.Exists(root)) return null;
+
+        var (output, _, code) = RunGitArgs(root, "show", $"{sha}:{repoRelPath.Replace('\\', '/')}");
+        return code == 0 ? output : null;
+    }
+
+    /// <summary>
+    /// Stages then commits the given repo-relative paths into the project repo.
+    /// Used by the wiki create-page/create-folder operations: the file already
+    /// exists on disk, this records it. A clean tree (nothing to commit) is a
+    /// soft failure, not an exception.
+    /// </summary>
+    public GitCommitResult CommitPaths(string repoRoot, string message, IReadOnlyCollection<string> repoRelPaths)
+    {
+        var root = ResolveGitToplevel(repoRoot);
+        if (root == null) return new GitCommitResult(false, null, $"Not a git repository: {repoRoot}");
+        var paths = NormalizePaths(repoRelPaths);
+        if (paths.Count == 0) return new GitCommitResult(false, null, "No paths to commit.");
+
+        var addArgs = new List<string> { "add", "-A", "--" };
+        addArgs.AddRange(paths);
+        var (_, addErr, addCode) = RunGitArgs(root, addArgs.ToArray());
+        if (addCode != 0) return new GitCommitResult(false, null, $"git add failed: {addErr.Trim()}");
+
+        return CommitPathspecs(root, message, paths);
+    }
+
+    /// <summary>
+    /// Moves/renames a wiki node via <c>git mv</c> and commits it. Tracked files
+    /// move through git; an untracked source falls back to a filesystem move plus
+    /// <c>git add</c> so a never-committed page can still be renamed. Refuses to
+    /// overwrite an existing destination.
+    /// </summary>
+    public GitCommitResult MoveAndCommit(string repoRoot, string fromRel, string toRel, string message)
+    {
+        var root = ResolveGitToplevel(repoRoot);
+        if (root == null) return new GitCommitResult(false, null, $"Not a git repository: {repoRoot}");
+
+        var from = NormalizeRel(fromRel);
+        var to = NormalizeRel(toRel);
+        if (string.IsNullOrEmpty(from) || string.IsNullOrEmpty(to))
+            return new GitCommitResult(false, null, "Source and destination are required.");
+
+        var fromAbs = Path.GetFullPath(Path.Combine(root, from));
+        var toAbs = Path.GetFullPath(Path.Combine(root, to));
+        if (!File.Exists(fromAbs) && !Directory.Exists(fromAbs))
+            return new GitCommitResult(false, null, "Source does not exist.");
+        if (File.Exists(toAbs) || Directory.Exists(toAbs))
+            return new GitCommitResult(false, null, "Destination already exists.");
+
+        var toDir = Path.GetDirectoryName(toAbs);
+        if (!string.IsNullOrEmpty(toDir)) Directory.CreateDirectory(toDir);
+
+        var (_, mvErr, mvCode) = RunGitArgs(root, "mv", from, to);
+        if (mvCode != 0)
+        {
+            // Untracked source: git mv refuses. Fall back to a plain move + stage.
+            try
+            {
+                if (Directory.Exists(fromAbs)) Directory.Move(fromAbs, toAbs);
+                else File.Move(fromAbs, toAbs);
+            }
+            catch (Exception ex)
+            {
+                return new GitCommitResult(false, null, $"Move failed: {mvErr.Trim()} / {ex.Message}");
+            }
+            var addArgs = new List<string> { "add", "-A", "--", from, to };
+            RunGitArgs(root, addArgs.ToArray());
+        }
+
+        return CommitPathspecs(root, message, new[] { from, to });
+    }
+
+    /// <summary>
+    /// Deletes a wiki node via <c>git rm -r</c> and commits it. An untracked
+    /// target falls back to a filesystem delete so an uncommitted page can still
+    /// be removed.
+    /// </summary>
+    public GitCommitResult RemoveAndCommit(string repoRoot, string repoRel, string message)
+    {
+        var root = ResolveGitToplevel(repoRoot);
+        if (root == null) return new GitCommitResult(false, null, $"Not a git repository: {repoRoot}");
+
+        var rel = NormalizeRel(repoRel);
+        if (string.IsNullOrEmpty(rel)) return new GitCommitResult(false, null, "Path is required.");
+
+        var abs = Path.GetFullPath(Path.Combine(root, rel));
+        if (!File.Exists(abs) && !Directory.Exists(abs))
+            return new GitCommitResult(false, null, "Path does not exist.");
+
+        var (_, rmErr, rmCode) = RunGitArgs(root, "rm", "-r", "--", rel);
+        if (rmCode != 0)
+        {
+            // Untracked target: git rm refuses. Fall back to a filesystem delete.
+            try
+            {
+                if (Directory.Exists(abs)) Directory.Delete(abs, recursive: true);
+                else File.Delete(abs);
+            }
+            catch (Exception ex)
+            {
+                return new GitCommitResult(false, null, $"Delete failed: {rmErr.Trim()} / {ex.Message}");
+            }
+            RunGitArgs(root, "add", "-A", "--", rel);
+        }
+
+        return CommitPathspecs(root, message, new[] { rel });
+    }
+
+    /// <summary>
+    /// Commits the staged changes limited to <paramref name="pathspecs"/>,
+    /// passing the message on stdin so it survives newlines and quoting. A clean
+    /// tree degrades to a soft failure rather than an error.
+    /// </summary>
+    private static GitCommitResult CommitPathspecs(string root, string message, IReadOnlyCollection<string> pathspecs)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return new GitCommitResult(false, null, "Commit message is required.");
+        var commitArgs = new List<string> { "commit", "-F", "-", "--" };
+        commitArgs.AddRange(pathspecs);
+        var (_, commitErr, commitCode) = RunGitArgs(root, commitArgs.ToArray(), stdin: message);
+        if (commitCode != 0)
+        {
+            if (commitErr.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
+                return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
+            return new GitCommitResult(false, null, commitErr.Trim());
+        }
+
+        var (sha, _, _) = RunGitArgs(root, "rev-parse", "--short", "HEAD");
+        return new GitCommitResult(true, sha.Trim(), null);
+    }
+
+    private static List<string> NormalizePaths(IEnumerable<string> paths) =>
+        paths
+            .Select(NormalizeRel)
+            .Where(p => !string.IsNullOrEmpty(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList()!;
+
+    private static string NormalizeRel(string? rel) =>
+        string.IsNullOrWhiteSpace(rel) ? "" : rel.Replace('\\', '/').Trim().TrimStart('/');
+
     /// <summary>
     /// Counts commits in the SHA range without deserialising any
     /// metadata. Cheap enough for the per-job kanban aggregate path

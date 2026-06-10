@@ -66,6 +66,17 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(ov);
         });
 
+        // The physical docs/ folder hierarchy (folders + .md/.html files) that
+        // backs the wiki navigation tree. No git is touched here so loading it
+        // stays cheap; per-doc commit metadata is fetched lazily via /history.
+        app.MapGet("/api/projects/{projectName}/wiki/tree", (string projectName, ProjectDocsService docs) =>
+        {
+            var tree = docs.GetWikiTree(projectName);
+            return tree == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(tree);
+        });
+
         app.MapGet("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs) =>
         {
             var file = docs.ReadWikiFile(projectName, relPath);
@@ -110,22 +121,83 @@ public static class ProjectDocsEndpoints
             return Results.Ok(new WikiFileHistory(relPath.Replace('\\', '/'), model, meta, commits));
         });
 
-        // ---- Wiki organisation (user-defined themes + hierarchy) ----
-
-        app.MapGet("/api/projects/{projectName}/wiki/organization", (string projectName, ProjectDocsService docs) =>
+        // Content of a wiki doc as it existed at an earlier commit, so the
+        // history panel can preview an old revision. Sits before the /files
+        // catch-all for the same precedence reason as /history.
+        app.MapGet("/api/projects/{projectName}/wiki/revisions/{sha}/{**relPath}", (string projectName, string sha, string relPath, ProjectDocsService docs, GitService git) =>
         {
-            var org = docs.GetWikiOrganization(projectName);
-            return org == null
-                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
-                : Results.Ok(org);
+            var full = docs.ResolveWikiDocFullPath(projectName, relPath);
+            if (full == null)
+                return Results.NotFound(new { error = "File not found or path rejected" });
+            var repoRoot = git.ResolveRepoRootForProject(projectName);
+            if (string.IsNullOrWhiteSpace(repoRoot))
+                return Results.NotFound(new { error = "Repository not found" });
+
+            var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
+            var content = git.GetFileAtCommit(repoRoot, sha, repoRel);
+            return content == null
+                ? Results.NotFound(new { error = "Revision not found" })
+                : Results.Ok(new { relPath = relPath.Replace('\\', '/'), sha, content });
         });
 
-        app.MapPut("/api/projects/{projectName}/wiki/organization", (string projectName, WikiOrganization? org, ProjectDocsService docs) =>
+        // ---- Wiki mutations (commit-backed create / move / delete) ----
+
+        // Create a new wiki page (.md/.html). The file is written to disk then
+        // committed into the project repo so it shows up in git history.
+        app.MapPost("/api/projects/{projectName}/wiki/pages", (string projectName, WikiCreatePageRequest body, ProjectDocsService docs, GitService git) =>
         {
-            var ok = docs.WriteWikiOrganization(projectName, org);
-            return ok
-                ? Results.Ok(docs.GetWikiOrganization(projectName))
-                : Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            var rel = Normalize(body.RelPath);
+            if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
+            var result = docs.CreateWikiPage(projectName, rel, body.Content);
+            if (!result.Success) return Results.BadRequest(new { error = result.Error });
+            return CommitWikiChange(git, projectName, result.FullPath!, $"wiki: create {rel}");
+        });
+
+        app.MapPost("/api/projects/{projectName}/wiki/folders", (string projectName, WikiCreateFolderRequest body, ProjectDocsService docs, GitService git) =>
+        {
+            var rel = Normalize(body.RelPath);
+            if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
+            var result = docs.CreateWikiFolder(projectName, rel);
+            if (!result.Success) return Results.BadRequest(new { error = result.Error });
+            return CommitWikiChange(git, projectName, result.FullPath!, $"wiki: create folder {rel}");
+        });
+
+        // Move/rename a wiki node (file or folder) via git mv + commit.
+        app.MapPost("/api/projects/{projectName}/wiki/move", (string projectName, WikiMoveRequest body, ProjectDocsService docs, GitService git) =>
+        {
+            var from = Normalize(body.FromRelPath);
+            var to = Normalize(body.ToRelPath);
+            if (from == null || to == null) return Results.BadRequest(new { error = "fromRelPath and toRelPath are required" });
+
+            var fromFull = docs.ResolveWikiNodeFullPath(projectName, from);
+            var toFull = docs.ResolveWikiNodeFullPath(projectName, to);
+            var repoRoot = git.ResolveRepoRootForProject(projectName);
+            if (fromFull == null || toFull == null || string.IsNullOrWhiteSpace(repoRoot))
+                return Results.BadRequest(new { error = "Invalid path or repository not found" });
+
+            var fromRepoRel = Path.GetRelativePath(repoRoot, fromFull).Replace('\\', '/');
+            var toRepoRel = Path.GetRelativePath(repoRoot, toFull).Replace('\\', '/');
+            var commit = git.MoveAndCommit(repoRoot, fromRepoRel, toRepoRel, $"wiki: move {from} -> {to}");
+            return commit.Success
+                ? Results.Ok(new { from, to, sha = commit.Sha })
+                : Results.BadRequest(new { error = commit.Error });
+        });
+
+        // Delete a wiki node (file or folder) via git rm + commit.
+        app.MapDelete("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs, GitService git) =>
+        {
+            var rel = Normalize(relPath);
+            if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
+            var full = docs.ResolveWikiNodeFullPath(projectName, rel);
+            var repoRoot = git.ResolveRepoRootForProject(projectName);
+            if (full == null || string.IsNullOrWhiteSpace(repoRoot))
+                return Results.BadRequest(new { error = "Invalid path or repository not found" });
+
+            var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
+            var commit = git.RemoveAndCommit(repoRoot, repoRel, $"wiki: delete {rel}");
+            return commit.Success
+                ? Results.Ok(new { relPath = rel, sha = commit.Sha })
+                : Results.BadRequest(new { error = commit.Error });
         });
 
         // ---- Architecture decisions ----
@@ -144,4 +216,33 @@ public static class ProjectDocsEndpoints
             return d == null ? Results.NotFound(new { error = "Decision not found" }) : Results.Ok(d);
         });
     }
+
+    /// <summary>Trims and forward-slashes a client path; null when blank.</summary>
+    private static string? Normalize(string? relPath)
+    {
+        if (string.IsNullOrWhiteSpace(relPath)) return null;
+        return relPath.Replace('\\', '/').Trim().TrimStart('/');
+    }
+
+    /// <summary>
+    /// Commits a freshly created wiki file/folder into the project repo and maps
+    /// the git outcome to an HTTP result. Resolving the repo root or a failed
+    /// commit both surface as a 400 so the UI can show the reason.
+    /// </summary>
+    private static IResult CommitWikiChange(GitService git, string projectName, string fullPath, string message)
+    {
+        var repoRoot = git.ResolveRepoRootForProject(projectName);
+        if (string.IsNullOrWhiteSpace(repoRoot))
+            return Results.BadRequest(new { error = "Repository not found" });
+
+        var repoRel = Path.GetRelativePath(repoRoot, fullPath).Replace('\\', '/');
+        var commit = git.CommitPaths(repoRoot, message, new[] { repoRel });
+        return commit.Success
+            ? Results.Ok(new { relPath = repoRel, sha = commit.Sha })
+            : Results.BadRequest(new { error = commit.Error });
+    }
 }
+
+public record WikiCreatePageRequest(string RelPath, string? Content);
+public record WikiCreateFolderRequest(string RelPath);
+public record WikiMoveRequest(string FromRelPath, string ToRelPath);

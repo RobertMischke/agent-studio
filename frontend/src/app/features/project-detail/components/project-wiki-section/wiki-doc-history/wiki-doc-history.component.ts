@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { WikiFileHistory } from '../../../../../models/project-docs.model';
 
 /**
@@ -20,6 +20,9 @@ import { WikiFileHistory } from '../../../../../models/project-docs.model';
 export class WikiDocHistoryComponent {
   readonly history = input<WikiFileHistory | null>(null);
   readonly loading = input(false);
+
+  /** Emits the SHA of a commit whose historic content the parent should preview. */
+  readonly viewRevision = output<string>();
 
   readonly model = computed(() => this.history()?.model ?? null);
   readonly meta = computed(() => this.history()?.metadata ?? null);

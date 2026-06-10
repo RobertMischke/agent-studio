@@ -223,3 +223,49 @@
 }
 .pwiki__history { display: block; padding: 12px 14px; max-height: 70vh; overflow-y: auto; }
 .pwiki__viewer-empty { margin: 0; padding: 24px 16px; }
+
+// Small "HTML" tag distinguishing a rendered concept page from a markdown doc.
+.pwiki__kind {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--studio-fg-muted);
+  border: 1px solid color-mix(in srgb, var(--studio-fg) 18%, transparent);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+// Sandboxed HTML doc: the iframe carries no allow-scripts token, so inline
+// scripts in a concept page can never execute against the app.
+.pwiki__html-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.pwiki__rev-banner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  font-size: 0.76rem;
+  color: var(--studio-fg);
+  background: color-mix(in srgb, var(--studio-accent-4) 14%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--studio-accent-4) 40%, transparent);
+}
+.pwiki__rev-banner code { color: var(--studio-accent-4-strong); }
+.pwiki__rev-banner button {
+  margin-left: auto;
+  background: color-mix(in srgb, var(--studio-fg) 6%, transparent);
+  color: var(--studio-fg);
+  border: 1px solid color-mix(in srgb, var(--studio-fg) 14%, transparent);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+}

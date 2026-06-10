@@ -75,24 +75,36 @@ export interface WikiFileHistory {
   commits: WikiCommitInfo[];
 }
 
+/** Kind of a wiki tree node: a folder, or a document by source type. */
+export type WikiNodeType = 'folder' | 'md' | 'html';
+
 /**
- * One node in the user-defined wiki organisation manifest. A `group` is a
- * user-created theme (no relPath); a `doc` pins an existing wiki file into the
- * hierarchy (relPath set, title optionally overriding the file's own title).
+ * One node in the physical wiki tree (mirrors backend WikiTreeNode). A `folder`
+ * carries `children`; a document node (`md` / `html`) is a leaf whose `relPath`
+ * is the docs-root-relative path. `title` is the display label (first H1 for
+ * docs, order-prefix-stripped name otherwise).
  */
-export interface WikiOrgNode {
-  id: string;
-  type: 'group' | 'doc';
-  title: string | null;
+export interface WikiTreeNode {
+  name: string;
+  title: string;
   relPath: string | null;
-  parentId: string | null;
-  order: number;
+  type: WikiNodeType;
+  children: WikiTreeNode[];
 }
 
-/** The virtual organisation layer persisted as docs/.wiki-organization.json. */
-export interface WikiOrganization {
-  version: number;
-  nodes: WikiOrgNode[];
+/** The physical docs/ folder tree backing the wiki navigation. */
+export interface WikiTree {
+  projectName: string;
+  baseDir: string;
+  exists: boolean;
+  root: WikiTreeNode[];
+}
+
+/** Content of a wiki doc at a past commit (the "view old revision" payload). */
+export interface WikiRevisionContent {
+  relPath: string;
+  sha: string;
+  content: string;
 }
 
 export interface ArchitectureDecisionSummary {

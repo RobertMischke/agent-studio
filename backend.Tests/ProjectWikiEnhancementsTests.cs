@@ -77,84 +77,178 @@ public class ProjectWikiEnhancementsTests : IDisposable
         Assert.Equal("keeps the rationale", meta.Reason);
     }
 
-    // ---- SanitizeOrganization (pure) ----
+    // ---- GetWikiTree (physical docs/ hierarchy) ----
 
     [Fact]
-    public void SanitizeOrganization_DropsBadNodes_NormalisesTitlesAndPaths()
+    public void GetWikiTree_ReflectsPhysicalStructure_FoldersFirst_IncludesHtml_StripsOrderPrefix()
     {
-        var org = new WikiOrganization(7, new List<WikiOrgNode>
-        {
-            new("g1", "group", "  Architecture  ", "stray/path.md", null, 0),
-            new("d1", "doc", null, "domain\\runner.md", "g1", 1),
-            new("", "doc", "no id", "x.md", null, 2),
-            new("bad", "folder", "wrong type", null, null, 3),
-        });
+        var projectRoot = Path.Combine(_tempDir, "tree-proj");
+        var docsDir = Path.Combine(projectRoot, "docs");
+        Directory.CreateDirectory(Path.Combine(docsDir, "01-concepts"));
+        File.WriteAllText(Path.Combine(docsDir, "README.md"), "# Index\n");
+        File.WriteAllText(Path.Combine(docsDir, "01-concepts", "10-overview.md"), "# Overview\n");
+        File.WriteAllText(Path.Combine(docsDir, "01-concepts", "page.html"), "<h1>HTML page</h1>");
 
-        var clean = ProjectDocsService.SanitizeOrganization(org);
+        var docs = BuildDocsService(("Tree", projectRoot));
+        var tree = docs.GetWikiTree("Tree");
 
-        Assert.Equal(1, clean.Version);
-        Assert.Equal(2, clean.Nodes.Count);
+        Assert.NotNull(tree);
+        Assert.True(tree!.Exists);
+        // Folder sorts before the loose README file.
+        Assert.Equal(2, tree.Root.Count);
+        Assert.Equal("folder", tree.Root[0].Type);
+        Assert.Equal("concepts", tree.Root[0].Title); // NN- prefix stripped
+        Assert.Equal("01-concepts", tree.Root[0].Name);
+        Assert.Equal("README.md", tree.Root[1].Name);
 
-        var g = clean.Nodes.Single(n => n.Id == "g1");
-        Assert.Equal("Architecture", g.Title);
-        Assert.Null(g.RelPath); // a group never carries a relPath
-
-        var d = clean.Nodes.Single(n => n.Id == "d1");
-        Assert.Equal("domain/runner.md", d.RelPath); // backslash normalised
-        Assert.Equal("g1", d.ParentId);
+        var folder = tree.Root[0];
+        Assert.Equal(2, folder.Children.Count);
+        // Both md and html surface; md '10-overview' sorts by its numeric prefix.
+        var types = folder.Children.Select(c => c.Type).ToHashSet();
+        Assert.Contains("md", types);
+        Assert.Contains("html", types);
+        Assert.Equal("01-concepts/page.html", folder.Children.Single(c => c.Type == "html").RelPath);
     }
 
     [Fact]
-    public void SanitizeOrganization_NullInput_ReturnsEmptyVersionedManifest()
+    public void GetWikiTree_NoDocsFolder_ReturnsEmptyButValid()
     {
-        var clean = ProjectDocsService.SanitizeOrganization(null);
-        Assert.Empty(clean.Nodes);
-        Assert.Equal(1, clean.Version);
-    }
-
-    // ---- Organisation manifest round-trip (filesystem) ----
-
-    [Fact]
-    public void WriteThenGetWikiOrganization_RoundTrips()
-    {
-        var projectRoot = Path.Combine(_tempDir, "proj");
+        var projectRoot = Path.Combine(_tempDir, "no-docs-proj");
         Directory.CreateDirectory(projectRoot);
-        var docs = BuildDocsService(("Proj", projectRoot));
+        var docs = BuildDocsService(("NoDocs", projectRoot));
 
-        var org = new WikiOrganization(1, new List<WikiOrgNode>
-        {
-            new("g1", "group", "Themes", null, null, 0),
-            new("d1", "doc", "Renamed", "guide.md", "g1", 0),
-        });
+        var tree = docs.GetWikiTree("NoDocs");
 
-        Assert.True(docs.WriteWikiOrganization("Proj", org));
-
-        var read = docs.GetWikiOrganization("Proj");
-        Assert.NotNull(read);
-        Assert.Equal(2, read!.Nodes.Count);
-        Assert.Equal("Themes", read.Nodes.Single(n => n.Id == "g1").Title);
-        Assert.Equal("Renamed", read.Nodes.Single(n => n.Id == "d1").Title);
-        Assert.True(File.Exists(Path.Combine(projectRoot, "docs", ".wiki-organization.json")));
+        Assert.NotNull(tree);
+        Assert.False(tree!.Exists);
+        Assert.Empty(tree.Root);
     }
 
     [Fact]
-    public void GetWikiOrganization_NoManifest_ReturnsEmptyButValid()
-    {
-        var projectRoot = Path.Combine(_tempDir, "empty-proj");
-        Directory.CreateDirectory(projectRoot);
-        var docs = BuildDocsService(("Empty", projectRoot));
-
-        var org = docs.GetWikiOrganization("Empty");
-
-        Assert.NotNull(org);
-        Assert.Empty(org!.Nodes);
-    }
-
-    [Fact]
-    public void GetWikiOrganization_UnknownProject_ReturnsNull()
+    public void GetWikiTree_UnknownProject_ReturnsNull()
     {
         var docs = BuildDocsService(("Known", Path.Combine(_tempDir, "known")));
-        Assert.Null(docs.GetWikiOrganization("Nope"));
+        Assert.Null(docs.GetWikiTree("Nope"));
+    }
+
+    // ---- CreateWikiPage / CreateWikiFolder + commit ----
+
+    [Fact]
+    public void CreateWikiPage_WritesFile_AndCommitPathsRecordsIt()
+    {
+        var repoRoot = Path.Combine(_tempDir, "create-repo");
+        Directory.CreateDirectory(repoRoot);
+        RunGit(repoRoot, "init -q -b main");
+        RunGit(repoRoot, "config user.email test@example.com");
+        RunGit(repoRoot, "config user.name test");
+
+        var docs = BuildDocsService(("Create", repoRoot));
+        var git = BuildGitService(("Create", repoRoot));
+
+        var result = docs.CreateWikiPage("Create", "guide.md", null);
+        Assert.True(result.Success);
+        Assert.True(File.Exists(Path.Combine(repoRoot, "docs", "guide.md")));
+
+        var commit = git.CommitPaths(repoRoot, "wiki: create docs/guide.md", new[] { "docs/guide.md" });
+        Assert.True(commit.Success, commit.Error);
+
+        var history = git.GetFileHistory(repoRoot, "docs/guide.md");
+        Assert.Single(history);
+        Assert.Equal("wiki: create docs/guide.md", history[0].Subject);
+    }
+
+    [Fact]
+    public void CreateWikiPage_RejectsExistingFile_AndNonDocExtension()
+    {
+        var projectRoot = Path.Combine(_tempDir, "reject-proj");
+        Directory.CreateDirectory(Path.Combine(projectRoot, "docs"));
+        File.WriteAllText(Path.Combine(projectRoot, "docs", "exists.md"), "# x\n");
+        var docs = BuildDocsService(("Reject", projectRoot));
+
+        Assert.False(docs.CreateWikiPage("Reject", "exists.md", null).Success);
+        Assert.False(docs.CreateWikiPage("Reject", "notes.txt", null).Success);
+    }
+
+    [Fact]
+    public void CreateWikiFolder_SeedsGitkeep()
+    {
+        var projectRoot = Path.Combine(_tempDir, "folder-proj");
+        Directory.CreateDirectory(projectRoot);
+        var docs = BuildDocsService(("Folder", projectRoot));
+
+        var result = docs.CreateWikiFolder("Folder", "concepts");
+        Assert.True(result.Success);
+        Assert.True(File.Exists(Path.Combine(projectRoot, "docs", "concepts", ".gitkeep")));
+    }
+
+    // ---- MoveAndCommit / RemoveAndCommit / GetFileAtCommit (real git) ----
+
+    [Fact]
+    public void MoveAndCommit_RenamesTrackedDoc_AndCommits()
+    {
+        var repoRoot = Path.Combine(_tempDir, "move-repo");
+        var docPath = Path.Combine(repoRoot, "docs", "old.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(docPath)!);
+        RunGit(repoRoot, "init -q -b main");
+        RunGit(repoRoot, "config user.email test@example.com");
+        RunGit(repoRoot, "config user.name test");
+        File.WriteAllText(docPath, "# Doc\n");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "seed");
+
+        var git = BuildGitService(("Move", repoRoot));
+        var commit = git.MoveAndCommit(repoRoot, "docs/old.md", "docs/new.md", "wiki: move docs/old.md -> docs/new.md");
+
+        Assert.True(commit.Success, commit.Error);
+        Assert.False(File.Exists(docPath));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "docs", "new.md")));
+    }
+
+    [Fact]
+    public void RemoveAndCommit_DeletesTrackedDoc_AndCommits()
+    {
+        var repoRoot = Path.Combine(_tempDir, "remove-repo");
+        var docPath = Path.Combine(repoRoot, "docs", "gone.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(docPath)!);
+        RunGit(repoRoot, "init -q -b main");
+        RunGit(repoRoot, "config user.email test@example.com");
+        RunGit(repoRoot, "config user.name test");
+        File.WriteAllText(docPath, "# Doc\n");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "seed");
+
+        var git = BuildGitService(("Remove", repoRoot));
+        var commit = git.RemoveAndCommit(repoRoot, "docs/gone.md", "wiki: delete docs/gone.md");
+
+        Assert.True(commit.Success, commit.Error);
+        Assert.False(File.Exists(docPath));
+    }
+
+    [Fact]
+    public void GetFileAtCommit_ReturnsHistoricContent()
+    {
+        var repoRoot = Path.Combine(_tempDir, "revision-repo");
+        var docPath = Path.Combine(repoRoot, "docs", "note.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(docPath)!);
+        RunGit(repoRoot, "init -q -b main");
+        RunGit(repoRoot, "config user.email test@example.com");
+        RunGit(repoRoot, "config user.name test");
+        File.WriteAllText(docPath, "# Note\nfirst");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "create note");
+
+        var git = BuildGitService(("Revision", repoRoot));
+        var history = git.GetFileHistory(repoRoot, "docs/note.md");
+        Assert.Single(history);
+
+        File.WriteAllText(docPath, "# Note\nsecond");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "update note");
+
+        var old = git.GetFileAtCommit(repoRoot, history[0].Sha, "docs/note.md");
+        Assert.NotNull(old);
+        Assert.Contains("first", old);
+        Assert.DoesNotContain("second", old);
     }
 
     // ---- ParseModelTrailer (pure) ----

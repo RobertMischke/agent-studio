@@ -5,21 +5,24 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ProjectWikiSectionComponent } from './project-wiki-section';
-import type { WikiFileHistory, WikiOrganization, WikiOverview } from '../../../../models/project-docs.model';
+import type { WikiFileHistory, WikiTree } from '../../../../models/project-docs.model';
 
-const OVERVIEW: WikiOverview = {
+const TREE: WikiTree = {
   projectName: 'Demo',
   baseDir: '/repo/docs',
   exists: true,
-  files: [
-    { name: 'README.md', relPath: 'README.md', title: 'Docs index', updatedAt: '2026-06-01T00:00:00Z', size: 10 },
-    { name: 'overview.md', relPath: 'concepts/overview.md', title: 'Concept overview', updatedAt: '2026-06-02T00:00:00Z', size: 20 },
+  root: [
+    {
+      name: 'concepts', title: 'concepts', relPath: 'concepts', type: 'folder', children: [
+        { name: 'overview.md', title: 'Concept overview', relPath: 'concepts/overview.md', type: 'md', children: [] },
+        { name: 'page.html', title: 'HTML page', relPath: 'concepts/page.html', type: 'html', children: [] },
+      ],
+    },
+    { name: 'README.md', title: 'Docs index', relPath: 'README.md', type: 'md', children: [] },
   ],
 };
 
-const EMPTY_ORG: WikiOrganization = { version: 1, nodes: [] };
-
-async function setup(org: WikiOrganization = EMPTY_ORG) {
+async function setup(tree: WikiTree = TREE) {
   await TestBed.configureTestingModule({
     imports: [ProjectWikiSectionComponent],
     providers: [
@@ -35,8 +38,7 @@ async function setup(org: WikiOrganization = EMPTY_ORG) {
   fixture.componentRef.setInput('projectName', 'Demo');
   fixture.detectChanges();
 
-  http.expectOne('/api/projects/Demo/wiki').flush(OVERVIEW);
-  http.expectOne('/api/projects/Demo/wiki/organization').flush(org);
+  http.expectOne('/api/projects/Demo/wiki/tree').flush(tree);
   fixture.detectChanges();
   return { fixture, http };
 }
@@ -61,28 +63,29 @@ function fireDrag(target: Element, type: string, dt: DataTransfer): void {
   target.dispatchEvent(ev);
 }
 
+const HISTORY: WikiFileHistory = {
+  relPath: 'concepts/overview.md',
+  model: 'Claude Opus 4.8',
+  metadata: {
+    model: 'Claude Opus 4.8', updatedAt: '2026-06-02T00:00:00Z', reason: 'distilled',
+    taskKey: null, status: null, runCount: null, hasFrontmatter: true,
+  },
+  commits: [
+    { sha: 'abc', shortSha: 'abc1234', authorDateUtc: '2026-06-02T00:00:00Z', author: 'bot', subject: 'update', filesChanged: 1, added: 3, removed: 1 },
+  ],
+};
+
 describe('ProjectWikiSectionComponent', () => {
-  it('renders every doc under the Ungrouped bucket when no manifest exists', async () => {
+  it('renders the physical folder tree with folders and md/html files', async () => {
     const { fixture, http } = await setup();
     const text = el(fixture).textContent ?? '';
-    expect(text).toContain('Docs index');
+    // Folders expand by default (seed effect), so children are visible.
+    expect(text).toContain('concepts');
     expect(text).toContain('Concept overview');
-    expect(text).toContain('Ungrouped');
-    expect(text).toContain('2 docs');
-    http.verify();
-  });
-
-  it('groups a pinned doc under its theme and leaves the rest Ungrouped', async () => {
-    const { fixture, http } = await setup({
-      version: 1,
-      nodes: [
-        { id: 'g1', type: 'group', title: 'Concepts', relPath: null, parentId: null, order: 0 },
-        { id: 'doc:concepts/overview.md', type: 'doc', title: null, relPath: 'concepts/overview.md', parentId: 'g1', order: 0 },
-      ],
-    });
-    const groupRow = el(fixture).querySelector('[data-testid="project-wiki-node-g1"]');
-    expect(groupRow?.textContent).toContain('Concepts');
-    expect(el(fixture).textContent).toContain('Ungrouped'); // README.md still loose
+    expect(text).toContain('Docs index');
+    expect(text).toContain('3 docs'); // overview.md + page.html + README.md
+    // The HTML page carries a subtle kind tag.
+    expect(el(fixture).querySelector('[data-testid="project-wiki-kind-html"]')).toBeTruthy();
     http.verify();
   });
 
@@ -96,18 +99,7 @@ describe('ProjectWikiSectionComponent', () => {
 
     http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
       .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n\nBody text.' });
-    const history: WikiFileHistory = {
-      relPath: 'concepts/overview.md',
-      model: 'Claude Opus 4.8',
-      metadata: {
-        model: 'Claude Opus 4.8', updatedAt: '2026-06-02T00:00:00Z', reason: 'distilled',
-        taskKey: null, status: null, runCount: null, hasFrontmatter: true,
-      },
-      commits: [
-        { sha: 'abc', shortSha: 'abc1234', authorDateUtc: '2026-06-02T00:00:00Z', author: 'bot', subject: 'update', filesChanged: 1, added: 3, removed: 1 },
-      ],
-    };
-    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(history);
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
     fixture.detectChanges();
 
     expect(el(fixture).textContent).toContain('Hello wiki');
@@ -131,60 +123,8 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
-  it('creates a group and persists the manifest', async () => {
+  it('opens a TEXT-ONLY right-click context menu for files and folders', async () => {
     const { fixture, http } = await setup();
-    el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-new-group"]')!.click();
-    fixture.detectChanges();
-
-    const put = http.expectOne(req =>
-      req.method === 'PUT' && req.url === '/api/projects/Demo/wiki/organization');
-    const body = put.request.body as WikiOrganization;
-    expect(body.nodes.some(n => n.type === 'group' && n.title === 'New group')).toBe(true);
-    put.flush(body);
-    fixture.detectChanges();
-
-    // A rename input opens for the freshly created group.
-    expect(el(fixture).querySelector('.pwiki__rename-input')).toBeTruthy();
-    http.verify();
-  });
-
-  it('renders a nested group hierarchy with increasing indentation per depth', async () => {
-    const { fixture, http } = await setup({
-      version: 1,
-      nodes: [
-        { id: 'g1', type: 'group', title: 'Architecture', relPath: null, parentId: null, order: 0 },
-        { id: 'g2', type: 'group', title: 'Decisions', relPath: null, parentId: 'g1', order: 0 },
-        { id: 'doc:concepts/overview.md', type: 'doc', title: null, relPath: 'concepts/overview.md', parentId: 'g2', order: 0 },
-      ],
-    });
-
-    const root = el(fixture);
-    const pad = (id: string): number => {
-      const row = root.querySelector<HTMLElement>(`[data-testid="project-wiki-node-${id}"]`);
-      expect(row, `row ${id} should render`).toBeTruthy();
-      return parseFloat(row!.style.paddingLeft || '0');
-    };
-
-    // Tree is g1 > g2 > doc; each level indents deeper than its parent, proving
-    // the nesting is actually rendered (not a flattened list).
-    const g1Pad = pad('g1');
-    const g2Pad = pad('g2');
-    const docPad = pad('doc:concepts/overview.md');
-    expect(g2Pad).toBeGreaterThan(g1Pad);
-    expect(docPad).toBeGreaterThan(g2Pad);
-
-    // The nested group label is visible (parent expanded by the seed effect).
-    expect(root.querySelector('[data-testid="project-wiki-node-g2"]')!.textContent).toContain('Decisions');
-    http.verify();
-  });
-
-  it('opens a TEXT-ONLY right-click context menu (no icons) for docs and groups', async () => {
-    const { fixture, http } = await setup({
-      version: 1,
-      nodes: [
-        { id: 'g1', type: 'group', title: 'Concepts', relPath: null, parentId: null, order: 0 },
-      ],
-    });
     const root = el(fixture);
 
     const openCtx = (id: string) => {
@@ -195,64 +135,124 @@ describe('ProjectWikiSectionComponent', () => {
     };
 
     const assertTextOnly = (panel: HTMLElement) => {
-      // The project-wide menu convention: no decorative leading icons.
       expect(panel.querySelectorAll('img')).toHaveLength(0);
       expect(panel.querySelectorAll('svg')).toHaveLength(0);
       expect(panel.querySelectorAll('.app-menu__icon')).toHaveLength(0);
     };
 
-    // The menu renders into a document-level overlay portal, so query globally.
-    // Doc context menu: Rename + View history rows, text-only.
-    openCtx('doc:README.md');
+    // File context menu: Rename + View history + Delete, text-only.
+    openCtx('concepts/overview.md');
     let panel = document.querySelector<HTMLElement>('[data-testid="wiki-ctx-panel"]');
-    expect(panel, 'doc context menu panel').toBeTruthy();
-    expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]')!.textContent).toContain('Rename');
+    expect(panel, 'file context menu panel').toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]')).toBeTruthy();
     expect(document.querySelector('[data-testid="wiki-ctx-item-history"]')).toBeTruthy();
     assertTextOnly(panel!);
 
     fixture.componentInstance.closeMenu();
     fixture.detectChanges();
 
-    // Group context menu: Rename + New subgroup + Delete group, also text-only.
-    openCtx('g1');
+    // Folder context menu: New page + New folder + Rename + Delete folder, text-only.
+    openCtx('concepts');
     panel = document.querySelector<HTMLElement>('[data-testid="wiki-ctx-panel"]');
-    expect(panel, 'group context menu panel').toBeTruthy();
-    expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]')).toBeTruthy();
-    expect(document.querySelector('[data-testid="wiki-ctx-item-subgroup"]')).toBeTruthy();
+    expect(panel, 'folder context menu panel').toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-new-page"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-new-folder"]')).toBeTruthy();
     expect(document.querySelector('[data-testid="wiki-ctx-item-delete"]')!.textContent).toContain('Delete');
     assertTextOnly(panel!);
     http.verify();
   });
 
-  it('drag-drops a doc onto a group and persists the new parent in the manifest', async () => {
-    const { fixture, http } = await setup({
-      version: 1,
-      nodes: [
-        { id: 'g1', type: 'group', title: 'Concepts', relPath: null, parentId: null, order: 0 },
-      ],
+  it('renders an HTML doc inside a script-disabled sandboxed iframe', async () => {
+    const { fixture, http } = await setup();
+    el(fixture)
+      .querySelector<HTMLButtonElement>('[data-testid="project-wiki-file-concepts/page.html"]')!
+      .click();
+    fixture.detectChanges();
+
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/page.html')
+      .flush({ relPath: 'concepts/page.html', content: '<h1>Sandboxed</h1><script>window.x=1</script>' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/page.html').flush({
+      relPath: 'concepts/page.html', model: null,
+      metadata: { model: null, updatedAt: null, reason: null, taskKey: null, status: null, runCount: null, hasFrontmatter: false },
+      commits: [],
     });
+    fixture.detectChanges();
+
+    const frame = el(fixture).querySelector<HTMLIFrameElement>('[data-testid="project-wiki-html-frame"]');
+    expect(frame, 'html iframe').toBeTruthy();
+    // sandbox attribute is present and empty => no allow-scripts token.
+    expect(frame!.getAttribute('sandbox')).toBe('');
+    const srcdoc = frame!.getAttribute('srcdoc') ?? frame!.srcdoc;
+    expect(srcdoc).toContain('Sandboxed');
+    http.verify();
+  });
+
+  it('creates a page via a git-backed POST then re-reads the tree', async () => {
+    const { fixture, http } = await setup();
+    fixture.componentInstance.createPage('', 'guide.md');
+    fixture.detectChanges();
+
+    const post = http.expectOne(req =>
+      req.method === 'POST' && req.url === '/api/projects/Demo/wiki/pages');
+    expect(post.request.body).toEqual({ relPath: 'guide.md', content: null });
+    post.flush({ relPath: 'docs/guide.md', sha: 'deadbee' });
+
+    // The mutation triggers a refresh of the physical tree.
+    http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
+    fixture.detectChanges();
+    http.verify();
+  });
+
+  it('drag-drops a file onto a folder and moves it via git', async () => {
+    const { fixture, http } = await setup();
     const root = el(fixture);
 
-    // README starts in the Ungrouped bucket; drag it onto the real group g1.
-    const docRow = root.querySelector<HTMLElement>('[data-testid="project-wiki-node-doc:README.md"]');
-    const groupRow = root.querySelector<HTMLElement>('[data-testid="project-wiki-node-g1"]');
-    expect(docRow).toBeTruthy();
-    expect(groupRow).toBeTruthy();
+    const fileRow = root.querySelector<HTMLElement>('[data-testid="project-wiki-node-README.md"]');
+    const folderRow = root.querySelector<HTMLElement>('[data-testid="project-wiki-node-concepts"]');
+    expect(fileRow).toBeTruthy();
+    expect(folderRow).toBeTruthy();
 
     const dt = makeDataTransfer();
-    fireDrag(docRow!, 'dragstart', dt);
-    fireDrag(groupRow!, 'dragover', dt);
-    fireDrag(groupRow!, 'drop', dt);
+    fireDrag(fileRow!, 'dragstart', dt);
+    fireDrag(folderRow!, 'dragover', dt);
+    fireDrag(folderRow!, 'drop', dt);
     fixture.detectChanges();
 
-    const put = http.expectOne(req =>
-      req.method === 'PUT' && req.url === '/api/projects/Demo/wiki/organization');
-    const body = put.request.body as WikiOrganization;
-    const moved = body.nodes.find(n => n.type === 'doc' && n.relPath === 'README.md');
-    expect(moved, 'README should be pinned into the manifest').toBeTruthy();
-    expect(moved!.parentId).toBe('g1');
-    put.flush(body);
+    const post = http.expectOne(req =>
+      req.method === 'POST' && req.url === '/api/projects/Demo/wiki/move');
+    expect(post.request.body).toEqual({ fromRelPath: 'README.md', toRelPath: 'concepts/README.md' });
+    post.flush({ from: 'README.md', to: 'concepts/README.md', sha: 'abc1234' });
+
+    http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
     fixture.detectChanges();
+    http.verify();
+  });
+
+  it('previews an old revision from the history panel', async () => {
+    const { fixture, http } = await setup();
+    el(fixture)
+      .querySelector<HTMLButtonElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!
+      .click();
+    fixture.detectChanges();
+
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Current\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    // History tab -> click "View" on the commit -> fetch + show the old revision.
+    el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-tab-history"]')!.click();
+    fixture.detectChanges();
+    el(fixture).querySelector<HTMLButtonElement>('[data-testid="wiki-doc-history-view-abc1234"]')!.click();
+    fixture.detectChanges();
+
+    http.expectOne('/api/projects/Demo/wiki/revisions/abc/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', sha: 'abc', content: '# Old revision\n' });
+    fixture.detectChanges();
+
+    const text = el(fixture).textContent ?? '';
+    expect(text).toContain('Old revision');
+    expect(el(fixture).querySelector('[data-testid="project-wiki-rev-banner"]')).toBeTruthy();
     http.verify();
   });
 });

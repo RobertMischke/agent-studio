@@ -52,6 +52,9 @@
               <div class="wdh__commit-top">
                 <span class="wdh__subject">{{ c.subject }}</span>
                 <span class="wdh__sha">{{ c.shortSha }}</span>
+                <button class="wdh__view" type="button"
+                        (click)="viewRevision.emit(c.sha)"
+                        [attr.data-testid]="'wiki-doc-history-view-' + c.shortSha">View</button>
               </div>
               <div class="wdh__commit-meta">
                 <span>{{ c.author }}</span>

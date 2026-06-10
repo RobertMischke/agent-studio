@@ -21,16 +21,18 @@ public class ProjectDocsService
     private const string AdrRel = "docs/architecture-decisions.md";
     private const string WikiRel = "docs";
 
-    // User-defined wiki organisation (themes/groups + parent/child + ordering)
-    // lives in a single git-tracked manifest at the docs root. It is a
-    // presentation layer over the immutable docs tree: nodes reference docs by
-    // relPath, so the physical files never move and per-file git history stays
-    // pristine. The dotfile is not a *.md doc, so it never shows up as content.
-    private const string WikiOrgFile = ".wiki-organization.json";
-    private const int WikiOrgMaxNodes = 5000;
+    // The wiki tree is the physical docs/ hierarchy itself - folders are nodes,
+    // files are pages - so there is no virtual organisation layer to maintain.
+    // These are the document extensions the tree surfaces and the content /
+    // history endpoints serve: markdown plus optional HTML concept pages (the
+    // UI renders HTML inside a sandboxed iframe).
+    private static readonly HashSet<string> WikiDocExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".md", ".html", ".htm" };
 
-    private static readonly JsonSerializerOptions WikiJsonOptions =
-        new(JsonSerializerDefaults.Web) { WriteIndented = true };
+    // Optional `NN-` (or `NN_` / `NN.`) numeric prefix on a file/folder name:
+    // controls sort order in the tree and is hidden from the displayed title.
+    private static readonly Regex OrderPrefixRegex =
+        new(@"^(?<num>\d+)[-_.\s]+", RegexOptions.Compiled);
 
     private static readonly Regex WikiFrontmatterRegex =
         new(@"\A---\r?\n(?<body>.*?)\r?\n---", RegexOptions.Singleline | RegexOptions.Compiled);
@@ -205,7 +207,7 @@ public class ProjectDocsService
 
     public WikiFileContent? ReadWikiFile(string projectName, string relPath)
     {
-        var full = ResolveWikiPath(projectName, relPath, requireMarkdown: true);
+        var full = ResolveWikiPath(projectName, relPath, requireDoc: true);
         if (full == null || !File.Exists(full)) return null;
         return new WikiFileContent(relPath.Replace('\\', '/'), File.ReadAllText(full));
     }
@@ -221,7 +223,7 @@ public class ProjectDocsService
         if (string.IsNullOrWhiteSpace(relPath)) return null;
         var ext = Path.GetExtension(relPath);
         if (!WikiAssetContentTypes.TryGetValue(ext, out var contentType)) return null;
-        var full = ResolveWikiPath(projectName, relPath, requireMarkdown: false);
+        var full = ResolveWikiPath(projectName, relPath, requireDoc: false);
         if (full == null || !File.Exists(full)) return null;
         return (full, contentType);
     }
@@ -229,14 +231,15 @@ public class ProjectDocsService
     /// <summary>
     /// Joins a caller-supplied relative path onto the docs root and confirms
     /// the resolved absolute path stays inside it (traversal guard). When
-    /// <paramref name="requireMarkdown"/> is set, only <c>.md</c> files pass.
+    /// <paramref name="requireDoc"/> is set, only wiki document extensions
+    /// (<c>.md</c> / <c>.html</c> / <c>.htm</c>) pass.
     /// </summary>
-    private string? ResolveWikiPath(string projectName, string relPath, bool requireMarkdown)
+    private string? ResolveWikiPath(string projectName, string relPath, bool requireDoc)
     {
         if (string.IsNullOrWhiteSpace(relPath)) return null;
         if (relPath.Contains("..", StringComparison.Ordinal)) return null;
         if (Path.IsPathRooted(relPath)) return null;
-        if (requireMarkdown && !string.Equals(Path.GetExtension(relPath), ".md", StringComparison.OrdinalIgnoreCase))
+        if (requireDoc && !WikiDocExtensions.Contains(Path.GetExtension(relPath)))
             return null;
 
         var entry = FindProject(projectName);
@@ -252,76 +255,151 @@ public class ProjectDocsService
     }
 
     /// <summary>
-    /// Absolute path of a wiki <c>.md</c> doc after the same traversal guard as
+    /// Absolute path of a wiki doc (.md/.html) after the same traversal guard as
     /// the read endpoints. Exposed so the history endpoint can hand the path to
     /// <see cref="GitService"/> without re-implementing path resolution.
     /// </summary>
     public string? ResolveWikiDocFullPath(string projectName, string relPath) =>
-        ResolveWikiPath(projectName, relPath, requireMarkdown: true);
+        ResolveWikiPath(projectName, relPath, requireDoc: true);
 
-    // -------- Wiki organisation (user-defined themes / hierarchy) --------
+    // -------- Wiki tree (physical docs/ folder hierarchy) --------
 
     /// <summary>
-    /// Reads the user-defined organisation manifest. Returns an empty (but
-    /// valid) manifest when none has been written yet, and null only when the
-    /// project itself is unknown. A corrupt manifest degrades to empty rather
-    /// than throwing, so a bad write never bricks the wiki view.
+    /// The recursive physical structure under <c>docs/</c>: folder nodes plus
+    /// document nodes (<c>.md</c> and <c>.html</c>). Siblings are sorted folders
+    /// first, then files; an optional leading <c>NN-</c> numeric prefix on a
+    /// name controls ordering and is stripped from the displayed title. No git
+    /// is invoked here, so building the tree stays cheap even for a large docs
+    /// folder (per-file commit metadata is fetched lazily on open).
     /// </summary>
-    public WikiOrganization? GetWikiOrganization(string projectName)
+    public WikiTree? GetWikiTree(string projectName)
     {
         var entry = FindProject(projectName);
         if (entry == null) return null;
         var baseDir = ResolveBaseDir(entry);
         if (baseDir == null) return null;
 
-        var path = Path.Combine(baseDir, WikiRel, WikiOrgFile);
-        if (!File.Exists(path)) return new WikiOrganization(1, []);
-        try
-        {
-            var org = JsonSerializer.Deserialize<WikiOrganization>(File.ReadAllText(path), WikiJsonOptions);
-            return SanitizeOrganization(org);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Wiki organisation manifest unreadable for {Project}; serving empty", projectName);
-            return new WikiOrganization(1, []);
-        }
-    }
-
-    public bool WriteWikiOrganization(string projectName, WikiOrganization? org)
-    {
-        var entry = FindProject(projectName);
-        if (entry == null) return false;
-        var baseDir = ResolveBaseDir(entry);
-        if (baseDir == null) return false;
-
-        var dir = Path.Combine(baseDir, WikiRel);
-        Directory.CreateDirectory(dir);
-        var sanitized = SanitizeOrganization(org);
-        File.WriteAllText(Path.Combine(dir, WikiOrgFile), JsonSerializer.Serialize(sanitized, WikiJsonOptions));
-        return true;
+        var wikiDir = Path.Combine(baseDir, WikiRel);
+        var exists = Directory.Exists(wikiDir);
+        var root = exists ? BuildTreeNodes(new DirectoryInfo(wikiDir), Path.GetFullPath(wikiDir)) : [];
+        return new WikiTree(projectName, wikiDir, exists, root);
     }
 
     /// <summary>
-    /// Drops malformed nodes (no id, unknown type), normalises titles, and
-    /// clears stray relPaths off group nodes. Keeps the manifest trustworthy
-    /// regardless of what a client PUTs. Returns a version-1 manifest.
+    /// Recursively maps a docs directory into wiki tree nodes. Folders with no
+    /// document descendants are dropped so the tree only surfaces navigable
+    /// content. Hidden entries (dot-prefixed) are skipped.
     /// </summary>
-    internal static WikiOrganization SanitizeOrganization(WikiOrganization? org)
+    private static List<WikiTreeNode> BuildTreeNodes(DirectoryInfo dir, string docsRoot)
     {
-        var nodes = org?.Nodes ?? [];
-        var clean = nodes
-            .Where(n => n != null && !string.IsNullOrWhiteSpace(n.Id))
-            .Where(n => n.Type is "group" or "doc")
-            .Take(WikiOrgMaxNodes)
-            .Select(n => n with
-            {
-                Title = string.IsNullOrWhiteSpace(n.Title) ? null : n.Title.Trim(),
-                RelPath = n.Type == "doc" ? n.RelPath?.Replace('\\', '/') : null,
-                ParentId = string.IsNullOrWhiteSpace(n.ParentId) ? null : n.ParentId,
-            })
-            .ToList();
-        return new WikiOrganization(1, clean);
+        var nodes = new List<WikiTreeNode>();
+
+        foreach (var sub in dir.GetDirectories())
+        {
+            if (sub.Name.StartsWith('.')) continue;
+            var children = BuildTreeNodes(sub, docsRoot);
+            if (children.Count == 0) continue; // prune empty folders
+            var rel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
+            nodes.Add(new WikiTreeNode(sub.Name, StripOrderPrefix(sub.Name), rel, "folder", children));
+        }
+
+        foreach (var file in dir.GetFiles())
+        {
+            if (file.Name.StartsWith('.')) continue;
+            var ext = file.Extension;
+            if (!WikiDocExtensions.Contains(ext)) continue;
+            var rel = Path.GetRelativePath(docsRoot, file.FullName).Replace('\\', '/');
+            var type = ext.Equals(".md", StringComparison.OrdinalIgnoreCase) ? "md" : "html";
+            var title = ExtractFirstHeading(file.FullName)
+                ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(file.Name));
+            nodes.Add(new WikiTreeNode(file.Name, title, rel, type, []));
+        }
+
+        nodes.Sort(CompareTreeNodes);
+        return nodes;
+    }
+
+    /// <summary>Folders before files; then by numeric order prefix; then name.</summary>
+    private static int CompareTreeNodes(WikiTreeNode a, WikiTreeNode b)
+    {
+        var aFolder = a.Type == "folder";
+        var bFolder = b.Type == "folder";
+        if (aFolder != bFolder) return aFolder ? -1 : 1;
+
+        var ao = OrderPrefixValue(a.Name);
+        var bo = OrderPrefixValue(b.Name);
+        if (ao != bo) return ao.CompareTo(bo);
+
+        return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Numeric value of a leading <c>NN-</c> prefix, or max when absent.</summary>
+    private static int OrderPrefixValue(string name)
+    {
+        var m = OrderPrefixRegex.Match(name);
+        return m.Success && int.TryParse(m.Groups["num"].Value, out var n) ? n : int.MaxValue;
+    }
+
+    /// <summary>Drops a leading <c>NN-</c> ordering prefix from a display label.</summary>
+    private static string StripOrderPrefix(string name)
+    {
+        var m = OrderPrefixRegex.Match(name);
+        return m.Success ? name[m.Length..] : name;
+    }
+
+    /// <summary>
+    /// Resolves a wiki node (file or folder) relative path to its absolute path
+    /// under <c>docs/</c> with the standard traversal guard. Unlike the doc
+    /// resolver this does not require a document extension, so folder targets of
+    /// move/delete operations resolve too.
+    /// </summary>
+    public string? ResolveWikiNodeFullPath(string projectName, string relPath) =>
+        ResolveWikiPath(projectName, relPath, requireDoc: false);
+
+    /// <summary>
+    /// Creates a new wiki document on disk (seed content optional). Returns the
+    /// absolute path so the endpoint can commit it; fails when the path is
+    /// unsafe, the extension is not a wiki document type, or the file exists.
+    /// </summary>
+    public WikiMutationResult CreateWikiPage(string projectName, string relPath, string? content)
+    {
+        var ext = Path.GetExtension(relPath);
+        if (!WikiDocExtensions.Contains(ext))
+            return WikiMutationResult.Fail("Only .md or .html pages are allowed.");
+        var full = ResolveWikiPath(projectName, relPath, requireDoc: true);
+        if (full == null) return WikiMutationResult.Fail("Invalid path.");
+        if (File.Exists(full)) return WikiMutationResult.Fail("A page with that name already exists.");
+
+        var dir = Path.GetDirectoryName(full);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        var seed = content ?? DefaultPageSeed(relPath, ext);
+        File.WriteAllText(full, seed);
+        return WikiMutationResult.Ok(full);
+    }
+
+    private static string DefaultPageSeed(string relPath, string ext)
+    {
+        var title = StripOrderPrefix(Path.GetFileNameWithoutExtension(relPath));
+        return ext.Equals(".md", StringComparison.OrdinalIgnoreCase)
+            ? $"# {title}\n\n"
+            : $"<!doctype html>\n<html>\n<head><meta charset=\"utf-8\"><title>{title}</title></head>\n<body>\n<h1>{title}</h1>\n</body>\n</html>\n";
+    }
+
+    /// <summary>
+    /// Creates a new wiki folder. A folder needs a tracked file to survive git,
+    /// so a <c>.gitkeep</c> placeholder is seeded inside it; the endpoint commits
+    /// that. Fails when the path is unsafe or the folder already exists.
+    /// </summary>
+    public WikiMutationResult CreateWikiFolder(string projectName, string relPath)
+    {
+        var full = ResolveWikiPath(projectName, relPath, requireDoc: false);
+        if (full == null) return WikiMutationResult.Fail("Invalid path.");
+        if (Directory.Exists(full)) return WikiMutationResult.Fail("A folder with that name already exists.");
+
+        Directory.CreateDirectory(full);
+        var keep = Path.Combine(full, ".gitkeep");
+        if (!File.Exists(keep)) File.WriteAllText(keep, "");
+        return WikiMutationResult.Ok(keep);
     }
 
     /// <summary>
@@ -531,14 +609,22 @@ public record WikiDocMetadata(
     bool HasFrontmatter);
 
 /// <summary>
-/// One node in the user-defined wiki organisation tree. A <c>group</c> is a
-/// user-created theme (uses <see cref="Title"/>); a <c>doc</c> pins an existing
-/// docs file (uses <see cref="RelPath"/>, with an optional <see cref="Title"/>
-/// rename override). <see cref="ParentId"/> nests nodes; <see cref="Order"/>
-/// sorts siblings.
+/// One node in the physical wiki tree. A <c>folder</c> carries child nodes; a
+/// document node (<c>type</c> = <c>md</c> or <c>html</c>) is a leaf. <see
+/// cref="RelPath"/> is the docs-root-relative path; <see cref="Title"/> is the
+/// display label (first H1 for docs, order-prefix-stripped name otherwise).
 /// </summary>
-public record WikiOrgNode(string Id, string Type, string? Title, string? RelPath, string? ParentId, int Order);
-public record WikiOrganization(int Version, List<WikiOrgNode> Nodes);
+public record WikiTreeNode(string Name, string Title, string? RelPath, string Type, List<WikiTreeNode> Children);
+
+/// <summary>The physical docs/ folder tree exposed to the wiki UI.</summary>
+public record WikiTree(string ProjectName, string BaseDir, bool Exists, List<WikiTreeNode> Root);
+
+/// <summary>Outcome of a wiki filesystem mutation (create/move/delete).</summary>
+public record WikiMutationResult(bool Success, string? FullPath, string? Error)
+{
+    public static WikiMutationResult Ok(string fullPath) => new(true, fullPath, null);
+    public static WikiMutationResult Fail(string error) => new(false, null, error);
+}
 
 /// <summary>History + provenance payload for one wiki doc.</summary>
 public record WikiFileHistory(string RelPath, string? Model, WikiDocMetadata Metadata, List<GitCommitInfo> Commits);

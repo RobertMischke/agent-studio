@@ -7,8 +7,9 @@ import {
   SecurityOverview,
   WikiFileContent,
   WikiFileHistory,
-  WikiOrganization,
-  WikiOverview
+  WikiOverview,
+  WikiRevisionContent,
+  WikiTree
 } from '../models/project-docs.model';
 
 /**
@@ -53,6 +54,13 @@ export class ProjectDocsService {
     );
   }
 
+  /** The physical docs/ folder tree (folders + .md/.html files), the wiki nav source. */
+  getWikiTree(projectName: string) {
+    return this.http.get<WikiTree>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/tree`
+    );
+  }
+
   getWikiFile(projectName: string, relPath: string) {
     return this.http.get<WikiFileContent>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/files/${this.encodeRelPath(relPath)}`
@@ -71,18 +79,41 @@ export class ProjectDocsService {
     );
   }
 
-  /** The user-defined organisation manifest (themes + hierarchy) over the docs tree. */
-  getWikiOrganization(projectName: string) {
-    return this.http.get<WikiOrganization>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/organization`
+  /** Content of a wiki doc as it existed at an earlier commit (old-revision view). */
+  getWikiRevision(projectName: string, sha: string, relPath: string) {
+    return this.http.get<WikiRevisionContent>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/revisions/${encodeURIComponent(sha)}/${this.encodeRelPath(relPath)}`
     );
   }
 
-  /** Persist a re-organised manifest; the server sanitises and echoes it back. */
-  putWikiOrganization(projectName: string, org: WikiOrganization) {
-    return this.http.put<WikiOrganization>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/organization`,
-      org
+  /** Create a new wiki page (.md/.html); the server commits it into the repo. */
+  createWikiPage(projectName: string, relPath: string, content?: string) {
+    return this.http.post<{ relPath: string; sha: string }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/pages`,
+      { relPath, content: content ?? null }
+    );
+  }
+
+  /** Create a new wiki folder; the server seeds a .gitkeep and commits it. */
+  createWikiFolder(projectName: string, relPath: string) {
+    return this.http.post<{ relPath: string; sha: string }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/folders`,
+      { relPath }
+    );
+  }
+
+  /** Move/rename a wiki node (file or folder) via git mv + commit. */
+  moveWikiNode(projectName: string, fromRelPath: string, toRelPath: string) {
+    return this.http.post<{ from: string; to: string; sha: string }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/move`,
+      { fromRelPath, toRelPath }
+    );
+  }
+
+  /** Delete a wiki node (file or folder) via git rm + commit. */
+  deleteWikiNode(projectName: string, relPath: string) {
+    return this.http.delete<{ relPath: string; sha: string }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/files/${this.encodeRelPath(relPath)}`
     );
   }
 

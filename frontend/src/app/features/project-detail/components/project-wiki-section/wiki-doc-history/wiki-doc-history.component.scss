@@ -88,6 +88,18 @@
   font-size: 0.72rem;
   color: var(--studio-accent-4-strong);
 }
+.wdh__view {
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--studio-fg) 6%, transparent);
+  color: var(--studio-fg);
+  border: 1px solid color-mix(in srgb, var(--studio-fg) 14%, transparent);
+  border-radius: 4px;
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+.wdh__view:hover { background: color-mix(in srgb, var(--studio-fg) 12%, transparent); }
 .wdh__commit-meta {
   display: flex;
   gap: 12px;
