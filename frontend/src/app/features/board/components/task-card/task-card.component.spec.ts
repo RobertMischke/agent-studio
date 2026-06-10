@@ -14,6 +14,8 @@ import {
   buildHumanReviewBadge,
   buildCodeReviewGradeBadge,
   buildPhaseBadge,
+  buildOwnerChip,
+  buildPipelineDots,
   buildTokenBubble,
 } from './task-card-view-model';
 
@@ -254,7 +256,8 @@ describe('TaskCardComponent (smoke)', () => {
 
     const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
     expect(host).not.toBeNull();
-    expect(findCssDeclaration('.task-card', 'border')).toContain('1px solid var(--studio-card-state-border');
+    expect(findCssDeclaration('.task-card', 'border')).toContain('1px solid color-mix');
+    expect(findCssDeclaration('.task-card[data-task-type', '--task-card-type-color')).toContain('248,113,113');
     expect(hasExplicitCssDeclaration('.task-card', 'border-left')).toBe(false);
     expect(hasExplicitCssDeclaration('.task-card__progress', 'height')).toBe(false);
     expect(findCssDeclaration('.task-card', '--task-card-ring')).toBe('0 0 0 1px var(--studio-card-state-border)');
@@ -263,8 +266,8 @@ describe('TaskCardComponent (smoke)', () => {
     expect(findCssDeclaration('.task-card', 'border-radius')).toBe('var(--studio-card-radius)');
     expect(findCssDeclaration('.task-card__title', 'font-size')).toBe('var(--studio-card-title-size)');
     expect(findCssDeclaration('.task-card__title', 'font-weight')).toBe('var(--studio-card-title-weight)');
-    expect(findCssDeclaration('.task-card__commits', 'background')).toBe('var(--studio-commit-bg)');
-    expect(findCssDeclaration('.task-card__commits', 'border')).toBe('1px solid var(--studio-commit-border)');
+    expect(findCssDeclaration('.task-card__commits', 'background')).toBe('transparent');
+    expect(findCssDeclaration('.task-card__commits', 'border')).toBe('0px');
   });
 
   it('routes compact-card density through the standard card tokens', async () => {
@@ -935,6 +938,26 @@ describe('buildEffectiveModelChip', () => {
   });
 });
 
+describe('buildOwnerChip', () => {
+  it('uses a stable two-letter owner marker while preserving the full tooltip', () => {
+    const chip = buildOwnerChip(makeOwner({ id: 'rainer-m', displayName: 'Rainer Mischewski' }));
+    expect(chip.initials).toBe('RM');
+    expect(chip.label).toBe('Rainer Mischewski');
+    expect(chip.tooltip).toContain('Rainer Mischewski');
+    expect(chip.tooltip).toContain('rainer-m');
+  });
+
+  it('falls back to the owner id for compact initials', () => {
+    const chip = buildOwnerChip(makeOwner({ id: 'codex-runner-1', displayName: '' }));
+    expect(chip.initials).toBe('CR');
+  });
+
+  it('keeps umlaut names readable when deriving initials', () => {
+    const chip = buildOwnerChip(makeOwner({ id: 'joerg-m', displayName: 'Jörg Müller' }));
+    expect(chip.initials).toBe('JM');
+  });
+});
+
 describe('buildTokenBubble', () => {
   it('uses backend-resolved model labels for aggregate and per-run rows', () => {
     const bubble = buildTokenBubble({
@@ -1139,6 +1162,33 @@ describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
     const blocked = buildPhaseBadge('post-processing-blocked');
     expect(blocked?.label).toBe('Post processing blocked');
     expect(blocked?.tone).toBe('post-processing-blocked');
+  });
+});
+
+describe('buildPipelineDots', () => {
+  it('marks the core run dot as active for a live progress card', () => {
+    const dots = buildPipelineDots(makeJob({
+      state: '3-progress',
+      execution: {
+        jobId: 'task-1', taskKey: 'test::task-1', processId: 1, startedAt: '',
+        status: 'running', exitCode: null, durationSeconds: null,
+        model: 'gpt-5-codex', runOutcome: null,
+      },
+    }));
+    expect(dots.currentLabel).toBe('Run');
+    expect(dots.dots.map((dot) => [dot.id, dot.status])).toEqual([
+      ['pre', 'done'],
+      ['run', 'active'],
+      ['post', 'pending'],
+      ['review', 'pending'],
+    ]);
+  });
+
+  it('surfaces post-processing as the active step without a large progress bar', () => {
+    const dots = buildPipelineDots(makeJob({ state: '3-progress', phase: 'post-processing-running' }));
+    expect(dots.currentLabel).toBe('Post');
+    expect(dots.dots.find((dot) => dot.id === 'post')?.status).toBe('active');
+    expect(dots.dots.find((dot) => dot.id === 'run')?.status).toBe('done');
   });
 });
 

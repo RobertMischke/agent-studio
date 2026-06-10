@@ -494,6 +494,7 @@ export function buildTagChips(
 export interface OwnerChip {
   id: string;
   label: string;
+  initials: string;
   emoji: string;
   background: string;
   border: string;
@@ -512,17 +513,30 @@ function tintFromHex(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/** Owner-attribution chip: emoji + display name + the owner's chosen colour. */
+function ownerInitials(label: string, id: string): string {
+  const words = label
+    .trim()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+  const source = words.length >= 2
+    ? `${words[0][0]}${words[1][0]}`
+    : (words[0] ?? id).slice(0, 2);
+  return (source || '??').toUpperCase();
+}
+
+/** Owner-attribution chip: compact user marker + the owner's chosen colour. */
 export function buildOwnerChip(owner: ClientSummary): OwnerChip {
   const baseColour = owner.colour || '#64748b';
+  const label = owner.displayName || owner.id;
   return {
     id: owner.id,
-    label: owner.displayName || owner.id,
+    label,
+    initials: ownerInitials(label, owner.id),
     emoji: owner.emoji || '·',
     background: tintFromHex(baseColour, 0.12),
     border: tintFromHex(baseColour, 0.32),
     foreground: '#e2e8f0',
-    tooltip: `Owner: ${owner.displayName || owner.id} (${owner.id})`
+    tooltip: `Owner: ${label} (${owner.id})`
   };
 }
 
@@ -593,6 +607,94 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
         tooltip: "Git state: archived — this task is out of the active git flow; its work, if any, was integrated into develop before it was archived.",
       };
   }
+}
+
+export type PipelineDotStatus = 'done' | 'active' | 'pending' | 'blocked';
+
+export interface PipelineDot {
+  id: 'pre' | 'run' | 'post' | 'review';
+  label: string;
+  status: PipelineDotStatus;
+}
+
+export interface PipelineDotsView {
+  dots: PipelineDot[];
+  currentLabel: string | null;
+  tooltip: string;
+}
+
+function pipelineView(
+  current: PipelineDot['id'] | null,
+  blocked: PipelineDot['id'] | null,
+  doneThrough: PipelineDot['id'] | null,
+): PipelineDotsView {
+  const order: PipelineDot['id'][] = ['pre', 'run', 'post', 'review'];
+  const labels: Record<PipelineDot['id'], string> = {
+    pre: 'Pre',
+    run: 'Run',
+    post: 'Post',
+    review: 'Review',
+  };
+  const doneIndex = doneThrough ? order.indexOf(doneThrough) : -1;
+  const dots = order.map((id, index): PipelineDot => ({
+    id,
+    label: labels[id],
+    status: blocked === id ? 'blocked'
+      : current === id ? 'active'
+        : index <= doneIndex ? 'done'
+          : 'pending',
+  }));
+  const currentLabel = current ? labels[current] : null;
+  return {
+    dots,
+    currentLabel,
+    tooltip: `Pipeline: ${dots.map((dot) => `${dot.label} ${dot.status}`).join(', ')}`,
+  };
+}
+
+/**
+ * Tiny card-level pipeline indicator. The board payload intentionally does not
+ * carry the full per-task pipeline execution; that lives behind the detail
+ * endpoint. The card therefore maps the existing lane/phase/execution signals
+ * to the four visible sections (Pre, Run, Post, Review) without inventing
+ * per-step results.
+ */
+export function buildPipelineDots(job: TaskInfo): PipelineDotsView {
+  switch (job.phase ?? null) {
+    case 'intake-running':
+      return pipelineView('pre', null, null);
+    case 'intake-blocked':
+      return pipelineView(null, 'pre', null);
+    case 'intake-passed':
+      return pipelineView(null, null, 'pre');
+    case 'post-processing-running':
+      return pipelineView('post', null, 'run');
+    case 'post-processing-blocked':
+      return pipelineView(null, 'post', 'run');
+    case 'awaiting-review':
+      return pipelineView(null, null, 'post');
+  }
+
+  if (job.state === TaskState.Progress) {
+    if (job.execution?.status === 'running') {
+      return pipelineView('run', null, 'pre');
+    }
+    return pipelineView(null, null, 'run');
+  }
+
+  if (job.state === TaskState.AutoReview || job.state === '4-review') {
+    return pipelineView('review', null, 'post');
+  }
+
+  if (job.state === TaskState.HumanReview || job.state === TaskState.Escalated) {
+    return pipelineView(null, null, 'review');
+  }
+
+  if (job.state === TaskState.Completed || job.state === TaskState.Archive) {
+    return pipelineView(null, null, 'review');
+  }
+
+  return pipelineView(null, null, null);
 }
 
 export type PhaseBadgeTone =
