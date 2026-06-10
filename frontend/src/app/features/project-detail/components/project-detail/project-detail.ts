@@ -200,6 +200,47 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     });
   });
 
+  // T1b / ASS-1742: per-project CLI context mode (clean isolated home vs the
+  // operator's shared global state). Default CLEAN for reproducible coding
+  // runs. Shared-only CLIs (Copilot, Gemini) render the dropdown disabled and
+  // pinned to shared since they expose no config-home redirect.
+  readonly cliContextModeResolved = signal<Record<string, { mode: string; source: string; supported: boolean }>>({});
+  readonly cliContextModeAvailable = signal<readonly string[]>(['clean', 'shared']);
+  /** Bound select value per CLI; mirrors the resolved effective context mode. */
+  readonly cliContextModeDraft: Record<string, string> = {};
+  /** Per-CLI write in flight; disables that row's controls until the PUT resolves. */
+  readonly cliContextModeBusy: Record<string, boolean> = {};
+
+  readonly cliContextModeMeta: Record<string, { label: string; hint: string }> = {
+    'clean': { label: 'Clean', hint: 'Isolierter Per-Run-Home: der Run sieht nur Prompt + versionierte Repo-Dateien — reproduzierbar, ohne alte Session-/Memory-Reste.' },
+    'shared': { label: 'Shared', hint: 'Der globale CLI-Zustand des Operators (Session-Historie, Memory, Settings). Nur bewusst waehlen.' },
+  };
+  readonly cliContextSourceMeta: Record<string, { label: string; hint: string }> = {
+    'project': { label: 'project', hint: 'Explizit fuer dieses Projekt gesetzt — ueberschreibt den Plattform-Default.' },
+    'default': { label: 'default', hint: 'Plattform-Default (clean) — kein Projekt-Override gesetzt.' },
+  };
+
+  cliContextModeLabel(mode: string | null | undefined) { return this.cliContextModeMeta[mode ?? '']?.label ?? mode ?? ''; }
+  cliContextModeHint(mode: string | null | undefined) { return this.cliContextModeMeta[mode ?? '']?.hint ?? ''; }
+  cliContextSourceLabel(source: string | null | undefined) { return this.cliContextSourceMeta[source ?? '']?.label ?? source ?? ''; }
+  cliContextSourceHint(source: string | null | undefined) { return this.cliContextSourceMeta[source ?? '']?.hint ?? ''; }
+
+  /** One row per CLI: effective context mode + source + whether clean is actually supported. */
+  readonly cliContextModeRows = computed(() => {
+    const resolved = this.cliContextModeResolved();
+    return this.cliTypes.map((cli) => {
+      const r = resolved[cli];
+      return {
+        cliType: cli as string,
+        label: cliTypeLabel(cli as CliType),
+        icon: cliTypeIcon(cli as CliType),
+        mode: r?.mode ?? 'clean',
+        source: r?.source ?? 'default',
+        supported: r?.supported ?? false,
+      };
+    });
+  });
+
   // Pre/post pipeline-step config. The catalogue (which steps exist + what
   // each accepts) is project-independent and fetched once; the per-project
   // overrides come from the settings projection. Both feed pipelineRows().
@@ -408,6 +449,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.refreshAll();
     this.loadPipelineConfig();
     this.refreshCliModes();
+    this.refreshCliContextModes();
     // Cycle 3: skip the 6-endpoint refreshAll fan-out when the panel is in
     // a backgrounded tab. The pre-Cycle-3 cadence put 42 requests over a
     // 10 s window from the project-detail panel alone (see logs/perf
@@ -593,6 +635,47 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.jobService.setProjectCliMode(this.projectName(), cli, '').subscribe({
       next: () => { this.cliModeBusy[cli] = false; this.refreshCliModes(); },
       error: () => { this.cliModeBusy[cli] = false; this.refreshCliModes(); }
+    });
+  }
+
+  /**
+   * T1b / ASS-1742: read the resolved per-CLI context modes for this project.
+   * Fills the dropdown drafts from the effective mode (default CLEAN) so an
+   * un-overridden CLI shows its platform posture rather than a blank control.
+   */
+  private refreshCliContextModes(): void {
+    this.jobService.getProjectCliContextModes(this.projectName()).subscribe({
+      next: (res) => {
+        this.cliContextModeResolved.set(res.resolved ?? {});
+        if (res.available?.length) this.cliContextModeAvailable.set(res.available);
+        for (const cli of this.cliTypes) {
+          const resolved = res.resolved?.[cli]?.mode ?? 'clean';
+          if (this.cliContextModeDraft[cli] !== resolved) this.cliContextModeDraft[cli] = resolved;
+        }
+      },
+      error: () => { /* keep last known modes */ }
+    });
+  }
+
+  /**
+   * Persist one CLI's context mode as a project override, then refresh the
+   * resolved map. Takes effect on the next spawn without a backend restart.
+   */
+  onCliContextModeChange(cli: string): void {
+    const mode = this.cliContextModeDraft[cli] ?? 'clean';
+    this.cliContextModeBusy[cli] = true;
+    this.jobService.setProjectCliContextMode(this.projectName(), cli, mode).subscribe({
+      next: () => { this.cliContextModeBusy[cli] = false; this.refreshCliContextModes(); },
+      error: () => { this.cliContextModeBusy[cli] = false; this.refreshCliContextModes(); }
+    });
+  }
+
+  /** Clear a CLI's context-mode project override, reverting to the platform default (CLEAN). */
+  resetCliContextMode(cli: string): void {
+    this.cliContextModeBusy[cli] = true;
+    this.jobService.setProjectCliContextMode(this.projectName(), cli, '').subscribe({
+      next: () => { this.cliContextModeBusy[cli] = false; this.refreshCliContextModes(); },
+      error: () => { this.cliContextModeBusy[cli] = false; this.refreshCliContextModes(); }
     });
   }
 

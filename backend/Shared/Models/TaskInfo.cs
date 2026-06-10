@@ -76,6 +76,14 @@ public record TaskInfo
     /// context from the long-running project session.
     /// </summary>
     public bool? UseOwnSession { get; init; }
+    /// <summary>
+    /// Per-task context-mode override (T1b / ASS-1742): <c>clean</c> (isolated
+    /// per-run CLI home) or <c>shared</c> (the operator's global CLI state). Null
+    /// means "no task override" — the run falls back to the project setting and
+    /// then the platform default (<see cref="CliContextModes.Clean"/>). See
+    /// <see cref="CliContextModes"/>.
+    /// </summary>
+    public string? ContextMode { get; init; }
     /// <summary>Last token / cost summary parsed from CLI output (best-effort).</summary>
     public SessionUsage? LastUsage { get; init; }
     public CliExecution? Execution { get; init; }

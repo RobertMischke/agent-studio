@@ -127,6 +127,17 @@ Inline-meta in the UI must reproduce:
 3. The verification command from the previous section.
 4. A drill-down link to this doc for the long form.
 
+## Context mode — a separate axis from permission mode
+
+**Permission mode** (above) controls *how much the CLI is allowed to do* (YOLO vs. sandboxed). **Context mode** controls *what state the CLI starts from* — they are orthogonal knobs and the Project Settings surface exposes both.
+
+- **`clean`** (default for coding runs): the run sees only the prompt plus the **versioned repo files** (`AGENTS.md` / `CLAUDE.md`, committed and in the working tree). It does **not** inherit the operator's global CLI state — user memory, prior session transcripts, scratch config. Reproducible: same commit ⇒ same context.
+- **`shared`**: the run reuses the operator's global state (`~/.claude`, `~/.codex`, …). Choose it deliberately when a run is meant to lean on accumulated local context.
+
+`clean` is **not a flag** — each adapter relocates the CLI's config home to a fresh per-run temp dir (Claude via `CLAUDE_CONFIG_DIR`, Codex via `CODEX_HOME`), seeding **only auth + base config** so login still works while memory/history are left behind. Repo instruction files are untouched in either mode because they live in the working tree, not the config home. CLIs with no config-home override (**Copilot**, **Gemini/Antigravity**) are honestly **shared-only**: a `clean` request against them is stamped `shared` so the Execution Context panel shows the truth.
+
+Resolution mirrors permission mode — **task override → project setting → `clean` default** — narrowed to `shared` for shared-only CLIs. The project-detail recommendation reads verbatim: *"Empfehlung: clean - der Run sieht nur Prompt + versionierte Repo-Dateien; reproduzierbar. shared nur bewusst waehlen."* Persisted in `project-settings.json` under the project's `CliContextModes` map; clearing the override reverts to the `clean` default. Canonical contract + per-CLI mechanics: [supported-clis.md §2.9](../supported-clis.md#29-context-mode--clean-vs-shared-per-run-isolation).
+
 ## Why this doc lives next to the controls
 
 Per [design-principles.md §Inline meta](../design-principles.md#inline-meta-explain-decisions-next-to-the-lever): a setting without inline meta is a regression. The Markdown source is *here* (single source of truth); the UI embeds the relevant subsection inline. When this doc changes, the UI updates without copy-paste drift.

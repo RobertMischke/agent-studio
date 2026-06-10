@@ -1482,6 +1482,33 @@ export class TaskService {
   }
 
   /**
+   * T1b / ASS-1742: read the resolved per-CLI context modes for one project.
+   * `resolved` has one entry per CLI (effective mode + source + whether the
+   * CLI can actually isolate clean state); `overrides` holds only the CLIs the
+   * operator explicitly set; `available` is the user-selectable id list
+   * (clean/shared).
+   */
+  getProjectCliContextModes(projectName: string) {
+    return this.http.get<{
+      resolved: Record<string, { mode: string; source: string; supported: boolean }>;
+      overrides: Record<string, string>;
+      available: string[];
+    }>(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/cli-context-modes`);
+  }
+
+  /**
+   * T1b / ASS-1742: write one CLI's context mode for a project. Pass an empty
+   * string to clear the override (the CLI reverts to the platform default =
+   * CLEAN). Takes effect on the next CLI spawn without a backend restart.
+   */
+  setProjectCliContextMode(projectName: string, cliType: string, mode: string) {
+    return this.http.put<{ cli: string; mode: string; source: string; supported: boolean }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/cli-context-mode`,
+      { cliType, mode },
+    );
+  }
+
+  /**
    * F35: read the resolved per-lane sort strategies for one project. The
    * `resolved` map has every lane key (defaults filled in); `overrides`
    * holds only the lanes the operator has explicitly set; `available` is

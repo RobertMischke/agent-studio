@@ -72,6 +72,12 @@ export interface CliExecutionContext {
   model: string | null;
   permissionMode: string | null;
   cwd: string | null;
+  /**
+   * Resolved context mode for the run (T1b / ASS-1742): `'clean'` (isolated
+   * per-run home) or `'shared'` (the operator's global state). Null for runs
+   * captured before the field existed.
+   */
+  contextMode?: string | null;
   capturedAt: string;
   source: string;
   sources: CliContextSource[];

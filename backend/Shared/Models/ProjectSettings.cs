@@ -157,6 +157,18 @@ public record ProjectSettings
     public Dictionary<string, string>? CliModes { get; init; }
 
     /// <summary>
+    /// Per-CLI context mode override (T1b / ASS-1742). Map of <see cref="CliTypes"/>
+    /// id to a mode from <see cref="CliContextModes"/> (<c>clean</c> /
+    /// <c>shared</c>). A missing CLI key means "no project override" and resolves
+    /// to the platform default (<see cref="CliContextModes.Clean"/>). A task can
+    /// further override this per-run via <see cref="TaskInfo.ContextMode"/>. The
+    /// resolved mode decides whether the driver seeds an isolated per-run config
+    /// home on spawn, so changes take effect on the next run without a backend
+    /// restart. Persisted in <c>project-settings.json</c>.
+    /// </summary>
+    public Dictionary<string, string>? CliContextModes { get; init; }
+
+    /// <summary>
     /// Model the epic planning/decomposition run uses (way 3): when a
     /// <see cref="TaskKinds.Epic"/> card is picked up, the runner runs a
     /// planning step that authors the sub-task list instead of a coding run.

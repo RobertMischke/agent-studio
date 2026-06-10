@@ -433,6 +433,18 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     }
 
     /// <summary>
+    /// T1b (ASS-1742): Claude isolates clean runs via <c>CLAUDE_CONFIG_DIR</c>,
+    /// which relocates the whole <c>~/.claude</c> home (credentials, settings,
+    /// session transcripts) to a per-run temp dir. <see cref="PrepareCleanContext"/>
+    /// seeds only the OAuth credentials + base settings so auth still works while
+    /// the run sees no leftover session history or user memory.
+    /// </summary>
+    public override bool SupportsCleanContext => true;
+
+    public override CleanContextPreparation? PrepareCleanContext(string workingDirectory)
+        => CleanContextPreparer.PrepareClaude(ResolveUserHome(), _logger);
+
+    /// <summary>
     /// ADR-0014 follow-up (Survey § R5): when the
     /// <c>ClaudeCli:UseHandleScrub</c> config flag is true, spawn via
     /// <see cref="Win.WindowsHandleScrubSpawner"/> on Windows. The

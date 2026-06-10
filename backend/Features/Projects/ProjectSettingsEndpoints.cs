@@ -98,6 +98,19 @@ public static class ProjectSettingsEndpoints
                             return new { mode = r.Mode, source = r.Source, args = r.Args };
                         },
                         StringComparer.OrdinalIgnoreCase),
+                    // Resolved per-CLI context mode + source + clean-support for
+                    // all four CLIs (project override → CLEAN default). T1b /
+                    // ASS-1742: the settings UI renders the effective mode and
+                    // greys clean out for shared-only CLIs from this without a
+                    // per-CLI round-trip.
+                    cliContextModes = CliTypes.All.ToDictionary(
+                        cli => cli,
+                        cli =>
+                        {
+                            var r = settings.ResolveContextMode(kv.Key, cli);
+                            return new { mode = r.Mode, source = r.Source, supported = r.Supported };
+                        },
+                        StringComparer.OrdinalIgnoreCase),
                 },
                 StringComparer.OrdinalIgnoreCase);
             return Results.Ok(projected);
@@ -342,6 +355,51 @@ public static class ProjectSettingsEndpoints
                 source = r.Source,
                 args = r.Args,
             });
+        });
+
+        // T1b / ASS-1742: per-project CLI context modes. GET returns the
+        // resolved mode + source + clean-support for every CLI (CLEAN default
+        // filled in) so the settings UI renders the effective state, the
+        // dropdown, and the shared-only greying in one shot.
+        app.MapGet("/api/projects/{projectName}/cli-context-modes", (string projectName, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            var s = settings.Get(projectName);
+            var resolved = CliTypes.All.ToDictionary(
+                cli => cli,
+                cli =>
+                {
+                    var r = settings.ResolveContextMode(projectName, cli);
+                    return new { mode = r.Mode, source = r.Source, supported = r.Supported };
+                },
+                StringComparer.OrdinalIgnoreCase);
+            return Results.Ok(new
+            {
+                resolved,
+                overrides = s.CliContextModes ?? new Dictionary<string, string>(),
+                available = CliContextModes.UserVisible,
+            });
+        });
+
+        // PUT one CLI's context mode. An empty/null mode clears the override
+        // (revert to the platform default CLEAN). Takes effect on the next spawn
+        // without a backend restart (ProjectRunner resolves live).
+        app.MapPut("/api/projects/{projectName}/cli-context-mode", (string projectName, SetCliContextModeRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            if (!CliTypes.IsValid(req.CliType))
+                return Results.BadRequest(new { error = $"Unknown CLI '{req.CliType}'" });
+            // Empty clears; a non-empty value must be a known mode.
+            if (!string.IsNullOrWhiteSpace(req.Mode) && !CliContextModes.IsValid(req.Mode))
+                return Results.BadRequest(new { error = $"Unsupported context mode '{req.Mode}'" });
+
+            settings.SetCliContextMode(projectName, req.CliType, req.Mode);
+            var r = settings.ResolveContextMode(projectName, req.CliType);
+            return Results.Ok(new { cli = r.CliType, mode = r.Mode, source = r.Source, supported = r.Supported });
         });
 
         // ADR-0052: max number of tasks the runner runs concurrently for this

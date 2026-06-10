@@ -393,6 +393,18 @@ public record SetCliModeRequest
     public string? Mode { get; init; }
 }
 
+/// <summary>
+/// Body for <c>PUT /api/projects/{name}/cli-context-mode</c>. Sets the
+/// per-project context mode for one CLI (T1b / ASS-1742). A null / empty
+/// <see cref="Mode"/> clears the override so the CLI reverts to the platform
+/// default (CLEAN).
+/// </summary>
+public record SetCliContextModeRequest
+{
+    public string CliType { get; init; } = "";
+    public string? Mode { get; init; }
+}
+
 public record SetOrchestratorModelRequest
 {
     public string? Model { get; init; }

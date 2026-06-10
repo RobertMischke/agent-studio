@@ -37,6 +37,15 @@ public record CliExecutionContext
     /// <summary>Working directory the CLI ran in (the run's checkout / worktree).</summary>
     public string? Cwd { get; init; }
 
+    /// <summary>
+    /// Resolved context mode for the run (T1b / ASS-1742): <c>clean</c> when the
+    /// adapter seeded an isolated per-run config home, or <c>shared</c> when the
+    /// run used the operator's global CLI state. Null for runs captured before
+    /// the field existed. Under clean, <see cref="Sources"/> point at the temp
+    /// home rather than the user profile.
+    /// </summary>
+    public string? ContextMode { get; init; }
+
     /// <summary>UTC time this context was captured (at run finish).</summary>
     public DateTime CapturedAt { get; init; }
 

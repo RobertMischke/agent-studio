@@ -147,6 +147,11 @@
                       @if (r.executionContext?.cwd) {
                         <span class="exec-context__scalar"><small>cwd</small><code>{{ r.executionContext?.cwd }}</code></span>
                       }
+                      @if (r.executionContext?.contextMode) {
+                        <span class="exec-context__scalar"
+                              [attr.data-testid]="'run-exec-context-mode-' + r.index"
+                              [appTooltip]="r.executionContext?.contextMode === 'clean' ? 'Isolierter Per-Run-Home: nur Prompt + versionierte Repo-Dateien.' : 'Geteilter globaler CLI-Zustand des Operators.'"><small>context</small><code>{{ r.executionContext?.contextMode }}</code></span>
+                      }
                       <span class="exec-context__origin" [appTooltip]="executionSourceLabel(r.executionContext)">
                         {{ r.executionContext?.source }}
                       </span>

@@ -255,6 +255,96 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         Assert.Equal(CliPermissionModes.Yolo, svc.ResolveCliMode("runbook", CliTypes.Copilot).Mode);
     }
 
+    // --- T1b / ASS-1742: per-project / per-task context mode --------------
+
+    [Fact]
+    public void ResolveContextMode_UnconfiguredProject_DefaultsToClean()
+    {
+        var svc = Build();
+
+        var r = svc.ResolveContextMode("new-project", CliTypes.Claude);
+
+        Assert.Equal(CliContextModes.Clean, r.Mode);
+        Assert.Equal(CliContextModeSources.Default, r.Source);
+        Assert.True(r.Supported); // Claude can isolate
+    }
+
+    [Fact]
+    public void ResolveContextMode_SharedOnlyCli_ReportsUnsupported()
+    {
+        var svc = Build();
+
+        var copilot = svc.ResolveContextMode("new-project", CliTypes.Copilot);
+        Assert.False(copilot.Supported);
+
+        var gemini = svc.ResolveContextMode("new-project", CliTypes.Gemini);
+        Assert.False(gemini.Supported);
+    }
+
+    [Fact]
+    public void SetCliContextMode_OverridePersistsAcrossReloadAndIsSourcedToProject()
+    {
+        var svc = Build();
+
+        svc.SetCliContextMode("runbook", CliTypes.Codex, CliContextModes.Shared);
+
+        var reloaded = Build();
+        var r = reloaded.ResolveContextMode("runbook", CliTypes.Codex);
+        Assert.Equal(CliContextModes.Shared, r.Mode);
+        Assert.Equal(CliContextModeSources.Project, r.Source);
+        Assert.True(r.Supported);
+    }
+
+    [Fact]
+    public void SetCliContextMode_BlankClearsOverrideRevertingToCleanDefault()
+    {
+        var svc = Build();
+        svc.SetCliContextMode("runbook", CliTypes.Claude, CliContextModes.Shared);
+        Assert.Equal(CliContextModeSources.Project, svc.ResolveContextMode("runbook", CliTypes.Claude).Source);
+
+        svc.SetCliContextMode("runbook", CliTypes.Claude, null);
+
+        var r = svc.ResolveContextMode("runbook", CliTypes.Claude);
+        Assert.Equal(CliContextModes.Clean, r.Mode);
+        Assert.Equal(CliContextModeSources.Default, r.Source);
+        Assert.Null(svc.Get("runbook").CliContextModes);
+    }
+
+    [Fact]
+    public void ResolveContextMode_TaskOverrideBeatsProjectOverride()
+    {
+        var svc = Build();
+        svc.SetCliContextMode("runbook", CliTypes.Codex, CliContextModes.Shared);
+
+        // Task asks clean explicitly -> wins over the project's shared override.
+        var r = svc.ResolveContextMode("runbook", CliTypes.Codex, taskOverride: CliContextModes.Clean);
+
+        Assert.Equal(CliContextModes.Clean, r.Mode);
+        Assert.Equal(CliContextModeSources.Task, r.Source);
+    }
+
+    [Fact]
+    public void ResolveContextMode_BlankTaskOverrideFallsThroughToProject()
+    {
+        var svc = Build();
+        svc.SetCliContextMode("runbook", CliTypes.Codex, CliContextModes.Shared);
+
+        var r = svc.ResolveContextMode("runbook", CliTypes.Codex, taskOverride: "   ");
+
+        Assert.Equal(CliContextModes.Shared, r.Mode);
+        Assert.Equal(CliContextModeSources.Project, r.Source);
+    }
+
+    [Fact]
+    public void SetCliContextMode_UnknownCli_IsIgnored()
+    {
+        var svc = Build();
+
+        svc.SetCliContextMode("runbook", "not-a-cli", CliContextModes.Shared);
+
+        Assert.Null(svc.Get("runbook").CliContextModes);
+    }
+
     [Fact]
     public void SetPipelineStepOrder_NormalizesAndPersistsAcrossReload()
     {

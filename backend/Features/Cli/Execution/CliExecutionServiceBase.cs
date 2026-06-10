@@ -281,6 +281,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         string? thinkingLevel = null,
         string? jobFolderPath = null,
         string? permissionMode = null,
+        string? contextMode = null,
         CancellationToken ct = default)
     {
         if (_processes.TryGetValue(jobKey, out var existing))
@@ -378,6 +379,29 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             psi.Environment["JOB_RESULTS_DIR"]            = Path.Combine(jobFolderPath, "results");
         }
 
+        // T1b (ASS-1742): clean context. When the run resolves to CLEAN and this
+        // adapter supports it, seed a fresh per-run config home and point the CLI
+        // at it via its own env override (CLAUDE_CONFIG_DIR / CODEX_HOME). The
+        // child then loads only the seeded auth + base config, not the operator's
+        // accumulated session history / memory. Repo AGENTS.md / CLAUDE.md stay
+        // active because they live in the checkout, not the home. The preparation
+        // is stamped on ProcInfo below and disposed (temp home torn down) when
+        // the run's tracking entry is evicted. A null result (shared-only backend
+        // or temp-home creation failure) silently falls back to a shared run.
+        CleanContextPreparation? cleanContext = null;
+        if (CliContextModes.Normalize(contextMode) == CliContextModes.Clean && SupportsCleanContext)
+        {
+            cleanContext = PrepareCleanContext(workingDirectory);
+            if (cleanContext != null)
+            {
+                foreach (var kv in cleanContext.EnvOverrides)
+                    psi.Environment[kv.Key] = kv.Value;
+                _logger.LogInformation(
+                    "{Cli} clean context for job {JobId}: isolated home at {Home}",
+                    CliType, jobId, cleanContext.TempHome);
+            }
+        }
+
         AgentGitCommandGuard.Apply(psi);
 
         ChildHandle child;
@@ -414,6 +438,10 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to start {Cli} CLI for job {JobId}", CliType, jobId);
+            // The run never reached ProcInfo, so the eviction-time dispose will
+            // never fire — tear the clean home down here so a spawn failure
+            // doesn't leak a temp dir.
+            cleanContext?.Dispose();
             return (null, $"Failed to start {CliType} CLI: {ex.Message}");
         }
         var process = child.Process;
@@ -438,7 +466,9 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             LastStreamedAt = execution.StartedAt,
             KillOverride = child.KillOverride,
             ChildStdin = child.Stdin,
-            PermissionMode = permissionMode
+            PermissionMode = permissionMode,
+            ContextMode = CliContextModes.Normalize(contextMode),
+            CleanContext = cleanContext
         };
         try { info.OutputLog.Reset(); }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log dir {Path}", logDir); }
@@ -658,22 +688,44 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         => _processes.TryGetValue(jobKey, out var info) ? BuildConventionContext(info) : null;
 
     /// <summary>
+    /// T1b (ASS-1742): shared-only by default. Claude / Codex override this to
+    /// true and provide a real <see cref="PrepareCleanContext"/>. Re-declared
+    /// here (not just inherited as a default interface member) so the base
+    /// <c>StartAsync</c> can read it through <c>this</c>.
+    /// </summary>
+    public virtual bool SupportsCleanContext => false;
+
+    /// <inheritdoc cref="ICliExecutionService.PrepareCleanContext" />
+    public virtual CleanContextPreparation? PrepareCleanContext(string workingDirectory) => null;
+
+    /// <summary>
     /// Build the convention-only context for a tracked run. Shared by the base
     /// <see cref="DescribeContextSources"/> and the Claude override (which adds
     /// init-frame data on top). The scalar permission mode is the
     /// platform mode the runner resolved, surfaced via its display name.
     /// </summary>
     protected AgentStudio.Shared.CliExecutionContext BuildConventionContext(ProcInfo info)
-        => new()
+    {
+        var clean = info.CleanContext;
+        // Under clean the home-rooted convention probes (~/.claude, ~/.codex)
+        // no longer reflect what the run loaded — the CLI read the temp home
+        // instead. Skip them (home=null) and surface the temp paths from the
+        // preparation so the panel shows the isolated home, not the operator's.
+        var home = clean != null ? null : ResolveUserHome();
+        var sources = CliContextConventions.For(CliType, info.WorkingDirectory, home);
+        if (clean != null) sources.AddRange(clean.Sources);
+        return new()
         {
             Cli = CliType,
             Model = info.Execution.Model,
             PermissionMode = info.PermissionMode is { } m ? CliPermissionModes.DisplayName(m) : null,
             Cwd = info.WorkingDirectory,
+            ContextMode = info.ContextMode,
             CapturedAt = DateTime.UtcNow,
             Source = "convention",
-            Sources = CliContextConventions.For(CliType, info.WorkingDirectory, ResolveUserHome()),
+            Sources = sources,
         };
+    }
 
     /// <summary>
     /// The user-profile home used to root the convention probes
@@ -1051,6 +1103,11 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 {
                     removed.OutputLog.Dispose();
                     try { removed.SessionLiveness?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:1009"); }
+                    // T1b: tear down the run's isolated clean-context home. Tied
+                    // to eviction (not OnFinished) because DescribeContextSources
+                    // runs asynchronously after finish and must still see the
+                    // temp paths intact (Exists=true) for the retention window.
+                    try { removed.CleanContext?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: clean-context dispose"); }
                 }
             });
         }
@@ -1520,6 +1577,22 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         /// runner injected no explicit mode (defer to the CLI's global config).
         /// </summary>
         public string? PermissionMode { get; set; }
+
+        /// <summary>
+        /// Resolved context mode for this run (T1b / ASS-1742): <c>clean</c> or
+        /// <c>shared</c>. Captured at spawn so <c>DescribeContextSources</c> can
+        /// report it on the execution-context panel.
+        /// </summary>
+        public string? ContextMode { get; set; }
+
+        /// <summary>
+        /// The run's isolated clean-context home (T1b), when CLEAN was resolved
+        /// and this CLI supports it. Owns the per-run temp config home; disposed
+        /// on ProcInfo eviction so the temp dir's lifetime spans the full
+        /// retention window (including the async DescribeContextSources read).
+        /// Null for shared runs and shared-only CLIs.
+        /// </summary>
+        public CleanContextPreparation? CleanContext { get; init; }
 
         /// <summary>
         /// For Claude: the parsed stream-json init frame (model, cwd,

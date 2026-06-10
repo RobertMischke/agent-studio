@@ -424,6 +424,59 @@
         <strong>default</strong>). Changes take effect on the next task run without a backend restart.
       </p>
     </section>
+
+    <section class="proj-detail__group">
+      <h3>CLI context modes</h3>
+      <p class="proj-detail__hint" data-testid="project-detail-cli-context-mode-recommendation">
+        Empfehlung: clean - der Run sieht nur Prompt + versionierte Repo-Dateien; reproduzierbar. shared nur bewusst waehlen.
+      </p>
+      <div class="proj-detail__cli-modes" data-testid="project-detail-cli-context-modes">
+        @for (row of cliContextModeRows(); track row.cliType) {
+          <div class="proj-detail__cli-row"
+               [attr.data-testid]="'cli-context-mode-row-' + row.cliType">
+            <span class="proj-detail__cli-name">
+              <span class="proj-detail__cli-icon" aria-hidden="true">{{ row.icon }}</span>
+              {{ row.label }}
+            </span>
+            <span class="proj-detail__cli-source"
+                  [attr.data-testid]="'cli-context-mode-source-' + row.cliType"
+                  [class.proj-detail__cli-source--project]="row.source === 'project'"
+                  [appTooltip]="cliContextSourceHint(row.source)">{{ cliContextSourceLabel(row.source) }}</span>
+            @if (row.supported) {
+              <select class="proj-detail__cli-select"
+                      [attr.data-testid]="'cli-context-mode-select-' + row.cliType"
+                      [appTooltip]="cliContextModeHint(cliContextModeDraft[row.cliType])"
+                      [disabled]="cliContextModeBusy[row.cliType]"
+                      [(ngModel)]="cliContextModeDraft[row.cliType]"
+                      (ngModelChange)="onCliContextModeChange(row.cliType)">
+                @for (mode of cliContextModeAvailable(); track mode) {
+                  <option [value]="mode">{{ cliContextModeLabel(mode) }}</option>
+                }
+              </select>
+              @if (row.source === 'project') {
+                <button type="button"
+                        class="proj-detail__cli-reset"
+                        [attr.data-testid]="'cli-context-mode-reset-' + row.cliType"
+                        [disabled]="cliContextModeBusy[row.cliType]"
+                        [appTooltip]="'Projekt-Override loeschen und auf den Plattform-Default (clean) zuruecksetzen.'"
+                        (click)="resetCliContextMode(row.cliType)">Reset</button>
+              }
+            } @else {
+              <span class="proj-detail__cli-shared-only"
+                    [attr.data-testid]="'cli-context-mode-shared-only-' + row.cliType"
+                    [appTooltip]="'Dieses CLI bietet keine Home-Umleitung — laeuft immer shared (im T1a-Panel sichtbar).'">shared-only</span>
+            }
+          </div>
+        }
+      </div>
+      <p class="proj-detail__hint">
+        Steuert, ob ein Run den isolierten <strong>clean</strong>-Home (nur Prompt + versionierte
+        Repo-Dateien, reproduzierbar) oder den <strong>shared</strong>-Zustand des Operators
+        (Session-Historie, Memory) sieht. Repo-Anweisungsdateien (AGENTS.md / CLAUDE.md) bleiben in
+        beiden Modi aktiv. CLIs ohne Home-Umleitung sind shared-only. Aenderungen greifen beim
+        naechsten Task-Run ohne Backend-Neustart.
+      </p>
+    </section>
   }
 
   @if (view() === 'orchestrator') {

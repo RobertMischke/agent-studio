@@ -125,6 +125,41 @@ If the CLI emits plain text already in a parser-friendly shape, `TransformReadLi
 
 **New CLI note.** The convention branch in `CliContextConventions.For` is the only thing a new sessionless/init-frame-less CLI needs; add its memory-file name and config-path conventions there. A driver that emits its own startup frame can override `DescribeContextSources` like Claude does.
 
+### 2.9 Context mode — clean vs. shared (per-run isolation)
+
+**Contract.** A run executes in one of two **context modes** (T1b / ASS-1742):
+
+- **`clean`** (the default for coding runs) — the run sees only the prompt plus the versioned repository files (`AGENTS.md` / `CLAUDE.md` and friends, which are committed and live in the working tree). It does **not** see the operator's accumulated global CLI state: user-level memory, prior session transcripts, or scratch config. This makes a run reproducible — two operators on the same commit get the same context.
+- **`shared`** — the run reuses the operator's global CLI state (whatever lives under `~/.claude`, `~/.codex`, …). Pick it deliberately when a run is *meant* to lean on accumulated local context.
+
+`clean` is **not a CLI flag** — no supported CLI exposes "ignore my global state" as a switch. Each adapter implements it by relocating the CLI's whole config home to a freshly created per-run temp directory, seeding only the auth + base-config files the CLI needs to run, and pointing the CLI at that temp home via an environment override. Repo instruction files are untouched in both modes because they live in the working tree, not the config home.
+
+**Per-CLI mechanism.**
+
+| CLI | `SupportsCleanContext` | Mechanism | Seeded into the temp home |
+|-----|:---:|-----------|---------------------------|
+| Claude | ✅ | `CLAUDE_CONFIG_DIR` → per-run temp dir | `.credentials.json`, `settings.json` (excludes `CLAUDE.md`, `projects/`) |
+| Codex | ✅ | `CODEX_HOME` → per-run temp dir | `auth.json`, `config.toml` (excludes `history.jsonl`) |
+| Copilot | ❌ shared-only | `~/.copilot` is hardcoded with no env override | — |
+| Gemini / Antigravity | ❌ shared-only | agentapi driver exposes no documented home override | — |
+
+A CLI with no isolation mechanism honestly **declares `shared-only`** (`SupportsCleanContext => false`). A run that requested `clean` against a shared-only CLI is stamped `contextMode = "shared"` so the read-only Execution Context panel (§2.8) shows the truth rather than a mode the CLI couldn't honor.
+
+**Auth is the adapter's duty.** Seeding only auth + base config (never history/memory) is what lets a clean run still log in. If auth comes from an env var instead (`ANTHROPIC_API_KEY`), a missing seed file is non-fatal — the clean home is still created and the env override still points at it.
+
+**Lifetime.** The per-run temp home is owned by the run's `ProcInfo` and torn down when that is evicted (not at process exit), so the async `DescribeContextSources` call at run-finish can still read the seeded paths. Teardown is best-effort and idempotent.
+
+**Configuration & resolution.** Context mode is set per project (with an optional per-task override), defaulting to `clean`. Resolution precedence is **task override → project setting → `clean` default**, narrowed to `shared` when the resolved CLI is shared-only. Project endpoints: `GET/PUT /api/projects/{name}/cli-context-mode(s)`; the project-detail settings UI carries the recommendation verbatim: *"Empfehlung: clean - der Run sieht nur Prompt + versionierte Repo-Dateien; reproduzierbar. shared nur bewusst waehlen."*
+
+**Code.**
+- Vocabulary + resolution: [`CliContextModes`](../backend/Shared/Models/CliContextModes.cs) (`Normalize` defaults to `clean`, `SupportsClean`), [`ProjectSettingsService`](../backend/Features/Projects/ProjectSettingsService.cs) (`SetCliContextMode` / `ResolveContextMode`).
+- Per-run preparer + handle: [`CleanContextPreparer` / `CleanContextPreparation`](../backend/Features/Cli/Execution/CleanContextPreparation.cs) (`PrepareClaude` / `PrepareCodex` return a disposable preparation that owns the temp home).
+- Adapter hook + env injection: `SupportsCleanContext` / `PrepareCleanContext` on [`CliExecutionServiceBase`](../backend/Features/Cli/Execution/CliExecutionServiceBase.cs) (clean home built and env overrides applied in `StartAsync`); Claude / Codex overrides in their adapters.
+
+**Test.** `CliContextModesTests` (vocabulary defaults + `SupportsClean` matrix; `CleanContextPreparer` seeds only the allow-listed files, sets the right env var, surfaces the temp paths as sources, and tears the home down on dispose) and `ProjectSettingsServiceTests` (resolution precedence, shared-only reporting, override persistence) cover the policy + isolation path.
+
+**New CLI note.** Default a new CLI to **shared-only** (inherit the base `SupportsCleanContext => false`). Implement `clean` only when the CLI has a real config-home env override (like `CLAUDE_CONFIG_DIR` / `CODEX_HOME`): add a `PrepareXxx` to `CleanContextPreparer` that seeds only auth + base config, then override `SupportsCleanContext => true` and `PrepareCleanContext` on the adapter. Never fake `clean` by passing a flag the CLI doesn't honor — declaring shared-only honestly is correct.
+
 ---
 
 ## 3. Currently supported CLIs
@@ -235,6 +270,7 @@ Use this as a PR template. Tick each box; missing items must be justified in sec
 - [ ] Add it to [`CliRouter`](../backend/Services/Cli/CliRouter.cs)'s constructor and dispatch table.
 - [ ] Add a `BuildXxxProjects()` branch in [`SessionRegistry`](../backend/Services/Cli/SessionRegistry.cs) — return `[]` if the CLI has no on-disk sessions.
 - [ ] Add a `Xxx(cwd, home)` branch in [`CliContextConventions`](../backend/Features/Cli/Execution/CliContextConventions.cs) for the read-only execution-context surface (§2.8) — the CLI's memory-file name and config-path conventions. Override `DescribeContextSources` only if the CLI emits its own startup frame.
+- [ ] Decide the **context mode** support (§2.9): leave the base `SupportsCleanContext => false` (shared-only) unless the CLI has a real config-home env override. If it does, add a `PrepareXxx` to [`CleanContextPreparer`](../backend/Features/Cli/Execution/CleanContextPreparation.cs) (seed only auth + base config) and override `SupportsCleanContext` / `PrepareCleanContext` on the adapter. Never fake `clean` with a flag the CLI doesn't honor.
 - [ ] Implement `XxxQuotaProbe : QuotaProbeBase` in `backend/Services/Quota/`.
 - [ ] Register the probe: `services.AddSingleton<IQuotaProbe, XxxQuotaProbe>()` in `Program.cs`.
 - [ ] Add a backend xUnit test for `BuildStartInfo` argument composition.

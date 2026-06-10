@@ -146,6 +146,13 @@ export interface TaskInfo {
   /** Whether the agent may use the web during this task. Mirrors backend `AllowWebAccess`. */
   allowWebAccess?: boolean;
   useOwnSession: boolean | null;
+  /**
+   * Per-task context-mode override (T1b / ASS-1742): `'clean'` (isolated
+   * per-run CLI home) or `'shared'` (the operator's global CLI state). Absent /
+   * null means no task override — the run falls back to the project setting and
+   * then the platform default (`clean`). Mirrors backend `TaskInfo.ContextMode`.
+   */
+  contextMode?: string | null;
   lastUsage: SessionUsage | null;
   execution: CliExecution | null;
   commit: TaskCommitInfo | null;

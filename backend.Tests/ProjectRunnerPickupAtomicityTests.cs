@@ -157,6 +157,7 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
             string? thinkingLevel = null,
             string? jobFolderPath = null,
             string? permissionMode = null,
+            string? contextMode = null,
             CancellationToken ct = default)
         {
             StartCalled = true;

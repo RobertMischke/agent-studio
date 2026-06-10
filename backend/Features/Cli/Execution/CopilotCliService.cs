@@ -128,7 +128,7 @@ public class CopilotCliService : ICliExecutionService
         return available;
     }
 
-    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, string? sessionName = null, bool resumeSession = false, string? model = null, string? thinkingLevel = null, string? jobFolderPath = null, string? permissionMode = null, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, string? sessionName = null, bool resumeSession = false, string? model = null, string? thinkingLevel = null, string? jobFolderPath = null, string? permissionMode = null, string? contextMode = null, CancellationToken ct = default)
     {
         if (_processes.TryGetValue(jobKey, out var existing))
         {
@@ -183,7 +183,10 @@ public class CopilotCliService : ICliExecutionService
         {
             OutputLogPath = outputLogDir,
             OutputLog = new RunLogStore(outputLogDir),
-            PermissionMode = permissionMode
+            PermissionMode = permissionMode,
+            // Copilot is shared-only (no config-home redirect), so the
+            // effective context mode is always shared even if clean was asked.
+            ContextMode = AgentStudio.Shared.CliContextModes.Shared
         };
         try { info.OutputLog.Reset(); }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log dir {Path}", outputLogDir); }
@@ -393,6 +396,7 @@ public class CopilotCliService : ICliExecutionService
             Model = info.Execution.Model,
             PermissionMode = info.PermissionMode is { } m ? AgentStudio.Shared.CliPermissionModes.DisplayName(m) : null,
             Cwd = info.WorkingDirectory,
+            ContextMode = info.ContextMode,
             CapturedAt = DateTime.UtcNow,
             Source = "convention",
             Sources = CliContextConventions.For(CliType, info.WorkingDirectory, home),
@@ -865,6 +869,8 @@ public class CopilotCliService : ICliExecutionService
         public AgentStudio.Shared.RunStopReason StopReason { get; set; } = AgentStudio.Shared.RunStopReason.None;
         /// <summary>Resolved platform permission mode for the run (ASS-1739 / T1a).</summary>
         public string? PermissionMode { get; set; }
+        /// <summary>Effective context mode for the run (T1b / ASS-1742). Always shared for Copilot.</summary>
+        public string? ContextMode { get; set; }
 
         public CliProcessInfo(Process process, CliExecution execution, string workingDirectory)
         {

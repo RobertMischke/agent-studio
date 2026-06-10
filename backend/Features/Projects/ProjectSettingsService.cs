@@ -548,6 +548,81 @@ public class ProjectSettingsService
         };
     }
 
+    /// <summary>
+    /// Sets the per-project context mode for one CLI
+    /// (<see cref="ProjectSettings.CliContextModes"/>). A null / empty / unknown
+    /// <paramref name="mode"/> clears the override so the CLI reverts to the
+    /// platform default (CLEAN). Invalid CLI ids are ignored. T1b / ASS-1742.
+    /// </summary>
+    public void SetCliContextMode(string projectName, string cliType, string? mode)
+    {
+        if (!CliTypes.IsValid(cliType)) return;
+        EnsureLoaded();
+        var cli = CliTypes.Normalize(cliType);
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var map = current.CliContextModes is null
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(current.CliContextModes, StringComparer.OrdinalIgnoreCase);
+
+            // Empty/unknown mode clears the override (revert to default CLEAN). A
+            // valid mode is stored canonically so only known ids land on disk.
+            if (string.IsNullOrWhiteSpace(mode) || !CliContextModes.IsValid(mode))
+                map.Remove(cli);
+            else
+                map[cli] = CliContextModes.Normalize(mode);
+
+            _cache[projectName] = current with { CliContextModes = map.Count == 0 ? null : map };
+            Persist();
+        }
+        _logger.LogInformation("CLI context mode for {Cli} set to {Mode} for project {Project}",
+            cli, string.IsNullOrWhiteSpace(mode) ? "(default)" : CliContextModes.Normalize(mode), projectName);
+    }
+
+    /// <summary>
+    /// Resolves the effective context mode for one CLI in one project / task.
+    /// Order: explicit per-task override → per-project override → platform
+    /// default (CLEAN). The resolution carries whether the CLI can actually
+    /// isolate persistent state (<see cref="CliContextModes.SupportsClean"/>);
+    /// a clean selection on a shared-only CLI still resolves to clean here but
+    /// the adapter runs it shared (and says so in the T1a panel). T1b / ASS-1742.
+    /// </summary>
+    public CliContextModeResolution ResolveContextMode(string projectName, string? cliType, string? taskOverride = null)
+    {
+        var cli = CliTypes.Normalize(cliType);
+        var supported = CliContextModes.SupportsClean(cli);
+
+        if (!string.IsNullOrWhiteSpace(taskOverride) && CliContextModes.IsValid(taskOverride))
+            return new CliContextModeResolution
+            {
+                CliType = cli,
+                Mode = CliContextModes.Normalize(taskOverride),
+                Source = CliContextModeSources.Task,
+                Supported = supported,
+            };
+
+        var settings = Get(projectName);
+        if (settings.CliContextModes != null
+            && settings.CliContextModes.TryGetValue(cli, out var configured)
+            && CliContextModes.IsValid(configured))
+            return new CliContextModeResolution
+            {
+                CliType = cli,
+                Mode = CliContextModes.Normalize(configured),
+                Source = CliContextModeSources.Project,
+                Supported = supported,
+            };
+
+        return new CliContextModeResolution
+        {
+            CliType = cli,
+            Mode = CliContextModes.Clean,
+            Source = CliContextModeSources.Default,
+            Supported = supported,
+        };
+    }
+
     private static readonly Regex CodexSandboxModeRegex = new(
         "sandbox_mode\\s*=\\s*\"(?<mode>[a-z-]+)\"",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);

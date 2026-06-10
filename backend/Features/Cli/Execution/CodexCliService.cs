@@ -57,6 +57,18 @@ public sealed class CodexCliService : CliExecutionServiceBase
         _logger.LogInformation("Codex CLI path set to: {Path}", GetCliPath());
     }
 
+    /// <summary>
+    /// T1b (ASS-1742): Codex isolates clean runs via <c>CODEX_HOME</c>, which
+    /// relocates the whole <c>~/.codex</c> home (auth, config, sessions,
+    /// history) to a per-run temp dir. <see cref="PrepareCleanContext"/> seeds
+    /// only the auth token + base config so auth still works while the run sees
+    /// no leftover session history.
+    /// </summary>
+    public override bool SupportsCleanContext => true;
+
+    public override CleanContextPreparation? PrepareCleanContext(string workingDirectory)
+        => CleanContextPreparer.PrepareCodex(ResolveUserHome(), _logger);
+
     protected override ProcessStartInfo BuildStartInfo(
         string prompt,
         string workingDirectory,
