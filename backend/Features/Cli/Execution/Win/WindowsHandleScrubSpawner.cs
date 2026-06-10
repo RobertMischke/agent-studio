@@ -216,7 +216,7 @@ internal static class WindowsHandleScrubSpawner
             Action killTree = () =>
             {
                 try { TerminateProcessTree(rawPid); }
-                catch { /* best-effort */ }
+                catch (Exception __ex) { SilentCatch.Note(__ex, "WindowsHandleScrubSpawner: best-effort"); /* best-effort */ }
                 finally { CloseHandle(rawHandle); }
             };
 
@@ -249,7 +249,7 @@ internal static class WindowsHandleScrubSpawner
             });
             killer?.WaitForExit(2000);
         }
-        catch { /* swallow */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "WindowsHandleScrubSpawner: swallow"); /* swallow */ }
     }
 
     /// <summary>Build a command line string with Win32 argv quoting rules (same as ProcessStartInfo.ArgumentList).</summary>

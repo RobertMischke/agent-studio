@@ -498,7 +498,7 @@ public sealed class AspectRunnerService
             await p.StandardInput.WriteAsync(prompt.AsMemory(), ct);
             p.StandardInput.Close();
         }
-        catch { /* CLI may have closed stdin already */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "AspectRunnerService: CLI may have closed stdin already"); /* CLI may have closed stdin already */ }
 
         var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -510,7 +510,7 @@ public sealed class AspectRunnerService
         }
         catch (OperationCanceledException)
         {
-            try { p.Kill(true); } catch { }
+            try { p.Kill(true); } catch (Exception __ex) { SilentCatch.Note(__ex, "AspectRunnerService:513"); }
             return string.Empty;
         }
     }

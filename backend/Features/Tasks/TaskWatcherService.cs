@@ -91,7 +91,7 @@ public class TaskWatcherService : BackgroundService
 
         stoppingToken.Register(() =>
         {
-            foreach (var w in _watchers) { try { w.Dispose(); } catch { } }
+            foreach (var w in _watchers) { try { w.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "TaskWatcherService:94"); } }
             _watchers.Clear();
         });
 

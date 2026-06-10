@@ -109,8 +109,9 @@ public sealed class TimelineLog
                 var evt = JsonSerializer.Deserialize<TimelineEvent>(line, ReadOpts);
                 if (evt != null) result.Add(evt);
             }
-            catch
+            catch (Exception __ex)
             {
+                SilentCatch.Note(__ex, "TimelineLog: Best-effort: skip torn / malformed lines.");
                 // Best-effort: skip torn / malformed lines.
             }
         }

@@ -286,7 +286,7 @@ public sealed class MetaCycleHostedService : BackgroundService
             var logPath = Path.Combine(job.FolderPath, "logs", "cli-output.log");
             if (File.Exists(logPath) && new FileInfo(logPath).Length > 0) return true;
         }
-        catch { /* swallow; observation is best-effort */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "MetaCycleHostedService: swallow; observation is best-effort"); /* swallow; observation is best-effort */ }
         return false;
     }
 
@@ -316,7 +316,7 @@ public sealed class MetaCycleHostedService : BackgroundService
                 }
             }
         }
-        catch { /* best-effort */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "MetaCycleHostedService: best-effort"); /* best-effort */ }
 
         // 2. Advisories at or above threshold since the last cycle
         var advisorySummary = ReadAdvisoriesSince(workspace, project, state.LastCycleAt, config.AdvisorySeverityThreshold);
@@ -386,7 +386,7 @@ public sealed class MetaCycleHostedService : BackgroundService
                 if (!topics.Contains(adv.Topic)) topics.Add(adv.Topic);
             }
         }
-        catch { /* best-effort */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "MetaCycleHostedService: best-effort"); /* best-effort */ }
         return new MetaCycleAdvisorySummary(count, topics);
     }
 

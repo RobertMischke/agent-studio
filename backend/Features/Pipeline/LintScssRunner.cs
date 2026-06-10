@@ -199,7 +199,7 @@ public sealed class LintScssRunner : ILintScssRunner
         }
         catch (OperationCanceledException)
         {
-            try { p.Kill(entireProcessTree: true); } catch { /* best effort */ }
+            try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "LintScssRunner: best effort"); /* best effort */ }
             return (null, $"stylelint timed out after {timeout.TotalSeconds:F0}s");
         }
     }

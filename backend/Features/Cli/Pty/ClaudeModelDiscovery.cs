@@ -125,7 +125,7 @@ public sealed class ClaudeModelDiscovery
 
         await pty.WaitForIdleAsync(idleMs: 700, timeoutMs: 3000, ct);
         var snapshot = pty.SnapshotStripped();
-        try { await pty.SendKeysAsync("<Esc>", ct); } catch { }
+        try { await pty.SendKeysAsync("<Esc>", ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "ClaudeModelDiscovery:128"); }
 
         var discovered = ParsePickerSnapshot(snapshot);
         if (discovered.Count == 0)

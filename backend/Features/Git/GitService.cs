@@ -704,7 +704,7 @@ public class GitService
             var abs = Path.Combine(root, path);
             if (File.Exists(abs))
             {
-                try { return new GitDiffLookupResult(true, File.ReadAllText(abs), null); } catch { /* best-effort */ }
+                try { return new GitDiffLookupResult(true, File.ReadAllText(abs), null); } catch (Exception __ex) { SilentCatch.Note(__ex, "GitService: best-effort"); /* best-effort */ }
             }
         }
         return new GitDiffLookupResult(true, output, null);
@@ -2733,7 +2733,7 @@ public class GitService
             var se = p.StandardError.ReadToEnd();
             if (!p.WaitForExit(30_000))
             {
-                try { p.Kill(true); } catch { }
+                try { p.Kill(true); } catch (Exception __ex) { SilentCatch.Note(__ex, "GitService:2736"); }
                 return ("", "git timed out", -1);
             }
             return (so, se, p.ExitCode);

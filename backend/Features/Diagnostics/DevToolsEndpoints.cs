@@ -211,8 +211,9 @@ public static class DevToolsEndpoints
             await Task.WhenAll(pumpTasks);
             await WriteSseAsync(http, "done", $"exit code {proc.ExitCode}", ct);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException __ex)
         {
+            SilentCatch.Note(__ex, "DevToolsEndpoints: Do NOT kill the child. The most common cancellation cause here is");
             // Do NOT kill the child. The most common cancellation cause here is
             // the script restarting THIS backend (when run from the same
             // checkout that the script targets). Killing the tree would kill
@@ -257,7 +258,7 @@ public static class DevToolsEndpoints
                 await WriteSseAsync(http, kind, line, ct);
             }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException __ex) { SilentCatch.Note(__ex, "DevToolsEndpoints:260"); }
     }
 
     private static async Task WriteSseAsync(HttpContext http, string evt, string data, CancellationToken ct)

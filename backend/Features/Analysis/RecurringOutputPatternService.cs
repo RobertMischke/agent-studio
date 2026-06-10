@@ -357,8 +357,9 @@ public sealed class RecurringOutputPatternService
                 updatedAt = parsed;
             }
         }
-        catch (JsonException)
+        catch (JsonException __ex)
         {
+            SilentCatch.Note(__ex, "RecurringOutputPatternService: Malformed task.json: keep defaults; the job still surfaces with");
             // Malformed task.json: keep defaults; the job still surfaces with
             // its folder id so the agent can flag it.
         }
@@ -476,7 +477,7 @@ public sealed class RecurringOutputPatternService
                 }
             }
         }
-        catch { /* best-effort */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "RecurringOutputPatternService: best-effort"); /* best-effort */ }
         return false;
     }
 

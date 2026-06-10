@@ -408,8 +408,9 @@ public class ProjectDocsService
                     return trimmed[2..].Trim();
             }
         }
-        catch
+        catch (Exception __ex)
         {
+            SilentCatch.Note(__ex, "ProjectDocsService: Unreadable file: fall back to the file name in the caller.");
             // Unreadable file: fall back to the file name in the caller.
         }
         return null;

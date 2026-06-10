@@ -139,8 +139,9 @@ public sealed class BusAggregationCache
                 }
             }
         }
-        catch
+        catch (Exception __ex)
         {
+            SilentCatch.Note(__ex, "BusAggregationCache: Backfill is best-effort; an empty state is fine - future appends");
             // Backfill is best-effort; an empty state is fine - future appends
             // will populate it. We do not want a startup-time disk hiccup to
             // poison the cache.

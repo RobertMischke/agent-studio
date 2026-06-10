@@ -769,8 +769,8 @@ public sealed class SoftwareArchitectureDriftAnalysisService
                     if (root.TryGetProperty("title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String)
                         title = titleEl.GetString() ?? id;
                 }
-                catch (JsonException) { /* still surface slug */ }
-                try { touched = Directory.GetLastWriteTimeUtc(dir); } catch { /* best-effort */ }
+                catch (JsonException __ex) { SilentCatch.Note(__ex, "SoftwareArchitectureDriftAnalysisService: still surface slug"); /* still surface slug */ }
+                try { touched = Directory.GetLastWriteTimeUtc(dir); } catch (Exception __ex) { SilentCatch.Note(__ex, "SoftwareArchitectureDriftAnalysisService: best-effort"); /* best-effort */ }
                 entries.Add(new RecentTaskRef(id, title, lane, touched));
             }
         }

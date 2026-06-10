@@ -286,7 +286,7 @@ public class CopilotCliService : ICliExecutionService
     {
         if (_processes.TryGetValue(jobKey, out var info))
         {
-            try { info.OutputLog?.Dispose(); } catch { /* already disposed */ }
+            try { info.OutputLog?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CopilotCliService: already disposed"); /* already disposed */ }
         }
     }
 
@@ -346,8 +346,9 @@ public class CopilotCliService : ICliExecutionService
                     process.Kill(entireProcessTree: true);
                 }
             }
-            catch
+            catch (Exception __ex)
             {
+                SilentCatch.Note(__ex, "CopilotCliService: Best effort timeout cleanup.");
                 // Best effort timeout cleanup.
             }
 
@@ -406,7 +407,7 @@ public class CopilotCliService : ICliExecutionService
                 OnOutput?.Invoke(jobKey, outputLine);
             }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException __ex) { SilentCatch.Note(__ex, "CopilotCliService:409"); }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error reading {Stream} for job {JobId}", stream, jobKey);
@@ -469,7 +470,7 @@ public class CopilotCliService : ICliExecutionService
 
         var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
         int? exitCode = null;
-        try { exitCode = process.ExitCode; } catch { /* reattached process may deny ExitCode access */ }
+        try { exitCode = process.ExitCode; } catch (Exception __ex) { SilentCatch.Note(__ex, "CopilotCliService: reattached process may deny ExitCode access"); /* reattached process may deny ExitCode access */ }
         var status = OrchestratorApi.Services.Runner.RunStatusClassifier.Classify(exitCode, info.StopReason);
 
         var finalExecution = info.Execution with
@@ -570,7 +571,7 @@ public class CopilotCliService : ICliExecutionService
                         return token;
                     }
                 }
-                catch { /* try next candidate */ }
+                catch (Exception __ex) { SilentCatch.Note(__ex, "CopilotCliService: try next candidate"); /* try next candidate */ }
             }
         }
         catch (Exception ex)
@@ -815,7 +816,7 @@ public class CopilotCliService : ICliExecutionService
                 });
                 _processes[pe.TaskKey] = info;
 
-                try { proc.EnableRaisingEvents = true; } catch { /* best effort */ }
+                try { proc.EnableRaisingEvents = true; } catch (Exception __ex) { SilentCatch.Note(__ex, "CopilotCliService: best effort"); /* best effort */ }
                 _ = MonitorProcessAsync(pe.TaskKey, proc, info, CancellationToken.None);
 
                 OnStarted?.Invoke(pe.TaskKey, execution);

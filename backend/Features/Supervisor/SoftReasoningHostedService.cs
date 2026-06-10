@@ -214,7 +214,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
             await p.StandardInput.WriteAsync(prompt.AsMemory(), ct);
             p.StandardInput.Close();
         }
-        catch { /* stdin may already be closed */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "SoftReasoningHostedService: stdin may already be closed"); /* stdin may already be closed */ }
 
         var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -226,7 +226,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
         }
         catch (OperationCanceledException)
         {
-            try { p.Kill(true); } catch { }
+            try { p.Kill(true); } catch (Exception __ex) { SilentCatch.Note(__ex, "SoftReasoningHostedService:229"); }
             return string.Empty;
         }
     }

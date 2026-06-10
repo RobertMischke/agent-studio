@@ -68,7 +68,7 @@ public abstract class QuotaProbeBase : IQuotaProbe
         }
 
         var snap = pty.SnapshotStripped();
-        try { await pty.SendKeysAsync("<Esc><Esc>", ct); } catch { }
+        try { await pty.SendKeysAsync("<Esc><Esc>", ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "QuotaProbeBase:71"); }
         return snap;
     }
 
@@ -119,7 +119,7 @@ public abstract class QuotaProbeBase : IQuotaProbe
             }
             if (step.PreSendDelayMs > 0)
             {
-                try { await Task.Delay(step.PreSendDelayMs, ct); } catch { }
+                try { await Task.Delay(step.PreSendDelayMs, ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "QuotaProbeBase:122"); }
             }
             if (!string.IsNullOrEmpty(step.SendKeys))
             {
@@ -137,7 +137,7 @@ public abstract class QuotaProbeBase : IQuotaProbe
         }
 
         var snap = pty.SnapshotStripped();
-        try { await pty.SendKeysAsync("<Esc><Esc>", ct); } catch { }
+        try { await pty.SendKeysAsync("<Esc><Esc>", ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "QuotaProbeBase:140"); }
         return snap;
     }
 

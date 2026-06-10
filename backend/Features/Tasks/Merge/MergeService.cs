@@ -620,7 +620,7 @@ public sealed class MergeService
         foreach (var file in Directory.GetFiles(sourceDir))
         {
             try { File.Copy(file, Path.Combine(targetDir, Path.GetFileName(file)), overwrite: true); }
-            catch { /* best-effort */ }
+            catch (Exception __ex) { SilentCatch.Note(__ex, "MergeService: best-effort"); /* best-effort */ }
         }
         foreach (var dir in Directory.GetDirectories(sourceDir))
         {

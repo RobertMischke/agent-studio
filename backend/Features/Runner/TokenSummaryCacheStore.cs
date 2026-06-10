@@ -66,7 +66,7 @@ public sealed class TokenSummaryCacheStore
         var baseDir = !string.IsNullOrWhiteSpace(taskRepo)
             ? Path.Combine(taskRepo, ".runtime")
             : Path.Combine(AppContext.BaseDirectory, "runtime");
-        try { Directory.CreateDirectory(baseDir); } catch { /* best-effort */ }
+        try { Directory.CreateDirectory(baseDir); } catch (Exception __ex) { SilentCatch.Note(__ex, "TokenSummaryCacheStore: best-effort"); /* best-effort */ }
         _path = Path.Combine(baseDir, "token-aggregate-cache.json");
     }
 

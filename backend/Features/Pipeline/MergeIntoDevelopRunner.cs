@@ -84,7 +84,7 @@ public sealed class MergeIntoDevelopRunner
         {
             _logger.LogWarning(ex, "merge-into-develop post-step failed for {JobId}", jobId);
             var errored = MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: ex.Message);
-            try { Record(jobFolderPath, project, jobId, errored, startedAt); } catch { /* recording is best-effort */ }
+            try { Record(jobFolderPath, project, jobId, errored, startedAt); } catch (Exception __ex) { SilentCatch.Note(__ex, "MergeIntoDevelopRunner: recording is best-effort"); /* recording is best-effort */ }
             return errored;
         }
     }

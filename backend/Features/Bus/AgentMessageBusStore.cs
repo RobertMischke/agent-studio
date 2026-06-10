@@ -116,7 +116,7 @@ public sealed class AgentMessageBusStore
         if (sink != null)
         {
             try { sink(workspaceRoot, message); }
-            catch { /* observers are best-effort */ }
+            catch (Exception __ex) { SilentCatch.Note(__ex, "AgentMessageBusStore: observers are best-effort"); /* observers are best-effort */ }
         }
     }
 
@@ -257,7 +257,7 @@ public sealed class AgentMessageBusStore
                 var p = JsonSerializer.Deserialize<AgentParticipant>(raw, JsonOptions);
                 if (p is not null && AgentMessageValidator.TryValidate(p, out _)) list.Add(p);
             }
-            catch { /* skip malformed */ }
+            catch (Exception __ex) { SilentCatch.Note(__ex, "AgentMessageBusStore: skip malformed"); /* skip malformed */ }
         }
         return list;
     }

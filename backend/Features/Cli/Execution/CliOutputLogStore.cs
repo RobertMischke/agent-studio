@@ -188,12 +188,13 @@ public sealed class CliOutputLogStore : IDisposable
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 CliOutputLine? entry = null;
                 try { entry = JsonSerializer.Deserialize<CliOutputLine>(line); }
-                catch { /* trailing partial line from a crash mid-write — skip */ }
+                catch (Exception __ex) { SilentCatch.Note(__ex, "CliOutputLogStore: trailing partial line from a crash mid-write — skip"); /* trailing partial line from a crash mid-write — skip */ }
                 if (entry != null) result.Add(entry);
             }
         }
-        catch
+        catch (Exception __ex)
         {
+            SilentCatch.Note(__ex, "CliOutputLogStore: Read is best-effort on top of best-effort: returning what we");
             // Read is best-effort on top of best-effort: returning what we
             // managed to parse is strictly better than failing the request.
         }
@@ -228,7 +229,7 @@ public sealed class CliOutputLogStore : IDisposable
 
     private void CloseStream()
     {
-        try { _stream?.Dispose(); } catch { /* already broken */ }
+        try { _stream?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliOutputLogStore: already broken"); /* already broken */ }
         _stream = null;
     }
 }

@@ -64,7 +64,7 @@ public sealed class RunLogStore : IDisposable
         // with an open handle).
         foreach (var store in _byStream.Values)
         {
-            try { store.Dispose(); } catch { /* already broken */ }
+            try { store.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "RunLogStore: already broken"); /* already broken */ }
         }
         _byStream.Clear();
 
@@ -72,7 +72,7 @@ public sealed class RunLogStore : IDisposable
         {
             if (Directory.Exists(_runDir)) Directory.Delete(_runDir, recursive: true);
         }
-        catch { /* best-effort; the per-stream Reset below still truncates each file */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "RunLogStore: best-effort; the per-stream Reset below still truncates each file"); /* best-effort; the per-stream Reset below still truncates each file */ }
 
         Directory.CreateDirectory(_runDir);
     }
@@ -141,8 +141,8 @@ public sealed class RunLogStore : IDisposable
     public static void DeleteRun(string? runDir)
     {
         if (string.IsNullOrEmpty(runDir)) return;
-        try { if (Directory.Exists(runDir)) Directory.Delete(runDir, recursive: true); } catch { }
-        try { var legacy = runDir + ".jsonl"; if (File.Exists(legacy)) File.Delete(legacy); } catch { }
+        try { if (Directory.Exists(runDir)) Directory.Delete(runDir, recursive: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "RunLogStore:144"); }
+        try { var legacy = runDir + ".jsonl"; if (File.Exists(legacy)) File.Delete(legacy); } catch (Exception __ex) { SilentCatch.Note(__ex, "RunLogStore:145"); }
     }
 
     public void Dispose()
@@ -151,7 +151,7 @@ public sealed class RunLogStore : IDisposable
         _disposed = true;
         foreach (var store in _byStream.Values)
         {
-            try { store.Dispose(); } catch { /* already broken */ }
+            try { store.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "RunLogStore: already broken"); /* already broken */ }
         }
         _byStream.Clear();
     }

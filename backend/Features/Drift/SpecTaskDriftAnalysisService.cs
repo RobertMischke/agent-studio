@@ -501,13 +501,14 @@ public sealed class SpecTaskDriftAnalysisService
             if (root.TryGetProperty("title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String)
                 title = titleEl.GetString() ?? id;
         }
-        catch (JsonException)
+        catch (JsonException __ex)
         {
+            SilentCatch.Note(__ex, "SpecTaskDriftAnalysisService: Malformed task.json - still surface the slug so the queue is visible.");
             // Malformed task.json - still surface the slug so the queue is visible.
         }
 
         try { touched = Directory.GetLastWriteTimeUtc(dir); }
-        catch { /* best-effort */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "SpecTaskDriftAnalysisService: best-effort"); /* best-effort */ }
 
         var promptExcerpt = ReadPromptExcerpt(dir);
         var hasStatus = File.Exists(Path.Combine(dir, "status.md"));
@@ -534,10 +535,10 @@ public sealed class SpecTaskDriftAnalysisService
             if (root.TryGetProperty("title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String)
                 title = titleEl.GetString() ?? id;
         }
-        catch (JsonException) { /* surface slug regardless */ }
+        catch (JsonException __ex) { SilentCatch.Note(__ex, "SpecTaskDriftAnalysisService: surface slug regardless"); /* surface slug regardless */ }
 
         try { touched = Directory.GetLastWriteTimeUtc(dir); }
-        catch { /* best-effort */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "SpecTaskDriftAnalysisService: best-effort"); /* best-effort */ }
 
         return new TaskRef(id, title, lane, touched);
     }

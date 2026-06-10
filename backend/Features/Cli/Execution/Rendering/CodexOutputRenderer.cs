@@ -49,7 +49,7 @@ public sealed class CodexOutputRenderer : ICliOutputRenderer
 
         JsonDocument? doc = null;
         try { doc = JsonDocument.Parse(raw.Text); }
-        catch { /* swallow; handled below */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "CodexOutputRenderer: swallow; handled below"); /* swallow; handled below */ }
 
         if (doc == null)
         {

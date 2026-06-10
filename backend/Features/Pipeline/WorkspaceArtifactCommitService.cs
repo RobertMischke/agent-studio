@@ -169,8 +169,9 @@ public sealed class WorkspaceArtifactCommitService
                 using var doc = JsonDocument.Parse(line);
                 if (doc.RootElement.ValueKind == JsonValueKind.Object) count++;
             }
-            catch
+            catch (Exception __ex)
             {
+                SilentCatch.Note(__ex, "WorkspaceArtifactCommitService: Tolerate torn JSONL lines like TaskSessionLog does.");
                 // Tolerate torn JSONL lines like TaskSessionLog does.
             }
         }

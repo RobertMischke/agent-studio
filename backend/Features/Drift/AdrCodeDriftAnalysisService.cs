@@ -478,13 +478,14 @@ public sealed class AdrCodeDriftAnalysisService
                     if (root.TryGetProperty("title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String)
                         title = titleEl.GetString() ?? id;
                 }
-                catch (JsonException)
+                catch (JsonException __ex)
                 {
+                    SilentCatch.Note(__ex, "AdrCodeDriftAnalysisService: Malformed task.json: still surface the slug as evidence.");
                     // Malformed task.json: still surface the slug as evidence.
                 }
 
                 try { touched = Directory.GetLastWriteTimeUtc(dir); }
-                catch { /* best-effort */ }
+                catch (Exception __ex) { SilentCatch.Note(__ex, "AdrCodeDriftAnalysisService: best-effort"); /* best-effort */ }
 
                 entries.Add(new RecentTaskRef(id, title, lane, touched));
             }

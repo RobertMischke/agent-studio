@@ -157,7 +157,7 @@ public sealed class CopilotModelDiscovery
         var snapshot = pty.SnapshotStripped();
 
         // Esc out cleanly.
-        try { await pty.SendKeysAsync("<Esc>", ct); } catch { }
+        try { await pty.SendKeysAsync("<Esc>", ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "CopilotModelDiscovery:160"); }
 
         var models = ParsePickerSnapshot(snapshot);
         if (models.Count == 0)

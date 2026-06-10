@@ -825,7 +825,7 @@ public class ProjectRunner
             var pf = Path.Combine(info.FolderPath, "prompt.md");
             if (File.Exists(pf)) text += "\n" + File.ReadAllText(pf);
         }
-        catch { /* best-effort */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "ProjectRunner: best-effort"); /* best-effort */ }
         var scope = ScopePathRegex.Matches(text)
             .Select(m => m.Groups[1].Value)
             .Select(p => { var i = p.LastIndexOf('/'); return i > 0 ? p.Substring(0, i) : p; })
@@ -1031,7 +1031,7 @@ public class ProjectRunner
                     if (integrationHeartbeat != null)
                     {
                         try { await integrationHeartbeat; }
-                        catch (OperationCanceledException) { }
+                        catch (OperationCanceledException __ex) { SilentCatch.Note(__ex, "ProjectRunner:1034"); }
                     }
                     integrationHeartbeatCts.Dispose();
                 }
@@ -1625,7 +1625,7 @@ public class ProjectRunner
             // TaskRunnerService can shape a friendly meta message without
             // re-scanning. Best-effort; null title is fine.
             string? activeTitle = null;
-            try { activeTitle = _scanner.FindJob(_activeJobId!, Entry.Path)?.Title; } catch { }
+            try { activeTitle = _scanner.FindJob(_activeJobId!, Entry.Path)?.Title; } catch (Exception __ex) { SilentCatch.Note(__ex, "ProjectRunner:1628"); }
             return RunOutcome.Reject(new RunRejection(
                 Reason: RunRejectReason.ProjectBusy,
                 Message: $"Runner '{ProjectName}' is already executing job '{_activeJobId}'",
@@ -2436,7 +2436,7 @@ public class ProjectRunner
             _ => new { ts = DateTime.UtcNow, kind = "other" }
         };
         var json = System.Text.Json.JsonSerializer.Serialize(record);
-        try { System.IO.File.AppendAllText(path, json + Environment.NewLine); } catch { /* best-effort */ }
+        try { System.IO.File.AppendAllText(path, json + Environment.NewLine); } catch (Exception __ex) { SilentCatch.Note(__ex, "ProjectRunner: best-effort"); /* best-effort */ }
     }
 
     /// <summary>
@@ -2492,7 +2492,7 @@ public class ProjectRunner
                 if (lastLine != null && SnapshotSignature(lastLine) == sig) return; // unchanged plan
             }
         }
-        catch { /* fall through with seq=1; a torn file should not block a write */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "ProjectRunner: fall through with seq=1; a torn file should not block a write"); /* fall through with seq=1; a torn file should not block a write */ }
 
         var record = new { ts = DateTime.UtcNow, seq, source = evt.Source, items };
         var json = System.Text.Json.JsonSerializer.Serialize(record);
@@ -2719,7 +2719,7 @@ public class ProjectRunner
             sb.AppendLine(text.Length > maxChars ? text[..maxChars] + "\n... [truncated]" : text);
             sb.AppendLine();
         }
-        catch { /* best-effort: missing or unreadable docs are fine */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "ProjectRunner: best-effort: missing or unreadable docs are fine"); /* best-effort: missing or unreadable docs are fine */ }
     }
 
     private static string TruncatePreview(string s, int max)
@@ -3030,7 +3030,7 @@ public class ProjectRunner
                 _chatLog.Append(info, OrchestratorMessageKind.Decision,
                     "[orchestrator] Auto-decision flow crashed; left the agent's question for you.");
             }
-            catch { }
+            catch (Exception __ex) { SilentCatch.Note(__ex, "ProjectRunner:3033"); }
         }
     }
 
@@ -6235,7 +6235,7 @@ public class ProjectRunner
                         if (stamp > maxStamp) maxStamp = stamp;
                         hasAny = true;
                     }
-                    catch { /* skip unreadable files */ }
+                    catch (Exception __ex) { SilentCatch.Note(__ex, "ProjectRunner: skip unreadable files"); /* skip unreadable files */ }
                 }
             }
 
@@ -6248,13 +6248,13 @@ public class ProjectRunner
                     if (stamp > maxStamp) maxStamp = stamp;
                     hasAny = true;
                 }
-                catch { /* skip */ }
+                catch (Exception __ex) { SilentCatch.Note(__ex, "ProjectRunner: skip"); /* skip */ }
             }
 
             if (hasAny) return maxStamp;
             if (Directory.Exists(folder)) return Directory.GetLastWriteTimeUtc(folder);
         }
-        catch { /* best-effort: an unreadable folder sorts to the head */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "ProjectRunner: best-effort: an unreadable folder sorts to the head"); /* best-effort: an unreadable folder sorts to the head */ }
         return DateTime.MinValue.ToUniversalTime();
     }
 
@@ -6720,7 +6720,7 @@ public class ProjectRunner
             }
 
             string? title = null;
-            try { title = _scanner.FindJob(jobId, Entry.Path)?.Title; } catch { /* best-effort */ }
+            try { title = _scanner.FindJob(jobId, Entry.Path)?.Title; } catch (Exception __ex) { SilentCatch.Note(__ex, "ProjectRunner: best-effort"); /* best-effort */ }
             _activePendingDecision = new PendingDecisionEntry(jobId, title ?? jobId, hit);
             _logger.LogInformation(
                 "[taskboard] pending decision detected for {JobId} on {Project}: kind={Kind} reason={Reason}",

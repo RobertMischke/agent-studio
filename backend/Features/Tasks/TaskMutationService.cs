@@ -915,8 +915,9 @@ public class TaskMutationService
                 File.WriteAllText(filePath, block.TrimStart('\n'));
             }
         }
-        catch
+        catch (Exception __ex)
         {
+            SilentCatch.Note(__ex, "TaskMutationService: Best-effort append - failure to persist the addendum should not block the CLI resume.");
             // Best-effort append - failure to persist the addendum should not block the CLI resume.
         }
     }

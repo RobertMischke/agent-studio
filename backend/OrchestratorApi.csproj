@@ -12,6 +12,17 @@
     <PackageReference Include="Porta.Pty" Version="1.0.7" />
     <PackageReference Include="Markdig" Version="0.42.0" />
     <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
+    <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+  </ItemGroup>
+
+  <!-- Roslyn analyzer that flags silent (empty / comment-only) catch blocks so
+       the no-silent-catch rule cannot regress. Built locally; referenced as an
+       analyzer, not a runtime dependency. -->
+  <ItemGroup>
+    <ProjectReference Include="..\tools\SilentCatchAnalyzer\SilentCatchAnalyzer.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,6 +34,10 @@
          project (its source files relied on these as project-level usings). -->
     <Using Include="Microsoft.Extensions.Logging" />
     <Using Include="Microsoft.Extensions.Configuration" />
+    <!-- SilentCatch is the project-wide standard for previously-silent catch
+         blocks; expose it globally so the broad catch sweep does not need a
+         per-file using. -->
+    <Using Include="OrchestratorApi.Diagnostics" />
   </ItemGroup>
 
   <ItemGroup>

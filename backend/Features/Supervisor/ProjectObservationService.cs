@@ -160,11 +160,11 @@ public sealed class ProjectObservationService
                         var stamp = File.GetLastWriteTimeUtc(file);
                         if (stamp > maxStamp) maxStamp = stamp;
                     }
-                    catch { /* skip unreadable */ }
+                    catch (Exception __ex) { SilentCatch.Note(__ex, "ProjectObservationService: skip unreadable"); /* skip unreadable */ }
                 }
             }
         }
-        catch { /* best-effort */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "ProjectObservationService: best-effort"); /* best-effort */ }
         return maxStamp == DateTime.MinValue ? null : maxStamp;
     }
 

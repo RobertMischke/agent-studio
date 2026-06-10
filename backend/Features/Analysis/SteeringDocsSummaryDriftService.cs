@@ -509,8 +509,9 @@ public sealed class SteeringDocsSummaryDriftService
                 if (root.TryGetProperty("title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String)
                     title = titleEl.GetString() ?? slug;
             }
-            catch (JsonException)
+            catch (JsonException __ex)
             {
+                SilentCatch.Note(__ex, "SteeringDocsSummaryDriftService: Surface the slug regardless; the agent can flag the malformed file.");
                 // Surface the slug regardless; the agent can flag the malformed file.
             }
             DateTime touched;

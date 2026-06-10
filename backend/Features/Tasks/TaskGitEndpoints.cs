@@ -244,7 +244,7 @@ public static class TaskGitEndpoints
                 chat.Append(refreshed, OrchestratorMessageKind.Decision,
                     $"Committed accepted task evidence: {commitInfo.ShortSha} \"{(message ?? "").Split('\n')[0]}\" ({commitInfo.FilesChanged} file{(commitInfo.FilesChanged == 1 ? "" : "s")})");
             }
-            catch { /* chat-log is best-effort */ }
+            catch (Exception __ex) { SilentCatch.Note(__ex, "TaskGitEndpoints: chat-log is best-effort"); /* chat-log is best-effort */ }
 
             return Results.Ok(new { commit = commitInfo });
         });

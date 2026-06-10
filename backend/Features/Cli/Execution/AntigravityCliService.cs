@@ -128,7 +128,7 @@ public sealed class AntigravityCliService : CliExecutionServiceBase
         }
 
         JsonDocument? doc = null;
-        try { doc = JsonDocument.Parse(raw.Text); } catch { }
+        try { doc = JsonDocument.Parse(raw.Text); } catch (Exception __ex) { SilentCatch.Note(__ex, "AntigravityCliService:131"); }
         if (doc == null) { yield return raw; yield break; }
 
         using var _ = doc;

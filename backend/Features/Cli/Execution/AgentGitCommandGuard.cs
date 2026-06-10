@@ -170,8 +170,9 @@ internal static class AgentGitCommandGuard
                 UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
 #pragma warning restore CA1416
         }
-        catch
+        catch (Exception __ex)
         {
+            SilentCatch.Note(__ex, "AgentGitCommandGuard: Best effort. Some filesystems ignore Unix mode bits.");
             // Best effort. Some filesystems ignore Unix mode bits.
         }
     }

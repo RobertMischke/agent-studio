@@ -135,8 +135,9 @@ public sealed class MergeAuditLog
                         var rec = JsonSerializer.Deserialize<MergeAuditRecord>(line, ReadOpts);
                         if (rec != null) result.Add(rec);
                     }
-                    catch
+                    catch (Exception __ex)
                     {
+                        SilentCatch.Note(__ex, "MergeAuditLog: Best-effort: skip torn / malformed lines.");
                         // Best-effort: skip torn / malformed lines.
                     }
                 }

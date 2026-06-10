@@ -90,7 +90,7 @@ public static class ReviewDecisionLog
                     var rec = JsonSerializer.Deserialize<ReviewDecisionRecord>(line, Json);
                     if (rec != null) result.Add(rec);
                 }
-                catch (JsonException) { /* skip malformed lines; the file is append-only */ }
+                catch (JsonException __ex) { SilentCatch.Note(__ex, "ReviewDecisionRecord: skip malformed lines; the file is append-only"); /* skip malformed lines; the file is append-only */ }
             }
         }
         return result;

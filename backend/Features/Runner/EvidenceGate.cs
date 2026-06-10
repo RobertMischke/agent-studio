@@ -133,8 +133,9 @@ public static class EvidenceGate
                     if (Array.IndexOf(ImageExtensions, ext) >= 0 && IsNonEmptyFile(path)) return true;
                 }
             }
-            catch
+            catch (Exception __ex)
             {
+                SilentCatch.Note(__ex, "EvidenceGate: best-effort; fall through to the evidence-log check");
                 // best-effort; fall through to the evidence-log check
             }
         }
@@ -146,8 +147,9 @@ public static class EvidenceGate
                 File.ReadLines(evidenceLog).Any(line => !string.IsNullOrWhiteSpace(line)))
                 return true;
         }
-        catch
+        catch (Exception __ex)
         {
+            SilentCatch.Note(__ex, "EvidenceGate: best-effort");
             // best-effort
         }
 

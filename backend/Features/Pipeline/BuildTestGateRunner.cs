@@ -195,7 +195,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         }
         catch (OperationCanceledException)
         {
-            try { p.Kill(entireProcessTree: true); } catch { /* best effort */ }
+            try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "BuildTestGateRunner: best effort"); /* best effort */ }
             output.AppendLine($"{fileName} timed out after {timeout.TotalSeconds:F0}s");
             return null;
         }

@@ -36,8 +36,9 @@ public sealed class CompletedPushWorker : BackgroundService
                 await ProcessAsync(request, stoppingToken);
             }
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        catch (OperationCanceledException __ex) when (stoppingToken.IsCancellationRequested)
         {
+            SilentCatch.Note(__ex, "CompletedPushWorker: Graceful shutdown. Unpushed items are recovered by the backstop.");
             // Graceful shutdown. Unpushed items are recovered by the backstop.
         }
     }

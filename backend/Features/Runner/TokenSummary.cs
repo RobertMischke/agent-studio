@@ -327,7 +327,7 @@ public class TokenSummaryService
             Disclaimer: DefaultDisclaimer);
 
         // Persist for next-app-start display. Best-effort.
-        try { cache?.Write(aggregate); } catch { /* swallow; tolerant by design */ }
+        try { cache?.Write(aggregate); } catch (Exception __ex) { SilentCatch.Note(__ex, "TokenSummary: swallow; tolerant by design"); /* swallow; tolerant by design */ }
 
         return aggregate;
     }

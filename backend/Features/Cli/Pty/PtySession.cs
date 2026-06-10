@@ -118,7 +118,7 @@ public sealed class PtySession : IAsyncDisposable
                 }
             }
         }
-        catch { /* swallow — connection torn down */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "PtySession: swallow — connection torn down"); /* swallow — connection torn down */ }
     }
 
     /// <summary>
@@ -216,7 +216,7 @@ public sealed class PtySession : IAsyncDisposable
 
     public void Resize(int cols, int rows)
     {
-        try { _conn.Resize(cols, rows); } catch { /* best-effort */ }
+        try { _conn.Resize(cols, rows); } catch (Exception __ex) { SilentCatch.Note(__ex, "PtySession: best-effort"); /* best-effort */ }
     }
 
     public async ValueTask DisposeAsync()
@@ -224,9 +224,9 @@ public sealed class PtySession : IAsyncDisposable
         if (_disposed) return;
         _disposed = true;
         _cts.Cancel();
-        try { _conn.Kill(); } catch { }
-        try { await _readLoop.WaitAsync(TimeSpan.FromSeconds(2)); } catch { }
-        try { _conn.Dispose(); } catch { }
+        try { _conn.Kill(); } catch (Exception __ex) { SilentCatch.Note(__ex, "PtySession:227"); }
+        try { await _readLoop.WaitAsync(TimeSpan.FromSeconds(2)); } catch (Exception __ex) { SilentCatch.Note(__ex, "PtySession:228"); }
+        try { _conn.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "PtySession:229"); }
         _cts.Dispose();
     }
 }

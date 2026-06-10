@@ -129,7 +129,7 @@ public sealed class CodexModelDiscovery
         }
         finally
         {
-            try { if (File.Exists(outputPath)) File.Delete(outputPath); } catch { }
+            try { if (File.Exists(outputPath)) File.Delete(outputPath); } catch (Exception __ex) { SilentCatch.Note(__ex, "CodexModelDiscovery:132"); }
         }
     }
 

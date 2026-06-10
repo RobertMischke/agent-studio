@@ -60,7 +60,7 @@ public sealed class WorkspaceTokensCacheStore
         _baseDir = !string.IsNullOrWhiteSpace(taskRepo)
             ? Path.Combine(taskRepo, ".runtime")
             : Path.Combine(AppContext.BaseDirectory, "runtime");
-        try { Directory.CreateDirectory(_baseDir); } catch { /* best-effort */ }
+        try { Directory.CreateDirectory(_baseDir); } catch (Exception __ex) { SilentCatch.Note(__ex, "WorkspaceTokensCacheStore: best-effort"); /* best-effort */ }
     }
 
     // ---- Timeline ----

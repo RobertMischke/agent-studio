@@ -161,7 +161,7 @@ internal static class TaskLayoutIndex
         catch (Exception ex)
         {
             logger.LogError(ex, "task-index: failed to write {Path}", path);
-            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* best-effort cleanup */ }
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch (Exception __ex) { SilentCatch.Note(__ex, "TaskLayoutIndex: best-effort cleanup"); /* best-effort cleanup */ }
             throw;
         }
     }

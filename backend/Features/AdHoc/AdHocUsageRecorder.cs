@@ -158,8 +158,9 @@ public sealed class AdHocUsageRecorder
                     var entry = JsonSerializer.Deserialize<AdHocUsageRecord>(line, ReadOpts);
                     if (entry != null) result.Add(entry);
                 }
-                catch
+                catch (Exception __ex)
                 {
+                    SilentCatch.Note(__ex, "AdHocUsageRecorder: Best-effort: skip torn / malformed lines.");
                     // Best-effort: skip torn / malformed lines.
                 }
             }

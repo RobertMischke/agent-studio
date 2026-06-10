@@ -129,7 +129,7 @@ public sealed class ClaudeSessionHeartbeat : IDisposable
             _lastSeenWriteAt = now;
         }
         try { _onActivity(); }
-        catch { /* best-effort: never let a heartbeat callback crash the watcher */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "ClaudeSessionHeartbeat: best-effort: never let a heartbeat callback crash the watcher"); /* best-effort: never let a heartbeat callback crash the watcher */ }
     }
 
     public void Dispose()
@@ -145,6 +145,6 @@ public sealed class ClaudeSessionHeartbeat : IDisposable
                 _watcher.Dispose();
             }
         }
-        catch { /* dispose path swallows */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "ClaudeSessionHeartbeat: dispose path swallows"); /* dispose path swallows */ }
     }
 }

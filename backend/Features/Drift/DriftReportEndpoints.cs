@@ -644,8 +644,9 @@ public static class DriftReportEndpoints
                     {
                         report = await action.EnrichWithLlmVerdictsAsync(report, oneShot, ct: ct);
                     }
-                    catch
+                    catch (Exception __ex)
                     {
+                        SilentCatch.Note(__ex, "DriftReportEndpoints: LLM enrichment is best-effort; preserve the");
                         // LLM enrichment is best-effort; preserve the
                         // deterministic report regardless of LLM failures.
                     }

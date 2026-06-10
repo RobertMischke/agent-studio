@@ -119,9 +119,12 @@ public sealed class BackendFileLogSink : IDisposable
             {
                 File.AppendAllText(_currentPath!, line + Environment.NewLine, Encoding.UTF8);
             }
-            catch
+            catch (Exception ex)
             {
-                // Logging itself must never crash the process. Swallow.
+                // Logging itself must never crash the process. Report via
+                // Console.Error rather than the logging pipeline (this IS the
+                // file sink; routing through Serilog/ILogger could recurse).
+                Console.Error.WriteLine($"[BackendFileLogger] WriteRaw failed: {ex.Message}");
             }
         }
     }
@@ -141,7 +144,8 @@ public sealed class BackendFileLogSink : IDisposable
         if (_currentPath != null && File.Exists(_currentPath) is false)
         {
             // Touch so the file appears even before the first write succeeds.
-            try { File.WriteAllBytes(_currentPath, Array.Empty<byte>()); } catch { }
+            try { File.WriteAllBytes(_currentPath, Array.Empty<byte>()); }
+            catch (Exception ex) { Console.Error.WriteLine($"[BackendFileLogger] touch failed: {ex.Message}"); }
         }
         // Day rollover is the natural time to also reap old files.
         if (_currentPath != null) PruneOldFiles();
@@ -149,7 +153,8 @@ public sealed class BackendFileLogSink : IDisposable
 
     private void EnsureDirectory()
     {
-        try { Directory.CreateDirectory(ResolvedDirectory); } catch { }
+        try { Directory.CreateDirectory(ResolvedDirectory); }
+        catch (Exception ex) { Console.Error.WriteLine($"[BackendFileLogger] EnsureDirectory failed: {ex.Message}"); }
     }
 
     private void PruneOldFiles()
@@ -164,11 +169,12 @@ public sealed class BackendFileLogSink : IDisposable
                 if (!DateOnly.TryParseExact(name, "yyyy-MM-dd", out var day)) continue;
                 if (day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) < cutoff)
                 {
-                    try { File.Delete(file); } catch { }
+                    try { File.Delete(file); }
+                    catch (Exception ex) { Console.Error.WriteLine($"[BackendFileLogger] prune delete failed for {file}: {ex.Message}"); }
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { Console.Error.WriteLine($"[BackendFileLogger] PruneOldFiles failed: {ex.Message}"); }
     }
 
     private static void AppendField(StringBuilder sb, string key, string? value)

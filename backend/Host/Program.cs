@@ -20,6 +20,20 @@ using OrchestratorApi.Services.Security;
 using OrchestratorApi.Services.Supervisor;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Diagnostics;
+using Serilog;
+using Serilog.Events;
+
+// Static Serilog logger so DI-less / static contexts (TryReadEnteredLaneAt,
+// path + parser helpers, the SilentCatch standard) have a real logger before -
+// and independently of - the DI container. CreateBootstrapLogger publishes it
+// to Log.Logger immediately and is swapped in place by the fully configured
+// logger once the host is built (UseSerilog below). Console sink only for now.
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -78,7 +92,26 @@ var fileLogSink = new BackendFileLogSink(fileLoggerOptions);
 var crashRecorder = new CrashRecorder(fileLoggerOptions, fileLogSink);
 builder.Services.AddSingleton(fileLogSink);
 builder.Services.AddSingleton(crashRecorder);
+// Drop the default MEL providers (Console/Debug/EventSource) so the operator
+// sees a single Serilog-formatted console stream rather than two. The rolling
+// backend file logger is re-added explicitly and kept alive via Serilog's
+// writeToProviders below.
+builder.Logging.ClearProviders();
 builder.Logging.AddProvider(new BackendFileLoggerProvider(fileLogSink));
+
+// Route Microsoft.Extensions.Logging through Serilog with a Console sink.
+// writeToProviders:true keeps every registered MEL provider (the rolling
+// BackendFileLoggerProvider above) receiving events, so this is purely
+// additive: Serilog console PLUS the existing file log, no instrumentation
+// dropped and no behaviour change beyond the console format. The fully
+// configured logger also replaces the bootstrap Log.Logger in place, so the
+// static SilentCatch standard and other DI-less callers share this config.
+builder.Host.UseSerilog((context, services, configuration) => configuration
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(),
+    writeToProviders: true);
 
 // Last-resort safety nets: an uncaught exception in a fire-and-forget Task
 // (e.g. CLI output streaming, SignalR fan-out) used to take down the whole API
@@ -131,9 +164,11 @@ AppDomain.CurrentDomain.ProcessExit += (_, _) =>
             reason = "ProcessExit",
         }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     }
-    catch { /* last-gasp; nothing to do */ }
+    // Last-gasp teardown: log via Console.Error rather than Serilog, whose
+    // console sink may already be flushing/disposed during ProcessExit.
+    catch (Exception ex) { Console.Error.WriteLine($"[ProcessExit] shutdown-marker write failed: {ex}"); }
     try { fileLogSink.WriteRaw($"{DateTime.UtcNow:O} INFO  Program ProcessExit fired (pid={Environment.ProcessId})"); }
-    catch { }
+    catch (Exception ex) { Console.Error.WriteLine($"[ProcessExit] shutdown-marker log failed: {ex}"); }
 };
 
 // Boot-time silent-death detector. The handlers above can only witness a
@@ -153,7 +188,11 @@ try
             $"[startup] previous backend run died silently (pid={previousRun.PreviousPid}, " +
             $"started={previousRun.PreviousStartedAt:O}) — see last-silent-kill.json");
 }
-catch { /* boot diagnostics must never block boot */ }
+catch (Exception ex)
+{
+    // Boot diagnostics must never block boot; record without rethrowing.
+    Log.ForContext("SourceContext", "Program").Warning(ex, "Boot silent-death detector failed");
+}
 
 builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
@@ -568,8 +607,8 @@ try
     var pushHub = app.Services.GetRequiredService<IHubContext<TaskHub>>();
     store.OnAppended = (workspace, msg) =>
     {
-        try { cache.OnAppended(workspace, msg); } catch { /* best-effort */ }
-        try { _ = pushHub.Clients.All.SendAsync("busMessageAdded", msg); } catch { /* best-effort */ }
+        try { cache.OnAppended(workspace, msg); } catch (Exception ex) { SilentCatch.Note(ex, "BusAggregationCache.OnAppended"); }
+        try { _ = pushHub.Clients.All.SendAsync("busMessageAdded", msg); } catch (Exception ex) { SilentCatch.Note(ex, "busMessageAdded SignalR push"); }
     };
 }
 catch (Exception ex) { crashRecorder.Record("BusAggregationCache.Wire", ex); }

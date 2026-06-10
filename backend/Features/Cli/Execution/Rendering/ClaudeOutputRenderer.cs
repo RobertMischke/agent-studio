@@ -24,7 +24,7 @@ public sealed class ClaudeOutputRenderer : ICliOutputRenderer
 
         JsonDocument? doc = null;
         try { doc = JsonDocument.Parse(raw.Text); }
-        catch { /* swallow; handled below */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "ClaudeOutputRenderer: swallow; handled below"); /* swallow; handled below */ }
 
         if (doc == null)
         {

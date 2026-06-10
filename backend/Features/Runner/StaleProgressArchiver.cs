@@ -440,8 +440,9 @@ public sealed class StaleProgressArchiver
                     if (stamp > maxStamp) maxStamp = stamp;
                     hasAnyLogFile = true;
                 }
-                catch
+                catch (Exception __ex)
                 {
+                    SilentCatch.Note(__ex, "StaleProgressArchiver: Best-effort: an unreadable file does not contribute to");
                     // Best-effort: an unreadable file does not contribute to
                     // the signature but does not disqualify the folder either.
                 }
@@ -488,8 +489,9 @@ public sealed class StaleProgressArchiver
                 return dt.ToUniversalTime();
             }
         }
-        catch
+        catch (Exception __ex)
         {
+            SilentCatch.Note(__ex, "StaleProgressArchiver: Best-effort: a torn or schema-less task.json contributes no");
             // Best-effort: a torn or schema-less task.json contributes no
             // enteredLaneAt floor; the log mtimes still drive the verdict.
         }
@@ -519,8 +521,9 @@ public sealed class StaleProgressArchiver
                 }
             }
         }
-        catch
+        catch (Exception __ex)
         {
+            SilentCatch.Note(__ex, "StaleProgressArchiver: Best-effort. Treat unreadable logs as 'no sentinel'; the folder");
             // Best-effort. Treat unreadable logs as "no sentinel"; the folder
             // will be archived as orphan rather than recovered.
         }

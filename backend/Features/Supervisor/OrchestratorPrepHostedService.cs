@@ -196,7 +196,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
             var nextJob = ready.FirstOrDefault();
             if (nextJob != null) nextText = ReadPromptText(nextJob);
         }
-        catch { /* best-effort */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "OrchestratorPrepHostedService: best-effort"); /* best-effort */ }
 
         var iteration = ReadIteration(job);
         var input = new OrchestratorPrepRules.PrepInput

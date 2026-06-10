@@ -187,7 +187,7 @@ public static class NpmShimHealer
             else
             {
                 long size = -1;
-                try { size = new FileInfo(wrapBin).Length; } catch { /* fall through */ }
+                try { size = new FileInfo(wrapBin).Length; } catch (Exception __ex) { SilentCatch.Note(__ex, "NpmShimHealer: fall through"); /* fall through */ }
                 if (size >= 0 && size < 4096)
                 {
                     needsPostinstall = true;
@@ -261,7 +261,7 @@ public static class NpmShimHealer
             }
             catch (OperationCanceledException)
             {
-                try { p.Kill(entireProcessTree: true); } catch { /* best effort */ }
+                try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "NpmShimHealer: best effort"); /* best effort */ }
                 return new HealOutcome(false, actions, "smoke-test probe timed out");
             }
 
@@ -319,7 +319,7 @@ public static class NpmShimHealer
             }
             catch (OperationCanceledException)
             {
-                try { p.Kill(entireProcessTree: true); } catch { /* best effort */ }
+                try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "NpmShimHealer: best effort"); /* best effort */ }
                 logger.LogWarning("postinstall (node install.cjs) timed out");
                 return false;
             }

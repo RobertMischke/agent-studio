@@ -410,7 +410,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                     // Close *only* when we actually opened it. Closing
                     // Stream.Null is a no-op so the guard is defensive
                     // rather than load-bearing.
-                    try { child.Stdin.Close(); } catch { }
+                    try { child.Stdin.Close(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:413"); }
                 }
             }
         }
@@ -498,7 +498,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         info.OutputBuffer.Add(startedLine);
         if (!info.OutputLog.Append(startedLine))
             _logger.LogWarning("Failed to persist 'started' line for job {JobId} to {Path}", jobId, info.OutputLogPath);
-        try { OnOutput?.Invoke(jobKey, startedLine); } catch { }
+        try { OnOutput?.Invoke(jobKey, startedLine); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:501"); }
 
         var stdoutTask = ReadStreamAsync(jobKey, child.Stdout, "stdout", info, ct);
         var stderrTask = ReadStreamAsync(jobKey, child.Stderr, "stderr", info, ct);
@@ -636,7 +636,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     {
         if (_processes.TryGetValue(jobKey, out var info))
         {
-            try { info.OutputLog.Dispose(); } catch { /* already disposed */ }
+            try { info.OutputLog.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: already disposed"); /* already disposed */ }
         }
     }
 
@@ -700,7 +700,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 _logger.LogWarning("Failed to persist codex-silent-completion marker for {TaskKey}", jobKey);
         }
         catch (Exception ex) { _logger.LogDebug(ex, "Persisting codex-silent-completion marker failed for {TaskKey}", jobKey); }
-        try { OnOutput?.Invoke(jobKey, synthetic); } catch { }
+        try { OnOutput?.Invoke(jobKey, synthetic); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:703"); }
 
         _logger.LogWarning(
             "Codex silent-completion tripped for {Cli} job {TaskKey}: {Diagnosis}",
@@ -778,7 +778,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 _logger.LogWarning("Failed to persist environment-blocker marker for {TaskKey}", jobKey);
         }
         catch (Exception ex) { _logger.LogDebug(ex, "Persisting environment-blocker marker failed for {TaskKey}", jobKey); }
-        try { OnOutput?.Invoke(jobKey, synthetic); } catch { }
+        try { OnOutput?.Invoke(jobKey, synthetic); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:781"); }
 
         _logger.LogWarning(
             "Environment blocker '{Pattern}' detected for {Cli} job {TaskKey} after {Hits} hit(s); terminating run",
@@ -896,7 +896,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 }
             }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:899"); }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error reading {Stream} for {Cli} job {JobId}", stream, CliType, jobKey);
@@ -939,7 +939,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             // process is gone: the session file will not change again, and we
             // want the FileSystemWatcher handle freed promptly rather than at
             // the 30-minute ProcInfo eviction.
-            try { info.SessionLiveness?.Dispose(); } catch { /* dispose path swallows */ }
+            try { info.SessionLiveness?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: dispose path swallows"); /* dispose path swallows */ }
             info.SessionLiveness = null;
 
             // Drop the active-job entry as soon as the process is known to be
@@ -950,7 +950,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
             var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
             int? exitCode = null;
-            try { exitCode = process.ExitCode; } catch { }
+            try { exitCode = process.ExitCode; } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:953"); }
             var status = RunStatusClassifier.Classify(exitCode, info.StopReason);
             var terminalOutcome = TerminalRunOutcomeClassifier.Classify(
                 status,
@@ -979,7 +979,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             };
             info.OutputBuffer.Add(exitLine);
             info.OutputLog.Append(exitLine);
-            try { OnOutput?.Invoke(jobKey, exitLine); } catch { }
+            try { OnOutput?.Invoke(jobKey, exitLine); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:982"); }
 
             // ADR-0013 typed events: emit ProcessExited (or Killed if the
             // exit was a deliberate Stop) so the runner's phase tracker
@@ -1006,7 +1006,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 if (_processes.TryRemove(jobKey, out var removed))
                 {
                     removed.OutputLog.Dispose();
-                    try { removed.SessionLiveness?.Dispose(); } catch { }
+                    try { removed.SessionLiveness?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:1009"); }
                 }
             });
         }
@@ -1191,7 +1191,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 }
                 finally
                 {
-                    try { proc.Dispose(); } catch { }
+                    try { proc.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:1194"); }
                 }
             }
 
@@ -1312,7 +1312,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 }
                 finally
                 {
-                    try { proc.Dispose(); } catch { }
+                    try { proc.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:1315"); }
                 }
             }
 

@@ -158,8 +158,9 @@ public class OrchestratorChat
                 var turn = JsonSerializer.Deserialize<OrchestratorChatTurn>(line, ReadOpts);
                 if (turn != null) result.Add(turn);
             }
-            catch
+            catch (Exception __ex)
             {
+                SilentCatch.Note(__ex, "OrchestratorChat: Best-effort: skip torn / malformed lines.");
                 // Best-effort: skip torn / malformed lines.
             }
         }
@@ -639,8 +640,9 @@ public class OrchestratorChatService
                 .ToList();
             AppendProjectStateSnapshot(sb, projectName, tasks);
         }
-        catch
+        catch (Exception __ex)
         {
+            SilentCatch.Note(__ex, "OrchestratorChat: Best-effort: missing snapshot is fine; the orchestrator can");
             // Best-effort: missing snapshot is fine; the orchestrator can
             // still answer general questions from session memory.
         }

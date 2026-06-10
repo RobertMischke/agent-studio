@@ -479,7 +479,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
             info.LastParsedUsage = usage;
             info.LastParsedUsageAt = line.Timestamp == default ? DateTime.UtcNow : line.Timestamp;
         }
-        catch (JsonException) { /* malformed frame; nothing to capture */ }
+        catch (JsonException __ex) { SilentCatch.Note(__ex, "CodexCliService: malformed frame; nothing to capture"); /* malformed frame; nothing to capture */ }
         catch (Exception ex) { _logger.LogDebug(ex, "Codex turn-usage capture skipped"); }
     }
 

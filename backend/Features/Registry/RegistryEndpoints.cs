@@ -236,7 +236,7 @@ public static class RegistryEndpoints
             }
 
             try { projects.Delete(projId); }
-            catch (KeyNotFoundException) { /* already removed; idempotent success */ }
+            catch (KeyNotFoundException __ex) { SilentCatch.Note(__ex, "RegistryEndpoints: already removed; idempotent success"); /* already removed; idempotent success */ }
 
             log.LogInformation(
                 "project-deleted id={Id} displayName={DisplayName} storage={Storage}",

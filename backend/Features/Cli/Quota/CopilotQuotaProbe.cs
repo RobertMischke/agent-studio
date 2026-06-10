@@ -102,7 +102,7 @@ public sealed class CopilotQuotaProbe : QuotaProbeBase
             await pty.WaitForIdleAsync(idleMs: 700, timeoutMs: 4000, ct);
 
             var snap = pty.SnapshotStripped();
-            try { await pty.SendKeysAsync("<Esc><Esc>", ct); } catch { }
+            try { await pty.SendKeysAsync("<Esc><Esc>", ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "CopilotQuotaProbe:105"); }
 
             if (matched == null)
                 _logger.LogInformation("Copilot quota probe: footer pattern not seen within timeout; parsing best-effort snapshot");

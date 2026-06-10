@@ -23,6 +23,11 @@ tools/*
 # from any checkout. Output files land under logs/perf/ and stay gitignored.
 !tools/perf-report/
 !tools/perf-report/**
+# Whitelisted: the ATB0001 silent-catch Roslyn analyzer. The backend csproj
+# references it as an Analyzer ProjectReference, so it must be tracked or the
+# build breaks on a fresh checkout.
+!tools/SilentCatchAnalyzer/
+!tools/SilentCatchAnalyzer/**
 
 .test-output
 

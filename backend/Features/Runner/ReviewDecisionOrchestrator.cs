@@ -4085,8 +4085,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 }
                 return;
             }
-            catch (JsonException)
+            catch (JsonException __ex)
             {
+                SilentCatch.Note(__ex, "ReviewDecisionOrchestrator: Fall through and treat it as ordinary output text.");
                 // Fall through and treat it as ordinary output text.
             }
         }
@@ -4635,7 +4636,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             await p.StandardInput.WriteAsync(prompt.AsMemory(), ct);
             p.StandardInput.Close();
         }
-        catch { /* stdin may already be closed by CLI */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "ReviewDecisionOrchestrator: stdin may already be closed by CLI"); /* stdin may already be closed by CLI */ }
 
         var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -4647,7 +4648,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
         catch (OperationCanceledException)
         {
-            try { p.Kill(true); } catch { }
+            try { p.Kill(true); } catch (Exception __ex) { SilentCatch.Note(__ex, "ReviewDecisionOrchestrator:4650"); }
             return string.Empty;
         }
     }

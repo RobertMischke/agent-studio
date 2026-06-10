@@ -74,19 +74,22 @@ public sealed class CrashRecorder
         DateTime? lastShutdown = null;
         DateTime? lastCrash = null;
 
-        try { (prevStarted, prevPid) = ReadStartupMarker(); } catch { }
-        try { lastShutdown = ReadCapturedAt(ShutdownMarkerPath); } catch { }
-        try { lastCrash = ReadCapturedAt(MarkerPath); } catch { }
+        // Boot diagnostics must never block boot and must not re-enter the
+        // logging pipeline (this is part of it), so each best-effort step
+        // reports a swallowed failure via Console.Error rather than ILogger.
+        try { (prevStarted, prevPid) = ReadStartupMarker(); } catch (Exception ex) { Console.Error.WriteLine($"[CrashRecorder] ReadStartupMarker failed: {ex.Message}"); }
+        try { lastShutdown = ReadCapturedAt(ShutdownMarkerPath); } catch (Exception ex) { Console.Error.WriteLine($"[CrashRecorder] ReadCapturedAt(shutdown) failed: {ex.Message}"); }
+        try { lastCrash = ReadCapturedAt(MarkerPath); } catch (Exception ex) { Console.Error.WriteLine($"[CrashRecorder] ReadCapturedAt(crash) failed: {ex.Message}"); }
 
         var verdict = CrashForensics.Classify(prevStarted, lastShutdown, lastCrash);
         var report = new PreviousRunReport(verdict, prevStarted, prevPid, lastShutdown, lastCrash);
 
-        try { LogVerdict(report); } catch { }
+        try { LogVerdict(report); } catch (Exception ex) { Console.Error.WriteLine($"[CrashRecorder] LogVerdict failed: {ex.Message}"); }
         if (verdict == PreviousRunVerdict.SilentKill)
         {
-            try { WriteSilentKillMarker(report); } catch { }
+            try { WriteSilentKillMarker(report); } catch (Exception ex) { Console.Error.WriteLine($"[CrashRecorder] WriteSilentKillMarker failed: {ex.Message}"); }
         }
-        try { ArmStartupMarker(); } catch { }
+        try { ArmStartupMarker(); } catch (Exception ex) { Console.Error.WriteLine($"[CrashRecorder] ArmStartupMarker failed: {ex.Message}"); }
 
         return report;
     }
@@ -209,9 +212,11 @@ public sealed class CrashRecorder
             sb.Append("    ").Append(LogRedactor.Scrub(ex.ToString()).Replace("\n", "\n    "));
             _sink.WriteRaw(sb.ToString());
         }
-        catch
+        catch (Exception logEx)
         {
-            // Logging the crash must never crash. Marker still gets a chance below.
+            // Logging the crash must never crash. Marker still gets a chance
+            // below. Report via Console.Error, not the logging pipeline.
+            Console.Error.WriteLine($"[CrashRecorder] WriteLogEntry failed for {source}: {logEx.Message}");
         }
     }
 
@@ -226,9 +231,11 @@ public sealed class CrashRecorder
                 File.WriteAllText(MarkerPath, json, Encoding.UTF8);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Same reason as above: this path runs from a process-wide handler.
+            // Same reason as above: this path runs from a process-wide handler,
+            // so report via Console.Error rather than the logging pipeline.
+            Console.Error.WriteLine($"[CrashRecorder] WriteMarker failed: {ex.Message}");
         }
     }
 

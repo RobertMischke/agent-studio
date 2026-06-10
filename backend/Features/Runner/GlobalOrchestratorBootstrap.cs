@@ -143,7 +143,7 @@ public sealed class GlobalOrchestratorBootstrap
             }
             sb.AppendLine();
         }
-        catch { /* boot is best-effort; missing snapshot is fine */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "GlobalOrchestratorBootstrap: boot is best-effort; missing snapshot is fine"); /* boot is best-effort; missing snapshot is fine */ }
 
         sb.AppendLine("Your job:");
         sb.AppendLine("- When asked which project needs attention, weigh queue depth and last activity.");

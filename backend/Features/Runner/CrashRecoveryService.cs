@@ -431,8 +431,9 @@ public sealed class CrashRecoveryService
                 var ts = evt.Ts.Kind == DateTimeKind.Utc ? evt.Ts : evt.Ts.ToUniversalTime();
                 if (first == null || ts < first.Value) first = ts;
             }
-            catch
+            catch (Exception __ex)
             {
+                SilentCatch.Note(__ex, "CrashRecoveryService: Best-effort recovery: ignore torn session-event rows.");
                 // Best-effort recovery: ignore torn session-event rows.
             }
         }
@@ -651,8 +652,9 @@ public sealed class CrashRecoveryService
                     bestFolder = jobFolder;
                 }
             }
-            catch
+            catch (Exception __ex)
             {
+                SilentCatch.Note(__ex, "CrashRecoveryService: Ignore unreadable task.json entries; recovery is best-effort.");
                 // Ignore unreadable task.json entries; recovery is best-effort.
             }
         }
@@ -705,8 +707,9 @@ public sealed class CrashRecoveryService
                        $"sha={decision.CommitSha ?? "-"} target={decision.TargetState ?? "-"} reason=\"{decision.Reason}\"";
             _logSink.WriteRaw(line);
         }
-        catch
+        catch (Exception __ex)
         {
+            SilentCatch.Note(__ex, "CrashRecoveryService: Logging the recovery must never crash the boot path.");
             // Logging the recovery must never crash the boot path.
         }
     }

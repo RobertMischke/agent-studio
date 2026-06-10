@@ -175,7 +175,7 @@ public static class CliEndpoints
 
             var scratch = Path.Combine(Path.GetTempPath(), "agent-taskboard-probe", cliType);
             Directory.CreateDirectory(scratch);
-            try { env.EnsureFolderTrusted(scratch); env.EnsureTerminalSetupAcknowledged("vscode", "vscode-insiders", "windows-terminal"); } catch { }
+            try { env.EnsureFolderTrusted(scratch); env.EnsureTerminalSetupAcknowledged("vscode", "vscode-insiders", "windows-terminal"); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliEndpoints:178"); }
 
             try
             {
@@ -196,8 +196,8 @@ public static class CliEndpoints
                     await pty.WaitForIdleAsync(idleMs: followUpSettleMs ?? 2000, timeoutMs: 10000, ct);
                 }
                 var snap = pty.SnapshotStripped();
-                try { await pty.SendKeysAsync("<Esc>", ct); } catch { }
-                try { await pty.SendKeysAsync("<Esc>", ct); } catch { }
+                try { await pty.SendKeysAsync("<Esc>", ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliEndpoints:199"); }
+                try { await pty.SendKeysAsync("<Esc>", ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliEndpoints:200"); }
                 return Results.Ok(new
                 {
                     cliType,

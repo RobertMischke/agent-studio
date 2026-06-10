@@ -284,8 +284,9 @@ public sealed class WorkspaceSummaryService
 
                     list.Add(new OrphanRecoveryRow(atUtc, project, slug, target));
                 }
-                catch (JsonException)
+                catch (JsonException __ex)
                 {
+                    SilentCatch.Note(__ex, "WorkspaceSummaryService: skip malformed line; lenient on read");
                     // skip malformed line; lenient on read
                 }
             }
@@ -337,7 +338,7 @@ public sealed class WorkspaceSummaryService
                                 ? null
                                 : $"{project}/{slug} archived without completion sentinel"));
                     }
-                    catch (JsonException) { }
+                    catch (JsonException __ex) { SilentCatch.Note(__ex, "WorkspaceSummaryService:340"); }
                 }
             }
             catch (IOException ex)

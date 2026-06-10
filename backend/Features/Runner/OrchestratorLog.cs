@@ -85,8 +85,9 @@ public class OrchestratorLog
                 var entry = JsonSerializer.Deserialize<OrchestratorLogEntry>(line, ReadOpts);
                 if (entry != null) result.Add(entry);
             }
-            catch
+            catch (Exception __ex)
             {
+                SilentCatch.Note(__ex, "OrchestratorLog: Best-effort: skip torn / malformed lines.");
                 // Best-effort: skip torn / malformed lines.
             }
         }

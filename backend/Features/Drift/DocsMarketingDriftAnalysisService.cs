@@ -455,14 +455,15 @@ public sealed class DocsMarketingDriftAnalysisService
             if (root.TryGetProperty("title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String)
                 title = titleEl.GetString() ?? id;
         }
-        catch (JsonException)
+        catch (JsonException __ex)
         {
+            SilentCatch.Note(__ex, "DocsMarketingDriftAnalysisService: Malformed task.json - still surface the slug as evidence so the");
             // Malformed task.json - still surface the slug as evidence so the
             // drift report can flag the queue dirty.
         }
 
         try { touched = Directory.GetLastWriteTimeUtc(dir); }
-        catch { /* best-effort */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "DocsMarketingDriftAnalysisService: best-effort"); /* best-effort */ }
 
         return new TaskRef(id, title, lane, touched);
     }

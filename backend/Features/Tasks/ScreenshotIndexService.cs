@@ -103,8 +103,9 @@ public class ScreenshotIndexService
                 var folderTouched = Directory.GetLastWriteTimeUtc(resultsDir);
                 if (folderTouched < cutoff) continue;
             }
-            catch
+            catch (Exception __ex)
             {
+                SilentCatch.Note(__ex, "ScreenshotIndexService: best-effort, fall through and let the per-file walk decide");
                 // best-effort, fall through and let the per-file walk decide
             }
 

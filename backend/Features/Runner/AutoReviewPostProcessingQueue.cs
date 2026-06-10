@@ -87,8 +87,9 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
                 await ProcessAsync(request, stoppingToken);
             }
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        catch (OperationCanceledException __ex) when (stoppingToken.IsCancellationRequested)
         {
+            SilentCatch.Note(__ex, "AutoReviewPostProcessingQueue: Graceful shutdown. The ReviewDecisionOrchestrator boot/backstop");
             // Graceful shutdown. The ReviewDecisionOrchestrator boot/backstop
             // sweep remains the recovery path for anything left in 4-auto-review.
         }

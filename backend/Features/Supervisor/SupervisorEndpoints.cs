@@ -143,7 +143,7 @@ public static class SupervisorEndpoints
                 var report = JsonSerializer.Deserialize<MetaCycleReport>(raw, MetaCycleJsonOptions);
                 if (report != null) list.Add(report);
             }
-            catch { /* skip malformed */ }
+            catch (Exception __ex) { SilentCatch.Note(__ex, "SupervisorEndpoints: skip malformed"); /* skip malformed */ }
         }
         return list;
     }
@@ -163,7 +163,7 @@ public static class SupervisorEndpoints
                 var item = JsonSerializer.Deserialize<T>(raw, JsonOptions);
                 if (item != null) list.Add(item);
             }
-            catch { /* skip malformed line */ }
+            catch (Exception __ex) { SilentCatch.Note(__ex, "SupervisorEndpoints: skip malformed line"); /* skip malformed line */ }
         }
         return list;
     }

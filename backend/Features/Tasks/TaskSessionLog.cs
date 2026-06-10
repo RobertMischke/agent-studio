@@ -218,8 +218,9 @@ public class TaskSessionLog
                 var evt = JsonSerializer.Deserialize<SessionEvent>(line, TaskJsonFile.ReadOpts);
                 if (evt != null) result.Add(evt);
             }
-            catch
+            catch (Exception __ex)
             {
+                SilentCatch.Note(__ex, "TaskSessionLog: Best-effort: skip torn / malformed lines.");
                 // Best-effort: skip torn / malformed lines.
             }
         }

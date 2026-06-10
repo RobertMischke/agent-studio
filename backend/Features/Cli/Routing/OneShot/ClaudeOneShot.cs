@@ -174,7 +174,7 @@ public sealed class ClaudeOneShot : ICliOneShot
             }
             finally
             {
-                try { p.StandardInput.Close(); } catch { /* idempotent */ }
+                try { p.StandardInput.Close(); } catch (Exception __ex) { SilentCatch.Note(__ex, "ClaudeOneShot: idempotent"); /* idempotent */ }
             }
 
             var stdoutTask = p.StandardOutput.ReadToEndAsync(effectiveCt);
@@ -202,7 +202,7 @@ public sealed class ClaudeOneShot : ICliOneShot
                 : "cancelled";
             _logger.LogWarning("Claude one-shot {Reason} (source={Source}, job={Job})",
                 reason, request.Source ?? "(none)", request.JobId ?? "(none)");
-            try { p?.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+            try { p?.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "ClaudeOneShot: best-effort"); /* best-effort */ }
             var fail = CliOneShotResult.SpawnFailure(reason, requestedAt, completedAt);
             RecordIfRequested(request, fail);
             return fail;
@@ -217,7 +217,7 @@ public sealed class ClaudeOneShot : ICliOneShot
             _logger.LogError(ex,
                 "Claude one-shot crashed (source={Source}, job={Job}, exceptionType={ExceptionType}): {Raw}",
                 request.Source ?? "(none)", request.JobId ?? "(none)", ex.GetType().Name, ex.Message);
-            try { p?.Kill(entireProcessTree: true); } catch { }
+            try { p?.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "ClaudeOneShot:220"); }
             var fail = CliOneShotResult.SpawnFailure(ex.Message, requestedAt, completedAt);
             RecordIfRequested(request, fail);
             return fail;
@@ -256,8 +256,9 @@ public sealed class ClaudeOneShot : ICliOneShot
                     rich = parsed;
                 }
             }
-            catch (JsonException)
+            catch (JsonException __ex)
             {
+                SilentCatch.Note(__ex, "ClaudeOneShot: Wrapper present but malformed; fall through. ParseOrFallback");
                 // Wrapper present but malformed; fall through. ParseOrFallback
                 // already returned the raw stdout as ParsedText so the call
                 // site still sees the text.
@@ -360,7 +361,7 @@ public sealed class ClaudeOneShot : ICliOneShot
             if (p is null) return false;
             if (!p.WaitForExit(5000))
             {
-                try { p.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+                try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "ClaudeOneShot: best-effort"); /* best-effort */ }
                 return false;
             }
             return p.ExitCode == 0;

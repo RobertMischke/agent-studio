@@ -520,7 +520,7 @@ public sealed class TaskFileHistoryService
         var stderr = p.StandardError.ReadToEndAsync();
         if (!p.WaitForExit((int)GitTimeout.TotalMilliseconds))
         {
-            try { p.Kill(entireProcessTree: true); } catch { }
+            try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "TaskFileHistoryService:523"); }
             return new GitProcessResult("", "git timed out.", -1);
         }
 

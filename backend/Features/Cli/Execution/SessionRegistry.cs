@@ -254,7 +254,7 @@ public sealed class SessionRegistry
                 }
             }
         }
-        catch { /* best-effort */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "SessionRegistry: best-effort"); /* best-effort */ }
 
         var tmpRoot = Path.Combine(root, "tmp");
         if (!Directory.Exists(tmpRoot)) return [];
@@ -286,7 +286,7 @@ public sealed class SessionRegistry
                         Cwd       = slugToCwd.TryGetValue(slug, out var cwd) ? cwd : slug
                     });
                 }
-                catch { /* skip unreadable session file */ }
+                catch (Exception __ex) { SilentCatch.Note(__ex, "SessionRegistry: skip unreadable session file"); /* skip unreadable session file */ }
             }
 
             if (sessions.Count == 0) continue;
@@ -349,7 +349,7 @@ public sealed class SessionRegistry
                 if (!string.IsNullOrWhiteSpace(id))
                     entries.Add(new CodexIndexEntry(id, name, updated, cwd));
             }
-            catch { /* skip malformed line */ }
+            catch (Exception __ex) { SilentCatch.Note(__ex, "SessionRegistry: skip malformed line"); /* skip malformed line */ }
         }
 
         var grouped = entries

@@ -110,15 +110,17 @@ public static class TaskCodeReviewEndpoints
                                 Generation = generated.GetValueOrDefault(fileName),
                             });
                         }
-                        catch
+                        catch (Exception __ex)
                         {
+                            SilentCatch.Note(__ex, "TaskCodeReviewEndpoints: Skip unreadable files; they should not break the list.");
                             // Skip unreadable files; they should not break the list.
                         }
                     }
                 }
             }
-            catch
+            catch (Exception __ex)
             {
+                SilentCatch.Note(__ex, "TaskCodeReviewEndpoints: Folder enumeration failure: return empty list rather than 500.");
                 // Folder enumeration failure: return empty list rather than 500.
             }
 

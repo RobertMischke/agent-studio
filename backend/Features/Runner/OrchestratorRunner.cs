@@ -328,7 +328,7 @@ public class OrchestratorRunner
             }
             finally
             {
-                try { process.StandardInput.Close(); } catch { }
+                try { process.StandardInput.Close(); } catch (Exception __ex) { SilentCatch.Note(__ex, "OrchestratorRunner:331"); }
             }
 
             var stdoutTask = process.StandardOutput.ReadToEndAsync(effectiveCt);

@@ -358,7 +358,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             info.LastParsedUsage = usage;
             info.LastParsedUsageAt = line.Timestamp == default ? DateTime.UtcNow : line.Timestamp;
         }
-        catch (JsonException) { /* malformed frame; nothing to capture */ }
+        catch (JsonException __ex) { SilentCatch.Note(__ex, "ClaudeCliService: malformed frame; nothing to capture"); /* malformed frame; nothing to capture */ }
         catch (Exception ex) { _logger.LogDebug(ex, "Claude turn-usage capture skipped"); }
     }
 

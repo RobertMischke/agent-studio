@@ -223,7 +223,7 @@ public sealed class ChatNoteHostedService : BackgroundService
                 advisories.Add(adv);
             }
         }
-        catch { /* best-effort read */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "ChatNoteHostedService: best-effort read"); /* best-effort read */ }
         return advisories;
     }
 
@@ -253,7 +253,7 @@ public sealed class ChatNoteHostedService : BackgroundService
                 entries.Add(new ChatNoteCycleEntry(ts, parts[1], parts[2], parts[3], parts[4]));
             }
         }
-        catch { /* best-effort read */ }
+        catch (Exception __ex) { SilentCatch.Note(__ex, "ChatNoteHostedService: best-effort read"); /* best-effort read */ }
         return entries;
     }
 

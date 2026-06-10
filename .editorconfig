@@ -1,0 +1,11 @@
+# EditorConfig for agent-taskboard (https://editorconfig.org)
+# Scoped intentionally narrow: this file only governs the backend "no silent
+# catch" guardrail (ATB0001, provided by tools/SilentCatchAnalyzer). It is not a
+# repo-wide style baseline.
+
+[*.cs]
+# ATB0001: empty / comment-only catch block silently swallows its exception.
+# Escalated to error so a new silent catch fails the backend build (the
+# anti-regression guard for the Serilog catch-hardening sweep). Log via
+# SilentCatch.Note / SilentCatch.Warn / an ILogger, or rethrow.
+dotnet_diagnostic.ATB0001.severity = error
