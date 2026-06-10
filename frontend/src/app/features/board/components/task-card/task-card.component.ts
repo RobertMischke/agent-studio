@@ -48,6 +48,7 @@ import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { stateLabel } from '../../../../services/format.util';
 import { BoardFiltersService } from '../../state/board-filters.service';
+import { EpicExpansionStore } from '../../state/epic-expansion.service';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
@@ -294,7 +295,15 @@ export class TaskCardComponent implements OnInit, OnDestroy {
       });
   });
   readonly hasInlineEpicSubTasks = computed(() => this.inlineEpicSubTasks().length > 0);
-  readonly epicExpanded = signal(false);
+
+  private readonly epicExpansion = inject(EpicExpansionStore);
+  /**
+   * Inline epic expand state, read from the shared {@link EpicExpansionStore}
+   * keyed on this epic's id rather than a local signal. Keying on the task id
+   * (not the component instance) is what keeps the expand open across polling
+   * cycles and card re-mounts - see the store's class doc.
+   */
+  readonly epicExpanded = computed(() => this.epicExpansion.isExpanded(this.job().id));
 
   /** Parent epic id when this card is a sub-task, else null (drives the "↳ epic" chip). */
   readonly subTaskEpicId = computed(() => {
@@ -304,7 +313,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   toggleEpicExpanded(event: Event): void {
     event.stopPropagation();
-    this.epicExpanded.update((value) => !value);
+    this.epicExpansion.toggle(this.job().id);
   }
 
   onInlineSubTaskClick(event: Event, subTask: TaskInfo): void {

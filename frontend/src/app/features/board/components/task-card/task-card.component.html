@@ -299,7 +299,7 @@
     <div class="task-card__epic-subtasks" data-testid="task-card-epic-subtasks">
       @if (inlineEpicSubTasks().length > 0) {
         <ul class="task-card__epic-subtask-list" role="list">
-          @for (sub of inlineEpicSubTasks(); track sub.taskKey) {
+          @for (sub of inlineEpicSubTasks(); track sub.id) {
             <li class="task-card__epic-subtask-item">
               <button type="button"
                       class="task-card__epic-subtask-btn"

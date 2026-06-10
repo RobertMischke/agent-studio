@@ -535,6 +535,123 @@ describe('TaskCardComponent (smoke)', () => {
     expect(opened).toEqual([subTask]);
   });
 
+  it('keeps the inline epic expand open across a data refresh without remounting the sub-list', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const epic = makeJob({
+      id: 'epic-refresh',
+      taskKey: 'test::epic-refresh',
+      title: 'Epic container',
+      kind: 'epic',
+      state: '2-ready',
+    });
+    const subTask = makeJob({
+      id: 'sub-refresh',
+      taskKey: 'test::sub-refresh',
+      title: 'Inline child task',
+      state: '4-auto-review',
+      epicId: epic.id,
+    });
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', epic);
+    fixture.componentRef.setInput('epicSubTasks', [subTask]);
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    host.querySelector<HTMLButtonElement>('[data-testid="task-card-epic-toggle"]')?.click();
+    fixture.detectChanges();
+
+    const panelBefore = host.querySelector('[data-testid="task-card-epic-subtasks"]') as HTMLElement | null;
+    const itemBefore = host.querySelector('[data-testid="task-card-epic-subtask"]') as HTMLElement | null;
+    expect(panelBefore).not.toBeNull();
+    expect(itemBefore).not.toBeNull();
+    // Stamp the live DOM nodes so we can prove they are reused, not rebuilt.
+    panelBefore!.dataset['persistMarker'] = 'panel';
+    itemBefore!.dataset['persistMarker'] = 'item';
+
+    // Simulate a polling refresh: brand-new TaskInfo objects (same ids)
+    // replace the inputs, exactly as a fresh board snapshot would.
+    fixture.componentRef.setInput('job', { ...epic, lastActivity: '2026-05-11T10:00:00Z' });
+    fixture.componentRef.setInput('epicSubTasks', [{ ...subTask, lastActivity: '2026-05-11T10:00:00Z' }]);
+    fixture.detectChanges();
+
+    const toggle = host.querySelector('[data-testid="task-card-epic-toggle"]') as HTMLButtonElement | null;
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+
+    const panelAfter = host.querySelector('[data-testid="task-card-epic-subtasks"]') as HTMLElement | null;
+    const itemAfter = host.querySelector('[data-testid="task-card-epic-subtask"]') as HTMLElement | null;
+    expect(panelAfter).not.toBeNull();
+    expect(host.querySelectorAll('[data-testid="task-card-epic-subtasks"]').length).toBe(1);
+    expect(host.querySelectorAll('[data-testid="task-card-epic-subtask"]').length).toBe(1);
+    // Same element instances => @if/@for kept the nodes; no double mount.
+    expect(panelAfter?.dataset['persistMarker']).toBe('panel');
+    expect(itemAfter?.dataset['persistMarker']).toBe('item');
+  });
+
+  it('keys the inline epic expand on the task id so it survives a card re-mount', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const epic = makeJob({
+      id: 'epic-remount',
+      taskKey: 'test::epic-remount',
+      title: 'Epic container',
+      kind: 'epic',
+      state: '2-ready',
+    });
+    const subTask = makeJob({
+      id: 'sub-remount',
+      taskKey: 'test::sub-remount',
+      title: 'Child task',
+      state: '2-ready',
+      epicId: epic.id,
+    });
+
+    const first = TestBed.createComponent(TaskCardComponent);
+    first.componentRef.setInput('job', epic);
+    first.componentRef.setInput('epicSubTasks', [subTask]);
+    first.detectChanges();
+    const firstHost: HTMLElement = first.nativeElement;
+    (firstHost.querySelector('[data-testid="task-card-epic-toggle"]') as HTMLButtonElement | null)?.click();
+    first.detectChanges();
+    expect(
+      firstHost.querySelector('[data-testid="task-card-epic-toggle"]')?.getAttribute('aria-expanded'),
+    ).toBe('true');
+
+    // Re-mount: destroy the card and build a brand-new instance for the same
+    // epic - a lane move, the group-by-epic toggle, and filter rebuilds all
+    // tear the card down and recreate it. A local signal would reset to
+    // collapsed here; the store keeps the state keyed on the epic id.
+    first.destroy();
+    const second = TestBed.createComponent(TaskCardComponent);
+    second.componentRef.setInput('job', { ...epic });
+    second.componentRef.setInput('epicSubTasks', [{ ...subTask }]);
+    second.detectChanges();
+    const secondHost: HTMLElement = second.nativeElement;
+
+    expect(
+      secondHost.querySelector('[data-testid="task-card-epic-toggle"]')?.getAttribute('aria-expanded'),
+    ).toBe('true');
+    expect(secondHost.querySelector('[data-testid="task-card-epic-subtasks"]')).not.toBeNull();
+    expect(secondHost.textContent).toContain('Child task');
+  });
+
   // ── Mode badge (planning / research recognizable at a glance) ──────────
 
   it('renders a mode pill naming the mode for a planning card', async () => {

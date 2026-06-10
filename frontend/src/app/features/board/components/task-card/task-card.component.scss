@@ -414,6 +414,20 @@
       border: 1px solid var(--studio-border);
       border-radius: 6px;
       background: color-mix(in srgb, var(--studio-bg-surface) 72%, transparent);
+      // Calm reveal on expand: a short compositor-only fade+slide so the
+      // sub-task block eases in instead of snapping the card taller. The
+      // card still grows to fit (no fixed-height reservation), the motion
+      // just takes the "jump" out of the open. Persisted expand state means
+      // this only plays on a real user toggle, never on every poll.
+      transform-origin: top;
+      animation: task-card-epic-reveal 160ms cubic-bezier(0, 0, 0.2, 1);
+    }
+    @keyframes task-card-epic-reveal {
+      from { opacity: 0; transform: translateY(-2px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .task-card__epic-subtasks { animation: none; }
     }
     .task-card__epic-subtask-list {
       display: flex;
