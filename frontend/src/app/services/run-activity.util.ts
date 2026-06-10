@@ -46,10 +46,10 @@ export function buildRunActivityBadge(job: TaskInfo, nowMs: number = Date.now())
   if (!activity) return null;
 
   const attemptLine = activity.attempt > 0
-    ? `<div><b>Attempt:</b> ${activity.attempt}</div>`
+    ? `<div><b>Versuch:</b> ${activity.attempt}</div>`
     : '';
   const errorLine = activity.lastError
-    ? `<div><b>Last error:</b> ${escapeHtml(activity.lastError)}</div>`
+    ? `<div><b>Letzter Fehler:</b> ${escapeHtml(activity.lastError)}</div>`
     : '';
 
   switch (activity.kind) {
@@ -57,36 +57,36 @@ export function buildRunActivityBadge(job: TaskInfo, nowMs: number = Date.now())
       const pid = typeof activity.processId === 'number' && activity.processId > 0 ? activity.processId : null;
       return {
         kind: activity.kind,
-        label: 'Run active',
+        label: 'Run aktiv',
         tone: 'active',
         tooltip: {
-          title: 'Run active',
-          body: `<div>A run process is alive and occupies a slot.</div>${pid !== null ? `<div><b>PID:</b> ${pid}</div>` : ''}${attemptLine}${errorLine}`,
+          title: 'Run aktiv (PID lebt)',
+          body: `<div>Ein Run-Prozess läuft und belegt einen Slot.</div>${pid !== null ? `<div><b>PID:</b> ${pid}</div>` : ''}${attemptLine}${errorLine}`,
         },
       };
     }
     case 'failed-backoff': {
       const clock = activity.backoffUntil ? formatClock(activity.backoffUntil) : null;
       const future = activity.backoffUntil ? Date.parse(activity.backoffUntil) > nowMs : false;
-      const label = clock && future ? `Failed · retry at ${clock}` : 'Failed · awaiting retry';
+      const label = clock && future ? `failed · Backoff bis ${clock}` : 'failed · wartet auf Reissue';
       return {
         kind: activity.kind,
         label,
         tone: 'failed',
         tooltip: {
-          title: 'Failed — waiting for re-pickup',
-          body: `<div>The last run failed; a rapid-crash backoff is holding re-pickup${clock && future ? ` until <b>${clock}</b>` : ''}.</div>${attemptLine}${errorLine}`,
+          title: 'failed — wartet auf Reissue/Review',
+          body: `<div>Der letzte Run ist fehlgeschlagen; ein Rapid-Crash-Backoff hält das Re-Pickup${clock && future ? ` bis <b>${clock}</b>` : ''} zurück.</div>${attemptLine}${errorLine}`,
         },
       };
     }
     case 'failed-idle': {
       return {
         kind: activity.kind,
-        label: 'Failed · no active run',
+        label: 'failed · kein aktiver Run',
         tone: 'failed',
         tooltip: {
-          title: 'Failed — no active run',
-          body: `<div>The last run failed and nothing is running now; the task is eligible for re-pickup.</div>${attemptLine}${errorLine}`,
+          title: 'failed — kein aktiver Run',
+          body: `<div>Der letzte Run ist fehlgeschlagen und aktuell läuft nichts; der Task ist wieder aufnahmebereit.</div>${attemptLine}${errorLine}`,
         },
       };
     }
@@ -94,11 +94,11 @@ export function buildRunActivityBadge(job: TaskInfo, nowMs: number = Date.now())
     default: {
       return {
         kind: 'no-active-run',
-        label: 'No active run',
+        label: 'kein aktiver Run',
         tone: 'idle',
         tooltip: {
-          title: 'No active run',
-          body: `<div>No run is executing this task. It is in 3-progress but is waiting to be picked up — e.g. an earlier run was ended by a backend restart.</div>${attemptLine}${errorLine}`,
+          title: 'kein aktiver Run',
+          body: `<div>Kein Run bearbeitet diesen Task gerade. Er liegt in 3-progress und wartet auf Aufnahme — z. B. wurde ein früherer Run durch einen Backend-Neustart beendet.</div>${attemptLine}${errorLine}`,
         },
       };
     }
