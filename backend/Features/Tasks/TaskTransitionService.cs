@@ -482,7 +482,19 @@ public sealed class TaskTransitionService
         if (runner == null) return;
         try
         {
-            runner.Run(moved.ProjectName, moved.Id, moved.FolderPath, moved.WatchPath, settings.IntegrationBranch);
+            var result = runner.Run(moved.ProjectName, moved.Id, moved.FolderPath, moved.WatchPath, settings.IntegrationBranch);
+
+            // ASS-1752: persist the develop-merge fact so the board card can show
+            // the landed state (`develop @sha`) instead of a dead worktree path,
+            // without a per-card graph query. `moved` was just freshly scanned, so
+            // its provenance is current (replace-all write needs that). Only a real
+            // new merge carries a SHA; write-once on the service side.
+            if (_provenance != null
+                && result.Outcome == AgentStudio.Git.MergeIntoIntegrationOutcome.Merged
+                && !string.IsNullOrWhiteSpace(result.MergedSha))
+            {
+                _provenance.RecordMerge(moved, result.MergedSha);
+            }
         }
         catch (Exception ex)
         {

@@ -112,6 +112,79 @@ public sealed class TaskProvenanceServiceTests : IDisposable
         Assert.Equal("merge00", result.Merge!.MergeCommit);
     }
 
+    // --- WithMerge: pure write-once merge anchor (ASS-1752) -----------------
+
+    [Fact]
+    public void WithMerge_NoExisting_SetsMergeAndBranch()
+    {
+        var merge = new TaskProvenanceMerge { MergeCommit = "ddddddd", AtUtc = DateTime.UtcNow };
+
+        var result = TaskProvenanceService.WithMerge(existing: null, "task/1", merge);
+
+        Assert.Equal("task/1", result.Branch);
+        Assert.NotNull(result.Merge);
+        Assert.Equal("ddddddd", result.Merge!.MergeCommit);
+        Assert.Empty(result.Transitions);
+    }
+
+    [Fact]
+    public void WithMerge_CarriesBranchBaseAndTransitionsThrough()
+    {
+        var existing = new TaskProvenance
+        {
+            Branch = "task/keep",
+            Base = "base000",
+            Transitions = [Anchor(TaskStates.Progress, branchTip: "aaaaaaa"), Anchor(TaskStates.AutoReview, branchTip: "aaaaaaa")],
+            Merge = null,
+        };
+        var merge = new TaskProvenanceMerge { MergeCommit = "ddddddd", AtUtc = DateTime.UtcNow };
+
+        var result = TaskProvenanceService.WithMerge(existing, "task/IGNORED", merge);
+
+        // Branch + base + the full transition ladder survive; the passed-in branch
+        // is only a fallback used when the record had none.
+        Assert.Equal("task/keep", result.Branch);
+        Assert.Equal("base000", result.Base);
+        Assert.Equal(2, result.Transitions.Count);
+        Assert.Equal("ddddddd", result.Merge!.MergeCommit);
+    }
+
+    [Fact]
+    public void WithMerge_IsWriteOnce_DoesNotOverwriteExistingMerge()
+    {
+        var existing = new TaskProvenance
+        {
+            Branch = "task/1",
+            Base = "base000",
+            Transitions = [Anchor(TaskStates.Progress)],
+            Merge = new TaskProvenanceMerge { MergeCommit = "FIRST00", AtUtc = DateTime.UtcNow },
+        };
+        var second = new TaskProvenanceMerge { MergeCommit = "SECOND0", AtUtc = DateTime.UtcNow };
+
+        var result = TaskProvenanceService.WithMerge(existing, "task/1", second);
+
+        // An already-recorded merge fact is append-only: the first SHA wins.
+        Assert.Equal("FIRST00", result.Merge!.MergeCommit);
+    }
+
+    [Fact]
+    public void WithMerge_DoesNotMutateExistingTransitionList()
+    {
+        var existing = new TaskProvenance
+        {
+            Branch = "task/1",
+            Base = "base000",
+            Transitions = [Anchor(TaskStates.Progress)],
+            Merge = null,
+        };
+
+        var result = TaskProvenanceService.WithMerge(
+            existing, "task/1", new TaskProvenanceMerge { MergeCommit = "ddddddd", AtUtc = DateTime.UtcNow });
+
+        result.Transitions.Add(Anchor(TaskStates.Completed));
+        Assert.Single(existing.Transitions); // the source snapshot is untouched
+    }
+
     // --- DeriveLandedState: graph ancestry, real repo ---------------------
 
     [Fact]
@@ -224,7 +297,125 @@ public sealed class TaskProvenanceServiceTests : IDisposable
         Assert.False(git.IsAncestor(repo, commitSha, "main"));
     }
 
+    // --- Anchor write-order: must run BEFORE worktree teardown (ASS-1752) -
+
+    [Fact]
+    public void RecordTransition_CapturesLiveBranchTip_ButLosesItOnceTornDown()
+    {
+        // The bug: the card showed a dead worktree because the provenance anchor
+        // was read at the wrong moment. RecordTransition pins whatever
+        // `GetBranchTip(task/<id>)` returns AT THE INSTANT it runs. This test
+        // proves the ordering contract end to end against a real repo:
+        //  - recorded while the task/<id> branch is alive -> the live tip is
+        //    captured, so the card can name the worktree, and
+        //  - recorded after the branch was torn down -> the tip is null, which is
+        //    exactly the "landed / no worktree" read.
+        // Therefore production MUST record the anchor before TeardownWorktreeForJob
+        // (it does: RecordTransition runs in MoveAsync right after the move lands,
+        // ahead of any integration teardown). Run this with the branch torn down
+        // FIRST and the worktree fact is gone forever.
+        var (repoRoot, watchPath) = SeedWorktreeRepo("order-1");
+        var taskTip = RunGit(repoRoot, "rev-parse task/order-1").Out.Trim();
+        Assert.False(string.IsNullOrWhiteSpace(taskTip));
+
+        var prov = BuildProvenanceService(repoRoot, watchPath, "demo");
+
+        // 1) Record WHILE the worktree branch is alive: the live tip is anchored.
+        var live = Scan(repoRoot, watchPath, "order-1");
+        Assert.NotNull(live);
+        prov.RecordTransition(live!, TaskStates.AutoReview);
+
+        var afterLive = Scan(repoRoot, watchPath, "order-1");
+        var liveAnchor = afterLive!.Provenance!.Transitions[^1];
+        Assert.Equal(TaskStates.AutoReview, liveAnchor.Lane);
+        Assert.Equal(taskTip, liveAnchor.BranchTip);
+
+        // 2) Tear the worktree branch down, THEN record again. The same call now
+        //    sees no branch and anchors a null tip - the worktree fact is lost.
+        RunGit(repoRoot, "checkout -q develop");
+        RunGit(repoRoot, "branch -D task/order-1");
+
+        prov.RecordTransition(afterLive!, TaskStates.HumanReview);
+
+        var afterTeardown = Scan(repoRoot, watchPath, "order-1");
+        var deadAnchor = afterTeardown!.Provenance!.Transitions[^1];
+        Assert.Equal(TaskStates.HumanReview, deadAnchor.Lane);
+        Assert.Null(deadAnchor.BranchTip);
+
+        // The earlier live anchor is still on record (append-only), so the ladder
+        // can reconstruct that the work once lived in a worktree.
+        Assert.Contains(afterTeardown.Provenance!.Transitions, t => t.BranchTip == taskTip);
+    }
+
     // --- Helpers (shared shape with GitWorktreePrimitivesTests) -----------
+
+    /// <summary>
+    /// A repo configured as a single watch path with a job-folder layout, plus a
+    /// live <c>task/&lt;id&gt;</c> branch cut off develop (simulating an isolated
+    /// worktree run). Returns (repoRoot, watchPath); the job sits in 3-progress.
+    /// </summary>
+    private (string RepoRoot, string WatchPath) SeedWorktreeRepo(string jobId)
+    {
+        var root = Path.Combine(_tempDir, "wt-" + jobId);
+        var repoRoot = Path.Combine(root, "repo");
+        var watchPath = Path.Combine(root, "jobs");
+        Directory.CreateDirectory(repoRoot);
+        foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(watchPath, state));
+
+        RunGit(repoRoot, "init -q -b main");
+        RunGit(repoRoot, "config user.email test@example.com");
+        RunGit(repoRoot, "config user.name test");
+        File.WriteAllText(Path.Combine(repoRoot, "README.md"), "seed");
+        RunGit(repoRoot, "add -A");
+        RunGit(repoRoot, "commit -q -m seed");
+        RunGit(repoRoot, "checkout -q -b develop");
+        // The task branch carries its own commit, so its tip differs from develop.
+        RunGit(repoRoot, "checkout -q -b task/" + jobId);
+        File.WriteAllText(Path.Combine(repoRoot, "work.txt"), "task work");
+        Commit(repoRoot, "feat: task work");
+
+        var dir = Path.Combine(watchPath, TaskStates.Progress, jobId);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "task.json"),
+            $"{{\"id\":\"{jobId}\",\"title\":\"{jobId}\",\"state\":\"{TaskStates.Progress}\",\"order\":1,\"agent\":\"copilot\"}}");
+
+        return (repoRoot, watchPath);
+    }
+
+    private static IConfiguration WatchConfig(string repoRoot, string watchPath, string projectName)
+        => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["WatchPaths:0:Name"] = projectName,
+            ["WatchPaths:0:Path"] = watchPath,
+            ["WatchPaths:0:RootPath"] = repoRoot,
+            ["WatchPaths:0:RepositoryPath"] = repoRoot,
+            ["TaskRepository"] = watchPath,
+        }).Build();
+
+    private static TaskProvenanceService BuildProvenanceService(string repoRoot, string watchPath, string projectName)
+    {
+        var config = WatchConfig(repoRoot, watchPath, projectName);
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var mutations = new TaskMutationService(
+            scanner,
+            new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance),
+            new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance),
+            new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance),
+            NullLogger<TaskMutationService>.Instance);
+        var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
+        return new TaskProvenanceService(git, settings, mutations, NullLogger<TaskProvenanceService>.Instance);
+    }
+
+    /// <summary>Fresh scanner each call so the read sees the latest on-disk stamp.</summary>
+    private static TaskInfo? Scan(string repoRoot, string watchPath, string jobId)
+    {
+        var config = WatchConfig(repoRoot, watchPath, "demo");
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        return scanner.FindJob(jobId, watchPath);
+    }
 
     private static TaskProvenanceTransition Anchor(
         string lane, string? branchTip = null, string? workBranchHead = null) => new()

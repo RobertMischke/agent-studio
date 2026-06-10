@@ -166,3 +166,26 @@ export interface TaskProvenanceView {
   ladder: TaskLandedLadder;
   commits: TaskCommitMembership[];
 }
+
+/**
+ * The persisted provenance record, mirroring backend `TaskProvenance`. This is
+ * the append-only fact block stored on `task.json` and surfaced on every board
+ * card via `TaskInfo.provenance` - NOT the live-derived {@link TaskProvenanceView}
+ * (which is only fetched per-task for the detail git pane).
+ *
+ * The card reads three ground-truth signals off this record to show *where the
+ * work actually lives*, instead of guessing from the lane:
+ *  - a real `task/<id>` worktree branch exists iff some transition carries a
+ *    non-null `branchTip` (sequential runs in the shared checkout never cut one);
+ *  - the newest transition's `branchTip` is the CURRENT attempt's tip, so a
+ *    reissue points at the live worktree, not an earlier run;
+ *  - `merge.mergeCommit` is the ground-truth "folded into develop" fact, written
+ *    once by the merge-into-develop step - the only safe-to-persist landed signal
+ *    (the derived `landedState` goes stale and is never stored here).
+ */
+export interface TaskProvenanceRecord {
+  branch: string;
+  base: string | null;
+  transitions: TaskProvenanceTransition[];
+  merge: TaskProvenanceMerge | null;
+}

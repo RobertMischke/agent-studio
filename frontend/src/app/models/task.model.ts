@@ -36,7 +36,7 @@ export const ALL_TASK_STATES: readonly TaskStateKey[] = Object.values(TaskState)
 // live under their own `features/X/models/` and are accessed via the
 // feature barrel. The two `import type` lines below let TaskInfo's
 // own field types reference feature-owned shapes without copying them.
-import type { TaskCommitInfo } from '../features/git';
+import type { TaskCommitInfo, TaskProvenanceRecord } from '../features/git';
 import type { TaskTokenSummary } from '../features/tokens';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orchestrator';
 
@@ -245,6 +245,14 @@ export interface TaskInfo {
    * detail-view reference section and the card `waiting on KEY` badge.
    */
   references?: TaskReferences;
+  /**
+   * Append-only commit-provenance record (ASS-1724). Mirrors backend
+   * `TaskInfo.Provenance` and ships on every board card so the git-state pill
+   * can show *where the work actually lives* (active `task/<id>` worktree vs
+   * landed in develop vs sequential main-checkout) from ground truth instead of
+   * guessing from the lane. Null on legacy `task.json` that predate the field.
+   */
+  provenance?: TaskProvenanceRecord | null;
 }
 
 export interface TaskOutcomeIssue {
