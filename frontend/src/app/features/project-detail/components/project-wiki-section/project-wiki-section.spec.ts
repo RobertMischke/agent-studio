@@ -113,6 +113,26 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
+  it('shows last-modified (date, author, commit subject) in the doc header from git metadata', async () => {
+    const { fixture, http } = await setup();
+    el(fixture)
+      .querySelector<HTMLButtonElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!
+      .click();
+    fixture.detectChanges();
+
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    // Doc tab is the default: the header surfaces the newest commit's author + subject.
+    const meta = el(fixture).querySelector('[data-testid="project-wiki-last-modified"]');
+    expect(meta, 'last-modified header').toBeTruthy();
+    expect(meta!.querySelector('[data-testid="project-wiki-last-modified-author"]')!.textContent).toContain('bot');
+    expect(meta!.querySelector('[data-testid="project-wiki-last-modified-subject"]')!.textContent).toContain('update');
+    http.verify();
+  });
+
   it('filters the tree by needle', async () => {
     const { fixture, http } = await setup();
     fixture.componentInstance.filter.set('concept');

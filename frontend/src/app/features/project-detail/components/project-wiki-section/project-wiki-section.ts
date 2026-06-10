@@ -170,6 +170,12 @@ export class ProjectWikiSectionComponent {
   readonly trustedHtml = computed<SafeHtml>(() =>
     this.sanitizer.bypassSecurityTrustHtml(this.displayContent()));
 
+  /**
+   * Latest commit for the open doc (history is newest-first), surfaced as the
+   * doc-header "last modified" line: when + who + the commit subject (= why).
+   */
+  readonly lastCommit = computed(() => this.history()?.commits?.[0] ?? null);
+
   // ---- loading ----
 
   refresh(): void {
@@ -464,5 +470,12 @@ export class ProjectWikiSectionComponent {
 
   rowPad(depth: number): number {
     return 6 + depth * 16;
+  }
+
+  /** Locale date-time for the doc-header last-modified line; blank on bad input. */
+  formatTimestamp(iso: string | null | undefined): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
   }
 }

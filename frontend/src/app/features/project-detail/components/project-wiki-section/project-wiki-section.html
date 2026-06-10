@@ -121,6 +121,16 @@
           </header>
 
           @if (viewerTab() === 'doc') {
+            @if (!revisionSha() && lastCommit(); as last) {
+              <div class="pwiki__doc-meta" data-testid="project-wiki-last-modified">
+                <span class="pwiki__doc-meta-label">Last modified</span>
+                <span data-testid="project-wiki-last-modified-when">{{ formatTimestamp(last.authorDateUtc) }}</span>
+                <span class="pwiki__doc-meta-dot" aria-hidden="true">·</span>
+                <span data-testid="project-wiki-last-modified-author">{{ last.author }}</span>
+                <span class="pwiki__doc-meta-dot" aria-hidden="true">·</span>
+                <span class="pwiki__doc-meta-subject" data-testid="project-wiki-last-modified-subject">{{ last.subject }}</span>
+              </div>
+            }
             @if (revisionSha(); as sha) {
               <div class="pwiki__rev-banner" data-testid="project-wiki-rev-banner">
                 Viewing revision <code>{{ sha }}</code>
