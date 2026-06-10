@@ -10,6 +10,7 @@ import { UxuiPanelComponent } from '../uxui-panel/uxui-panel.component';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { ProjectObservabilityPanelComponent } from '../project-observability/project-observability-panel.component';
 import { ProjectProductRuntimePanelComponent } from '../project-product-runtime/project-product-runtime-panel.component';
+import { ProjectPipelinePanelComponent } from '../project-pipeline-panel/project-pipeline-panel.component';
 import { ProjectSteeringDocsSectionComponent } from '../project-steering-docs-section/project-steering-docs-section';
 import { ProjectSkillReadinessSectionComponent } from '../project-skill-readiness-section/project-skill-readiness-section';
 import { ProjectWikiSectionComponent } from '../project-wiki-section/project-wiki-section';
@@ -44,6 +45,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
     ProjectTokenUsagePanelComponent,
     ProjectObservabilityPanelComponent,
     ProjectProductRuntimePanelComponent,
+    ProjectPipelinePanelComponent,
     ProjectSteeringDocsSectionComponent,
     ProjectSkillReadinessSectionComponent,
     ProjectWikiSectionComponent,

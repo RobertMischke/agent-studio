@@ -150,9 +150,10 @@ test('pipeline: disabling a step persists enabled=false and line-through styling
   await toggle.uncheck();
   await expect.poll(async () => (await getStepOverride())?.enabled).toBe(false);
 
-  // The row gets the disabled modifier (line-through name, dimmed).
+  // The row reflects the disabled state (line-through name, dimmed). Asserted
+  // via the stable data-enabled marker rather than a styling-dependent class.
   const row = page.getByTestId(`pipeline-step-row-${STEP}`);
-  await expect(row).toHaveClass(/proj-detail__pl-row--disabled/);
+  await expect(row).toHaveAttribute('data-enabled', 'false');
 
   await section.scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, '03-step-disabled.png'), fullPage: true });

@@ -97,11 +97,9 @@
   }
   @defer (when activeRail() === 'pipeline') {
     @if (activeRail() === 'pipeline') {
-      <app-project-detail
+      <app-project-pipeline-panel
         [projectName]="projectName()"
-        view="pipeline"
-        (openFeed)="openFeedFromDetail($event)"
-        (openReport)="openReport($event)" />
+        (openPrompts)="setRail('prompts')" />
     }
   }
   @defer (when activeRail() === 'workflow') {

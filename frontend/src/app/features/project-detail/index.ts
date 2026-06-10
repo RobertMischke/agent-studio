@@ -16,6 +16,7 @@ export { SecurityPanelComponent } from './components/security-panel/security-pan
 export { UxuiPanelComponent } from './components/uxui-panel/uxui-panel.component';
 export { ProjectObservabilityPanelComponent } from './components/project-observability/project-observability-panel.component';
 export { ProjectProductRuntimePanelComponent } from './components/project-product-runtime/project-product-runtime-panel.component';
+export { ProjectPipelinePanelComponent } from './components/project-pipeline-panel/project-pipeline-panel.component';
 
 // section components used cross-feature
 export { ProjectSteeringDocsSectionComponent } from './components/project-steering-docs-section/project-steering-docs-section';

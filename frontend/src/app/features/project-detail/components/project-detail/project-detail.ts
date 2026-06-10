@@ -6,21 +6,9 @@ import type { GroupedJobs, ProjectQueueHealth, RunnerStatus } from '../../../../
 import { CLI_TYPES, TaskState, type CliType } from '../../../../models/task.model';
 import { cliTypeLabel, cliTypeIcon } from '../../../../services/format.util';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
-import {
-  PipelineStep_GateModes,
-  PipelineStep_Conditions,
-  PipelineStep_ConditionValueTokens,
-} from './project-detail.models';
 import { CliCatalogStore } from '../../../../services/cli-catalog.store';
-import type {
-  PipelineCatalogueStep,
-  PipelineStepSetting,
-  PipelineStepCondition,
-  PipelineStepConditionToken,
-} from '../../../../features/task-pipeline';
 import { TokenSummaryBlockComponent } from '../../../../features/tokens';
 import { GlobalOrchestratorCardComponent } from '../../../../features/orchestrator';
-import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { ProjectArchitectureSectionComponent } from '../project-architecture-section/project-architecture-section';
 import { ProjectDriftSectionComponent } from '../project-drift-section/project-drift-section';
 import { ProjectDriftOverviewSectionComponent } from '../project-drift-overview-section/project-drift-overview-section';
@@ -42,45 +30,14 @@ interface ProjectSettingsRow {
 
 type AutoPushStrategy = 'never' | 'on-completed' | 'always-immediate';
 
-interface PipelineAdminRow {
-  id: string;
-  displayName: string;
-  kind: string;
-  usesModel: boolean;
-  usesPrompt: boolean;
-  supportsMode: boolean;
-  canDisable: boolean;
-  supportsCondition: boolean;
-  phase: string;
-  enabled: boolean;
-  cliType: string;
-  model: string;
-  thinkingLevel: string;
-  prompt: string;
-  mode: string;
-  condition: string;
-  conditionValue: string;
-  conditionNeedsValue: boolean;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
-}
-
-interface PipelineGroup {
-  phase: string;
-  label: string;
-  rows: PipelineAdminRow[];
-}
-
 export type ProjectDetailView =
   | 'overview'
   | 'jobs'
   | 'settings'
-  // Nav-rebuild step 2 (T5b): three sections that used to live inside the
-  // 'settings' view now render under their own view so the project-shell rails
-  // (Pipeline / Workflow) and the workspace Admin → CLI & Modelle surface can
-  // mount them unchanged. Same controls, same backend writes — only the mount
-  // location moved (Funktions-Diff = 0).
-  | 'pipeline'
+  // Nav-rebuild step 2 (T5b): sections that used to live inside the 'settings'
+  // view now render under their own view so the project-shell rails (Workflow)
+  // and the workspace Admin → CLI & Modelle surface can mount them unchanged.
+  // Same controls, same backend writes — only the mount location moved.
   | 'workflow'
   | 'cli'
   | 'orchestrator'
@@ -104,7 +61,6 @@ export type ProjectDetailView =
   standalone: true,
   imports: [
     FormsModule,
-    CliModelSelectorComponent,
     TokenSummaryBlockComponent,
     GlobalOrchestratorCardComponent,
     ProjectArchitectureSectionComponent,
@@ -237,85 +193,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     });
   });
 
-  // Pre/post pipeline-step config. The catalogue (which steps exist + what
-  // each accepts) is project-independent and fetched once; the per-project
-  // overrides come from the settings projection. Both feed pipelineRows().
-  readonly pipelineCatalogue = signal<readonly PipelineCatalogueStep[]>([]);
-  readonly pipelineOverrides = signal<Record<string, PipelineStepSetting>>({});
-  readonly pipelineOrder = signal<readonly string[]>([]);
-  readonly pipelineCliTypes = CLI_TYPES;
-  readonly pipelineGateModes = PipelineStep_GateModes;
-  readonly pipelineConditions = PipelineStep_Conditions;
-  /** Per-step write in flight; disables that row's controls until the PUT resolves. */
-  readonly pipelineStepBusy: Record<string, boolean> = {};
-  readonly pipelineOrderBusy = signal(false);
-
-  /**
-   * One row per configurable step: the catalogue metadata joined with the
-   * project's current override. With no override (or a null `enabled`) the row
-   * falls back to the step's `defaultEnabled` - on for most steps, off for the
-   * opt-in drift post-steps. `model` / `mode` empty string = inherit.
-   */
-  readonly pipelineRows = computed<PipelineAdminRow[]>(() => {
-    const overrides = this.pipelineOverrides();
-    const drafts = this.pipelineConditionDraft();
-    const catalogue = this.orderedPipelineCatalogue();
-    return catalogue.map((step, index) => {
-      const ov = overrides[step.id];
-      // A draft (an in-progress condition edit not yet persisted - e.g. a
-      // value-bearing token whose value the user is still typing) shadows the
-      // persisted condition so the value input can appear before there is
-      // anything to save.
-      const draft = drafts[step.id];
-      const conditionWhen = draft?.when ?? ov?.condition?.when ?? '';
-      const conditionValue = draft?.value ?? ov?.condition?.value ?? '';
-      return {
-        id: step.id,
-        displayName: step.displayName,
-        kind: step.kind,
-        usesModel: step.usesModel,
-        usesPrompt: step.usesPrompt,
-        supportsMode: step.supportsMode,
-        canDisable: step.canDisable,
-        supportsCondition: step.supportsCondition,
-        phase: step.phase ?? this.phaseForStep(step),
-        enabled: ov?.enabled ?? step.defaultEnabled,
-        cliType: ov?.cliType ?? step.cliType ?? '',
-        model: ov?.model ?? '',
-        thinkingLevel: ov?.thinkingLevel ?? '',
-        prompt: ov?.prompt ?? '',
-        mode: ov?.mode ?? '',
-        condition: conditionWhen,
-        conditionValue,
-        conditionNeedsValue: PipelineStep_ConditionValueTokens.includes(conditionWhen),
-        canMoveUp: this.canMovePipelineStep(catalogue, index, -1),
-        canMoveDown: this.canMovePipelineStep(catalogue, index, 1),
-      };
-    });
-  });
-
-  readonly pipelineGroups = computed(() => {
-    const groups: PipelineGroup[] = [];
-    for (const row of this.pipelineRows()) {
-      const phase = row.phase || 'post';
-      let group = groups.find(g => g.phase === phase);
-      if (!group) {
-        group = { phase, label: this.pipelinePhaseLabel(phase), rows: [] };
-        groups.push(group);
-      }
-      group.rows.push(row);
-    }
-    return groups;
-  });
-
-  /**
-   * In-progress condition edits, keyed by step id. Shadows the persisted
-   * condition in `pipelineRows` so a value-bearing token (task-type / tag)
-   * can show its value input before a value has been entered and persisted.
-   * Cleared once a write resolves so the row falls back to persisted truth.
-   */
-  readonly pipelineConditionDraft = signal<Record<string, { when: string; value: string }>>({});
-
   /**
    * Mode buttons. The four runner modes are: manual (off), auto-single
    * (run one then revert), auto-continuous (run all ready), paused
@@ -443,7 +320,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.cliCatalog.ensure('claude').subscribe({ error: () => void 0 });
     this.refreshAll();
-    this.loadPipelineConfig();
     this.refreshCliModes();
     this.refreshCliContextModes();
     // Cycle 3: skip the 6-endpoint refreshAll fan-out when the panel is in
@@ -451,31 +327,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     // 10 s window from the project-detail panel alone (see logs/perf
     // baseline); this drops to zero when the tab is hidden.
     this.pollTimer = setVisibleInterval(() => this.refreshAll(true), 5_000);
-  }
-
-  /**
-   * Load the step catalogue (once) and this project's current per-step
-   * overrides. The overrides ride on the settings projection rather than
-   * the per-project snapshot, so this is a separate read; it is cheap and
-   * runs on panel open plus after each write.
-   */
-  private loadPipelineConfig(): void {
-    this.jobService.getPipelineCatalogue().subscribe({
-      next: (cat) => this.pipelineCatalogue.set(cat.steps ?? []),
-      error: () => { /* leave catalogue empty; the section just hides */ }
-    });
-    this.refreshPipelineOverrides();
-  }
-
-  private refreshPipelineOverrides(): void {
-    const project = this.projectName();
-    this.jobService.getAllProjectSettings().subscribe({
-      next: (all) => {
-        this.pipelineOverrides.set(all[project]?.pipelineSteps ?? {});
-        this.pipelineOrder.set(all[project]?.pipelineStepOrder ?? []);
-      },
-      error: () => { /* keep last known overrides */ }
-    });
   }
 
   ngOnDestroy(): void {
@@ -670,6 +521,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     });
   }
 
+<<<<<<< HEAD
   onStepEnabledChange(stepId: string, enabled: boolean): void {
     this.writeStep(stepId, { enabled });
   }
@@ -936,6 +788,17 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+=======
+  /** F35: persist one lane's sort strategy, then refresh the resolved map. */
+  onLaneSortChange(lane: string): void {
+    const strategy = this.laneSortDraft[lane] ?? 'manual';
+    this.jobService.setLaneSortStrategy(this.projectName(), lane, strategy).subscribe({
+      next: () => this.refreshAll(true),
+      error: () => this.refreshAll(true)
+    });
+  }
+
+>>>>>>> 545fc1ea (Nav-Umbau Schritt 3: Pipeline-Seite ueberarbeiten (Steps, Modelle, Prompt-Bindung, Kosten))
   repairQueueHealth(): void {
     if (this.queueRepairBusy()) return;
     this.queueRepairBusy.set(true);

@@ -109,11 +109,9 @@
         }
         @defer (when overlays.projectShellRail() === 'pipeline') {
           @if (overlays.projectShellRail() === 'pipeline') {
-            <app-project-detail
+            <app-project-pipeline-panel
               [projectName]="projShell"
-              view="pipeline"
-              (openFeed)="overlays.openFeedFromDetail($event)"
-              (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
+              (openPrompts)="setProjectShellRail('prompts')" />
           }
         }
         @defer (when overlays.projectShellRail() === 'workflow') {
