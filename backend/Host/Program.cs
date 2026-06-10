@@ -275,6 +275,20 @@ builder.Services.AddSingleton<AgentStudio.AdHoc.AdHocUsageRecorder>();
 builder.Services.AddSingleton<AgentStudio.AdHoc.AdHocUsageService>();
 builder.Services.AddSingleton<PickupLockFile>();
 builder.Services.AddSingleton<IntegrationLeaseService>();
+// ASS-1729: keep the host awake while >=1 agent run is active. Default ON;
+// disable via "KeepAwakeDuringRuns": false. Uses the Windows Power Request API
+// on Windows (visible under `powercfg /requests`, system-required only so the
+// display may still sleep); a no-op elsewhere. SystemRequired prevents the idle
+// sleep timer from firing mid-run; lid-close / manual sleep can still win, which
+// the sleep-aware watchdog handles on resume.
+builder.Services.AddSingleton<SystemKeepAwake>(sp =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var enabled = cfg.GetValue("KeepAwakeDuringRuns", true);
+    AgentStudio.Runner.ISystemPowerRequest request =
+        OperatingSystem.IsWindows() ? new WindowsPowerRequest() : new NoopPowerRequest();
+    return new SystemKeepAwake(request, enabled);
+});
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<CrashRecoveryService>();
 builder.Services.AddSingleton<StaleProgressArchiver>();

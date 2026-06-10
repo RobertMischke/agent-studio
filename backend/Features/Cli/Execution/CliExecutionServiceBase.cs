@@ -649,6 +649,14 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     public DateTime? GetLastStreamedAt(string jobKey) =>
         _processes.TryGetValue(jobKey, out var info) ? info.LastStreamedAt : null;
 
+    public void ResetSilenceClock(string jobKey)
+    {
+        if (_processes.TryGetValue(jobKey, out var info))
+        {
+            info.LastStreamedAt = DateTime.UtcNow;
+        }
+    }
+
     public WatchdogState GetWatchdogState(string jobKey) =>
         _processes.TryGetValue(jobKey, out var info) ? info.LastWatchdogState : WatchdogState.Healthy;
 

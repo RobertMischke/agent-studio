@@ -53,6 +53,10 @@ public class TaskRunnerService : BackgroundService
     // from session transcripts. DI injects the registered singleton; null only
     // when a test fixture builds the service directly.
     private readonly AgentStudio.Cli.ClaudeSessionInspector? _sessionInspector;
+    // ASS-1729: holds a Windows system power-request while >=1 run is active so
+    // the host does not sleep mid-run. Optional: DI injects the singleton; null
+    // when a test fixture builds the service directly (keep-awake then off).
+    private readonly SystemKeepAwake? _keepAwake;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -105,7 +109,8 @@ public class TaskRunnerService : BackgroundService
         AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null,
         HumanReviewEscalation? humanReviewEscalation = null,
         AgentStudio.Runner.PostAbortReviewStepService? postAbortReview = null,
-        AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null)
+        AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null,
+        SystemKeepAwake? keepAwake = null)
     {
         _config = config;
         _logger = logger;
@@ -139,6 +144,7 @@ public class TaskRunnerService : BackgroundService
         _pipelineLog = pipelineLog;
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
+        _keepAwake = keepAwake;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -310,6 +316,14 @@ public class TaskRunnerService : BackgroundService
             catch (Exception ex) { _logger.LogWarning(ex, "Global orchestrator boot failed"); }
         }, stoppingToken);
 
+        // ASS-1729: OS suspend/resume detector. The wall clock keeps advancing
+        // while the host sleeps but this stopwatch (QPC) freezes, so comparing
+        // their deltas across a tick reveals how long we were suspended. The
+        // first Observe() only primes the baseline.
+        var monoClock = System.Diagnostics.Stopwatch.StartNew();
+        var sleepDetector = new SleepDetector();
+        sleepDetector.Observe(DateTime.UtcNow, monoClock.Elapsed);
+
         // Run the loop - poll every 5 seconds for auto-mode runners.
         // Per-tick try/catch is the load-bearing safety net: an unhandled
         // exception escaping ExecuteAsync stops the host
@@ -317,6 +331,28 @@ public class TaskRunnerService : BackgroundService
         // tick must not take down the API for every other project.
         while (!stoppingToken.IsCancellationRequested)
         {
+            // ASS-1729: before any watchdog evaluation this iteration, check
+            // whether the host just woke from sleep. If so, reset the silence
+            // clocks of every active run across all projects - the wall-clock
+            // jump is sleep, not agent silence, and must not trigger a kill.
+            try
+            {
+                var slept = sleepDetector.Observe(DateTime.UtcNow, monoClock.Elapsed);
+                if (slept is { } sleptSeconds)
+                {
+                    var resetRuns = 0;
+                    foreach (var runner in _runners.Values)
+                    {
+                        try { resetRuns += runner.AbsorbSleep(sleptSeconds); }
+                        catch (Exception ex) { _logger.LogWarning(ex, "AbsorbSleep failed for {Project}", runner.ProjectName); }
+                    }
+                    _logger.LogInformation(
+                        "[power] system slept ~{Minutes:F0} min; reset silence clocks for {Runs} run(s)",
+                        sleptSeconds / 60.0, resetRuns);
+                }
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "Sleep detection tick failed; continuing"); }
+
             foreach (var runner in _runners.Values)
             {
                 if (stoppingToken.IsCancellationRequested) break;
@@ -346,9 +382,26 @@ public class TaskRunnerService : BackgroundService
                 }
             }
 
+            // ASS-1729: reconcile the keep-awake power request with the total
+            // number of in-flight runs across all projects. Idempotent: holds
+            // the request while >=1 run is active, releases it at 0. Done after
+            // the ticks so newly-started/finished runs this iteration count.
+            try
+            {
+                var activeRuns = 0;
+                foreach (var runner in _runners.Values) activeRuns += runner.ActiveRunCount;
+                _keepAwake?.Update(activeRuns);
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "Keep-awake refresh failed; continuing"); }
+
             try { await Task.Delay(5000, stoppingToken); }
             catch (OperationCanceledException) { break; }
         }
+
+        // Loop exited (shutdown): drop any held keep-awake request so the host
+        // is not pinned awake after the backend stops ticking.
+        try { _keepAwake?.Update(0); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Keep-awake release on shutdown failed"); }
     }
 
     public RunnerStatus GetStatus()

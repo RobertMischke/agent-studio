@@ -2108,6 +2108,53 @@ public class ProjectRunner
     /// process tree (when transitioning into Hung). Same-state ticks are
     /// silent so the chat does not pile up identical notes.
     /// </summary>
+    /// <summary>
+    /// Number of in-flight coding runs occupying this project's slots. Summed
+    /// across every project by <see cref="TaskRunnerService"/> to drive the
+    /// system keep-awake power request.
+    /// </summary>
+    public int ActiveRunCount => _activeRuns.Count;
+
+    /// <summary>
+    /// Absorb a detected OS sleep of <paramref name="sleptSeconds"/> by resetting
+    /// the silence clocks of every active run, so the watchdog does not mistake
+    /// the nap for agent silence on the resume tick (the wall clock jumped
+    /// forward by the sleep duration, but no agent actually went quiet). Resets
+    /// both the per-phase activity clock (<see cref="_phaseByJob"/>) and the CLI
+    /// service's last-streamed clock. Returns the number of runs reset.
+    ///
+    /// <para>
+    /// The CLI child process is deliberately left untouched here: if it survived
+    /// the suspend it simply keeps running with a fresh clock; if the OS killed
+    /// it during sleep, the process has already exited and the normal
+    /// exit/crash-recovery path picks it up - this method does not classify or
+    /// reissue.
+    /// </para>
+    /// </summary>
+    public int AbsorbSleep(double sleptSeconds)
+    {
+        var now = DateTime.UtcNow;
+        var reset = 0;
+        foreach (var run in _activeRuns.Snapshot())
+        {
+            var jobKey = TaskIdentity.CreateKey(Entry.Path, run.JobId);
+
+            if (_phaseByJob.TryGetValue(jobKey, out var snap))
+            {
+                _phaseByJob[jobKey] = snap with { LastActivityAt = now };
+            }
+
+            if (run.CliType is { } cliType)
+            {
+                try { _router.Get(cliType).ResetSilenceClock(jobKey); }
+                catch (Exception ex) { _logger.LogDebug(ex, "ResetSilenceClock skipped for {JobId}", run.JobId); }
+            }
+
+            reset++;
+        }
+        return reset;
+    }
+
     private void TickWatchdog()
     {
         var jobId = _activeJobId;

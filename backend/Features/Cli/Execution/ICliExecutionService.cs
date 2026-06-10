@@ -73,6 +73,18 @@ public interface ICliExecutionService
     DateTime? GetLastStreamedAt(string jobKey);
 
     /// <summary>
+    /// Reset the silence clock for a live run by stamping its last-streamed
+    /// timestamp to now, without any output having actually arrived. The runner
+    /// calls this on the tick after an OS suspend/resume is detected: the wall
+    /// clock jumped forward by the nap duration, so the run looks silent for the
+    /// whole sleep even though the agent never went quiet. Resetting here keeps
+    /// the watchdog from killing a healthy run on the resume tick. No-op when
+    /// the run is unknown / finished, and a default no-op for backends and test
+    /// stubs that don't track a silence clock.
+    /// </summary>
+    void ResetSilenceClock(string jobKey) { }
+
+    /// <summary>
     /// Read / write the watchdog state previously announced for this run.
     /// Used by the runner's per-tick announcer to suppress same-state
     /// repeats. Defaults to <see cref="AgentStudio.Shared.WatchdogState.Healthy"/>

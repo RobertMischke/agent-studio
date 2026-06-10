@@ -52,6 +52,27 @@ The file is gitignored so it stays per-checkout. Stable lacks the file, so the s
 
 `RepositoryPath` is optional. Use it when the Git repository root differs from the CLI working directory, for example a monorepo or a source app under a parent repository. Git status, diff, commits, and the VS Code handoff use `RepositoryPath`; when it is omitted, they fall back to `RootPath` and still ask Git for the work-tree top-level.
 
+### Keep the system awake during runs
+
+```json
+// backend/appsettings.json (or appsettings.Local.json)
+{
+  "KeepAwakeDuringRuns": true
+}
+```
+
+`KeepAwakeDuringRuns` (default `true`) makes the backend hold a Windows **power request** for as long as at least one agent run is active, so the host does not drop into idle sleep mid-run. The request is coupled to the live active-run count in one place (the runner loop): it is acquired when the first run starts and released when the count returns to zero. It asserts `PowerRequestSystemRequired` only, so the **display may still sleep** — only the system is kept awake. On Windows the request is named ("Agent Studio: N aktive Agent-Runs") and shows up under:
+
+```sh
+powercfg /requests
+```
+
+On non-Windows hosts the setting is a harmless no-op. Set it to `false` to opt out entirely.
+
+This is prevention, not a guarantee: a `PowerRequestSystemRequired` request stops the **idle** sleep timer but does **not** override a lid-close or a manual sleep (especially on Modern Standby machines). For those cases the runner is also **sleep-aware**: when the host wakes, the runner detects the suspend (the wall clock jumped forward while a monotonic clock stayed frozen) and **resets the silence clocks** of every active run instead of letting the watchdog mistake the nap for agent silence and kill the run. A wake is logged as `[power] system slept ~X min; reset silence clocks for N run(s)`.
+
+> Operator note (informational, not configured here): on battery (DC) you may additionally want to raise or disable the OS standby timeout. That is a host power-plan setting, separate from `KeepAwakeDuringRuns`.
+
 ### Orchestrator + supervisor toggles (UI-configurable)
 
 The hosted-service flags that gate the auto-review orchestrator, the orchestrator-prep lane, the Layer-2 supervisor passes, the Layer-2.5 meta-cycle, and the auto-intervention policy used to require hand-editing `backend/appsettings.Local.json`. These are now reachable from the header `⋮` menu under "Orchestrator config". The drawer reads `GET /api/admin/config/orchestrator`, writes via `PUT` (X-Client-Id required), and the changes land in `backend/appsettings.Local.json` for the running checkout. All flags require a backend restart to take effect; the drawer surfaces a "Restart required" banner after every successful save.

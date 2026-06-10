@@ -306,6 +306,71 @@ process.exit(0);
     }
 
     [SkippableFact]
+    public async Task ResetSilenceClock_OnStalledRun_AdvancesLastStreamedToNow()
+    {
+        // ASS-1729: after an OS suspend/resume the runner calls
+        // ResetSilenceClock on every active run so the wall-clock jump is not
+        // mistaken for agent silence. Pin the primitive: a run that streamed an
+        // init line then stalled has a stale LastStreamedAt; resetting bumps it
+        // forward to ~now without any new output having arrived.
+        var node = NodeExePath;
+        Skip.IfNot(node != null, "node.exe not found");
+
+        const string Script = @"
+process.stdout.write('{""type"":""system"",""subtype"":""init""}\n');
+setInterval(() => {}, 600000);
+";
+        var svc = new FakeNodeCliService(node!, Script);
+        var jobId = $"fake-{Guid.NewGuid():N}";
+        var jobKey = $"::{jobId}";
+
+        var (exec, err) = await svc.StartAsync(jobId, jobKey, "(unused)", Path.GetTempPath());
+        Assert.Null(err);
+        Assert.NotNull(exec);
+
+        // Wait for the init line so LastStreamedAt is stamped from real output.
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        DateTime? before = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            var snap = svc.GetOutput(jobKey);
+            if (snap.Any(l => l.Stream == "stdout" && l.Text.Contains("\"system\"")))
+            {
+                before = svc.GetLastStreamedAt(jobKey);
+                break;
+            }
+            await Task.Delay(100);
+        }
+        Assert.NotNull(before);
+
+        // The run is now stalled - no further output, so LastStreamedAt goes
+        // stale as wall-clock time passes. Let a clear gap accrue.
+        await Task.Delay(1200);
+
+        svc.ResetSilenceClock(jobKey);
+        var after = svc.GetLastStreamedAt(jobKey);
+
+        Assert.NotNull(after);
+        Assert.True(after!.Value > before!.Value,
+            $"ResetSilenceClock should advance LastStreamedAt (before={before:o}, after={after:o}).");
+        Assert.True((DateTime.UtcNow - after.Value).TotalSeconds < 2,
+            "Reset LastStreamedAt should be ~now.");
+
+        svc.Stop(jobKey, RunStopReason.Watchdog);
+    }
+
+    [Fact]
+    public void ResetSilenceClock_UnknownJobKey_IsNoOp()
+    {
+        // Defensive: resetting a run the service does not track must not throw
+        // (the runner iterates active slots, which can race a just-finished run).
+        var svc = new FakeNodeCliService("node", "process.exit(0);");
+        var ex = Record.Exception(() => svc.ResetSilenceClock("::no-such-job"));
+        Assert.Null(ex);
+        Assert.Null(svc.GetLastStreamedAt("::no-such-job"));
+    }
+
+    [SkippableFact]
     public async Task FakeCli_StreamsManyFrames_RunnerCapturesAll()
     {
         // Counter test: a fake CLI that ACTUALLY produces output should be
