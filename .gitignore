@@ -92,3 +92,11 @@ frontend/mockup-chat.*.log
 # runtime frontend dev-server logs (not source)
 frontend-ngserve.*.log
 frontend-server.*.log
+
+# Local UI evidence capture (screenshots + throwaway capture/proxy helpers).
+# Task evidence belongs in the task's results/ folder, never in the source
+# repo; a crash-recovery auto-commit otherwise sweeps these back in.
+frontend/evidence-out/
+frontend/capture-evidence.mjs
+frontend/debug-styles.mjs
+frontend/proxy.stable.json
