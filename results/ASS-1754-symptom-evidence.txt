@@ -32,3 +32,17 @@ c263528f Nav-Umbau Schritt 3: Pipeline-Seite ueberarbeiten (Steps, Modelle, Prom
 24ef35d0 chore(crash-recovery): rescue orphan changes for bug-page-not-scoped-to-active-project-shows-foreign-elements
 50e21a26 chore(crash-recovery): rescue orphan changes for extend-deletejob-to-remove-jobjson-less-orphan-folders
 7b4a7930 chore(crash-recovery): rescue orphan changes for extend-deletejob-to-remove-jobjson-less-orphan-folders
+
+## Gate re-verification (re-issue run)
+The auto-review re-open cited a deterministic build/test gate failure:
+  CSC error CS2012: Cannot open '...\tools\SilentCatchAnalyzer\obj\Debug\netstandard2.0\SilentCatchAnalyzer.dll'
+  for writing -- being used by another process.
+This is an environmental file lock, NOT a defect in this task's diff: the Roslyn analyzer DLL
+(SilentCatchAnalyzer, referenced by OrchestratorApi as OutputItemType="Analyzer") is held open by the
+persistent shared compiler server (VBCSCompiler) when multiple slots build the shared main checkout
+concurrently. The error path is the main checkout (...\agent-taskboard-dev\tools\...), not this worktree;
+this task's diff does not touch tools/SilentCatchAnalyzer.
+Re-verified green in this worktree (unique analyzer output path, no cross-build collision):
+  dotnet build backend/OrchestratorApi.csproj        -> Build succeeded, 0 Error(s)
+  dotnet build backend.Tests/OrchestratorApi.Tests.csproj -> 0 Error(s)
+  dotnet test  --filter GitServiceWorktreeRunCommit|TaskCommitBinding -> Passed 11, Failed 0
