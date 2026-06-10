@@ -478,6 +478,141 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.selectedPipelineIsCurrent()).toBe(true);
   });
 
+  it('run switcher: collapses to a recent window past the limit and expands on demand (ASS-1705)', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe = agentPipeline('claude-opus-4-8');
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const archivedAttempt = (attempt: number) => ({
+      pipelineId: 'standard-task-pipeline',
+      pipelineVersion: 1,
+      jobId: 'test-1',
+      project: 'test',
+      attempt,
+      startedAt: `2026-06-09T${pad(attempt)}:00:00.000Z`,
+      completedAt: `2026-06-09T${pad(attempt)}:05:00.000Z`,
+      previousAttempts: [],
+      steps: [
+        {
+          stepId: 'core-agent-run', kind: 'core' as const, model: 'claude-opus-4-8',
+          status: 'passed' as const,
+          startedAt: `2026-06-09T${pad(attempt)}:00:00.000Z`,
+          completedAt: `2026-06-09T${pad(attempt)}:05:00.000Z`,
+          durationMs: 300_000, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0,
+        },
+      ],
+    });
+    pipe.execution = {
+      ...pipe.execution!,
+      attempt: 10,
+      startedAt: '2026-06-10T10:00:00.000Z',
+      completedAt: null,
+      steps: [
+        {
+          stepId: 'core-agent-run', kind: 'core', model: 'claude-opus-4-8', status: 'running',
+          startedAt: '2026-06-10T10:00:00.000Z', completedAt: null, durationMs: 0,
+          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+        },
+      ],
+      previousAttempts: [9, 8, 7, 6, 5, 4, 3, 2, 1].map(archivedAttempt),
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    expect(c.pipelineRunOptions().length).toBe(10);
+    expect(c.runSwitcherLimit()).toBe(6);
+    expect(c.visibleRunOptions().length).toBe(6);
+    expect(c.hiddenRunCount()).toBe(4);
+    // Current/final run is always the first, visible, primary anchor.
+    expect(c.visibleRunOptions()[0].attempt).toBe(10);
+    expect(c.visibleRunOptions()[0].current).toBe(true);
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelectorAll('[data-testid="overview-pipeline-run-option"]').length).toBe(6);
+    const more = host.querySelector<HTMLButtonElement>('[data-testid="overview-pipeline-run-more"]');
+    expect(more).not.toBeNull();
+    expect(more!.textContent?.trim()).toBe('+4 older');
+
+    more!.click();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    expect(c.runSwitcherExpanded()).toBe(true);
+    expect(c.hiddenRunCount()).toBe(0);
+    expect(host.querySelectorAll('[data-testid="overview-pipeline-run-option"]').length).toBe(10);
+    expect(host.querySelector('[data-testid="overview-pipeline-run-more"]')).toBeNull();
+    expect(host.querySelector('[data-testid="overview-pipeline-run-less"]')).not.toBeNull();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="overview-pipeline-run-less"]')!.click();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    expect(c.runSwitcherExpanded()).toBe(false);
+    expect(host.querySelectorAll('[data-testid="overview-pipeline-run-option"]').length).toBe(6);
+  });
+
+  it('run switcher: per-run tokens + cost join from the usage rollup, with a step-sum fallback (ASS-1705)', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe = agentPipeline('claude-opus-4-8');
+    pipe.execution = {
+      ...pipe.execution!,
+      attempt: 2,
+      startedAt: '2026-06-09T09:00:00.000Z',
+      completedAt: null,
+      steps: [
+        {
+          stepId: 'core-agent-run', kind: 'core', model: 'claude-opus-4-8', status: 'running',
+          startedAt: '2026-06-09T09:00:00.000Z', completedAt: null, durationMs: 0,
+          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+        },
+      ],
+      previousAttempts: [
+        {
+          pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+          attempt: 1, startedAt: '2026-06-08T08:00:00.000Z', completedAt: '2026-06-08T08:03:00.000Z',
+          previousAttempts: [],
+          steps: [
+            {
+              stepId: 'core-agent-run', kind: 'core', model: 'claude-opus-4-8', status: 'passed',
+              startedAt: '2026-06-08T08:00:00.000Z', completedAt: '2026-06-08T08:03:00.000Z',
+              durationMs: 180_000, inputTokens: 10, outputTokens: 20, cacheReadTokens: 0, cacheCreationTokens: 0,
+            },
+          ],
+        },
+      ],
+    };
+    // Usage rollup carries a priced row for the current run only; the archived
+    // run has no rollup row and must fall back to summing its step tokens.
+    pipe.tokensByModel = {
+      runs: [
+        {
+          attempt: 2, current: true, startedAt: '2026-06-09T09:00:00.000Z', completedAt: null,
+          models: [], totalTokens: 5_000, totalCostUsd: 0.42, anyModelUnknown: false,
+        },
+      ],
+      totalByModel: [],
+      totalTokens: 5_000,
+      totalCostUsd: 0.42,
+      anyModelUnknown: false,
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    const opts = c.pipelineRunOptions();
+    const cur = opts.find(o => o.attempt === 2)!;
+    const prev = opts.find(o => o.attempt === 1)!;
+
+    expect(cur.totalTokens).toBe(5_000);
+    expect(cur.totalCostUsd).toBeCloseTo(0.42);
+    expect(cur.costKnown).toBe(true);
+    expect(cur.tooltip?.body).toContain('Tokens:');
+    expect(cur.tooltip?.body).toContain('Cost (API est.):');
+
+    // Fallback path: step-token sum (10 + 20), cost unknown -> "n/a".
+    expect(prev.totalTokens).toBe(30);
+    expect(prev.costKnown).toBe(false);
+    expect(prev.totalCostUsd).toBe(0);
+    expect(prev.tooltip?.body).toContain('Cost (API est.): n/a');
+    expect(prev.tooltip?.body).toContain('Verdict: 1 passed');
+  });
+
   it('pipeline block: CORE CLI-footer tokens render with source, API-price tooltip, run count, and SUM footer', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     const pipe = agentPipeline('claude-opus-4-8');

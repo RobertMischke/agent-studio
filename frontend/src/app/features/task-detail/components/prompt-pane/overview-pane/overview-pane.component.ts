@@ -30,6 +30,7 @@ import type {
   PipelineStepExecution,
   PipelineStepStatus,
   PipelineModelUsageSummary,
+  PipelineRunTokenUsage,
   StepKind,
   StepRunMode,
 } from '../../../../task-pipeline';
@@ -211,7 +212,17 @@ interface PipelineRunOptionVm {
   durationMs: number;
   passed: number;
   failed: number;
-  /** Structured tooltip listing per-step outcomes for this archived run. */
+  /**
+   * Total tokens recorded for this run, joined from the per-run usage rollup
+   * with a fall back to summing the run's step tokens for older archives that
+   * predate the rollup. 0 when nothing was recorded.
+   */
+  totalTokens: number;
+  /** API-price estimate for this run; only meaningful when {@link costKnown}. */
+  totalCostUsd: number;
+  /** False when no priced usage row exists (older run or unpriced model). */
+  costKnown: boolean;
+  /** Structured tooltip: duration, tokens, cost, verdict, per-step outcomes. */
   tooltip: StructuredTooltip | null;
 }
 
@@ -1410,31 +1421,102 @@ export class OverviewPaneComponent {
   /**
    * Compact summaries for the run switcher. The current run stays first, then
    * prior runs follow most-recent first so an operator can swap the step table
-   * between attempts after a restart.
+   * between attempts after a restart. Per-run tokens and cost are joined from
+   * the per-run usage rollup so the hover card can surface them without
+   * overloading the inline pill.
    */
   readonly pipelineRunOptions = computed<PipelineRunOptionVm[]>(() => {
     const current = this.pipelineExecution();
     if (current == null) return [];
+    const usageByAttempt = new Map<number, PipelineRunTokenUsage>();
+    for (const run of this.pipelineTokenUsage()?.runs ?? []) {
+      usageByAttempt.set(run.attempt, run);
+    }
     return [
-      this.toPipelineRunOptionVm(current, true),
-      ...(current.previousAttempts ?? []).map(rec => this.toPipelineRunOptionVm(rec, false)),
+      this.toPipelineRunOptionVm(current, true, usageByAttempt),
+      ...(current.previousAttempts ?? []).map(rec => this.toPipelineRunOptionVm(rec, false, usageByAttempt)),
     ];
   });
 
-  private toPipelineRunOptionVm(rec: PipelineExecutionRecord, current: boolean): PipelineRunOptionVm {
+  /**
+   * Default number of run pills the switcher renders before the older runs
+   * fold behind a "+N older" toggle. Keeps the Overview from overflowing once a
+   * heavily re-issued task accrues many runs while still showing the current
+   * run plus recent history at a glance.
+   */
+  private static readonly RUN_SWITCHER_COLLAPSED_LIMIT = 6;
+
+  /** Whether the switcher is showing every run vs the collapsed recent window. */
+  readonly runSwitcherExpanded = signal(false);
+
+  readonly runSwitcherLimit = computed<number>(
+    () => OverviewPaneComponent.RUN_SWITCHER_COLLAPSED_LIMIT,
+  );
+
+  /**
+   * Run pills to render. Collapsed by default to the most recent
+   * {@link RUN_SWITCHER_COLLAPSED_LIMIT} runs (the current run is always index
+   * 0, so it is never hidden); the rest fold behind the "+N older" toggle. The
+   * actively-inspected run is kept visible even past the window so collapsing
+   * never hides the run whose steps are shown below.
+   */
+  readonly visibleRunOptions = computed<PipelineRunOptionVm[]>(() => {
+    const all = this.pipelineRunOptions();
+    const limit = this.runSwitcherLimit();
+    if (this.runSwitcherExpanded() || all.length <= limit) return all;
+    const head = all.slice(0, limit);
+    const selected = this.selectedPipelineAttemptNumber();
+    if (!head.some(r => r.attempt === selected)) {
+      const sel = all.find(r => r.attempt === selected);
+      if (sel) head.push(sel);
+    }
+    return head;
+  });
+
+  /** Count of runs hidden by the collapse window (0 when expanded or short). */
+  readonly hiddenRunCount = computed<number>(() => {
+    if (this.runSwitcherExpanded()) return 0;
+    return Math.max(0, this.pipelineRunOptions().length - this.runSwitcherLimit());
+  });
+
+  toggleRunSwitcher(): void {
+    this.runSwitcherExpanded.update(v => !v);
+  }
+
+  private toPipelineRunOptionVm(
+    rec: PipelineExecutionRecord,
+    current: boolean,
+    usageByAttempt: Map<number, PipelineRunTokenUsage>,
+  ): PipelineRunOptionVm {
     const steps = rec.steps ?? [];
     const passed = steps.filter(s => s.status === 'passed').length;
     const failed = steps.filter(s => s.status === 'failed').length;
     const durationMs = this.recordDurationMs(rec);
+    const attempt = rec.attempt ?? 1;
+    const usage = usageByAttempt.get(attempt) ?? null;
+    // Older archives predate the per-run usage rollup, so fall back to summing
+    // the run's own step token fields to still show a token figure on hover.
+    const stepTokens = steps.reduce(
+      (sum, s) =>
+        sum + (s.inputTokens ?? 0) + (s.outputTokens ?? 0) +
+        (s.cacheReadTokens ?? 0) + (s.cacheCreationTokens ?? 0),
+      0,
+    );
+    const totalTokens = usage?.totalTokens ?? stepTokens;
+    const totalCostUsd = usage?.totalCostUsd ?? 0;
+    const costKnown = usage != null && !usage.anyModelUnknown;
     return {
-      attempt: rec.attempt ?? 1,
+      attempt,
       current,
       startedAt: rec.startedAt ?? null,
       completedAt: rec.completedAt ?? null,
       durationMs,
       passed,
       failed,
-      tooltip: this.buildPreviousRunTooltip(rec, steps, durationMs),
+      totalTokens,
+      totalCostUsd,
+      costKnown,
+      tooltip: this.buildPreviousRunTooltip(rec, current, steps, durationMs, totalTokens, totalCostUsd, costKnown),
     };
   }
 
@@ -1449,20 +1531,39 @@ export class OverviewPaneComponent {
 
   private buildPreviousRunTooltip(
     rec: PipelineExecutionRecord,
+    current: boolean,
     steps: PipelineStepExecution[],
     durationMs: number,
+    totalTokens: number,
+    totalCostUsd: number,
+    costKnown: boolean,
   ): StructuredTooltip | null {
     const lines: string[] = [];
     if (rec.startedAt) lines.push(`Started: ${this.formatAbsoluteTime(rec.startedAt)}`);
     if (durationMs > 0) lines.push(`Duration: ${this.formatStepDuration(durationMs)}`);
+    if (totalTokens > 0) {
+      lines.push(`Tokens: ${this.formatTokens(totalTokens)}`);
+      lines.push(costKnown ? `Cost (API est.): ${this.formatCost(totalCostUsd)}` : 'Cost (API est.): n/a');
+    }
+    const passed = steps.filter(s => s.status === 'passed').length;
+    const failed = steps.filter(s => s.status === 'failed').length;
+    if (passed > 0 || failed > 0) {
+      lines.push(`Verdict: ${passed} passed${failed > 0 ? `, ${failed} failed` : ''}`);
+    }
     const ran = steps.filter(s =>
       s.status === 'passed' || s.status === 'failed' || s.status === 'skipped',
     );
-    for (const s of ran) {
-      lines.push(`${this.stepStatusIcon(s.status)} ${s.stepId}`);
+    if (ran.length > 0) {
+      lines.push('');
+      for (const s of ran) {
+        lines.push(`${this.stepStatusIcon(s.status)} ${s.stepId}`);
+      }
     }
     if (lines.length === 0) return null;
-    return { title: `Run #${rec.attempt ?? 1}`, body: lines.join('\n') };
+    return {
+      title: `Run #${rec.attempt ?? 1}${current ? ' · current' : ''}`,
+      body: lines.join('\n'),
+    };
   }
 
   /** True while any pipeline step is in flight. */

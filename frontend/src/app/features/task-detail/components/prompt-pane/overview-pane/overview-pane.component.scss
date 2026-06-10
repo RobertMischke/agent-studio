@@ -1295,77 +1295,173 @@
 // Segmented pipeline run switcher. The current run stays first, archived runs
 // follow from most-recent to oldest, and selecting one rebinds the step table to
 // that run's archived pipeline-execution record.
-.ov-pl-switcher {
+// Run switcher (ASS-1705). A premium, scalable run history: the current /
+// final run is the primary accent card; prior runs read as dimmed history but
+// stay legible. OK / fail counts source the central semantic success / error
+// tokens so the colour vocabulary matches the rest of the studio. Older runs
+// fold behind a "+N older" toggle so the strip never overflows at 10+ runs.
+.ov-runs-switcher {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 4px 0 6px;
-  font-size: 11px;
+  flex-direction: column;
+  gap: var(--studio-spacing-2);
+  margin: var(--studio-spacing-1) 0 var(--studio-spacing-3);
+
+  &__head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--studio-spacing-2);
+  }
 
   &__label {
-    flex: 0 0 auto;
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
     color: var(--studio-fg-dim);
+  }
+
+  &__total {
+    font-size: 10px;
   }
 
   &__list {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    align-items: stretch;
+    gap: var(--studio-spacing-2);
   }
 
   &__run {
     display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    min-height: 24px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: var(--studio-bg-elevated);
-    border: 1px solid var(--studio-border);
+    flex-direction: column;
+    gap: var(--studio-spacing-1);
+    min-width: 92px;
+    padding: var(--studio-spacing-2) var(--studio-spacing-3);
+    border-radius: 10px;
+    background: var(--studio-surface-muted);
+    border: 1px solid var(--studio-border-muted);
     color: var(--studio-fg-dim);
+    text-align: left;
     cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 
     &:hover {
       color: var(--studio-fg);
       border-color: var(--studio-border-strong);
     }
 
+    &:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--studio-accent) 60%, transparent);
+      outline-offset: 1px;
+    }
+
+    // History run that failed: a faint red edge flags a bad older attempt at a
+    // glance without shouting over the current run.
+    &--failed {
+      border-color: color-mix(in srgb, var(--studio-error) 34%, var(--studio-border-muted));
+    }
+
+    // The current / final run is the primary anchor: brand accent surface and
+    // stronger text so it always wins the hierarchy over history.
+    &--current {
+      color: var(--studio-fg-strong);
+      background: color-mix(in srgb, var(--studio-accent) 12%, var(--studio-surface));
+      border-color: color-mix(in srgb, var(--studio-accent) 42%, var(--studio-border-strong));
+
+      &:hover {
+        border-color: color-mix(in srgb, var(--studio-accent) 60%, var(--studio-border-strong));
+      }
+    }
+
+    // The actively-inspected run (whose steps populate the table below) gets a
+    // ring so selection reads distinctly from "current".
     &--active {
       color: var(--studio-fg-strong);
-      background: color-mix(in srgb, var(--studio-accent) 16%, var(--studio-bg-elevated));
-      border-color: color-mix(in srgb, var(--studio-accent) 45%, var(--studio-border));
+      border-color: color-mix(in srgb, var(--studio-accent) 55%, var(--studio-border-strong));
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--studio-accent) 50%, transparent);
     }
   }
 
+  &__run-top {
+    display: flex;
+    align-items: center;
+    gap: var(--studio-spacing-2);
+  }
+
   &__run-name {
+    font-size: 12px;
     font-weight: 600;
+    color: inherit;
   }
 
   &__current {
     font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
+    padding: var(--studio-spacing-1) var(--studio-spacing-2);
+    border-radius: 999px;
+    color: var(--studio-accent-strong);
+    background: color-mix(in srgb, var(--studio-accent) 18%, transparent);
   }
 
-  &__time {
+  &__run-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--studio-spacing-1);
     font-size: 10px;
   }
 
   &__outcome {
     display: inline-flex;
-    gap: 4px;
+    align-items: center;
+    gap: var(--studio-spacing-1);
+    font-size: 10px;
+    font-weight: 600;
   }
 
   &__pass {
-    color: var(--studio-accent-3-strong, var(--studio-fg));
+    color: var(--studio-success);
   }
 
   &__fail {
-    color: var(--studio-danger, var(--studio-fg-strong));
+    color: var(--studio-error);
+  }
+
+  &__pending {
+    color: var(--studio-fg-dim);
+    font-style: italic;
+  }
+
+  &__time,
+  &__duration,
+  &__sep {
+    font-size: 10px;
+  }
+
+  &__more {
+    align-self: center;
+    min-height: 28px;
+    padding: var(--studio-spacing-1) var(--studio-spacing-3);
+    border-radius: 999px;
+    background: transparent;
+    border: 1px dashed var(--studio-border-strong);
+    color: var(--studio-fg-dim);
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+
+    &:hover {
+      color: var(--studio-fg);
+      border-color: var(--studio-fg-dim);
+      background: var(--studio-surface-muted);
+    }
+
+    &:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--studio-accent) 60%, transparent);
+      outline-offset: 1px;
+    }
   }
 }

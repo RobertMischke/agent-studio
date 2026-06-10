@@ -173,16 +173,28 @@
       <app-completion-loop-indicator />
 
       @if (pipelineRunOptions().length > 1) {
-        <div class="ov-pl-switcher"
-             role="tablist"
+        <!-- Run switcher (ASS-1705): the current / final run is the primary
+             anchor (accent card, "Current" badge); prior runs read as dimmed
+             history but stay legible. Older runs past RUN_SWITCHER_COLLAPSED_LIMIT
+             fold behind a "+N older" toggle so a heavily re-issued task never
+             overflows the Overview. Per-run tokens / cost / duration / verdict
+             live in the hover card rather than inline. -->
+        <div class="ov-runs-switcher"
+             role="group"
              aria-label="Pipeline runs"
              data-testid="overview-pipeline-run-switcher">
-          <span class="ov-pl-switcher__label">Runs</span>
-          <div class="ov-pl-switcher__list">
-            @for (run of pipelineRunOptions(); track run.attempt) {
+          <div class="ov-runs-switcher__head">
+            <span class="ov-runs-switcher__label">Runs</span>
+            <span class="ov-runs-switcher__total ov-dim"
+                  data-testid="overview-pipeline-run-total">{{ pipelineRunOptions().length }} total</span>
+          </div>
+          <div class="ov-runs-switcher__list" role="tablist">
+            @for (run of visibleRunOptions(); track run.attempt) {
               <button type="button"
-                      class="ov-pl-switcher__run"
-                      [class.ov-pl-switcher__run--active]="selectedPipelineAttemptNumber() === run.attempt"
+                      class="ov-runs-switcher__run"
+                      [class.ov-runs-switcher__run--current]="run.current"
+                      [class.ov-runs-switcher__run--active]="selectedPipelineAttemptNumber() === run.attempt"
+                      [class.ov-runs-switcher__run--failed]="!run.current && run.failed > 0"
                       role="tab"
                       [attr.aria-selected]="selectedPipelineAttemptNumber() === run.attempt"
                       [attr.data-attempt]="run.attempt"
@@ -190,21 +202,49 @@
                       data-testid="overview-pipeline-run-option"
                       [appTooltip]="run.tooltip"
                       (click)="selectPipelineRun(run.attempt)">
-                <span class="ov-pl-switcher__run-name">Run #{{ run.attempt }}</span>
-                @if (run.current) {
-                  <span class="ov-pl-switcher__current">Current</span>
-                }
-                @if (run.startedAt) {
-                  <span class="ov-pl-switcher__time ov-dim">{{ formatRelativeTime(run.startedAt) }}</span>
-                }
-                <span class="ov-pl-switcher__outcome ov-value--mono">
-                  @if (run.passed > 0) {
-                    <span class="ov-pl-switcher__pass">{{ run.passed }}✓</span>
-                  }
-                  @if (run.failed > 0) {
-                    <span class="ov-pl-switcher__fail">{{ run.failed }}✗</span>
+                <span class="ov-runs-switcher__run-top">
+                  <span class="ov-runs-switcher__run-name">Run #{{ run.attempt }}</span>
+                  @if (run.current) {
+                    <span class="ov-runs-switcher__current"
+                          data-testid="overview-pipeline-run-current">Current</span>
                   }
                 </span>
+                <span class="ov-runs-switcher__run-meta">
+                  <span class="ov-runs-switcher__outcome ov-value--mono">
+                    @if (run.passed > 0) {
+                      <span class="ov-runs-switcher__pass">{{ run.passed }} OK</span>
+                    }
+                    @if (run.failed > 0) {
+                      <span class="ov-runs-switcher__fail">{{ run.failed }} fail</span>
+                    }
+                    @if (run.passed === 0 && run.failed === 0) {
+                      <span class="ov-runs-switcher__pending">pending</span>
+                    }
+                  </span>
+                  @if (run.startedAt) {
+                    <span class="ov-runs-switcher__time ov-dim">{{ formatRelativeTime(run.startedAt) }}</span>
+                  }
+                  @if (run.durationMs > 0) {
+                    <span class="ov-runs-switcher__sep ov-dim" aria-hidden="true">·</span>
+                    <span class="ov-runs-switcher__duration ov-value--mono ov-dim">{{ formatStepDuration(run.durationMs) }}</span>
+                  }
+                </span>
+              </button>
+            }
+            @if (hiddenRunCount() > 0) {
+              <button type="button"
+                      class="ov-runs-switcher__more"
+                      data-testid="overview-pipeline-run-more"
+                      [attr.aria-label]="'Show ' + hiddenRunCount() + ' older runs'"
+                      (click)="toggleRunSwitcher()">
+                +{{ hiddenRunCount() }} older
+              </button>
+            } @else if (runSwitcherExpanded() && pipelineRunOptions().length > runSwitcherLimit()) {
+              <button type="button"
+                      class="ov-runs-switcher__more"
+                      data-testid="overview-pipeline-run-less"
+                      (click)="toggleRunSwitcher()">
+                Show fewer
               </button>
             }
           </div>
