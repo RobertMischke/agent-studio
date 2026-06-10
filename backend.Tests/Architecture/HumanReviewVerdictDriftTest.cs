@@ -44,9 +44,9 @@ public class HumanReviewVerdictDriftTest
     private static readonly IReadOnlyDictionary<string, string> Whitelist =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["backend/Services/Runner/ReviewDecisionOrchestrator.cs"] =
+            ["backend/Features/Runner/ReviewDecisionOrchestrator.cs"] =
                 "Agent-driven review path: every escalate move writes a ReviewDecisionLog Escalate record.",
-            ["backend/Services/Runner/HumanReviewEscalation.cs"] =
+            ["backend/Features/Runner/HumanReviewEscalation.cs"] =
                 "Deterministic system-escalation funnel: move + Escalate verdict + status.md stub.",
         };
 

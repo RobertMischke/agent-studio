@@ -73,13 +73,13 @@ public class TaskFolderAccessIsolationTest
             // job-folder tree. The phase 2-4 implementation lives in
             // TaskAccessService.cs; the contract surface stays in the
             // four sibling files below.
-            ["backend/Services/TaskAccess/ITaskAccess.cs"] =
+            ["backend/Features/TaskAccess/ITaskAccess.cs"] =
                 "TaskAccess contract surface.",
-            ["backend/Services/TaskAccess/ITaskAccessHost.cs"] =
+            ["backend/Features/TaskAccess/ITaskAccessHost.cs"] =
                 "TaskAccess lifecycle surface.",
-            ["backend/Services/TaskAccess/TaskAccessRecords.cs"] =
+            ["backend/Features/TaskAccess/TaskAccessRecords.cs"] =
                 "TaskAccess typed request/result records.",
-            ["backend/Services/TaskAccess/TaskAccessService.cs"] =
+            ["backend/Features/TaskAccess/TaskAccessService.cs"] =
                 "TaskAccess implementation: the one place that constructs lane folder paths.",
 
             // Tier 2: current storage authority. TaskStateMachine is the
@@ -89,39 +89,46 @@ public class TaskFolderAccessIsolationTest
             // effects (auto-commit, runner-active-state clear).
             // (The Services/Jobs -> Services/Tasks rename moved these four
             // files; the whitelist tracks their current home.)
-            ["backend/Services/Tasks/TaskStateMachine.cs"] =
+            ["backend/Features/Tasks/TaskStateMachine.cs"] =
                 "Single-state-machine authority for folder moves and deletes.",
-            ["backend/Services/Tasks/TaskMutationService.cs"] =
+            ["backend/Features/Tasks/TaskMutationService.cs"] =
                 "Owns folder creates and per-job field edits.",
-            ["backend/Services/Tasks/TaskScannerService.cs"] =
+            ["backend/Features/Tasks/TaskScannerService.cs"] =
                 "Owns reads against the job-folder tree.",
-            ["backend/Services/Tasks/TaskTransitionService.cs"] =
+            ["backend/Features/Tasks/TaskTransitionService.cs"] =
                 "Combines folder moves with auto-commit and runner-active-state side effects.",
-            ["backend/Services/Tasks/Merge/MergeService.cs"] =
+            ["backend/Features/Tasks/Merge/MergeService.cs"] =
                 "Merge archives the secondary task folder and prunes its mirror; structural moves owned here.",
-            ["backend/Services/TaskWatcherService.cs"] =
+            ["backend/Features/Tasks/TaskWatcherService.cs"] =
                 "FileSystemWatcher feeding the scanner; needs raw lane paths.",
 
             // Project-level (not lane-level) deletion: removes a whole
             // <TaskRepository>/projects/<key> folder when a registry project
             // is deleted via DELETE /api/projects/{PROJ-NNN}. Operates on the
             // project root, not individual lane folders.
-            ["backend/Services/Configuration/WorkspaceManagementService.cs"] =
+            ["backend/Features/Configuration/WorkspaceManagementService.cs"] =
                 "Owns project-storage folder lifecycle (create on workspace add, recursive delete on project delete).",
 
             // Tier 2 (boot): the crash-recovery sweep walks 3-progress
             // before the in-memory store boots. Explicitly carved out in
             // the prompt for this task.
-            ["backend/Services/Runner/CrashRecoveryService.cs"] =
+            ["backend/Features/Runner/CrashRecoveryService.cs"] =
                 "Boot-time recovery; runs before ITaskAccess could be available.",
-            ["backend/Services/Runner/WorktreeTaskLifecycle.cs"] =
+            ["backend/Features/Runner/WorktreeTaskLifecycle.cs"] =
                 "Git worktree cleanup under configured worktree roots, not task storage.",
 
-            // NOTE: NpmShimHealer.cs used to be whitelisted here for its
-            // npm staging-orphan Directory.Delete (under %AppData%/Roaming/npm,
-            // not the job-folder tree). It moved to the AgentTaskboard.Runner
-            // project (src/) when the executor CLI layer was extracted, and this
-            // scan only covers backend/ — so the entry is no longer needed.
+            // Re-added after the structure migration folded the src/ executor
+            // projects back into backend/ (the scan covers them again):
+            ["backend/Features/Cli/Execution/NpmShimHealer.cs"] =
+                "npm staging-orphan Directory.Delete under %AppData%/Roaming/npm, not the job-folder tree.",
+            ["backend/Features/Cli/Execution/RunLogStore.cs"] =
+                "Owns the per-run log directory lifecycle (run-context dirs), not lane folders.",
+
+            // Wiki git-ops (2026-06-10): physical folder move/delete inside the
+            // project's CODE repo docs/ tree (git-backed wiki reorganisation),
+            // never the task-storage tree.
+            ["backend/Features/Git/GitService.cs"] =
+                "Wiki folder move/delete operate on the project repo docs/ tree, not task storage.",
 
             // Tier 3 migration complete. All former MIGRATION TARGET
             // entries (ProjectRunner, StaleProgressArchiver,
