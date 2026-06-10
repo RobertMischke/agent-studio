@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
@@ -8,6 +9,7 @@ import {
   ExplorerWorkspaceTreeComponent,
   type ExplorerProjectRow,
 } from './explorer-workspace-tree.component';
+import { TooltipDirective } from '../../../../components/tooltip';
 import type { RegistryWorkspaceListItem, RegistryProjectSummary } from '../../../../models/task.model';
 
 function project(displayName: string, workspaceId: string, storage: string): RegistryProjectSummary {
@@ -148,6 +150,27 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(ready?.textContent?.trim()).toBe('3');
     expect(progress?.textContent?.trim()).toBe('2');
     expect(review?.textContent?.trim()).toBe('5');
+  });
+
+  it('attaches a lane-explaining appTooltip to each Board lane counter', () => {
+    const fixture = mount();
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [
+      row('Alpha', { laneCounts: { ready: 3, progress: 2, humanReview: 5 } }),
+    ]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.detectChanges();
+
+    const tipFor = (testid: string) => {
+      const node = fixture.debugElement
+        .queryAll(By.directive(TooltipDirective))
+        .find(d => (d.nativeElement as HTMLElement).getAttribute('data-testid') === testid);
+      return node?.injector.get(TooltipDirective).content();
+    };
+
+    expect(tipFor('studio-explorer-project-board-count-ready-Alpha')).toMatchObject({ title: 'Ready' });
+    expect(tipFor('studio-explorer-project-board-count-progress-Alpha')).toMatchObject({ title: 'In Progress' });
+    expect(tipFor('studio-explorer-project-board-count-human-review-Alpha')).toMatchObject({ title: 'Human Review' });
   });
 
   it('right-click opens a text-only Rename menu that starts the inline rename', () => {

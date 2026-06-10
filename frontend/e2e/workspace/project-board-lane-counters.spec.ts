@@ -202,3 +202,33 @@ test('Explorer Project Board row shows subtle live lane counters', async ({ page
     contentType: 'image/png',
   });
 });
+
+test('each lane counter explains its lane via the canonical appTooltip', async ({ page }) => {
+  await boot(page);
+
+  await expect(page.getByTestId(`studio-explorer-project-board-counts-${PROJECT}`)).toBeVisible();
+
+  const tip = page.getByTestId('app-tooltip');
+
+  // Grey counter = Ready (2-ready).
+  await page.getByTestId(`studio-explorer-project-board-count-ready-${PROJECT}`).hover();
+  await expect(tip).toBeVisible({ timeout: 5_000 });
+  await expect(tip).toHaveText(/Ready.*queued for a coding agent/);
+
+  // Orange counter = In Progress (3-progress).
+  await page.getByTestId(`studio-explorer-project-board-count-progress-${PROJECT}`).hover();
+  await expect(tip).toBeVisible({ timeout: 5_000 });
+  await expect(tip).toHaveText(/In Progress.*actively running/);
+
+  // Green counter = Human Review (5-human-review).
+  await page.getByTestId(`studio-explorer-project-board-count-human-review-${PROJECT}`).hover();
+  await expect(tip).toBeVisible({ timeout: 5_000 });
+  await expect(tip).toHaveText(/Human Review.*waiting for your review/);
+
+  const tipShot = test.info().outputPath('project-board-lane-counter-tooltip.png');
+  await tip.screenshot({ path: tipShot });
+  await test.info().attach('project-board-lane-counter-tooltip', {
+    path: tipShot,
+    contentType: 'image/png',
+  });
+});

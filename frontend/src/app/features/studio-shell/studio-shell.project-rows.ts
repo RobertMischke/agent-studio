@@ -1,11 +1,34 @@
 import type { GroupedJobs, TaskInfo } from '../../models/task.model';
 import { projectIdentity } from '../../services/project-identity.util';
+import type { StructuredTooltip } from '../../components/tooltip';
 
 export interface ExplorerLaneCounts {
   ready: number;
   progress: number;
   humanReview: number;
 }
+
+/**
+ * Hover help for the three Explorer board lane counters (grey Ready /
+ * orange In Progress / green Human Review). Each entry feeds the canonical
+ * `[appTooltip]` directive as a {@link StructuredTooltip} so the number says
+ * which lane it counts and what that lane means. Prose mirrors the lane
+ * concept docs (`docs/concept-docs/lane-{2-ready,3-progress,5-human-review}.md`).
+ */
+export const BOARD_LANE_COUNT_TOOLTIPS: Record<keyof ExplorerLaneCounts, StructuredTooltip> = {
+  ready: {
+    title: 'Ready',
+    body: 'Refined tasks queued for a coding agent. The orchestrator runs the top card next when a slot frees up.',
+  },
+  progress: {
+    title: 'In Progress',
+    body: 'Tasks the orchestrator is actively running now, or resuming between attempts. One per project at a time.',
+  },
+  humanReview: {
+    title: 'Human Review',
+    body: 'Finished runs waiting for your review. Accept the work or send it back for another pass.',
+  },
+};
 
 export interface ProjectSidebarRow {
   name: string;

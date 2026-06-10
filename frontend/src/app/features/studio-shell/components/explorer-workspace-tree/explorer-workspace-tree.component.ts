@@ -23,7 +23,7 @@ import { MenuComponent, type MenuItem, type MenuItemClickEvent } from '../../../
 import { ProjectDragDropService } from '../../../shell';
 import { ExplorerSectionsService } from '../../services/explorer-sections.service';
 import { ExplorerProjectActionsService } from '../../services/explorer-project-actions.service';
-import { boardLaneCountsLabel, laneCountsFor, type ExplorerLaneCounts } from '../../studio-shell.project-rows';
+import { BOARD_LANE_COUNT_TOOLTIPS, boardLaneCountsLabel, laneCountsFor, type ExplorerLaneCounts } from '../../studio-shell.project-rows';
 
 /** Flat project row as computed by the shell (`ProjectSidebarRow`). */
 export interface ExplorerProjectRow {
@@ -276,6 +276,8 @@ export class ExplorerWorkspaceTreeComponent {
 
   readonly laneCountsFor = laneCountsFor;
   readonly boardLaneCountsLabel = boardLaneCountsLabel;
+  /** Per-lane hover help for the three board counters (see {@link BOARD_LANE_COUNT_TOOLTIPS}). */
+  readonly laneCountTooltips = BOARD_LANE_COUNT_TOOLTIPS;
 
   /** Enter inline-rename for a real workspace header (synthetic groups no-op). */
   startRenameWorkspace(g: ExplorerWorkspaceGroup): void {
