@@ -176,6 +176,28 @@ Migration plan (multi-session, in order):
 
 New ChatEvent kinds belong in `chat-types.ts` and get icon + label entries in `chat.component.ts` (`eventIcon` / `eventLabel`). Severity-style tints (warn / error / `session-recovered` / `memory-refreshed`) go in `chat.component.scss` as `.chat__event--<kind>` modifiers.
 
+## Conversation view (`<app-conversation-view>` — next-gen chat projection)
+
+`<app-conversation-view>` (`components/chat/conversation-view/`) renders the **next-gen single-pane transcript** from a parsed event model. It never pattern-matches raw CLI lines in the template; the renderer only consumes `ConversationEvent[]` produced by `projectConversation(...)` (`components/chat/conversation-projection.ts`). Keep that split: parsing/classification lives in the projection (pure, unit-tested against fixtures), presentation lives in the component.
+
+**Single-pane grouping, one actor header per turn.** Consecutive same-actor agent outputs coalesce into one `messageGroup` row (`<ol class="conv__feed">` → one `<li>` per group, an inner `<ol class="msg__items">` per turn). The actor header (`conversation-message-head`) renders **once** at the head of a run; continued groups carry `data-show-header="false"` and emit no header element. A tool burst between two agent turns preserves role continuity (the second agent group stays header-less); a `USER` turn, a non-tool reset event, or a mid-task **model switch** breaks the run into a new header. Do not reintroduce a per-message "Agent" label.
+
+**Timestamps are clock-only with the date on hover.** The visible `<time>` shows the clock; the calendar date is disclosed via the `[appTooltip]` binding (`groupTimeTooltip` / `formatDateTime`). `formatTime` must stay date-free; reach for `formatDateTime` when you need the full calendar+clock string.
+
+**Markers are parsed, never shown raw.** Terminal sentinels (`[[TASK_DONE]]`, `[[TASK_BLOCKED:…]]`, `[[TASK_NOOP]]`, `[[TASK_NEEDS_INPUT:…]]`) and bracketed runtime markers (`[worktree-containment]`, `[environment-blocker]`, `[capture-fail]`, `[schema-drift]`, `[watchdog…]`, `[heuristic]`, …) are classified by the projection into semantic events (`system.status` result chips, `agent.needsInput`, `supervisor.wait`, `system.captureFail`, `system.schemaDrift`, `system.parserWarning`) and rendered as chips/rows. Any human prose sharing a line with a sentinel is preserved as a normal agent message with the token stripped. New marker shapes get a classifier branch in `projectGroup` (or `parseOrchestratorStatus`) plus a `@case` in the template — not a raw passthrough.
+
+**Session info is subtle.** A run's captured session id rides on the agent bubble as `data-session-id` and renders as a truncated `session <8-char>` chip (`conversation-message-session`); the full id and init/rate-limit metadata live behind the header `[appTooltip]` (`metaTooltip`) and the `<app-conversation-session-card>` sidecar row. Never put a full session id inline in the message flow.
+
+**Tool runs are CLI-agnostic and unified.** Tool activity from **both** CLIs folds into the same `toolBurst` event rendered by `<app-tool-burst-chip>`:
+- **codex** emits JSONL frames — `parseCodexJsonlFrame` maps `item.{started,completed}` of `command_execution` (with `command` / `aggregated_output` / exit code) into an activity-log group of kind `command`;
+- **claude** emits action-line text — `parseActionLine` → `classifyAction` maps `Read(...)` / `Edit(...)` / `Run …(shell)` / `Search …` into `read` / `edit` / `command` / `search` groups.
+
+The projection's `classifyToolGroup` then collapses any contiguous run of those tool groups (across either CLI) into a single `toolBurst` carrying per-family counts, failures, file paths, parsed command executions, and test rollups. There is no codex-only or claude-only tool path in the renderer. When you add a new CLI driver, route its tool output into one of the existing activity-log tool kinds so it inherits the same burst chip automatically.
+
+**Orchestrator decisions are elevated.** `decision.orchestrator` events render with their own prominent treatment — an accent rail (`.decision__rail`) and a structured body (`.decision__body`), distinct from a plain agent bubble — carrying `data-decision-type` and `data-severity` so the accent can shift (info / warn / error / accept). The raw kebab/snake kind never reaches the UI: `decisionTypeLabel` maps known kinds (`auto-review` → "Auto-Review", `reissue-open-items` → "Reissue · Open items", `worktree-containment`, `escalate`, `accept`, …) to presentable labels and title-cases unknown kinds so a new decision reads cleanly without code changes.
+
+Regression coverage is acceptance-level (DOM render via `TestBed`) in `conversation-view.component.spec.ts` (grouping, header-once continuation, dated-time hover, decision elevation+label, subtle session chip, parsed status/needs-input rows) and projection-level in `conversation-projection.spec.ts` (sentinel/marker parsing, codex+claude tool unification). Extend both when you change event classification or rendering.
+
 ## Tests
 
 `npm test` runs Vitest via `@angular/build:unit-test` (Angular 21's first-party runner). All `src/**/*.spec.ts` are picked up; `e2e/` is Playwright-only and not part of `npm test`.
