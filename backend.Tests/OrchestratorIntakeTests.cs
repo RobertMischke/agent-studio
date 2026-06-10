@@ -308,12 +308,14 @@ public class OrchestratorIntakeTests : IDisposable
     // ---- Done-precheck routing (requirement 5) -------------------------------
 
     [Fact]
-    public void RouteAlreadyDone_AlreadyDoneCard_RoutesToHumanReviewThroughFunnel()
+    public void RouteAlreadyDone_AlreadyDoneCard_RoutesToEscalatedThroughFunnel()
     {
         // A card whose prompt declares the work already done is not executed:
-        // it is routed to 5-human-review through the HumanReviewEscalation funnel
+        // it is routed to 5e-escalated through the HumanReviewEscalation funnel
         // (HumanDecisionNeeded) so a person confirms-and-completes. The
-        // orchestrator never auto-moves to 6-completed.
+        // orchestrator never auto-moves to 6-completed. (The funnel's target
+        // lane moved from 5-human-review to 5e-escalated when the dedicated
+        // escalation lane replaced the retired 1b-needs-human-review lane.)
         WriteJob(TaskStates.Ready, "done-card", "Add the rollup card",
             "This rollup card is already implemented on main and merged. No work needed.");
         var (intake, scanner) = BuildIntake();
@@ -332,12 +334,12 @@ public class OrchestratorIntakeTests : IDisposable
             escalation, "done-card", _watchPath, "test", verdict.Reason,
             NullLogger<IntakeHostedService>.Instance);
 
-        // Folder physically moved out of 2-ready into 5-human-review, and the
+        // Folder physically moved out of 2-ready into 5e-escalated, and the
         // escalation wrote a status.md stub so the card is explainable.
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "done-card")),
             "the already-done card must leave 2-ready");
-        var parked = Path.Combine(_watchPath, TaskStates.HumanReview, "done-card");
-        Assert.True(Directory.Exists(parked), "the already-done card must land in 5-human-review");
+        var parked = Path.Combine(_watchPath, TaskStates.Escalated, "done-card");
+        Assert.True(Directory.Exists(parked), "the already-done card must land in 5e-escalated");
         Assert.True(File.Exists(Path.Combine(parked, "status.md")), "a status.md stub must be written");
     }
 

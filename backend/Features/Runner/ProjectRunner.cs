@@ -5270,12 +5270,38 @@ public class ProjectRunner
         try { info = _scanner.FindJob(jobId, Entry.Path); }
         catch (Exception ex) { _logger.LogDebug(ex, "Reconcile: FindJob threw for {JobId}", jobId); }
 
-        if (info != null && info.State == TaskStates.Progress) return false;
+        // Use the PHYSICAL lane, not the scanner's resolved State. The wedge
+        // this guard detects is an external mover (boot-time stuck-folder sweep,
+        // a hand edit) that drags the active folder out of 3-progress WITHOUT
+        // rewriting task.json. The scanner prefers task.json's "state" field, so
+        // it can still report "3-progress" from the stale json even though the
+        // folder now sits under another lane. In the legacy lane layout the
+        // folder's parent directory IS the lane, so that is authoritative; in
+        // the flat layout there is no lane folder and we fall back to State.
+        var physicalLane = ResolvePhysicalLane(info);
+        if (info != null && physicalLane == TaskStates.Progress) return false;
 
         var reason = info == null
             ? "active job folder no longer exists"
-            : $"active job moved out of 3-progress (now in {info.State})";
+            : $"active job moved out of 3-progress (now in {physicalLane})";
         return ClearActiveJobIfMatches(jobId, reason);
+    }
+
+    /// <summary>
+    /// The lane a job physically sits in. In the legacy lane layout
+    /// (<c>&lt;watchPath&gt;/&lt;state&gt;/&lt;slug&gt;</c>) the folder's parent
+    /// directory name is the lane and is authoritative over a possibly-stale
+    /// <c>task.json</c> "state" field. In the flat layout the parent is a
+    /// storage bucket (not a known lane), so the resolved
+    /// <see cref="TaskInfo.State"/> is used instead.
+    /// </summary>
+    private static string? ResolvePhysicalLane(TaskInfo? info)
+    {
+        if (info == null) return null;
+        var parent = Path.GetFileName(Path.GetDirectoryName(info.FolderPath) ?? string.Empty);
+        if (!string.IsNullOrEmpty(parent) && Array.IndexOf(TaskStates.All, parent) >= 0)
+            return parent;
+        return info.State;
     }
 
     /// <summary>Test seam: lets a unit test prime the active-job latch

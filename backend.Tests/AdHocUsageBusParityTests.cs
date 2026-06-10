@@ -70,9 +70,15 @@ public sealed class AdHocUsageBusParityTests : IDisposable
             Assert.True(recorder.Record(r));
         }
 
-        // Wait for the bus side to catch up. Fire-and-forget is the production
-        // semantics; the test gives it a generous bounded window.
-        await WaitForBusCountAsync(store, expected: records.Length, timeoutMs: 5_000);
+        // Wait for the bus side to catch up. Record() mirrors onto the bus as
+        // fire-and-forget (the returned Task is discarded by design - the bus is
+        // observability and must not block the canonical JSONL write), so the
+        // only completion signal available is the message count. The emits are
+        // durable, never dropped; they just queue behind other work when the
+        // threadpool is saturated by sibling parallel test collections. A 5s
+        // budget starved to 3/8 under that load, so the window is generous
+        // (30s) rather than tight - it drains in ~140ms unloaded.
+        await WaitForBusCountAsync(store, expected: records.Length, timeoutMs: 30_000);
 
         var legacy = AdHocUsageService.Aggregate(recorder.ReadAll(), recorder.LogPath, 0, null);
         var bus    = BusBackedAdHocUsageReader.AggregateFromStore(store, _workspace);

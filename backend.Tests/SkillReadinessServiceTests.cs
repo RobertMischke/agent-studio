@@ -208,11 +208,18 @@ public class SkillReadinessServiceTests : IDisposable
         Assert.Equal(TaskStates.Ready, result!.TargetState);
         Assert.False(string.IsNullOrEmpty(result.JobId));
 
+        // The job is queued in 2-ready. Its physical folder now lives in the
+        // flat jobs/<bucket>/<key> storage layout - the lane is carried in
+        // task.json's "state" field, not the folder path - so resolve it via
+        // the scanner rather than pinning the legacy <watchPath>/2-ready/<id>.
+        var job = BuildScanner().FindJob(result.JobId, _watchPath);
+        Assert.NotNull(job);
+        Assert.Equal(TaskStates.Ready, job!.State);
+
         // Folder + prompt landed on disk.
-        var jobDir = Path.Combine(_watchPath, TaskStates.Ready, result.JobId);
-        Assert.True(Directory.Exists(jobDir));
-        Assert.True(File.Exists(Path.Combine(jobDir, "task.json")));
-        var prompt = File.ReadAllText(Path.Combine(jobDir, "prompt.md"));
+        Assert.True(Directory.Exists(job.FolderPath));
+        Assert.True(File.Exists(Path.Combine(job.FolderPath, "task.json")));
+        var prompt = File.ReadAllText(Path.Combine(job.FolderPath, "prompt.md"));
         Assert.Contains("Agent Software Studio Skills", prompt);
 
         // Watched project's README is *not* edited by the fix path - the
@@ -267,5 +274,18 @@ public class SkillReadinessServiceTests : IDisposable
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         return new SkillReadinessService(scanner, mutations, NullLogger<SkillReadinessService>.Instance);
+    }
+
+    private TaskScannerService BuildScanner()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WatchPaths:0:Name"] = _projectName,
+                ["WatchPaths:0:Path"] = _watchPath,
+            })
+            .Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        return new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
     }
 }

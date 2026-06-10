@@ -309,12 +309,21 @@ public class TaskOutcomeIssueScannerTests : IDisposable
         Assert.NotNull(job.OutcomeIssue);
         Assert.Equal("permission-blocked", job.OutcomeIssue!.Kind);
         Assert.Equal("High", job.OutcomeIssue.Severity);
-        Assert.Contains("category: permission-blocked", job.OutcomeIssue.Summary);
+        // The summary is derived from the genuine [orchestrator] permission
+        // line, NOT the [intervention] meta line whose "(category: ...)" prose
+        // is suppressed as an orchestrator-meta source.
+        Assert.Contains("Permission denied and could not request permission", job.OutcomeIssue.Summary);
     }
 
     [Fact]
-    public void ScanAllJobs_LegacyHeuristicFallbackLog_SurfacesClassifierUnknown()
+    public void ScanAllJobs_LegacyHeuristicMetaLine_IsSuppressed()
     {
+        // A bare "[heuristic]" fallback line is orchestrator meta, not a typed
+        // runner outcome. After the meta-tag suppression (the orchestrator's own
+        // prose must never become an outcome issue), this legacy format no
+        // longer surfaces a classifier-unknown chip even though its text matches
+        // "could not classify the agent's reply". The canonical surface is the
+        // typed "[classifier-unknown]" marker (see TaskScannerOutcomeIssueTests).
         var dir = Path.Combine(_watchPath, TaskStates.HumanReview, "legacy-heuristic-task");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "task.json"),
@@ -326,8 +335,6 @@ public class TaskOutcomeIssueScannerTests : IDisposable
 
         var job = Assert.Single(BuildScanner().ScanAllJobs());
 
-        Assert.NotNull(job.OutcomeIssue);
-        Assert.Equal("classifier-unknown", job.OutcomeIssue!.Kind);
-        Assert.Equal("Warn", job.OutcomeIssue.Severity);
+        Assert.Null(job.OutcomeIssue);
     }
 }

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -34,59 +33,62 @@ public class PipelineExecutionParallelTests : IDisposable
     }
 
     [Fact]
-    public async Task FourAspects_RunInParallel_WallClockIsCloseToOneAspectNotFour()
+    public async Task FourAspects_RunInParallel_NoneCompletesUntilAllHaveStarted()
     {
-        // Each stubbed aspect sleeps for a fixed delay. If the runner is
-        // sequential, total wall time is ~4 * perAspect. Parallel runs
-        // finish in ~1 * perAspect plus scheduling slack. We assert the
-        // total finishes well under the sequential floor (2x perAspect)
-        // so the test is robust against CI scheduler jitter.
-        var perAspect = TimeSpan.FromMilliseconds(400);
+        // Deterministic proof of parallel fan-out (replaces the old wall-clock
+        // threshold, which starved + flaked to 60s+ when xUnit ran sibling
+        // collections in parallel and the threadpool was saturated). Each
+        // stubbed aspect arrives at a 4-way rendezvous and cannot return until
+        // all four have arrived: a sequential runner blocks forever on the
+        // first aspect, so the bounded guard surfaces the regression instead of
+        // leaning on timing. A correct parallel runner holds all four semaphore
+        // permits at once (cap == aspect count), so the gate opens immediately.
+        var rendezvous = new ConcurrencyRendezvous(4);
         var runner = BuildRunner(async aspect =>
         {
-            await Task.Delay(perAspect);
+            await rendezvous.ArriveAndWaitAsync(aspect);
             return "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]";
         });
 
-        var sw = Stopwatch.StartNew();
-        var report = await runner.RunAsync(BuildInputs(),
+        var runTask = runner.RunAsync(BuildInputs(),
             new[] { "requirement-fit", "code-quality", "documentation-impact", "tests-and-evidence" },
-            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
-        sw.Stop();
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(30), CancellationToken.None);
 
+        var finished = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(15)));
+        Assert.True(finished == runTask,
+            "the four aspects never all reached the rendezvous: the runner is launching them sequentially, not in parallel");
+
+        var report = await runTask;
         Assert.Equal(4, report.Verdicts.Count);
         Assert.Equal(AspectStatus.Pass, report.Overall);
-
-        var sequentialFloor = TimeSpan.FromMilliseconds(perAspect.TotalMilliseconds * 2);
-        Assert.True(sw.Elapsed < sequentialFloor,
-            $"expected parallel run < {sequentialFloor.TotalMilliseconds}ms (sequential would be ~{perAspect.TotalMilliseconds * 4}ms), got {sw.Elapsed.TotalMilliseconds}ms");
     }
 
     [Fact]
-    public async Task FourAspects_AllStartWithinNarrowWindow_ProvesParallelLaunch()
+    public async Task FourAspects_AllFourDispatched_ProvesParallelLaunch()
     {
-        // Capture wall-clock at the moment each stubbed CLI call begins.
-        // A sequential runner would space starts by perAspect; the parallel
-        // runner launches all four within milliseconds (bounded by the
-        // semaphore cap of 4 = aspect count).
-        var perAspect = TimeSpan.FromMilliseconds(300);
-        var starts = new System.Collections.Concurrent.ConcurrentBag<DateTime>();
+        // Companion to the rendezvous test above, from the dispatch angle: the
+        // gate only opens once four DISTINCT aspect ids have arrived, so a
+        // successful run proves the runner dispatched every requested aspect
+        // concurrently (not the same one four times, and not a serial subset).
+        var rendezvous = new ConcurrencyRendezvous(4);
         var runner = BuildRunner(async aspect =>
         {
-            starts.Add(DateTime.UtcNow);
-            await Task.Delay(perAspect);
+            await rendezvous.ArriveAndWaitAsync(aspect);
             return "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]";
         });
 
-        await runner.RunAsync(BuildInputs(),
+        var runTask = runner.RunAsync(BuildInputs(),
             new[] { "requirement-fit", "code-quality", "documentation-impact", "tests-and-evidence" },
-            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(30), CancellationToken.None);
 
-        var ordered = starts.OrderBy(t => t).ToList();
-        Assert.Equal(4, ordered.Count);
-        var spread = ordered[^1] - ordered[0];
-        Assert.True(spread < TimeSpan.FromMilliseconds(perAspect.TotalMilliseconds),
-            $"expected all 4 aspect starts within < {perAspect.TotalMilliseconds}ms (proves parallel launch), got spread of {spread.TotalMilliseconds}ms");
+        var finished = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(15)));
+        Assert.True(finished == runTask,
+            "the four aspects never all reached the rendezvous: parallel launch did not happen");
+        await runTask;
+
+        Assert.Equal(
+            new[] { "code-quality", "documentation-impact", "requirement-fit", "tests-and-evidence" },
+            rendezvous.ArrivedAspects.OrderBy(a => a, StringComparer.Ordinal).ToArray());
     }
 
     [Fact]
@@ -225,5 +227,37 @@ public class PipelineExecutionParallelTests : IDisposable
             pipelineLog: pipelineLog);
         runner.CliRunner = (aspectId, _, _, _, _, _) => stub(aspectId);
         return runner;
+    }
+
+    /// <summary>
+    /// A deterministic N-way rendezvous used to prove the aspect runner
+    /// launches its stubs concurrently without leaning on wall-clock timing.
+    /// Each caller signals arrival and awaits a gate that only opens once all
+    /// <c>expected</c> callers have arrived; a sequential runner therefore
+    /// blocks on the first caller forever. Awaiting is async (a
+    /// <see cref="TaskCompletionSource"/>, not a blocking wait) so it does not
+    /// consume threadpool threads while parked.
+    /// </summary>
+    private sealed class ConcurrencyRendezvous
+    {
+        private readonly int _expected;
+        private int _arrived;
+        private readonly System.Collections.Concurrent.ConcurrentBag<string> _aspects = new();
+        private readonly TaskCompletionSource _allArrived =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ConcurrencyRendezvous(int expected) => _expected = expected;
+
+        public IReadOnlyCollection<string> ArrivedAspects => _aspects;
+
+        public Task ArriveAndWaitAsync(string aspect)
+        {
+            _aspects.Add(aspect);
+            if (Interlocked.Increment(ref _arrived) == _expected)
+            {
+                _allArrived.TrySetResult();
+            }
+            return _allArrived.Task;
+        }
     }
 }

@@ -48,7 +48,7 @@ public class OrchestratorPromptTests
         Assert.Contains("screenshot.png", prompt, System.StringComparison.Ordinal);
         Assert.Contains("C:\\jobs\\fix-layout\\attachments\\screenshot.png", prompt, System.StringComparison.Ordinal);
         Assert.Contains("Read tool", prompt, System.StringComparison.Ordinal);
-        Assert.Contains("Before answering BLOCK", prompt, System.StringComparison.Ordinal);
+        Assert.Contains("Before deferring, check whether reading an attached file", prompt, System.StringComparison.Ordinal);
     }
 
     [Fact]

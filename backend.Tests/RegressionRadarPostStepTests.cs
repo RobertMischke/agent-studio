@@ -125,7 +125,11 @@ public class RegressionRadarPostStepTests : IDisposable
     [Fact]
     public async Task RadarCondition_DoesNotRunAnalyzer_WhenConditionDoesNotMatch()
     {
-        SeedReviewJobWithDone("radar-condition", taskType: "bug");
+        // taskType must be non-"feature" so the radar condition does NOT match,
+        // but NOT "bug": a bug card trips the EvidenceGate (ASS-764, bugs require
+        // visual proof) which blocks promotion to 5-human-review and the radar
+        // step record never reaches the review folder this test reads back.
+        SeedReviewJobWithDone("radar-condition", taskType: "chore");
         var analyzerCalled = false;
         var orchestrator = BuildOrchestrator(
             new RegressionRadarResult
@@ -235,7 +239,13 @@ public class RegressionRadarPostStepTests : IDisposable
             oneShotRegistry: null,
             sessions: null,
             git: null,
-            pipelineLog: pipelineLog);
+            pipelineLog: pipelineLog,
+            // The radar post-step reads its run condition from the project
+            // settings; production injects this via DI. Without it _projectSettings
+            // is null and the condition is never consulted (the radar runs
+            // unconditionally), so the per-task condition gating can't be
+            // exercised. Pass the same configured instance the test mutates.
+            projectSettings: settings);
         orchestrator.RegressionRadarAnalyzer = (_, _) => cannedResult;
         return orchestrator;
     }
