@@ -5346,6 +5346,11 @@ public class ProjectRunner
 
     private bool IsReadyPickupCandidate(TaskInfo job, bool intakeEnabled)
         => AgentTypes.IsAutoPickupEligible(job.Agent)
+           // Epics are containers, not work items: their sub-tasks flow through
+           // the pipeline, the epic card never code-executes. Skip it hard so it
+           // can never be loaded into a slot, even if it has come to rest in a
+           // pickup lane (old data / stray move).
+           && !IsUnpickableEpic(job)
            // Hard safety net for the human-decision-needed marker:
            // never auto-run such a card even if the 2-ready->5-human-review
            // relocation sweep failed to move it. Running it just NOOP-burns
@@ -5355,6 +5360,23 @@ public class ProjectRunner
            // its exponential cooldown elapses (RapidCrashBreaker).
            && !IsInRapidCrashBackoff(job.Id)
            && IsPickupAllowed(job, intakeEnabled);
+
+    /// <summary>
+    /// True when a card must never be auto-picked because it is an epic
+    /// container rather than a runnable work item. Logs once per skip so an
+    /// epic that has leaked into a work lane surfaces as a visible anomaly
+    /// instead of a silent zombie. Manual decomposition (an operator starting
+    /// the epic's planning run) routes through the start endpoint, not this
+    /// auto-pickup gate, so it is unaffected.
+    /// </summary>
+    private bool IsUnpickableEpic(TaskInfo job)
+    {
+        if (!TaskKinds.IsEpic(job.Kind)) return false;
+        _logger.LogWarning(
+            "[taskboard] skipping epic card {Job} on {Project} in pickup lane {State}: epics are containers, not pickable work items",
+            job.Id, ProjectName, job.State);
+        return true;
+    }
 
     private List<DisplayedPickupCandidate> ListPickupCandidatesInDisplayedOrder()
     {
@@ -5417,6 +5439,11 @@ public class ProjectRunner
         }
 
         if (!AgentTypes.IsAutoPickupEligible(candidate.Info.Agent))
+            return null;
+
+        // Epics are containers, not work items - never resume one into a slot
+        // even if it has come to rest in 3-progress (old data / stray move).
+        if (IsUnpickableEpic(candidate.Info))
             return null;
 
         // Rapid-crash backoff: a progress folder that just crashed fast is
