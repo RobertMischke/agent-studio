@@ -790,6 +790,42 @@ describe('TaskCardComponent (smoke)', () => {
     expect(cc?.rows[0].shortSha).toBe('legacyy');
     expect(fixture.componentInstance.commitEmptyBadge()).toBeNull();
   });
+
+  // Regression: the portal migration dropped the native `popover` attribute that
+  // kept the token-usage panel collapsed by default. Without a default-hidden
+  // state every card paints its `position: fixed` popover off the right viewport
+  // edge (operator screenshot: multiple panels hung open + clipped). The panel
+  // must stay hidden until the directive opens it on hover/focus.
+  it('keeps the token popover hidden until the trigger is hovered', async () => {
+    const fixture = await renderCard(makeJob({
+      tokenSummary: {
+        calls: 2,
+        inputTokens: 120_000,
+        outputTokens: 18_000,
+        cacheReadTokens: 250_000,
+        cacheCreationTokens: 12_000,
+        totalTokens: 400_000,
+        lastModel: 'claude-opus-4-7',
+        lastUpdate: '2026-06-09T08:30:00Z',
+        entries: [],
+      },
+    }));
+
+    const bubble = fixture.nativeElement.querySelector('[data-testid="task-card-token-bubble"]') as HTMLElement | null;
+    expect(bubble, 'token bubble should render for a non-zero summary').not.toBeNull();
+
+    const popover = fixture.nativeElement.querySelector('[data-token-popover]') as HTMLElement | null;
+    expect(popover, 'token popover element should exist in the card').not.toBeNull();
+    expect(popover?.hidden, 'token popover must start hidden, not hang open').toBe(true);
+
+    const wrap = fixture.nativeElement.querySelector('[appTokenPopover]') as HTMLElement | null;
+    expect(wrap).not.toBeNull();
+    wrap?.dispatchEvent(new MouseEvent('mouseenter'));
+    fixture.detectChanges();
+    expect(popover?.hidden, 'hovering the trigger should reveal the popover').toBe(false);
+
+    fixture.destroy();
+  });
 });
 
 describe('buildEffectiveModelChip', () => {

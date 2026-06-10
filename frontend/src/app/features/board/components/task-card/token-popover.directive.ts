@@ -21,7 +21,10 @@ import {
  * shared with menus, model pickers, and prompt popovers.
  *
  * Apply on the wrapper that contains the trigger + the `[data-token-popover]`
- * element.
+ * element. The popover element MUST start with the `hidden` attribute in markup:
+ * this directive only toggles `pop.hidden`, it does not own the initial state.
+ * Without it every card paints its `position: fixed` popover at its static
+ * position (off the right viewport edge) until it is first hovered (ASS-1700).
  */
 @Directive({
   selector: '[appTokenPopover]',
