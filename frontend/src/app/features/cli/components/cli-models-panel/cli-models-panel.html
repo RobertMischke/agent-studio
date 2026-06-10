@@ -1,0 +1,47 @@
+<div class="cli-models" data-testid="cli-models-panel">
+  @for (g of groups(); track g.cliType) {
+    <article class="cli-models__card"
+             [attr.data-cli]="g.cliType"
+             [attr.data-testid]="'cli-models-card-' + g.cliType">
+      <header class="cli-models__head">
+        <span class="cli-models__icon" aria-hidden="true">{{ g.icon }}</span>
+        <span class="cli-models__name">{{ g.label }}</span>
+        <span class="cli-models__count">{{ g.models.length }} models</span>
+        <button class="cli-models__refresh"
+                type="button"
+                [attr.data-testid]="'cli-models-refresh-' + g.cliType"
+                (click)="refresh(g.cliType)"
+                [attr.aria-label]="'Refresh ' + g.label + ' model catalog'">↻</button>
+      </header>
+
+      @if (g.defaultModel; as dm) {
+        <div class="cli-models__default" [attr.data-testid]="'cli-models-default-' + g.cliType">
+          <span class="cli-models__default-tag">default</span>
+          <span class="cli-models__default-name">{{ dm.label }}</span>
+          @if (dm.defaultThinkingLevel) {
+            <span class="cli-models__thinking">thinking: {{ dm.defaultThinkingLevel }}</span>
+          }
+        </div>
+      } @else {
+        <div class="cli-models__empty">No catalog loaded yet.</div>
+      }
+
+      @if (g.models.length) {
+        <ul class="cli-models__list">
+          @for (m of g.models; track m.id) {
+            <li class="cli-models__row"
+                [class.cli-models__row--default]="m.isDefault"
+                [class.cli-models__row--deprecated]="m.deprecated">
+              <span class="cli-models__row-label">{{ m.label }}</span>
+              @if (m.vendor) { <span class="cli-models__row-vendor">{{ m.vendor }}</span> }
+              @if (m.multiplier !== null) { <span class="cli-models__row-mult">{{ m.multiplier }}×</span> }
+              @if (thinkingSummary(m); as th) { <span class="cli-models__row-thinking">{{ th }}</span> }
+              @if (m.available === false) { <span class="cli-models__row-flag">unavailable</span> }
+              @if (m.deprecated) { <span class="cli-models__row-flag">deprecated</span> }
+            </li>
+          }
+        </ul>
+      }
+    </article>
+  }
+</div>

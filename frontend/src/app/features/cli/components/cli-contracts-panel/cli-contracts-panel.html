@@ -1,0 +1,41 @@
+<div class="cli-contracts" data-testid="cli-contracts-panel">
+  @if (errorMsg(); as err) {
+    <div class="cli-contracts__error" data-testid="cli-contracts-error">{{ err }}</div>
+  }
+
+  @if (loading() && contracts().length === 0) {
+    <div class="cli-contracts__empty">Loading contracts…</div>
+  }
+
+  @for (c of contracts(); track c.cliType) {
+    <article class="cli-contracts__card"
+             [attr.data-cli]="c.cliType"
+             [attr.data-testid]="'cli-contract-card-' + c.cliType">
+      <header class="cli-contracts__head">
+        <span class="cli-contracts__icon" aria-hidden="true">{{ icon(c.cliType) }}</span>
+        <span class="cli-contracts__name">{{ label(c.cliType) }}</span>
+        <span class="cli-contracts__badge"
+              [class.cli-contracts__badge--typed]="c.typed"
+              [class.cli-contracts__badge--heuristic]="!c.typed"
+              [attr.data-testid]="'cli-contract-typed-' + c.cliType">
+          {{ c.typed ? 'typed adapter' : 'exit-based' }}
+        </span>
+      </header>
+
+      <dl class="cli-contracts__grid">
+        <dt>Transport</dt>
+        <dd>{{ c.transport }}</dd>
+        <dt>Session start</dt>
+        <dd>{{ c.sessionStartSignal }}</dd>
+        <dt>Completion</dt>
+        <dd class="cli-contracts__signal">{{ c.completionSignal }}</dd>
+        <dt>Failure</dt>
+        <dd>{{ c.failureSignal }}</dd>
+        <dt>Usage source</dt>
+        <dd>{{ c.usageSource }}</dd>
+      </dl>
+
+      <p class="cli-contracts__notes">{{ c.notes }}</p>
+    </article>
+  }
+</div>

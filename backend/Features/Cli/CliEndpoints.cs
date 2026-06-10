@@ -60,6 +60,12 @@ public static class CliEndpoints
 
         cliGroup.MapGet("/types", () => Results.Ok(CliTypes.All));
 
+        // Per-CLI completion contract: how each backend signals turn
+        // completion (native frame -> typed CliRunEvent). Static, derived
+        // from the live adapter mappings; the Admin/CLI page renders it so
+        // the contract shown is the real one, not a frontend guess.
+        cliGroup.MapGet("/contracts", () => Results.Ok(CliCompletionContracts.All));
+
         cliGroup.MapGet("/{cliType}/models", async (string cliType, bool? refresh, CliRouter router, CancellationToken ct) =>
         {
             if (!CliTypes.IsValid(cliType))

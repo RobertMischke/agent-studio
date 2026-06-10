@@ -28,7 +28,7 @@ import type {
 } from '../models/task.model';
 import { TaskState } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
-import type { CopilotModelCatalog, CliModelCatalog, CliUsageReport } from '../features/cli';
+import type { CopilotModelCatalog, CliModelCatalog, CliCompletionContract, CliUsageReport } from '../features/cli';
 import type { GitFileChange, GitStatus, TaskCommitDetail, TaskProvenanceView } from '../features/git';
 import type {
   OrchestratorLogResponse,
@@ -1260,6 +1260,11 @@ export class TaskService {
 
   getCliUsageReport() {
     return this.http.get<CliUsageReport>(`${this.baseUrl}/cli/usage`);
+  }
+
+  /** Per-CLI completion contracts (how each backend signals turn completion). */
+  getCliCompletionContracts() {
+    return this.http.get<CliCompletionContract[]>(`${this.baseUrl}/cli/contracts`);
   }
 
   // Cycle 10d: quota / subscription rate-limit reporting moved to

@@ -29,6 +29,25 @@ export interface CliModelCatalog {
   fetchedAt?: string;
 }
 
+/**
+ * Mirror of the backend `CliCompletionContract` record (see
+ * backend/Features/Cli/Execution/CliCompletionContracts.cs). Describes how one
+ * CLI signals turn completion: which native frame each adapter maps to
+ * `TurnCompleted` / `TurnFailed`, where the usage summary is read from, and
+ * whether a typed `CliRunEvent` adapter exists at all (`typed`). Served by
+ * `GET /api/cli/contracts` and rendered read-only on the Admin/CLI page.
+ */
+export interface CliCompletionContract {
+  cliType: CliType;
+  transport: string;
+  sessionStartSignal: string;
+  completionSignal: string;
+  failureSignal: string;
+  usageSource: string;
+  typed: boolean;
+  notes: string;
+}
+
 // Backwards-compat aliases — the records were Copilot-named before the multi-CLI refactor.
 export type CopilotModelInfo = CliModelInfo;
 export type CopilotModelCatalog = CliModelCatalog;

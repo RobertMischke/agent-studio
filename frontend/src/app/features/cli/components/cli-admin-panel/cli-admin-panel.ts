@@ -7,6 +7,8 @@ import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import { QuotaApiService } from '../../../../features/quota';
 import { CliUsageDetailComponent, CliUsageStore } from '../../../tokens';
 import { CliSessionsPanelComponent } from '../cli-sessions-panel/cli-sessions-panel';
+import { CliModelsPanelComponent } from '../cli-models-panel/cli-models-panel';
+import { CliContractsPanelComponent } from '../cli-contracts-panel/cli-contracts-panel';
 
 interface CapsResponse {
   defaultCapPct: number;
@@ -25,20 +27,24 @@ interface CapRow {
 }
 
 /**
- * Admin / management surface for installed CLIs. The first capability shipped
- * here is the per-CLI per-window usage cap: each quota window from the latest
- * /api/cli/quota snapshot gets a slider that the user drags to set "do not
- * run past N% of this window". The runner gates auto-pickup and stops in-
- * flight runs when usage crosses these caps.
+ * Admin / management surface for installed CLIs. Sections, top to bottom:
+ * the per-CLI model catalog (types + default model / thinking); per-CLI
+ * per-window usage caps (each quota window from the latest /api/cli/quota
+ * snapshot gets a slider the user drags to set "do not run past N% of this
+ * window" - the runner gates auto-pickup and stops in-flight runs when usage
+ * crosses these caps); full usage detail; the per-CLI completion contract
+ * (how each backend signals turn completion); the CLI-session inventory; and
+ * a Working Memory placeholder.
  *
- * Other admin / statistics content lives behind a "Coming soon" placeholder
- * - the user explicitly asked for the sliders first; the rest is on the
- *   roadmap but does not block this surface.
+ * The model catalog and completion-contract sections are dedicated child
+ * components ({@link CliModelsPanelComponent} / {@link CliContractsPanelComponent})
+ * so this host stays within its size budget. Working Memory is a "coming
+ * soon" placeholder until its backing surface lands (T1c).
  */
 @Component({
   selector: 'app-cli-admin-panel',
   standalone: true,
-  imports: [FormsModule, CliUsageDetailComponent, CliSessionsPanelComponent],
+  imports: [FormsModule, CliUsageDetailComponent, CliSessionsPanelComponent, CliModelsPanelComponent, CliContractsPanelComponent],
   templateUrl: './cli-admin-panel.html',
   styleUrl: './cli-admin-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
