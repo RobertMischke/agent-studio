@@ -38,9 +38,9 @@ public class PipelineCatalogueTests
         // Post includes the deterministic review/build gates, four aspects,
         // implemented tool steps (incl. the opt-in wiki-maintenance and
         // wiki-learnings distillation steps), the deferred operator-triggered
-        // "Merge into Develop" step, final orchestrator decision, and opt-in
-        // drift dimensions.
-        Assert.Equal(21, p.Post.Count);
+        // "Merge into Develop" step, the automatic code-review quality-grade
+        // step, final orchestrator decision, and opt-in drift dimensions.
+        Assert.Equal(22, p.Post.Count);
     }
 
     [Fact]
@@ -432,6 +432,55 @@ public class PipelineCatalogueTests
             },
         };
         Assert.True(PipelineStepConfigResolver.IsEnabled(settings, step));
+    }
+
+    [Fact]
+    public void StandardPipeline_CodeReviewGrade_IsDefaultOnReviewStep_AfterAspects_BeforeDecision()
+    {
+        // ASS-1657: the automatic code-review quality-grade step ships as a
+        // first-class post-step that runs after the parallel aspect verdicts
+        // and before the final orchestrator decision. It is default-on (every
+        // pipelined task carries a grade), reuses the Orchestrator kind (an LLM
+        // ruling, like the decision step), and depends on every aspect so a
+        // DAG-resolver schedules it after the verdicts.
+        var p = PipelineCatalogue.Standard;
+        var step = p.Post.First(s => s.Id == PipelineCatalogue.CodeReviewGradeStepId);
+        Assert.Equal("post-code-review-grade", step.Id);
+        Assert.Equal(StepKind.Orchestrator, step.Kind);
+        Assert.Equal(StepRunMode.Sequential, step.RunMode);
+        Assert.True(step.Idempotent);
+        Assert.True(step.DefaultEnabled); // every task gets a grade
+        Assert.False(step.Stub);
+        foreach (var aspectId in PipelineCatalogue.AspectStepIds)
+        {
+            Assert.Contains(aspectId, step.DependsOn);
+        }
+
+        var gradeIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.CodeReviewGradeStepId);
+        var decisionIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.OrchestratorDecisionStepId);
+        Assert.True(gradeIndex < decisionIndex,
+            $"code-review grade (idx {gradeIndex}) must precede orchestrator-decision (idx {decisionIndex})");
+        foreach (var aspectId in PipelineCatalogue.AspectStepIds)
+        {
+            var aspectIndex = p.Post.FindIndex(s => s.Id == aspectId);
+            Assert.True(aspectIndex < gradeIndex,
+                $"aspect {aspectId} (idx {aspectIndex}) must precede code-review grade (idx {gradeIndex})");
+        }
+
+        // Not a git step: the read-only planning/research pipeline keeps it.
+        Assert.DoesNotContain(PipelineCatalogue.CodeReviewGradeStepId, PipelineCatalogue.GitStepIds);
+        Assert.Contains(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.CodeReviewGradeStepId);
+
+        // Default-on, but an operator can disable it per project.
+        Assert.True(PipelineStepConfigResolver.IsEnabled((ProjectSettings?)null, step));
+        var disabled = new ProjectSettings
+        {
+            PipelineSteps = new Dictionary<string, PipelineStepSetting>
+            {
+                [PipelineCatalogue.CodeReviewGradeStepId] = new() { Enabled = false },
+            },
+        };
+        Assert.False(PipelineStepConfigResolver.IsEnabled(disabled, step));
     }
 
     [Fact]

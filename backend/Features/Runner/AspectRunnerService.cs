@@ -693,4 +693,63 @@ internal static class ConcernTagWriter
                 jobFolderPath);
         }
     }
+
+    /// <summary>
+    /// Prefix shared by the four quality-grade tags
+    /// (<c>code-review:grade-a</c> … <c>code-review:grade-d</c>) the
+    /// automatic code-review step hangs on a card. Used to reconcile the
+    /// grade so a re-graded task carries exactly one grade tag.
+    /// </summary>
+    public const string CodeReviewGradeTagPrefix = "code-review:grade-";
+
+    /// <summary>
+    /// Set the card's single quality-grade tag to <paramref name="gradeTagId"/>,
+    /// dropping any other <c>code-review:grade-*</c> tag a prior run left behind.
+    /// Every non-grade tag is untouched. A grade is carried on every pipelined
+    /// task, so unlike the concern tags this is authoritative for exactly one
+    /// value. No-op when nothing changes, to avoid churning the folder mtime.
+    /// </summary>
+    public static void ReplaceCodeReviewGradeTag(string jobFolderPath, string gradeTagId, ILogger logger)
+    {
+        if (string.IsNullOrWhiteSpace(gradeTagId)) return;
+        var jobJsonPath = Path.Combine(jobFolderPath, "task.json");
+        if (!File.Exists(jobJsonPath)) return;
+
+        try
+        {
+            var json = File.ReadAllText(jobJsonPath);
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, TaskJsonFile.ReadOpts)
+                      ?? new Dictionary<string, JsonElement>();
+            var existing = new List<string>();
+            if (doc.TryGetValue("tags", out var tagsEl) && tagsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var t in tagsEl.EnumerateArray())
+                {
+                    if (t.ValueKind == JsonValueKind.String)
+                    {
+                        var s = t.GetString();
+                        if (!string.IsNullOrWhiteSpace(s)) existing.Add(s!);
+                    }
+                }
+            }
+
+            var reconciled = existing
+                .Where(t => !t.StartsWith(CodeReviewGradeTagPrefix, StringComparison.OrdinalIgnoreCase))
+                .Append(gradeTagId)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var before = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
+            var after = new HashSet<string>(reconciled, StringComparer.OrdinalIgnoreCase);
+            if (before.SetEquals(after)) return;
+
+            TaskJsonFile.UpdateField(jobFolderPath, "tags", reconciled, logger);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "ConcernTagWriter: failed to set code-review grade tag into {TaskFolder}",
+                jobFolderPath);
+        }
+    }
 }

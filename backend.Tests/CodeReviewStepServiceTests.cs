@@ -207,6 +207,94 @@ public class CodeReviewStepServiceTests : IDisposable
         Assert.Equal("code-review:block", CodeReviewStepService.TagFor(AspectStatus.Block));
     }
 
+    [Fact]
+    public async Task GradeMode_ParsesGradeSentinel_WritesGradeMd_AddsGradeTag()
+    {
+        var service = BuildService((_, _, _, _, _) =>
+            Task.FromResult("Complete and tested.\n[[CODE_REVIEW_GRADE: grade=A; summary=Solves the goal with tests.]]\n[[TASK_DONE]]"));
+
+        var report = await service.RunAsync(BuildGradeRequest(), CancellationToken.None);
+
+        Assert.Equal(CodeReviewGrade.A, report.Grade);
+        Assert.Equal(AspectStatus.Pass, report.Status); // A maps to pass
+        Assert.Equal("code-review:grade-a", report.ConcernTagId);
+        Assert.StartsWith("code-review-grade-", report.FileName);
+
+        var content = File.ReadAllText(report.FilePath);
+        Assert.Contains("type: code-review-grade", content);
+        Assert.Contains("grade: A", content);
+        Assert.Contains("Quality Grade: A", content);
+        Assert.Contains("Solves the goal with tests.", content);
+
+        Assert.Contains("code-review:grade-a", ReadTags());
+    }
+
+    [Fact]
+    public async Task GradeMode_UnparseableReply_DefaultsToGradeC_NoSilentA()
+    {
+        var service = BuildService((_, _, _, _, _) =>
+            Task.FromResult("I have some thoughts but no clear grade."));
+
+        var report = await service.RunAsync(BuildGradeRequest(), CancellationToken.None);
+
+        Assert.Equal(CodeReviewGrade.C, report.Grade);
+        Assert.Equal(AspectStatus.Concerns, report.Status);
+        Assert.Equal("code-review:grade-c", report.ConcernTagId);
+        Assert.Contains("code-review:grade-c", ReadTags());
+    }
+
+    [Fact]
+    public async Task GradeMode_DGrade_MapsToBlock_AndTags()
+    {
+        var service = BuildService((_, _, _, _, _) =>
+            Task.FromResult("Reimplements existing behaviour.\n[[CODE_REVIEW_GRADE: grade=D; summary=Redundant, not wired.]]"));
+
+        var report = await service.RunAsync(BuildGradeRequest(), CancellationToken.None);
+
+        Assert.Equal(CodeReviewGrade.D, report.Grade);
+        Assert.Equal(AspectStatus.Block, report.Status);
+        Assert.Contains("code-review:grade-d", ReadTags());
+    }
+
+    [Fact]
+    public async Task GradeMode_ReGrade_ReplacesStaleGradeTag_KeepsExactlyOne()
+    {
+        var replies = new Queue<string>(new[]
+        {
+            "[[CODE_REVIEW_GRADE: grade=C; summary=First, half-done.]]",
+            "[[CODE_REVIEW_GRADE: grade=A; summary=Now complete.]]",
+        });
+        var service = BuildService((_, _, _, _, _) => Task.FromResult(replies.Dequeue()));
+
+        var first = await service.RunAsync(BuildGradeRequest(), CancellationToken.None);
+        File.Move(first.FilePath, first.FilePath + ".bak");
+        await service.RunAsync(BuildGradeRequest(), CancellationToken.None);
+
+        var tags = ReadTags();
+        Assert.Contains("code-review:grade-a", tags);
+        Assert.DoesNotContain("code-review:grade-c", tags);
+        Assert.Single(tags, t => t.StartsWith("code-review:grade-"));
+    }
+
+    [Fact]
+    public async Task GradeMode_RegistersGeneratedFileMetadata_WithGradeKind()
+    {
+        var index = new FileGenerationIndex(NullLogger<FileGenerationIndex>.Instance);
+        var service = BuildService((_, _, _, _, _) =>
+            Task.FromResult("[[CODE_REVIEW_GRADE: grade=B; summary=ok]]"), index);
+
+        await service.RunAsync(BuildGradeRequest(), CancellationToken.None);
+
+        var entries = index.ReadForJob(_jobFolder, cacheLegacy: false);
+        var generation = Assert.Single(entries.Values);
+        Assert.Equal("code-review-grade", generation.Kind);
+    }
+
+    private CodeReviewStepRequest BuildGradeRequest(string model = "claude-opus-4-8") => BuildRequest(model) with
+    {
+        Mode = CodeReviewMode.Grade,
+    };
+
     private CodeReviewStepRequest BuildRequest(string model = "claude-opus-4-7") => new(
         Project: "demo",
         JobId: "test-job",

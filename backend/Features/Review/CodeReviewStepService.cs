@@ -67,8 +67,11 @@ public sealed class CodeReviewStepService
         }
     }
 
-    /// <summary>Public for testability: runtime prompt template name.</summary>
+    /// <summary>Public for testability: runtime prompt template name (verdict mode).</summary>
     public const string PromptTemplate = "code-review-step.md";
+
+    /// <summary>Public for testability: runtime prompt template name (grade mode).</summary>
+    public const string GradePromptTemplate = "code-review-grade.md";
 
     /// <summary>Public for testability: ad-hoc usage source tag.</summary>
     public const string UsageSource = "code-review-step";
@@ -126,34 +129,60 @@ public sealed class CodeReviewStepService
         AdHocClaudeInvoker.Record(_usage, UsageSource, request.Model, callUsage,
             sw.ElapsedMilliseconds, ok, project: request.Project, jobId: request.JobId);
 
-        var parsed = AspectVerdictParsing.ParseVerdict(rawResponse);
-        if (parsed == null)
+        CodeReviewGrade? grade = null;
+        if (request.Mode == CodeReviewMode.Grade)
         {
-            // No silent durchwinken: an unparseable reply gets a Concerns
-            // verdict so the card always shows an outcome.
-            status = AspectStatus.Concerns;
-            summary = string.IsNullOrWhiteSpace(rawResponse)
-                ? "Code review produced no parseable reply."
-                : "Code review produced no parseable verdict sentinel.";
+            // Quality-grade pass: parse the A/B/C/D sentinel. An unparseable
+            // reply is graded C (concerns), never silently A - the work is
+            // never waved through on a missing grade.
+            var parsedGrade = CodeReviewGradeParsing.ParseGrade(rawResponse);
+            if (parsedGrade == null)
+            {
+                grade = CodeReviewGrade.C;
+                summary = string.IsNullOrWhiteSpace(rawResponse)
+                    ? "Quality-grade review produced no parseable reply."
+                    : "Quality-grade review produced no parseable grade sentinel.";
+            }
+            else
+            {
+                grade = parsedGrade.Value.Grade;
+                summary = parsedGrade.Value.Summary;
+            }
+            // Map onto the existing pass/concerns/block status so the report
+            // and pipeline rendering reuse one severity concept.
+            status = CodeReviewGradeParsing.ToAspectStatus(grade.Value);
         }
         else
         {
-            status = parsed.Value.Status;
-            summary = parsed.Value.Summary;
+            var parsed = AspectVerdictParsing.ParseVerdict(rawResponse);
+            if (parsed == null)
+            {
+                // No silent durchwinken: an unparseable reply gets a Concerns
+                // verdict so the card always shows an outcome.
+                status = AspectStatus.Concerns;
+                summary = string.IsNullOrWhiteSpace(rawResponse)
+                    ? "Code review produced no parseable reply."
+                    : "Code review produced no parseable verdict sentinel.";
+            }
+            else
+            {
+                status = parsed.Value.Status;
+                summary = parsed.Value.Summary;
+            }
         }
 
-        var verdict = new CodeReviewVerdict(status, summary);
-        var fileName = $"code-review-{startedAt:yyyy-MM-ddTHH-mm-ssZ}.md";
+        var fileNamePrefix = request.Mode == CodeReviewMode.Grade ? "code-review-grade" : "code-review";
+        var fileName = $"{fileNamePrefix}-{startedAt:yyyy-MM-ddTHH-mm-ssZ}.md";
         var filePath = Path.Combine(request.JobFolderPath, fileName);
 
         try
         {
-            var report = RenderReport(request, verdict, rawResponse, startedAt);
+            var report = RenderReport(request, status, summary, grade, rawResponse, startedAt);
             await File.WriteAllTextAsync(filePath, report, ct);
             _fileGenerationIndex?.Upsert(request.JobFolderPath, new FileGenerationMeta
             {
                 File = fileName,
-                Kind = "code-review",
+                Kind = request.Mode == CodeReviewMode.Grade ? "code-review-grade" : "code-review",
                 Model = callUsage?.Model ?? request.Model,
                 Cli = request.CliType,
                 TokensIn = callUsage?.InputTokens ?? 0,
@@ -175,15 +204,27 @@ public sealed class CodeReviewStepService
                 "code-review-step: failed to write {Path}", filePath);
         }
 
-        var concernTagId = TagFor(status);
-        if (concernTagId != null)
+        string? concernTagId;
+        if (request.Mode == CodeReviewMode.Grade)
         {
-            ConcernTagWriter.MergeConcernTags(request.JobFolderPath, new[] { concernTagId }, _logger);
+            // Authoritative single grade tag: drop any stale code-review:grade-*
+            // a prior run hung so a re-graded card carries exactly one grade.
+            concernTagId = CodeReviewGradeParsing.TagFor(grade!.Value);
+            ConcernTagWriter.ReplaceCodeReviewGradeTag(request.JobFolderPath, concernTagId, _logger);
+        }
+        else
+        {
+            concernTagId = TagFor(status);
+            if (concernTagId != null)
+            {
+                ConcernTagWriter.MergeConcernTags(request.JobFolderPath, new[] { concernTagId }, _logger);
+            }
         }
 
         _logger.LogInformation(
-            "code-review-step: finished project={Project} job={JobId} model={Model} verdict={Verdict} durationMs={DurationMs} file={File}",
-            request.Project, request.JobId, request.Model, AspectVerdictParsing.StatusToken(status),
+            "code-review-step: finished project={Project} job={JobId} model={Model} mode={Mode} verdict={Verdict} grade={Grade} durationMs={DurationMs} file={File}",
+            request.Project, request.JobId, request.Model, request.Mode, AspectVerdictParsing.StatusToken(status),
+            grade is null ? "-" : CodeReviewGradeParsing.GradeToken(grade.Value),
             sw.ElapsedMilliseconds, fileName);
 
         return new CodeReviewStepReport(
@@ -197,7 +238,8 @@ public sealed class CodeReviewStepService
             Commit: request.Commit,
             ConcernTagId: concernTagId,
             DurationMs: sw.ElapsedMilliseconds,
-            StartedAt: startedAt);
+            StartedAt: startedAt,
+            Grade: grade);
     }
 
     /// <summary>Tag id for the given verdict, or null when no tag should be hung.</summary>
@@ -221,21 +263,39 @@ public sealed class CodeReviewStepService
             ["diff"] = request.Diff,
             ["model"] = request.Model,
         };
+        var template = request.Mode == CodeReviewMode.Grade ? GradePromptTemplate : PromptTemplate;
         try
         {
-            return _prompts.Render(PromptTemplate, values);
+            return _prompts.Render(template, values);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
                 "code-review-step: prompt template '{Template}' not rendered; using inline fallback",
-                PromptTemplate);
+                template);
             return BuildInlineFallbackPrompt(request);
         }
     }
 
     private static string BuildInlineFallbackPrompt(CodeReviewStepRequest request)
     {
+        if (request.Mode == CodeReviewMode.Grade)
+        {
+            return
+                $"# Code review — quality grade\n\n" +
+                $"Grade the change set below for **{request.Project}/{request.JobId}** ({request.JobTitle}).\n" +
+                $"Commit: `{request.Commit ?? "(HEAD)"}`. Model: `{request.Model}`.\n\n" +
+                $"## Task body\n\n```\n{request.TaskBody}\n```\n\n" +
+                $"## Diff\n\n```\n{request.Diff}\n```\n\n" +
+                "Assign a single quality grade using this rubric:\n" +
+                "- **A** — solves the goal clearly, complete, with tests / evidence.\n" +
+                "- **B** — solid, small gaps.\n" +
+                "- **C** — concerns: half-done or unclear.\n" +
+                "- **D** — misses the goal, or redundantly redoes already-present code.\n\n" +
+                "Reply with a short paragraph plus exactly one sentinel on its own line:\n\n" +
+                "[[CODE_REVIEW_GRADE: grade=<A|B|C|D>; summary=<one short sentence>]]\n";
+        }
+
         return
             $"# Code review step\n\n" +
             $"Review the diff below for **{request.Project}/{request.JobId}** ({request.JobTitle}).\n" +
@@ -251,13 +311,51 @@ public sealed class CodeReviewStepService
 
     private static string RenderReport(
         CodeReviewStepRequest request,
-        CodeReviewVerdict verdict,
+        AspectStatus status,
+        string summary,
+        CodeReviewGrade? grade,
         string body,
         DateTime startedAt)
     {
-        var statusToken = AspectVerdictParsing.StatusToken(verdict.Status);
-        var tag = TagFor(verdict.Status);
-        var safeSummary = EscapeYaml(verdict.Summary);
+        var statusToken = AspectVerdictParsing.StatusToken(status);
+        var safeSummary = EscapeYaml(summary);
+
+        if (grade is not null)
+        {
+            // Quality-grade report: lead with the grade so the Markdown renders
+            // prominently (ASS-1657 "nicht billo"). Keep `verdict` in the
+            // frontmatter too so the existing list parser still has a value.
+            var gradeToken = CodeReviewGradeParsing.GradeToken(grade.Value);
+            var gradeTag = CodeReviewGradeParsing.TagFor(grade.Value);
+            return
+                "---\n" +
+                "type: code-review-grade\n" +
+                $"runAt: {startedAt:O}\n" +
+                $"model: {request.Model}\n" +
+                $"cliType: {request.CliType}\n" +
+                (string.IsNullOrWhiteSpace(request.ThinkingLevel) ? string.Empty : $"thinkingLevel: {request.ThinkingLevel}\n") +
+                $"commit: {request.Commit ?? "(HEAD)"}\n" +
+                $"grade: {gradeToken}\n" +
+                $"verdict: {statusToken}\n" +
+                $"summary: {safeSummary}\n" +
+                $"tag: {gradeTag}\n" +
+                "---\n\n" +
+                $"# Code Review — Quality Grade: {gradeToken}\n\n" +
+                (string.IsNullOrWhiteSpace(summary) ? string.Empty : $"> {summary}\n\n") +
+                $"**Grade:** {gradeToken} &nbsp;·&nbsp; **Model:** `{request.Model}` (`{request.CliType}`) &nbsp;·&nbsp; **Commit:** `{request.Commit ?? "(HEAD)"}`\n\n" +
+                "| Grade | Meaning |\n" +
+                "| :---: | --- |\n" +
+                $"| {(gradeToken == "A" ? "**A**" : "A")} | Solves the goal clearly, complete, with tests / evidence |\n" +
+                $"| {(gradeToken == "B" ? "**B**" : "B")} | Solid, small gaps |\n" +
+                $"| {(gradeToken == "C" ? "**C**" : "C")} | Concerns: half-done or unclear |\n" +
+                $"| {(gradeToken == "D" ? "**D**" : "D")} | Misses the goal, or redundantly redoes existing code |\n\n" +
+                "## Reviewer reply\n\n" +
+                (string.IsNullOrWhiteSpace(body)
+                    ? "_No reply text was returned by the model._\n"
+                    : body.Trim() + "\n");
+        }
+
+        var tag = TagFor(status);
         return
             "---\n" +
             "type: code-review-step\n" +
@@ -272,7 +370,7 @@ public sealed class CodeReviewStepService
             "---\n\n" +
             "# Code Review Step\n\n" +
             $"**Verdict:** {statusToken}\n\n" +
-            (string.IsNullOrWhiteSpace(verdict.Summary) ? string.Empty : $"**Summary:** {verdict.Summary}\n\n") +
+            (string.IsNullOrWhiteSpace(summary) ? string.Empty : $"**Summary:** {summary}\n\n") +
             $"**Model:** `{request.Model}` (`{request.CliType}`)\n\n" +
             $"**Commit:** `{request.Commit ?? "(HEAD)"}`\n\n" +
             "## Reviewer reply\n\n" +
@@ -328,6 +426,18 @@ public sealed class CodeReviewStepService
     }
 }
 
+/// <summary>
+/// Which review the step runs. <see cref="Verdict"/> is the legacy
+/// user-triggered pass/concerns/block review; <see cref="Grade"/> is the
+/// automatic pipeline pass that assigns a quality grade A/B/C/D
+/// (ASS-1657). Same service, prompt-and-parse differ by mode.
+/// </summary>
+public enum CodeReviewMode
+{
+    Verdict,
+    Grade,
+}
+
 /// <summary>One code-review request: who to review, with which model, against which commit.</summary>
 public sealed record CodeReviewStepRequest(
     string Project,
@@ -346,6 +456,13 @@ public sealed record CodeReviewStepRequest(
 
     /// <summary>Wall-clock cap for the CLI invocation. Defaults to 10 minutes.</summary>
     public TimeSpan Timeout { get; init; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// Verdict (default, user-triggered) or Grade (automatic quality grade).
+    /// Defaults to <see cref="CodeReviewMode.Verdict"/> so every existing
+    /// caller keeps its current behaviour unchanged.
+    /// </summary>
+    public CodeReviewMode Mode { get; init; } = CodeReviewMode.Verdict;
 }
 
 /// <summary>Per-call report returned by <see cref="CodeReviewStepService.RunAsync"/>.</summary>
@@ -360,6 +477,5 @@ public sealed record CodeReviewStepReport(
     string? Commit,
     string? ConcernTagId,
     long DurationMs,
-    DateTime StartedAt);
-
-internal sealed record CodeReviewVerdict(AspectStatus Status, string Summary);
+    DateTime StartedAt,
+    CodeReviewGrade? Grade = null);

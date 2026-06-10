@@ -12,6 +12,7 @@ import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import {
   buildAutoReviewProcessBadge,
   buildCardCtxMenuItems,
+  buildCodeReviewGradeBadge,
   buildCommitChainTooltip,
   buildCommitChainView,
   buildCommitEmptyBadge,
@@ -208,6 +209,14 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   );
 
   readonly humanReviewBadge = computed(() => buildHumanReviewBadge(this.job()));
+
+  /**
+   * Quality-grade badge (ASS-1657). The automatic code-review step grades every
+   * pipelined task A/B/C/D and hangs a `code-review:grade-{a-d}` tag; this lifts
+   * that grade into a prominent colour-coded badge. Null until the grade step
+   * has run. See {@link buildCodeReviewGradeBadge}.
+   */
+  readonly codeReviewGradeBadge = computed(() => buildCodeReviewGradeBadge(this.job().tags));
 
   /**
    * Git-integration-state badge (ASS-1665). Pure lane-derived: pre-merge (work

@@ -12,6 +12,7 @@ import {
   buildTagChips,
   buildReviewBadge,
   buildHumanReviewBadge,
+  buildCodeReviewGradeBadge,
   buildPhaseBadge,
   buildTokenBubble,
 } from './task-card-view-model';
@@ -1021,6 +1022,33 @@ describe('buildTagChips — lane-mirror + concern suppression', () => {
     // 'review' only mirrors review lanes; in 3-progress it survives.
     const chips = buildTagChips(['review'], reg, '3-progress');
     expect(chips.map((c) => c.id)).toEqual(['review']);
+  });
+
+  it('suppresses the raw code-review:grade-* tag (the grade badge renders it)', () => {
+    const reg = registry(tag('code-review:grade-a', 'Grade A'));
+    const chips = buildTagChips(['code-review:grade-a'], reg, '4-auto-review');
+    expect(chips).toEqual([]);
+  });
+});
+
+describe('buildCodeReviewGradeBadge — A/B/C/D quality grade (ASS-1657)', () => {
+  it('reads the grade letter + tone from a code-review:grade-* tag', () => {
+    const badge = buildCodeReviewGradeBadge(['code-review:grade-b']);
+    expect(badge?.grade).toBe('B');
+    expect(badge?.tone).toBe('b');
+    expect(badge?.tooltip).toContain('Quality grade B');
+  });
+
+  it('handles every grade A-D', () => {
+    expect(buildCodeReviewGradeBadge(['code-review:grade-a'])?.grade).toBe('A');
+    expect(buildCodeReviewGradeBadge(['code-review:grade-c'])?.grade).toBe('C');
+    expect(buildCodeReviewGradeBadge(['code-review:grade-d'])?.grade).toBe('D');
+  });
+
+  it('returns null when no grade tag is present', () => {
+    expect(buildCodeReviewGradeBadge(['architecture', 'code-review:pass'])).toBeNull();
+    expect(buildCodeReviewGradeBadge(undefined)).toBeNull();
+    expect(buildCodeReviewGradeBadge([])).toBeNull();
   });
 });
 

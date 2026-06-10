@@ -100,6 +100,7 @@ public static class TaskCodeReviewEndpoints
                             {
                                 FileName = fileName,
                                 Verdict = fields.GetValueOrDefault("verdict") ?? "unknown",
+                                Grade = fields.GetValueOrDefault("grade"),
                                 Summary = fields.GetValueOrDefault("summary") ?? string.Empty,
                                 Model = fields.GetValueOrDefault("model") ?? string.Empty,
                                 CliType = fields.GetValueOrDefault("cliType") ?? string.Empty,
@@ -286,6 +287,12 @@ public sealed record CodeReviewListEntry
 {
     public required string FileName { get; init; }
     public required string Verdict { get; init; }
+
+    /// <summary>
+    /// Quality grade A/B/C/D for the automatic grade pass (ASS-1657); null
+    /// for the older user-triggered verdict reviews that carry no grade.
+    /// </summary>
+    public string? Grade { get; init; }
     public required string Summary { get; init; }
     public required string Model { get; init; }
     public required string CliType { get; init; }

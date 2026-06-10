@@ -141,6 +141,16 @@
         {{ hrb.label }}
       </span>
     }
+    @if (codeReviewGradeBadge(); as grade) {
+      <span class="task-card__grade-pill"
+            [class]="'task-card__grade-pill--' + grade.tone"
+            [appTooltip]="grade.tooltip"
+            data-testid="task-card-grade"
+            [attr.data-grade]="grade.grade">
+        <span class="task-card__grade-letter" aria-hidden="true">{{ grade.grade }}</span>
+        grade
+      </span>
+    }
     @if (phaseBadge(); as pb) {
       <span class="task-card__phase-pill"
             [class]="'task-card__phase-pill--' + pb.tone"

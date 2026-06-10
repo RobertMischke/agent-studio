@@ -442,6 +442,10 @@ function compactTagText(value: string): string {
 
 function isSuppressedCardTag(id: string, entry: TagRegistryEntry | undefined, state: string | undefined): boolean {
   if (/^[a-z][a-z0-9-]*:(?:concerns?|unparseable)$/i.test(id)) return true;
+  // The quality grade has its own prominent badge ({@link buildCodeReviewGradeBadge});
+  // suppress the raw `code-review:grade-*` tag so it does not also render as a
+  // dull chip in the tag row.
+  if (CODE_REVIEW_GRADE_TAG_RE.test(id)) return true;
   const compactId = compactTagText(id);
   const compactLabel = entry ? compactTagText(entry.label) : '';
   if (SUPPRESSED_CARD_TAG_TEXT.has(compactId) || SUPPRESSED_CARD_TAG_TEXT.has(compactLabel)) return true;
@@ -791,6 +795,50 @@ export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
 export function cardNeedsAttention(job: TaskInfo): boolean {
   if (!HUMAN_DECISION_LANES.has(job.state)) return false;
   return job.orchestratorVerdict === 'escalate' || job.orchestratorVerdict === 'reissue';
+}
+
+/** Matches the per-task quality-grade tag the automatic code-review step hangs
+ *  (`code-review:grade-a` .. `code-review:grade-d`). */
+const CODE_REVIEW_GRADE_TAG_RE = /^code-review:grade-([abcd])$/i;
+
+export type CodeReviewGradeLetter = 'A' | 'B' | 'C' | 'D';
+
+export interface CodeReviewGradeBadge {
+  grade: CodeReviewGradeLetter;
+  /** Lower-case letter, drives the per-grade colour class on the badge. */
+  tone: 'a' | 'b' | 'c' | 'd';
+  tooltip: string;
+}
+
+const CODE_REVIEW_GRADE_MEANING: Record<CodeReviewGradeLetter, string> = {
+  A: 'Solves the goal clearly — complete, coherent, and backed by tests / evidence.',
+  B: 'Solid work that does the job, with small gaps a human can accept.',
+  C: 'Concerns — the work is half-done or unclear; a reviewer would want changes before shipping.',
+  D: 'Misses the goal, redundantly redoes existing behaviour, or leaves broken / half-finished work.',
+};
+
+/**
+ * Quality-grade badge (ASS-1657). Every task that runs through the pipeline
+ * gets an automatic A/B/C/D code-review grade, carried as a
+ * `code-review:grade-{a-d}` tag. This lifts the grade out of the tag row into a
+ * prominent, colour-coded card badge so the operator reads the quality verdict
+ * at a glance. Returns null when no grade tag is present (older cards, or a task
+ * that has not reached the grade step yet).
+ */
+export function buildCodeReviewGradeBadge(tags: readonly string[] | undefined): CodeReviewGradeBadge | null {
+  for (const id of tags ?? []) {
+    const m = CODE_REVIEW_GRADE_TAG_RE.exec(id);
+    if (m) {
+      const tone = m[1].toLowerCase() as 'a' | 'b' | 'c' | 'd';
+      const grade = tone.toUpperCase() as CodeReviewGradeLetter;
+      return {
+        grade,
+        tone,
+        tooltip: `Quality grade ${grade} — automatic code-review step. ${CODE_REVIEW_GRADE_MEANING[grade]}`,
+      };
+    }
+  }
+  return null;
 }
 
 export interface OutcomeIssueBadge { label: string; tone: 'info' | 'warn' | 'high'; tooltip: string; }

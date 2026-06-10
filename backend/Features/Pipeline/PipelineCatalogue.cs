@@ -245,6 +245,23 @@ public static class PipelineCatalogue
     public const string OrchestratorDecisionStepId = "post-orchestrator-decision";
 
     /// <summary>
+    /// First-class automatic code-review step (ASS-1657): runs post-CORE on the
+    /// task's change set and assigns a Quality-Grade A/B/C/D with a short
+    /// justification, so every pipelined task carries a grade visible in the
+    /// Overview pipeline (status / duration / verdict / grade) rather than only
+    /// in a log. It extends the existing user-triggered
+    /// <see cref="OrchestratorApi.Services.Review.CodeReviewStepService"/> (a
+    /// grade mode), runs after the parallel aspect verdicts and before the final
+    /// orchestrator decision, and uses a quality-first model
+    /// (<c>CodeReviewStep:DefaultModel</c>, Claude Opus by default) rather than
+    /// the cheap aspect model. Default-on; the recording lives in
+    /// <c>ReviewDecisionOrchestrator</c>. Reporting only - the grade never gates
+    /// the lane decision, so a low grade surfaces for the human without forcing a
+    /// reissue.
+    /// </summary>
+    public const string CodeReviewGradeStepId = "post-code-review-grade";
+
+    /// <summary>
     /// Display name for the post-core completeness check
     /// (<see cref="OrchestratorReviewStepId"/>): the EARLY gate that runs straight
     /// after the core run, before the aspect verdicts. It is deliberately distinct
@@ -555,6 +572,26 @@ public static class PipelineCatalogue
                     DependsOn = [.. AspectStepIds],
                     Idempotent = true,
                     DefaultEnabled = false,
+                },
+                new PipelineStep
+                {
+                    Id = CodeReviewGradeStepId,
+                    DisplayName = "Code-review quality grade",
+                    // An LLM review pass that produces a single A/B/C/D ruling,
+                    // same shape as the orchestrator decision (consumes the diff,
+                    // emits a verdict), so it reuses StepKind.Orchestrator rather
+                    // than the Aspect kind (which is pinned to the four
+                    // aspect-runner ids).
+                    Kind = StepKind.Orchestrator,
+                    RunMode = StepRunMode.Sequential,
+                    // Reads the full change set after the aspects have run; depends
+                    // on them so a DAG-resolver schedules it after the verdicts and
+                    // before the final decision.
+                    DependsOn = [.. AspectStepIds],
+                    Idempotent = true,
+                    // Every pipelined task carries a grade (ASS-1657), so on by
+                    // default; an operator can still disable it per project.
+                    DefaultEnabled = true,
                 },
                 new PipelineStep
                 {

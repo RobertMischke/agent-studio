@@ -274,6 +274,8 @@ internal static class PromptDescriptionCatalog
 
         ["code-review-step.md"] = new("Code-review step",
             "Automated code-review pass over the run's diff in the post bracket.", "Review"),
+        ["code-review-grade.md"] = new("Code-review quality grade",
+            "Automatic post-CORE pass that grades the task change set A/B/C/D (quality grade on every task).", "Review"),
         ["review-aspect-code-quality.md"] = new("Aspect: code quality",
             "Review aspect that grades code quality of the change.", "Review"),
         ["review-aspect-requirement-fit.md"] = new("Aspect: requirement fit",

@@ -156,6 +156,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly TimelineLog? _timeline;
     private readonly ProjectSettingsService? _projectSettings;
     private readonly WorkspaceArtifactCommitService? _workspaceArtifactCommits;
+    // The automatic code-review quality-grade step (ASS-1657). Optional so the
+    // many stand-alone test constructors that wire the orchestrator without it
+    // keep compiling; production DI always supplies the registered singleton.
+    private readonly OrchestratorApi.Services.Review.CodeReviewStepService? _codeReviewStep;
     // The system-escalation funnel. Used here only for the boot-time repair of
     // legacy 5-human-review cards that carry no verdict (RecordVerdictAndStatus,
     // no move). Optional so test fixtures that do not exercise the backfill keep
@@ -195,7 +199,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         ProjectSettingsService? projectSettings = null,
         HumanReviewEscalation? humanReviewEscalation = null,
         RegressionRadarService? regressionRadar = null,
-        WorkspaceArtifactCommitService? workspaceArtifactCommits = null)
+        WorkspaceArtifactCommitService? workspaceArtifactCommits = null,
+        OrchestratorApi.Services.Review.CodeReviewStepService? codeReviewStep = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -220,6 +225,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _humanReviewEscalation = humanReviewEscalation;
         _regressionRadar = regressionRadar;
         _workspaceArtifactCommits = workspaceArtifactCommits;
+        _codeReviewStep = codeReviewStep;
 
         _statusSnapshot.ConfigureEscalationRateAlert(
             _configuration.GetValue(
@@ -1607,6 +1613,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // is reporting-only and never changes the task lane decision.
         RunWikiLearningsPostStep(entry, current, report, statusSummary, diffSummary);
 
+        // Code-review quality-grade post-step (ASS-1657): the first-class
+        // automatic review that assigns an A/B/C/D grade to the task's change
+        // set with a quality-first model (Opus by default), recorded on the
+        // pipeline so the grade shows in the Overview and as a card badge. It
+        // runs after the aspects and before the Complete mark so its step record
+        // lands in the in-flight pipeline-execution.json. Reporting only - the
+        // grade never gates the lane decision below.
+        await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
+
         _pipelineLog?.Complete(current.FolderPath);
 
         if (report.Overall == AspectStatus.Block)
@@ -2693,6 +2708,166 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Verdict = verdict,
             Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
         });
+    }
+
+    /// <summary>
+    /// Run the automatic post-CORE quality-grade code-review step (ASS-1657)
+    /// and record it on the pipeline. Reporting only: it assigns an A/B/C/D
+    /// grade to the task's full change set with a quality-first model
+    /// (<c>CodeReviewStep:DefaultModel</c>, default Opus 4.8) and hangs a
+    /// <c>code-review:grade-*</c> tag on the card so the grade shows in the
+    /// Overview and as a card badge. Best-effort: any failure is logged,
+    /// recorded as a skipped row, and swallowed so a grade hiccup never
+    /// blocks the lane decision. No-op when the optional service is not wired
+    /// (stand-alone test path) or the step is disabled via
+    /// <c>CodeReviewStep:AutoGrade=false</c>.
+    /// </summary>
+    private async Task RunCodeReviewGradePostStepAsync(
+        WatchPathEntry entry,
+        TaskInfo job,
+        string taskBody,
+        CancellationToken ct)
+    {
+        if (_codeReviewStep == null) return;
+
+        // Opt-out switch; default on so every pipelined task carries a grade.
+        if (!_configuration.GetValue("CodeReviewStep:AutoGrade", true)) return;
+
+        var stepId = PipelineCatalogue.CodeReviewGradeStepId;
+        var startedAt = DateTime.UtcNow;
+        try
+        {
+            // Quality over cost: the grade pass defaults to Opus 4.8 even though
+            // the four cheap aspect reviews stay on Haiku. Configurable so a
+            // deployment can dial the grade model without touching the aspects.
+            var model = _configuration["CodeReviewStep:DefaultModel"];
+            if (string.IsNullOrWhiteSpace(model))
+                model = OrchestratorApi.Services.Cli.ClaudeCliService.DefaultOpusModel;
+            var cli = _configuration["CodeReviewStep:DefaultCli"];
+            if (string.IsNullOrWhiteSpace(cli)) cli = "claude";
+
+            var (diff, commitLabel) = BuildGradeDiff(entry.Name, entry.Path, job);
+
+            var request = new OrchestratorApi.Services.Review.CodeReviewStepRequest(
+                Project: entry.Name,
+                JobId: job.Id,
+                JobTitle: job.Title ?? job.Id,
+                JobFolderPath: job.FolderPath,
+                TaskBody: taskBody,
+                Diff: diff,
+                CliType: cli!,
+                Model: model!)
+            {
+                Mode = OrchestratorApi.Services.Review.CodeReviewMode.Grade,
+                Commit = commitLabel,
+            };
+
+            var report = await _codeReviewStep.RunAsync(request, ct);
+
+            var gradeToken = report.Grade is null
+                ? "?"
+                : OrchestratorApi.Services.Review.CodeReviewGradeParsing.GradeToken(report.Grade.Value);
+            // A grade is reporting evidence, never a lane gate: a D records as a
+            // Failed row so it stands out in the Overview; A-C record Passed.
+            var status = report.Grade == OrchestratorApi.Services.Review.CodeReviewGrade.D
+                ? PipelineStepStatus.Failed
+                : PipelineStepStatus.Passed;
+
+            _pipelineLog?.RecordStep(job.FolderPath, new PipelineStepExecution
+            {
+                StepId = stepId,
+                Kind = StepKind.Orchestrator,
+                Status = status,
+                StartedAt = startedAt,
+                CompletedAt = DateTime.UtcNow,
+                DurationMs = report.DurationMs,
+                Model = report.Model,
+                Verdict = gradeToken,
+                VerdictSummary = string.IsNullOrWhiteSpace(report.Summary) ? null : report.Summary,
+            });
+
+            WritePostProcessingOutcome(job, PostProcessingOutcomes.FindingsAdded,
+                summary: $"Quality grade {gradeToken}: {report.Summary}",
+                performerCliType: cli,
+                stepId: stepId,
+                evidenceRef: report.FileName);
+
+            _logger.LogInformation(
+                "code-review-grade: project={Project} job={JobId} grade={Grade} model={Model} file={File}",
+                entry.Name, job.Id, gradeToken, report.Model, report.FileName);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "code-review-grade: post-step failed for {Project}/{JobId}; recording a skipped row",
+                entry.Name, job.Id);
+            _pipelineLog?.RecordStep(job.FolderPath, new PipelineStepExecution
+            {
+                StepId = stepId,
+                Kind = StepKind.Orchestrator,
+                Status = PipelineStepStatus.Skipped,
+                StartedAt = startedAt,
+                CompletedAt = DateTime.UtcNow,
+                DurationMs = 0,
+                Reason = "grade step error: " + ex.Message,
+            });
+        }
+    }
+
+    /// <summary>
+    /// Build the diff text the quality-grade pass reviews: the aggregate diff
+    /// of every commit the task owns (the same per-task scoping the
+    /// user-triggered code-review endpoint and the protocol-pane change set
+    /// use), with a human-readable commit label. Falls back to HEAD, then the
+    /// live working-tree diff, so the grade never reviews nothing. Best-effort:
+    /// returns an empty diff with a "(no diff resolved)" label when git is not
+    /// wired or resolution throws.
+    /// </summary>
+    private (string Diff, string? CommitLabel) BuildGradeDiff(string project, string? watchPath, TaskInfo job)
+    {
+        if (_git == null) return (string.Empty, null);
+        try
+        {
+            IReadOnlyList<string> taskShas = Array.Empty<string>();
+            if (_sessions != null)
+            {
+                var events = _sessions.ReadSessionEvents(job.Id, watchPath);
+                var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(job.FolderPath));
+                var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
+                var aggregate = TaskCommitsAggregator.Aggregate(job, timeline.Runs,
+                    (before, after) => _git!.GetCommitsInShaRange(job.Id, watchPath, before, after));
+                taskShas = aggregate.Commits
+                    .Select(c => c.Sha)
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            var scope = OrchestratorApi.Services.Review.CodeReviewScopeResolver.Resolve(
+                overrideCommit: null, taskShas, _git.GetHeadSha(job.Id, watchPath));
+
+            var diff = scope.Mode switch
+            {
+                OrchestratorApi.Services.Review.CodeReviewScopeMode.WorkingTree =>
+                    "(no commit resolved; reviewing working-tree diff)\n\n" +
+                    _git.GetDiff(job.Id, watchPath, path: null),
+                OrchestratorApi.Services.Review.CodeReviewScopeMode.AggregateCommits =>
+                    _git.GetAggregateCommitDiff(job.Id, watchPath, scope.Shas, path: null),
+                _ => _git.GetCommitDiff(job.Id, watchPath, scope.Shas[0], path: null),
+            };
+            return (diff, scope.Label);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "code-review-grade: diff resolution failed for {Project}/{JobId}; grading an empty diff",
+                project, job.Id);
+            return (string.Empty, null);
+        }
     }
 
     private void WritePostProcessingOutcome(
