@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import type { ToolBurstEvent, ToolFamily, ToolOutputHit } from '../conversation-event';
 import { TooltipDirective } from '../../tooltip';
+import type { StructuredTooltip } from '../../tooltip';
 
 /**
  * Dense, collapsed-by-default renderer for `ToolBurst` events in the
@@ -64,12 +65,54 @@ export class ToolBurstChipComponent {
     return iconFor(top.family);
   });
 
+  // Written-out meaning of the current row's glyph, e.g. "Read - Dateien
+  // gelesen". Used in the expanded detail head so the cryptic one-letter
+  // prefix is recognizable once the row is open, not only on hover.
+  readonly leadingGlyphLabel = computed(() => {
+    const entry = glyphEntry(this.leadingIcon());
+    return entry ? `${entry.name} - ${entry.meaning}` : '';
+  });
+
+  // A single instant-hover legend for the glyph column. The active glyph is
+  // emphasized, but the full key is always shown so any row decodes the
+  // whole alphabet (R/S/$/E/A/D/T/!), not just its own letter.
+  readonly glyphTooltip = computed<StructuredTooltip>(() => {
+    const active = this.leadingIcon();
+    const items = GLYPH_LEGEND.map((e) => {
+      const cell = `<code>${e.glyph}</code> ${e.name} - ${e.meaning}`;
+      return e.glyph === active ? `<li><strong>${cell}</strong></li>` : `<li>${cell}</li>`;
+    }).join('');
+    const entry = glyphEntry(active);
+    return {
+      title: entry ? `${entry.name} - ${entry.meaning}` : 'Tool-Glyphen',
+      body: `<ul>${items}</ul>`
+    };
+  });
+
   readonly fileCount = computed(() => this.event().files?.length ?? 0);
   readonly artifactCount = computed(() => this.event().artifacts?.length ?? 0);
 
   readonly formattedDuration = computed(() => formatBurstDuration(this.event().durationMs ?? 0));
 
   readonly commands = computed(() => this.event().commands ?? []);
+
+  // One-line gist of what the burst did, shown only while collapsed so a long
+  // tool-use reads as a single summary line. Prefers the first command, then a
+  // touched file, then a representative family sample.
+  readonly previewLine = computed(() => {
+    const event = this.event();
+    const command = (event.commands ?? [])[0]?.command?.trim();
+    if (command) return command;
+    const file = (event.files ?? [])[0];
+    if (file) return file;
+    const samples = event.samples ?? {};
+    const order: ToolFamily[] = ['search', 'read', 'edit', 'task', 'todo', 'command', 'other'];
+    for (const f of order) {
+      const sample = samples[f]?.trim();
+      if (sample) return sample;
+    }
+    return '';
+  });
 
   readonly detailRows = computed<DetailRow[]>(() => {
     const event = this.event();
@@ -201,6 +244,29 @@ function iconFor(family: ToolFamily): string {
     case 'todo': return 'D';
     default: return 'T';
   }
+}
+
+interface GlyphLegendEntry {
+  glyph: string;
+  name: string;
+  meaning: string;
+}
+
+// Complete key for the one-letter tool prefixes rendered in `.burst__icon`.
+// Order mirrors the family order used elsewhere, with the failure marker last.
+const GLYPH_LEGEND: readonly GlyphLegendEntry[] = [
+  { glyph: 'R', name: 'Read', meaning: 'Dateien gelesen' },
+  { glyph: 'S', name: 'Search', meaning: 'Suche / grep' },
+  { glyph: '$', name: 'Shell', meaning: 'Kommando ausgefuehrt' },
+  { glyph: 'E', name: 'Edit', meaning: 'Dateien geaendert' },
+  { glyph: 'A', name: 'Task', meaning: 'Unteraufgabe / Agent' },
+  { glyph: 'D', name: 'Todo', meaning: 'Aufgabenliste' },
+  { glyph: 'T', name: 'Tool', meaning: 'Sonstiges Werkzeug' },
+  { glyph: '!', name: 'Fehler', meaning: 'Tool-Aufruf fehlgeschlagen' }
+];
+
+function glyphEntry(glyph: string): GlyphLegendEntry | undefined {
+  return GLYPH_LEGEND.find((e) => e.glyph === glyph);
 }
 
 function formatBurstDuration(ms: number): string {
