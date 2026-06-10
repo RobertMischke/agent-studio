@@ -49,8 +49,13 @@
             Could not load this step’s result.
           </p>
         } @else if (hasContent()) {
-          <app-markdown [source]="content()" [dense]="true"
-                        testId="pipeline-step-result-markdown" />
+          <app-file-source-history data-testid="pipeline-step-result-markdown"
+                                   [jobId]="jobId()"
+                                   [watchPath]="watchPath() ?? null"
+                                   [path]="fileName()"
+                                   [content]="content()"
+                                   [contentTransform]="cleanTransform"
+                                   [dense]="true" />
         } @else {
           <p class="step-result__state">No structured result was written for this step.</p>
         }

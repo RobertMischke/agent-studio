@@ -20,7 +20,7 @@ function text(route: Route, body: string): Promise<void> {
   });
 }
 
-function detail() {
+function detail(statusMarkdown = '') {
   return {
     info: {
       id: JOB_ID,
@@ -44,12 +44,14 @@ function detail() {
       sessionChain: [],
     },
     promptMarkdown: '# Current prompt\n\nThe current task prompt.',
-    statusMarkdown: '',
+    statusMarkdown,
     log: [],
     promptHistory: [],
     titleHistory: [],
     reviewEvidence: [],
-    summaryState: { status: 'none', startedAt: null, finishedAt: null, errorMessage: null },
+    summaryState: statusMarkdown
+      ? { status: 'ready', startedAt: '2026-06-09T12:00:00Z', finishedAt: '2026-06-09T12:01:00Z', errorMessage: null }
+      : { status: 'none', startedAt: null, finishedAt: null, errorMessage: null },
   };
 }
 
@@ -130,6 +132,13 @@ async function installRoutes(page: Page): Promise<void> {
     text(route, '@@ -1 +1 @@\n-Old prompt\n+Current prompt\n'));
   await page.route(new RegExp(`/api/tasks/${idEsc}/files/prompt\\.md(\\?|$)`), (route) =>
     text(route, '# Historical prompt\n\nRun two prompt body.'));
+  await page.route(new RegExp(`/api/tasks/${idEsc}/pipeline(\\?|$)`), (route) => json(route, {
+    pipeline: { id: 'p', displayName: 'Pipeline', version: 1, pre: [], core: [], post: [], allSteps: [] },
+    execution: null,
+    cost: null,
+    tokensByModel: null,
+    config: {},
+  }));
   await page.route(new RegExp(`/api/tasks/${idEsc}/output(\\?|$)`), (route) => json(route, []));
   await page.route(new RegExp(`/api/tasks/${idEsc}/runs(\\?|$)`), (route) => json(route, {
     runCount: 0,
@@ -154,6 +163,43 @@ async function installRoutes(page: Page): Promise<void> {
   await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) => json(route, detail()));
 }
 
+/**
+ * Extra routes for the protocol `status.md` surface. Registered after
+ * {@link installRoutes} so the status-bearing detail and the `status.md`
+ * file-source endpoints win over the generic handlers (Playwright matches the
+ * most recently added route first).
+ */
+async function installStatusRoutes(page: Page): Promise<void> {
+  const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  await page.route(new RegExp(`/api/tasks/${idEsc}/files/status\\.md/history(\\?|$)`), (route) => json(route, [
+    {
+      sha: '4444444',
+      at: '2026-06-09T12:10:00Z',
+      runIndex: 2,
+      verdict: 'pass',
+      message: 'update status',
+      author: 'Agent <agent@example.com>',
+      provenance: { source: 'workspace', path: 'status.md' },
+    },
+    {
+      sha: '3333333',
+      at: '2026-06-09T12:00:00Z',
+      runIndex: 1,
+      verdict: 'concerns',
+      message: 'create status',
+      author: 'Agent <agent@example.com>',
+      provenance: { source: 'workspace', path: 'status.md' },
+    },
+  ]));
+  await page.route(new RegExp(`/api/tasks/${idEsc}/files/status\\.md/diff(\\?|$)`), (route) =>
+    text(route, '@@ -1 +1 @@\n-Run one status\n+Run two status\n'));
+  await page.route(new RegExp(`/api/tasks/${idEsc}/files/status\\.md(\\?|$)`), (route) =>
+    text(route, '# Status\n\nResult: pass\n\n## Summary\n\nHistorical status body for run two.'));
+  await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
+    json(route, detail('# Status\n\nResult: pass\n\nThe current protocol summary.')));
+}
+
 test.describe('File source history viewer', () => {
   test('Files tab shows run history, selected version, and run-to-run diff', async ({ page }) => {
     await installRoutes(page);
@@ -171,5 +217,27 @@ test.describe('File source history viewer', () => {
     await expect(promptCard.getByTestId('file-source-version')).toContainText('Historical prompt');
     await expect(promptCard.getByTestId('file-source-diff')).toContainText('-Old prompt');
     await expect(promptCard.getByTestId('file-source-diff')).toContainText('+Current prompt');
+  });
+
+  test('Protocol "View version history" exposes the status.md run timeline', async ({ page }) => {
+    await installRoutes(page);
+    await installStatusRoutes(page);
+
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+
+    // Protocol is the default inspector tab; its toolbar carries the view menu.
+    await expect(page.getByTestId('protocol-toolbar')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('protocol-beautiful-results')).toBeVisible();
+
+    await page.getByTestId('protocol-more-actions').click();
+    await page.getByTestId('protocol-context-menu-item-view-history').click();
+
+    const history = page.getByTestId('protocol-file-history');
+    await expect(history).toBeVisible();
+    // The same file-source-history mechanic, opened straight onto the timeline.
+    await expect(history.getByTestId('file-source-history-timeline')).toContainText('Run #2');
+    await expect(history.getByTestId('file-source-history-timeline')).toContainText('pass');
+    await expect(history.getByTestId('file-source-version')).toContainText('Historical status body');
+    await expect(history.getByTestId('file-source-diff')).toContainText('+Run two status');
   });
 });

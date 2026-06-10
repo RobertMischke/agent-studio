@@ -312,6 +312,15 @@
               @if (protocolViewMode() === 'raw') {
                 <pre class="notes-panel__body notes-panel__body--raw"
                      data-testid="protocol-raw-markdown">{{ statusMarkdownBody() }}</pre>
+              } @else if (protocolViewMode() === 'history') {
+                <app-file-source-history class="notes-panel__body"
+                                         data-testid="protocol-file-history"
+                                         path="status.md"
+                                         initialMode="history"
+                                         [jobId]="detail().info.id"
+                                         [watchPath]="detail().info.watchPath"
+                                         [content]="detail().statusMarkdown"
+                                         [contentTransform]="statusHistoryTransform" />
               } @else {
                 <app-beautiful-results class="notes-panel__body"
                                        data-testid="protocol-beautiful-results"

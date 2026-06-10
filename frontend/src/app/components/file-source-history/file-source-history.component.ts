@@ -43,6 +43,8 @@ export class FileSourceHistoryComponent {
   readonly dense = input(false);
   readonly scope = input<TaskFileSourceScope>('auto');
   readonly contentTransform = input<(content: string) => string>((content) => content);
+  /** Pane to open on. `'history'` lands directly on the git timeline and loads it eagerly. */
+  readonly initialMode = input<PaneMode>('file');
 
   readonly mode = signal<PaneMode>('file');
   readonly history = signal<TaskFileHistoryEntry[]>([]);
@@ -69,7 +71,8 @@ export class FileSourceHistoryComponent {
     this.jobId();
     this.watchPath();
     this.path();
-    this.mode.set('file');
+    const initial = this.initialMode();
+    this.mode.set(initial);
     this.history.set([]);
     this.historyState.set('idle');
     this.historyError.set(null);
@@ -82,6 +85,7 @@ export class FileSourceHistoryComponent {
     this.diffText.set('');
     this.diffState.set('idle');
     this.diffError.set(null);
+    if (initial === 'history') this.loadHistory();
   }, { allowSignalWrites: true });
 
   showFile(): void {

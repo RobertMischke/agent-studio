@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { TaskService } from '../../../../../services/task.service';
 import { TooltipDirective } from '../../../../../components/tooltip';
-import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
+import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
 import { cleanStepResultMarkdown } from './pipeline-step-result.util';
 
 /**
@@ -36,10 +36,13 @@ export interface PipelineStepResultHeader {
  * card with a header (title + status + verdict + model / timing / token / cost
  * meta) and a body that lazily fetches the
  * step's on-disk markdown (`status.md` for the CORE run, `aspect-{id}.md` for
- * a review aspect) and renders it through the canonical {@link
- * MarkdownViewComponent}. Cleaning ({@link cleanStepResultMarkdown}) strips the
- * frontmatter, unwraps the model-reply fence, and drops machine sentinels so
- * the operator reads formatted prose, not a raw blob.
+ * a review aspect) and renders it through the shared {@link
+ * FileSourceHistoryComponent} so the same prose-plus-git-timeline mechanic that
+ * the Files and Code-Review panes use also backs each pipeline step. Cleaning
+ * ({@link cleanStepResultMarkdown}) is passed as the history `contentTransform`
+ * so the live body and every historical version strip the frontmatter, unwrap
+ * the model-reply fence, and drop machine sentinels — the operator reads
+ * formatted prose, not a raw blob, at any point on the timeline.
  *
  * Self-contained: a closed popover costs nothing; the file is fetched on the
  * first open and cached for the component's lifetime.
@@ -48,7 +51,7 @@ export interface PipelineStepResultHeader {
   selector: 'app-pipeline-step-result',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownViewComponent, TooltipDirective],
+  imports: [FileSourceHistoryComponent, TooltipDirective],
   templateUrl: './pipeline-step-result.component.html',
   styleUrl: './pipeline-step-result.component.scss',
 })
@@ -65,9 +68,13 @@ export class PipelineStepResultComponent {
   readonly loading = signal(false);
   readonly loaded = signal(false);
   readonly failed = signal(false);
+  /** Raw on-disk body. Cleaning runs in the history `contentTransform`, not here. */
   readonly content = signal<string>('');
 
-  readonly hasContent = computed(() => this.content().length > 0);
+  /** Stable transform reference handed to the history pane (live + historical bodies). */
+  readonly cleanTransform = (raw: string): string => cleanStepResultMarkdown(raw);
+
+  readonly hasContent = computed(() => this.cleanTransform(this.content()).length > 0);
 
   toggle(): void {
     const next = !this.open();
@@ -84,7 +91,7 @@ export class PipelineStepResultComponent {
     this.failed.set(false);
     this.tasks.readJobFile(this.jobId(), this.fileName(), this.watchPath()).subscribe({
       next: (text) => {
-        this.content.set(cleanStepResultMarkdown(typeof text === 'string' ? text : ''));
+        this.content.set(typeof text === 'string' ? text : '');
         this.loaded.set(true);
         this.loading.set(false);
       },

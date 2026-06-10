@@ -50,6 +50,7 @@ import type {
 import { ConversationViewComponent } from '../../../../../components/chat/conversation-view/conversation-view.component';
 import { projectConversation } from '../../../../../components/chat/conversation-projection';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
+import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
 import { SourceViewerComponent, type SourceViewerRequest } from '../../source-viewer/source-viewer.component';
 import { MenuComponent } from '../../../../../components/menu';
 import type { MenuItem, MenuItemClickEvent } from '../../../../../components/menu';
@@ -112,6 +113,7 @@ interface InterimSummaryState {
     RunGitViewerComponent,
     VerboseDebugOverlayComponent,
     BeautifulResultsComponent,
+    FileSourceHistoryComponent,
     SourceViewerComponent,
     MenuComponent,
     TooltipDirective,
@@ -413,6 +415,12 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly statusProvenance = computed(() =>
     generatedFileProvenance(this.detail().statusGeneration),
   );
+  /**
+   * Same header strip the rendered/raw views apply, handed to the file-history
+   * pane so the live body and every historical `status.md` version render with
+   * the `# Status` header lifted out (the verdict pill already shows it).
+   */
+  readonly statusHistoryTransform = (raw: string): string => stripStatusHeader(raw);
 
   /**
    * Progressive spinner label so a slow Haiku call doesn't look frozen.
@@ -1027,7 +1035,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   }
 
   // --- Protocol context menu (F54) ---
-  readonly protocolViewMode = signal<'rendered' | 'raw'>('rendered');
+  readonly protocolViewMode = signal<'rendered' | 'raw' | 'history'>('rendered');
   readonly protocolMenuOpen = signal(false);
   readonly protocolMenuPosition = signal<{ x: number; y: number } | null>(null);
 
@@ -1051,6 +1059,12 @@ export class ProtocolPaneComponent implements OnDestroy {
         id: 'view-raw',
         label: 'View raw markdown',
         active: this.protocolViewMode() === 'raw',
+      },
+      {
+        kind: 'row',
+        id: 'view-history',
+        label: 'View version history',
+        active: this.protocolViewMode() === 'history',
       },
     ];
     return items;
@@ -1077,6 +1091,9 @@ export class ProtocolPaneComponent implements OnDestroy {
         break;
       case 'view-raw':
         this.protocolViewMode.set('raw');
+        break;
+      case 'view-history':
+        this.protocolViewMode.set('history');
         break;
     }
     this.closeProtocolMenu();

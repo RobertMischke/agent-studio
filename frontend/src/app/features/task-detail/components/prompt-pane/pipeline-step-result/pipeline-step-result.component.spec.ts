@@ -83,6 +83,21 @@ describe('PipelineStepResultComponent', () => {
     expect(body?.textContent).not.toContain('TASK_DONE');
   });
 
+  it('renders the step result through the shared file-source-history mechanic', async () => {
+    const { fixture } = setup();
+    fixture.componentInstance.toggle();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // The body is now backed by app-file-source-history, so the file/history
+    // toggle is available on every pipeline step - the same mechanic the Files
+    // and Code-Review panes use.
+    const body = root(fixture).querySelector('[data-testid="pipeline-step-result-body"]');
+    expect(body?.querySelector('[data-testid="file-source-history"]')).not.toBeNull();
+    expect(body?.querySelector('[data-testid="file-source-history-toggle"]')).not.toBeNull();
+    expect(body?.textContent).toContain('aspect-code-quality.md');
+  });
+
   it('renders the header title, status and verdict chip when open', async () => {
     const { fixture } = setup();
     fixture.componentInstance.toggle();

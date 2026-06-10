@@ -80,6 +80,51 @@ describe('FileSourceHistoryComponent', () => {
     expect(diff?.textContent).toContain('+pass');
     http.verify();
   });
+
+  it('opens directly on the git timeline and loads it eagerly when initialMode is "history"', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FileSourceHistoryComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(FileSourceHistoryComponent);
+    fixture.componentRef.setInput('jobId', 'demo-job');
+    fixture.componentRef.setInput('watchPath', 'C:/projects/foo');
+    fixture.componentRef.setInput('path', 'status.md');
+    fixture.componentRef.setInput('content', '# Status\n\nPassed.');
+    fixture.componentRef.setInput('initialMode', 'history');
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    const root = fixture.nativeElement as HTMLElement;
+
+    // No interaction needed: the timeline request fires on first render.
+    http.expectOne((r) => r.url === '/api/tasks/demo-job/files/status.md/history')
+      .flush([
+        {
+          sha: 'aaaaaaa',
+          at: '2026-06-09T12:10:00Z',
+          runIndex: 1,
+          verdict: 'pass',
+          message: 'write status',
+          author: 'Agent <agent@example.com>',
+          provenance: { source: 'workspace', path: 'status.md' },
+        },
+      ]);
+    http.expectOne((r) =>
+      r.url === '/api/tasks/demo-job/files/status.md' && r.params.get('at') === 'aaaaaaa')
+      .flush(utf8Buffer('# Status\n\nPassed.'));
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="file-source-history-panel"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="file-source-history-timeline"]')?.textContent).toContain('Run #1');
+    http.verify();
+  });
 });
 
 function utf8Buffer(value: string): ArrayBuffer {
