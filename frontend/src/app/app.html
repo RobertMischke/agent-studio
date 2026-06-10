@@ -345,28 +345,17 @@
               @if (studioTabState.activeTab(); as tab) {
                 @if (tab.kind === 'epic' && selectedJob(); as detail) {
                   <main class="workspace__main workspace__main--studio" data-testid="studio-epic">
-                    <app-job-detail #jobDetail
-                                    [detail]="detail"
-                                    [watchPaths]="watchPaths()"
-                                    [lanePeers]="triageLanePeers()"
-                                    [mutationsBlocked]="updateClient.mutationsBlocked()"
-                                    [selectedSubTaskId]="epicTabTaskDetail()?.info?.id ?? null"
-                                    (back)="closeDetail()"
-                                    (fileSaved)="onFileSaved()"
-                                    (projectChanged)="onProjectChanged($event)"
-                                    (deleteRequested)="onDeleteFromDetail(detail.info)"
-                                    (navigateLaneRequested)="onNavigateLane($event)"
-                                    (openEpicRequested)="onOpenEpicFromTaskAnchor(detail.info, $event)"
-                                    (openSubTaskRequested)="onEpicTabOpenSubTask($event)"
-                                    (triageMoveRequested)="onTriageMove(detail.info, $event)"
-                                    (triageMoveToTopRequested)="onTriageMoveToTop(detail.info, $event)"
-                                    (triageDeleteRequested)="onTriageDelete(detail.info, $event)"
-                                    (triageStartRequested)="onTriageStart(detail.info, $event)"
-                                    (nextInLaneRequested)="onTriageNext(detail.info)"
-                                    (prevInLaneRequested)="onTriagePrev(detail.info)" />
                     @if (epicTabTaskDetail(); as subDetail) {
-                      <app-job-detail
+                      <!-- In-place sub-task view: clicking a sub-task in the epic
+                           rollup swaps THIS same panel from the epic to the task,
+                           reusing the single-panel detail. No right-hand panel or
+                           sheet is opened. The epic-membership banner rendered
+                           inside the detail is the consistent "back to epic" path
+                           (and the pager prev/next stays within the epic's
+                           sub-tasks). -->
+                      <app-job-detail #jobDetail
                         [detail]="subDetail"
+                        data-testid="studio-epic-subtask-detail"
                         [watchPaths]="watchPaths()"
                         [lanePeers]="epicTabSubTaskPeers()"
                         [mutationsBlocked]="updateClient.mutationsBlocked()"
@@ -383,6 +372,26 @@
                         (triageStartRequested)="onTriageStart(subDetail.info, $event)"
                         (nextInLaneRequested)="onEpicTabNextSubTask(subDetail.info)"
                         (prevInLaneRequested)="onEpicTabPrevSubTask(subDetail.info)" />
+                    } @else {
+                      <app-job-detail #jobDetail
+                                      [detail]="detail"
+                                      data-testid="studio-epic-detail"
+                                      [watchPaths]="watchPaths()"
+                                      [lanePeers]="triageLanePeers()"
+                                      [mutationsBlocked]="updateClient.mutationsBlocked()"
+                                      (back)="closeDetail()"
+                                      (fileSaved)="onFileSaved()"
+                                      (projectChanged)="onProjectChanged($event)"
+                                      (deleteRequested)="onDeleteFromDetail(detail.info)"
+                                      (navigateLaneRequested)="onNavigateLane($event)"
+                                      (openEpicRequested)="onOpenEpicFromTaskAnchor(detail.info, $event)"
+                                      (openSubTaskRequested)="onEpicTabOpenSubTask($event)"
+                                      (triageMoveRequested)="onTriageMove(detail.info, $event)"
+                                      (triageMoveToTopRequested)="onTriageMoveToTop(detail.info, $event)"
+                                      (triageDeleteRequested)="onTriageDelete(detail.info, $event)"
+                                      (triageStartRequested)="onTriageStart(detail.info, $event)"
+                                      (nextInLaneRequested)="onTriageNext(detail.info)"
+                                      (prevInLaneRequested)="onTriagePrev(detail.info)" />
                     }
                   </main>
                 }

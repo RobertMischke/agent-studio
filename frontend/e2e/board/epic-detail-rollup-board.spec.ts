@@ -1,15 +1,22 @@
 /**
- * Acceptance for the epic detail rollup mini-board (ASS-593 follow-up:
- * "group sub-tasks by lane, full width"). When the open card in the task
- * detail is an epic (kind=epic), the rollup pane below the toolbar renders the
- * epic's sub-tasks grouped into the lane/state columns they currently sit in,
- * spanning the full pane width - replacing the old single narrow column list.
+ * Acceptance for the epic detail rollup mini-board AND the in-place sub-task
+ * navigation contract (ASS-1698).
+ *
+ * When the open card in the studio detail is an epic (kind=epic) it opens in its
+ * own inline epic tab (`[data-testid="studio-epic"]`). The rollup pane below the
+ * toolbar renders the epic's sub-tasks grouped into the lane/state columns they
+ * currently sit in, spanning the full pane width.
+ *
+ * The navigation contract this locks: clicking a sub-task in the rollup swaps
+ * THIS SAME lower detail panel from the epic to the task IN PLACE - it must not
+ * open a second panel to the right. The epic-membership banner inside the
+ * sub-task detail is the consistent "back to epic" path. The studio-epic main
+ * therefore always holds exactly one `app-job-detail`.
  *
  * The test seeds one epic + four sub-tasks via the API and spreads them across
  * three lanes (two stay 2-ready, one -> 3-progress, one -> 6-completed), opens
- * the epic from the board, and asserts the mini-board renders inside the
- * closable overlay without changing board context. Clicking a sub-task keeps
- * the epic master section mounted and swaps the nested detail below it.
+ * the epic from the board, asserts the mini-board, then walks the in-place swap
+ * and the return to the epic.
  *
  * Routes are `/api/tasks*`; this spec inlines the task API calls it needs so it
  * does not depend on the still-`/api/jobs` shared helpers/jobs.ts.
@@ -87,11 +94,11 @@ async function readLaneOrder(page: Page): Promise<string[]> {
   });
 }
 
-test.describe('Epic detail: sub-tasks grouped by lane', () => {
+test.describe('Epic detail: rollup board + in-place sub-task swap', () => {
   test.beforeEach(() => test.setTimeout(120_000));
   test.afterEach(() => cleanup());
 
-  test('rollup pane renders a full-width lane board; cards open their detail', async ({ page }, testInfo) => {
+  test('rollup board renders; sub-task click swaps the same panel in place (no right panel)', async ({ page }, testInfo) => {
     const wp = await getTestWatchPath();
     const watchPath = wp.path;
     await cleanup();
@@ -122,23 +129,20 @@ test.describe('Epic detail: sub-tasks grouped by lane', () => {
 
     await page.goto('/');
     await expect(page.locator('[data-testid="studio-board"]')).toBeVisible({ timeout: 20_000 });
-    await expect.poll(() => new URL(page.url()).searchParams.get('job'), { timeout: 10_000 })
-      .toBeNull();
 
+    // Open the epic from the board: it lands in its own inline epic tab.
     await page.locator('app-job-card').filter({ hasText: `${PREFIX}Checkout revamp` }).first().click();
 
-    const overlay = page.locator('[data-testid="epic-overlay"]');
-    await expect(overlay).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('[data-testid="studio-board"]')).toBeVisible();
-    await expect.poll(() => new URL(page.url()).searchParams.get('job'), { timeout: 10_000 })
-      .toBeNull();
+    const epicMain = page.locator('[data-testid="studio-epic"]');
+    await expect(epicMain).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="studio-epic-detail"]')).toBeVisible({ timeout: 15_000 });
 
-    const pane = overlay.locator('[data-testid="epic-rollup-pane"]');
+    const pane = epicMain.locator('[data-testid="epic-rollup-pane"]');
     await expect(pane).toBeVisible({ timeout: 15_000 });
     await expect(pane.locator('[data-testid="epic-rollup-count"]'))
       .toHaveText('1 / 4 done', { timeout: 15_000 });
 
-    const board = overlay.locator('[data-testid="epic-rollup-board"]');
+    const board = epicMain.locator('[data-testid="epic-rollup-board"]');
     await expect(board).toBeVisible({ timeout: 10_000 });
 
     // Exactly the three populated lanes, in kanban order. Empty lanes are hidden.
@@ -152,67 +156,35 @@ test.describe('Epic detail: sub-tasks grouped by lane', () => {
     await expect(progressLane.locator('[data-testid="epic-rollup-lane-count"]')).toHaveText('1');
     await expect(completedLane.locator('[data-testid="epic-rollup-lane-count"]')).toHaveText('1');
 
-    const chrome = await readyLane.evaluate((lane) => {
-      const laneStyles = getComputedStyle(lane);
-      const firstCard = lane.querySelector('[data-testid="epic-rollup-card"]');
-      if (!(firstCard instanceof HTMLElement)) throw new Error('Missing rollup card');
-      const firstCardStyles = getComputedStyle(firstCard);
-      const firstRow = firstCard.closest('li');
-      if (!(firstRow instanceof HTMLElement)) throw new Error('Missing rollup row');
-      const firstRowStyles = getComputedStyle(firstRow);
-      return {
-        laneBackground: laneStyles.backgroundColor,
-        laneBorderTopWidth: laneStyles.borderTopWidth,
-        laneBorderLeftWidth: laneStyles.borderLeftWidth,
-        cardBackground: firstCardStyles.backgroundColor,
-        cardBorderTopWidth: firstCardStyles.borderTopWidth,
-        rowSeparatorStyle: firstRowStyles.borderBottomStyle,
-        rowSeparatorWidth: firstRowStyles.borderBottomWidth,
-      };
-    });
-    expect(chrome).toMatchObject({
-      laneBackground: 'rgba(0, 0, 0, 0)',
-      laneBorderTopWidth: '0px',
-      laneBorderLeftWidth: '0px',
-      cardBackground: 'rgba(0, 0, 0, 0)',
-      cardBorderTopWidth: '0px',
-      rowSeparatorStyle: 'solid',
-      rowSeparatorWidth: '1px',
-    });
-
     const boardShot = testInfo.outputPath('epic-detail-lane-board.png');
     await page.screenshot({ path: boardShot, fullPage: false });
     await testInfo.attach('epic-detail-lane-board', { path: boardShot, contentType: 'image/png' });
 
-    // Clicking a sub-task swaps the nested detail while the epic master stays
-    // mounted, so the operator can keep navigating within the epic.
+    // The contract: exactly one detail panel is mounted while the epic is open.
+    await expect(epicMain.locator('app-job-detail')).toHaveCount(1);
+
+    // Clicking a sub-task swaps THIS panel from the epic to the task in place.
+    // The epic detail (and its rollup board) is replaced - not pushed aside by a
+    // second panel on the right.
     await board.locator(`[data-testid="epic-rollup-card"][data-sub-id="${subIds[1]}"]`).click();
-    await expect(overlay).toBeVisible({ timeout: 15_000 });
-    await expect(pane).toBeVisible();
-    await expect(board.locator(`[data-testid="epic-rollup-card"][data-sub-id="${subIds[1]}"]`))
-      .toHaveAttribute('aria-current', 'true', { timeout: 10_000 });
-    await expect(overlay.locator('[data-testid="epic-overlay-detail"]')).toBeVisible({ timeout: 15_000 });
-    await expect(overlay.locator('[data-testid="overview-title"]')).toContainText(`${PREFIX}sub 2`, { timeout: 15_000 });
-    await expect.poll(() => new URL(page.url()).searchParams.get('job'), { timeout: 10_000 })
-      .toBe(subIds[1]);
+    await expect(epicMain).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="studio-epic-subtask-detail"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="studio-epic-detail"]')).toHaveCount(0);
+    await expect(epicMain.locator('[data-testid="epic-rollup-board"]')).toHaveCount(0);
+    // Still a single detail panel - nothing opened to the right.
+    await expect(epicMain.locator('app-job-detail')).toHaveCount(1);
+    await expect(epicMain.locator('[data-testid="overview-title"]')).toContainText(`${PREFIX}sub 2`, { timeout: 15_000 });
 
-    const secondDetailShot = testInfo.outputPath('epic-detail-persistent-master-detail.png');
-    await page.screenshot({ path: secondDetailShot, fullPage: false });
-    await testInfo.attach('epic-detail-persistent-master-detail', { path: secondDetailShot, contentType: 'image/png' });
+    const swapShot = testInfo.outputPath('epic-detail-inplace-swap.png');
+    await page.screenshot({ path: swapShot, fullPage: false });
+    await testInfo.attach('epic-detail-inplace-swap', { path: swapShot, contentType: 'image/png' });
 
-    await board.locator(`[data-testid="epic-rollup-card"][data-sub-id="${subIds[2]}"]`).click();
-    await expect(overlay).toBeVisible({ timeout: 15_000 });
-    await expect(pane).toBeVisible();
-    await expect(board.locator(`[data-testid="epic-rollup-card"][data-sub-id="${subIds[2]}"]`))
-      .toHaveAttribute('aria-current', 'true', { timeout: 10_000 });
-    await expect(overlay.locator('[data-testid="overview-title"]')).toContainText(`${PREFIX}sub 3`, { timeout: 15_000 });
-    await expect.poll(() => new URL(page.url()).searchParams.get('job'), { timeout: 10_000 })
-      .toBe(subIds[2]);
-
-    await page.locator('[data-testid="epic-overlay-close"]').click();
-    await expect(overlay).toHaveCount(0, { timeout: 10_000 });
-    await expect(page.locator('[data-testid="studio-board"]')).toBeVisible({ timeout: 10_000 });
-    await expect.poll(() => new URL(page.url()).searchParams.get('job'), { timeout: 10_000 })
-      .toBeNull();
+    // Back to the epic via the membership banner restores the rollup board in the
+    // same single panel.
+    await page.locator('[data-testid="epic-membership-banner"]').click();
+    await expect(page.locator('[data-testid="studio-epic-detail"]')).toBeVisible({ timeout: 15_000 });
+    await expect(epicMain.locator('[data-testid="epic-rollup-board"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="studio-epic-subtask-detail"]')).toHaveCount(0);
+    await expect(epicMain.locator('app-job-detail')).toHaveCount(1);
   });
 });

@@ -193,4 +193,56 @@ describe('App epic tab navigation', () => {
       viewTaskKey: 'C:/watch::task-a',
     });
   });
+
+  it('swaps the epic tab in place to the sub-task without opening a second panel/tab', async () => {
+    const { app, taskService, http } = await configure();
+    const epic = task({
+      id: 'epic-a',
+      taskKey: 'C:/watch::epic-a',
+      title: 'Epic One',
+      kind: 'epic',
+      order: 0,
+    });
+    const sub1 = task({
+      id: 'sub-1',
+      taskKey: 'C:/watch::sub-1',
+      title: 'Sub One',
+      kind: 'task',
+      epicId: 'epic-a',
+      order: 1,
+    });
+    const sub2 = task({
+      id: 'sub-2',
+      taskKey: 'C:/watch::sub-2',
+      title: 'Sub Two',
+      kind: 'task',
+      epicId: 'epic-a',
+      order: 2,
+    });
+    seed(taskService, [epic, sub1, sub2]);
+
+    app.openDetail(epic);
+    flushDetail(http, 'epic-a', 'C:/watch', detail(epic));
+    expect(app.selectedJob()?.info.id).toBe('epic-a');
+    expect(app.epicTabTaskDetail()).toBeNull();
+
+    // Clicking a sub-task in the epic rollup swaps THIS same panel to the
+    // sub-task: the epic stays the tab's selected job (so the single panel
+    // re-renders in place) and no separate task tab/right panel is spawned
+    // (viewTaskKey was unset).
+    app.onEpicTabOpenSubTask({ jobId: 'sub-1', watchPath: 'C:/watch' });
+    flushDetail(http, 'sub-1', 'C:/watch', detail(sub1));
+    expect(app.epicTabTaskDetail()?.info.id).toBe('sub-1');
+    expect(app.selectedJob()?.info.id).toBe('epic-a');
+    expect(app.studioTabState.tabs().map((t) => studioTabKey(t))).toEqual([
+      'board:__all__',
+      'epic:C:/watch::epic-a',
+    ]);
+
+    // Back to the epic clears the in-place sub-task, returning the panel to
+    // the epic detail without leaving a second panel behind.
+    app.closeEpicTabTaskDetail();
+    expect(app.epicTabTaskDetail()).toBeNull();
+    expect(app.selectedJob()?.info.id).toBe('epic-a');
+  });
 });
