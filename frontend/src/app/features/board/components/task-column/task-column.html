@@ -10,7 +10,7 @@
               (dragleave)="onDragLeave($event)"
               (drop)="onDrop($event)">
           <span class="column-rail__icon" aria-hidden="true">{{ icon() }}</span>
-          <span class="column-rail__count" data-testid="lane-rail-count">{{ jobs().length }}</span>
+          <span class="column-rail__count" data-testid="lane-rail-count">{{ headerCount() }}</span>
           <span class="column-rail__title">{{ title() }}</span>
           <span class="column-rail__indicators" aria-hidden="true">
             @if (indicators().running > 0) {
@@ -48,7 +48,7 @@
       <div class="column__header">
         <span class="column__icon">{{ icon() }}</span>
         <h2 class="column__title">{{ title() }}</h2>
-        <span class="column__count">{{ jobs().length }}</span>
+        <span class="column__count">{{ headerCount() }}</span>
         @if (sortIndicator(); as sort) {
           <span class="column__sort-indicator"
                 [attr.data-testid]="'lane-sort-indicator-' + state()"
@@ -127,26 +127,46 @@
       </div>
       <div class="column__body">
         @if (isArchive()) {
-          @for (job of archiveVisible(); track job.taskKey) {
+          <div class="archive-filter">
+            <input type="search"
+                   class="archive-filter__input"
+                   data-testid="archive-filter-input"
+                   placeholder="Filter archived tasks…"
+                   [value]="archiveSearch()"
+                   (input)="onArchiveSearchInput($any($event.target).value)" />
+          </div>
+          @for (item of archiveItems(); track item.id) {
             <button type="button"
                     class="archive-row"
                     [attr.data-testid]="'archive-row'"
-                    [style.--project-color]="identityFor(job.projectName).color"
-                    [style.--project-on]="identityFor(job.projectName).onColor"
-                    [appTooltip]="archiveTooltip(job)"
-                    (click)="jobClick.emit(job)">
-              <span class="archive-row__date">{{ formatShortDate(job.lastActivity) }}</span>
+                    [style.--project-color]="identityFor(item.projectName).color"
+                    [style.--project-on]="identityFor(item.projectName).onColor"
+                    [appTooltip]="archiveTooltip(item)"
+                    (click)="jobClick.emit(archiveClickTarget(item))">
+              <span class="archive-row__date">{{ formatShortDate(item.lastActivity) }}</span>
               <span class="archive-row__disk"
-                    [attr.aria-label]="job.projectName">{{ identityFor(job.projectName).initial }}</span>
-              <span class="archive-row__title">{{ job.title || job.id }}</span>
+                    [attr.aria-label]="item.projectName">{{ identityFor(item.projectName).initial }}</span>
+              <span class="archive-row__title">{{ item.title || item.id }}</span>
             </button>
           }
-          @if (jobs().length === 0) {
-            <div class="column__empty">No archived tasks</div>
-          } @else if (archiveOverflow() > 0) {
-            <div class="archive-overflow">
-              + {{ archiveOverflow() }} more in <code>6-archive/</code> folder
+          @if (archiveError(); as err) {
+            <div class="column__empty column__empty--error" data-testid="archive-error">{{ err }}</div>
+          } @else if (archiveIsEmpty()) {
+            <div class="column__empty" data-testid="archive-empty">
+              @if (archiveSearch().trim()) { No archived tasks match the filter }
+              @else { No archived tasks }
             </div>
+          } @else if (archiveRemaining() > 0) {
+            <button type="button"
+                    class="archive-load-more"
+                    data-testid="archive-load-more"
+                    [disabled]="archiveLoading()"
+                    (click)="loadMoreArchive()">
+              @if (archiveLoading()) { Loading… }
+              @else { Load more ({{ archiveRemaining() }} remaining) }
+            </button>
+          } @else if (archiveLoading() && !archiveLoaded()) {
+            <div class="column__empty" data-testid="archive-loading">Loading archived tasks…</div>
           }
         } @else if (isReview()) {
           @for (group of reviewGroups(); track group.kind) {

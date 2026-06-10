@@ -172,6 +172,26 @@ public class TaskScannerService : ITaskScanner
     }
 
     /// <summary>
+    /// Returns only the terminal <c>7-archive</c> tasks, slim-hydrated. Mirrors
+    /// <see cref="ScanAllJobs"/>: when a <see cref="TaskIndexCache"/> is wired
+    /// (production) this is an O(1) read of the archive partition the cache
+    /// already built from its single shared disk walk; tests without a cache
+    /// fall back to filtering a fresh raw scan. Powers the paged
+    /// <c>GET /api/tasks/archive</c> read endpoint (ASS-1727) - the board
+    /// responses deliberately exclude this lane, so it has its own read path.
+    /// </summary>
+    public List<TaskInfo> ScanArchivedJobs()
+    {
+        if (_indexCache != null)
+        {
+            return _indexCache.GetArchiveSnapshot().ToList();
+        }
+        return ScanAllJobsRaw()
+            .Where(j => string.Equals(j.State, TaskStates.Archive, StringComparison.Ordinal))
+            .ToList();
+    }
+
+    /// <summary>
     /// The uncached disk walk. Always reads from disk; used by
     /// <see cref="TaskIndexCache"/> for refresh and by callers that want to
     /// bypass the cache (tests, recovery paths).

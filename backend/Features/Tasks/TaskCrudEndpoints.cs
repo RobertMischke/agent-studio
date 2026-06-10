@@ -1,4 +1,4 @@
-
+using System.Diagnostics;
 
 using static AgentStudio.Tasks.TaskEndpointHelpers;
 namespace AgentStudio.Tasks;
@@ -88,9 +88,73 @@ public static class TaskCrudEndpoints
                 Escalated = escalated,
                 Review = autoReview, // legacy alias for pre-ADR-0025 clients
                 Completed = SortLane(TaskStates.Completed),
+                // ASS-1727: the board response intentionally keeps Archive
+                // empty. ScanAllJobs() (cache-backed) excludes the terminal
+                // 7-archive lane, so SortLane finds nothing here even though
+                // hundreds of archived folders exist on disk. Eager-loading
+                // them bloated every poll; the Archive view pages through the
+                // dedicated GET /api/tasks/archive endpoint instead. The key is
+                // kept (always []) so pre-existing clients that read
+                // grouped.archive don't NPE on a missing field.
                 Archive = SortLane(TaskStates.Archive)
             };
             return Results.Ok(grouped);
+        });
+
+        // ASS-1727: dedicated paged read for the terminal 7-archive lane. The
+        // board /grouped response keeps Archive empty (hundreds of terminal
+        // cards would bloat every poll), so the Archive view lazy-loads through
+        // here. Slim by construction: it reuses the slim-hydrated archive
+        // partition the index cache already built from its single shared disk
+        // walk (no per-request full scan) and projects only the fields an
+        // archived card renders. Query: watchPath (optional project filter),
+        // offset/limit (paging), search (case-insensitive title/key/id), and
+        // includeFixtures (default false, mirroring the board endpoints).
+        group.MapGet("/archive", (string? watchPath, int? offset, int? limit, string? search, bool? includeFixtures,
+            TaskScannerService scanner, ILoggerFactory loggerFactory) =>
+        {
+            var sw = Stopwatch.StartNew();
+            IEnumerable<TaskInfo> archived = scanner.ScanArchivedJobs();
+
+            if (!string.IsNullOrWhiteSpace(watchPath))
+                archived = archived.Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase));
+            if (includeFixtures != true)
+                archived = archived.Where(j => !j.Fixture);
+
+            var term = search?.Trim();
+            if (!string.IsNullOrWhiteSpace(term))
+            {
+                archived = archived.Where(j =>
+                    j.Title.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || (j.Key?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || j.Id.Contains(term, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Newest-archived first. A terminal card has no live freshness
+            // signal, so EnteredLaneAt (when it entered 7-archive) is the
+            // natural ordering, with LastActivity as a stable tiebreaker.
+            var ordered = archived
+                .OrderByDescending(j => j.EnteredLaneAt)
+                .ThenByDescending(j => j.LastActivity)
+                .ToList();
+
+            var total = ordered.Count;
+            var off = Math.Max(0, offset ?? 0);
+            var lim = Math.Clamp(limit ?? 50, 1, 200);
+            var items = ordered.Skip(off).Take(lim).Select(ArchivedTaskInfo.From).ToList();
+
+            sw.Stop();
+            loggerFactory.CreateLogger("TaskArchiveEndpoint").LogInformation(
+                "GET /api/tasks/archive returned {Returned}/{Total} archived tasks (offset={Offset}, limit={Limit}, search={HasSearch}) in {ElapsedMs}ms",
+                items.Count, total, off, lim, !string.IsNullOrWhiteSpace(term), sw.ElapsedMilliseconds);
+
+            return Results.Ok(new ArchivedTasksResponse
+            {
+                Items = items,
+                Total = total,
+                Offset = off,
+                Limit = lim,
+            });
         });
 
         group.MapGet("/{jobId}", (string jobId, string? watchPath, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions) =>

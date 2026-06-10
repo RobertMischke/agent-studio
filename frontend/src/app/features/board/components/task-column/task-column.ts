@@ -1,5 +1,24 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { TaskInfo, TaskOrderItem, ProjectRunnerStatus, TaskState } from '../../../../models/task.model';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnDestroy,
+  OnInit,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
+import type { Subscription } from 'rxjs';
+import {
+  ArchivedTaskInfo,
+  CliType,
+  TaskInfo,
+  TaskOrderItem,
+  ProjectRunnerStatus,
+  TaskState,
+} from '../../../../models/task.model';
+import { TaskService } from '../../../../services/task.service';
 import { TaskCardComponent } from '../task-card/task-card.component';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { cliTypeIcon } from '../../../../services/format.util';
@@ -9,7 +28,10 @@ import { InfoButtonComponent } from '../../../../components/info-button/info-but
 import { laneDocTopic } from '../../../../components/info-button/lane-doc-topic';
 import { laneSortStrategyMeta, isManualStrategy } from '../../../../services/lane-sort.util';
 
-const ARCHIVE_VISIBLE_LIMIT = 20;
+/** ASS-1727: page size for the Archive lane's lazy-load / "load more". */
+const ARCHIVE_PAGE_SIZE = 50;
+/** Debounce before a typed Archive filter term hits the endpoint. */
+const ARCHIVE_SEARCH_DEBOUNCE_MS = 300;
 
 @Component({
   selector: 'app-task-column, app-job-column',
@@ -25,7 +47,9 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
   templateUrl: './task-column.html',
   styleUrl: './task-column.scss'
 })
-export class TaskColumnComponent {
+export class TaskColumnComponent implements OnInit, OnDestroy {
+  private readonly taskService = inject(TaskService);
+
   readonly title = input.required<string>();
   readonly icon = input<string>('');
   readonly state = input.required<string>();
@@ -406,43 +430,129 @@ export class TaskColumnComponent {
     return this.state() === TaskState.Completed || this.state() === '5-completed';
   }
 
-  readonly archiveVisible = computed(() => {
-    if (!this.isArchive()) return [] as TaskInfo[];
-    return [...this.jobs()]
-      .sort((a, b) => (b.lastActivity ?? '').localeCompare(a.lastActivity ?? ''))
-      .slice(0, ARCHIVE_VISIBLE_LIMIT);
-  });
+  // ── ASS-1727: Archive lane lazy-load ──────────────────────────────────
+  // The board's `grouped.archive` is intentionally empty (the cache-backed
+  // board scan excludes the terminal lane), so this lane hydrates from the
+  // paged `GET /api/tasks/archive` endpoint instead of its `jobs()` input.
+  // Newest-first, paged via "load more", narrowed by a simple text filter.
+  readonly archiveItems = signal<ArchivedTaskInfo[]>([]);
+  readonly archiveTotal = signal<number>(0);
+  readonly archiveLoading = signal<boolean>(false);
+  readonly archiveError = signal<string | null>(null);
+  readonly archiveSearch = signal<string>('');
+  /** True once the first fetch has resolved, so the empty state doesn't flash before data lands. */
+  readonly archiveLoaded = signal<boolean>(false);
+  private archiveSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  private archiveSub: Subscription | null = null;
 
-  readonly archiveOverflow = computed(() => {
-    if (!this.isArchive()) return 0;
-    return Math.max(0, this.jobs().length - ARCHIVE_VISIBLE_LIMIT);
-  });
+  /** Unloaded archived rows behind the current page (drives "load more"). */
+  readonly archiveRemaining = computed(() => Math.max(0, this.archiveTotal() - this.archiveItems().length));
+  /** Show the empty state only once a fetch has resolved with a genuine zero count. */
+  readonly archiveIsEmpty = computed(() => this.archiveLoaded() && this.archiveTotal() === 0);
+
+  /** Header/rail count: archived total for the archive lane, live job count otherwise. */
+  readonly headerCount = computed(() => (this.isArchive() ? this.archiveTotal() : this.jobs().length));
+
+  ngOnInit(): void {
+    if (this.isArchive()) this.loadArchive(true);
+  }
+
+  ngOnDestroy(): void {
+    if (this.archiveSearchTimer !== null) clearTimeout(this.archiveSearchTimer);
+    this.archiveSub?.unsubscribe();
+  }
+
+  /**
+   * Fetch a page of archived tasks. `reset` starts a fresh newest-first run
+   * (offset 0, replacing the list); otherwise it appends the next page.
+   */
+  loadArchive(reset: boolean): void {
+    if (this.archiveLoading()) return;
+    const offset = reset ? 0 : this.archiveItems().length;
+    this.archiveLoading.set(true);
+    this.archiveError.set(null);
+    this.archiveSub?.unsubscribe();
+    this.archiveSub = this.taskService
+      .getArchivedTasks({ offset, limit: ARCHIVE_PAGE_SIZE, search: this.archiveSearch() })
+      .subscribe({
+        next: (res) => {
+          this.archiveItems.set(reset ? res.items : [...this.archiveItems(), ...res.items]);
+          this.archiveTotal.set(res.total);
+          this.archiveLoading.set(false);
+          this.archiveLoaded.set(true);
+        },
+        error: () => {
+          this.archiveError.set('Failed to load archived tasks.');
+          this.archiveLoading.set(false);
+          this.archiveLoaded.set(true);
+        },
+      });
+  }
+
+  loadMoreArchive(): void {
+    this.loadArchive(false);
+  }
+
+  /** Debounced text-filter handler: re-runs the search from offset 0. */
+  onArchiveSearchInput(term: string): void {
+    this.archiveSearch.set(term);
+    if (this.archiveSearchTimer !== null) clearTimeout(this.archiveSearchTimer);
+    this.archiveSearchTimer = setTimeout(() => {
+      this.archiveSearchTimer = null;
+      this.loadArchive(true);
+    }, ARCHIVE_SEARCH_DEBOUNCE_MS);
+  }
 
   readonly identityFor = (name: string) => projectIdentity(name);
 
-  archiveTooltip(job: TaskInfo): string {
-    const lines: string[] = [];
-    lines.push(job.title || job.id);
-    lines.push('');
-    lines.push(`Project: ${job.projectName}`);
-    if (job.agent) lines.push(`Agent: ${job.agent}${job.cliType ? ` (${job.cliType})` : ''}`);
-    else if (job.cliType) lines.push(`CLI: ${job.cliType}`);
-    if (job.model) lines.push(`Model: ${job.model}`);
-    lines.push('');
-    lines.push(`Created: ${this.formatLongDate(job.createdAt)}`);
-    lines.push(`Last activity: ${this.formatLongDate(job.lastActivity)}`);
-    if (job.commit) {
-      lines.push('');
-      lines.push(`Commit ${job.commit.shortSha}: ${this.firstLine(job.commit.message)}`);
-      lines.push(`Files changed: ${job.commit.filesChanged}`);
-    }
-    return lines.join('\n');
+  /**
+   * Map a slim archived row to the minimal {@link TaskInfo} the open-detail
+   * path consumes (id / watchPath / state / taskKey / kind). The detail view
+   * re-fetches the full record by id, so the unfilled fields never surface.
+   */
+  archiveClickTarget(item: ArchivedTaskInfo): TaskInfo {
+    return {
+      id: item.id,
+      taskKey: item.taskKey,
+      key: item.key ?? null,
+      title: item.title,
+      state: item.state,
+      watchPath: item.watchPath,
+      projectName: item.projectName,
+      agent: item.agent,
+      cliType: (item.cliType ?? null) as CliType | null,
+      lastActivity: item.lastActivity,
+      createdAt: item.enteredLaneAt,
+      order: 0,
+      folderPath: '',
+      sessionName: null,
+      model: null,
+      useOwnSession: null,
+      lastUsage: null,
+      execution: null,
+      commit: null,
+      kind: 'task',
+    } as TaskInfo;
   }
 
-  private firstLine(s: string | null | undefined): string {
-    if (!s) return '';
-    const idx = s.indexOf('\n');
-    return idx < 0 ? s : s.slice(0, idx);
+  archiveTooltip(item: ArchivedTaskInfo): string {
+    const lines: string[] = [];
+    lines.push(item.title || item.id);
+    lines.push('');
+    lines.push(`Project: ${item.projectName}`);
+    if (item.agent) lines.push(`Agent: ${item.agent}${item.cliType ? ` (${item.cliType})` : ''}`);
+    else if (item.cliType) lines.push(`CLI: ${item.cliType}`);
+    lines.push('');
+    lines.push(`Archived: ${this.formatLongDate(item.enteredLaneAt)}`);
+    lines.push(`Last activity: ${this.formatLongDate(item.lastActivity)}`);
+    if (item.commitCount > 0) {
+      lines.push('');
+      lines.push(`Commits: ${item.commitCount}`);
+    } else if (!item.codeActivityDetected) {
+      lines.push('');
+      lines.push('No code changes');
+    }
+    return lines.join('\n');
   }
 
   formatLongDate(iso: string | null | undefined): string {

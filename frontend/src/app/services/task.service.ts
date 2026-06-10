@@ -2,6 +2,7 @@ import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { map } from 'rxjs';
 import type {
+  ArchivedTasksResponse,
   CreateJobRequest,
   GroupedJobs,
   TaskArtifactsResponse,
@@ -485,6 +486,23 @@ export class TaskService {
       body,
       this.withWatchPath(watchPath),
     );
+  }
+
+  /**
+   * ASS-1727 — page the terminal Archive lane. The board `grouped.archive`
+   * is intentionally empty (the cache-backed board scan excludes the archive
+   * partition), so the Archive view reads here instead. Returns a slim,
+   * newest-first slice plus the full unpaged `total` so the caller can drive
+   * "load more" and an accurate empty state. No full disk walk per call —
+   * the backend serves this from the same cached scan that feeds the board.
+   */
+  getArchivedTasks(opts: { watchPath?: string; offset?: number; limit?: number; search?: string } = {}) {
+    let params = this.withWatchPath(opts.watchPath).params ?? new HttpParams();
+    if (typeof opts.offset === 'number') params = params.set('offset', String(opts.offset));
+    if (typeof opts.limit === 'number') params = params.set('limit', String(opts.limit));
+    const term = opts.search?.trim();
+    if (term) params = params.set('search', term);
+    return this.http.get<ArchivedTasksResponse>(`${this.baseUrl}/tasks/archive`, { params });
   }
 
   getWatchPaths() {

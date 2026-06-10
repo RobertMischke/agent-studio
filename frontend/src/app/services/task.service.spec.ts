@@ -176,6 +176,45 @@ describe('TaskService', () => {
     diffReq.flush(utf8Buffer('-old\n+new\n'));
     expect(diff).toBe('-old\n+new\n');
   });
+
+  // ASS-1727: the paged Archive read endpoint. The board's grouped.archive is
+  // intentionally empty, so the Archive view reads here. Verify the query is
+  // built correctly (offset/limit/trimmed search) and the envelope passes
+  // through untouched.
+  it('pages the archive endpoint with offset/limit and a trimmed search term', () => {
+    let total = -1;
+    let ids: string[] = [];
+    service.getArchivedTasks({ offset: 50, limit: 25, search: '  migration  ' }).subscribe((res) => {
+      total = res.total;
+      ids = res.items.map((i) => i.id);
+    });
+
+    const req = http.expectOne((request) =>
+      request.url === '/api/tasks/archive' &&
+      request.params.get('offset') === '50' &&
+      request.params.get('limit') === '25' &&
+      request.params.get('search') === 'migration');
+    req.flush({
+      items: [{ id: 'arch-1', taskKey: 't::arch-1', title: 'Archived', state: '7-archive' }],
+      total: 873,
+      offset: 50,
+      limit: 25,
+    });
+
+    expect(total).toBe(873);
+    expect(ids).toEqual(['arch-1']);
+  });
+
+  it('omits empty optional params from the archive query', () => {
+    service.getArchivedTasks().subscribe();
+
+    const req = http.expectOne((request) => request.url === '/api/tasks/archive');
+    expect(req.request.params.has('offset')).toBe(false);
+    expect(req.request.params.has('limit')).toBe(false);
+    expect(req.request.params.has('search')).toBe(false);
+    expect(req.request.params.has('watchPath')).toBe(false);
+    req.flush({ items: [], total: 0, offset: 0, limit: 50 });
+  });
 });
 
 function utf8Buffer(value: string): ArrayBuffer {

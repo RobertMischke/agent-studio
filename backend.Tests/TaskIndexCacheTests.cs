@@ -140,6 +140,60 @@ public class TaskIndexCacheTests : IDisposable
     }
 
     [Fact]
+    public void ArchiveSnapshot_HoldsOnlyArchived_BuiltByTheSameScanAsTheBoard()
+    {
+        // ASS-1727: the archive partition is filled by the same single disk
+        // walk that fills the board snapshot. Priming one then reading the
+        // other must NOT trigger a second scan (one miss, then a hit).
+        WriteJob(TaskStates.Ready, "ready-1", "Ready");
+        WriteJob(TaskStates.Archive, "archived-1", "Archived A");
+        WriteJob(TaskStates.Archive, "archived-2", "Archived B");
+
+        var board = _cache.GetSnapshot();
+        var archive = _cache.GetArchiveSnapshot();
+
+        Assert.Single(board);
+        Assert.DoesNotContain(board, j => j.State == TaskStates.Archive);
+
+        Assert.Equal(2, archive.Count);
+        Assert.All(archive, j => Assert.Equal(TaskStates.Archive, j.State));
+        Assert.Contains(archive, j => j.Id == "archived-1");
+        Assert.Contains(archive, j => j.Id == "archived-2");
+
+        // One disk walk fed both partitions: the second read was a cache hit.
+        Assert.Equal(1, _cache.Misses);
+        Assert.Equal(1, _cache.Hits);
+    }
+
+    [Fact]
+    public void ScanArchivedJobs_ReturnsArchivedOnly_FromCache()
+    {
+        WriteJob(TaskStates.Ready, "ready-1", "Ready");
+        WriteJob(TaskStates.Completed, "done-1", "Completed");
+        WriteJob(TaskStates.Archive, "archived-1", "Archived");
+
+        var archived = _scanner.ScanArchivedJobs();
+
+        Assert.Single(archived);
+        Assert.Equal("archived-1", archived[0].Id);
+        Assert.Equal(TaskStates.Archive, archived[0].State);
+    }
+
+    [Fact]
+    public void ScanArchivedJobs_PicksUpNewArchivedFolder_AfterInvalidate()
+    {
+        WriteJob(TaskStates.Archive, "archived-1", "First");
+        Assert.Single(_scanner.ScanArchivedJobs());
+
+        WriteJob(TaskStates.Archive, "archived-2", "Second");
+        // Stale by design until something invalidates the cache.
+        Assert.Single(_scanner.ScanArchivedJobs());
+
+        _cache.Invalidate();
+        Assert.Equal(2, _scanner.ScanArchivedJobs().Count);
+    }
+
+    [Fact]
     public void WithoutCache_ScanAllJobs_AlwaysHitsDisk()
     {
         // Build a scanner without a cache (mimics test fixtures that don't

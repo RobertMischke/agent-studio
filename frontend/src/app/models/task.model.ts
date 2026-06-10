@@ -620,6 +620,43 @@ export interface GroupedJobs {
   archive: TaskInfo[];
 }
 
+/**
+ * ASS-1727 — one row in the paged Archive read endpoint
+ * (`GET /api/tasks/archive`). The board `grouped.archive` lane is
+ * intentionally empty (the cache-backed board scan excludes the terminal
+ * lane), so the Archive view hydrates from this slim projection instead of
+ * the full `TaskInfo`. Mirrors backend `ArchivedTaskInfo`.
+ */
+export interface ArchivedTaskInfo {
+  id: string;
+  taskKey: string;
+  key?: string | null;
+  title: string;
+  state: string;
+  projectName: string;
+  watchPath: string;
+  enteredLaneAt: string;
+  lastActivity: string;
+  commitCount: number;
+  codeActivityDetected: boolean;
+  taskType: string;
+  cliType?: string | null;
+  agent: string;
+}
+
+/**
+ * ASS-1727 — paged envelope for `GET /api/tasks/archive`. `total` is the
+ * full unpaged count (drives "load more" / empty-state); `items` is the
+ * newest-first slice for the requested `offset`/`limit`. Mirrors backend
+ * `ArchivedTasksResponse`.
+ */
+export interface ArchivedTasksResponse {
+  items: ArchivedTaskInfo[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
 export interface CreateJobRequest {
   id?: string;
   title: string;

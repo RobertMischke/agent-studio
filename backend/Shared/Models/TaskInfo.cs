@@ -262,6 +262,67 @@ public record TaskOutcomeIssue
 }
 
 /// <summary>
+/// Slim projection of an archived (<c>7-archive</c>) task for the paged
+/// archive read endpoint (ASS-1727). The terminal lane holds hundreds of
+/// finished cards, so the board's <c>/grouped</c> response deliberately omits
+/// it; the Archive view pages through <c>GET /api/tasks/archive</c> instead and
+/// only needs the few fields an archived card renders - identity, title,
+/// project, the lane-entry timestamp, and the commit count. Built from a
+/// slim-hydrated <see cref="TaskInfo"/> (ASS-1649), so no live-card affordance
+/// (outcome chip, token totals, execution) is carried here.
+/// </summary>
+public record ArchivedTaskInfo
+{
+    public string Id { get; init; } = "";
+    public string TaskKey { get; init; } = "";
+    public string? Key { get; init; }
+    public string Title { get; init; } = "";
+    public string State { get; init; } = TaskStates.Archive;
+    public string ProjectName { get; init; } = "";
+    public string WatchPath { get; init; } = "";
+    /// <summary>Lane-entry anchor: when the task entered 7-archive (its effective "completed/archived at").</summary>
+    public DateTime EnteredLaneAt { get; init; }
+    public DateTime LastActivity { get; init; }
+    public int CommitCount { get; init; }
+    public bool CodeActivityDetected { get; init; }
+    public string TaskType { get; init; } = TaskTypes.Chore;
+    public string? CliType { get; init; }
+    public string Agent { get; init; } = "";
+
+    public static ArchivedTaskInfo From(TaskInfo job) => new()
+    {
+        Id = job.Id,
+        TaskKey = job.TaskKey,
+        Key = job.Key,
+        Title = job.Title,
+        State = job.State,
+        ProjectName = job.ProjectName,
+        WatchPath = job.WatchPath,
+        EnteredLaneAt = job.EnteredLaneAt,
+        LastActivity = job.LastActivity,
+        CommitCount = job.CommitCount,
+        CodeActivityDetected = job.CodeActivityDetected,
+        TaskType = job.TaskType,
+        CliType = job.CliType,
+        Agent = job.Agent,
+    };
+}
+
+/// <summary>
+/// Paged response for <c>GET /api/tasks/archive</c>. <see cref="Total"/> is the
+/// count after the (optional) <c>watchPath</c> + <c>search</c> filters but
+/// before paging, so the frontend can drive infinite-scroll / "showing N of
+/// Total" without a second round-trip.
+/// </summary>
+public record ArchivedTasksResponse
+{
+    public List<ArchivedTaskInfo> Items { get; init; } = [];
+    public int Total { get; init; }
+    public int Offset { get; init; }
+    public int Limit { get; init; }
+}
+
+/// <summary>
 /// Pure rules for reconciling a derived <see cref="TaskOutcomeIssue"/> against a
 /// task's final accept verdict. An accepted/completed task (moved to
 /// 5-human-review / 6-completed after an <c>accept</c> verdict) must NOT carry a

@@ -38,6 +38,12 @@ public sealed class TaskIndexCache
     // event marked it stale before the next read got there.
     private readonly Lock _lock = new();
     private ImmutableList<TaskInfo> _snapshot = ImmutableList<TaskInfo>.Empty;
+    // Archive partition of the same scan. The terminal 7-archive lane is kept
+    // out of _snapshot (board reads must never page through hundreds of
+    // terminal cards), but the slim-hydrated archived records are still walked
+    // once per refresh, so we keep them here for the dedicated paged archive
+    // read (ASS-1727) instead of re-walking disk for that endpoint.
+    private ImmutableList<TaskInfo> _archiveSnapshot = ImmutableList<TaskInfo>.Empty;
     private DateTime _snapshotAtUtc = DateTime.MinValue;
     private bool _dirty = true;
 
@@ -76,12 +82,38 @@ public sealed class TaskIndexCache
     }
 
     /// <summary>
-    /// Returns the cached snapshot of all jobs. If the cache is dirty or has
-    /// aged past the safety TTL, refreshes by calling
-    /// <see cref="TaskScannerService.ScanAllJobsRaw"/> and replaces the
-    /// snapshot atomically before returning.
+    /// Returns the cached snapshot of board jobs (every lane except the
+    /// terminal 7-archive). If the cache is dirty or has aged past the safety
+    /// TTL, refreshes from disk first. The archive partition of the same scan
+    /// is available via <see cref="GetArchiveSnapshot"/>.
     /// </summary>
     public ImmutableList<TaskInfo> GetSnapshot()
+    {
+        EnsureFresh();
+        lock (_lock) return _snapshot;
+    }
+
+    /// <summary>
+    /// Returns the cached snapshot of terminal 7-archive jobs, slim-hydrated.
+    /// Populated by the same single disk walk that feeds <see cref="GetSnapshot"/>
+    /// (partitioned in <see cref="EnsureFresh"/>), so the dedicated paged
+    /// archive endpoint (ASS-1727) pays no extra scan: it reads this field in
+    /// O(1) when the cache is warm.
+    /// </summary>
+    public ImmutableList<TaskInfo> GetArchiveSnapshot()
+    {
+        EnsureFresh();
+        lock (_lock) return _archiveSnapshot;
+    }
+
+    /// <summary>
+    /// Ensures both partitions (<see cref="_snapshot"/> + <see cref="_archiveSnapshot"/>)
+    /// reflect a scan taken after the last <see cref="Invalidate"/> / safety-TTL
+    /// expiry. Single-flight: only one thread does the disk walk; concurrent
+    /// readers wait briefly for it so a post-Invalidate read always observes the
+    /// fresh snapshot (read-after-write guarantee).
+    /// </summary>
+    private void EnsureFresh()
     {
         // Bounded retry: if a waiter wakes onto a racy in-flight snapshot
         // (_dirty=true), it must re-run the refresh path so the mutation that
@@ -99,7 +131,7 @@ public sealed class TaskIndexCache
                 if (!_dirty && DateTime.UtcNow - _snapshotAtUtc < _safetyTtl)
                 {
                     Interlocked.Increment(ref Hits);
-                    return _snapshot;
+                    return;
                 }
             }
 
@@ -117,7 +149,7 @@ public sealed class TaskIndexCache
                     // If a mutation landed during it, _dirty is still true and
                     // the snapshot the refresher installed is racy w.r.t. that
                     // mutation - loop to drive a fresh scan ourselves.
-                    if (!_dirty) return _snapshot;
+                    if (!_dirty) return;
                 }
                 continue;
             }
@@ -130,12 +162,24 @@ public sealed class TaskIndexCache
                 // happens during the disk walk gets stomped by `_dirty = false`
                 // and the cache serves stale data for the rest of the safety TTL.
                 var genBefore = Volatile.Read(ref _invalidationGen);
-                var fresh = _scanner.ScanAllJobsRaw()
-                    .Where(j => !string.Equals(j.State, TaskStates.Archive, StringComparison.Ordinal))
-                    .ToList();
+                // One walk, two partitions: board (every live lane) vs the
+                // terminal 7-archive lane. Splitting here keeps the board reads
+                // archive-free at zero extra disk cost and gives the paged
+                // archive endpoint a ready snapshot.
+                var fresh = _scanner.ScanAllJobsRaw();
+                var board = new List<TaskInfo>(fresh.Count);
+                var archive = new List<TaskInfo>();
+                foreach (var job in fresh)
+                {
+                    if (string.Equals(job.State, TaskStates.Archive, StringComparison.Ordinal))
+                        archive.Add(job);
+                    else
+                        board.Add(job);
+                }
                 lock (_lock)
                 {
-                    _snapshot = fresh.ToImmutableList();
+                    _snapshot = board.ToImmutableList();
+                    _archiveSnapshot = archive.ToImmutableList();
                     _snapshotAtUtc = DateTime.UtcNow;
                     // If no invalidation landed during the disk walk, the snapshot
                     // is authoritative. If one did, leave _dirty=true so the next
@@ -145,7 +189,7 @@ public sealed class TaskIndexCache
                         _dirty = false;
                     }
                     Interlocked.Increment(ref Misses);
-                    return _snapshot;
+                    return;
                 }
             }
             finally
@@ -154,9 +198,8 @@ public sealed class TaskIndexCache
                 Interlocked.Exchange(ref _refreshing, 0);
             }
         }
-        // Fallthrough: bounded retries exhausted under a storm. Return whatever
-        // we have rather than blocking forever; the next read will rescan.
-        lock (_lock) return _snapshot;
+        // Fallthrough: bounded retries exhausted under a storm. Leave whatever
+        // we have in place rather than blocking forever; the next read rescans.
     }
 
     /// <summary>

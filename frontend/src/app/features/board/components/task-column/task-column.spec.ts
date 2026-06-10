@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TaskColumnComponent } from './task-column';
-import type { CliExecution, TaskInfo, ProjectRunnerStatus } from '../../../../models/task.model';
+import type { ArchivedTaskInfo, CliExecution, TaskInfo, ProjectRunnerStatus } from '../../../../models/task.model';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -362,6 +362,141 @@ describe('TaskColumnComponent (smoke)', () => {
     expect(deleted).toEqual([job]);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// ASS-1727: Archive lane lazy-load. The board's `grouped.archive` is
+// intentionally empty (the cache-backed board scan excludes the terminal
+// lane), so the Archive column hydrates from the paged
+// `GET /api/tasks/archive` endpoint instead of its `jobs()` input. These
+// tests pin: a fetch fires on init, rows render, the empty state only shows
+// after a genuine zero-total response, "load more" appends the next page,
+// and the text filter re-queries (debounced) from offset 0.
+// ─────────────────────────────────────────────────────────────────────────
+describe('TaskColumnComponent archive lane (ASS-1727)', () => {
+  async function buildArchiveColumn() {
+    await TestBed.configureTestingModule({
+      imports: [TaskColumnComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const httpMock = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(TaskColumnComponent);
+    fixture.componentRef.setInput('title', 'Archive');
+    fixture.componentRef.setInput('state', '7-archive');
+    fixture.componentRef.setInput('jobs', []);
+    fixture.detectChanges(); // first CD runs ngOnInit → initial fetch
+    return { fixture, httpMock };
+  }
+
+  const isArchiveReq = (url: string) => url === '/api/tasks/archive';
+
+  it('fetches the paged archive endpoint on init and renders rows', async () => {
+    const { fixture, httpMock } = await buildArchiveColumn();
+
+    const req = httpMock.expectOne((r) => isArchiveReq(r.url));
+    expect(req.request.params.get('offset')).toBe('0');
+    expect(req.request.params.get('limit')).toBe('50');
+    req.flush({
+      items: [makeArchived({ id: 'a1', title: 'Archived One' })],
+      total: 1,
+      offset: 0,
+      limit: 50,
+    });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.archiveItems().length).toBe(1);
+    expect(fixture.componentInstance.archiveTotal()).toBe(1);
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="archive-row"]')).toBeTruthy();
+    expect(host.textContent ?? '').toContain('Archived One');
+    // The header count reflects the unpaged total, not the empty jobs() input.
+    expect(host.querySelector('.column__count')?.textContent?.trim()).toBe('1');
+    httpMock.verify();
+  });
+
+  it('shows the empty state only after a genuine zero-total response', async () => {
+    const { fixture, httpMock } = await buildArchiveColumn();
+
+    // Before the fetch resolves the empty state must not flash.
+    expect(fixture.componentInstance.archiveIsEmpty()).toBe(false);
+
+    httpMock.expectOne((r) => isArchiveReq(r.url)).flush({ items: [], total: 0, offset: 0, limit: 50 });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.archiveIsEmpty()).toBe(true);
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="archive-empty"]')).toBeTruthy();
+    httpMock.verify();
+  });
+
+  it('load more appends the next page; total stays the source of truth', async () => {
+    const { fixture, httpMock } = await buildArchiveColumn();
+
+    httpMock.expectOne((r) => isArchiveReq(r.url)).flush({
+      items: [makeArchived({ id: 'a1' })],
+      total: 2,
+      offset: 0,
+      limit: 50,
+    });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.archiveRemaining()).toBe(1);
+
+    fixture.componentInstance.loadMoreArchive();
+    const req2 = httpMock.expectOne((r) => isArchiveReq(r.url));
+    expect(req2.request.params.get('offset')).toBe('1'); // offset = items already loaded
+    req2.flush({ items: [makeArchived({ id: 'a2' })], total: 2, offset: 1, limit: 50 });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.archiveItems().map((i) => i.id)).toEqual(['a1', 'a2']);
+    expect(fixture.componentInstance.archiveRemaining()).toBe(0);
+    httpMock.verify();
+  });
+
+  it('debounced search re-queries from offset 0 with the term', async () => {
+    const { fixture, httpMock } = await buildArchiveColumn();
+    httpMock.expectOne((r) => isArchiveReq(r.url)).flush({ items: [], total: 0, offset: 0, limit: 50 });
+
+    vi.useFakeTimers();
+    try {
+      fixture.componentInstance.onArchiveSearchInput('migration');
+      // Debounced: no request until the timer elapses.
+      httpMock.expectNone((r) => isArchiveReq(r.url));
+      vi.advanceTimersByTime(300);
+
+      const req = httpMock.expectOne((r) => isArchiveReq(r.url));
+      expect(req.request.params.get('search')).toBe('migration');
+      expect(req.request.params.get('offset')).toBe('0');
+      req.flush({ items: [], total: 0, offset: 0, limit: 50 });
+    } finally {
+      vi.useRealTimers();
+    }
+    httpMock.verify();
+  });
+});
+
+function makeArchived(overrides: Partial<ArchivedTaskInfo> = {}): ArchivedTaskInfo {
+  return {
+    id: 'arch-1',
+    taskKey: 'test::arch-1',
+    key: 'ASS-1',
+    title: 'Archived task',
+    state: '7-archive',
+    projectName: 'Test',
+    watchPath: '/tmp/watch',
+    enteredLaneAt: '2026-05-01T09:00:00Z',
+    lastActivity: '2026-05-01T09:30:00Z',
+    commitCount: 1,
+    codeActivityDetected: true,
+    taskType: 'chore',
+    cliType: 'claude',
+    agent: 'claude',
+    ...overrides,
+  };
+}
 
 function makeExec(overrides: Partial<CliExecution> = {}): CliExecution {
   return {
