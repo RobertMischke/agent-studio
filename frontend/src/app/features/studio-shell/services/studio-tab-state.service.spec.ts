@@ -2,9 +2,12 @@ import { TestBed } from '@angular/core/testing';
 import { StudioTabStateService } from './studio-tab-state.service';
 import type { StudioTab } from '../studio-shell.types';
 import { studioTabKey } from '../studio-shell.types';
+import { ensureBrowserStorage } from '../../../../testing/browser-storage';
 
 const STORAGE_KEY = 'atp.studio.tabs.v1';
 const ALL_BOARD_KEY = 'board:__all__';
+
+ensureBrowserStorage();
 
 describe('StudioTabStateService', () => {
   let svc: StudioTabStateService;

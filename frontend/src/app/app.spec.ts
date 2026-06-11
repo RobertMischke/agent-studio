@@ -8,6 +8,9 @@ import { App } from './app';
 import { TaskService } from './services/task.service';
 import type { TaskDetail, TaskInfo } from './models/task.model';
 import { studioTabKey } from './features/studio-shell';
+import { ensureBrowserStorage } from '../testing/browser-storage';
+
+ensureBrowserStorage();
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
