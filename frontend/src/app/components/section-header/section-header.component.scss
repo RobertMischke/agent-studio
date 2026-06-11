@@ -8,11 +8,11 @@
 .section-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--studio-spacing-2);
   // Right gutter reads the shared rail token so a trailing count pill (e.g.
   // the "Open tabs" total) or the Workspaces "show all" action lines up with
   // the tree-row / list-row counts below instead of hugging the edge at 12px.
-  padding: 4px var(--studio-rail-trailing-gutter) 4px 8px;
+  padding: var(--studio-spacing-1) var(--studio-rail-trailing-gutter) var(--studio-spacing-1) var(--studio-spacing-2);
   margin: 0;
   font-size: 11px;
   font-weight: 700;
@@ -40,9 +40,9 @@
   // Divider variant — top rule + spacing that separates a group from the
   // one above it (formerly studio-explorer__group-head--mt).
   &--divider {
-    margin-top: 12px;
+    margin-top: var(--studio-spacing-3);
     border-top: 1px solid var(--studio-border);
-    padding-top: 10px;
+    padding-top: var(--studio-spacing-3);
   }
 
   &__chev {
@@ -75,10 +75,15 @@
   }
 }
 
-// Collapsible section heads (Workspaces, Open tabs) render as a `<button>`,
-// so the shell's `.studio button { padding: 0 }` reset (0,1,1) beats the base
-// `.section-header { padding }` (0,1,0) and the trailing count / "show all"
-// action sits flush against the rail edge. Scope to `.studio` (0,2,0) so the
-// shared trailing gutter wins and the section count column lines up with the
-// tree-row counts below it.
-.studio .section-header { padding-right: var(--studio-rail-trailing-gutter); }
+// Collapsible section heads render as a `<button>`, so the shell's
+// `.studio button { padding: 0 }` reset (0,1,1) beats the base
+// `.section-header { padding }` (0,1,0). Scope the same component-owned
+// spacing to `.studio` (0,2,0) so Explorer and Project Hub keep one rhythm.
+.studio .section-header {
+  padding: var(--studio-spacing-1) var(--studio-rail-trailing-gutter) var(--studio-spacing-1) var(--studio-spacing-2);
+}
+
+.studio .section-header--divider {
+  margin-top: var(--studio-spacing-3);
+  padding-top: var(--studio-spacing-3);
+}

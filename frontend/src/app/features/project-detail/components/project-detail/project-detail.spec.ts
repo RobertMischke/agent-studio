@@ -62,4 +62,25 @@ describe('ProjectDetailComponent (smoke)', () => {
     expect(text).toContain('Auto-commit on transition 3-progress -> 4-auto-review');
     expect(text).toContain('Changes apply immediately to the next job transition.');
   });
+
+  it('does not render a duplicate overview feed header inside the project shell', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ProjectDetailComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ProjectDetailComponent);
+    fixture.componentRef.setInput('projectName', 'Demo Project');
+    fixture.componentRef.setInput('view', 'overview');
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.proj-detail__head')).toBeNull();
+    expect(host.querySelector('[data-testid="project-detail-open-feed"]')).toBeNull();
+  });
 });

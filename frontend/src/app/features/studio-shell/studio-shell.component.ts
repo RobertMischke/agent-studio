@@ -17,6 +17,7 @@ import { FormsModule } from '@angular/forms';
 import type { TaskInfo, RegistryWorkspaceListItem, WatchPathEntry } from '../../models/task.model';
 import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
+import { StudioSidebarHeaderComponent } from '../../components/studio-sidebar-header/studio-sidebar-header.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
 import { StudioEmptyStateComponent } from './components/studio-empty-state/studio-empty-state.component';
 import { SectionHeaderComponent } from '../../components/section-header/section-header.component';
@@ -38,7 +39,7 @@ import { WorkspaceManagerService, ProjectDragDropService } from '../shell';
 import { WorkspaceSettingsService } from '../shell/state/workspace-settings.service';
 import { ProjectLookupService } from '../../services/project-lookup.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
-import { ExplorerWorkspaceTreeComponent } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
+import { ExplorerWorkspaceTreeComponent, type ExplorerProjectSurface } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
 import { TooltipDirective } from '../../components/tooltip/tooltip.directive';
 import { TaskStatusPopoverDirective } from '../../components/task-status-card';
@@ -83,7 +84,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, SegmentedControlComponent, ProjectDetailComponent],
+  imports: [FormsModule, StudioIconComponent, StudioSidebarHeaderComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, SegmentedControlComponent, ProjectDetailComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -661,6 +662,16 @@ export class StudioShellComponent {
   readonly activeBoardProject = computed<string | null>(() => {
     const tab = this.activeTab();
     if (tab?.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
+    return null;
+  });
+
+  readonly activeProjectSurface = computed<ExplorerProjectSurface | null>(() => {
+    const tab = this.activeTab();
+    if (!tab) return null;
+    if (tab.kind === 'board') return tab.projectName === '__all__' ? null : 'board';
+    if (tab.kind === 'hub') return 'hub';
+    if (tab.kind === 'backlog') return tab.projectName === null ? null : 'backlog';
+    if (tab.kind === 'epics') return tab.projectName === null ? null : 'epics';
     return null;
   });
 

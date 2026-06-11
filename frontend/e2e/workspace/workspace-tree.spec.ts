@@ -68,6 +68,47 @@ test.describe('F46: Explorer two-level workspace -> project tree', () => {
     await expect(page.locator(GROUP).first()).toBeVisible();
   });
 
+  test('Workspaces header plus opens the create-workspace dialog without collapsing the tree', async ({ page }) => {
+    await gotoStudio(page);
+
+    const panel = page.getByTestId('studio-explorer-workspace-head');
+    await expect(panel).toHaveAttribute('aria-expanded', 'true');
+
+    await page.getByTestId('studio-explorer-add-workspace').click();
+    const dialog = page.getByTestId('workspace-create-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(panel).toHaveAttribute('aria-expanded', 'true');
+
+    await page.getByTestId('workspace-create-cancel').click();
+    await expect(dialog).not.toBeVisible();
+  });
+
+  test('workspace-row plus opens project onboarding for that workspace without adding a tree row', async ({ page }) => {
+    await gotoStudio(page);
+
+    const action = page.locator('[data-testid^="studio-workspace-"][data-testid$="-add-project"]').first();
+    if ((await action.count()) === 0) {
+      test.skip(true, 'No real workspace folder available — add-project action skipped.');
+      return;
+    }
+
+    await expect(page.getByText('New project', { exact: true })).toHaveCount(0);
+    const testid = await action.getAttribute('data-testid');
+    const workspaceId = testid?.replace(/^studio-workspace-/, '').replace(/-add-project$/, '') ?? '';
+    expect(workspaceId).not.toBe('');
+    const group = page.getByTestId(`studio-explorer-ws-group-${workspaceId}`);
+    await expect(group).toHaveAttribute('aria-expanded', 'true');
+
+    await action.click();
+    const dialog = page.getByTestId('onboard-project-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(page.getByTestId('onboard-project-workspace')).toHaveValue(workspaceId);
+    await expect(group).toHaveAttribute('aria-expanded', 'true');
+
+    await page.getByTestId('onboard-project-cancel').click();
+    await expect(dialog).not.toBeVisible();
+  });
+
   test('project rows nest under a workspace folder header', async ({ page }) => {
     await gotoStudio(page);
 

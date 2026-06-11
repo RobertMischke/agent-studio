@@ -1,5 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
+import { StudioSidebarHeaderComponent } from '../../../../components/studio-sidebar-header/studio-sidebar-header.component';
+import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
+import { TooltipDirective } from '../../../../components/tooltip';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
 import {
   PROJECT_RAIL_ITEMS,
@@ -22,6 +25,19 @@ export interface ProjectRailGroupView {
   nodes: readonly ProjectRailNode[];
 }
 
+type ProjectRailCompactItem = ProjectRailItem & { railIcon: NonNullable<ProjectRailItem['railIcon']> };
+
+function isCompactRailItem(item: ProjectRailItem): item is ProjectRailCompactItem {
+  return item.navigable !== false && item.railIcon != null;
+}
+
+interface RailResizeState {
+  pointerId: number;
+  startX: number;
+  startWidth: number;
+  moved: boolean;
+}
+
 /**
  * Project page shell. Slice 2 of the quality-system mockup: introduces the
  * left-rail navigation skeleton plus a placeholder body per rail item.
@@ -33,12 +49,18 @@ export interface ProjectRailGroupView {
 @Component({
   selector: 'app-project-shell',
   standalone: true,
-  imports: [SectionHeaderComponent, TreeRowComponent],
+  imports: [SectionHeaderComponent, StudioSidebarHeaderComponent, StudioIconComponent, TooltipDirective, TreeRowComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-shell.component.html',
   styleUrl: './project-shell.component.scss',
 })
 export class ProjectShellComponent {
+  readonly collapsedRailWidth = 44;
+  readonly minRailWidth = 176;
+  readonly maxRailWidth = 360;
+  private readonly collapseThreshold = 128;
+  private readonly keyboardResizeStep = 16;
+
   readonly projectName = input.required<string>();
   readonly activeRail = input.required<ProjectRailKey>();
   /**
@@ -54,6 +76,14 @@ export class ProjectShellComponent {
   readonly railChange = output<ProjectRailKey>();
   readonly openFeed = output<void>();
   readonly closeShell = output<void>();
+
+  readonly railCollapsed = signal(false);
+  readonly railWidth = signal(240);
+  readonly railWidthStyle = computed(() => `${this.railWidth()}px`);
+  readonly splitterValue = computed(() => this.railCollapsed() ? this.collapsedRailWidth : this.railWidth());
+
+  private railResizeState: RailResizeState | null = null;
+  private suppressSplitterClick = false;
 
   /** Main segments the user has collapsed (hidden contents). */
   private readonly collapsedGroups = signal<ReadonlySet<ProjectRailGroup>>(new Set());
@@ -97,6 +127,89 @@ export class ProjectShellComponent {
     return PROJECT_RAIL_ITEMS.find(i => i.key === key) ?? PROJECT_RAIL_ITEMS[0];
   });
 
+  readonly compactRailItems = computed<readonly ProjectRailCompactItem[]>(() =>
+    PROJECT_RAIL_ITEMS.filter(isCompactRailItem),
+  );
+
+  setRailCollapsed(collapsed: boolean): void {
+    this.railCollapsed.set(collapsed);
+  }
+
+  toggleRailCollapsed(): void {
+    this.railCollapsed.update(v => !v);
+  }
+
+  startRailResize(event: PointerEvent): void {
+    event.preventDefault();
+    const target = event.currentTarget as HTMLElement | null;
+    target?.setPointerCapture?.(event.pointerId);
+    this.railResizeState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: this.railCollapsed() ? this.collapsedRailWidth : this.railWidth(),
+      moved: false,
+    };
+  }
+
+  resizeRail(event: PointerEvent): void {
+    const state = this.railResizeState;
+    if (!state || event.pointerId !== state.pointerId) return;
+
+    const delta = event.clientX - state.startX;
+    if (Math.abs(delta) <= 2) return;
+
+    state.moved = true;
+    this.applyRailWidth(state.startWidth + delta);
+  }
+
+  finishRailResize(event: PointerEvent): void {
+    const state = this.railResizeState;
+    if (!state || event.pointerId !== state.pointerId) return;
+
+    const target = event.currentTarget as HTMLElement | null;
+    target?.releasePointerCapture?.(event.pointerId);
+    this.suppressSplitterClick = state.moved;
+    this.railResizeState = null;
+
+    if (this.suppressSplitterClick) {
+      window.setTimeout(() => {
+        this.suppressSplitterClick = false;
+      }, 0);
+    }
+  }
+
+  onSplitterClick(): void {
+    if (this.suppressSplitterClick) return;
+    this.toggleRailCollapsed();
+  }
+
+  onSplitterKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.toggleRailCollapsed();
+      return;
+    }
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      if (this.railCollapsed()) return;
+      const nextWidth = this.railWidth() - this.keyboardResizeStep;
+      if (nextWidth < this.minRailWidth) this.setRailCollapsed(true);
+      else this.railWidth.set(nextWidth);
+      return;
+    }
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      if (this.railCollapsed()) {
+        this.setRailCollapsed(false);
+        this.railWidth.update(width => Math.max(width, this.minRailWidth));
+      } else {
+        this.railWidth.set(this.clampRailWidth(this.railWidth() + this.keyboardResizeStep));
+      }
+    }
+  }
+
   isGroupCollapsed(id: ProjectRailGroup): boolean {
     return this.collapsedGroups().has(id);
   }
@@ -133,5 +246,19 @@ export class ProjectShellComponent {
     }
     if (item.key === this.activeRail()) return;
     this.railChange.emit(item.key);
+  }
+
+  private applyRailWidth(width: number): void {
+    if (width <= this.collapseThreshold) {
+      this.setRailCollapsed(true);
+      return;
+    }
+
+    this.setRailCollapsed(false);
+    this.railWidth.set(this.clampRailWidth(width));
+  }
+
+  private clampRailWidth(width: number): number {
+    return Math.min(this.maxRailWidth, Math.max(this.minRailWidth, Math.round(width)));
   }
 }

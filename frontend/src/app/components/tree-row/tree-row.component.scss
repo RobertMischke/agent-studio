@@ -38,8 +38,18 @@
   }
 
   &--active {
-    background: var(--studio-bg-selected);
+    background: color-mix(in srgb, var(--studio-accent) 14%, var(--studio-bg-selected));
     color: var(--studio-fg-strong);
+    font-weight: 600;
+  }
+
+  &--active:hover {
+    background: color-mix(in srgb, var(--studio-accent) 18%, var(--studio-bg-selected));
+  }
+
+  &--active .tree-row__chev,
+  &--active .tree-row__glyph-icon {
+    color: var(--studio-accent-strong);
   }
 
   // Padding-left lives below: `.studio button` (specificity 0,1,1)
@@ -59,6 +69,11 @@
     transition: color 120ms ease;
 
     &:hover { color: var(--studio-fg); }
+
+    &--placeholder {
+      pointer-events: none;
+      visibility: hidden;
+    }
   }
 
   &__glyph {
@@ -80,6 +95,10 @@
     width: 14px;
     color: var(--studio-fg-muted);
     flex-shrink: 0;
+
+    &--placeholder {
+      visibility: hidden;
+    }
   }
 
   &__name {

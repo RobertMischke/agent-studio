@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -11,7 +11,7 @@ import type { ProjectRailKey } from './project-shell.config';
  * Render-path coverage for the Project-Hub nav IA (ASS-1711): collapsible
  * main segments, tree-expandable parents (Steering Docs / Settings), the
  * "Agent Docs" rename, the standalone "Runtime Prompts" point, and the
- * text-only rail (no per-item icons).
+ * shared tree-row icon rail.
  */
 function mount(activeRail: ProjectRailKey = 'overview') {
   TestBed.configureTestingModule({
@@ -34,7 +34,90 @@ function railEl(host: HTMLElement, key: string): HTMLElement | null {
   return host.querySelector<HTMLElement>(`[data-testid="project-shell-rail-${key}"]`);
 }
 
+function resizeEvent(
+  clientX: number,
+  target: Pick<HTMLElement, 'setPointerCapture' | 'releasePointerCapture'>,
+): PointerEvent {
+  return {
+    clientX,
+    currentTarget: target,
+    pointerId: 7,
+    preventDefault: vi.fn(),
+  } as unknown as PointerEvent;
+}
+
 describe('ProjectShellComponent rail IA', () => {
+  it('renders one balanced project-hub header with icon actions', () => {
+    const host = mount().nativeElement as HTMLElement;
+    const back = host.querySelector<HTMLElement>('[data-testid="project-shell-back"]')!;
+    const feed = host.querySelector<HTMLElement>('[data-testid="project-shell-open-feed"]')!;
+
+    expect(host.querySelector('[data-testid="project-shell-title"]')!.textContent).toContain('Demo Project');
+    expect(host.querySelector('[data-testid="project-shell-sidebar-header"]')!.textContent).toContain('Project Hub');
+    expect(back.getAttribute('aria-label')).toBe('Collapse project navigation');
+    expect(feed.getAttribute('aria-label')).toBe('Open project activity feed');
+    expect(back.querySelector('app-studio-icon')).toBeTruthy();
+    expect(feed.querySelector('app-studio-icon')).toBeTruthy();
+  });
+
+  it('collapses the project navigation into an icon rail and expands through the splitter', () => {
+    const fixture = mount('security');
+    const host = fixture.nativeElement as HTMLElement;
+
+    host.querySelector<HTMLElement>('[data-testid="project-shell-back"]')!.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector<HTMLElement>('[data-testid="project-shell-rail"]')?.getAttribute('data-collapsed')).toBe('true');
+    expect(host.querySelector('[data-testid="project-shell-sidebar-header"]')).toBeNull();
+    expect(host.querySelector('[data-testid="project-shell-expand-nav"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="project-shell-mini-rail-security"]')?.getAttribute('aria-current')).toBe('page');
+    expect(host.querySelector('[data-testid="project-shell-panel-security"]')).toBeTruthy();
+
+    host.querySelector<HTMLElement>('[data-testid="project-shell-splitter"]')!.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector<HTMLElement>('[data-testid="project-shell-rail"]')?.getAttribute('data-collapsed')).toBe('false');
+    expect(host.querySelector('[data-testid="project-shell-sidebar-header"]')).toBeTruthy();
+  });
+
+  it('resizes the project navigation by dragging the splitter and collapses below threshold', () => {
+    const fixture = mount();
+    const component = fixture.componentInstance;
+    const target = {
+      setPointerCapture: vi.fn(),
+      releasePointerCapture: vi.fn(),
+    } as unknown as HTMLElement;
+
+    component.startRailResize(resizeEvent(240, target));
+    component.resizeRail({ clientX: 320, pointerId: 7 } as PointerEvent);
+
+    expect(target.setPointerCapture).toHaveBeenCalledWith(7);
+    expect(component.railCollapsed()).toBe(false);
+    expect(component.railWidth()).toBe(320);
+
+    component.resizeRail({ clientX: 80, pointerId: 7 } as PointerEvent);
+    component.finishRailResize({ currentTarget: target, pointerId: 7 } as unknown as PointerEvent);
+
+    expect(component.railCollapsed()).toBe(true);
+    expect(target.releasePointerCapture).toHaveBeenCalledWith(7);
+  });
+
+  it('supports keyboard resizing and collapse on the splitter', () => {
+    const fixture = mount();
+    const component = fixture.componentInstance;
+    const preventDefault = vi.fn();
+
+    component.onSplitterKeydown({ key: 'ArrowRight', preventDefault } as unknown as KeyboardEvent);
+    expect(component.railWidth()).toBe(256);
+
+    component.onSplitterKeydown({ key: 'Enter', preventDefault } as unknown as KeyboardEvent);
+    expect(component.railCollapsed()).toBe(true);
+
+    component.onSplitterKeydown({ key: 'ArrowRight', preventDefault } as unknown as KeyboardEvent);
+    expect(component.railCollapsed()).toBe(false);
+    expect(component.railWidth()).toBeGreaterThanOrEqual(component.minRailWidth);
+  });
+
   it('renders all four collapsible main segments', () => {
     const host = mount().nativeElement as HTMLElement;
     for (const id of ['insight', 'quality', 'operations', 'config']) {
@@ -119,9 +202,12 @@ describe('ProjectShellComponent rail IA', () => {
     expect(railEl(host, 'settings-overrides')!.textContent).toContain('Project Overrides');
   });
 
-  it('renders a text-only rail (no per-item decorative icons)', () => {
+  it('renders rail rows through the shared icon + text tree-row control', () => {
     const host = mount().nativeElement as HTMLElement;
-    expect(host.querySelector('.proj-shell__rail-icon')).toBeNull();
+    expect(railEl(host, 'overview')?.querySelector('app-studio-icon')).toBeTruthy();
+    expect(railEl(host, 'security')?.querySelector('app-studio-icon')).toBeTruthy();
+    expect(railEl(host, 'steering-docs')?.querySelector('app-studio-icon')).toBeTruthy();
+    expect(railEl(host, 'overview')?.querySelector('.tree-row__chev--placeholder')).toBeTruthy();
   });
 
   // T5a nav-rebuild step 1: the target navigation gains three reachable

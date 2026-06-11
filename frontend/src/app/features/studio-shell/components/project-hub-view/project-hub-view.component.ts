@@ -23,6 +23,8 @@ import {
   isProjectRailKey,
 } from '../../../project-detail/components/project-shell/project-shell.config';
 import { ProjectOverlaysService } from '../../../project-detail/state/project-overlays.service';
+import { StudioTabStateService } from '../../services/studio-tab-state.service';
+import { studioTabKey } from '../../studio-shell.types';
 
 /** Rails whose content panel is real (not the project-shell placeholder). */
 const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRailKey>([
@@ -91,6 +93,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
 export class ProjectHubViewComponent {
   private readonly jobService = inject(TaskService);
   private readonly overlays = inject(ProjectOverlaysService);
+  private readonly tabState = inject(StudioTabStateService);
 
   readonly projectName = input.required<string>();
   /** Optional initial rail; defaults to "overview" if absent or unknown. */
@@ -130,11 +133,16 @@ export class ProjectHubViewComponent {
 
   setRail(rail: ProjectRailKey): void {
     this.activeRail.set(rail);
+    const projectName = this.projectName();
+    this.tabState.retarget(
+      studioTabKey({ kind: 'hub', projectName }),
+      { kind: 'hub', projectName, section: rail },
+    );
   }
 
   /**
    * Open the orchestrator feed overlay (same target as the legacy
-   * project-shell's 📜 Open feed button).
+   * project-shell feed button).
    */
   openFeed(): void {
     this.overlays.openOrchFeed(this.projectName());
@@ -149,9 +157,9 @@ export class ProjectHubViewComponent {
     this.overlays.openAnalysisReport(this.projectName(), report.reportId);
   }
 
-  /** Hub closes when the user closes the tab; no separate close action. */
+  /** Hub closes when the user closes the editor tab; the in-rail button only collapses navigation. */
   closeShell(): void {
-    /* no-op — the tab close button handles this */
+    /* legacy output hook: ProjectShell owns navigation collapse internally */
   }
 
   onSecurityFollowUp(evt: unknown): void { void evt; }

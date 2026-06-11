@@ -454,6 +454,8 @@
       <app-confirm-dialog />
       @if (workspaceManager.createOpen()) {
         <app-workspace-create-dialog />
+      }
+      @if (workspaceManager.onboardProjectOpen()) {
         <app-onboard-project-dialog />
       }
       <app-notification-stack />
@@ -857,6 +859,8 @@
       <app-confirm-dialog />
       @if (workspaceManager.createOpen()) {
         <app-workspace-create-dialog />
+      }
+      @if (workspaceManager.onboardProjectOpen()) {
         <app-onboard-project-dialog />
       }
       <app-notification-stack />

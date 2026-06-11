@@ -1,12 +1,5 @@
 <section class="proj-detail" [attr.data-testid]="'project-detail-' + view()">
   @if (view() === 'overview') {
-    <header class="proj-detail__head">
-      <h2 class="proj-detail__title">{{ projectName() }}</h2>
-      <button class="proj-detail__feed" (click)="openFeed.emit(projectName())" data-testid="project-detail-open-feed">
-        Open feed
-      </button>
-    </header>
-
     @if (paths(); as p) {
       <dl class="proj-detail__paths">
         <div><dt>Watch path</dt><dd>{{ p.path }}</dd></div>

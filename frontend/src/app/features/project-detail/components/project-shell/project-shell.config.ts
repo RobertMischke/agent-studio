@@ -5,6 +5,7 @@
  * inventory and copy below; per-panel real content lands in follow-up
  * slices listed in that mockup's README.
  */
+import type { StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 
 export type ProjectRailGroup = 'insight' | 'quality' | 'operations' | 'config';
 
@@ -53,8 +54,10 @@ export interface ProjectRailItem {
   description: string;
   /** Empty-state copy for the placeholder body. */
   empty: string;
-  /** Glyph used in the panel header. The rail itself is text-only (no icons). */
+  /** Glyph used in the placeholder panel header. */
   icon: string;
+  /** SVG glyph used by the shared tree-row navigation control. */
+  railIcon?: StudioIconName | null;
   /**
    * When set, this item is a child of the given parent and renders nested /
    * indented under it; the parent gains a disclosure twisty. Children live in
@@ -84,6 +87,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Snapshot of project health and quick actions',
     empty: 'Overview placeholder. Health snapshot and quick actions will land in a later slice.',
     icon: '▤',
+    railIcon: 'layout',
   },
   {
     key: 'visual-evidence',
@@ -93,6 +97,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Project screenshots, UI evidence, and task links',
     empty: 'No visual evidence yet. Screenshots created by Playwright or browser checks will appear here.',
     icon: '◉',
+    railIcon: 'eye',
   },
   {
     key: 'drift',
@@ -102,6 +107,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Overall drift score, per-dimension state, findings, and follow-ups',
     empty: 'No drift reports yet. Run a comparison to produce the first one.',
     icon: '↯',
+    railIcon: 'diff',
   },
   {
     key: 'uxui',
@@ -111,6 +117,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Design references, screenshots, council critique, and next-version actions',
     empty: 'UX/UI placeholder. Design surfaces and council critique arrive in a later slice.',
     icon: '◐',
+    railIcon: 'eye',
   },
   {
     key: 'observability',
@@ -120,6 +127,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Agent communication on the message bus: timeline, participants, kinds, token usage',
     empty: 'No bus messages for this project yet. Once the orchestrator, an agent, or the supervisor speaks, the timeline and counters fill in here.',
     icon: '⌁',
+    railIcon: 'activity',
   },
 
   // ---- QUALITY: what guards the project ----
@@ -135,6 +143,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Baseline, reviews, and active findings for this project',
     empty: 'No security baseline yet. The Security slice ships the baseline action and review history.',
     icon: '⊡',
+    railIcon: 'warn',
   },
   {
     key: 'test-quality',
@@ -144,6 +153,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Backend tests, end-to-end tests, tuning runs, coverage, and source-code perspective',
     empty: 'Test Quality placeholder. Run history and coverage views land in a later slice.',
     icon: '✓',
+    railIcon: 'check',
   },
   {
     key: 'audits',
@@ -153,6 +163,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Review definitions, per-task checks, and runtime probe slots for this project',
     empty: 'Audits & Checks placeholder. The review-definition model lands in a later slice.',
     icon: '⊟',
+    railIcon: 'list',
   },
   {
     key: 'product-runtime',
@@ -162,6 +173,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'How the built software behaved during local runs and tests: events, errors, latency, domain timeline',
     empty: 'No runtime events captured yet. Once the built software emits structured events to the runtime JSONL files, recent events, error groups, latency summaries, and the domain timeline appear here.',
     icon: '⊜',
+    railIcon: 'runbook',
   },
 
   // ---- OPERATIONS: what's running right now ----
@@ -173,6 +185,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Tasks queued, in progress, and recently completed',
     empty: 'Jobs placeholder. The board page is the live view; this panel will show a project-scoped slice.',
     icon: '☰',
+    railIcon: 'list',
   },
   {
     key: 'token-usage',
@@ -182,6 +195,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Inference spend by job, supporting runs, orchestrator turns, and time window',
     empty: 'Token Usage placeholder. Heatmap, timeline, and per-job drill-down land in a later slice.',
     icon: '▦',
+    railIcon: 'cli',
   },
   {
     key: 'activity',
@@ -191,6 +205,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Decisions, actions, and observations recorded by the orchestrator',
     empty: 'Activity placeholder. The full feed lives at the project-feed overlay; a scoped view lands later.',
     icon: '⌖',
+    railIcon: 'activity',
   },
 
   // ---- CONFIG: how the project is set up ----
@@ -205,6 +220,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Documentation that steers this project: architecture, the docs tree, and agent-read instructions',
     empty: 'Pick a document surface below: Architecture, Wiki / Docs, or Agent Docs.',
     icon: '⊕',
+    railIcon: 'folder',
     navigable: false,
   },
   {
@@ -216,6 +232,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Architectural decisions and drift status',
     empty: 'Architecture placeholder. ADR list and high-level map land in the architecture slice.',
     icon: '⊞',
+    railIcon: 'layout',
   },
   {
     key: 'wiki',
@@ -226,6 +243,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Browse the project docs/ tree: navigation card, domain docs, and accumulated learnings',
     empty: 'No docs found. Once the project has a docs/ folder, its tree and rendered documents appear here.',
     icon: '📚',
+    railIcon: 'book',
   },
   {
     // Renamed from "Steering Docs": these are the instructions agents read of
@@ -240,6 +258,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Instruction files agents read on their own (AGENTS.md and the agent-facing domain docs), with human summary and drift warnings',
     empty: 'No agent-doc inventory yet. The slice lists AGENTS.md, frontend/AGENTS.md, README, ROADMAP, the task contract, the skills lookup, and the ADR archive.',
     icon: '🧭',
+    railIcon: 'file',
   },
   // ---- Nav-rebuild shells (T5a step 1) ----
   // Target navigation (Zielbild §F2): Board · Wiki · Pipeline · Workflow ·
@@ -254,6 +273,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Run pipeline steps (pre / core / post): activation, order, per-step model and prompt binding, and cost.',
     empty: 'Pipeline shell — navigation only. Step 2 (T5b) moves the pipeline sections currently in Project Settings here unchanged: per-step activation and order, model + prompt binding (→ Prompts), and token/cost view. Step 3 (T4a) then redesigns this page.',
     icon: '⫶',
+    railIcon: 'sliders',
   },
   {
     key: 'workflow',
@@ -263,6 +283,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'The lane model and per-lane ordering, plus a read-only view of what the platform does at each transition today. Per-transition Git integration comes after the Git concept decision.',
     empty: 'Workflow / Lanes — the lane list, per-lane sort order, and a read-only transition view. Per-transition Git profiles and MR / team workflow stay placeholders until the Git concept is decided.',
     icon: '⇄',
+    railIcon: 'branch',
   },
   {
     key: 'prompts',
@@ -272,6 +293,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Prompt registry for this project: inventory, source / override matrix, and coverage.',
     empty: 'Prompts shell — navigation only. Step 2 (T5b) moves the prompt-admin surface here unchanged: registry inventory, source/override matrix, and coverage. Distinct from Runtime Prompts below, which is the read-only browse over prompts/runtime/*.md.',
     icon: '✎',
+    railIcon: 'file',
   },
   {
     // Runtime prompts are a SEPARATE main point from the agent-read docs above:
@@ -284,6 +306,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Pipeline, aspect, review, and orchestrator prompts the platform injects at run time (prompts/runtime/*.md)',
     empty: 'Runtime Prompts placeholder. A read-only browse over prompts/runtime/*.md lands in a later slice; these are CLI-behaviour prompts, distinct from the agent-read Agent Docs.',
     icon: '⌥',
+    railIcon: 'cli',
   },
   {
     key: 'orchestrator',
@@ -293,6 +316,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Live session, recent decisions and observations',
     empty: 'Orchestrator placeholder. Session detail and recent decisions land in a later slice.',
     icon: '◈',
+    railIcon: 'bot',
   },
   {
     // Settings is a navigable tree parent: the row opens the full Settings
@@ -304,6 +328,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'How the orchestrator behaves on this project',
     empty: 'Settings placeholder. Runner mode, auto-commit, and orchestrator model controls arrive next.',
     icon: '⚙',
+    railIcon: 'settings',
   },
   {
     key: 'settings-defaults',
@@ -314,6 +339,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Global defaults inherited from Workspace settings (default agent, usage caps)',
     empty: 'Workspace defaults placeholder.',
     icon: '⚙',
+    railIcon: 'sliders',
   },
   {
     key: 'settings-overrides',
@@ -324,6 +350,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Per-project settings that win over the inherited workspace defaults',
     empty: 'Project overrides placeholder.',
     icon: '⚙',
+    railIcon: 'settings',
   },
 ];
 

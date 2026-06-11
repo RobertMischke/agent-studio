@@ -150,28 +150,29 @@
              [attr.data-active-panel]="activePanel()"
              data-testid="studio-sidebar">
         <!-- Header per panel -->
-        <div class="studio-sidebar__header">
-          <span class="studio-sidebar__title">{{ activePanel() }}</span>
-          <span class="studio-sidebar__spacer"></span>
+        <app-studio-sidebar-header [title]="activePanel()" testid="studio-sidebar-header">
           @if (activePanel() === 'explorer') {
-            <button type="button"
-                    class="studio-sidebar__action"
+            <button actions
+                    type="button"
+                    class="studio-sidebar-header__action"
                     data-testid="studio-sidebar-add-workspace"
-                    appTooltip="Add a project to the workspace"
-                    aria-label="Add a project to the workspace"
+                    appTooltip="Create workspace"
+                    aria-label="Create workspace"
                     (click)="onAddWorkspace()">
               <app-studio-icon name="plus" [size]="14"></app-studio-icon>
             </button>
-            <button type="button"
-                    class="studio-sidebar__action"
+            <button actions
+                    type="button"
+                    class="studio-sidebar-header__action"
                     data-testid="studio-sidebar-refresh"
                     appTooltip="Refresh project list"
                     aria-label="Refresh project list"
                     (click)="onRefreshWorkspace()">
               <app-studio-icon name="refresh" [size]="14"></app-studio-icon>
             </button>
-            <button type="button"
-                    class="studio-sidebar__action"
+            <button actions
+                    type="button"
+                    class="studio-sidebar-header__action"
                     data-testid="studio-sidebar-collapse-all"
                     appTooltip="Collapse all projects"
                     aria-label="Collapse all projects"
@@ -180,14 +181,15 @@
             </button>
           }
           @if (activePanel() === 'filters' && boardFilters.hasActiveFiltersOrSearch()) {
-            <button type="button"
-                    class="studio-sidebar__action studio-sidebar__action--text"
+            <button actions
+                    type="button"
+                    class="studio-sidebar-header__action studio-sidebar-header__action--text"
                     data-testid="studio-sidebar-filter-clear-all"
                     appTooltip="Clear all active filters"
                     aria-label="Clear all filters"
                     (click)="boardFilters.clearSearchAndFilters()">Clear all</button>
           }
-        </div>
+        </app-studio-sidebar-header>
         <div class="studio-sidebar__body">
           @switch (activePanel()) {
             @case ('explorer') {
@@ -204,6 +206,7 @@
                   [projectStorageByName]="projectStorageByName()"
                   [expandedProjects]="expandedProjects()"
                   [showAllActive]="activeProjectName() === null && activeTab()?.kind === 'board'"
+                  [activeProjectSurface]="activeProjectSurface()"
                   (showAll)="pickProject(null)"
                   (toggleExpanded)="toggleProjectExpanded($event)"
                   (openBoardRequest)="openBoard($event)"
@@ -211,6 +214,7 @@
                   (openBacklogRequest)="openProjectBacklog($event)"
                   (openEpicsRequest)="openProjectEpics($event)"
                   (onboardProjectRequest)="onAddProjectToWorkspace($event)"
+                  (onboardWorkspaceRequest)="onAddWorkspace()"
                   (renameWorkspace)="onTreeRenameWorkspace($event)"
                   (renameProject)="onTreeRenameProject($event)"
                   (deleteProject)="onTreeDeleteProject($event)"
