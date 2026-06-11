@@ -31,11 +31,11 @@ const FILE_LIST_MAX = 12;
 
 export function buildTaskTypeChip(taskType: TaskInfo['taskType']): TaskTypeChip {
   const type = (taskType || 'chore').toLowerCase();
-  if (type === 'bug') return { kind: 'bug', label: 'Bug', icon: '🐞', tooltip: 'Task type: Bug' };
+  if (type === 'bug') return { kind: 'bug', label: 'Bug', icon: 'warn', tooltip: 'Task type: Bug' };
   if (type === 'feature' || type === 'user-story') {
-    return { kind: 'feature', label: 'Feature', icon: '✨', tooltip: 'Task type: Feature' };
+    return { kind: 'feature', label: 'Feature', icon: 'plus', tooltip: 'Task type: Feature' };
   }
-  return { kind: 'chore', label: 'Chore', icon: '·', tooltip: 'Task type: Chore (default)' };
+  return { kind: 'chore', label: 'Chore', icon: 'dot', tooltip: 'Task type: Chore (default)' };
 }
 
 export interface ModeBadge {
@@ -402,6 +402,7 @@ export interface TaskTagChip {
 
 const SUPPRESSED_CARD_TAG_TEXT = new Set([
   'ready',
+  'reviewed',
   'reviewready',
   'readytosignoff',
   'autoreview',
@@ -412,6 +413,9 @@ const SUPPRESSED_CARD_TAG_TEXT = new Set([
   'classifier',
   'classifierunknown',
   'classification',
+  'orchestratormove',
+  'orchestratormoved',
+  'movedbyorchestrator',
   'qas',
   'qandas',
   'questionsandanswers',
@@ -431,6 +435,8 @@ const LANE_MIRROR_CARD_TAG_TEXT: Record<string, readonly string[]> = {
   [TaskState.Completed]: ['completed', 'complete', 'done'],
   [TaskState.Archive]: ['archive', 'archived'],
 };
+
+const REISSUE_AUTO_REVIEW_TAG_ID = 'reissue:autoreview';
 
 function compactTagText(value: string): string {
   return value
@@ -468,6 +474,17 @@ export function buildTagChips(
   return list.flatMap((id) => {
     const entry = byId.get(id);
     if (isSuppressedCardTag(id, entry, state)) return [];
+    if (id.toLowerCase() === REISSUE_AUTO_REVIEW_TAG_ID) {
+      return {
+        id,
+        label: 'Reissue',
+        color: '#f59e0b',
+        ghost: false,
+        concern: false,
+        unparseable: false,
+        tooltip: 'Auto-review sent this task back for another attempt.'
+      };
+    }
     if (entry) {
       return {
         id,
@@ -555,19 +572,34 @@ export interface GitStateBadge {
   tooltip: string;
 }
 
-// Lane -> which cards carry a git-state pill at all. Backlog / preparation /
-// ready / failed-pickup have no useful git context and stay quiet (null). The
-// lane no longer decides the LABEL: that comes from the provenance ground truth
-// below. Completed/Archive still map straight through because the lane itself is
-// the terminal fact (accepted into develop / archived).
+// Lane -> which cards may carry a git-state pill. Early lanes still stay quiet
+// unless a real branch/tip is recorded; this lets prepared/ready worktree tasks
+// show their branch before the first commit without inventing context for
+// ordinary backlog cards. The lane no longer decides the LABEL: that comes from
+// the provenance ground truth below. Completed/Archive still map straight
+// through because the lane itself is the terminal fact (accepted into develop /
+// archived).
 const GIT_STATE_LANES: ReadonlySet<string> = new Set<string>([
+  TaskState.Backlog,
+  TaskState.Preparation,
+  TaskState.OrchestratorPrep,
+  TaskState.Ready,
   TaskState.Progress,
   TaskState.CodeNotComplete,
+  TaskState.FailedPickup,
   TaskState.AutoReview,
   TaskState.HumanReview,
   TaskState.Escalated,
   TaskState.Completed,
   TaskState.Archive,
+]);
+
+const EARLY_GIT_CONTEXT_LANES: ReadonlySet<string> = new Set<string>([
+  TaskState.Backlog,
+  TaskState.Preparation,
+  TaskState.OrchestratorPrep,
+  TaskState.Ready,
+  TaskState.FailedPickup,
 ]);
 
 // Review lanes a PARALLEL run only reaches AFTER its task/<id> worktree was
@@ -641,6 +673,10 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
   const branchName = prov?.branch || `task/${job.key || job.id}`;
   const tip = currentBranchTip(prov);
   const mergeSha = recordedMergeSha(prov);
+
+  if (EARLY_GIT_CONTEXT_LANES.has(job.state) && !tip && !mergeSha) {
+    return null;
+  }
 
   // (2) Landed in develop. Ground-truth merge fact wins; otherwise the lane is
   // terminal (Completed) or a post-integration review lane whose parallel
@@ -874,8 +910,7 @@ export function buildReviewBadge(summaryState: TaskInfo['summaryState']): Review
       return { label: 'summarizing', tone: 'generating',
                tooltip: 'Orchestrator is summarizing the run output (Haiku). The card will become quiet once status.md has been written.' };
     case 'ready':
-      return { label: 'Reviewed', tone: 'ready',
-               tooltip: summaryState.bytesWritten ? `Auto-review wrote ${summaryState.bytesWritten} bytes to status.md.` : 'Auto-review finished.' };
+      return null;
     case 'failed':
       return { label: 'review failed', tone: 'failed',
                tooltip: summaryState.errorMessage ?? 'Auto-review failed.' };
@@ -931,16 +966,15 @@ export function buildAutoReviewProcessBadge(job: TaskInfo, status: AutoReviewSta
 // auto-review process badge.
 const HUMAN_DECISION_LANES = new Set<string>([TaskState.HumanReview, TaskState.Escalated, '4-review']);
 
-export interface HumanReviewBadge { label: string; tone: 'attention' | 'accept'; tooltip: string; }
+export interface HumanReviewBadge { label: string; tone: 'attention'; tooltip: string; }
 
 /**
  * Human-decision badge. An escalated / reissue card parked in 5-human-review
  * used to render identically to a Completed card, hiding that a human still has
  * to act ("Failed-Cards sehen aus wie Done"). This pill makes the verdict
  * explicit: a loud red "Escalated" / "Needs rework" marker for action-required
- * verdicts, and a calm green "Reviewed" marker for an accepted card awaiting
- * confirmation. Returns null for plain human review (no verdict yet) so
- * undecided cards stay quiet.
+ * verdicts. Accepted cards stay quiet; the lane and commit context carry enough
+ * state without repeating "Reviewed" as another chip.
  */
 export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
   if (!HUMAN_DECISION_LANES.has(job.state)) return null;
@@ -958,11 +992,7 @@ export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
         tooltip: 'Auto-review asked for a reissue: the work needs changes before it can be accepted. Waiting on a human to act.'
       };
     case 'accept':
-      return {
-        label: 'Reviewed',
-        tone: 'accept',
-        tooltip: 'Auto-review accepted this task. A human just needs to confirm and move it to Completed.'
-      };
+      return null;
     default:
       return null;
   }

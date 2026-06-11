@@ -44,11 +44,11 @@ import {
 import { TooltipDirective } from '../../../../components/tooltip';
 import { TaskStatusPopoverDirective } from '../../../../components/task-status-card';
 import { MenuComponent, MenuItemClickEvent } from '../../../../components/menu';
+import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { TokenPopoverDirective } from './token-popover.directive';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { stateLabel } from '../../../../services/format.util';
-import { buildRunActivityBadge } from '../../../../services/run-activity.util';
 import { BoardFiltersService } from '../../state/board-filters.service';
 import { EpicExpansionStore } from '../../state/epic-expansion.service';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
@@ -61,7 +61,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, TokenPopoverDirective],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's
@@ -116,6 +116,12 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   private stopPolling: (() => void) | null = null;
 
   readonly taskTypeChip = computed(() => buildTaskTypeChip(this.job().taskType));
+
+  taskTypeIconName(kind: string): StudioIconName {
+    if (kind === 'bug') return 'warn';
+    if (kind === 'feature') return 'plus';
+    return 'dot';
+  }
 
   readonly issueLabel = computed(() => this.job().key || this.job().id);
 
@@ -207,15 +213,6 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   executionBadge() { return buildExecutionBadge(this.job()); }
 
-  /**
-   * ASS-1751: run-activity pill for 3-progress cards — distinguishes a live run,
-   * a failed run waiting out the rapid-crash backoff (with the retry time), and
-   * an orphan whose run was ended by a backend restart. Re-evaluates with the
-   * shared 30s tick so the "retry at HH:MM" copy stays fresh without re-reading
-   * Date.now() during change detection.
-   */
-  readonly runActivityBadge = computed(() => buildRunActivityBadge(this.job(), nowTick()));
-
   readonly reviewBadge = computed(() => buildReviewBadge(this.job().summaryState));
 
   readonly autoReviewProcessBadge = computed(() =>
@@ -248,19 +245,24 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     const empty = this.commitEmptyBadge();
     if (!live && !gitState && !commits && !empty) return null;
 
-    const kind = live ? 'worktree' : gitState?.kind === 'tagged' ? 'archive' : 'branch';
-    const label = live ? 'WT' : gitState?.kind === 'tagged' ? 'TAG' : 'BR';
-    const value = live?.branch || gitState?.label || '';
-    const summary = live
-      ? live.filesChanged === 0 ? 'clean' : `${live.filesChanged} ${live.filesChanged === 1 ? 'file' : 'files'}`
+    const liveBranch = live?.branch ?? null;
+    const liveMatchesGitState = !!live && (!gitState || gitState.label === 'main checkout' || liveBranch === gitState.label);
+    const displayLive = liveMatchesGitState ? live : null;
+    const displayGitState = displayLive ? null : gitState;
+    const sharedCheckout = displayGitState?.label === 'main checkout';
+    const kind = displayLive || sharedCheckout ? 'worktree' : displayGitState?.kind === 'tagged' ? 'archive' : 'branch';
+    const label = displayLive || sharedCheckout ? 'WT' : displayGitState?.kind === 'tagged' ? 'TAG' : 'BR';
+    const value = displayLive?.branch || displayGitState?.label || '';
+    const summary = displayLive
+      ? displayLive.filesChanged === 0 ? 'clean' : `${displayLive.filesChanged} ${displayLive.filesChanged === 1 ? 'file' : 'files'}`
       : commits ? `${commits.totalCount} ${commits.totalCount === 1 ? 'commit' : 'commits'}`
-        : empty?.label ?? null;
-    const stat = live && (live.totalAdded || live.totalRemoved)
-      ? `+${live.totalAdded}/-${live.totalRemoved}`
+        : empty?.label ?? (displayGitState?.kind === 'pre-merge' ? 'no commits yet' : null);
+    const stat = displayLive && (displayLive.totalAdded || displayLive.totalRemoved)
+      ? `+${displayLive.totalAdded}/-${displayLive.totalRemoved}`
       : null;
     const tooltip = [
-      live ? this.gitTooltip() : null,
-      gitState?.tooltip ?? null,
+      displayLive ? this.gitTooltip() : null,
+      displayGitState?.tooltip ?? null,
       empty?.tooltip ?? null,
     ].filter((part): part is string => !!part).join('\n\n');
 

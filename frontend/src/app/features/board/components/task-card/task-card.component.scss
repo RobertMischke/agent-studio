@@ -217,11 +217,12 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      min-height: 22px;
-      padding: 0 6px 0 5px;
+      height: 22px;
+      padding: 0 6px;
       border-radius: 7px;
       font-size: 10px;
       font-weight: 700;
+      line-height: 1;
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.10);
       color: var(--studio-fg-dim);
@@ -377,12 +378,13 @@
       align-items: center;
       justify-content: center;
       justify-self: start;
-      min-height: 22px;
+      height: 22px;
       max-width: 100%;
-      padding: 0 var(--studio-spacing-2);
+      padding: 0 6px;
       border-radius: 7px;
       font-size: 10px;
-      font-weight: 650;
+      font-weight: 700;
+      line-height: 1;
       font-variant-numeric: tabular-nums;
       letter-spacing: 0.02em;
       color: var(--studio-fg-dim);
@@ -515,12 +517,10 @@
       margin-bottom: var(--studio-card-section-gap);
     }
     .task-card__execution-pill,
-    .task-card__run-activity-pill,
     .task-card__pending-pill,
     .task-card__waiting-pill,
     .task-card__mode-pill,
     .task-card__type-pill,
-    .task-card__state-pill,
     .task-card__loop-pill,
     .task-card__review-pill,
     .task-card__code-review-pill,
@@ -748,8 +748,8 @@
     /* Human-decision pill (Done & Decide column). The attention variant
        reuses the failure accent (--studio-accent-6) shared with the failed
        execution pill and high-severity issue pill, so "this needs a human"
-       reads in the same red vocabulary across the board. The accept variant
-       is a calm green sign-off cue, distinct from the loud attention tone. */
+       reads in the same red vocabulary across the board. Accepted cards stay
+       quiet so the board does not repeat "Reviewed" as another chip. */
     .task-card__human-review-pill {
       display: inline-flex;
       align-items: center;
@@ -772,11 +772,6 @@
       background: color-mix(in srgb, var(--studio-accent-6) 18%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-6) 45%, transparent);
     }
-    .task-card__human-review-pill--accept {
-      color: var(--studio-accent-success-strong);
-      background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
-      border-color: color-mix(in srgb, var(--studio-accent-success) 35%, transparent);
-    }
     /* Quality-grade pill (ASS-1657). The automatic code-review step grades
        every pipelined task A/B/C/D; the grade reads loud and colour-coded so
        the operator gets the quality verdict at a glance. A/B share the calm
@@ -791,6 +786,8 @@
       padding: 0 5px;
       border-radius: 7px;
       font-weight: 700;
+      font-size: 10px;
+      line-height: 1;
       border: 1px solid transparent;
       cursor: help;
     }
@@ -803,7 +800,7 @@
       padding: 0;
       border-radius: 0;
       font-weight: 800;
-      font-size: 11px;
+      font-size: 10px;
       line-height: 1;
       background: transparent;
       color: currentColor;
@@ -860,38 +857,6 @@
       0%, 100% { opacity: 1; }
       50% { opacity: 0.35; }
     }
-    /* ASS-1751: run-activity pill for 3-progress cards. Deliberately quiet — no
-       alarm design. It only disambiguates a state that otherwise looks
-       untouched: blue for a live run, red (calm, not loud) for a failed run
-       waiting out backoff, and a muted neutral chip for an orphan/idle card. */
-    .task-card__run-activity-pill {
-      border: 1px solid transparent;
-    }
-    .task-card__run-activity-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: currentColor;
-      flex: 0 0 auto;
-    }
-    .task-card__run-activity-pill--active {
-      color: var(--studio-accent-3-strong);
-      background: color-mix(in srgb, var(--studio-accent-3) 14%, var(--studio-bg-elevated));
-      border-color: color-mix(in srgb, var(--studio-accent-3) 34%, transparent);
-    }
-    .task-card__run-activity-pill--active .task-card__run-activity-dot {
-      animation: pulse-running 1.3s infinite;
-    }
-    .task-card__run-activity-pill--failed {
-      color: var(--studio-accent-6-strong);
-      background: color-mix(in srgb, var(--studio-accent-6) 12%, var(--studio-bg-elevated));
-      border-color: color-mix(in srgb, var(--studio-accent-6) 32%, transparent);
-    }
-    .task-card__run-activity-pill--idle {
-      color: var(--studio-fg-muted);
-      background: color-mix(in srgb, var(--studio-fg-dim) 10%, var(--studio-bg-elevated));
-      border-color: color-mix(in srgb, var(--studio-fg-dim) 26%, transparent);
-    }
     /* Lifecycle phase chip (ready-orchestrator-intake-lane). Distinct
        palette per outcome so the Ready group reads at a glance: blue for
        human-owned phases, amber when intake is mid-flight, red on a
@@ -942,13 +907,6 @@
       border: 1px solid transparent;
       font-weight: 600;
     }
-    .task-card__state-pill {
-      color: var(--task-card-state-color);
-      background: color-mix(in srgb, var(--task-card-state-color) 12%, var(--studio-bg-elevated));
-      border: 1px solid color-mix(in srgb, var(--task-card-state-color) 36%, transparent);
-      font-weight: 650;
-      text-transform: lowercase;
-    }
     /* Git-integration-state badge (ASS-1665). Pure lane-derived phase: a card's
        work is either still on its task branch (pre-merge), merged into develop
        (post-merge), or archived/tagged. Cyan for branch work, green for merged,
@@ -996,18 +954,24 @@
       display: flex;
       flex-wrap: wrap;
       gap: var(--studio-spacing-1);
+      align-items: center;
       margin: 0 0 var(--studio-card-section-gap);
     }
     .task-card__tag-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       font-size: 10px;
       font-weight: 600;
       letter-spacing: 0.02em;
-      min-height: 18px;
+      line-height: 1;
+      height: 18px;
       padding: 0 var(--studio-spacing-2);
-      border-radius: 7px;
+      border-radius: 5px;
       color: var(--studio-fg-strong);
       background: color-mix(in srgb, var(--tag-color, var(--studio-fg-dim)) 22%, rgba(0,0,0,0));
       border: 1px solid var(--tag-color, var(--studio-fg-dim));
+      box-sizing: border-box;
     }
     .task-card__tag-chip--ghost {
       color: var(--studio-fg-dim);
@@ -1049,41 +1013,49 @@
     }
     .task-card__meta {
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-start;
       align-items: center;
-      gap: var(--studio-spacing-2);
+      gap: 6px;
       flex-wrap: wrap;
       font-size: var(--studio-card-meta-size);
       color: var(--studio-fg-dim);
-      margin-bottom: var(--studio-card-section-gap);
+      margin-bottom: 5px;
+      min-width: 0;
     }
     .task-card__meta-main {
-      display: inline-flex;
+      display: flex;
       align-items: center;
-      gap: var(--studio-spacing-2);
+      gap: 6px;
+      row-gap: 3px;
+      flex-wrap: wrap;
+      width: 100%;
       min-width: 0;
+      max-width: 100%;
     }
     .task-card__type-icon {
       display: inline-grid;
       place-items: center;
-      width: 20px;
-      height: 20px;
-      border-radius: 6px;
+      width: 18px;
+      height: 18px;
+      border-radius: 5px;
       border: 1px solid transparent;
-      font-size: 11px;
       line-height: 1;
       cursor: help;
       flex: 0 0 auto;
     }
+    .task-card__type-icon app-studio-icon {
+      display: block;
+      line-height: 0;
+    }
     .task-card__type-icon--bug {
-      color: #fca5a5;
-      background: rgba(248, 113, 113, 0.10);
-      border-color: rgba(248, 113, 113, 0.26);
+      color: #ef4444;
+      background: rgba(248, 113, 113, 0.07);
+      border-color: rgba(248, 113, 113, 0.22);
     }
     .task-card__type-icon--feature {
-      color: #93c5fd;
-      background: rgba(96, 165, 250, 0.10);
-      border-color: rgba(96, 165, 250, 0.28);
+      color: #2563eb;
+      background: rgba(96, 165, 250, 0.07);
+      border-color: rgba(96, 165, 250, 0.22);
     }
     .task-card__type-icon--chore {
       color: var(--studio-fg-dim);
@@ -1093,19 +1065,34 @@
     .task-card__effective-model {
       display: inline-flex;
       align-items: center;
-      gap: var(--studio-spacing-1);
+      gap: 4px;
+      flex: 1 1 80px;
       font-size: var(--studio-card-meta-size);
       color: var(--studio-fg-dim);
       min-width: 0;
+      max-width: 100%;
+      line-height: 1.2;
     }
     .task-card__effective-model-icon {
-      font-size: 12px;
+      font-size: 11px;
       line-height: 1;
       flex: 0 0 auto;
     }
     .task-card__effective-model-cli {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       font-weight: 600;
       color: var(--studio-fg-dim);
+      white-space: nowrap;
+    }
+    .task-card__effective-model-cli::after {
+      content: "";
+      width: 2px;
+      height: 2px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: 0.42;
     }
     .task-card__effective-model-name {
       font-family: var(--font-mono, monospace);
@@ -1131,48 +1118,55 @@
     .task-card__pipeline {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      min-height: 10px;
-      margin: -2px 0 var(--studio-card-section-gap);
+      gap: 4px;
+      min-height: 12px;
+      margin: 0 0 5px;
       color: var(--studio-fg-muted);
-      font-size: 9px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
+      font-size: 8px;
+      font-weight: 650;
+      letter-spacing: 0;
       cursor: help;
     }
     .task-card__pipeline-dots {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 4px;
-      min-height: 10px;
+      height: 12px;
     }
     .task-card__pipeline-dot {
       width: 5px;
       height: 5px;
       border-radius: 999px;
       background: var(--studio-card-muted-border);
-      opacity: 0.68;
+      opacity: 0.62;
       flex: 0 0 auto;
     }
     .task-card__pipeline-dot--done {
       background: color-mix(in srgb, var(--studio-accent-success) 68%, var(--studio-card-muted-border));
-      opacity: 0.72;
+      opacity: 0.68;
     }
     .task-card__pipeline-dot--active {
-      width: 11px;
-      background: var(--studio-accent-3-strong);
+      width: 9px;
+      height: 9px;
+      box-sizing: border-box;
+      background: transparent;
+      border: 1.5px solid var(--studio-accent-3-strong);
       opacity: 1;
-      box-shadow: 0 0 0 2px color-mix(in srgb, var(--studio-accent-3) 20%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--studio-accent-3) 16%, transparent);
     }
     .task-card__pipeline-dot--blocked {
-      background: var(--studio-accent-6-strong);
+      width: 9px;
+      height: 9px;
+      box-sizing: border-box;
+      background: transparent;
+      border: 1.5px solid var(--studio-accent-6-strong);
       opacity: 1;
-      box-shadow: 0 0 0 2px color-mix(in srgb, var(--studio-accent-6) 18%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--studio-accent-6) 14%, transparent);
     }
     .task-card__pipeline-current {
       color: var(--studio-fg-muted);
-      font-size: 9px;
+      font-size: 8px;
       line-height: 1;
     }
     .task-card__git {
@@ -1324,26 +1318,57 @@
       position: relative;
       display: inline-flex;
       align-items: center;
+      margin-left: auto;
+      min-width: 0;
+      flex: 0 0 auto;
     }
     .task-card__token-bubble {
-      min-width: 28px;
-      height: 18px;
-      padding: 0 6px;
-      border-radius: 999px;
-      border: 1px solid rgba(255,255,255,0.18);
-      display: inline-grid;
-      place-items: center;
+      min-width: 0;
+      height: 17px;
+      padding: 0 3px;
+      border-radius: 5px;
+      border: 1px solid transparent;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
+      font-weight: 650;
+      line-height: 1;
+      letter-spacing: 0;
       cursor: help;
-      color: var(--studio-fg);
-      background: rgba(148,163,184,0.18);
+      color: var(--studio-fg-muted);
+      background: transparent;
       font-variant-numeric: tabular-nums;
+    }
+    .task-card__token-bubble:hover {
+      background: var(--studio-card-muted-bg);
+      border-color: var(--studio-card-muted-border);
+      color: var(--studio-fg-dim);
     }
     .task-card__token-bubble:focus-visible {
       outline: 2px solid #7dd3fc;
       outline-offset: 2px;
+    }
+    .task-card__token-bars {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 1px;
+      width: 9px;
+      height: 9px;
+      flex: 0 0 auto;
+      color: currentColor;
+      opacity: 0.9;
+    }
+    .task-card__token-bars span {
+      width: 2px;
+      border-radius: 2px 2px 0 0;
+      background: currentColor;
+    }
+    .task-card__token-bars span:nth-child(1) { height: 3px; opacity: 0.55; }
+    .task-card__token-bars span:nth-child(2) { height: 6px; opacity: 0.75; }
+    .task-card__token-bars span:nth-child(3) { height: 9px; }
+    .task-card__token-label {
+      white-space: nowrap;
     }
     /* Spend-tier colours. Defaults: < 50k = neutral, 50k-500k = blue,
        500k-5M = mauve, > 5M = peach. Tier thresholds are computed in the
@@ -1351,23 +1376,15 @@
        with the rest of the board. */
     .task-card__token-bubble--neutral {
       color: var(--studio-fg-dim);
-      background: rgba(148,163,184,0.18);
-      border-color: rgba(148,163,184,0.32);
     }
     .task-card__token-bubble--blue {
-      color: #bae6fd;
-      background: rgba(56,189,248,0.18);
-      border-color: rgba(56,189,248,0.40);
+      color: color-mix(in srgb, var(--studio-accent-3-strong) 82%, var(--studio-fg-dim));
     }
     .task-card__token-bubble--mauve {
-      color: #e9d5ff;
-      background: rgba(192,132,252,0.20);
-      border-color: rgba(192,132,252,0.42);
+      color: color-mix(in srgb, #c084fc 78%, var(--studio-fg-dim));
     }
     .task-card__token-bubble--peach {
-      color: #fed7aa;
-      background: rgba(251,146,60,0.22);
-      border-color: rgba(251,146,60,0.45);
+      color: color-mix(in srgb, #fb923c 76%, var(--studio-fg-dim));
     }
 
     /* TokenPopoverDirective portals this element to the central body overlay

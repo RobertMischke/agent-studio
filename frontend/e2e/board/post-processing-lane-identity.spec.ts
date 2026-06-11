@@ -287,7 +287,7 @@ test.describe('Post Processing lane identity', () => {
 
     const card = page.locator('[data-testid="task-card"]', { hasText: job.title });
     await expect(card).toBeVisible({ timeout: 10_000 });
-    await expect(card.getByTestId('task-card-state')).toContainText('Post Processing');
+    await expect(card.getByTestId('task-card-state')).toHaveCount(0);
     await expect(card.getByTestId('task-card-phase')).toContainText('Post processing');
     await expect(card.getByTestId('task-card-effective-model')).toContainText('Codex');
 
