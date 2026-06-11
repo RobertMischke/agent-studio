@@ -48,9 +48,9 @@ export type ProjectDetailView =
 
 /**
  * Project detail panel: name + paths, runner mode toggle, orchestrator
- * model selector, auto-commit toggle, job-state counts, the most recent
- * orchestrator entries with token totals, and a button to open the full
- * feed. Mounted as an overlay panel from the project-tabs ⚙ button.
+ * model selector, auto-commit toggle, job-state counts, and the most recent
+ * orchestrator entries with token totals. Mounted as an overlay panel from
+ * the project-tabs settings button.
  *
  * Read-mostly: only the three setting controls write back. Everything
  * else is polled (5s interval) so a backend change made elsewhere is

@@ -62,7 +62,7 @@ public sealed class CodePatternDriftAnalysisService
 
     /// <summary>
     /// Build the effective rule set: the hardcoded <see cref="DefaultRules"/>
-    /// plus any extra rules parsed from <c>docs/code-patterns.md</c> under
+    /// plus any extra rules parsed from <c>docs/contracts/code-patterns.md</c> under
     /// <paramref name="repoRoot"/>. Hardcoded rules win on id collisions so
     /// a docs-only override cannot relax a load-bearing rule by accident.
     /// </summary>
@@ -184,7 +184,7 @@ public sealed class CodePatternDriftAnalysisService
 
         // Merge: ctor-injected rules (used by tests) take priority; for the
         // production path the ctor passes DefaultRules and we layer the
-        // docs/code-patterns.md additions on top.
+        // docs/contracts/code-patterns.md additions on top.
         IReadOnlyList<CodePatternRule> activeRules = _rules;
         if (ReferenceEquals(_rules, DefaultRules))
         {

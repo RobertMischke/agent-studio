@@ -4,7 +4,7 @@ namespace AgentStudio.Drift;
 
 /// <summary>
 /// In-code projection of <c>docs/schemas/drift-report.schema.json</c> and the
-/// prose contract in <c>docs/drift-reports.md</c>. Drift reports are a
+/// prose contract in <c>docs/reports/drift-reports.md</c>. Drift reports are a
 /// separate evidence pile from
 /// <see cref="AgentStudio.Analysis.AnalysisReport"/>: drift is a
 /// project dimension beside Architecture (ROADMAP "Drift Control"), so the
@@ -49,7 +49,7 @@ public enum DriftReportScopeKind
 /// <summary>
 /// Triage band. <c>Unknown</c> is reserved for the evidence-only path where
 /// no agent narrative was supplied or overall sourceCoverage was below the
-/// reporting threshold (see docs/drift-reports.md, Section 4).
+/// reporting threshold (see docs/reports/drift-reports.md, Section 4).
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum DriftScoreBand
@@ -93,7 +93,7 @@ public enum DriftFindingStatus
 /// <summary>
 /// Drift dimension vocabulary. Producers must not invent new dimension names;
 /// adding one requires a schema bump and a contract update in
-/// docs/drift-reports.md (Section 2).
+/// docs/reports/drift-reports.md (Section 2).
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum DriftDimensionType
@@ -174,7 +174,7 @@ public sealed record DriftFindingSeverityCounts(
 /// Transparent breakdown of the inputs that produced a dimension's
 /// <see cref="DriftDimension.Score"/>. Consumers may render this as a
 /// tooltip or drill-down; the weighting is documented in
-/// docs/drift-reports.md (Section 5) so the score is reproducible from
+/// docs/reports/drift-reports.md (Section 5) so the score is reproducible from
 /// these inputs.
 /// </summary>
 public sealed record DriftScoreInputs(

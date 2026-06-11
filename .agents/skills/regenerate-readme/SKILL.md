@@ -25,9 +25,9 @@ The README must stay in sync with these sources of truth. Read them first; never
 
 - [`ROADMAP.md`](../../../ROADMAP.md) - product thesis, themes, hard boundaries.
 - [`AGENTS.md`](../../../AGENTS.md) - architecture pointers, orchestration philosophy, supervision model.
-- [`docs/architecture-decisions.md`](../../../docs/architecture-decisions.md) - load-bearing decisions to honour.
-- [`docs/design-principles.md`](../../../docs/design-principles.md) - UX contract.
-- [`docs/protocol-style.md`](../../../docs/protocol-style.md) - Activity Log shape.
+- [`docs/architecture/decisions/adr-archive.md`](../../../docs/architecture/decisions/adr-archive.md) - load-bearing decisions to honour.
+- [`docs/product/design-principles.md`](../../../docs/product/design-principles.md) - UX contract.
+- [`docs/contracts/protocol-style.md`](../../../docs/contracts/protocol-style.md) - Activity Log shape.
 - [`backend/Endpoints/EndpointMapping.cs`](../../../backend/Endpoints/EndpointMapping.cs) - the actual route surface; never invent endpoints.
 
 ## Hard rules
@@ -37,7 +37,7 @@ These are policy, not preference. Violating any is a defect.
 1. **No em dashes** anywhere in the file. Use a hyphen, a comma, a semicolon, or a new sentence. The repo policy is in [`AGENTS.md`](../../../AGENTS.md) "Documentation Language".
 2. **English only** in the body. No pinned German note at the top: the previous propagation-test note was removed on 2026-05-12. Memory-propagation rules now live in AGENTS.md as structural guidance rather than a top-pin.
 3. **No invented features.** Every claim in the README must be traceable to code or to one of the source-of-truth docs above.
-4. **Keep the demo project images.** README references `docs/images/board-overview.png`, `docs/images/detail-protocol.png`, `docs/images/detail-three-panes.png`, `docs/images/detail-quality-gate.png`. Do not delete the demo project these came from. Regenerate README often, keep the demo intact.
+4. **Keep the demo project images.** README references `docs/assets/images/board-overview.png`, `docs/assets/images/detail-protocol.png`, `docs/assets/images/detail-three-panes.png`, `docs/assets/images/detail-quality-gate.png`. Do not delete the demo project these came from. Regenerate README often, keep the demo intact.
 5. **Sections are stable.** The top-level sections in the current README are the canonical narrative skeleton:
    - Title
    - Security first

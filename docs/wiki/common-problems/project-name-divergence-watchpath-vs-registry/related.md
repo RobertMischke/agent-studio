@@ -1,4 +1,4 @@
 # Related
 
-- `docs/setup/onboard-a-project.md`
+- `docs/operations/setup/onboard-a-project.md`
 - [[workspace-create-invisible]]

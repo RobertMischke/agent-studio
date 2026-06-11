@@ -366,10 +366,10 @@ public sealed class RoadmapAlignmentReviewService
         AddIfExists(docs, repoRoot, "README.md", "README");
         AddIfExists(docs, repoRoot, "ROADMAP.md", "ROADMAP");
         AddIfExists(docs, repoRoot, "AGENTS.md", "AGENTS");
-        AddIfExists(docs, repoRoot, "docs/architecture-decisions.md", "Architecture decisions");
-        AddIfExists(docs, repoRoot, "docs/design-principles.md", "Design principles");
-        AddIfExists(docs, repoRoot, "docs/agent-message-bus.md", "Agent Message Bus");
-        AddIfExists(docs, repoRoot, "docs/analysis-reports.md", "Analysis reports contract");
+        AddIfExists(docs, repoRoot, "docs/architecture/decisions/adr-archive.md", "Architecture decisions");
+        AddIfExists(docs, repoRoot, "docs/product/design-principles.md", "Design principles");
+        AddIfExists(docs, repoRoot, "docs/architecture/bus/agent-message-bus.md", "Agent Message Bus");
+        AddIfExists(docs, repoRoot, "docs/reports/analysis-reports.md", "Analysis reports contract");
 
         // Mockup folders: list one entry per direct subfolder so the agent can
         // drill into the relevant one without the prompt swelling with copies

@@ -1,58 +1,139 @@
-<section class="proj-shell" data-testid="project-shell">
-  <header class="proj-shell__head">
-    <div class="proj-shell__title-row">
-      <button class="proj-shell__back"
-              type="button"
-              data-testid="project-shell-back"
-              (click)="closeShell.emit()">← Board</button>
-      <h1 class="proj-shell__title" data-testid="project-shell-title">{{ projectName() }}</h1>
-      <span class="proj-shell__chip" data-testid="project-shell-chip">this repo</span>
-      <span class="proj-shell__spacer"></span>
-      <button class="proj-shell__feed"
-              type="button"
-              data-testid="project-shell-open-feed"
-              (click)="openFeed.emit()">📜 Open feed</button>
-    </div>
-  </header>
-
+<section class="proj-shell"
+         [class.proj-shell--rail-collapsed]="railCollapsed()"
+         [style.--project-rail-width]="railWidthStyle()"
+         data-testid="project-shell">
   <div class="proj-shell__body">
-    <aside class="proj-shell__rail" data-testid="project-shell-rail" aria-label="Project sections">
-      @for (group of railGroups(); track group.id) {
-        <app-section-header
-          [collapsible]="true"
-          [collapsed]="isGroupCollapsed(group.id)"
-          [title]="group.label"
-          [testid]="'project-shell-group-' + group.id"
-          (collapsedChange)="setGroupCollapsed(group.id, $event)" />
-        @if (!isGroupCollapsed(group.id)) {
-          @for (node of group.nodes; track node.item.key) {
-            <app-tree-row
-              level="root"
-              [label]="node.item.label"
-              [chevron]="node.children.length > 0 ? (isExpanded(node.item.key) ? 'expanded' : 'collapsed') : null"
-              [chevronTestid]="node.children.length > 0 ? ('project-shell-twisty-' + node.item.key) : null"
-              [active]="node.item.key === activeRail()"
-              [ariaCurrent]="node.item.key === activeRail() ? 'page' : null"
-              [ariaLabel]="node.item.label"
-              [testid]="'project-shell-rail-' + node.item.key"
-              (chevronClick)="toggleParent(node.item.key)"
-              (selectRequest)="onRailClick(node.item)" />
-            @if (node.children.length > 0 && isExpanded(node.item.key)) {
-              @for (child of node.children; track child.key) {
-                <app-tree-row
-                  level="child"
-                  [label]="child.label"
-                  [active]="child.key === activeRail()"
-                  [ariaCurrent]="child.key === activeRail() ? 'page' : null"
-                  [ariaLabel]="child.label"
-                  [testid]="'project-shell-rail-' + child.key"
-                  (selectRequest)="onRailClick(child)" />
+    <aside class="proj-shell__rail"
+           id="project-shell-nav"
+           [class.proj-shell__rail--collapsed]="railCollapsed()"
+           [attr.data-collapsed]="railCollapsed() ? 'true' : 'false'"
+           data-testid="project-shell-rail"
+           aria-label="Project sections">
+      @if (railCollapsed()) {
+        <nav class="proj-shell__mini-nav" aria-label="Project sections">
+          <button type="button"
+                  class="proj-shell__mini-action"
+                  data-testid="project-shell-expand-nav"
+                  aria-label="Expand project navigation"
+                  appTooltip="Expand project navigation"
+                  (click)="setRailCollapsed(false)">
+            <app-studio-icon name="chevronRight" [size]="14"></app-studio-icon>
+          </button>
+          <button type="button"
+                  class="proj-shell__mini-action"
+                  data-testid="project-shell-mini-feed"
+                  aria-label="Open project activity feed"
+                  appTooltip="Open the orchestrator activity feed for this project"
+                  (click)="openFeed.emit()">
+            <app-studio-icon name="activity" [size]="14"></app-studio-icon>
+          </button>
+          <div class="proj-shell__mini-scroll">
+            @for (item of compactRailItems(); track item.key) {
+              <button type="button"
+                      class="proj-shell__mini-item"
+                      [class.proj-shell__mini-item--active]="item.key === activeRail()"
+                      [attr.aria-current]="item.key === activeRail() ? 'page' : null"
+                      [attr.aria-label]="item.label"
+                      [attr.data-testid]="'project-shell-mini-rail-' + item.key"
+                      [appTooltip]="item.label"
+                      (click)="onRailClick(item)">
+                <app-studio-icon [name]="item.railIcon" [size]="14"></app-studio-icon>
+              </button>
+            }
+          </div>
+        </nav>
+      } @else {
+        <app-studio-sidebar-header
+          title="Project Hub"
+          [subtitle]="projectName()"
+          subtitleTestid="project-shell-title"
+          testid="project-shell-sidebar-header">
+          <button actions
+                  class="studio-sidebar-header__action"
+                  type="button"
+                  data-testid="project-shell-back"
+                  aria-label="Collapse project navigation"
+                  appTooltip="Collapse project navigation"
+                  (click)="setRailCollapsed(true)">
+            <app-studio-icon name="chevronLeft" [size]="14"></app-studio-icon>
+          </button>
+          <button actions
+                  class="studio-sidebar-header__action"
+                  type="button"
+                  data-testid="project-shell-open-feed"
+                  aria-label="Open project activity feed"
+                  appTooltip="Open the orchestrator activity feed for this project"
+                  (click)="openFeed.emit()">
+            <app-studio-icon name="activity" [size]="14"></app-studio-icon>
+          </button>
+        </app-studio-sidebar-header>
+
+        <div class="proj-shell__rail-body">
+        @for (group of railGroups(); track group.id; let first = $first) {
+          <app-section-header
+            [collapsible]="true"
+            [collapsed]="isGroupCollapsed(group.id)"
+            [title]="group.label"
+            [divider]="!first"
+            [testid]="'project-shell-group-' + group.id"
+            (collapsedChange)="setGroupCollapsed(group.id, $event)" />
+          @if (!isGroupCollapsed(group.id)) {
+            @for (node of group.nodes; track node.item.key) {
+              <app-tree-row
+                level="root"
+                [label]="node.item.label"
+                [glyph]="node.item.railIcon ?? null"
+                [reserveChevron]="true"
+                [reserveGlyph]="true"
+                [chevron]="node.children.length > 0 ? (isExpanded(node.item.key) ? 'expanded' : 'collapsed') : null"
+                [chevronTestid]="node.children.length > 0 ? ('project-shell-twisty-' + node.item.key) : null"
+                [active]="node.item.key === activeRail()"
+                [ariaCurrent]="node.item.key === activeRail() ? 'page' : null"
+                [ariaLabel]="node.item.label"
+                [testid]="'project-shell-rail-' + node.item.key"
+                (chevronClick)="toggleParent(node.item.key)"
+                (selectRequest)="onRailClick(node.item)" />
+              @if (node.children.length > 0 && isExpanded(node.item.key)) {
+                @for (child of node.children; track child.key) {
+                  <app-tree-row
+                    level="child"
+                    [label]="child.label"
+                    [glyph]="child.railIcon ?? null"
+                    [reserveGlyph]="true"
+                    [active]="child.key === activeRail()"
+                    [ariaCurrent]="child.key === activeRail() ? 'page' : null"
+                    [ariaLabel]="child.label"
+                    [testid]="'project-shell-rail-' + child.key"
+                    (selectRequest)="onRailClick(child)" />
+                }
               }
             }
           }
         }
+        </div>
       }
     </aside>
+
+    <div class="proj-shell__splitter"
+         role="separator"
+         tabindex="0"
+         aria-controls="project-shell-nav"
+         aria-orientation="vertical"
+         [class.proj-shell__splitter--collapsed]="railCollapsed()"
+         data-testid="project-shell-splitter"
+         [attr.aria-label]="railCollapsed() ? 'Resize or expand project navigation' : 'Resize or collapse project navigation'"
+         [attr.aria-valuemin]="collapsedRailWidth"
+         [attr.aria-valuemax]="maxRailWidth"
+         [attr.aria-valuenow]="splitterValue()"
+         [appTooltip]="railCollapsed() ? 'Drag or click to expand project navigation' : 'Drag to resize project navigation. Click to collapse.'"
+         (pointerdown)="startRailResize($event)"
+         (pointermove)="resizeRail($event)"
+         (pointerup)="finishRailResize($event)"
+         (pointercancel)="finishRailResize($event)"
+         (click)="onSplitterClick()"
+         (keydown)="onSplitterKeydown($event)">
+      <span aria-hidden="true"></span>
+    </div>
 
     <main class="proj-shell__panel"
           [attr.data-testid]="'project-shell-panel-' + activeRail()"

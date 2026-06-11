@@ -198,6 +198,6 @@ public class DriftReportValidatorTests
         SourceCoverage: 0.7,
         Status: DriftFindingStatus.New,
         Summary: "ADRs out of sync with runner.",
-        EvidenceRefs: new[] { "docs/architecture-decisions.md" },
+        EvidenceRefs: new[] { "docs/architecture/decisions/adr-archive.md" },
         RecommendedActions: new[] { "Refresh ADR-0017" });
 }

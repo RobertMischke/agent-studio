@@ -6,7 +6,7 @@ import { api } from '../helpers/api';
 // data from the configured product workspace and writes output paths relative
 // to the frontend/ working dir.
 
-const OUT = '../docs/images/';
+const OUT = '../docs/assets/images/';
 const TASK_CARD = '[data-testid="task-card"], [data-testid="job-card"]';
 const PRIMARY_TASK_LABELS = ['ASS-847', 'ASS-850', 'ASS-856', 'ASS-1529'];
 

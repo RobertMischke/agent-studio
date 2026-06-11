@@ -9,9 +9,9 @@ Structured knowledge base for the agent-taskboard project. This is a first-class
 | [common-problems/](common-problems/) | Known recurring problems with root-cause analysis, occurrence logs, and workarounds. **Search here first** when a familiar symptom appears. |
 | [learnings/](learnings/) | Per-task run learnings auto-distilled by the opt-in `post-wiki-learnings` pipeline step: derived verdict, review findings, stumbling blocks, agent notes, and what changed. One page per task; `README.md` is the auto-generated index. Do not edit by hand. |
 | [concepts/](concepts/) | Hand-maintained living concept/knowledge pages for a domain area: why a design exists, what the parts are, how to work with it, plus a running knowledge log. The conceptual companion to the system-of-record docs in `docs/`. |
-| [decisions/](decisions/) | Architecture Decision Records (reserved for Phase 2 migration from `docs/architecture-decisions.md`). |
-| [glossary/](glossary/) | Term definitions (reserved for Phase 4). |
-| [conventions/](conventions/) | File naming, test naming, commit conventions (reserved for Phase 4). |
+
+Future areas such as a glossary or conventions folder should be added only when
+they exist as real directories with real pages.
 
 ## Searching
 

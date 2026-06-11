@@ -141,7 +141,7 @@ public static class TaskRunnerEndpoints
         // The condensed run timeline that drives the protocol-pane redesign.
         // One record per CLI invocation between user inputs, paired with the
         // [taskboard] Started/exited markers in cli-output.log so the frontend
-        // can render line-spans for drill-down. See docs/design-principles.md
+        // can render line-spans for drill-down. See docs/product/design-principles.md
         // for the contract this surface has to honour: top-level summary +
         // always-available drill-down.
         group.MapGet("/{jobId}/runs", (string jobId, string? watchPath, TaskReader reader) =>

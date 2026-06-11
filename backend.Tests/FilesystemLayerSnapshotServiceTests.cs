@@ -96,7 +96,7 @@ public class FilesystemLayerSnapshotServiceTests : IDisposable
         Assert.Equal(3, root.CoveredLines);
         Assert.Equal(5, root.CoverableLines);
         Assert.Equal("coverage/coverage.cobertura.xml", root.CoverageSource);
-        Assert.Contains(snapshot.Rows, r => r.Path == "docs/images");
+        Assert.Contains(snapshot.Rows, r => r.Path == "docs/assets/images");
         Assert.Contains(snapshot.Rows, r => r.Path == "prompts/runtime");
         var coverageReport = Assert.Single(snapshot.CoverageReports);
         Assert.Equal("cobertura", coverageReport.Format);

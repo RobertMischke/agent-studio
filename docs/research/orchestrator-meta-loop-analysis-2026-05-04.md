@@ -22,7 +22,7 @@ The implementation is **not** included here. The user will read this, edit it, t
 
 ### Layer 0 - CLI agent loop (the worker)
 
-Owned by the CLI vendor. The agent reads tools, plans, calls tools, and iterates until it emits a sentinel ([`[[TASK_DONE]]`](../agent-task-contract.md), `[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, `[[TASK_NOOP]]`) or the process exits. The orchestrator does not control this inner loop directly - it can only start the process, observe stdout, and signal cancellation by killing it.
+Owned by the CLI vendor. The agent reads tools, plans, calls tools, and iterates until it emits a sentinel ([`[[TASK_DONE]]`](../contracts/agent-task.md), `[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, `[[TASK_NOOP]]`) or the process exits. The orchestrator does not control this inner loop directly - it can only start the process, observe stdout, and signal cancellation by killing it.
 
 ### Layer 1 - Orchestrator job-pickup loop (the manager)
 
@@ -86,7 +86,7 @@ Meta-loop holds direct handles to Layer 1's running things (the CLI process, the
   - `pausePickup(reason)` - orchestrator stops picking new tasks until resumed.
   - `forceFail(jobId, reason)` - mark a task failed without further retry.
   - `resume()` - lift a pause.
-  
+
   These exist for the "agent is clearly broken / costing real money / about to do harm" case. Each invocation must justify itself in the log, and the user-visible activity feed shows them as a separate participant.
 - The human stays in the kill-switch role for non-emergency interventions. Supervisor is *advice-first*, *force-rare*.
 

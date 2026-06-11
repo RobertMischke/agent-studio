@@ -149,7 +149,7 @@ test('dimension drill-down: panel renders evidence and findings', async ({ page 
     dimensions: [
       dimension('Architecture', 60, 'High', 0.80, 'Tracked',
         'Runner state-machine has drifted from ADR-0024.', {
-          evidence: ['docs/architecture-decisions.md#adr-0024', 'backend/Services/Jobs/JobTransitionService.cs'],
+          evidence: ['docs/architecture/decisions/adr-archive.md#adr-0024', 'backend/Services/Jobs/JobTransitionService.cs'],
           recommendedActions: ['Reconcile RunnerEndpoints with JobTransitionService.'],
           findings: [
             finding('finding-001', 'High', 'Two endpoints write job state outside JobTransitionService.', 'New', [

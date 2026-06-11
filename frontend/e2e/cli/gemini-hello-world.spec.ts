@@ -23,7 +23,7 @@ test.describe('Gemini — hello world @billable', () => {
 
   test('creates, starts and completes a tiny Hello World task', async () => {
     // 1. Availability — we don't gate on quota numbers because the Gemini
-    //    probe doesn't surface them (see docs/supported-clis.md §3.4).
+    //    probe doesn't surface them (see docs/cli/supported-clis.md §3.4).
     const a = await getGeminiAvailability();
     expect(a.available, 'gemini CLI must be available (npm i -g @google/gemini-cli)').toBe(true);
 

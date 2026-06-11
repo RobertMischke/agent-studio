@@ -94,7 +94,7 @@ test.describe('Status bar layout consolidated', () => {
       statusBar.getByTestId('hquota-card-copilot'),
       // Right side: action buttons and unified defaults chip
       // (formerly two separate cli/model pickers, see
-      // docs/cli-model-selector-audit.md).
+      // docs/frontend/audits/cli-model-selector-audit.md).
       statusBar.getByTestId('orch-side-sheet-toggle'),
       statusBar.getByTestId('status-bar-defaults'),
     ];

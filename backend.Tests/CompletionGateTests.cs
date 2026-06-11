@@ -95,7 +95,7 @@ public class CompletionGateTests
     [Theory]
     // The reissue loop's own trigger: a commit/push-delegation follow-up the
     // agent can never close because the platform owns the commit boundary
-    // (docs/commit-push-doctrine.md). Each variant must NOT become a finding,
+    // (docs/operations/git/commit-push-doctrine.md). Each variant must NOT become a finding,
     // or the managed run ping-pongs back to 2-ready forever / escalates grundlos.
     [InlineData("- [ ] Working tree changes awaiting managed-run commit/push (platform owns merge).")]
     [InlineData("- [ ] Changes left in the working tree for the platform to commit.")]

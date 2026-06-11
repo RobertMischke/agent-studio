@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
 :host { display: block; height: 100%; min-height: 0; overflow: hidden; }
 
 .proj-shell {
@@ -8,54 +10,6 @@
   background: var(--studio-bg-editor);
   color: var(--studio-fg);
 }
-
-// -------------------------------------------------------------------------
-// Header — connects flush to the body via a single border, no gap below.
-// -------------------------------------------------------------------------
-.proj-shell__head {
-  flex: 0 0 auto;
-  padding: var(--studio-spacing-2) var(--studio-spacing-4);
-  border-bottom: 1px solid var(--studio-border);
-  background: var(--studio-bg-sidebar);
-}
-.proj-shell__title-row {
-  display: flex;
-  align-items: center;
-  gap: var(--studio-spacing-3);
-  flex-wrap: wrap;
-}
-.proj-shell__back {
-  background: transparent;
-  color: var(--studio-fg-dim);
-  border: 1px solid transparent;
-  padding: var(--studio-spacing-1) var(--studio-spacing-3);
-  border-radius: 6px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.82rem;
-}
-.proj-shell__back:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
-.proj-shell__title { margin: 0; font-size: 1.05rem; color: var(--studio-fg-strong); font-weight: 600; }
-.proj-shell__chip {
-  font-size: 0.72rem;
-  letter-spacing: 0.02em;
-  padding: var(--studio-spacing-1) var(--studio-spacing-2);
-  border-radius: 999px;
-  background: var(--studio-bg-selected);
-  color: var(--studio-fg-dim);
-}
-.proj-shell__spacer { flex: 1; }
-.proj-shell__feed {
-  background: color-mix(in srgb, var(--studio-accent-warn) 14%, transparent);
-  color: var(--studio-accent-warn);
-  border: 1px solid color-mix(in srgb, var(--studio-accent-warn) 40%, transparent);
-  padding: var(--studio-spacing-1) var(--studio-spacing-3);
-  border-radius: 6px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.80rem;
-}
-.proj-shell__feed:hover { background: color-mix(in srgb, var(--studio-accent-warn) 22%, transparent); }
 
 // -------------------------------------------------------------------------
 // Body — flush flex: rail + panel abut with no padding/gap so nothing
@@ -76,14 +30,124 @@
 // with the workspace tree, using the SAME section-header + tree-row controls.
 .proj-shell__rail {
   flex: 0 0 auto;
-  width: 220px;
+  width: var(--project-rail-width, 240px);
   min-width: 0;
   display: flex;
   flex-direction: column;
   background: var(--studio-bg-sidebar);
   border-right: 1px solid var(--studio-border);
-  overflow-y: auto;
+  overflow: hidden;
+  transition: width 160ms ease;
+}
+
+.proj-shell__rail--collapsed {
+  width: 44px;
+}
+
+.proj-shell__rail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   padding: var(--studio-spacing-1) 0;
+  @include m.thin-scroll;
+}
+
+.proj-shell__mini-nav {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: var(--studio-spacing-1) 0;
+}
+
+.proj-shell__mini-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding-top: var(--studio-spacing-1);
+  border-top: 1px solid var(--studio-border);
+  @include m.thin-scroll;
+}
+
+.proj-shell__mini-action,
+.proj-shell__mini-item {
+  width: 100%;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  cursor: pointer;
+}
+
+.proj-shell__mini-action:hover,
+.proj-shell__mini-item:hover {
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+}
+
+.proj-shell__mini-item--active {
+  background: color-mix(in srgb, var(--studio-accent) 14%, var(--studio-bg-selected));
+  color: var(--studio-accent-strong);
+}
+
+.proj-shell__splitter {
+  flex: 0 0 1px;
+  width: 1px;
+  min-width: 1px;
+  margin-left: -1px;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  position: relative;
+  border: 0;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  cursor: col-resize;
+  outline: 0;
+  touch-action: none;
+  user-select: none;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.proj-shell__splitter::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+  cursor: col-resize;
+  transition: background 120ms ease;
+  z-index: 1;
+}
+
+.proj-shell__splitter span {
+  width: 0;
+  min-height: 100%;
+}
+
+.proj-shell__splitter:hover,
+.proj-shell__splitter:focus-visible {
+  background: transparent;
+}
+
+.proj-shell__splitter:hover::before,
+.proj-shell__splitter:focus-visible::before,
+.proj-shell__splitter:active::before {
+  background: color-mix(in srgb, var(--studio-accent) 18%, transparent);
+}
+
+.proj-shell__splitter:hover span,
+.proj-shell__splitter:focus-visible span,
+.proj-shell__splitter:active span,
+.proj-shell__splitter--collapsed span {
+  width: 0;
 }
 
 // Panel — fills the remaining width and the full height top-to-bottom.
@@ -117,6 +181,17 @@
   flex-direction: column;
   max-width: var(--studio-panel-content-max);
 }
+
+.proj-shell__panel[data-rail-key='wiki'] {
+  overflow: hidden;
+  padding: 0;
+}
+
+.proj-shell__panel[data-rail-key='wiki'] .proj-shell__panel-content {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
 .proj-shell__panel-head {
   flex: 0 0 auto;
   padding-bottom: var(--studio-spacing-3);
@@ -138,12 +213,77 @@
   font-size: 0.85rem;
 }
 
-@media (max-width: 720px) {
-  .proj-shell__body { flex-direction: column; }
+@media (max-width: 56.25rem) {
+  .proj-shell__rail { width: 12.5rem; }
+  .proj-shell__panel { padding: var(--studio-spacing-4); }
+}
+
+@media (max-width: 45rem) {
+  .proj-shell__body {
+    flex-direction: column;
+    overflow: hidden;
+  }
   .proj-shell__rail {
     width: auto;
-    flex: 0 0 auto;
+    flex: 0 0 min(44vh, 24rem);
+    max-height: min(44vh, 24rem);
+    min-height: 0;
     border-right: 0;
     border-bottom: 1px solid var(--studio-border);
+  }
+  .proj-shell__rail--collapsed {
+    width: auto;
+    flex-basis: 44px;
+    max-height: 44px;
+  }
+  .proj-shell__rail-body { min-height: 0; }
+  .proj-shell__mini-nav,
+  .proj-shell__mini-scroll {
+    flex-direction: row;
+    height: 44px;
+    padding: 0;
+  }
+  .proj-shell__mini-scroll {
+    overflow-x: auto;
+    border-top: 0;
+    border-left: 1px solid var(--studio-border);
+  }
+  .proj-shell__mini-action,
+  .proj-shell__mini-item {
+    width: 40px;
+    height: 44px;
+    flex: 0 0 auto;
+  }
+  .proj-shell__splitter {
+    width: auto;
+    min-width: 0;
+    height: 1px;
+    min-height: 1px;
+    margin-top: -1px;
+    margin-left: 0;
+    border-left: 0;
+    border-right: 0;
+    cursor: row-resize;
+  }
+  .proj-shell__splitter::before {
+    top: -3px;
+    bottom: -3px;
+    left: 0;
+    right: 0;
+    cursor: row-resize;
+  }
+  .proj-shell__splitter span {
+    width: 100%;
+    min-height: 1px;
+    height: 1px;
+  }
+  .proj-shell__splitter:hover span,
+  .proj-shell__splitter:focus-visible span,
+  .proj-shell__splitter:active span,
+  .proj-shell__splitter--collapsed span { height: 1px; }
+  .proj-shell__panel {
+    flex: 1 1 0;
+    min-height: 0;
+    padding: var(--studio-spacing-3);
   }
 }

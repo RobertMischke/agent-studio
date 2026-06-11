@@ -4,26 +4,6 @@
 // which made this rail drift from the full-bleed data panels.
 :host { display: block; }
 .proj-detail { display: flex; flex-direction: column; gap: 2px; }
-.proj-detail__head {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.10);
-}
-.proj-detail__title { margin: 0; color: var(--studio-fg-strong, #f8fafc); font-size: 1.1rem; }
-.proj-detail__feed {
-  margin-left: auto;
-  background: rgba(249, 226, 175, 0.14);
-  color: var(--studio-accent-warn);
-  border: 1px solid rgba(249, 226, 175, 0.40);
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 0.78rem;
-  cursor: pointer;
-}
-.proj-detail__feed:hover { background: rgba(249, 226, 175, 0.22); }
 
 .proj-detail__banner {
   margin: 0 0 16px;
@@ -177,6 +157,19 @@
 .proj-detail__paths > div { display: contents; }
 .proj-detail__paths dt { color: var(--studio-fg-muted); }
 .proj-detail__paths dd { margin: 0; color: var(--studio-fg); font-family: var(--font-mono, monospace); word-break: break-all; }
+
+@media (max-width: 56.25rem) {
+  .proj-detail__paths {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--studio-spacing-1);
+  }
+  .proj-detail__paths > div { display: block; }
+  .proj-detail__paths dt { margin-bottom: var(--studio-spacing-1); }
+  .proj-detail__paths dd {
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+}
 
 /*
  * Section spacing: was 18px (tight, "super technisch" per user

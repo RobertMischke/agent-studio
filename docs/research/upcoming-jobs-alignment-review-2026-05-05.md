@@ -7,9 +7,9 @@ This review compares the upcoming Agent Software Studio job queue against the in
 - `README.md`
 - `ROADMAP.md`
 - `AGENTS.md`
-- `docs/architecture-decisions.md`
-- `docs/design-principles.md`
-- `docs/agent-message-bus.md`
+- `docs/architecture/decisions/adr-archive.md`
+- `docs/product/design-principles.md`
+- `docs/architecture/bus/agent-message-bus.md`
 - `docs/mockups/quality-system/`
 - `docs/mockups/orchestrator-meta-cycle/`
 
@@ -79,7 +79,7 @@ Evidence:
 
 - `agent-message-bus-contract` and `agent-message-bus-store` are in `4-review`.
 - Follow-up implementation slices are queued in `2-ready`: bridging existing events, project observability panel, supporting-agent events, and system-health reader.
-- `docs/agent-message-bus.md`, schemas, and roadmap language are aligned.
+- `docs/architecture/bus/agent-message-bus.md`, schemas, and roadmap language are aligned.
 
 Concern:
 
@@ -169,7 +169,7 @@ The user request is broader than the current meta-cycle:
 
 Recommendation:
 
-Create a new "Analysis Reports" product surface and queue implementation tasks. It should reuse the schema-first in-memory layer, Agent Message Bus references, and existing report contract language in `docs/design-principles.md`.
+Create a new "Analysis Reports" product surface and queue implementation tasks. It should reuse the schema-first in-memory layer, Agent Message Bus references, and existing report contract language in `docs/product/design-principles.md`.
 
 ### 7. Dev / Stable Role Split
 
@@ -207,7 +207,7 @@ Required syncs:
 - `README.md`: mention meta-cycle and recurring/manual analysis reports beside meta documentation and supervision.
 - `ROADMAP.md`: add an explicit Analysis Reports / Meta-Analysis theme.
 - `AGENTS.md`: include Layer 2.5 meta-cycle in the multi-loop model.
-- `docs/design-principles.md`: make analysis reports first-class action results, not just Skill outputs.
+- `docs/product/design-principles.md`: make analysis reports first-class action results, not just Skill outputs.
 - Marketing docs: explain periodic/manual "is this on track?" analysis as part of the trust layer.
 
 ADR status:

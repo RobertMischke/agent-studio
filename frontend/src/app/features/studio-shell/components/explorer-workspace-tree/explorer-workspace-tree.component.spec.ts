@@ -173,6 +173,73 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(tipFor('studio-explorer-project-board-count-human-review-Alpha')).toMatchObject({ title: 'Human Review' });
   });
 
+  it('renders create workspace as a compact Workspaces header action', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    cmp.setCollapsed('workspace', false);
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+    const emitted: void[] = [];
+    cmp.onboardWorkspaceRequest.subscribe(v => emitted.push(v));
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const add = root.querySelector<HTMLButtonElement>('[data-testid="studio-explorer-add-workspace"]');
+    expect(add?.classList.contains('studio-sidebar-header__action')).toBe(true);
+    expect(add?.querySelector('app-studio-icon')).toBeTruthy();
+
+    add?.click();
+
+    expect(emitted).toHaveLength(1);
+    expect(cmp.isCollapsed('workspace')).toBe(false);
+  });
+
+  it('renders create project as a compact workspace-row icon action', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    cmp.setCollapsed('workspace', false);
+    cmp.setCollapsed('ws:ws-default', false);
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+    const emitted: string[] = [];
+    cmp.onboardProjectRequest.subscribe(v => emitted.push(v));
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const add = root.querySelector<HTMLButtonElement>('[data-testid="studio-workspace-ws-default-add-project"]');
+    expect(add?.tagName.toLowerCase()).toBe('button');
+    expect(add?.classList.contains('tree-row')).toBe(false);
+    expect(add?.querySelector('app-studio-icon')).toBeTruthy();
+    expect(root.textContent).not.toContain('New project');
+
+    add?.click();
+
+    expect(emitted).toEqual(['ws-default']);
+    expect(cmp.isCollapsed('ws:ws-default')).toBe(false);
+  });
+
+  it('highlights the active project subnavigation row', () => {
+    const fixture = mount();
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha', { isActive: true })]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.componentRef.setInput('activeProjectSurface', 'hub');
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const board = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-board-Alpha"]');
+    const hub = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-hub-Alpha"]');
+
+    expect(board?.classList.contains('tree-row--active')).toBe(false);
+    expect(board?.getAttribute('aria-current')).toBeNull();
+    expect(hub?.classList.contains('tree-row--active')).toBe(true);
+    expect(hub?.getAttribute('aria-current')).toBe('page');
+  });
+
   it('right-click opens a text-only Rename menu that starts the inline rename', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;

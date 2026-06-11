@@ -1,6 +1,6 @@
 # Copilot CLI fixtures
 
-Captured plain-text output from `copilot -p ... --allow-all`. See [`docs/cli-skills/cli-copilot.md`](../../../../docs/cli-skills/cli-copilot.md).
+Captured plain-text output from `copilot -p ... --allow-all`. See [`docs/cli/skills/cli-copilot.md`](../../../../docs/cli/skills/cli-copilot.md).
 
 Copilot has no JSON output mode for headless runs, so fixtures here are plain-text snippets. Suggested first fixtures:
 

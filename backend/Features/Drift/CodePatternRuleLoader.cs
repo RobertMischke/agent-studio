@@ -4,7 +4,7 @@ namespace AgentStudio.Drift;
 
 /// <summary>
 /// Parses additional <see cref="CodePatternRule"/>s out of
-/// <c>docs/code-patterns.md</c> so reviewers can extend the watchlist
+/// <c>docs/contracts/code-patterns.md</c> so reviewers can extend the watchlist
 /// without a backend rebuild.
 /// </summary>
 /// <remarks>

@@ -80,8 +80,7 @@ test.describe('Explorer · project links to Board / Project Hub / Backlog / Epic
     await page.getByTestId(`studio-explorer-project-board-${expanded.name}`).click();
     await expect(page.getByRole('tab', { name: `${expanded.name} · Board` })).toHaveAttribute('aria-selected', 'true', { timeout: 5_000 });
 
-    const titlebar = page.getByTestId('studio-titlebar');
-    await expect(titlebar).not.toContainText('Agent Software Studio');
+    await expect(page.getByTestId('studio-project-picker-trigger')).toContainText(expanded.name);
     await expect(page.getByTestId('studio-titlebar-workspace')).toHaveCount(0);
     await expect(page.getByTestId('studio-titlebar-active-tab')).toHaveCount(0);
     await expect(page.getByTestId('studio-titlebar-crumbs')).not.toContainText('Board');

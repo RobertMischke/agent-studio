@@ -11,7 +11,7 @@ import { TooltipInput, TooltipPosition, TooltipSeverity } from './tooltip.types'
 
 /**
  * Canonical tooltip directive for the app. Single visual standard, instant
- * hover, lazy singleton DOM. See docs/ui-tooltip-audit.md.
+ * hover, lazy singleton DOM. See docs/frontend/audits/tooltip-audit.md.
  */
 @Directive({
   selector: '[appTooltip]',

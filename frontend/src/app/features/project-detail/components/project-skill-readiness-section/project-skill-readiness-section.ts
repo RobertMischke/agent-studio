@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { ConceptHelpComponent } from '../../../../components/concept-help/concept-help.component';
 
 /**
- * Project-level "Check skill readiness" surface (docs/skills-architecture.md
+ * Project-level "Check skill readiness" surface (docs/product/skills-architecture.md
  * "First Product Step"). Renders a section with a single button on the
  * project detail panel; clicking it opens an inline modal that:
  *

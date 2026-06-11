@@ -14,7 +14,7 @@ one UX direction before implementation.
 >
 > The action ids, intents, and state keys are unchanged. See
 > `frontend/src/app/features/task-detail/state/triage-actions.model.ts` and the
-> lane concept docs (`docs/concept-docs/lane-5-human-review.md`,
+> lane concept docs (`docs/in-app-help/lane-guides/lane-5-human-review.md`,
 > `lane-6-completed.md`) for the current wording.
 
 ## Current Catalogue Analysis

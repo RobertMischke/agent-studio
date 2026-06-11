@@ -1,7 +1,7 @@
 ---
 concept: companion-app
 title: Companion App
-learnMore: docs/companion-app-design.md
+learnMore: docs/product/companion-app-design.md
 learnMoreLabel: Companion App Design
 ---
 

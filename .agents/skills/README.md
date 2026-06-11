@@ -2,7 +2,7 @@
 
 Reusable specialist workflows that any CLI agent (Claude Code, Codex,
 Copilot, Gemini) can pick up and follow. Architecture documented in
-[`docs/skills-architecture.md`](../../docs/skills-architecture.md).
+[`docs/product/skills-architecture.md`](../../docs/product/skills-architecture.md).
 
 Skill format: each subfolder is one skill with a `SKILL.md` at its root that
 states when to invoke, hard rules, process, and anti-patterns. Larger skills

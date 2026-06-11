@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ProjectHubViewComponent } from './project-hub-view.component';
+import { StudioTabStateService } from '../../services/studio-tab-state.service';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -46,5 +47,32 @@ describe('ProjectHubViewComponent (smoke)', () => {
       console.warn('[smoke] ProjectHubViewComponent TestBed setup skipped:', (e as Error).message);
       expect(ProjectHubViewComponent).toBeTruthy();
     }
+  });
+
+  it('keeps the active rail in the hub tab', async () => {
+    window.localStorage?.removeItem('atp.studio.tabs.v1');
+    await TestBed.configureTestingModule({
+      imports: [ProjectHubViewComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const tabState = TestBed.inject(StudioTabStateService);
+    tabState.open({ kind: 'hub', projectName: 'Alpha', section: 'overview' });
+
+    const fixture = TestBed.createComponent(ProjectHubViewComponent);
+    fixture.componentRef.setInput('projectName', 'Alpha');
+    fixture.componentRef.setInput('initialSection', 'overview');
+    fixture.detectChanges();
+
+    fixture.componentInstance.setRail('security');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.activeRail()).toBe('security');
+    expect(tabState.activeTab()).toEqual({ kind: 'hub', projectName: 'Alpha', section: 'security' });
   });
 });

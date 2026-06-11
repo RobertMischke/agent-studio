@@ -1,6 +1,6 @@
 # Gemini CLI fixtures
 
-Captured `stream-json` frames from `gemini -p ... -o stream-json --skip-trust -y`. See [`docs/cli-skills/cli-gemini.md`](../../../../docs/cli-skills/cli-gemini.md).
+Captured `stream-json` frames from `gemini -p ... -o stream-json --skip-trust -y`. See [`docs/cli/skills/cli-gemini.md`](../../../../docs/cli/skills/cli-gemini.md).
 
 Inline fixtures already live in [`backend.Tests/GeminiCliServiceTests.cs`](../../../GeminiCliServiceTests.cs) for the common frame shapes (`init`, `message`, `tool_use`, `tool_result`, `result`). Use this folder when:
 

@@ -144,7 +144,7 @@ public sealed record AgentOutcome(
 ///   (<c>[[TASK_DONE]]</c>, <c>[[TASK_BLOCKED:&lt;reason&gt;]]</c>,
 ///   <c>[[TASK_NEEDS_INPUT:&lt;reason&gt;]]</c>, <c>[[TASK_NOOP]]</c>).
 ///   These are authoritative. The agent contract is documented in
-///   <c>docs/agent-task-contract.md</c>.</item>
+///   <c>docs/contracts/agent-task.md</c>.</item>
 ///   <item>Empty fast exit: empty output buffer or no agent text plus a
 ///   sub-threshold duration. The CLI exited before an agent turn produced
 ///   reviewable output; this is a failed-start issue, not a no-op.</item>
@@ -380,7 +380,7 @@ public static class AgentOutcomeAnalyzer
     // (the continuous-decision scanner, post-run policy, supervisor parsing)
     // share one grammar. ADR-0002 anchors the deterministic-orchestration
     // philosophy on a single sentinel regex; this is the single source of truth
-    // referenced from AGENTS.md and docs/agent-task-contract.md.
+    // referenced from AGENTS.md and docs/contracts/agent-task.md.
     public static readonly Regex SentinelRegex = new(
         @"\[\[\s*TASK[\s_-]*(?<keyword>DONE|BLOCKED|NEEDS[\s_-]*INPUT|NOOP)\s*(?::\s*(?<reason>[^\]]*?))?\s*\]\]",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);

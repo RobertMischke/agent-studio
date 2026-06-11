@@ -100,11 +100,11 @@ public class ProjectSteeringDocsService
             string.Equals(NormalizeRel(d.RelPath), NormalizeRel(relPath), StringComparison.OrdinalIgnoreCase));
         if (!allowed)
         {
-            // Allow sub-files inside prompts/runtime/ and docs/cli-skills/
+            // Allow sub-files inside prompts/runtime/ and docs/cli/skills/
             // as well, since they are referenced as a directory.
             var rel = NormalizeRel(relPath);
             if (!rel.StartsWith("prompts/runtime/", StringComparison.OrdinalIgnoreCase) &&
-                !rel.StartsWith("docs/cli-skills/", StringComparison.OrdinalIgnoreCase))
+                !rel.StartsWith("docs/cli/skills/", StringComparison.OrdinalIgnoreCase))
             {
                 return null;
             }
@@ -145,22 +145,22 @@ public class ProjectSteeringDocsService
             "Frontend-scoped agent instructions; applies to changes under frontend/."),
         new("roadmap", "ROADMAP.md", "ROADMAP.md", SteeringDocsSourceKind.Roadmap,
             "Product thesis, near-term themes, hard boundaries, and decision principles."),
-        new("task-contract", "Task contract", "docs/agent-task-contract.md",
+        new("task-contract", "Task contract", "docs/contracts/agent-task.md",
             SteeringDocsSourceKind.TaskContract,
             "The boundary the application enforces against CLI agents per task."),
-        new("skills-architecture", "Skills architecture", "docs/skills-architecture.md",
+        new("skills-architecture", "Skills architecture", "docs/product/skills-architecture.md",
             SteeringDocsSourceKind.SkillsLookup,
             "How portable skills are defined, distributed, and discovered."),
-        new("cli-skills-readme", "CLI skills lookup", "docs/cli-skills/README.md",
+        new("cli-skills-readme", "CLI skills lookup", "docs/cli/skills/README.md",
             SteeringDocsSourceKind.SkillsLookup,
             "Per-CLI skill index. Required reading before touching a CLI driver."),
-        new("adr", "Architecture decisions", "docs/architecture-decisions.md",
+        new("adr", "Architecture decisions", "docs/architecture/decisions/adr-archive.md",
             SteeringDocsSourceKind.AdrIndex,
             "Durable archive of load-bearing architectural decisions."),
-        new("design-principles", "Design principles", "docs/design-principles.md",
+        new("design-principles", "Design principles", "docs/product/design-principles.md",
             SteeringDocsSourceKind.SteeringNote,
             "UX contract + design principles that the agent-facing rules build on."),
-        new("commit-doctrine", "Commit / push doctrine", "docs/commit-push-doctrine.md",
+        new("commit-doctrine", "Commit / push doctrine", "docs/operations/git/commit-push-doctrine.md",
             SteeringDocsSourceKind.SteeringNote,
             "Where the application owns the commit and push boundary."),
         new("appsettings", "Project settings", "backend/appsettings.json",

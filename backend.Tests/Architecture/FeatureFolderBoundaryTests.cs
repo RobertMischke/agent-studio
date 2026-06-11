@@ -4,7 +4,7 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// Enforces docs/architecture/STYLEGUIDE.md §1+§2 so the structure migration
+/// Enforces docs/architecture/backend-structure/styleguide.md §1+§2 so the structure migration
 /// cannot regress:
 ///
 /// <list type="bullet">

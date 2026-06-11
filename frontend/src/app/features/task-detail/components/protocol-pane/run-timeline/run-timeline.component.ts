@@ -9,7 +9,7 @@ import { TooltipDirective } from '../../../../../components/tooltip';
  * Run timeline panel rendered above the activity log in the protocol
  * pane. Each card represents one CLI invocation between user inputs
  * (one "run" - the unit of conversation defined in
- * `docs/design-principles.md`). The collapsed card shows:
+ * `docs/product/design-principles.md`). The collapsed card shows:
  *
  * - intent badge (start / continue / recovery / restart)
  * - status badge (running / completed / failed / cancelled)

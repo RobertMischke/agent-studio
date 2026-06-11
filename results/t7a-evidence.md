@@ -24,7 +24,7 @@ be dishonest and would violate the spec, so there is nothing further to build on
 
 ### 2. `--real` screenshot — protocol-satisfied; `--real` path committed for the stable seat
 
-Per [docs/protocol-style.md §4.4](../docs/protocol-style.md): mocked-route screenshots are
+Per [docs/contracts/protocol-style.md §4.4](../docs/contracts/protocol-style.md): mocked-route screenshots are
 **allowed** evidence and a `--real` shot is a *"recommendation, not compulsion."* The two
 shots below are produced from THIS worktree's own production build (`ng build frontend`)
 served statically on `:4099` with the CLI admin API surface route-mocked — no supervisor

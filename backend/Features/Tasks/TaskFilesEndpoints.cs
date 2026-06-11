@@ -11,7 +11,7 @@ namespace AgentStudio.Tasks;
 /// <c>attachments/</c> upload/download surface used by the prompt
 /// editor and the read-only <c>results/</c> mirror that backs
 /// <c>status.md</c> image references. See
-/// <c>docs/protocol-style.md</c> for the storage contract.
+/// <c>docs/contracts/protocol-style.md</c> for the storage contract.
 /// </summary>
 public static class TaskFilesEndpoints
 {
@@ -110,7 +110,7 @@ public static class TaskFilesEndpoints
         // Read-only mirror of /attachments/ for the job's `results/` folder — the
         // place where agents drop screenshots that should survive past the next
         // Playwright run. The protocol pane resolves `results/<name>` references
-        // in status.md against this URL. See docs/protocol-style.md.
+        // in status.md against this URL. See docs/contracts/protocol-style.md.
         group.MapGet("/{jobId}/results/{fileName}", (string jobId, string fileName, string? watchPath, TaskScannerService scanner) =>
         {
             var (path, contentType) = scanner.ResolveResult(jobId, fileName, watchPath);

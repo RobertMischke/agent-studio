@@ -4,7 +4,7 @@ namespace AgentStudio.Runner;
 /// <summary>
 /// Pure decision library for the completion-loop re-trigger (loop id
 /// <c>completion.retrigger-transient-abort-per-job</c> in
-/// <c>docs/loop-inventory.md</c>).
+/// <c>docs/contracts/loop-inventory.md</c>).
 ///
 /// <para>
 /// <b>Why this exists.</b> A watchdog/transient process abort is a
@@ -40,7 +40,7 @@ public static class CompletionRetriggerDecider
     /// Maximum number of automatic re-triggers per job for a transient
     /// abort before the loop gives up and escalates to human review.
     /// Counted per job and reset when the job leaves the run loop. Documented
-    /// in <c>docs/loop-inventory.md</c> (completion.retrigger-transient-abort-per-job);
+    /// in <c>docs/contracts/loop-inventory.md</c> (completion.retrigger-transient-abort-per-job);
     /// change both in the same commit when tuning.
     /// </summary>
     public const int DefaultBudget = 2;

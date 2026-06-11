@@ -7,7 +7,7 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// Locks the structure of the CLI skill files under <c>docs/cli-skills/</c>.
+/// Locks the structure of the CLI skill files under <c>docs/cli/skills/</c>.
 /// Every CLI driver our project supports must have a corresponding skill
 /// file, every skill file must have the YAML frontmatter the loader expects,
 /// and every file must carry a unique sentinel string the @billable e2e
@@ -39,7 +39,7 @@ public class CliSkillFilesTests
             dir = dir.Parent;
         }
         throw new DirectoryNotFoundException(
-            $"docs/cli-skills/ not found by walking up from {sourceFile}.");
+            $"docs/cli/skills/ not found by walking up from {sourceFile}.");
     }
 
     [Theory]

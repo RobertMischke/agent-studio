@@ -620,8 +620,8 @@ public sealed class AgentMessageBusBridge
     // <c>logs/analysis/&lt;project&gt;/&lt;reportId&gt;.{md,json}</c>. The bus
     // never edits source code; supporting agents are observability + decision
     // records, not coding-agent extensions. See
-    // <c>docs/agent-message-bus.md</c> section "Supporting agents" and
-    // <c>docs/analysis-reports.md</c> section 11.
+    // <c>docs/architecture/bus/agent-message-bus.md</c> section "Supporting agents" and
+    // <c>docs/reports/analysis-reports.md</c> section 11.
     // ---------------------------------------------------------------------
 
     /// <summary>

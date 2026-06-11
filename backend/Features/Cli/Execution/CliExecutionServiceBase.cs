@@ -292,7 +292,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         }
 
         // Pre-spawn self-heal (infra-cli-broken category in
-        // docs/agent-contract-pattern.md). A racing auto-updater can put the
+        // docs/contracts/agent-contract-pattern.md). A racing auto-updater can put the
         // npm install into a half-rebuilt state minutes after the boot-time
         // check-cli-shims.sh pre-flight passed. Without this hook the next
         // pickup spawns into a 500-byte stub, gets 3 silent runs, lands the

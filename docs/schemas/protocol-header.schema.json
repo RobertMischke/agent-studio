@@ -36,7 +36,7 @@
     "correlationId": {
       "type": ["string", "null"],
       "minLength": 1,
-      "description": "Agent Message Bus correlation id (see docs/agent-message-bus.md). When present, the header card links to all bus messages sharing this id so the reader can follow the conversation thread without leaving the protocol view."
+      "description": "Agent Message Bus correlation id (see docs/architecture/bus/agent-message-bus.md). When present, the header card links to all bus messages sharing this id so the reader can follow the conversation thread without leaving the protocol view."
     },
     "agent": {
       "type": ["string", "null"],

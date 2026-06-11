@@ -1,6 +1,6 @@
 # Mockup: Project Pipeline Editor
 
-Project-level surface. Defines the ordered pre- and post-steps for one project. Reached from the project Settings panel (a new "Pipeline" section). Spec: [ADR-0051 section 5.1](../../adr/adr-0051-task-processing-pipeline.md#51-project-level-the-pipeline-editor).
+Project-level surface. Defines the ordered pre- and post-steps for one project. Reached from the project Settings panel (a new "Pipeline" section). Spec: [ADR-0051 section 5.1](../../architecture/decisions/proposed/adr-0051-task-processing-pipeline.md#51-project-level-the-pipeline-editor).
 
 ## Default state (the seeded `standard-task-pipeline`, version 1)
 
@@ -77,7 +77,7 @@ LLM step shown (Reaction defaults to Review; Model picker is the shared selector
 
 ## AI-assist drawer
 
-Operator types a description; the assistant proposes a draft definition the operator confirms (never auto-applied). The proposal is a schema-validated draft ([ADR-0032](../../architecture-decisions.md#adr-0032)).
+Operator types a description; the assistant proposes a draft definition the operator confirms (never auto-applied). The proposal is a schema-validated draft ([ADR-0032](../../architecture/decisions/adr-archive.md#adr-0032)).
 
 ```
 +--------------------------------------------------------------------------------------+

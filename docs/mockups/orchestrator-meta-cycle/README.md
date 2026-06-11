@@ -34,7 +34,7 @@ The runner remains the single state-machine authority. The meta-cycle never move
 
 - [taxonomy.md](taxonomy.md) - configurable knobs, inspection checks, health rules, action vocabulary, override surface.
 - [ui.html](ui.html) - clickable dummy showing the meta-cycle control panel. Open in a browser. Catppuccin-ish dark to match the real frontend.
-- [`docs/architecture-decisions.md`](../../architecture-decisions.md) ADR-0022 - the ADR that adopts this mockup as the spec.
+- [`docs/architecture/decisions/adr-archive.md`](../../architecture/decisions/adr-archive.md) ADR-0022 - the ADR that adopts this mockup as the spec.
 - [`docs/schemas/meta-cycle-report.schema.json`](../../schemas/meta-cycle-report.schema.json) - JSON shape of one cycle report.
 
 ## Hard boundaries (read before extending)

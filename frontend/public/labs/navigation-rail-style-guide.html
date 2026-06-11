@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Navigation Rail Style Guide</title>
+  <style>
+    :root {
+      --bg-editor: #fff;
+      --bg-sidebar: #f8f8f8;
+      --bg-hover: #efefef;
+      --bg-selected: #f0d8cf;
+      --fg: #1a1a1a;
+      --fg-dim: #656565;
+      --fg-muted: #878787;
+      --border: #d4d4d4;
+      --accent: #d97757;
+      --accent-strong: #a8472d;
+      --rail-width: 240px;
+      --rail-row-h: 30px;
+      --rail-header-h: 39px;
+      --rail-left-pad: 8px;
+      --rail-child-pad: 44px;
+      --rail-right-pad: 24px;
+      --rail-section-gap: 12px;
+      --rail-divider-alpha: 1;
+      --font-ui: Inter, Segoe UI, system-ui, sans-serif;
+      --font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #f1f3f5;
+      color: var(--fg);
+      font: 13px/1.45 var(--font-ui);
+    }
+
+    .page {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 20px;
+      padding: 24px;
+    }
+
+    .top {
+      display: grid;
+      grid-template-columns: minmax(320px, 1fr) auto;
+      gap: 24px;
+      align-items: start;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    h1 {
+      font-size: 24px;
+      letter-spacing: 0;
+      line-height: 1.15;
+    }
+
+    .sub {
+      max-width: 780px;
+      margin-top: 8px;
+      color: var(--fg-dim);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      gap: 10px;
+      width: min(920px, 100%);
+    }
+
+    label {
+      display: grid;
+      gap: 5px;
+      color: var(--fg-dim);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    select {
+      height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #fff;
+      color: var(--fg);
+      font: inherit;
+    }
+
+    .lab-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 2px;
+    }
+
+    .lab-action {
+      height: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #fff;
+      color: var(--fg);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .lab-action:hover {
+      background: var(--bg-hover);
+    }
+
+    .canvas {
+      display: grid;
+      grid-template-columns: var(--rail-width) var(--rail-width) 1fr;
+      min-height: 620px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--bg-editor);
+    }
+
+    .rail {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+    }
+
+    .rail + .rail { border-left: 0; }
+
+    .rail__header {
+      min-height: var(--rail-header-h);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px 8px 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--fg-dim);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .rail__title { flex: 0 0 auto; }
+
+    .rail__context {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--fg);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0;
+      text-overflow: ellipsis;
+      text-transform: none;
+    }
+
+    .rail__spacer { flex: 1; }
+
+    .icon-btn {
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 3px;
+      background: transparent;
+      color: var(--fg-muted);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .icon-btn:hover {
+      background: var(--bg-hover);
+      color: var(--fg);
+    }
+
+    .icon {
+      width: 14px;
+      height: 14px;
+      display: block;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+
+    .icon--sm {
+      width: 10px;
+      height: 10px;
+      stroke-width: 2.2;
+    }
+
+    .rail__body {
+      flex: 1;
+      overflow: auto;
+      padding: 4px 0;
+    }
+
+    .section {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      height: 20px;
+      padding: 4px var(--rail-right-pad) 4px 8px;
+      border: 0;
+      background: transparent;
+      color: var(--fg);
+      font: inherit;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      text-align: left;
+      user-select: none;
+      cursor: pointer;
+    }
+
+    .section:hover,
+    .section:focus-visible {
+      background: var(--bg-hover);
+      outline: none;
+    }
+
+    .section--collapsed {
+      color: var(--fg-muted);
+    }
+
+    .section--divider {
+      height: 29px;
+      margin-top: var(--rail-section-gap);
+      padding-top: 12px;
+      border-top: 1px solid rgb(212 212 212 / var(--rail-divider-alpha));
+    }
+
+    .row {
+      position: relative;
+      height: var(--rail-row-h);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 0 var(--rail-right-pad) 0 var(--rail-left-pad);
+      border: 0;
+      background: transparent;
+      color: var(--fg);
+      font: inherit;
+      text-align: left;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .row:hover,
+    .row:focus-visible {
+      background: var(--bg-hover);
+      outline: none;
+    }
+
+    .row--child { padding-left: var(--rail-child-pad); font-size: 12px; }
+    .row--project { margin-left: 12px; width: calc(100% - 12px); }
+    .row--muted { color: var(--fg-muted); }
+    .row--hidden { display: none; }
+    .row--new-project {
+      color: var(--fg-muted);
+    }
+
+    .row--active {
+      background: color-mix(in srgb, var(--accent) 14%, var(--bg-selected));
+      color: var(--fg);
+      font-weight: 600;
+    }
+
+    .row__chev, .row__icon {
+      width: 14px;
+      height: 14px;
+      display: inline-grid;
+      place-items: center;
+      color: var(--fg-muted);
+      flex: 0 0 auto;
+    }
+
+    .row__chev--empty { visibility: hidden; }
+
+    .row__chev:not(.row__chev--empty) {
+      cursor: pointer;
+    }
+
+    .row__name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .row__count {
+      margin-left: auto;
+      min-width: 18px;
+      height: 14px;
+      display: grid;
+      place-items: center;
+      padding: 0 5px;
+      border-radius: 3px;
+      background: #fff;
+      color: var(--fg-dim);
+      font: 700 10px/1 var(--font-mono);
+    }
+
+    .lane-counts {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .lane-count {
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: 999px;
+      border: 1px solid #d9d9d9;
+      background: #fff;
+      color: var(--fg-dim);
+      font: 700 10px/14px var(--font-mono);
+      text-align: center;
+    }
+
+    .content {
+      padding: 24px 32px;
+      min-width: 0;
+      overflow: auto;
+    }
+
+    .content h2 {
+      font-size: 18px;
+      margin-bottom: 12px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(240px, 1fr));
+      gap: 12px;
+      max-width: 780px;
+    }
+
+    .inspector {
+      max-width: 780px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .inspect-cell {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      background: #fff;
+      min-width: 0;
+    }
+
+    .inspect-cell span {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--fg-muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .inspect-cell strong {
+      display: block;
+      overflow: hidden;
+      color: var(--fg);
+      font-size: 13px;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .row__action {
+      width: 22px;
+      height: 22px;
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border: 0;
+      border-radius: 3px;
+      background: transparent;
+      color: var(--fg-muted);
+      cursor: pointer;
+    }
+
+    .row__action:hover,
+    .row__action:focus-visible,
+    .row--menu-open .row__action {
+      background: var(--bg-hover);
+      color: var(--fg);
+      outline: none;
+    }
+
+    .rail-context-menu {
+      position: absolute;
+      top: calc(100% - 2px);
+      right: 12px;
+      z-index: 10;
+      min-width: 150px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      box-shadow: 0 8px 22px rgb(0 0 0 / 0.12);
+    }
+
+    .rail-menu-item {
+      width: 100%;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--fg);
+      font: inherit;
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .rail-menu-item:hover,
+    .rail-menu-item:focus-visible {
+      background: var(--bg-hover);
+      outline: none;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      background: #fff;
+    }
+
+    .card h3 {
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+
+    .card p { color: var(--fg-dim); }
+
+    .token-table {
+      width: 100%;
+      margin-top: 18px;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .token-table th,
+    .token-table td {
+      padding: 7px 8px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: #f4f4f4;
+      border: 1px solid #e3e3e3;
+      border-radius: 3px;
+      padding: 1px 4px;
+    }
+
+    body[data-width='compact'] { --rail-width: 220px; }
+    body[data-width='roomy'] { --rail-width: 260px; }
+    body[data-density='compact'] { --rail-row-h: 26px; }
+    body[data-density='roomy'] { --rail-row-h: 34px; }
+    body[data-divider='quiet'] { --rail-divider-alpha: 0; --rail-section-gap: 8px; }
+    body[data-divider='soft'] { --rail-divider-alpha: 0.55; }
+    body[data-context='pill'] .rail__context {
+      max-width: 92px;
+      padding: 1px 6px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--fg-dim);
+      font-size: 10px;
+    }
+    body[data-context='hidden'] .rail__context { display: none; }
+
+    body[data-newproject='icon'] .card--new-project-icon,
+    body[data-newproject='context'] .card--new-project-context,
+    body[data-newproject='row'] .card--new-project-row {
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+      background: color-mix(in srgb, var(--accent) 7%, #fff);
+    }
+
+    @media (max-width: 980px) {
+      .top { grid-template-columns: 1fr; }
+      .controls { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .canvas { grid-template-columns: 1fr; }
+      .rail { min-height: 380px; border-right: 0; border-bottom: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body data-width="normal" data-density="normal" data-divider="soft" data-context="inline" data-newproject="icon">
+  <main class="page">
+    <section class="top">
+      <div>
+        <h1>Navigation rail style guide</h1>
+        <p class="sub">A compact lab for aligning the Workspace Explorer and Project Hub rails. The goal is one visual grammar: one boundary line, one header rhythm, one row grid, and configurable density without per-surface CSS drift.</p>
+      </div>
+      <div class="controls" aria-label="Rail configuration">
+        <label>Width
+          <select data-control="width">
+            <option value="compact">Compact 220</option>
+            <option value="normal" selected>Normal 240</option>
+            <option value="roomy">Roomy 260</option>
+          </select>
+        </label>
+        <label>Density
+          <select data-control="density">
+            <option value="compact">Compact 26</option>
+            <option value="normal" selected>Normal 30</option>
+            <option value="roomy">Roomy 34</option>
+          </select>
+        </label>
+        <label>Dividers
+          <select data-control="divider">
+            <option value="quiet">Quiet spacing</option>
+            <option value="soft" selected>Soft rules</option>
+            <option value="strong">Full rules</option>
+          </select>
+        </label>
+        <label>Context
+          <select data-control="context">
+            <option value="inline" selected>Inline text</option>
+            <option value="pill">Small pill</option>
+            <option value="hidden">Hidden</option>
+          </select>
+        </label>
+        <label>New project
+          <select data-control="newproject">
+            <option value="icon" selected>Icon action</option>
+            <option value="context">Context menu</option>
+            <option value="row">Child row</option>
+          </select>
+        </label>
+        <div class="lab-actions">
+          <button class="lab-action" type="button" data-action="expand-all">Expand all</button>
+          <button class="lab-action" type="button" data-action="collapse-groups">Collapse groups</button>
+          <button class="lab-action" type="button" data-action="reset">Reset</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="canvas" aria-label="Rail comparison">
+      <aside class="rail" aria-label="Workspace Explorer">
+        <header class="rail__header">
+          <span class="rail__title">Explorer</span>
+          <span class="rail__spacer"></span>
+          <button class="icon-btn" aria-label="Refresh" data-header-icon="refresh"></button>
+        </header>
+        <div class="rail__body" data-rail-body="explorer"></div>
+      </aside>
+
+      <aside class="rail" aria-label="Project Hub">
+        <header class="rail__header">
+          <span class="rail__title">Project Hub</span>
+          <span class="rail__context">Runbook</span>
+          <span class="rail__spacer"></span>
+          <button class="icon-btn" aria-label="Collapse" data-header-icon="chevronLeft"></button>
+          <button class="icon-btn" aria-label="Activity" data-header-icon="activity"></button>
+        </header>
+        <div class="rail__body" data-rail-body="project"></div>
+      </aside>
+
+      <section class="content">
+        <h2>Recommended convergence</h2>
+        <div class="inspector" aria-live="polite">
+          <div class="inspect-cell">
+            <span>Selected</span>
+            <strong data-inspect="label">Overview</strong>
+          </div>
+          <div class="inspect-cell">
+            <span>Rail</span>
+            <strong data-inspect="rail">Project Hub</strong>
+          </div>
+          <div class="inspect-cell">
+            <span>Level</span>
+            <strong data-inspect="level">Root item</strong>
+          </div>
+          <div class="inspect-cell">
+            <span>State</span>
+            <strong data-inspect="state">Active row</strong>
+          </div>
+        </div>
+        <div class="cards">
+          <article class="card">
+            <h3>One boundary owner</h3>
+            <p>The rail owns the visible <code>border-right</code>. Resize handles are transparent overlays and never paint an idle line.</p>
+          </article>
+          <article class="card">
+            <h3>Header contract</h3>
+            <p>Every rail uses the same 39px header. Context is either inline, a small pill, or hidden by config.</p>
+          </article>
+          <article class="card">
+            <h3>Row grid</h3>
+            <p>Rows share 30px height, 8px root pad, 44px child pad, 14px icon column, and 24px trailing gutter.</p>
+          </article>
+          <article class="card">
+            <h3>Section rhythm</h3>
+            <p>Use a named divider mode instead of ad hoc borders: quiet spacing, soft rules, or full rules.</p>
+          </article>
+          <article class="card card--new-project-icon">
+            <h3>New project: icon action</h3>
+            <p>Recommended default. The workspace row owns creation via a compact plus action, so navigation stays navigation.</p>
+          </article>
+          <article class="card card--new-project-context">
+            <h3>New project: context menu</h3>
+            <p>Best when rename/delete/move also live there. It keeps the rail quiet, but discoverability is lower.</p>
+          </article>
+          <article class="card card--new-project-row">
+            <h3>New project: child row</h3>
+            <p>Most visible, but it reads like a real item and repeats once per workspace. I would avoid it.</p>
+          </article>
+        </div>
+
+        <table class="token-table">
+          <thead>
+            <tr><th>Token / config</th><th>Target</th><th>Why it matters</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>--studio-rail-width</code></td><td>220 / 240 / 260</td><td>Lets Explorer and Hub switch density without new SCSS.</td></tr>
+            <tr><td><code>--studio-rail-row-h</code></td><td>26 / 30 / 34</td><td>Prevents one menu from feeling compressed while the other breathes.</td></tr>
+            <tr><td><code>--studio-rail-divider-mode</code></td><td>quiet / soft / strong</td><td>Project Hub has more categories, so divider strength should be configurable.</td></tr>
+            <tr><td><code>RailContextMode</code></td><td>inline / pill / hidden</td><td>Project name is useful, but it must not make the header feel unlike Explorer.</td></tr>
+            <tr><td><code>RailBoundary</code></td><td>border-owned-by-rail</td><td>Avoids double lines when a resize handle is present.</td></tr>
+            <tr><td><code>NewProjectAffordance</code></td><td>icon / context / row</td><td>Treat create-project as an action, not as repeated navigation content.</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const icons = {
+      activity: '<path d="M3 12h3l2-7 4 14 2-7h3" />',
+      alert: '<path d="M12 3 2 20h20L12 3Z" /><path d="M12 9v4" /><path d="M12 17h.01" />',
+      board: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /><path d="M15 4v16" />',
+      book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5Z" />',
+      bot: '<rect x="5" y="7" width="14" height="10" rx="2" /><path d="M12 7V4" /><path d="M8 11h.01" /><path d="M16 11h.01" /><path d="M9 17v2" /><path d="M15 17v2" />',
+      branch: '<path d="M6 3v12" /><circle cx="6" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M9 6h4a5 5 0 0 1 5 5v1" /><circle cx="18" cy="15" r="3" />',
+      check: '<path d="m4 12 5 5L20 6" />',
+      chevronDown: '<path d="m6 9 6 6 6-6" />',
+      chevronLeft: '<path d="m15 18-6-6 6-6" />',
+      chevronRight: '<path d="m9 6 6 6-6 6" />',
+      cli: '<path d="m4 8 4 4-4 4" /><path d="M12 16h8" />',
+      diff: '<path d="M12 3v18" /><path d="M8 7H4" /><path d="M6 5v4" /><path d="M20 17h-4" />',
+      eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />',
+      file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6" />',
+      folder: '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />',
+      grid: '<rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />',
+      layout: '<rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /><path d="M9 21V9" />',
+      list: '<path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" />',
+      more: '<path d="M5 12h.01" /><path d="M12 12h.01" /><path d="M19 12h.01" />',
+      plus: '<path d="M12 5v14" /><path d="M5 12h14" />',
+      refresh: '<path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4" />',
+      runbook: '<path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" /><path d="M8 5v14" />',
+      settings: '<path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.2 17l.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9c.3.6.9 1 1.6 1h.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z" />',
+      sliders: '<path d="M4 21v-7" /><path d="M4 10V3" /><path d="M12 21v-9" /><path d="M12 8V3" /><path d="M20 21v-5" /><path d="M20 12V3" /><path d="M2 14h4" /><path d="M10 8h4" /><path d="M18 16h4" />',
+    };
+
+    const projectRail = [
+      { type: 'section', key: 'project-insight', label: 'Insight' },
+      { key: 'project-overview', label: 'Overview', icon: 'layout', active: true, section: 'project-insight' },
+      { key: 'project-visual-evidence', label: 'Visual Evidence', icon: 'eye', section: 'project-insight' },
+      { key: 'project-drift', label: 'Drift', icon: 'diff', section: 'project-insight' },
+      { key: 'project-uxui', label: 'UX / UI', icon: 'eye', section: 'project-insight' },
+      { key: 'project-observability', label: 'Observability', icon: 'activity', section: 'project-insight' },
+      { type: 'section', key: 'project-quality', label: 'Quality', divider: true },
+      { key: 'project-security', label: 'Security', icon: 'alert', section: 'project-quality' },
+      { key: 'project-test-quality', label: 'Test Quality', icon: 'check', section: 'project-quality' },
+      { key: 'project-audits', label: 'Audits & Checks', icon: 'list', section: 'project-quality' },
+      { key: 'project-product-runtime', label: 'Product Runtime', icon: 'runbook', section: 'project-quality' },
+      { type: 'section', key: 'project-operations', label: 'Operations', divider: true },
+      { key: 'project-jobs', label: 'Jobs', icon: 'list', section: 'project-operations' },
+      { key: 'project-token-usage', label: 'Token Usage', icon: 'cli', section: 'project-operations' },
+      { key: 'project-activity', label: 'Activity', icon: 'activity', section: 'project-operations' },
+      { type: 'section', key: 'project-config', label: 'Config', divider: true },
+      { key: 'project-steering-docs', label: 'Steering Docs', icon: 'folder', expanded: true, section: 'project-config' },
+      { key: 'project-architecture', label: 'Architecture', icon: 'layout', level: 'child', parent: 'project-steering-docs', section: 'project-config' },
+      { key: 'project-wiki', label: 'Wiki / Docs', icon: 'book', level: 'child', parent: 'project-steering-docs', section: 'project-config' },
+      { key: 'project-agent-docs', label: 'Agent Docs', icon: 'file', level: 'child', parent: 'project-steering-docs', section: 'project-config' },
+      { key: 'project-pipeline', label: 'Pipeline', icon: 'sliders', section: 'project-config' },
+      { key: 'project-workflow', label: 'Workflow', icon: 'branch', section: 'project-config' },
+      { key: 'project-prompts', label: 'Prompts', icon: 'file', section: 'project-config' },
+      { key: 'project-runtime-prompts', label: 'Runtime Prompts', icon: 'cli', section: 'project-config' },
+      { key: 'project-orchestrator', label: 'Orchestrator', icon: 'bot', section: 'project-config' },
+      { key: 'project-settings', label: 'Settings', icon: 'settings', expanded: true, section: 'project-config' },
+      { key: 'project-settings-defaults', label: 'Workspace Defaults', icon: 'sliders', level: 'child', parent: 'project-settings', section: 'project-config' },
+      { key: 'project-settings-overrides', label: 'Project Overrides', icon: 'settings', level: 'child', parent: 'project-settings', section: 'project-config' },
+    ];
+
+    const explorerRail = [
+      { type: 'section', key: 'explorer-workspaces', label: 'Workspaces', count: 3, action: 'new-workspace' },
+      { key: 'ws-agent-studio-software', label: 'Agent Studio Software', icon: 'folder', expanded: true, workspace: true, section: 'explorer-workspaces' },
+      { key: 'proj-agent-task-processor', label: 'Agent Task Processor', icon: 'layout', expanded: true, project: true, count: 439, parent: 'ws-agent-studio-software', section: 'explorer-workspaces' },
+      { key: 'proj-agent-task-processor-board', label: 'Board', icon: 'grid', level: 'child', laneCounts: [0, 0, 0], parent: 'proj-agent-task-processor', section: 'explorer-workspaces' },
+      { key: 'proj-agent-task-processor-hub', label: 'Project Hub', icon: 'layout', level: 'child', parent: 'proj-agent-task-processor', section: 'explorer-workspaces' },
+      { key: 'proj-agent-task-processor-backlog', label: 'Backlog', icon: 'list', level: 'child', parent: 'proj-agent-task-processor', section: 'explorer-workspaces' },
+      { key: 'proj-agent-task-processor-epics', label: 'Epics', icon: 'book', level: 'child', parent: 'proj-agent-task-processor', section: 'explorer-workspaces' },
+      { key: 'ws-agent-studio-software-new', label: 'New project', icon: 'plus', level: 'child', muted: true, newProject: true, parent: 'ws-agent-studio-software', section: 'explorer-workspaces' },
+      { key: 'ws-workspace', label: 'Workspace', icon: 'folder', expanded: true, workspace: true, section: 'explorer-workspaces' },
+      { key: 'proj-playwright-test', label: 'Playwright Test', icon: 'layout', expanded: true, project: true, count: 0, parent: 'ws-workspace', section: 'explorer-workspaces' },
+      { key: 'proj-playwright-test-board', label: 'Board', icon: 'grid', level: 'child', laneCounts: [0, 0, 0], parent: 'proj-playwright-test', section: 'explorer-workspaces' },
+      { key: 'proj-playwright-test-hub', label: 'Project Hub', icon: 'layout', level: 'child', parent: 'proj-playwright-test', section: 'explorer-workspaces' },
+      { key: 'proj-playwright-test-backlog', label: 'Backlog', icon: 'list', level: 'child', parent: 'proj-playwright-test', section: 'explorer-workspaces' },
+      { key: 'proj-playwright-test-epics', label: 'Epics', icon: 'book', level: 'child', parent: 'proj-playwright-test', section: 'explorer-workspaces' },
+      { key: 'ws-workspace-new', label: 'New project', icon: 'plus', level: 'child', muted: true, newProject: true, parent: 'ws-workspace', section: 'explorer-workspaces' },
+      { key: 'ws-privat', label: 'Privat', icon: 'folder', expanded: true, workspace: true, section: 'explorer-workspaces' },
+      { key: 'proj-runbook', label: 'Runbook', icon: 'layout', expanded: true, project: true, count: 130, parent: 'ws-privat', section: 'explorer-workspaces' },
+      { key: 'proj-runbook-board', label: 'Board', icon: 'grid', level: 'child', laneCounts: [0, 0, 0], parent: 'proj-runbook', section: 'explorer-workspaces' },
+      { key: 'proj-runbook-hub', label: 'Project Hub', icon: 'layout', level: 'child', active: true, parent: 'proj-runbook', section: 'explorer-workspaces' },
+      { key: 'proj-runbook-backlog', label: 'Backlog', icon: 'list', level: 'child', parent: 'proj-runbook', section: 'explorer-workspaces' },
+      { key: 'proj-runbook-epics', label: 'Epics', icon: 'book', level: 'child', parent: 'proj-runbook', section: 'explorer-workspaces' },
+      { key: 'ws-privat-new', label: 'New project', icon: 'plus', level: 'child', muted: true, newProject: true, parent: 'ws-privat', section: 'explorer-workspaces' },
+      { type: 'section', key: 'explorer-open-tabs', label: 'Open tabs', count: 1, divider: true },
+      { key: 'tab-runbook-hub', label: 'Runbook / Project Hub', icon: 'layout', active: true, section: 'explorer-open-tabs' },
+    ];
+
+    function svg(name, small = false) {
+      return `<svg class="icon${small ? ' icon--sm' : ''}" viewBox="0 0 24 24" aria-hidden="true">${icons[name] ?? icons.file}</svg>`;
+    }
+
+    const railState = {
+      explorer: {
+        label: 'Explorer',
+        items: explorerRail,
+        active: 'proj-runbook-hub',
+        expanded: new Set(explorerRail.filter(item => item.expanded).map(item => item.key)),
+        collapsedSections: new Set(),
+      },
+      project: {
+        label: 'Project Hub',
+        items: projectRail,
+        active: 'project-overview',
+        expanded: new Set(projectRail.filter(item => item.expanded).map(item => item.key)),
+        collapsedSections: new Set(),
+      },
+    };
+
+    const initialState = {
+      explorer: {
+        active: railState.explorer.active,
+        expanded: new Set(railState.explorer.expanded),
+        collapsedSections: new Set(),
+      },
+      project: {
+        active: railState.project.active,
+        expanded: new Set(railState.project.expanded),
+        collapsedSections: new Set(),
+      },
+    };
+
+    let inspectedRail = 'project';
+    let inspectedAction = null;
+    let openWorkspaceMenu = null;
+
+    function section(item, railName) {
+      const state = railState[railName];
+      const collapsed = state.collapsedSections.has(item.key);
+      const action = item.action === 'new-workspace'
+        ? `<button class="row__action" type="button" data-new-workspace="${item.key}" aria-label="Create workspace">${svg('plus', true)}</button>`
+        : '';
+      const count = item.count != null ? `<span class="row__count">${item.count}</span>` : '';
+      return `<div class="section${item.divider ? ' section--divider' : ''}${collapsed ? ' section--collapsed' : ''}" role="button" tabindex="0" data-rail="${railName}" data-section-toggle="${item.key}" aria-expanded="${!collapsed}">
+        <span class="row__chev">${svg(collapsed ? 'chevronRight' : 'chevronDown', true)}</span>
+        <span class="row__name">${item.label}</span>
+        ${count}
+        ${action}
+      </div>`;
+    }
+
+    function hasChildren(item, items) {
+      return items.some(child => child.parent === item.key);
+    }
+
+    function row(item, railName, visible) {
+      const state = railState[railName];
+      const newProjectMode = document.body.dataset.newproject ?? 'icon';
+      const children = hasChildren(item, state.items);
+      const expanded = state.expanded.has(item.key);
+      const active = state.active === item.key;
+      const hiddenByAffordance = item.newProject && newProjectMode !== 'row';
+      const rowVisible = visible && !hiddenByAffordance;
+      const classes = [
+        'row',
+        item.level === 'child' ? 'row--child' : '',
+        item.project ? 'row--project' : '',
+        item.newProject ? 'row--new-project' : '',
+        openWorkspaceMenu === item.key ? 'row--menu-open' : '',
+        active ? 'row--active' : '',
+        item.muted ? 'row--muted' : '',
+        rowVisible ? '' : 'row--hidden',
+      ].filter(Boolean).join(' ');
+      const chev = children
+        ? `<span class="row__chev" data-parent-toggle="${item.key}" data-rail="${railName}" aria-label="${expanded ? 'Collapse' : 'Expand'}">${svg(expanded ? 'chevronDown' : 'chevronRight', true)}</span>`
+        : '<span class="row__chev row__chev--empty"></span>';
+      const count = item.count != null ? `<span class="row__count">${item.count}</span>` : '';
+      const laneCounts = item.laneCounts
+        ? `<span class="lane-counts">${item.laneCounts.map(v => `<span class="lane-count">${v}</span>`).join('')}</span>`
+        : '';
+      const workspaceAction = railName === 'explorer' && item.workspace && newProjectMode !== 'row'
+        ? newProjectMode === 'context'
+          ? `<button class="row__action" type="button" data-menu-trigger="${item.key}" aria-label="Workspace actions for ${item.label}">${svg('more', true)}</button>`
+          : `<button class="row__action" type="button" data-new-project="${item.key}" aria-label="Create project in ${item.label}">${svg('plus', true)}</button>`
+        : '';
+      const contextMenu = openWorkspaceMenu === item.key && newProjectMode === 'context'
+        ? `<div class="rail-context-menu" role="menu" data-menu-for="${item.key}">
+            <button class="rail-menu-item" type="button" role="menuitem" data-menu-action="new-project" data-workspace="${item.key}">${svg('plus', true)} New project</button>
+            <button class="rail-menu-item" type="button" role="menuitem" data-menu-action="rename-workspace" data-workspace="${item.key}">${svg('file', true)} Rename workspace</button>
+          </div>`
+        : '';
+      return `<div class="${classes}" role="button" tabindex="0" data-rail="${railName}" data-key="${item.key}" aria-current="${active ? 'page' : 'false'}" ${children ? `aria-expanded="${expanded}"` : ''}>
+        ${chev}<span class="row__icon">${svg(item.icon)}</span><span class="row__name">${item.label}</span>${workspaceAction}${laneCounts}${count}${contextMenu}
+      </div>`;
+    }
+
+    function itemMap(items) {
+      return new Map(items.filter(item => item.type !== 'section').map(item => [item.key, item]));
+    }
+
+    function isVisible(item, railName) {
+      const state = railState[railName];
+      if (state.collapsedSections.has(item.section)) return false;
+      const map = itemMap(state.items);
+      let parent = item.parent ? map.get(item.parent) : null;
+      while (parent) {
+        if (!state.expanded.has(parent.key)) return false;
+        parent = parent.parent ? map.get(parent.parent) : null;
+      }
+      return true;
+    }
+
+    function renderRail(railName) {
+      const target = document.querySelector(`[data-rail-body="${railName}"]`);
+      const state = railState[railName];
+      target.innerHTML = state.items
+        .map(item => item.type === 'section' ? section(item, railName) : row(item, railName, isVisible(item, railName)))
+        .join('');
+    }
+
+    function renderAll() {
+      renderRail('explorer');
+      renderRail('project');
+      updateInspector();
+    }
+
+    function findItem(railName, key) {
+      return railState[railName].items.find(item => item.key === key);
+    }
+
+    function updateInspector() {
+      if (inspectedAction) {
+        document.querySelector('[data-inspect="label"]').textContent = inspectedAction.label;
+        document.querySelector('[data-inspect="rail"]').textContent = inspectedAction.rail;
+        document.querySelector('[data-inspect="level"]').textContent = inspectedAction.level;
+        document.querySelector('[data-inspect="state"]').textContent = inspectedAction.state;
+        return;
+      }
+      const railName = inspectedRail;
+      const item = findItem(railName, railState[railName].active);
+      const hasKids = item ? hasChildren(item, railState[railName].items) : false;
+      const expanded = item && railState[railName].expanded.has(item.key);
+      document.querySelector('[data-inspect="label"]').textContent = item?.label ?? 'None';
+      document.querySelector('[data-inspect="rail"]').textContent = railState[railName]?.label ?? railName;
+      document.querySelector('[data-inspect="level"]').textContent = item?.level === 'child' ? 'Child item' : hasKids ? 'Parent item' : 'Root item';
+      document.querySelector('[data-inspect="state"]').textContent = hasKids ? (expanded ? 'Active, expanded' : 'Active, collapsed') : 'Active row';
+    }
+
+    renderAll();
+
+    for (const button of document.querySelectorAll('[data-header-icon]')) {
+      button.innerHTML = svg(button.dataset.headerIcon, true);
+    }
+
+    document.addEventListener('click', (event) => {
+      if (event.target.closest('[data-new-project], [data-new-workspace], [data-menu-trigger], [data-menu-action], .rail-context-menu')) return;
+
+      const sectionToggle = event.target.closest('[data-section-toggle]');
+      if (sectionToggle) {
+        const railName = sectionToggle.dataset.rail;
+        const key = sectionToggle.dataset.sectionToggle;
+        const set = railState[railName].collapsedSections;
+        if (set.has(key)) set.delete(key);
+        else set.add(key);
+        renderAll();
+        return;
+      }
+
+      const parentToggle = event.target.closest('[data-parent-toggle]');
+      if (parentToggle) {
+        event.stopPropagation();
+        const railName = parentToggle.dataset.rail;
+        const key = parentToggle.dataset.parentToggle;
+        const set = railState[railName].expanded;
+        if (set.has(key)) set.delete(key);
+        else set.add(key);
+        renderAll();
+        return;
+      }
+
+      const rowButton = event.target.closest('.row[data-key]');
+      if (rowButton) {
+        const railName = rowButton.dataset.rail;
+        railState[railName].active = rowButton.dataset.key;
+        inspectedRail = railName;
+        inspectedAction = null;
+        openWorkspaceMenu = null;
+        renderAll();
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const rowButton = event.target.closest('.row[data-key]');
+      if (!rowButton) return;
+      event.preventDefault();
+      rowButton.click();
+    });
+
+    document.addEventListener('click', (event) => {
+      const newProjectButton = event.target.closest('[data-new-project]');
+      if (newProjectButton) {
+        event.stopPropagation();
+        const workspace = findItem('explorer', newProjectButton.dataset.newProject);
+        inspectedRail = 'explorer';
+        inspectedAction = {
+          label: 'New project',
+          rail: 'Explorer',
+          level: 'Workspace action',
+          state: `Create in ${workspace?.label ?? 'workspace'}`,
+        };
+        openWorkspaceMenu = null;
+        renderAll();
+        return;
+      }
+
+      const newWorkspaceButton = event.target.closest('[data-new-workspace]');
+      if (newWorkspaceButton) {
+        event.stopPropagation();
+        inspectedRail = 'explorer';
+        inspectedAction = {
+          label: 'New workspace',
+          rail: 'Explorer',
+          level: 'Section action',
+          state: 'Create workspace',
+        };
+        openWorkspaceMenu = null;
+        renderAll();
+        return;
+      }
+
+      const menuTrigger = event.target.closest('[data-menu-trigger]');
+      if (menuTrigger) {
+        event.stopPropagation();
+        openWorkspaceMenu = openWorkspaceMenu === menuTrigger.dataset.menuTrigger ? null : menuTrigger.dataset.menuTrigger;
+        inspectedRail = 'explorer';
+        inspectedAction = {
+          label: 'Workspace actions',
+          rail: 'Explorer',
+          level: 'Context menu',
+          state: openWorkspaceMenu ? 'Menu open' : 'Menu closed',
+        };
+        renderAll();
+        return;
+      }
+
+      const menuAction = event.target.closest('[data-menu-action]');
+      if (menuAction) {
+        event.stopPropagation();
+        const workspace = findItem('explorer', menuAction.dataset.workspace);
+        inspectedRail = 'explorer';
+        inspectedAction = {
+          label: menuAction.dataset.menuAction === 'new-project' ? 'New project' : 'Rename workspace',
+          rail: 'Explorer',
+          level: 'Context menu action',
+          state: `${menuAction.textContent.trim()} in ${workspace?.label ?? 'workspace'}`,
+        };
+        openWorkspaceMenu = null;
+        renderAll();
+        return;
+      }
+
+      if (!event.target.closest('.rail-context-menu')) {
+        if (openWorkspaceMenu) {
+          openWorkspaceMenu = null;
+          renderAll();
+        }
+      }
+    });
+
+    document.querySelector('[data-action="expand-all"]').addEventListener('click', () => {
+      for (const [railName, state] of Object.entries(railState)) {
+        state.collapsedSections.clear();
+        state.expanded = new Set(state.items.filter(item => item.type !== 'section' && hasChildren(item, state.items)).map(item => item.key));
+      }
+      openWorkspaceMenu = null;
+      renderAll();
+    });
+
+    document.querySelector('[data-action="collapse-groups"]').addEventListener('click', () => {
+      for (const state of Object.values(railState)) {
+        state.collapsedSections = new Set(state.items.filter(item => item.type === 'section').map(item => item.key));
+        state.expanded.clear();
+      }
+      openWorkspaceMenu = null;
+      renderAll();
+    });
+
+    document.querySelector('[data-action="reset"]').addEventListener('click', () => {
+      for (const [railName, initial] of Object.entries(initialState)) {
+        railState[railName].active = initial.active;
+        railState[railName].expanded = new Set(initial.expanded);
+        railState[railName].collapsedSections = new Set(initial.collapsedSections);
+      }
+      inspectedRail = 'project';
+      inspectedAction = null;
+      openWorkspaceMenu = null;
+      renderAll();
+    });
+
+    for (const select of document.querySelectorAll('[data-control]')) {
+      select.addEventListener('change', () => {
+        document.body.dataset[select.dataset.control] = select.value;
+        if (select.dataset.control === 'newproject') {
+          openWorkspaceMenu = null;
+          inspectedAction = null;
+          renderAll();
+        }
+      });
+    }
+  </script>
+</body>
+</html>

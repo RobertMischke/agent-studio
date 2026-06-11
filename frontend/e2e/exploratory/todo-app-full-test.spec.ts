@@ -228,7 +228,7 @@ test('full lifecycle: create → steer → complete (Playwright Test sandbox)', 
     // Once the state machine reports human-review, find the card in the
     // board and click Complete. The F9 data-states attribute is the
     // canonical lookup for "the lane group containing state X" — see
-    // docs/frontend-testids.md.
+    // docs/frontend/testing.md.
     if (lastObservedState === '5-human-review') {
       const ourCard = page
         .locator('[data-states*="5-human-review"] [data-testid^="job-card-"]')

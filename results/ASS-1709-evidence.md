@@ -49,9 +49,9 @@ tests are the deterministic, runnable substitute and assert the same rendered be
 
 > "New API endpoints and filesystem manifest lack documentation."
 
-Closed by adding `docs/wiki-organization.md` and wiring it into the docs map:
+Closed by adding `docs/contracts/wiki-organization.md` and wiring it into the docs map:
 
-- **`docs/wiki-organization.md`** (new) — documents the design (a virtual organization
+- **`docs/contracts/wiki-organization.md`** (new) — documents the design (a virtual organization
   layer over the immutable `docs/` tree that preserves per-file git history), all three
   endpoints with request/response JSON examples
   (`GET`/`PUT /api/projects/{project}/wiki/organization`,
@@ -59,9 +59,9 @@ Closed by adding `docs/wiki-organization.md` and wiring it into the docs map:
   `docs/.wiki-organization.json` manifest schema (version + nodes; per-node
   id/type/title/relPath/parentId/order).
 - **`docs/README.md`** — added an index row pointing at wiki-organization.md.
-- **`docs/filesystem-contract.md`** — added a "Project docs manifests" subsection
+- **`docs/contracts/filesystem.md`** — added a "Project docs manifests" subsection
   describing the app-owned `docs/.wiki-organization.json` and linking the detail doc.
-- **`docs/frontend-domain.md`** — extended the project-detail Key Code bullet with the
+- **`docs/domains/frontend.md`** — extended the project-detail Key Code bullet with the
   Wiki / Docs rail description and a link to wiki-organization.md.
 
 ## Orchestrator green-gate
