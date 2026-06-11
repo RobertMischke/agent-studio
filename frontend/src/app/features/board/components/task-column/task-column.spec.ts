@@ -456,6 +456,37 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     httpMock.verify();
   });
 
+  it('filtered empty state names the filter, not a bare "no archived tasks"', async () => {
+    const { fixture, httpMock } = await buildArchiveColumn();
+    // Initial load: archive has rows, so this is NOT a "truly empty" archive.
+    httpMock.expectOne((r) => isArchiveReq(r.url)).flush({
+      items: [makeArchived({ id: 'a1' })],
+      total: 1,
+      offset: 0,
+      limit: 50,
+    });
+    fixture.detectChanges();
+
+    vi.useFakeTimers();
+    try {
+      // A filter that matches nothing comes back as total=0 for the query.
+      fixture.componentInstance.onArchiveSearchInput('no-such-card');
+      vi.advanceTimersByTime(300);
+      httpMock.expectOne((r) => isArchiveReq(r.url)).flush({ items: [], total: 0, offset: 0, limit: 50 });
+    } finally {
+      vi.useRealTimers();
+    }
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const empty = host.querySelector('[data-testid="archive-empty"]');
+    expect(empty).toBeTruthy();
+    expect(empty?.textContent ?? '').toContain('match the filter');
+    // The lane header count tracks the (filtered) archive total, not jobs().
+    expect(fixture.componentInstance.headerCount()).toBe(0);
+    httpMock.verify();
+  });
+
   it('debounced search re-queries from offset 0 with the term', async () => {
     const { fixture, httpMock } = await buildArchiveColumn();
     httpMock.expectOne((r) => isArchiveReq(r.url)).flush({ items: [], total: 0, offset: 0, limit: 50 });

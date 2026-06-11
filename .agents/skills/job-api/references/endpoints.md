@@ -48,6 +48,50 @@ project is busy (avoid disturbing an in-flight run).
 Returns jobs grouped by lane. Heavy; prefer the per-lane folder scan when you
 only need slugs.
 
+The `archive` bucket is **always `[]`** here by design (ASS-1727): the
+cache-backed board scan excludes the terminal `7-archive` lane so a poll never
+carries hundreds of terminal cards. Read the archive through the dedicated
+paged endpoint below, not this field.
+
+### `GET /api/tasks/archive`
+
+Paged, slim read of the terminal `7-archive` lane (ASS-1727). The board
+`/grouped` response keeps `archive` empty, so the Archive view lazy-loads
+through here. Reuses the slim-hydrated archive partition the index cache
+already built from its single shared disk walk - no per-request full scan.
+
+Query params (all optional):
+
+| Param | Default | Notes |
+| --- | --- | --- |
+| `watchPath` | all projects | restrict to one project's archive |
+| `offset` | `0` | paging start; negative is clamped to `0` |
+| `limit` | `50` | page size, clamped to `1..200` |
+| `search` | none | case-insensitive substring over title / key / id |
+| `includeFixtures` | `false` | include fixture jobs (mirrors the board endpoints) |
+
+Ordering is newest-archived first (`enteredLaneAt` desc, `lastActivity` as
+tiebreaker). `total` is the full unpaged count for the current filter, so a
+search narrows `total` to the match count. Response shape:
+
+```json
+{
+  "items": [
+    { "id": "fix-foo", "key": "ASS-123", "title": "Fix foo",
+      "state": "7-archive", "projectName": "Agent Task Processor",
+      "enteredLaneAt": "2026-06-01T10:00:00Z", "lastActivity": "...",
+      "commitCount": 3, "codeActivityDetected": true }
+  ],
+  "total": 852,
+  "offset": 0,
+  "limit": 50
+}
+```
+
+A search query logs the stable event `task-archive-search`
+(`term`, `matched`, `archivedScanned`) so a "filter found nothing" report is
+diagnosable from the api log.
+
 ### `GET /api/tasks/{id}`
 
 Single job detail. Pass `?watchPath=...` to disambiguate when the slug exists

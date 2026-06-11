@@ -89,14 +89,18 @@ public static class TaskCrudEndpoints
                 Review = autoReview, // legacy alias for pre-ADR-0025 clients
                 Completed = SortLane(TaskStates.Completed),
                 // ASS-1727: the board response intentionally keeps Archive
-                // empty. ScanAllJobs() (cache-backed) excludes the terminal
-                // 7-archive lane, so SortLane finds nothing here even though
-                // hundreds of archived folders exist on disk. Eager-loading
-                // them bloated every poll; the Archive view pages through the
+                // empty. ScanAllJobs() (cache-backed) already excludes the
+                // terminal 7-archive lane, so there is nothing to filter or
+                // sort here even though hundreds of archived folders exist on
+                // disk. Emit an explicit empty array instead of re-running
+                // SortLane over a lane the scan guarantees is absent: that
+                // call only ever produced [] and reading as if it built the
+                // archive lane was misleading. Eager-loading those cards
+                // bloated every poll; the Archive view pages through the
                 // dedicated GET /api/tasks/archive endpoint instead. The key is
                 // kept (always []) so pre-existing clients that read
                 // grouped.archive don't NPE on a missing field.
-                Archive = SortLane(TaskStates.Archive)
+                Archive = Array.Empty<TaskInfo>()
             };
             return Results.Ok(grouped);
         });
@@ -113,8 +117,10 @@ public static class TaskCrudEndpoints
         group.MapGet("/archive", (string? watchPath, int? offset, int? limit, string? search, bool? includeFixtures,
             TaskScannerService scanner, ILoggerFactory loggerFactory) =>
         {
+            var logger = loggerFactory.CreateLogger("TaskArchiveEndpoint");
             var sw = Stopwatch.StartNew();
-            IEnumerable<TaskInfo> archived = scanner.ScanArchivedJobs();
+            var all = scanner.ScanArchivedJobs();
+            IEnumerable<TaskInfo> archived = all;
 
             if (!string.IsNullOrWhiteSpace(watchPath))
                 archived = archived.Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase));
@@ -122,6 +128,7 @@ public static class TaskCrudEndpoints
                 archived = archived.Where(j => !j.Fixture);
 
             var term = search?.Trim();
+            var hasSearch = !string.IsNullOrWhiteSpace(term);
             if (!string.IsNullOrWhiteSpace(term))
             {
                 archived = archived.Where(j =>
@@ -144,9 +151,20 @@ public static class TaskCrudEndpoints
             var items = ordered.Skip(off).Take(lim).Select(ArchivedTaskInfo.From).ToList();
 
             sw.Stop();
-            loggerFactory.CreateLogger("TaskArchiveEndpoint").LogInformation(
+            // A typed Archive filter is a user-visible query path, so it gets
+            // its own stable event. Without this a "the filter found nothing"
+            // report is undiagnosable from the api log - you can't tell an
+            // empty archive from a term that simply matched no card. Logging
+            // matched-vs-scanned makes both cases obvious post-hoc.
+            if (hasSearch)
+            {
+                logger.LogInformation(
+                    "task-archive-search term={SearchTerm} matched={Matched} of {ArchivedScanned} archived (watchPath={HasWatchPath})",
+                    term, total, all.Count, !string.IsNullOrWhiteSpace(watchPath));
+            }
+            logger.LogInformation(
                 "GET /api/tasks/archive returned {Returned}/{Total} archived tasks (offset={Offset}, limit={Limit}, search={HasSearch}) in {ElapsedMs}ms",
-                items.Count, total, off, lim, !string.IsNullOrWhiteSpace(term), sw.ElapsedMilliseconds);
+                items.Count, total, off, lim, hasSearch, sw.ElapsedMilliseconds);
 
             return Results.Ok(new ArchivedTasksResponse
             {
