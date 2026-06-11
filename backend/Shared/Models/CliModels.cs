@@ -203,6 +203,37 @@ public static class ModelMetadataRegistry
     public static IReadOnlyList<ModelMetadata> ForVendor(string vendor)
         => Entries.Where(e => string.Equals(e.Vendor, vendor, StringComparison.OrdinalIgnoreCase)).ToList();
 
+    public static string? DefaultForCli(string? cliType)
+    {
+        var vendor = VendorForCli(cliType);
+        if (vendor == null) return null;
+        var models = ForVendor(vendor).Where(e => e.Available && !e.Deprecated).ToList();
+        return models.FirstOrDefault(e => e.IsDefault)?.Id ?? models.FirstOrDefault()?.Id;
+    }
+
+    public static bool IsCompatibleWithCli(string? cliType, string? model)
+    {
+        if (string.IsNullOrWhiteSpace(cliType) || string.IsNullOrWhiteSpace(model)) return true;
+        if (string.Equals(CliTypes.Copilot, cliType, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var expectedVendor = VendorForCli(cliType);
+        if (expectedVendor == null) return true;
+
+        var metadata = Find(model);
+        return metadata == null
+               || string.Equals(metadata.Vendor, expectedVendor, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static string? NormalizeForCli(string? cliType, string? model)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+        if (string.IsNullOrWhiteSpace(cliType)) return trimmed;
+        return IsCompatibleWithCli(cliType, trimmed)
+            ? trimmed ?? DefaultForCli(cliType)
+            : DefaultForCli(cliType);
+    }
+
     public static ModelMetadata? Find(string? id)
     {
         if (string.IsNullOrWhiteSpace(id)) return null;
@@ -263,4 +294,16 @@ public static class ModelMetadataRegistry
         string[]? aliases = null)
         => new(id, label, "anthropic", isDefault, Deprecated: false, Available: true,
             InputPricePerMillion: input, OutputPricePerMillion: output, ContextWindow: context, Aliases: aliases);
+
+    private static string? VendorForCli(string? cliType)
+    {
+        if (!CliTypes.IsValid(cliType)) return null;
+        return CliTypes.Normalize(cliType) switch
+        {
+            CliTypes.Claude => "anthropic",
+            CliTypes.Codex => "openai",
+            CliTypes.Gemini => "google",
+            _ => null
+        };
+    }
 }

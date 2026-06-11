@@ -98,6 +98,59 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
         Assert.Equal("codex", info.Agent);
     }
 
+    [Fact]
+    public void SetJobCliType_RemapsForeignModelToNewCliDefault()
+    {
+        var (machine, scanner, mutations) = Build();
+        machine.EnsureStateFoldersAndMigrate();
+
+        mutations.CreateJob(new CreateJobRequest
+        {
+            Id = "model-drift",
+            Title = "Model drift",
+            WatchPath = _watchPath,
+            Agent = "claude",
+            CliType = "claude",
+            Model = "claude-opus-4-8",
+            TargetState = TaskStates.Ready
+        });
+
+        Assert.True(mutations.SetJobCliType("model-drift", "codex", _watchPath));
+
+        var info = scanner.FindJob("model-drift", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("codex", info!.CliType);
+        Assert.Equal("codex", info.Agent);
+        Assert.Equal(ModelIds.Gpt5Codex, info.Model);
+        Assert.Equal("high", info.ThinkingLevel);
+    }
+
+    [Fact]
+    public void SetJobModel_ForeignModelForCurrentCli_RemapsToCliDefault()
+    {
+        var (machine, scanner, mutations) = Build();
+        machine.EnsureStateFoldersAndMigrate();
+
+        mutations.CreateJob(new CreateJobRequest
+        {
+            Id = "bad-model-update",
+            Title = "Bad model update",
+            WatchPath = _watchPath,
+            Agent = "codex",
+            CliType = "codex",
+            Model = ModelIds.Gpt5Codex,
+            TargetState = TaskStates.Ready
+        });
+
+        Assert.True(mutations.SetJobModel("bad-model-update", "claude-opus-4-8", _watchPath));
+
+        var info = scanner.FindJob("bad-model-update", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("codex", info!.CliType);
+        Assert.Equal(ModelIds.Gpt5Codex, info.Model);
+        Assert.Equal("medium", info.ThinkingLevel);
+    }
+
     private (TaskStateMachine machine, TaskScannerService scanner, TaskMutationService mutations) Build()
     {
         var config = BuildConfig();

@@ -79,7 +79,7 @@ public class TaskMutationService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        var normalizedModel = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+        var normalizedModel = ModelMetadataRegistry.NormalizeForCli(info.CliType, model);
         TaskJsonFile.UpdateField(info.FolderPath, "model", normalizedModel ?? "", _logger);
         TaskJsonFile.UpdateField(
             info.FolderPath,
@@ -117,11 +117,13 @@ public class TaskMutationService
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
         var normalized = CliTypes.Normalize(cliType);
+        var normalizedModel = ModelMetadataRegistry.NormalizeForCli(normalized, info.Model);
         TaskJsonFile.UpdateField(info.FolderPath, "cliType", normalized, _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "model", normalizedModel ?? "", _logger);
         TaskJsonFile.UpdateField(
             info.FolderPath,
             "thinkingLevel",
-            CliThinkingLevels.Normalize(normalized, info.Model, info.ThinkingLevel) ?? "",
+            CliThinkingLevels.Normalize(normalized, normalizedModel, info.ThinkingLevel) ?? "",
             _logger);
         // Keep the parallel `agent` field in lockstep with `cliType`. The two
         // were originally meant to address different layers (which CLI vs.
@@ -597,6 +599,7 @@ public class TaskMutationService
         var effectiveModel = !string.IsNullOrWhiteSpace(req.Model)
             ? req.Model.Trim()
             : ownerIdentity?.DefaultModel;
+        effectiveModel = ModelMetadataRegistry.NormalizeForCli(effectiveCliType, effectiveModel);
         var effectiveThinkingLevel = CliThinkingLevels.Normalize(
             effectiveCliType,
             effectiveModel,
@@ -1006,6 +1009,7 @@ public class TaskMutationService
                 ? CliTypes.Normalize(dc)
                 : null;
             var model = owner.DefaultModel;
+            model = ModelMetadataRegistry.NormalizeForCli(cliType, model);
             var thinkingLevel = CliThinkingLevels.Normalize(cliType, model, owner.DefaultThinkingLevel);
 
             if (cliType == null && model == null && thinkingLevel == null) continue;

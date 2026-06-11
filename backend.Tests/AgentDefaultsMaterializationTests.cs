@@ -111,6 +111,51 @@ public class AgentDefaultsMaterializationTests : IDisposable
     }
 
     [Fact]
+    public void CreateJob_ExplicitCliTypeWithoutModel_UsesThatCliDefault()
+    {
+        var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-8");
+
+        mutations.CreateJob(new CreateJobRequest
+        {
+            Id = "task-codex-default",
+            Title = "Codex default",
+            WatchPath = _watchPath,
+            Agent = "codex",
+            CliType = "codex",
+            TargetState = TaskStates.Ready
+        });
+
+        var info = scanner.FindJob("task-codex-default", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("codex", info!.Agent);
+        Assert.Equal("codex", info.CliType);
+        Assert.Equal(ModelIds.Gpt5Codex, info.Model);
+        Assert.Equal("medium", info.ThinkingLevel);
+    }
+
+    [Fact]
+    public void CreateJob_ExplicitCliTypeWithForeignModel_RemapsToCliDefault()
+    {
+        var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-8");
+
+        mutations.CreateJob(new CreateJobRequest
+        {
+            Id = "task-codex-foreign",
+            Title = "Codex foreign",
+            WatchPath = _watchPath,
+            CliType = "codex",
+            Model = "claude-opus-4-8",
+            TargetState = TaskStates.Ready
+        });
+
+        var info = scanner.FindJob("task-codex-foreign", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("codex", info!.Agent);
+        Assert.Equal("codex", info.CliType);
+        Assert.Equal(ModelIds.Gpt5Codex, info.Model);
+    }
+
+    [Fact]
     public void CreateJob_PreservesAgentHuman_AsDeliberateManualTask()
     {
         var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
