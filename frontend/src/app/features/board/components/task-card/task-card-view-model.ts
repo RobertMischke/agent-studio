@@ -742,9 +742,9 @@ function pipelineView(
 ): PipelineDotsView {
   const order: PipelineDot['id'][] = ['pre', 'run', 'post', 'review'];
   const labels: Record<PipelineDot['id'], string> = {
-    pre: 'Pre',
-    run: 'Run',
-    post: 'Post',
+    pre: 'Pre steps',
+    run: 'Core agent work',
+    post: 'Post steps',
     review: 'Review',
   };
   const doneIndex = doneThrough ? order.indexOf(doneThrough) : -1;
@@ -768,7 +768,7 @@ function pipelineView(
  * Tiny card-level pipeline indicator. The board payload intentionally does not
  * carry the full per-task pipeline execution; that lives behind the detail
  * endpoint. The card therefore maps the existing lane/phase/execution signals
- * to the four visible sections (Pre, Run, Post, Review) without inventing
+ * to the four visible sections (Pre steps, core agent work, post steps, review) without inventing
  * per-step results.
  */
 export function buildPipelineDots(job: TaskInfo): PipelineDotsView {

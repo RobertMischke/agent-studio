@@ -78,7 +78,7 @@ export interface PipelineKindLegendRow {
 }
 
 const PIPELINE_KIND_LABELS: Record<PipelineStepKindKey, string> = {
-  core: 'Core run',
+  core: 'Core agent work',
   aspect: 'Aspects',
   tool: 'Tool steps',
   orchestrator: 'Orchestrator',
@@ -103,14 +103,14 @@ export function phaseForStep(step: PipelineCatalogueStep): string {
 
 export function pipelinePhaseLabel(phase: string): string {
   switch (phase) {
-    case 'pre': return 'Pre';
-    case 'core': return 'Core';
+    case 'pre': return 'Pre steps';
+    case 'core': return 'Core agent work';
     case 'aspect': return 'Aspect reviews';
     case 'tool': return 'Tool steps';
     case 'decision': return 'Decision';
     case 'drift': return 'Drift';
     case 'abort': return 'Abort-only';
-    default: return 'Post';
+    default: return 'Post steps';
   }
 }
 

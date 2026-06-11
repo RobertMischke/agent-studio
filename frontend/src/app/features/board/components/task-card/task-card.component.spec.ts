@@ -1361,7 +1361,7 @@ describe('buildPipelineDots', () => {
         model: 'gpt-5-codex', runOutcome: null,
       },
     }));
-    expect(dots.currentLabel).toBe('Run');
+    expect(dots.currentLabel).toBe('Core agent work');
     expect(dots.dots.map((dot) => [dot.id, dot.status])).toEqual([
       ['pre', 'done'],
       ['run', 'active'],
@@ -1372,7 +1372,7 @@ describe('buildPipelineDots', () => {
 
   it('surfaces post-processing as the active step without a large progress bar', () => {
     const dots = buildPipelineDots(makeJob({ state: '3-progress', phase: 'post-processing-running' }));
-    expect(dots.currentLabel).toBe('Post');
+    expect(dots.currentLabel).toBe('Post steps');
     expect(dots.dots.find((dot) => dot.id === 'post')?.status).toBe('active');
     expect(dots.dots.find((dot) => dot.id === 'run')?.status).toBe('done');
   });

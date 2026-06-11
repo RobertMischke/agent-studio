@@ -1047,9 +1047,9 @@ describe('OverviewPaneComponent (smoke)', () => {
 
     const c = fixture.componentInstance;
     const rows = c.pipelineRows();
-    // The loop guard is the first row (Pre), so a detected loop is visible early.
+    // The loop guard is the first row (pre steps), so a detected loop is visible early.
     expect(rows[0].id).toBe('pre-loop-guard');
-    expect(c.stepKindLabel(rows[0].kind)).toBe('Pre');
+    expect(c.stepKindLabel(rows[0].kind)).toBe('Pre steps');
 
     const guard = rows.find(r => r.id === 'pre-loop-guard')!;
     expect(guard.status).toBe('failed');
@@ -1336,15 +1336,15 @@ describe('OverviewPaneComponent (smoke)', () => {
       fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-phase"]'),
     ) as HTMLElement[];
     expect(groups.map(g => g.querySelector('.ov-pl-phase__label')?.textContent?.trim())).toEqual([
-      'PRE', 'CORE', 'ASPECT', 'TOOL', 'DECISION', 'DRIFT',
+      'PRE STEPS', 'CORE AGENT WORK', 'ASPECT', 'TOOL', 'DECISION', 'DRIFT',
     ]);
     expect(groups.map(g => g.querySelector('.ov-pl-phase__info')?.textContent?.trim())).toEqual([
       'i', 'i', 'i', 'i', 'i', 'i',
     ]);
     expect(groups.some(g => g.querySelector('.ov-pl-phase__description'))).toBe(false);
     expect(groups.map(g => g.getAttribute('aria-label'))).toEqual([
-      'PRE pipeline phase: Preparation checks before the agent gets the task.',
-      'CORE pipeline phase: The coding agent run.',
+      'PRE STEPS pipeline phase: Preparation checks before the agent gets the task.',
+      'CORE AGENT WORK pipeline phase: The coding agent work.',
       'ASPECT pipeline phase: Parallel review passes over the finished work.',
       'TOOL pipeline phase: Deterministic post-run tooling and evidence steps.',
       'DECISION pipeline phase: The orchestrator ruling that accepts, reissues, or escalates.',

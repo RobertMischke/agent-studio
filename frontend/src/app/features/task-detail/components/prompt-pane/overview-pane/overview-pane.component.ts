@@ -388,13 +388,13 @@ const FINAL_VERDICT_STEP_ID = 'post-orchestrator-decision';
 const PIPELINE_PHASES: Record<PipelinePhaseKey, PipelinePhaseVm> = {
   pre: {
     key: 'pre',
-    label: 'PRE',
+    label: 'PRE STEPS',
     description: 'Preparation checks before the agent gets the task.',
   },
   core: {
     key: 'core',
-    label: 'CORE',
-    description: 'The coding agent run.',
+    label: 'CORE AGENT WORK',
+    description: 'The coding agent work.',
   },
   aspect: {
     key: 'aspect',
@@ -1669,8 +1669,8 @@ export class OverviewPaneComponent {
 
   stepKindLabel(kind: StepKind): string {
     switch (kind) {
-      case 'module':       return 'Pre';
-      case 'core':         return 'Core';
+      case 'module':       return 'Pre steps';
+      case 'core':         return 'Core agent work';
       case 'aspect':       return 'Aspect';
       case 'orchestrator': return 'Decision';
       case 'tool':         return 'Tool';

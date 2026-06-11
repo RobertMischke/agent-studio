@@ -150,7 +150,7 @@
   @if (hasPipelineSection()) {
     <section class="ov-section studio-measure studio-measure--tabular-compact" data-testid="overview-pipeline">
       <h3 class="ov-section__title"
-          [appTooltip]="'Pre / core / post processing steps for this task. Per-step model and enable/disable are configured in project Settings.'">
+          [appTooltip]="'Pre steps, core agent work, and post steps for this task. Per-step model and enable/disable are configured in project Settings.'">
         Pipeline
         @if (isPipelineRestart()) {
           <span class="ov-pl-restart-badge"
