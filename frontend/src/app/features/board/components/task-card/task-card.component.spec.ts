@@ -371,7 +371,7 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.className).toContain('task-card__human-review-pill--attention');
   });
 
-  it('shows a calm Reviewed pill (not attention) for an accepted human-review card', async () => {
+  it('stays quiet for an accepted human-review card', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],
       providers: [
@@ -390,16 +390,13 @@ describe('TaskCardComponent (smoke)', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.needsAttention()).toBe(false);
-    expect(fixture.componentInstance.humanReviewBadge()?.tone).toBe('accept');
+    expect(fixture.componentInstance.humanReviewBadge()).toBeNull();
 
     const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
     expect(host?.classList.contains('task-card--attention')).toBe(false);
 
     const pill = fixture.nativeElement.querySelector('[data-testid="task-card-human-review"]') as HTMLElement | null;
-    // ASS-748: an accepted card carries the lane-independent "Reviewed" signal,
-    // not the old lane-mirroring "Ready to sign off" wording.
-    expect(pill?.textContent).toContain('Reviewed');
-    expect(pill?.className).toContain('task-card__human-review-pill--accept');
+    expect(pill).toBeNull();
   });
 
   it('stays quiet for an undecided human-review card and for completed cards', async () => {
@@ -754,6 +751,53 @@ describe('TaskCardComponent (smoke)', () => {
       ...overrides,
     };
   }
+
+  it('shows a ready task branch before commits without inventing file activity', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '2-ready',
+      commit: null,
+      commits: [],
+      provenance: {
+        branch: 'task/ready-before-first-commit',
+        base: 'base000',
+        transitions: [
+          {
+            lane: '2-ready',
+            atUtc: '2026-06-10T18:58:06.2321361Z',
+            branchTip: 'c599fb5c764b1991b5cb681d13dc6a4e98479c44',
+            workBranchHead: '948f4892c8a5bf0d2d234146547cba22f76501a8',
+          },
+        ],
+        merge: null,
+      },
+    }));
+
+    const context = fixture.componentInstance.changeContext();
+    expect(context?.label).toBe('BR');
+    expect(context?.value).toBe('task/ready-before-first-commit');
+    expect(context?.summary).toBe('no commits yet');
+    expect(context?.stat).toBeNull();
+
+    const change = fixture.nativeElement.querySelector('[data-testid="task-card-change-context"]') as HTMLElement | null;
+    expect(change?.textContent).toContain('task/ready-before-first-commit');
+    expect(change?.textContent).toContain('no commits yet');
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-commit"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-no-commits"]')).toBeNull();
+  });
+
+  it('labels the shared main checkout as worktree context, not branch context', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '3-progress',
+      commit: null,
+      commits: [],
+      provenance: null,
+    }));
+
+    const context = fixture.componentInstance.changeContext();
+    expect(context?.label).toBe('WT');
+    expect(context?.value).toBe('main checkout');
+    expect(context?.summary).toBe('no commits yet');
+  });
 
   it('AC#6 0-commit analysis-only card shows a calm "no code changes" badge, no pill', async () => {
     const fixture = await renderCard(makeJob({
@@ -1143,7 +1187,7 @@ describe('buildModeBadge', () => {
 
 // ASS-748: the card must not repeat what the lane already says. These cover the
 // pure render-logic that drops lane-mirroring labels and concern/classifier
-// tags while keeping genuine content tags and the "Reviewed" signal.
+// tags while keeping genuine content tags.
 describe('buildTagChips — lane-mirror + concern suppression', () => {
   function registry(...entries: TagRegistryEntry[]): Map<string, TagRegistryEntry> {
     return new Map(entries.map((e) => [e.id, e]));
@@ -1193,6 +1237,15 @@ describe('buildTagChips — lane-mirror + concern suppression', () => {
     expect(chips.map((c) => c.label)).toEqual(['Architecture', 'Security']);
   });
 
+  it('renders the auto-review reissue marker as a readable tag', () => {
+    const chips = buildTagChips(['reissue:autoreview'], new Map(), '2-ready');
+    expect(chips).toEqual([expect.objectContaining({
+      id: 'reissue:autoreview',
+      label: 'Reissue',
+      ghost: false,
+    })]);
+  });
+
   it('does not suppress a lane-name tag in an unrelated lane', () => {
     const reg = registry(tag('review', 'Review'));
     // 'review' only mirrors review lanes; in 3-progress it survives.
@@ -1203,6 +1256,19 @@ describe('buildTagChips — lane-mirror + concern suppression', () => {
   it('suppresses the raw code-review:grade-* tag (the grade badge renders it)', () => {
     const reg = registry(tag('code-review:grade-a', 'Grade A'));
     const chips = buildTagChips(['code-review:grade-a'], reg, '4-auto-review');
+    expect(chips).toEqual([]);
+  });
+
+  it('drops redundant review and orchestrator-moved tags', () => {
+    const reg = registry(
+      tag('accepted', 'Reviewed'),
+      tag('orchestrator-moved', 'Orchestrator: moved'),
+    );
+    const chips = buildTagChips(
+      ['accepted', 'orchestrator-moved', 'orchestrator:moved'],
+      reg,
+      '5-human-review',
+    );
     expect(chips).toEqual([]);
   });
 });
@@ -1228,13 +1294,12 @@ describe('buildCodeReviewGradeBadge — A/B/C/D quality grade (ASS-1657)', () =>
   });
 });
 
-describe('buildReviewBadge — keeps the Reviewed signal, no lane label', () => {
-  it('renders "Reviewed" for a ready summary (not "review ready")', () => {
+describe('buildReviewBadge — active review status only', () => {
+  it('stays quiet for a ready summary', () => {
     const badge = buildReviewBadge({
       status: 'ready', startedAt: null, finishedAt: null, errorMessage: null, bytesWritten: 42,
     });
-    expect(badge?.label).toBe('Reviewed');
-    expect(badge?.tone).toBe('ready');
+    expect(badge).toBeNull();
   });
 
   it('uses "summarizing" (not "auto-reviewing") while generating', () => {
@@ -1245,16 +1310,20 @@ describe('buildReviewBadge — keeps the Reviewed signal, no lane label', () => 
   });
 });
 
-describe('buildHumanReviewBadge — verdict is kept, "Reviewed" replaces sign-off', () => {
-  it('renders "Reviewed" for an accepted card (not "Ready to sign off")', () => {
+describe('buildHumanReviewBadge — action-required verdicts only', () => {
+  it('stays quiet for an accepted card', () => {
     const badge = buildHumanReviewBadge(makeJob({ state: '5-human-review', orchestratorVerdict: 'accept' }));
-    expect(badge?.label).toBe('Reviewed');
-    expect(badge?.tone).toBe('accept');
+    expect(badge).toBeNull();
   });
 
   it('keeps the escalate verdict — it is not derivable from the lane', () => {
     const badge = buildHumanReviewBadge(makeJob({ state: '5-human-review', orchestratorVerdict: 'escalate' }));
     expect(badge?.label).toBe('Escalated');
+  });
+
+  it('keeps the reissue verdict — it is an action signal', () => {
+    const badge = buildHumanReviewBadge(makeJob({ state: '5-human-review', orchestratorVerdict: 'reissue' }));
+    expect(badge?.label).toBe('Needs rework');
   });
 
   it('stays quiet for an undecided human-review card (no lane mirror)', () => {
