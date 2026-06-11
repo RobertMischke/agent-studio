@@ -294,6 +294,6 @@ Each follow-up task should leave behind, at minimum:
 - A regression test covering the case "existing job, no `phase`, renders in the right lane".
 - A Playwright screenshot of the new lane state where it touches the UI.
 - An update to `ROADMAP.md` if the task changes naming or the implementation order.
-- An update to `docs/agent-task-contract.md` if the task changes what agents can do (it should not for any of the listed tasks).
+- An update to `docs/contracts/agent-task.md` if the task changes what agents can do (it should not for any of the listed tasks).
 
 End of concept.

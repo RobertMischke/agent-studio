@@ -1,6 +1,6 @@
 # run-timeline
 
-Per-job CLI-invocation timeline. One run = one CLI invocation between two user inputs (the unit-of-conversation surface documented in `docs/design-principles.md`).
+Per-job CLI-invocation timeline. One run = one CLI invocation between two user inputs (the unit-of-conversation surface documented in `docs/product/design-principles.md`).
 
 ## Public API
 

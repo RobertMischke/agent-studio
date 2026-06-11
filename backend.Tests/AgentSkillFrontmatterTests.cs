@@ -23,7 +23,7 @@ namespace AgentStudio.Tests;
 /// added skill that forgets its frontmatter is flagged in the repo before
 /// it ever reaches a Codex run. It complements
 /// <see cref="CliSkillFilesTests"/>, which guards the separate
-/// <c>docs/cli-skills/</c> family.
+/// <c>docs/cli/skills/</c> family.
 /// </para>
 /// </summary>
 public class AgentSkillFrontmatterTests

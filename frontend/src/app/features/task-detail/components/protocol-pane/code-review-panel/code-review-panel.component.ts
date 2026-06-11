@@ -47,7 +47,7 @@ const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
  * </ul>
  *
  * <p>The CLI list is intentionally not filtered (see
- * <code>docs/cli-model-selector-audit.md</code>): the backend
+ * <code>docs/frontend/audits/cli-model-selector-audit.md</code>): the backend
  * <code>POST /api/tasks/{id}/code-review</code> endpoint accepts an
  * arbitrary <code>cliType</code> field, so the operator may run a review
  * with any installed CLI even though Claude remains the default.</p>

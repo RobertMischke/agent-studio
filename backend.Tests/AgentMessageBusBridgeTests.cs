@@ -6,7 +6,7 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// Locks the Phase A bridge contract (docs/agent-message-bus.md section 9):
+/// Locks the Phase A bridge contract (docs/architecture/bus/agent-message-bus.md section 9):
 /// every existing structured signal we elected to project onto the bus produces
 /// a typed <see cref="AgentMessage"/> with the right kind, severity, and
 /// participant. The legacy raw streams (cli-output.log, observations.jsonl,

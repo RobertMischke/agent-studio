@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -9,7 +9,7 @@ import type { ProjectRailKey } from './project-shell.config';
 
 /**
  * Render-path coverage for the Project-Hub nav IA (ASS-1711): collapsible
- * main segments, tree-expandable parents (Steering Docs / Settings), the
+ * main segments, tree-expandable parents (Project Knowledge / Settings), the
  * "Agent Docs" rename, the standalone "Runtime Prompts" point, and the
  * shared tree-row icon rail.
  */
@@ -34,6 +34,16 @@ function railEl(host: HTMLElement, key: string): HTMLElement | null {
   return host.querySelector<HTMLElement>(`[data-testid="project-shell-rail-${key}"]`);
 }
 
+function projectShellStorageKey(projectName = 'Demo Project'): string {
+  return `atp.projectShell.v1.${encodeURIComponent(projectName)}`;
+}
+
+function clearProjectShellStorage(): void {
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith('atp.projectShell.v1.')) localStorage.removeItem(key);
+  }
+}
+
 function resizeEvent(
   clientX: number,
   target: Pick<HTMLElement, 'setPointerCapture' | 'releasePointerCapture'>,
@@ -47,6 +57,10 @@ function resizeEvent(
 }
 
 describe('ProjectShellComponent rail IA', () => {
+  beforeEach(() => {
+    clearProjectShellStorage();
+  });
+
   it('renders one balanced project-hub header with icon actions', () => {
     const host = mount().nativeElement as HTMLElement;
     const back = host.querySelector<HTMLElement>('[data-testid="project-shell-back"]')!;
@@ -68,6 +82,7 @@ describe('ProjectShellComponent rail IA', () => {
     fixture.detectChanges();
 
     expect(host.querySelector<HTMLElement>('[data-testid="project-shell-rail"]')?.getAttribute('data-collapsed')).toBe('true');
+    expect(JSON.parse(localStorage.getItem(projectShellStorageKey()) ?? '{}').railCollapsed).toBe(true);
     expect(host.querySelector('[data-testid="project-shell-sidebar-header"]')).toBeNull();
     expect(host.querySelector('[data-testid="project-shell-expand-nav"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="project-shell-mini-rail-security"]')?.getAttribute('aria-current')).toBe('page');
@@ -77,7 +92,27 @@ describe('ProjectShellComponent rail IA', () => {
     fixture.detectChanges();
 
     expect(host.querySelector<HTMLElement>('[data-testid="project-shell-rail"]')?.getAttribute('data-collapsed')).toBe('false');
+    expect(JSON.parse(localStorage.getItem(projectShellStorageKey()) ?? '{}').railCollapsed).toBe(false);
     expect(host.querySelector('[data-testid="project-shell-sidebar-header"]')).toBeTruthy();
+  });
+
+  it('restores collapsed project navigation state after a reload', () => {
+    localStorage.setItem(projectShellStorageKey(), JSON.stringify({
+      railCollapsed: true,
+      railWidth: 320,
+      collapsedGroups: ['insight'],
+      expandedParents: ['settings'],
+    }));
+
+    const fixture = mount('security');
+    const component = fixture.componentInstance;
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(component.railCollapsed()).toBe(true);
+    expect(component.railWidth()).toBe(320);
+    expect(component.isGroupCollapsed('insight')).toBe(true);
+    expect(component.isExpanded('steering-docs')).toBe(false);
+    expect(host.querySelector('[data-testid="project-shell-sidebar-header"]')).toBeNull();
   });
 
   it('resizes the project navigation by dragging the splitter and collapses below threshold', () => {
@@ -143,18 +178,19 @@ describe('ProjectShellComponent rail IA', () => {
     expect(railEl(host, 'overview')).toBeTruthy();
   });
 
-  it('groups documentation rails under a non-navigable "Steering Docs" tree parent', () => {
+  it('groups knowledge rails under a non-navigable "Project Knowledge" tree parent', () => {
     const fixture = mount();
     const host = fixture.nativeElement as HTMLElement;
 
     // The container row is present and labelled, and ships a disclosure twisty.
     const container = railEl(host, 'steering-docs')!;
-    expect(container.textContent).toContain('Steering Docs');
+    expect(container.textContent).toContain('Project Knowledge');
     expect(host.querySelector('[data-testid="project-shell-twisty-steering-docs"]')).toBeTruthy();
 
     // Children are visible by default (parents seed expanded).
     expect(railEl(host, 'architecture')).toBeTruthy();
     expect(railEl(host, 'wiki')).toBeTruthy();
+    expect(railEl(host, 'wiki')!.textContent).toContain('Root Folder');
     expect(railEl(host, 'steering')).toBeTruthy();
 
     // Collapsing the parent hides only its children, not the container row.
@@ -180,18 +216,18 @@ describe('ProjectShellComponent rail IA', () => {
     expect(railEl(host, 'architecture')).toBeNull(); // collapsed
   });
 
-  it('renames the former Steering Docs leaf to "Agent Docs" and keeps the steering key', () => {
+  it('labels the agent-read leaf "Agent Docs" and keeps the steering key', () => {
     const host = mount().nativeElement as HTMLElement;
     const leaf = railEl(host, 'steering')!;
     expect(leaf.textContent).toContain('Agent Docs');
-    expect(leaf.textContent).not.toContain('Steering Docs');
+    expect(leaf.textContent).not.toContain('Project Knowledge');
   });
 
   it('exposes Runtime Prompts as its own top-level point in Config', () => {
     const host = mount().nativeElement as HTMLElement;
     const runtime = railEl(host, 'runtime-prompts')!;
     expect(runtime.textContent).toContain('Runtime Prompts');
-    // It is not nested under the Steering Docs container (no twisty, top-level row).
+    // It is not nested under the Project Knowledge container (no twisty, top-level row).
     expect(host.querySelector('[data-testid="project-shell-twisty-runtime-prompts"]')).toBeNull();
   });
 

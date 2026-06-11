@@ -3,7 +3,7 @@
 Status: reconciled with ADR-0052 (2026-05-31). No code change. Captures
 user intent from the `planning-task-task-differenzierung` brainstorm.
 The parallelism *mechanics* this note originally had to argue for now
-live in [ADR-0052](../architecture-decisions.md#adr-0052---intra-project-parallelism-is-now-an-opt-in-orchestrator-gated-capability-2026-05-31)
+live in [ADR-0052](../architecture/decisions/adr-archive.md#adr-0052---intra-project-parallelism-is-now-an-opt-in-orchestrator-gated-capability-2026-05-31)
 and the full design in [docs/concepts/parallel-task-execution.md](../concepts/parallel-task-execution.md).
 What remains genuinely this note's own is the **task-kind taxonomy**
 (planning / research / coding as a first-class `kind`), the **read-only

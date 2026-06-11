@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
@@ -45,6 +45,16 @@ async function setup(tree: WikiTree = TREE) {
 
 const el = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
 
+function wikiStorageKey(projectName = 'Demo'): string {
+  return `atp.projectWiki.v1.${encodeURIComponent(projectName)}`;
+}
+
+function clearWikiStorage(): void {
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith('atp.projectWiki.v1.')) localStorage.removeItem(key);
+  }
+}
+
 /** Minimal DataTransfer backed by a Map so getData/setData round-trip in jsdom. */
 function makeDataTransfer(): DataTransfer {
   const store = new Map<string, string>();
@@ -63,6 +73,18 @@ function fireDrag(target: Element, type: string, dt: DataTransfer): void {
   target.dispatchEvent(ev);
 }
 
+function fakePointer(clientX: number, pointerId = 1): PointerEvent {
+  return {
+    clientX,
+    pointerId,
+    preventDefault() {},
+    currentTarget: {
+      setPointerCapture() {},
+      releasePointerCapture() {},
+    },
+  } as unknown as PointerEvent;
+}
+
 const HISTORY: WikiFileHistory = {
   relPath: 'concepts/overview.md',
   model: 'Claude Opus 4.8',
@@ -76,6 +98,10 @@ const HISTORY: WikiFileHistory = {
 };
 
 describe('ProjectWikiSectionComponent', () => {
+  beforeEach(() => {
+    clearWikiStorage();
+  });
+
   it('renders the physical folder tree with folders and md/html files', async () => {
     const { fixture, http } = await setup();
     const text = el(fixture).textContent ?? '';
@@ -83,9 +109,13 @@ describe('ProjectWikiSectionComponent', () => {
     expect(text).toContain('concepts');
     expect(text).toContain('Concept overview');
     expect(text).toContain('Docs index');
-    expect(text).toContain('3 docs'); // overview.md + page.html + README.md
-    // The HTML page carries a subtle kind tag.
-    expect(el(fixture).querySelector('[data-testid="project-wiki-kind-html"]')).toBeTruthy();
+    expect(text).toContain('3 pages'); // overview.md + page.html + README.md
+    // The nav exposes the physical root path, parent path, and subtle file type icon.
+    expect(el(fixture).querySelector('[data-testid="project-wiki-root-path"]')!.textContent)
+      .toContain('/repo/docs');
+    expect(el(fixture).querySelector('[data-testid="project-wiki-file-path-concepts/page.html"]')!.textContent)
+      .toContain('concepts');
+    expect(el(fixture).querySelector('[data-file-type="html"]')).toBeTruthy();
     http.verify();
   });
 
@@ -104,10 +134,17 @@ describe('ProjectWikiSectionComponent', () => {
 
     expect(el(fixture).textContent).toContain('Hello wiki');
 
-    // Switch to the History tab and assert provenance + commit render.
-    el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-tab-history"]')!.click();
+    // The Source tab exposes a read-only editor surface with line numbers.
+    el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-tab-source"]')!.click();
     fixture.detectChanges();
+    const source = el(fixture).querySelector('[data-testid="project-wiki-source-editor"]');
+    expect(source, 'source editor').toBeTruthy();
+    expect(source!.textContent).toContain('# Hello wiki');
+    expect(source!.querySelector('[data-testid="project-wiki-source-line"]')!.textContent).toContain('1');
+
+    // History is no longer a document tab; it lives in the right context rail.
     const text = el(fixture).textContent ?? '';
+    expect(el(fixture).querySelector('[data-testid="project-wiki-history-panel"]')).toBeTruthy();
     expect(text).toContain('Claude Opus 4.8');
     expect(text).toContain('abc1234');
     http.verify();
@@ -137,9 +174,131 @@ describe('ProjectWikiSectionComponent', () => {
     const { fixture, http } = await setup();
     fixture.componentInstance.filter.set('concept');
     fixture.detectChanges();
-    const text = el(fixture).textContent ?? '';
+    const text = el(fixture).querySelector('[data-testid="project-wiki-tree"]')?.textContent ?? '';
     expect(text).toContain('Concept overview');
     expect(text).not.toContain('Docs index');
+    http.verify();
+  });
+
+  it('renders a functional default workspace page and collapses side panels', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+
+    expect(root.querySelector('[data-testid="project-wiki-viewer-empty"]')!.textContent)
+      .toContain('Root folder');
+    expect(root.querySelector('[data-testid="project-wiki-open-first"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-workspace-meta"]')).toBeTruthy();
+
+    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-toggle-nav"]')!.click();
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="project-wiki-tree"]')).toBeNull();
+
+    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-toggle-context"]')!.click();
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="project-wiki-workspace-meta"]')).toBeNull();
+    http.verify();
+  });
+
+  it('restores collapsed panels, selected document, and active tab from localStorage', async () => {
+    localStorage.setItem(wikiStorageKey(), JSON.stringify({
+      navCollapsed: true,
+      contextCollapsed: true,
+      openedRel: 'concepts/overview.md',
+      viewerTab: 'source',
+      navWidth: 340,
+      contextWidth: 360,
+    }));
+
+    const { fixture, http } = await setup();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Restored\n\nBody text.' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    const root = el(fixture);
+    expect(root.querySelector('[data-testid="project-wiki-tree"]')).toBeNull();
+    expect(root.querySelector('[data-testid="project-wiki-meta-panel"]')).toBeNull();
+    expect(root.querySelector('[data-testid="project-wiki-source-editor"]')!.textContent).toContain('# Restored');
+    expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent).toContain('concepts/overview.md');
+    expect(fixture.componentInstance.navWidth()).toBe(340);
+    expect(fixture.componentInstance.contextWidth()).toBe(360);
+    http.verify();
+  });
+
+  it('resizes and persists the tree and context panel widths', async () => {
+    const { fixture, http } = await setup();
+    const cmp = fixture.componentInstance;
+
+    cmp.startPanelResize(fakePointer(100), 'nav');
+    cmp.resizePanel(fakePointer(150));
+    cmp.finishPanelResize(fakePointer(150));
+    expect(cmp.navWidth()).toBe(336);
+
+    cmp.startPanelResize(fakePointer(300), 'context');
+    cmp.resizePanel(fakePointer(250));
+    cmp.finishPanelResize(fakePointer(250));
+    expect(cmp.contextWidth()).toBe(334);
+
+    const stored = JSON.parse(localStorage.getItem(wikiStorageKey()) ?? '{}') as {
+      navWidth?: number;
+      contextWidth?: number;
+    };
+    expect(stored.navWidth).toBe(336);
+    expect(stored.contextWidth).toBe(334);
+
+    cmp.onPanelSplitterKeydown(new KeyboardEvent('keydown', { key: 'ArrowRight' }), 'nav');
+    expect(cmp.navWidth()).toBe(352);
+    cmp.onPanelSplitterKeydown(new KeyboardEvent('keydown', { key: 'ArrowLeft' }), 'context');
+    expect(cmp.contextWidth()).toBe(350);
+    http.verify();
+  });
+
+  it('opens the drift modal with model selection and a document-scoped prompt', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+
+    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-drift-open-empty"]')!.click();
+    fixture.detectChanges();
+
+    http.expectOne('/api/cli/claude/models').flush({
+      models: [
+        { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', multiplier: null, vendor: 'anthropic', isDefault: true },
+      ],
+      source: 'test',
+    });
+    http.expectOne('/api/watch-paths').flush([
+      { name: 'Demo', path: 'C:\\repo\\projects\\agent-taskboard' },
+    ]);
+    http.expectOne(req =>
+      req.method === 'GET' && req.urlWithParams.startsWith('/api/drift/agent-taskboard/reports?')
+    ).flush({ reports: [] });
+    http.expectOne('/api/drift/agent-taskboard/actions/software-architecture-drift/prompt')
+      .flush({
+        project: 'agent-taskboard',
+        capturedAt: '2026-06-11T00:00:00Z',
+        architectureModelFound: true,
+        architectureModelSourcePath: 'docs/architecture/model.md',
+        architectureModelRejectionReason: null,
+        docs: ['docs/architecture/model.md'],
+        sourceTree: [],
+        moduleBoundaries: [],
+        schemas: [],
+        testDirs: [],
+        recentTasks: [],
+        recentDriftReports: [],
+        recentAnalysisReports: [],
+        prompt: 'Base architecture drift prompt',
+      });
+    fixture.detectChanges();
+
+    const modal = document.querySelector<HTMLElement>('[data-testid="project-wiki-drift-modal"]');
+    expect(modal, 'drift modal').toBeTruthy();
+    expect(modal!.querySelector('[data-testid="project-wiki-drift-model"]')!.textContent)
+      .toContain('Claude Opus 4.8');
+    expect(modal!.querySelector('[data-testid="project-wiki-drift-result"]')!.textContent)
+      .toContain('Knowledge page drift analysis');
+    expect(modal!.querySelector('[data-testid="project-wiki-drift-result"]')!.textContent)
+      .toContain('Base architecture drift prompt');
     http.verify();
   });
 
@@ -171,7 +330,7 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.componentInstance.closeMenu();
     fixture.detectChanges();
 
-    // Folder context menu: New page + New folder + Rename + Delete folder, text-only.
+    // Category context menu: New page + New category + Rename + Delete category, text-only.
     openCtx('concepts');
     panel = document.querySelector<HTMLElement>('[data-testid="wiki-ctx-panel"]');
     expect(panel, 'folder context menu panel').toBeTruthy();
@@ -260,9 +419,7 @@ describe('ProjectWikiSectionComponent', () => {
     http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
     fixture.detectChanges();
 
-    // History tab -> click "View" on the commit -> fetch + show the old revision.
-    el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-tab-history"]')!.click();
-    fixture.detectChanges();
+    // History is in the right context rail; clicking View fetches the old revision.
     el(fixture).querySelector<HTMLButtonElement>('[data-testid="wiki-doc-history-view-abc1234"]')!.click();
     fixture.detectChanges();
 

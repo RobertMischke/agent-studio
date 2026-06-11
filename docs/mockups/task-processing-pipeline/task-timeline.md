@@ -1,6 +1,6 @@
 # Mockup: Task-Detail Pipeline Timeline
 
-Task-detail surface (read/observe). Shows the planned step sequence up front, live progress on the executing step, and per-step status + duration + attempt + artifact + orchestrator verdict. Renders on the `timeline.jsonl` ledger ([ADR-0049](../../architecture-decisions.md#adr-0049)). Spec: [ADR-0051 section 5.2](../../adr/adr-0051-task-processing-pipeline.md#52-task-detail-level-the-timeline-readobserve).
+Task-detail surface (read/observe). Shows the planned step sequence up front, live progress on the executing step, and per-step status + duration + attempt + artifact + orchestrator verdict. Renders on the `timeline.jsonl` ledger ([ADR-0049](../../architecture/decisions/adr-archive.md#adr-0049)). Spec: [ADR-0051 section 5.2](../../architecture/decisions/proposed/adr-0051-task-processing-pipeline.md#52-task-detail-level-the-timeline-readobserve).
 
 ## Mid-run state (core done, build running, rest planned)
 
@@ -82,7 +82,7 @@ Every step produces a markdown artifact. Script artifact = captured output + ver
 
 ## Step-history drill-down (links to the project analytics view)
 
-Each step row has a hover affordance into the cross-task CI/CD-style stats ([ADR-0051 section 6.4](../../adr/adr-0051-task-processing-pipeline.md#64-aggregates--queries)), served from the derived `pipeline-history.db`.
+Each step row has a hover affordance into the cross-task CI/CD-style stats ([ADR-0051 section 6.4](../../architecture/decisions/proposed/adr-0051-task-processing-pipeline.md#64-aggregates--queries)), served from the derived `pipeline-history.db`.
 
 ```
   Build (dotnet build)   runs 142   p95 12.0s   fail-rate 4.2%   trend v  [ See history ]

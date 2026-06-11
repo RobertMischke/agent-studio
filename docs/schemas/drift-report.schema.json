@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-taskboard.local/schemas/drift-report.schema.json",
   "title": "DriftReport",
-  "description": "One project-level drift analysis report. Drift is the gap between what the project says and what the project does. A report compares two or more project surfaces (intent, specs, tasks/jobs, ADRs and source code, README and AGENTS, marketing claims, design references, tests, runtime behavior, process rules, schemas, token spend) and emits a triage score with evidence references, per-dimension breakdowns, optional architecture-element scores, and follow-up task suggestions. The Markdown sibling at <reportId>.md is the durable human artifact; this JSON is the additive app contract. Storage lives at <workspace>/logs/drift/<project>/<reportId>.{md,json} and is read through the project organization / Task Access layer. Scoring inputs and weighting are documented in docs/drift-reports.md.",
+  "description": "One project-level drift analysis report. Drift is the gap between what the project says and what the project does. A report compares two or more project surfaces (intent, specs, tasks/jobs, ADRs and source code, README and AGENTS, marketing claims, design references, tests, runtime behavior, process rules, schemas, token spend) and emits a triage score with evidence references, per-dimension breakdowns, optional architecture-element scores, and follow-up task suggestions. The Markdown sibling at <reportId>.md is the durable human artifact; this JSON is the additive app contract. Storage lives at <workspace>/logs/drift/<project>/<reportId>.{md,json} and is read through the project organization / Task Access layer. Scoring inputs and weighting are documented in docs/reports/drift-reports.md.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -109,12 +109,12 @@
       "type": "integer",
       "minimum": 0,
       "maximum": 100,
-      "description": "Triage score across all dimensions. Higher is healthier; lower means more drift risk. Computed from dimension scores and weights documented in docs/drift-reports.md. The score is a triage signal, not a hidden decision engine."
+      "description": "Triage score across all dimensions. Higher is healthier; lower means more drift risk. Computed from dimension scores and weights documented in docs/reports/drift-reports.md. The score is a triage signal, not a hidden decision engine."
     },
     "scoreBand": {
       "type": "string",
       "enum": ["Healthy", "Watch", "Warn", "Critical", "Unknown"],
-      "description": "Human-facing score band. Derived from overallScore and the worst dimension severity. Healthy >= 85 with no High/Critical; Watch 70-84 or any Warn; Warn 50-69 or any High; Critical < 50 or any Critical; Unknown when sourceCoverage is too low to score (see docs/drift-reports.md)."
+      "description": "Human-facing score band. Derived from overallScore and the worst dimension severity. Healthy >= 85 with no High/Critical; Watch 70-84 or any Warn; Warn 50-69 or any High; Critical < 50 or any Critical; Unknown when sourceCoverage is too low to score (see docs/reports/drift-reports.md)."
     },
     "summary": {
       "type": "string",
@@ -221,7 +221,7 @@
           "scoreInputs": {
             "type": ["object", "null"],
             "additionalProperties": false,
-            "description": "Transparent breakdown of the inputs that produced score. Consumers may render this as a tooltip or drill-down panel. The exact weighting is documented in docs/drift-reports.md so the score is reproducible from these inputs.",
+            "description": "Transparent breakdown of the inputs that produced score. Consumers may render this as a tooltip or drill-down panel. The exact weighting is documented in docs/reports/drift-reports.md so the score is reproducible from these inputs.",
             "properties": {
               "findingsBySeverity": {
                 "type": "object",
@@ -236,7 +236,7 @@
               },
               "affectedSurfaces": {
                 "type": "array",
-                "description": "Distinct source surfaces touched by this dimension's findings. Free-form labels, e.g. 'README.md', 'docs/architecture-decisions.md', 'backend/Services/Runner', 'frontend/src/app/components'.",
+                "description": "Distinct source surfaces touched by this dimension's findings. Free-form labels, e.g. 'README.md', 'docs/architecture/decisions/adr-archive.md', 'backend/Services/Runner', 'frontend/src/app/components'.",
                 "items": { "type": "string", "minLength": 1, "maxLength": 200 }
               },
               "recurrenceCount": {
@@ -315,7 +315,7 @@
     },
     "architectureModel": {
       "type": ["object", "null"],
-      "description": "Optional high-level architecture model used for software-to-architecture drift. Intended for a marble-style project view. Hard limit of ten elements keeps the map reviewable. The authoring contract for the source model (Markdown + frontmatter) lives in docs/architecture-model.md and is validated by docs/schemas/architecture-model.schema.json. The block here is the per-report projection: it carries scoring fields keyed by the source model's elementId.",
+      "description": "Optional high-level architecture model used for software-to-architecture drift. Intended for a marble-style project view. Hard limit of ten elements keeps the map reviewable. The authoring contract for the source model (Markdown + frontmatter) lives in docs/architecture/model.md and is validated by docs/schemas/architecture-model.schema.json. The block here is the per-report projection: it carries scoring fields keyed by the source model's elementId.",
       "additionalProperties": false,
       "required": ["modelId", "title", "elements"],
       "properties": {

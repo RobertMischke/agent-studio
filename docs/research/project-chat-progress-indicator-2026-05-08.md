@@ -310,7 +310,7 @@ account-bound, GUI tools (see §1.2 resume note for the full capability gap).
 A 30-minute human session closes the gap.
 
 **Output.** Append a new section "Empirical addendum (captured 2026-05-XX)" to
-[`docs/research/project-chat-progress-indicator-2026-05-08.md`](../docs/research/project-chat-progress-indicator-2026-05-08.md)
+[`docs/research/project-chat-progress-indicator-2026-05-08.md`](project-chat-progress-indicator-2026-05-08.md)
 with one sub-section per tool. Each sub-section contains:
 
 1. One screenshot of the in-flight indicator state (`results/<tool>-indicator.png`).

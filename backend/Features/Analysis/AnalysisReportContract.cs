@@ -168,7 +168,7 @@ public sealed record AnalysisReportProducer(
 /// <summary>
 /// One typed pointer to evidence. Reports cite by stable id and do not copy
 /// raw bytes. Reference shapes are documented in
-/// <c>docs/analysis-reports.md</c>.
+/// <c>docs/reports/analysis-reports.md</c>.
 /// </summary>
 public sealed record AnalysisReportReference(
     AnalysisReportReferenceKind Kind,
@@ -206,7 +206,7 @@ public sealed record AnalysisReportFollowUpTaskSuggestion(
 /// <remarks>
 /// Schema: <c>docs/schemas/analysis-report.schema.json</c>. Storage rules,
 /// producer model, and parse-failure semantics are documented in
-/// <c>docs/analysis-reports.md</c>.
+/// <c>docs/reports/analysis-reports.md</c>.
 /// </remarks>
 public sealed record AnalysisReport(
     string ReportId,

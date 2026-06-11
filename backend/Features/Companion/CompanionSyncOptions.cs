@@ -3,7 +3,7 @@ namespace AgentStudio.Companion;
 /// <summary>
 /// Bound from the <c>Companion</c> section of <c>appsettings*.json</c>. Default
 /// disabled so a fresh checkout never tries to phone home. The full design is
-/// documented in <c>docs/companion-app-design.md</c> and ADR-0018.
+/// documented in <c>docs/product/companion-app-design.md</c> and ADR-0018.
 /// </summary>
 public sealed class CompanionSyncOptions
 {

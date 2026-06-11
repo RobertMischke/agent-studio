@@ -8,7 +8,7 @@ namespace AgentStudio.Tasks;
 /// workspace-wide visual evidence reel without inventing a new
 /// retention policy: the files are exactly the ones the runner and
 /// the Playwright artifact harvester already drop on disk per
-/// <c>docs/protocol-style.md</c>.
+/// <c>docs/contracts/protocol-style.md</c>.
 ///
 /// Two top-level shapes:
 ///

@@ -18,7 +18,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
  * 2. Scheduling controls per topic, default <code>disabled</code>. The cadence
  *    is persisted in <code>ProjectSettings.AnalysisSchedules</code>; the
  *    backend does not auto-run scheduled reports yet, see
- *    <code>docs/analysis-reports.md</code>.
+ *    <code>docs/reports/analysis-reports.md</code>.
  * 3. Report history newest-first with title, scope, producer, trigger,
  *    severity, parse status and a count of follow-ups. Click a row to
  *    drill down (event surfaced through <code>(openReport)</code>).

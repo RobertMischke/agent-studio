@@ -11,7 +11,7 @@ import * as fs from 'fs';
  *
  * Output target: per-job `results/` so the screenshots survive past the
  * next test run (Playwright's `test-results/` is scratch).
- * See `docs/protocol-style.md`.
+ * See `docs/contracts/protocol-style.md`.
  */
 
 const FRONTEND_DIR = process.cwd();

@@ -26,7 +26,7 @@
     { "kind": "LogSlice", "ref": "sample-job:1:7-15", "label": "queue.tick burst" },
     { "kind": "LogSlice", "ref": "sample-job:1:6", "label": "order.shipped without order.placed" },
     { "kind": "Screenshot", "ref": "sample-job/results/runtime/orders.spec.jsonl", "label": "Playwright runtime attachment" },
-    { "kind": "Doc", "ref": "docs/product-runtime-observability.md", "label": "runtime observability contract" }
+    { "kind": "Doc", "ref": "docs/operations/runtime/observability.md", "label": "runtime observability contract" }
   ],
   "findings": [
     {

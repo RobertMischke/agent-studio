@@ -263,7 +263,7 @@ public static class PostAbortReviewDecider
     /// <summary>
     /// Default per-job rerun budget. Bounds the abort-review rerun loop so a
     /// misbehaving run cannot be re-issued forever; mirrored in
-    /// <c>docs/loop-inventory.md</c> (<c>abort-review.rerun-per-job</c>) and
+    /// <c>docs/contracts/loop-inventory.md</c> (<c>abort-review.rerun-per-job</c>) and
     /// asserted by <c>AbortReviewRerunBreakerTest</c>.
     /// </summary>
     public const int DefaultRerunBudget = 2;

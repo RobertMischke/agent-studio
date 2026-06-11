@@ -117,7 +117,7 @@ The prep loop is **not** a new layer. It runs inside the orchestrator's existing
 
 - [taxonomy.md](taxonomy.md) - the configurable knobs, the clarity-score inputs, the per-level transition matrix, and the typed bounce reasons.
 - [ui.html](ui.html) - clickable dummy with two states: low-autonomy board (`1b-needs-human-review` visible, queue thin) and fully-auto board (`1b-needs-human-review` hidden, queue full, items flowing). Toggle via the slider in the header.
-- [`docs/architecture-decisions.md`](../../architecture-decisions.md) ADR-0026 - the ADR that adopts this mockup as the spec.
+- [`docs/architecture/decisions/adr-archive.md`](../../architecture/decisions/adr-archive.md) ADR-0026 - the ADR that adopts this mockup as the spec.
 
 ## First implementation slice
 

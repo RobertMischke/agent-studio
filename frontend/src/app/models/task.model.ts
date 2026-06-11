@@ -490,7 +490,7 @@ export interface TaskDetail {
    * audits, code-review passes, task checks, or human notes. Empty when
    * the file is absent. Findings are evidence for review, not blockers:
    * the lane transitions never gate on them. See
-   * `docs/filesystem-contract.md` "results/review-evidence.jsonl".
+   * `docs/contracts/filesystem.md` "results/review-evidence.jsonl".
    */
   reviewEvidence: ReviewEvidenceEntry[];
 }

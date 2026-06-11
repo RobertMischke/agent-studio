@@ -90,7 +90,7 @@ A single Markdown reply structured like this:
    that produces or consumes those records.
 6. **Missing ADRs** - load-bearing decisions visible in recent commits or
    recent task evidence that do not have an entry in
-   `docs/architecture-decisions.md`.
+   `docs/architecture/decisions/adr-archive.md`.
 7. **Follow-up task suggestions** - candidate jobs to queue (ADR update,
    code alignment, or architecture review). Suggestions are drafts; the
    user creates the actual job.

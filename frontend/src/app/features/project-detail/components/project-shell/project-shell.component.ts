@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
 import { StudioSidebarHeaderComponent } from '../../../../components/studio-sidebar-header/studio-sidebar-header.component';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
@@ -37,6 +37,15 @@ interface RailResizeState {
   startWidth: number;
   moved: boolean;
 }
+
+interface ProjectShellPersistedState {
+  railCollapsed?: boolean;
+  railWidth?: number;
+  collapsedGroups?: ProjectRailGroup[];
+  expandedParents?: ProjectRailKey[];
+}
+
+const PROJECT_SHELL_STATE_STORAGE_PREFIX = 'atp.projectShell.v1.';
 
 /**
  * Project page shell. Slice 2 of the quality-system mockup: introduces the
@@ -96,6 +105,12 @@ export class ProjectShellComponent {
     new Set(PROJECT_RAIL_PARENT_KEYS),
   );
 
+  constructor() {
+    effect(() => {
+      this.restorePersistedState(this.projectName());
+    });
+  }
+
   /**
    * Rail items as a collapsible-segment → tree-node structure. Top-level nodes
    * are items without a `parent`; each carries the children that point back at
@@ -133,10 +148,12 @@ export class ProjectShellComponent {
 
   setRailCollapsed(collapsed: boolean): void {
     this.railCollapsed.set(collapsed);
+    this.persistState();
   }
 
   toggleRailCollapsed(): void {
     this.railCollapsed.update(v => !v);
+    this.persistState();
   }
 
   startRailResize(event: PointerEvent): void {
@@ -195,7 +212,10 @@ export class ProjectShellComponent {
       if (this.railCollapsed()) return;
       const nextWidth = this.railWidth() - this.keyboardResizeStep;
       if (nextWidth < this.minRailWidth) this.setRailCollapsed(true);
-      else this.railWidth.set(nextWidth);
+      else {
+        this.railWidth.set(nextWidth);
+        this.persistState();
+      }
       return;
     }
 
@@ -207,6 +227,7 @@ export class ProjectShellComponent {
       } else {
         this.railWidth.set(this.clampRailWidth(this.railWidth() + this.keyboardResizeStep));
       }
+      this.persistState();
     }
   }
 
@@ -220,6 +241,7 @@ export class ProjectShellComponent {
     if (collapsed) next.add(id);
     else next.delete(id);
     this.collapsedGroups.set(next);
+    this.persistState();
   }
 
   isExpanded(key: ProjectRailKey): boolean {
@@ -231,6 +253,7 @@ export class ProjectShellComponent {
     if (next.has(key)) next.delete(key);
     else next.add(key);
     this.expandedParents.set(next);
+    this.persistState();
   }
 
   /**
@@ -256,9 +279,72 @@ export class ProjectShellComponent {
 
     this.setRailCollapsed(false);
     this.railWidth.set(this.clampRailWidth(width));
+    this.persistState();
   }
 
   private clampRailWidth(width: number): number {
     return Math.min(this.maxRailWidth, Math.max(this.minRailWidth, Math.round(width)));
+  }
+
+  private restorePersistedState(projectName: string): void {
+    const state = this.readPersistedState(projectName);
+    this.railCollapsed.set(state?.railCollapsed === true);
+    this.railWidth.set(this.clampRailWidth(state?.railWidth ?? 240));
+    this.collapsedGroups.set(new Set(state?.collapsedGroups ?? []));
+    this.expandedParents.set(new Set(state?.expandedParents ?? PROJECT_RAIL_PARENT_KEYS));
+  }
+
+  private persistState(): void {
+    const projectName = this.projectName();
+    if (!projectName) return;
+    const state: ProjectShellPersistedState = {
+      railCollapsed: this.railCollapsed(),
+      railWidth: this.railWidth(),
+      collapsedGroups: [...this.collapsedGroups()],
+      expandedParents: [...this.expandedParents()],
+    };
+    try {
+      globalThis.localStorage?.setItem(this.storageKey(projectName), JSON.stringify(state));
+    } catch {
+      /* Persistence is a convenience; navigation keeps working without storage. */
+    }
+  }
+
+  private readPersistedState(projectName: string): ProjectShellPersistedState | null {
+    try {
+      const raw = globalThis.localStorage?.getItem(this.storageKey(projectName));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Partial<ProjectShellPersistedState>;
+      return {
+        railCollapsed: parsed.railCollapsed === true,
+        railWidth: this.readStoredRailWidth(parsed.railWidth),
+        collapsedGroups: this.readStoredGroups(parsed.collapsedGroups),
+        expandedParents: this.readStoredParents(parsed.expandedParents),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private readStoredRailWidth(value: unknown): number | undefined {
+    return typeof value === 'number' && Number.isFinite(value)
+      ? this.clampRailWidth(value)
+      : undefined;
+  }
+
+  private readStoredGroups(value: unknown): ProjectRailGroup[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    const valid = new Set<ProjectRailGroup>(['insight', 'quality', 'operations', 'config']);
+    return value.filter((item): item is ProjectRailGroup => valid.has(item));
+  }
+
+  private readStoredParents(value: unknown): ProjectRailKey[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    const valid = new Set<ProjectRailKey>(PROJECT_RAIL_PARENT_KEYS);
+    return value.filter((item): item is ProjectRailKey => valid.has(item));
+  }
+
+  private storageKey(projectName: string): string {
+    return `${PROJECT_SHELL_STATE_STORAGE_PREFIX}${encodeURIComponent(projectName)}`;
   }
 }

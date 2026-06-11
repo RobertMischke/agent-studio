@@ -20,4 +20,4 @@ PW_TARGET="$pw_target" PW_VISUAL_CAPTURE="$pw_visual_capture" npx playwright tes
 cd "$repo_root"
 node scripts/visual-docs/validate.mjs
 
-echo "Visual documentation screenshots are ready in docs/images/."
+echo "Visual documentation screenshots are ready in docs/assets/images/."

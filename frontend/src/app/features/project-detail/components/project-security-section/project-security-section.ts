@@ -10,7 +10,7 @@ import { MarkdownViewComponent } from '../../../../components/markdown-view/mark
  *
  * Prototype: no diff view, no syntax highlight, no Markdown preview
  * toolbar. Source-mode textarea for editing, rendered Markdown in
- * read mode. Files live under <repoRoot>/docs/security/.
+ * read mode. Files live under <repoRoot>/docs/operations/security/.
  */
 @Component({
   selector: 'app-project-security-section',

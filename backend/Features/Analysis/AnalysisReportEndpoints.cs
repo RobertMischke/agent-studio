@@ -247,7 +247,7 @@ public static class AnalysisReportEndpoints
 
             var reportId = "01" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + Guid.NewGuid().ToString("N").Substring(0, 8);
             // Producer + participant follow the supporting-agent rules in
-            // docs/agent-message-bus.md once an agent narrative is supplied;
+            // docs/architecture/bus/agent-message-bus.md once an agent narrative is supplied;
             // the evidence-only path stays Manual/user so the timeline does
             // not falsely advertise a supporting-agent run.
             var hasAgentRun = !string.IsNullOrWhiteSpace(agentResponse);
@@ -416,7 +416,7 @@ public static class AnalysisReportEndpoints
 
             var reportId = "01" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + Guid.NewGuid().ToString("N").Substring(0, 8);
             // Producer + participant follow the supporting-agent rules in
-            // docs/agent-message-bus.md once an agent narrative is supplied;
+            // docs/architecture/bus/agent-message-bus.md once an agent narrative is supplied;
             // the evidence-only path stays Manual/user so the timeline does
             // not falsely advertise a supporting-agent run.
             var hasAgentRun = !string.IsNullOrWhiteSpace(agentResponse);

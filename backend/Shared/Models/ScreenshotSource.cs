@@ -7,7 +7,7 @@ namespace AgentStudio.Shared;
 /// API routes (<c>mocked</c>). Composite images that stitch several shots
 /// together carry <c>composite</c> plus the source of each part.
 ///
-/// See <c>docs/protocol-style.md</c> §4.4 for the filename grammar.
+/// See <c>docs/contracts/protocol-style.md</c> §4.4 for the filename grammar.
 /// </summary>
 public static class ScreenshotSources
 {

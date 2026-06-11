@@ -20,7 +20,7 @@ CLI agent and the runtime (e.g. a JSON event stream over a side socket, a
 named pipe carrying `decision-required` events) or whether *scanning recent
 output every N seconds* is enough.
 
-The agent contract today (ADR-0002, [docs/agent-task-contract.md](../agent-task-contract.md))
+The agent contract today (ADR-0002, [docs/contracts/agent-task.md](../contracts/agent-task.md))
 already pins the answer for the post-run path: the canonical sentinels
 (`[[TASK_DONE]]`, `[[TASK_BLOCKED:...]]`, `[[TASK_NEEDS_INPUT:...]]`,
 `[[TASK_NOOP]]`) are bracketed strings the agent emits in its normal stdout.
@@ -45,7 +45,7 @@ Why:
    primitive `AgentOutcomeAnalyzer.SentinelRegex` exposes; reuse it.
 2. **Every supported CLI already writes stdout.** Claude, Codex, Copilot, and
    Gemini all emit the agent's response on stdout (per the per-CLI driver
-   contract in `docs/supported-clis.md`). A typed channel would have to be
+   contract in `docs/cli/supported-clis.md`). A typed channel would have to be
    reimplemented per CLI driver - and at least one (Copilot) does not give
    us a structured event stream we control. Stdout works for all four with
    no driver changes.

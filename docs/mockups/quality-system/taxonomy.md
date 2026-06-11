@@ -168,7 +168,7 @@ Suggested dimension vocabulary:
 
 - Reusable workflows that produce work, evidence, reports, or analysis.
 - Portable across managed taskboard runs and direct CLI sessions.
-- Already defined conceptually in [docs/skills-architecture.md](../../skills-architecture.md).
+- Already defined conceptually in [docs/product/skills-architecture.md](../../product/skills-architecture.md).
 - Not the same thing as a UI surface. Skills power buttons; surfaces organize evidence.
 
 ## 7. Report Contracts
@@ -205,7 +205,7 @@ Drift reports use a separate contract because the UI needs scoring and trends:
       "confidence": 0.78,
       "sourceCoverage": 0.7,
       "summary": "Two ADR assumptions are not reflected in the current source layout.",
-      "evidenceRefs": ["docs/architecture-decisions.md", "backend/Services/..."],
+      "evidenceRefs": ["docs/architecture/decisions/adr-archive.md", "backend/Services/..."],
       "status": "new",
       "recommendedActions": ["Create architecture follow-up task"]
     }
@@ -377,7 +377,7 @@ The mockup may show repository entries as a future preview, but installation sho
 ## 13. Open Questions
 
 1. Final UI label for the definitions library: "Review definitions", "Audits and Checks", or "Project checks"?
-2. Exact storage for project audit reports: under `docs/security/reviews/`, under `docs/quality/reviews/`, or under a project evidence folder?
+2. Exact storage for project audit reports: under `docs/operations/security/reviews/`, under `docs/quality/reviews/`, or under a project evidence folder?
 3. Whether spawned Task Checks run before the folder move to `4-review` or immediately after it. Either way, first version should not block the transition.
 4. Whether injected checks are worth shipping at all in the first version.
 5. Which token source is authoritative per CLI, and how much should be inferred when a CLI only exposes partial data?

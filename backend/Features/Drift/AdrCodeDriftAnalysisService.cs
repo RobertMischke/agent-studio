@@ -375,16 +375,16 @@ public sealed class AdrCodeDriftAnalysisService
     private static IReadOnlyList<DriftRef> BuildDocList(string repoRoot)
     {
         var docs = new List<DriftRef>();
-        AddIfExists(docs, repoRoot, "docs/architecture-decisions.md", "Architecture decisions (ADR archive)");
-        AddIfExists(docs, repoRoot, "docs/design-principles.md", "Design principles");
+        AddIfExists(docs, repoRoot, "docs/architecture/decisions/adr-archive.md", "Architecture decisions (ADR archive)");
+        AddIfExists(docs, repoRoot, "docs/product/design-principles.md", "Design principles");
         AddIfExists(docs, repoRoot, "ROADMAP.md", "ROADMAP");
         AddIfExists(docs, repoRoot, "README.md", "README");
         AddIfExists(docs, repoRoot, "AGENTS.md", "AGENTS");
-        AddIfExists(docs, repoRoot, "docs/agent-task-contract.md", "Agent task contract");
-        AddIfExists(docs, repoRoot, "docs/skills-architecture.md", "Skills architecture");
-        AddIfExists(docs, repoRoot, "docs/protocol-style.md", "Protocol & image style");
-        AddIfExists(docs, repoRoot, "docs/filesystem-contract.md", "Filesystem contract");
-        AddIfExists(docs, repoRoot, "docs/analysis-reports.md", "Analysis reports contract");
+        AddIfExists(docs, repoRoot, "docs/contracts/agent-task.md", "Agent task contract");
+        AddIfExists(docs, repoRoot, "docs/product/skills-architecture.md", "Skills architecture");
+        AddIfExists(docs, repoRoot, "docs/contracts/protocol-style.md", "Protocol & image style");
+        AddIfExists(docs, repoRoot, "docs/contracts/filesystem.md", "Filesystem contract");
+        AddIfExists(docs, repoRoot, "docs/reports/analysis-reports.md", "Analysis reports contract");
         return docs;
     }
 

@@ -33,7 +33,7 @@ public record TaskDetail
     /// Empty when the file is absent or only contained malformed lines.
     /// Findings are evidence for review, not blockers: their presence does
     /// not gate any state transition. See
-    /// <c>docs/filesystem-contract.md</c> "results/review-evidence.jsonl".
+    /// <c>docs/contracts/filesystem.md</c> "results/review-evidence.jsonl".
     /// </summary>
     public List<ReviewEvidenceEntry> ReviewEvidence { get; init; } = [];
 }

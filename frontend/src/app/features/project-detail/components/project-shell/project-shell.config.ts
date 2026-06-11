@@ -21,9 +21,9 @@ export type ProjectRailKey =
   | 'observability'
   | 'product-runtime'
   // 'steering-docs' is the NON-navigable tree container that groups the
-  // documentation rails (Architecture / Wiki / Agent Docs). 'steering' is the
-  // (renamed) leaf that used to be labelled "Steering Docs" and now carries the
-  // "Agent Docs" label — the AGENTS.md-style instructions agents read of their
+  // knowledge rails (Architecture / Root Folder / Agent Docs). 'steering' is the
+  // (renamed) leaf that carries the "Agent Docs" label: the AGENTS.md-style
+  // instructions agents read of their
   // own accord. Two different nodes; do not collapse them.
   | 'steering-docs'
   | 'steering'
@@ -66,7 +66,7 @@ export interface ProjectRailItem {
   parent?: ProjectRailKey;
   /**
    * Whether selecting the row routes to a panel. Defaults to true. A pure tree
-   * container (e.g. "Steering Docs") sets this false: clicking the row only
+   * container (e.g. "Project Knowledge") sets this false: clicking the row only
    * toggles its children, it never becomes the active panel.
    */
   navigable?: boolean;
@@ -76,7 +76,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
   // ---- INSIGHT: what the project IS / does ----
   // Order matches the agent-orchestrator.zip mockup (hub-view.png):
   // Overview · Visual Evidence · Drift · UX / UI · Observability.
-  // Architecture used to live here; it now sits under the "Steering Docs"
+  // Architecture used to live here; it now sits under the "Project Knowledge"
   // documentation container in CONFIG (ASS-1711) because it is thematically a
   // doc surface, not a live-health surface.
   {
@@ -209,16 +209,16 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
   },
 
   // ---- CONFIG: how the project is set up ----
-  // Documentation surfaces are grouped under one collapsible "Steering Docs"
-  // tree container (ASS-1711): Architecture + Wiki/Docs + Agent Docs. The
+  // Knowledge surfaces are grouped under one collapsible "Project Knowledge"
+  // tree container (ASS-1711): Architecture + Knowledge + Agent Docs. The
   // container itself is non-navigable — it only expands to its children.
   {
     key: 'steering-docs',
     group: 'config',
-    label: 'Steering Docs',
-    panelTitle: 'Steering Docs',
-    description: 'Documentation that steers this project: architecture, the docs tree, and agent-read instructions',
-    empty: 'Pick a document surface below: Architecture, Wiki / Docs, or Agent Docs.',
+    label: 'Project Knowledge',
+    panelTitle: 'Project Knowledge',
+    description: 'Knowledge that steers this project: architecture, the root folder, and agent-read instructions',
+    empty: 'Pick a knowledge surface below: Architecture, Root Folder, or Agent Docs.',
     icon: '⊕',
     railIcon: 'folder',
     navigable: false,
@@ -238,15 +238,15 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     key: 'wiki',
     group: 'config',
     parent: 'steering-docs',
-    label: 'Wiki / Docs',
-    panelTitle: 'Wiki / Docs',
-    description: 'Browse the project docs/ tree: navigation card, domain docs, and accumulated learnings',
-    empty: 'No docs found. Once the project has a docs/ folder, its tree and rendered documents appear here.',
+    label: 'Root Folder',
+    panelTitle: 'Root Folder',
+    description: 'Browse the project root folder: categories, Markdown pages, HTML pages, and accumulated learnings',
+    empty: 'No pages found. Once the project has a knowledge root folder, its categories and rendered pages appear here.',
     icon: '📚',
     railIcon: 'book',
   },
   {
-    // Renamed from "Steering Docs": these are the instructions agents read of
+    // These are the instructions agents read of
     // their own accord (AGENTS.md, frontend/AGENTS.md, the agent-facing
     // domain/nav docs). The key stays 'steering' so deep-links and the
     // shipped steering-docs panel keep working.
@@ -261,7 +261,7 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     railIcon: 'file',
   },
   // ---- Nav-rebuild shells (T5a step 1) ----
-  // Target navigation (Zielbild §F2): Board · Wiki · Pipeline · Workflow ·
+  // Target navigation (Zielbild §F2): Board · Knowledge · Pipeline · Workflow ·
   // Prompts · Einstellungen at project level. These three are reachable
   // placeholder shells now; step 2 (T5b) moves the existing functionality
   // here unchanged. Nothing is moved in this step — the source pages stay put.

@@ -94,7 +94,7 @@ public record CliPermissionResolution
 /// <para>
 /// Each CLI exposes a different permission vocabulary; where a CLI has no
 /// faithful equivalent for a mode, the closest safe approximation is used and
-/// the limitation is documented in <c>docs/cli-skills/sandbox-and-yolo.md</c>.
+/// the limitation is documented in <c>docs/cli/skills/sandbox-and-yolo.md</c>.
 /// </para>
 /// </summary>
 public static class CliPermissionFlags

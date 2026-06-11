@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-taskboard.local/schemas/analysis-report.schema.json",
   "title": "AnalysisReport",
-  "description": "One inspection report. Generic shape used for manual, scheduled, meta-cycle, supporting-agent, and external-monitor analyses such as queue health, docs drift, stale jobs, roadmap alignment, token-spend review, QA status, architecture drift, and security posture. The Markdown sibling at <reportId>.md is the durable human artifact; this JSON is the additive app contract. Storage and producer rules are documented in docs/analysis-reports.md.",
+  "description": "One inspection report. Generic shape used for manual, scheduled, meta-cycle, supporting-agent, and external-monitor analyses such as queue health, docs drift, stale jobs, roadmap alignment, token-spend review, QA status, architecture drift, and security posture. The Markdown sibling at <reportId>.md is the durable human artifact; this JSON is the additive app contract. Storage and producer rules are documented in docs/reports/analysis-reports.md.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -147,7 +147,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 400,
-            "description": "Stable identifier for the referenced object, in the shape documented for kind in docs/analysis-reports.md."
+            "description": "Stable identifier for the referenced object, in the shape documented for kind in docs/reports/analysis-reports.md."
           },
           "label": {
             "type": ["string", "null"],

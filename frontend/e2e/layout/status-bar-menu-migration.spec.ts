@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
  * homogenisation. The two separate pickers collapsed into the single
  * shared `<app-cli-model-selector>` chip; this spec opens it and shows
  * the CLI pills + model pills inside one popover. See
- * `docs/cli-model-selector-audit.md`.
+ * `docs/frontend/audits/cli-model-selector-audit.md`.
  */
 test.describe('Status bar default picker (unified chip)', () => {
   test('opens the unified CLI+model defaults picker', async ({ page }) => {

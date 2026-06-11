@@ -7,7 +7,7 @@ import * as path from 'path';
 interface WatchPath { name: string; path: string; rootPath: string; }
 
 /**
- * Verifies the image flow described in docs/protocol-style.md:
+ * Verifies the image flow described in docs/contracts/protocol-style.md:
  *
  *   <job>/results/<name>.png  +  status.md `![](results/<name>.png)`
  *     ─►  rendered inline in the protocol pane via /api/jobs/{id}/results/{name}

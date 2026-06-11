@@ -6,7 +6,7 @@ namespace AgentStudio.Docs;
 /// <summary>
 /// Project-level docs surface: security archive (free-form MD files +
 /// a small <c>state.json</c> meta sidecar) and architecture decisions
-/// (parsed from a single <c>architecture-decisions.md</c> file).
+/// (parsed from the ADR archive).
 ///
 /// Prototype scope. Files live inside the watched project's repo or
 /// root, never inside this app's working tree.
@@ -16,9 +16,9 @@ public class ProjectDocsService
     private readonly TaskScannerService _scanner;
     private readonly ILogger<ProjectDocsService> _logger;
 
-    private const string SecurityRel = "docs/security";
+    private const string SecurityRel = "docs/operations/security";
     private const string SecurityStateFile = "state.json";
-    private const string AdrRel = "docs/architecture-decisions.md";
+    private const string AdrRel = "docs/architecture/decisions/adr-archive.md";
     private const string WikiRel = "docs";
 
     // The wiki tree is the physical docs/ hierarchy itself - folders are nodes,

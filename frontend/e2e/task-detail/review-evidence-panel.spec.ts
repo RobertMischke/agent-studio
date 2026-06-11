@@ -6,7 +6,7 @@ import * as path from 'path';
 
 /**
  * Verifies the task-evidence contract documented in
- * docs/filesystem-contract.md `results/review-evidence.jsonl`:
+ * docs/contracts/filesystem.md `results/review-evidence.jsonl`:
  *
  *   - the panel renders findings stored in the file (`high` and `info`),
  *   - the panel resolves linked artifacts (a real PNG copied next to it),

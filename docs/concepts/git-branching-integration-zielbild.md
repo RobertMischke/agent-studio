@@ -2,8 +2,8 @@
 
 > **Status: ENTWURF zur Review** (Operator-Entscheidungen in §7 offen).
 > Kontext: Epic ASS-1720 (Lane-Rename + Merge-into-Develop), Provenienz-Slice ASS-1724,
-> Messung vom 2026-06-10 (§6). Verwandt: [structure-target](../architecture/structure-target.md),
-> [STYLEGUIDE](../architecture/STYLEGUIDE.md).
+> Messung vom 2026-06-10 (§6). Verwandt: [structure-target](../architecture/backend-structure/structure-target.md),
+> [STYLEGUIDE](../architecture/backend-structure/styleguide.md).
 > Leitfrage: *Wo liegt die Arbeit eines Tasks zu jedem Zeitpunkt — und wann wird sie „Wahrheit"?*
 
 ---
