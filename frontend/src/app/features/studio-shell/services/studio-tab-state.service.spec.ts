@@ -311,6 +311,47 @@ describe('StudioTabStateService', () => {
       expect(restored.activeKey()).toBe('task:b');
     });
 
+    it('restores the All-projects board as the active reload surface', () => {
+      svc.open({ kind: 'backlog', projectName: null });
+      svc.select(ALL_BOARD_KEY);
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+      const restored = TestBed.inject(StudioTabStateService);
+
+      expect(restored.activeKey()).toBe(ALL_BOARD_KEY);
+      expect(restored.activeTab()).toEqual({ kind: 'board', projectName: '__all__' });
+    });
+
+    it('restores a project board as the active reload surface', () => {
+      svc.open({ kind: 'board', projectName: 'Project A' });
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+      const restored = TestBed.inject(StudioTabStateService);
+
+      expect(restored.activeKey()).toBe('board:Project A');
+      expect(restored.activeTab()).toEqual({ kind: 'board', projectName: 'Project A' });
+    });
+
+    it('restores Backlog Triage only when it is the persisted active surface', () => {
+      svc.open({ kind: 'backlog', projectName: null });
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+      const restored = TestBed.inject(StudioTabStateService);
+
+      expect(restored.activeKey()).toBe('backlog:__all__');
+      expect(restored.activeTab()).toEqual({ kind: 'backlog', projectName: null });
+    });
+
+    it('restores a project navigation tab as the active reload surface', () => {
+      svc.open({ kind: 'hub', projectName: 'Project A' });
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+      const restored = TestBed.inject(StudioTabStateService);
+
+      expect(restored.activeKey()).toBe('hub:Project A');
+      expect(restored.activeTab()).toEqual({ kind: 'hub', projectName: 'Project A', section: undefined });
+    });
+
     it('honours a persisted empty tab list (user closed everything) and shows the empty-state', () => {
       localStorage.setItem(
         STORAGE_KEY,

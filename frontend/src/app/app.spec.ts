@@ -55,6 +55,75 @@ describe('App (smoke)', () => {
   });
 });
 
+describe('App studio restore hash contract', () => {
+  const TAB_STORAGE_KEY = 'atp.studio.tabs.v1';
+  const VSCODE_FLAG_KEY = 'atp.flag.vsCodeLayout';
+
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    localStorage.removeItem(TAB_STORAGE_KEY);
+    localStorage.removeItem(VSCODE_FLAG_KEY);
+    history.replaceState(null, '', '/');
+  });
+
+  async function configure(): Promise<App> {
+    TestBed.resetTestingModule();
+    localStorage.removeItem(TAB_STORAGE_KEY);
+    localStorage.setItem(VSCODE_FLAG_KEY, '0');
+    await TestBed.configureTestingModule({
+      imports: [App],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    return TestBed.createComponent(App).componentInstance;
+  }
+
+  function reconcile(app: App): void {
+    const harness = app as unknown as {
+      initialHashSyncComplete: boolean;
+      reconcileBacklogHashForActiveTab(tab: ReturnType<App['studioTabState']['activeTab']>): void;
+    };
+    harness.initialHashSyncComplete = true;
+    harness.reconcileBacklogHashForActiveTab(app.studioTabState.activeTab());
+  }
+
+  it('removes a stale Backlog hash when All-projects Board is active', async () => {
+    const app = await configure();
+    history.replaceState(null, '', '/#/backlog&filters=projects:Project%20A');
+
+    reconcile(app);
+
+    expect(app.studioTabState.activeKey()).toBe('board:__all__');
+    expect(window.location.hash).toBe('#filters=projects:Project%20A');
+  });
+
+  it('keeps the Backlog hash when Backlog Triage is the active tab', async () => {
+    const app = await configure();
+    app.studioTabState.open({ kind: 'backlog', projectName: 'Project A' });
+    history.replaceState(null, '', '/');
+
+    reconcile(app);
+
+    expect(app.studioTabState.activeKey()).toBe('backlog:Project A');
+    expect(window.location.hash).toBe('#/backlog?project=Project+A');
+  });
+
+  it('removes a stale Backlog hash when a project navigation page is active', async () => {
+    const app = await configure();
+    app.studioTabState.open({ kind: 'hub', projectName: 'Project A' });
+    history.replaceState(null, '', '/#/backlog?project=Project%20A');
+
+    reconcile(app);
+
+    expect(app.studioTabState.activeKey()).toBe('hub:Project A');
+    expect(window.location.hash).toBe('');
+  });
+});
+
 describe('App epic tab navigation', () => {
   const TAB_STORAGE_KEY = 'atp.studio.tabs.v1';
   const VSCODE_FLAG_KEY = 'atp.flag.vsCodeLayout';

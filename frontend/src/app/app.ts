@@ -348,6 +348,7 @@ export class App implements OnInit, OnDestroy {
    *  Drives the status-bar Settings button's pressed/active state. */
   readonly workspaceSettingsOpen = this.workspaceOverlays.anyOpen;
   private hashListener: (() => void) | null = null;
+  private initialHashSyncComplete = false;
   private kanbanKeyListener: ((ev: KeyboardEvent) => void) | null = null;
   private boardShortcutListener: ((ev: KeyboardEvent) => void) | null = null;
   readonly watchPaths = signal<WatchPathEntry[]>([]);
@@ -1148,6 +1149,7 @@ export class App implements OnInit, OnDestroy {
       if (tab?.kind === 'backlog') {
         untracked(() => this.backlogTriage.scopedProject.set(tab.projectName));
       }
+      untracked(() => this.reconcileBacklogHashForActiveTab(tab));
     });
 
   }
@@ -1185,6 +1187,8 @@ export class App implements OnInit, OnDestroy {
       this.syncEpicsTabFromHash();
     };
     applyHash();
+    this.initialHashSyncComplete = true;
+    this.reconcileBacklogHashForActiveTab(this.studioTabState.activeTab());
     this.hashListener = applyHash;
     window.addEventListener('hashchange', this.hashListener);
 
@@ -2037,6 +2041,22 @@ export class App implements OnInit, OnDestroy {
     if (onBacklog) {
       this.studioTabState.open({ kind: 'backlog', projectName: this.backlogTriage.scopedProject() });
     }
+  }
+
+  /**
+   * Keep the Backlog deep-link hash aligned with the active editor tab after
+   * startup hash routes have had their chance to open explicit deep links.
+   * Without this, a stale `#/backlog` segment survives a Board / Hub / task
+   * navigation and wins the next F5 before tab persistence can restore the
+   * active surface.
+   */
+  private reconcileBacklogHashForActiveTab(tab: StudioTab | null): void {
+    if (!this.initialHashSyncComplete) return;
+    if (tab?.kind === 'backlog') {
+      this.backlogTriage.openTriage(tab.projectName);
+      return;
+    }
+    this.backlogTriage.closeTriage();
   }
 
   private syncEpicsTabFromHash(): void {
