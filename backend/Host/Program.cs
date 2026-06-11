@@ -267,6 +267,7 @@ builder.Services.AddSingleton<ClaudeCliService>();
 builder.Services.AddSingleton<CodexCliService>();
 builder.Services.AddSingleton<AntigravityCliService>();
 builder.Services.AddSingleton<ClaudeSessionInspector>();
+builder.Services.AddSingleton<CliWorkingMemoryService>();
 builder.Services.AddSingleton<CliRouter>();
 builder.Services.AddSingleton<SessionToTaskIndex>();
 builder.Services.AddSingleton<SessionRegistry>();

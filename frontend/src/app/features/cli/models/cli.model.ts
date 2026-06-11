@@ -101,3 +101,44 @@ export interface CliUsageReport {
   at: string;
   sections: CliUsageSection[];
 }
+
+/**
+ * Mirror of the backend `CliWorkingMemoryEntry` record (see
+ * backend/Shared/Models/CliWorkingMemory.cs). One persistent memory / session
+ * state a CLI keeps on disk, surfaced per-CLI on the Admin/CLI page (ASS-1748 /
+ * T1c). `deletable` is false for auth / credential and base-config entries, which
+ * the panel renders as protected and the delete endpoint refuses.
+ */
+export interface CliWorkingMemoryEntry {
+  id: string;
+  cliType: CliType;
+  /** One of 'memory' | 'session' | 'auth' | 'config'. */
+  kind: string;
+  label: string;
+  path: string;
+  isDirectory: boolean;
+  sizeBytes: number;
+  itemCount: number | null;
+  lastModifiedUtc: string | null;
+  preview: string | null;
+  deletable: boolean;
+  detail: string | null;
+}
+
+/** Mirror of the backend `CliWorkingMemoryReport` record. */
+export interface CliWorkingMemoryReport {
+  cliType: CliType;
+  available: boolean;
+  root: string | null;
+  capturedAt: string;
+  entries: CliWorkingMemoryEntry[];
+}
+
+/** Mirror of the backend `CliWorkingMemoryDeleteResult` record. */
+export interface CliWorkingMemoryDeleteResult {
+  /** One of 'Deleted' | 'NotFound' | 'Protected' | 'Error'. */
+  status: string;
+  message: string | null;
+  freedBytes: number;
+  report: CliWorkingMemoryReport | null;
+}

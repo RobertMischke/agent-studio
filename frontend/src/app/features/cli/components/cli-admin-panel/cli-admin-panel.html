@@ -128,15 +128,12 @@
     <app-cli-sessions-panel (openJobDetail)="openJobDetail.emit($event)" />
   </section>
 
-  <section class="cli-admin__section cli-admin__section--placeholder" data-testid="cli-admin-working-memory">
+  <section class="cli-admin__section" data-testid="cli-admin-working-memory">
     <header class="cli-admin__section-head">
       <h3>Working memory</h3>
-      <span class="cli-admin__hint">coming soon</span>
+      <span class="cli-admin__hint">per-CLI memory &amp; sessions · auth stays protected</span>
     </header>
-    <p class="cli-admin__placeholder">
-      Per-CLI working-memory inspection lands with the memory surface (T1c).
-      This section is a placeholder until that backing data is available.
-    </p>
+    <app-cli-working-memory-panel />
   </section>
 </div>
   
