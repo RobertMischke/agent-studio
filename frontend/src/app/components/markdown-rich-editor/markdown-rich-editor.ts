@@ -24,6 +24,7 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   readonly value = input('');
   readonly readOnly = input(false);
   readonly readOnlyReason = input<string | null>(null);
+  readonly autoSave = input(true);
   readonly jobId = input<string | null>(null);
   readonly watchPath = input<string | null>(null);
   readonly save = output<string>();
@@ -229,6 +230,7 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
 
   private scheduleAutosave(): void {
     if (this.readOnly()) return;
+    if (!this.autoSave()) return;
     if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
     this.autosaveTimer = setTimeout(() => {
       this.autosaveTimer = null;

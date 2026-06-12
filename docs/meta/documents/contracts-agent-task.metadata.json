@@ -1,0 +1,36 @@
+{
+  "title": "Agent task contract metadata",
+  "sourcePath": "docs/contracts/agent-task.md",
+  "owner": "tasks",
+  "documentMode": "documentation",
+  "temporalState": "present",
+  "implementationState": "implemented",
+  "lastReview": {
+    "date": "2026-06-11",
+    "method": "sample metadata pass",
+    "model": "codex"
+  },
+  "drift": {
+    "grade": "A",
+    "hasDrift": false,
+    "score": 0.08,
+    "summary": "The contract remains a reliable source of truth for task file semantics and API-backed task flow.",
+    "rationale": [
+      "Recent work respected the API boundary and did not bypass task storage.",
+      "The contract still matches the known task mutation rules.",
+      "Only routine future checks are needed."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "high",
+    "implementationAlignment": "high",
+    "freshness": "high",
+    "operatorUsefulness": "high"
+  },
+  "duplicates": {
+    "suspected": false,
+    "groupSize": 1,
+    "similarTo": []
+  },
+  "nextAction": "Keep as a reference document and re-check only when task mutation APIs change."
+}

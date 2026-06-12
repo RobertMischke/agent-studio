@@ -109,16 +109,27 @@
           </label>
         }
 
-        <div class="pwiki__rows" role="tree">
-          @for (row of rows(); track nodeId(row.node)) {
+        <div class="pwiki__rows"
+             role="tree"
+             aria-label="Knowledge document tree">
+          @for (row of rows(); track nodeId(row.node); let index = $index) {
             <div class="pwiki__row"
+                 role="treeitem"
+                 [attr.tabindex]="rowTabIndex(row, index)"
                  [class.pwiki__row--group]="row.node.type === 'folder'"
                  [class.pwiki__row--doc]="row.node.type !== 'folder'"
                  [class.pwiki__row--active]="openedRel() === row.node.relPath"
                  [class.pwiki__row--drop]="dropTargetId() === nodeId(row.node)"
                  [style.padding-left.px]="rowPad(row.depth)"
+                 [attr.aria-level]="row.depth + 1"
+                 [attr.aria-expanded]="treeItemExpanded(row)"
+                 [attr.aria-selected]="openedRel() === row.node.relPath ? 'true' : null"
                  [attr.data-testid]="'project-wiki-node-' + nodeId(row.node)"
+                 [attr.data-wiki-row-id]="nodeId(row.node)"
                  [draggable]="row.node.type !== 'folder'"
+                 (focusin)="focusTreeRow(row.node)"
+                 (click)="focusTreeRowElement($event, row.node)"
+                 (keydown)="onTreeKeydown($event)"
                  (dragstart)="onFileDragStart($event, row.node)"
                  (dragend)="onDragEnd()"
                  (dragover)="onFolderDragOver($event, row.node)"
@@ -128,6 +139,7 @@
 
               @if (row.node.type === 'folder' && row.hasChildren) {
                 <button class="pwiki__chevron" type="button"
+                        tabindex="-1"
                         (click)="toggleExpand(nodeId(row.node))"
                         [attr.aria-label]="row.expanded ? 'Collapse' : 'Expand'"
                         [attr.data-testid]="'project-wiki-chevron-' + nodeId(row.node)">
@@ -148,23 +160,27 @@
                        [attr.data-testid]="'project-wiki-rename-' + nodeId(row.node)">
               } @else if (row.node.type === 'folder') {
                 <button class="pwiki__label pwiki__label--group" type="button"
+                        tabindex="-1"
                         (click)="toggleExpand(nodeId(row.node))">
                   <app-studio-icon name="folder" [size]="13"></app-studio-icon>
                   <span class="pwiki__label-copy">
                     <span class="pwiki__label-text">{{ row.node.title }}</span>
-                    <code class="pwiki__label-path">{{ navPath(row.node) }}</code>
                   </span>
                   <span class="pwiki__group-count">{{ row.node.children.length }}</span>
                 </button>
               } @else {
-                <button class="pwiki__label pwiki__label--doc" type="button"
-                        (click)="openFile(row.node.relPath!, row.node.type)"
-                        [attr.title]="row.node.relPath"
-                        [attr.data-testid]="'project-wiki-file-' + row.node.relPath">
+                <div class="pwiki__label pwiki__label--doc"
+                     role="button"
+                     tabindex="-1"
+                     (click)="openFile(row.node.relPath!, row.node.type)"
+                     [attr.title]="row.node.relPath"
+                     [attr.data-testid]="'project-wiki-file-' + row.node.relPath">
                   <span class="pwiki__file-type"
                         [attr.aria-label]="fileTypeLabel(row.node)"
                         [attr.data-file-type]="row.node.type">
                     @if (row.node.type === 'html') {
+                      <app-studio-icon name="code" [size]="13"></app-studio-icon>
+                    } @else if (row.node.type === 'json') {
                       <app-studio-icon name="code" [size]="13"></app-studio-icon>
                     } @else {
                       <app-studio-icon name="file" [size]="13"></app-studio-icon>
@@ -172,9 +188,28 @@
                   </span>
                   <span class="pwiki__label-copy">
                     <span class="pwiki__label-text">{{ row.node.title }}</span>
-                    <code class="pwiki__label-path" [attr.data-testid]="'project-wiki-file-path-' + row.node.relPath">{{ navPath(row.node) }}</code>
+                    <span class="pwiki__metric-strip"
+                          [attr.data-testid]="'project-wiki-ratings-' + row.node.relPath">
+                      @for (chip of documentMetricChips(row.node); track chip.key) {
+                        <button class="pwiki__metric"
+                                type="button"
+                                [disabled]="!chip.reportAnchor"
+                                [attr.data-tone]="chip.tone"
+                                [attr.data-kind]="chip.key"
+                                [attr.data-testid]="'project-wiki-metric-' + row.node.relPath + '-' + chip.key"
+                                [attr.aria-label]="chip.label"
+                                [appTooltip]="chip.tooltip"
+                                (click)="openReportSection($event, row.node, chip.reportAnchor)">
+                          <span class="pwiki__metric-prefix">{{ chip.prefix }}</span>
+                          <span class="pwiki__metric-value">
+                            <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
+                            <span>{{ chip.value }}</span>
+                          </span>
+                        </button>
+                      }
+                    </span>
                   </span>
-                </button>
+                </div>
               }
             </div>
           }
@@ -215,7 +250,17 @@
                       (click)="selectTab('doc')"
                       data-testid="project-wiki-tab-doc">
                 <app-studio-icon name="file" [size]="13"></app-studio-icon>
-                <span>Preview</span>
+                <span>Document</span>
+              </button>
+              <button class="pwiki__tab" type="button"
+                      role="tab"
+                      [class.pwiki__tab--active]="viewerTab() === 'report'"
+                      [attr.aria-selected]="viewerTab() === 'report'"
+                      appTooltip="Open the metadata reasoning report for this document"
+                      (click)="selectTab('report')"
+                      data-testid="project-wiki-tab-report">
+                <app-studio-icon name="book" [size]="13"></app-studio-icon>
+                <span>Report</span>
               </button>
               <button class="pwiki__tab" type="button"
                       role="tab"
@@ -227,6 +272,14 @@
                 <span>Source</span>
               </button>
             </div>
+            <button class="pwiki__viewer-action" type="button"
+                    [disabled]="!canEditDoc() || saveBusy()"
+                    [appTooltip]="editDisabledReason() || 'Edit this Markdown page'"
+                    (click)="selectTab('edit')"
+                    data-testid="project-wiki-edit">
+              <app-studio-icon name="code" [size]="12"></app-studio-icon>
+              <span>Edit</span>
+            </button>
             <button class="pwiki__viewer-close" type="button" (click)="closeFile()"
                     data-testid="project-wiki-close">
               <app-studio-icon name="close" [size]="12"></app-studio-icon>
@@ -254,7 +307,58 @@
                           data-testid="project-wiki-rev-back">Back to current</button>
                 </div>
               }
-              @if (viewerTab() === 'source') {
+              @if (viewerTab() === 'report') {
+                <div class="pwiki__report-view" data-testid="project-wiki-report">
+                  @if (loadingReport()) {
+                    <p class="studio-empty pwiki__reader-empty">Loading report...</p>
+                  } @else if (reportError(); as error) {
+                    <div class="pwiki__report-empty" data-testid="project-wiki-report-empty">
+                      <app-studio-icon name="book" [size]="20"></app-studio-icon>
+                      <p>{{ error }}</p>
+                    </div>
+                  } @else {
+                    <iframe class="pwiki__html-frame pwiki__report-frame"
+                            data-testid="project-wiki-report-frame"
+                            sandbox=""
+                            [srcdoc]="trustedReportHtml()"
+                    title="Document metadata reasoning report"></iframe>
+                  }
+                </div>
+              } @else if (viewerTab() === 'edit') {
+                @if (canEditDoc()) {
+                  <div class="pwiki__edit-shell" data-testid="project-wiki-editor-shell">
+                    <app-markdown-rich-editor class="pwiki__editor"
+                                              data-testid="project-wiki-editor"
+                                              [value]="openedContent()"
+                                              [autoSave]="false"
+                                              [readOnly]="saveBusy()"
+                                              [readOnlyReason]="'Saving this document...'"
+                                              (save)="saveWikiContent($event)">
+                      <div bar-prefix class="pwiki__edit-prefix">
+                        <span>Editing</span>
+                        <code>{{ rel }}</code>
+                        @if (saveBusy()) {
+                          <span>Saving...</span>
+                        } @else if (saveResult(); as saved) {
+                          <span data-testid="project-wiki-save-result">
+                            {{ saved.changed ? 'Committed' : 'Saved' }}
+                            @if (saved.branch) { on {{ saved.branch }} }
+                            @if (saved.sha) { at {{ saved.sha.slice(0, 7) }} }
+                          </span>
+                        }
+                      </div>
+                    </app-markdown-rich-editor>
+                    @if (saveError(); as error) {
+                      <p class="pwiki__save-error" data-testid="project-wiki-save-error">{{ error }}</p>
+                    }
+                  </div>
+                } @else {
+                  <div class="pwiki__report-empty" data-testid="project-wiki-edit-empty">
+                    <app-studio-icon name="code" [size]="20"></app-studio-icon>
+                    <p>{{ editDisabledReason() }}</p>
+                  </div>
+                }
+              } @else if (viewerTab() === 'source') {
                 <div class="pwiki__source-editor" data-testid="project-wiki-source-editor" aria-label="Read-only document source">
                   @if (loadingDoc()) {
                     <p class="studio-empty pwiki__reader-empty">Loading document...</p>
@@ -277,6 +381,10 @@
                         sandbox=""
                         [srcdoc]="trustedHtml()"
                 title="HTML knowledge page"></iframe>
+              } @else if (openedType() === 'json') {
+                <div class="pwiki__json-preview" data-testid="project-wiki-json-preview">
+                  <pre>{{ displayJson() }}</pre>
+                </div>
               } @else {
                 <app-markdown class="pwiki__viewer-body pwiki__reader-body"
                               data-testid="project-wiki-viewer"
@@ -470,7 +578,9 @@
                   <button class="pwiki__doc-card" type="button"
                           [attr.data-testid]="'project-wiki-suggested-' + doc.relPath"
                           (click)="openFile(doc.relPath!, doc.type)">
-                    <span class="pwiki__doc-card-kind">{{ doc.type === 'html' ? 'HTML' : 'MD' }}</span>
+                    <span class="pwiki__doc-card-kind">
+                      {{ doc.type === 'html' ? 'HTML' : doc.type === 'json' ? 'JSON' : 'MD' }}
+                    </span>
                     <strong>{{ doc.title }}</strong>
                     <code>{{ doc.relPath }}</code>
                   </button>
@@ -553,6 +663,7 @@
              (keydown.escape)="closeDriftModal()">
       <article class="pwiki__drift-card"
                (click)="stopModal($event)"
+               (keydown)="stopModal($event)"
                tabindex="0">
         <header class="pwiki__drift-head">
           <div>

@@ -7,6 +7,7 @@ import {
   SecurityOverview,
   WikiFileContent,
   WikiFileHistory,
+  WikiFileSaveResult,
   WikiOverview,
   WikiRevisionContent,
   WikiTree
@@ -64,6 +65,13 @@ export class ProjectDocsService {
   getWikiFile(projectName: string, relPath: string) {
     return this.http.get<WikiFileContent>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/files/${this.encodeRelPath(relPath)}`
+    );
+  }
+
+  putWikiFile(projectName: string, relPath: string, content: string) {
+    return this.http.put<WikiFileSaveResult>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/files/${this.encodeRelPath(relPath)}`,
+      { content }
     );
   }
 

@@ -18,6 +18,7 @@ Use this page as the first stop when you need the right document quickly.
 | [cli/](cli/README.md) | Supported CLI contract, per-CLI skills, audits, and investigations. |
 | [operations/](operations/README.md) | Setup, onboarding, security docs, runtime observability, git doctrine, and test workspaces. |
 | [reports/](reports/README.md) | Report contracts, HTML visual reports, and screenshot-backed visual documentation. |
+| [meta/](meta/README.md) | Document metadata, drift grading samples, direction, and HTML metadata reports. |
 | [concepts/](concepts/) | Future/current architecture concepts that have not become a domain or ADR yet. |
 | [in-app-help/](in-app-help/README.md) | Short Markdown help pages served by the app next to non-obvious UI surfaces. |
 | [wiki/](wiki/README.md) | Living knowledge: common problems, explanatory concept pages, learnings, and migration notes. |
@@ -40,6 +41,9 @@ Use this page as the first stop when you need the right document quickly.
 | Architecture model | [architecture/model.md](architecture/model.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](architecture/bus/agent-message-bus.md) |
 | UX doctrine | [product/design-principles.md](product/design-principles.md) |
+| Wiki classification | [product/wiki-document-classification.md](product/wiki-document-classification.md) |
+| Wiki editing flow | [product/wiki-editing-and-branch-flow.md](product/wiki-editing-and-branch-flow.md) |
+| Wiki drift audit | [meta/reports/wiki-drift-audit-2026-06-11.html](meta/reports/wiki-drift-audit-2026-06-11.html) |
 | Supported CLIs | [cli/supported-clis.md](cli/supported-clis.md) |
 | Setup | [operations/setup/README.md](operations/setup/README.md) |
 | Common problems | [wiki/common-problems/README.md](wiki/common-problems/README.md) |

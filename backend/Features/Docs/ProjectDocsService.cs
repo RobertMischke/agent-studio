@@ -24,10 +24,10 @@ public class ProjectDocsService
     // The wiki tree is the physical docs/ hierarchy itself - folders are nodes,
     // files are pages - so there is no virtual organisation layer to maintain.
     // These are the document extensions the tree surfaces and the content /
-    // history endpoints serve: markdown plus optional HTML concept pages (the
-    // UI renders HTML inside a sandboxed iframe).
+    // history endpoints serve: markdown, optional HTML concept pages, and JSON
+    // metadata pages (HTML renders inside a sandboxed iframe; JSON as source).
     private static readonly HashSet<string> WikiDocExtensions =
-        new(StringComparer.OrdinalIgnoreCase) { ".md", ".html", ".htm" };
+        new(StringComparer.OrdinalIgnoreCase) { ".md", ".html", ".htm", ".json" };
 
     // Optional `NN-` (or `NN_` / `NN.`) numeric prefix on a file/folder name:
     // controls sort order in the tree and is hidden from the displayed title.
@@ -185,10 +185,9 @@ public class ProjectDocsService
 
     /// <summary>
     /// Read-only browse surface over the project's <c>docs/</c> tree: every
-    /// <c>.md</c> file (recursive), relative to the docs root, so the UI can
-    /// render the navigation card, the domain documents, and the accumulated
-    /// learnings from the wiki post-processing step. Title is the first H1
-    /// heading when present, otherwise the file name.
+    /// supported document file (recursive), relative to the docs root, so the UI
+    /// can render the navigation card, the domain documents, JSON metadata, and
+    /// the accumulated learnings from the wiki post-processing step.
     /// </summary>
     public WikiOverview? GetWikiOverview(string projectName)
     {
@@ -212,6 +211,18 @@ public class ProjectDocsService
         return new WikiFileContent(relPath.Replace('\\', '/'), File.ReadAllText(full));
     }
 
+    public WikiSaveResult WriteWikiFile(string projectName, string relPath, string content)
+    {
+        var full = ResolveWikiPath(projectName, relPath, requireDoc: true);
+        if (full == null) return WikiSaveResult.Fail("Invalid path.");
+        if (!File.Exists(full)) return WikiSaveResult.Fail("File not found.");
+        var before = File.ReadAllText(full);
+        if (string.Equals(before, content, StringComparison.Ordinal))
+            return WikiSaveResult.Ok(full, changed: false);
+        File.WriteAllText(full, content);
+        return WikiSaveResult.Ok(full, changed: true);
+    }
+
     /// <summary>
     /// Resolves a non-markdown asset (image/diagram) referenced from a wiki
     /// doc. Returns the absolute file path plus a content type, or null when
@@ -232,7 +243,7 @@ public class ProjectDocsService
     /// Joins a caller-supplied relative path onto the docs root and confirms
     /// the resolved absolute path stays inside it (traversal guard). When
     /// <paramref name="requireDoc"/> is set, only wiki document extensions
-    /// (<c>.md</c> / <c>.html</c> / <c>.htm</c>) pass.
+    /// (<c>.md</c> / <c>.html</c> / <c>.htm</c> / <c>.json</c>) pass.
     /// </summary>
     private string? ResolveWikiPath(string projectName, string relPath, bool requireDoc)
     {
@@ -266,11 +277,11 @@ public class ProjectDocsService
 
     /// <summary>
     /// The recursive physical structure under <c>docs/</c>: folder nodes plus
-    /// document nodes (<c>.md</c> and <c>.html</c>). Siblings are sorted folders
-    /// first, then files; an optional leading <c>NN-</c> numeric prefix on a
-    /// name controls ordering and is stripped from the displayed title. No git
-    /// is invoked here, so building the tree stays cheap even for a large docs
-    /// folder (per-file commit metadata is fetched lazily on open).
+    /// document nodes (<c>.md</c>, <c>.html</c>, and <c>.json</c>). Siblings are
+    /// sorted folders first, then files; an optional leading <c>NN-</c> numeric
+    /// prefix on a name controls ordering and is stripped from the displayed
+    /// title. No git is invoked here, so building the tree stays cheap even for
+    /// a large docs folder (per-file commit metadata is fetched lazily on open).
     /// </summary>
     public WikiTree? GetWikiTree(string projectName)
     {
@@ -281,7 +292,12 @@ public class ProjectDocsService
 
         var wikiDir = Path.Combine(baseDir, WikiRel);
         var exists = Directory.Exists(wikiDir);
-        var root = exists ? BuildTreeNodes(new DirectoryInfo(wikiDir), Path.GetFullPath(wikiDir)) : [];
+        var root = exists
+            ? BuildTreeNodes(
+                new DirectoryInfo(wikiDir),
+                Path.GetFullPath(wikiDir),
+                LoadWikiMetadataIndex(wikiDir))
+            : [];
         return new WikiTree(projectName, wikiDir, exists, root);
     }
 
@@ -290,17 +306,20 @@ public class ProjectDocsService
     /// document descendants are dropped so the tree only surfaces navigable
     /// content. Hidden entries (dot-prefixed) are skipped.
     /// </summary>
-    private static List<WikiTreeNode> BuildTreeNodes(DirectoryInfo dir, string docsRoot)
+    private static List<WikiTreeNode> BuildTreeNodes(
+        DirectoryInfo dir,
+        string docsRoot,
+        IReadOnlyDictionary<string, WikiTreeMetadata> metadataByRelPath)
     {
         var nodes = new List<WikiTreeNode>();
 
         foreach (var sub in dir.GetDirectories())
         {
             if (sub.Name.StartsWith('.')) continue;
-            var children = BuildTreeNodes(sub, docsRoot);
+            var children = BuildTreeNodes(sub, docsRoot, metadataByRelPath);
             if (children.Count == 0) continue; // prune empty folders
             var rel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
-            nodes.Add(new WikiTreeNode(sub.Name, StripOrderPrefix(sub.Name), rel, "folder", children));
+            nodes.Add(new WikiTreeNode(sub.Name, StripOrderPrefix(sub.Name), rel, "folder", children, null));
         }
 
         foreach (var file in dir.GetFiles())
@@ -309,14 +328,141 @@ public class ProjectDocsService
             var ext = file.Extension;
             if (!WikiDocExtensions.Contains(ext)) continue;
             var rel = Path.GetRelativePath(docsRoot, file.FullName).Replace('\\', '/');
-            var type = ext.Equals(".md", StringComparison.OrdinalIgnoreCase) ? "md" : "html";
-            var title = ExtractFirstHeading(file.FullName)
+            var type = ext.Equals(".md", StringComparison.OrdinalIgnoreCase)
+                ? "md"
+                : ext.Equals(".json", StringComparison.OrdinalIgnoreCase)
+                    ? "json"
+                    : "html";
+            var title = ExtractDocTitle(file.FullName, ext)
                 ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(file.Name));
-            nodes.Add(new WikiTreeNode(file.Name, title, rel, type, []));
+            metadataByRelPath.TryGetValue(rel, out var metadata);
+            nodes.Add(new WikiTreeNode(file.Name, title, rel, type, [], metadata));
         }
 
         nodes.Sort(CompareTreeNodes);
         return nodes;
+    }
+
+    /// <summary>
+    /// Reads visible JSON metadata documents from <c>docs/meta/documents/</c>
+    /// and indexes them by the source document they describe. The tree only
+    /// needs a compact summary; full JSON remains readable as a normal page.
+    /// </summary>
+    private static IReadOnlyDictionary<string, WikiTreeMetadata> LoadWikiMetadataIndex(string wikiDir)
+    {
+        var index = new Dictionary<string, WikiTreeMetadata>(StringComparer.OrdinalIgnoreCase);
+        var metaDir = Path.Combine(wikiDir, "meta", "documents");
+        if (!Directory.Exists(metaDir)) return index;
+
+        foreach (var file in Directory.EnumerateFiles(metaDir, "*.json", SearchOption.TopDirectoryOnly))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(file));
+                var root = doc.RootElement;
+                if (root.ValueKind != JsonValueKind.Object) continue;
+
+                var sourceRel = NormalizeMetadataSourcePath(JsonString(root, "sourcePath"));
+                if (sourceRel == null) continue;
+
+                TryJsonObject(root, "drift", out var drift);
+                TryJsonObject(root, "duplicates", out var duplicates);
+
+                var metadata = new WikiTreeMetadata(
+                    DocumentMode: JsonString(root, "documentMode"),
+                    TemporalState: JsonString(root, "temporalState"),
+                    ImplementationState: JsonString(root, "implementationState"),
+                    DriftGrade: JsonString(drift, "grade"),
+                    HasDrift: JsonBool(drift, "hasDrift"),
+                    DriftScore: JsonDouble(drift, "score"),
+                    Quality: ExtractQuality(root),
+                    DuplicateSuspected: JsonBool(duplicates, "suspected"),
+                    DuplicateGroupSize: JsonInt(duplicates, "groupSize"),
+                    ReportPath: NormalizeMetadataSourcePath(JsonString(root, "reportPath")),
+                    Summary: JsonString(drift, "summary") ?? JsonString(root, "summary"));
+                index[sourceRel] = metadata;
+            }
+            catch (Exception __ex)
+            {
+                SilentCatch.Note(__ex, "ProjectDocsService: unreadable wiki metadata record ignored.");
+            }
+        }
+
+        return index;
+    }
+
+    private static string? NormalizeMetadataSourcePath(string? sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath)) return null;
+        var rel = sourcePath.Trim().Replace('\\', '/');
+        while (rel.StartsWith("./", StringComparison.Ordinal)) rel = rel[2..];
+        if (rel.StartsWith("docs/", StringComparison.OrdinalIgnoreCase)) rel = rel[5..];
+        if (rel.Length == 0 || rel.Contains("..", StringComparison.Ordinal) || rel.StartsWith("/", StringComparison.Ordinal))
+            return null;
+        return rel;
+    }
+
+    private static bool TryJsonObject(JsonElement element, string property, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(property, out value)
+            && value.ValueKind == JsonValueKind.Object)
+        {
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static string? JsonString(JsonElement element, string property)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+        if (!element.TryGetProperty(property, out var value)) return null;
+        return value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+    }
+
+    private static bool? JsonBool(JsonElement element, string property)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+        if (!element.TryGetProperty(property, out var value)) return null;
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => null,
+        };
+    }
+
+    private static int? JsonInt(JsonElement element, string property)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+        if (!element.TryGetProperty(property, out var value)) return null;
+        return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number) ? number : null;
+    }
+
+    private static double? JsonDouble(JsonElement element, string property)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+        if (!element.TryGetProperty(property, out var value)) return null;
+        return value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) ? number : null;
+    }
+
+    private static string? ExtractQuality(JsonElement root)
+    {
+        var explicitQuality = JsonString(root, "quality");
+        if (!string.IsNullOrWhiteSpace(explicitQuality)) return explicitQuality;
+        if (!TryJsonObject(root, "axes", out var axes)) return null;
+
+        var values = axes.EnumerateObject()
+            .Select(p => p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : null)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v!.Trim().ToLowerInvariant())
+            .ToList();
+        if (values.Count == 0) return null;
+        if (values.Any(v => v is "low" or "poor")) return "low";
+        if (values.Count(v => v is "high" or "strong") >= values.Count - 1) return "high";
+        return "medium";
     }
 
     /// <summary>Folders before files; then by numeric order prefix; then name.</summary>
@@ -365,7 +511,7 @@ public class ProjectDocsService
     {
         var ext = Path.GetExtension(relPath);
         if (!WikiDocExtensions.Contains(ext))
-            return WikiMutationResult.Fail("Only .md or .html pages are allowed.");
+            return WikiMutationResult.Fail("Only .md, .html, or .json pages are allowed.");
         var full = ResolveWikiPath(projectName, relPath, requireDoc: true);
         if (full == null) return WikiMutationResult.Fail("Invalid path.");
         if (File.Exists(full)) return WikiMutationResult.Fail("A page with that name already exists.");
@@ -380,9 +526,15 @@ public class ProjectDocsService
     private static string DefaultPageSeed(string relPath, string ext)
     {
         var title = StripOrderPrefix(Path.GetFileNameWithoutExtension(relPath));
-        return ext.Equals(".md", StringComparison.OrdinalIgnoreCase)
-            ? $"# {title}\n\n"
-            : $"<!doctype html>\n<html>\n<head><meta charset=\"utf-8\"><title>{title}</title></head>\n<body>\n<h1>{title}</h1>\n</body>\n</html>\n";
+        if (ext.Equals(".md", StringComparison.OrdinalIgnoreCase))
+            return $"# {title}\n\n";
+        if (ext.Equals(".json", StringComparison.OrdinalIgnoreCase))
+            return "{\n"
+                + $"  \"title\": \"{title}\",\n"
+                + "  \"summary\": \"\",\n"
+                + "  \"drift\": { \"grade\": \"unknown\", \"hasDrift\": false }\n"
+                + "}\n";
+        return $"<!doctype html>\n<html>\n<head><meta charset=\"utf-8\"><title>{title}</title></head>\n<body>\n<h1>{title}</h1>\n</body>\n</html>\n";
     }
 
     /// <summary>
@@ -451,14 +603,16 @@ public class ProjectDocsService
         if (!Directory.Exists(wikiDir)) return [];
         var root = Path.GetFullPath(wikiDir);
         var results = new List<WikiFileEntry>();
-        foreach (var f in Directory.EnumerateFiles(wikiDir, "*.md", SearchOption.AllDirectories))
+        foreach (var f in Directory.EnumerateFiles(wikiDir, "*", SearchOption.AllDirectories))
         {
+            var ext = Path.GetExtension(f);
+            if (!WikiDocExtensions.Contains(ext)) continue;
             var fi = new FileInfo(f);
             var rel = Path.GetRelativePath(root, f).Replace('\\', '/');
             results.Add(new WikiFileEntry(
                 Name: Path.GetFileName(f),
                 RelPath: rel,
-                Title: ExtractFirstHeading(f) ?? Path.GetFileNameWithoutExtension(f),
+                Title: ExtractDocTitle(f, ext) ?? Path.GetFileNameWithoutExtension(f),
                 UpdatedAt: fi.LastWriteTimeUtc,
                 Size: fi.Length));
         }
@@ -466,9 +620,20 @@ public class ProjectDocsService
         return results;
     }
 
+    /// <summary>Cheap label sniff for a nicer title than the file name.</summary>
+    private static string? ExtractDocTitle(string path, string extension)
+    {
+        if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
+            return ExtractJsonTitle(path);
+        if (extension.Equals(".html", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".htm", StringComparison.OrdinalIgnoreCase))
+            return ExtractHtmlTitle(path);
+        return ExtractFirstHeading(path);
+    }
+
     /// <summary>
-    /// Cheap first-H1 sniff for a nicer label than the file name. Reads at
-    /// most the first handful of lines so listing a large tree stays fast.
+    /// Cheap first-H1 sniff for Markdown/HTML labels. Reads at most the first
+    /// handful of lines so listing a large tree stays fast.
     /// </summary>
     private static string? ExtractFirstHeading(string path)
     {
@@ -491,6 +656,51 @@ public class ProjectDocsService
         }
         return null;
     }
+
+    private static string? ExtractJsonTitle(string path)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            if (doc.RootElement.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
+                return title.GetString();
+            if (doc.RootElement.TryGetProperty("label", out var label) && label.ValueKind == JsonValueKind.String)
+                return label.GetString();
+            if (doc.RootElement.TryGetProperty("document", out var document)
+                && document.ValueKind == JsonValueKind.Object
+                && document.TryGetProperty("title", out var docTitle)
+                && docTitle.ValueKind == JsonValueKind.String)
+                return docTitle.GetString();
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: Unreadable JSON title: fall back to the file name in the caller.");
+        }
+
+        return null;
+    }
+
+    private static string? ExtractHtmlTitle(string path)
+    {
+        try
+        {
+            var text = File.ReadAllText(path);
+            var h1 = Regex.Match(text, @"<h1[^>]*>(?<title>.*?)</h1>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (h1.Success) return StripHtml(h1.Groups["title"].Value);
+            var title = Regex.Match(text, @"<title[^>]*>(?<title>.*?)</title>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (title.Success) return StripHtml(title.Groups["title"].Value);
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: Unreadable HTML title: fall back to the file name in the caller.");
+        }
+
+        return null;
+    }
+
+    private static string StripHtml(string text) =>
+        Regex.Replace(text, "<.*?>", "", RegexOptions.Singleline).Trim();
 
     // -------- Architecture decisions --------
 
@@ -610,11 +820,32 @@ public record WikiDocMetadata(
 
 /// <summary>
 /// One node in the physical wiki tree. A <c>folder</c> carries child nodes; a
-/// document node (<c>type</c> = <c>md</c> or <c>html</c>) is a leaf. <see
+/// document node (<c>type</c> = <c>md</c>, <c>html</c>, or <c>json</c>) is a leaf. <see
 /// cref="RelPath"/> is the docs-root-relative path; <see cref="Title"/> is the
 /// display label (first H1 for docs, order-prefix-stripped name otherwise).
+/// <see cref="Metadata"/> is an optional compact summary read from visible
+/// <c>docs/meta/documents/*.json</c> records.
 /// </summary>
-public record WikiTreeNode(string Name, string Title, string? RelPath, string Type, List<WikiTreeNode> Children);
+public record WikiTreeMetadata(
+    string? DocumentMode,
+    string? TemporalState,
+    string? ImplementationState,
+    string? DriftGrade,
+    bool? HasDrift,
+    double? DriftScore,
+    string? Quality,
+    bool? DuplicateSuspected,
+    int? DuplicateGroupSize,
+    string? ReportPath,
+    string? Summary);
+
+public record WikiTreeNode(
+    string Name,
+    string Title,
+    string? RelPath,
+    string Type,
+    List<WikiTreeNode> Children,
+    WikiTreeMetadata? Metadata);
 
 /// <summary>The physical docs/ folder tree exposed to the wiki UI.</summary>
 public record WikiTree(string ProjectName, string BaseDir, bool Exists, List<WikiTreeNode> Root);
@@ -624,6 +855,12 @@ public record WikiMutationResult(bool Success, string? FullPath, string? Error)
 {
     public static WikiMutationResult Ok(string fullPath) => new(true, fullPath, null);
     public static WikiMutationResult Fail(string error) => new(false, null, error);
+}
+
+public record WikiSaveResult(bool Success, string? FullPath, bool Changed, string? Error)
+{
+    public static WikiSaveResult Ok(string fullPath, bool changed) => new(true, fullPath, changed, null);
+    public static WikiSaveResult Fail(string error) => new(false, null, false, error);
 }
 
 /// <summary>History + provenance payload for one wiki doc.</summary>

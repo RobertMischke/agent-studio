@@ -44,6 +44,14 @@ export interface WikiFileContent {
   content: string;
 }
 
+export interface WikiFileSaveResult {
+  relPath: string;
+  saved: boolean;
+  changed: boolean;
+  sha: string | null;
+  branch: string | null;
+}
+
 /** Per-document provenance parsed from YAML frontmatter (mirrors backend WikiDocMetadata). */
 export interface WikiDocMetadata {
   model: string | null;
@@ -76,13 +84,30 @@ export interface WikiFileHistory {
 }
 
 /** Kind of a wiki tree node: a folder, or a document by source type. */
-export type WikiNodeType = 'folder' | 'md' | 'html';
+export type WikiNodeType = 'folder' | 'md' | 'html' | 'json';
+
+/** Compact per-document metadata shown in the tree (mirrors backend WikiTreeMetadata). */
+export interface WikiTreeMetadata {
+  documentMode: string | null;
+  temporalState: string | null;
+  implementationState: string | null;
+  driftGrade: string | null;
+  hasDrift: boolean | null;
+  driftScore: number | null;
+  quality: string | null;
+  duplicateSuspected: boolean | null;
+  duplicateGroupSize: number | null;
+  reportPath: string | null;
+  summary: string | null;
+}
 
 /**
  * One node in the physical wiki tree (mirrors backend WikiTreeNode). A `folder`
- * carries `children`; a document node (`md` / `html`) is a leaf whose `relPath`
- * is the docs-root-relative path. `title` is the display label (first H1 for
- * docs, order-prefix-stripped name otherwise).
+ * carries `children`; a document node (`md` / `html` / `json`) is a leaf whose
+ * `relPath` is the docs-root-relative path. `title` is the display label (first
+ * H1 or JSON title for docs, order-prefix-stripped name otherwise). `metadata`
+ * is present only when a visible JSON record under `docs/meta/documents/`
+ * describes the source document.
  */
 export interface WikiTreeNode {
   name: string;
@@ -90,6 +115,7 @@ export interface WikiTreeNode {
   relPath: string | null;
   type: WikiNodeType;
   children: WikiTreeNode[];
+  metadata?: WikiTreeMetadata | null;
 }
 
 /** The physical docs/ folder tree backing the wiki navigation. */

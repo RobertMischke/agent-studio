@@ -85,29 +85,60 @@ public class ProjectWikiEnhancementsTests : IDisposable
         var projectRoot = Path.Combine(_tempDir, "tree-proj");
         var docsDir = Path.Combine(projectRoot, "docs");
         Directory.CreateDirectory(Path.Combine(docsDir, "01-concepts"));
+        Directory.CreateDirectory(Path.Combine(docsDir, "meta", "documents"));
         File.WriteAllText(Path.Combine(docsDir, "README.md"), "# Index\n");
         File.WriteAllText(Path.Combine(docsDir, "01-concepts", "10-overview.md"), "# Overview\n");
         File.WriteAllText(Path.Combine(docsDir, "01-concepts", "page.html"), "<h1>HTML page</h1>");
+        File.WriteAllText(Path.Combine(docsDir, "01-concepts", "page.metadata.json"),
+            "{ \"title\": \"Page metadata\", \"drift\": { \"grade\": \"B\" } }");
+        File.WriteAllText(Path.Combine(docsDir, "meta", "documents", "concept-overview.metadata.json"),
+            """
+            {
+              "sourcePath": "docs/01-concepts/10-overview.md",
+              "documentMode": "documentation",
+              "temporalState": "present",
+              "implementationState": "implemented",
+              "reportPath": "docs/meta/reports/documents/concept-overview.report.html",
+              "drift": { "grade": "B", "hasDrift": true, "score": 0.24, "summary": "Light sample drift." },
+              "axes": {
+                "architectureAlignment": "high",
+                "implementationAlignment": "medium",
+                "freshness": "medium",
+                "operatorUsefulness": "high"
+              },
+              "duplicates": { "suspected": false, "groupSize": 1 }
+            }
+            """);
 
         var docs = BuildDocsService(("Tree", projectRoot));
         var tree = docs.GetWikiTree("Tree");
 
         Assert.NotNull(tree);
         Assert.True(tree!.Exists);
-        // Folder sorts before the loose README file.
-        Assert.Equal(2, tree.Root.Count);
+        // Folders sort before the loose README file.
+        Assert.Equal(3, tree.Root.Count);
         Assert.Equal("folder", tree.Root[0].Type);
         Assert.Equal("concepts", tree.Root[0].Title); // NN- prefix stripped
         Assert.Equal("01-concepts", tree.Root[0].Name);
-        Assert.Equal("README.md", tree.Root[1].Name);
+        Assert.Equal("README.md", tree.Root[2].Name);
 
         var folder = tree.Root[0];
-        Assert.Equal(2, folder.Children.Count);
-        // Both md and html surface; md '10-overview' sorts by its numeric prefix.
+        Assert.Equal(3, folder.Children.Count);
+        // Markdown, HTML, and JSON surface; md '10-overview' sorts by its numeric prefix.
         var types = folder.Children.Select(c => c.Type).ToHashSet();
         Assert.Contains("md", types);
         Assert.Contains("html", types);
+        Assert.Contains("json", types);
         Assert.Equal("01-concepts/page.html", folder.Children.Single(c => c.Type == "html").RelPath);
+        Assert.Equal("Page metadata", folder.Children.Single(c => c.Type == "json").Title);
+        var overview = folder.Children.Single(c => c.Name == "10-overview.md");
+        Assert.NotNull(overview.Metadata);
+        Assert.Equal("implemented", overview.Metadata!.ImplementationState);
+        Assert.True(overview.Metadata.HasDrift);
+        Assert.Equal("B", overview.Metadata.DriftGrade);
+        Assert.Equal("medium", overview.Metadata.Quality);
+        Assert.False(overview.Metadata.DuplicateSuspected);
+        Assert.Equal("meta/reports/documents/concept-overview.report.html", overview.Metadata.ReportPath);
     }
 
     [Fact]
@@ -167,6 +198,26 @@ public class ProjectWikiEnhancementsTests : IDisposable
 
         Assert.False(docs.CreateWikiPage("Reject", "exists.md", null).Success);
         Assert.False(docs.CreateWikiPage("Reject", "notes.txt", null).Success);
+        Assert.True(docs.CreateWikiPage("Reject", "meta.json", null).Success);
+    }
+
+    [Fact]
+    public void WriteWikiFile_UpdatesExistingDoc_AndReportsNoop()
+    {
+        var projectRoot = Path.Combine(_tempDir, "write-proj");
+        var docPath = Path.Combine(projectRoot, "docs", "guide.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(docPath)!);
+        File.WriteAllText(docPath, "# Guide\n");
+        var docs = BuildDocsService(("Write", projectRoot));
+
+        var changed = docs.WriteWikiFile("Write", "guide.md", "# Guide\n\nUpdated.\n");
+        Assert.True(changed.Success);
+        Assert.True(changed.Changed);
+        Assert.Equal("# Guide\n\nUpdated.\n", File.ReadAllText(docPath));
+
+        var unchanged = docs.WriteWikiFile("Write", "guide.md", "# Guide\n\nUpdated.\n");
+        Assert.True(unchanged.Success);
+        Assert.False(unchanged.Changed);
     }
 
     [Fact]

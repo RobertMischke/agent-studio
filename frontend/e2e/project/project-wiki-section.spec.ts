@@ -17,8 +17,9 @@ import { api } from '../helpers/api';
 
 interface WatchPath { name: string; path: string }
 interface WikiTreeNodeFixture {
-  type: 'folder' | 'md' | 'html';
+  type: 'folder' | 'md' | 'html' | 'json';
   children?: WikiTreeNodeFixture[];
+  metadata?: unknown;
 }
 interface WikiTreeFixture {
   exists: boolean;
@@ -50,6 +51,7 @@ async function resetWikiStorage(page: Page): Promise<void> {
     for (const key of Object.keys(localStorage)) {
       if (key.startsWith('atp.projectWiki.v1.')) localStorage.removeItem(key);
       if (key.startsWith('atp.projectShell.v1.')) localStorage.removeItem(key);
+      if (key === 'atp.studio.panelState.v1') localStorage.removeItem(key);
     }
   });
 }
@@ -118,6 +120,18 @@ test.describe('Project detail - Knowledge section', () => {
     const tree = page.getByTestId('project-wiki-tree');
     await expect(tree).toBeVisible();
     await expect(page.getByTestId('project-wiki-root-path')).toBeVisible();
+    const firstFolder = tree.locator('.pwiki__row--group').first();
+    await expect(firstFolder).toBeVisible();
+    await expect(firstFolder).toHaveAttribute('aria-expanded', 'false');
+    await firstFolder.locator('.pwiki__label').click();
+    await expect(firstFolder).toBeFocused();
+    await expect(firstFolder).toHaveAttribute('aria-expanded', 'true');
+    await page.keyboard.press('ArrowLeft');
+    await expect(firstFolder).toHaveAttribute('aria-expanded', 'false');
+    await page.keyboard.press('ArrowRight');
+    await expect(firstFolder).toHaveAttribute('aria-expanded', 'true');
+    await page.keyboard.press('ArrowDown');
+    await expect(tree.locator('.pwiki__row').nth(1)).toBeFocused();
 
     const treeBoxBeforeResize = await tree.boundingBox();
     expect(treeBoxBeforeResize, 'tree bounds before resize').toBeTruthy();
@@ -138,6 +152,7 @@ test.describe('Project detail - Knowledge section', () => {
 
     const firstFile = tree.locator('[data-testid^="project-wiki-file-"]').first();
     await expect(firstFile).toBeVisible({ timeout: 10_000 });
+    await expect(tree.locator('[data-testid^="project-wiki-ratings-"]').first()).toBeVisible({ timeout: 10_000 });
 
     // Count badge reflects a non-empty tree.
     await expect(page.getByTestId('project-wiki-count')).toContainText(/\d+ pages/);
@@ -197,6 +212,32 @@ test.describe('Project detail - Knowledge section', () => {
     // Clearing the filter restores the full tree.
     await page.getByTestId('project-wiki-filter').fill('');
     await expect(tree.locator('[data-testid^="project-wiki-file-"]').first()).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('Classification chips open the reasoning report and edit mode is reachable', async ({ page }) => {
+    await page.goto(`/#/projects/${slugFor(projectName)}/wiki`);
+    await expect(page.getByTestId('project-wiki-section')).toBeVisible({ timeout: 10_000 });
+
+    await page.getByTestId('project-wiki-filter-toggle').click();
+    await page.getByTestId('project-wiki-filter').fill('structure-target');
+
+    const targetPath = 'architecture/backend-structure/structure-target.md';
+    const file = page.getByTestId(`project-wiki-file-${targetPath}`);
+    await expect(file).toBeVisible({ timeout: 10_000 });
+
+    await page.getByTestId(`project-wiki-metric-${targetPath}-drift`).click();
+    const reportFrame = page.getByTestId('project-wiki-report-frame');
+    await expect(reportFrame).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('project-wiki-tab-report')).toHaveClass(/pwiki__tab--active/);
+    await expect.poll(async () => await reportFrame.getAttribute('srcdoc')).toContain('url=#why-drift');
+
+    await page.reload();
+    await expect(page.getByTestId('project-wiki-section')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('project-wiki-tab-report')).toHaveClass(/pwiki__tab--active/);
+    await expect(page.getByTestId('project-wiki-report-frame')).toBeVisible({ timeout: 10_000 });
+
+    await page.getByTestId('project-wiki-edit').click();
+    await expect(page.getByTestId('project-wiki-editor-shell')).toBeVisible({ timeout: 10_000 });
   });
 
   test('Default page opens the page drift modal without starting a CLI', async ({ page }) => {

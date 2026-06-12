@@ -20,15 +20,17 @@ import { OverlayPortalDirective } from '../../../../directives/overlay-portal.di
 import { TooltipDirective } from '../../../../components/tooltip';
 import { CLI_TYPES, CliType, TaskState } from '../../../../models/task.model';
 import {
+  WikiFileSaveResult,
   WikiFileHistory,
   WikiNodeType,
   WikiTree,
   WikiTreeNode,
 } from '../../../../models/project-docs.model';
 import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
+import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor/markdown-rich-editor';
 import { MenuComponent } from '../../../../components/menu/menu.component';
 import { MenuItem, MenuItemClickEvent } from '../../../../components/menu/menu.types';
-import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
+import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
 import {
@@ -49,7 +51,7 @@ const WIKI_CONTEXT_MAX_WIDTH = 420;
 const WIKI_CONTEXT_DEFAULT_WIDTH = 284;
 const WIKI_RESIZE_STEP = 16;
 
-type WikiViewerTab = 'doc' | 'source';
+type WikiViewerTab = 'doc' | 'report' | 'source' | 'edit';
 type WikiResizablePanel = 'nav' | 'context';
 
 interface WikiPersistedState {
@@ -59,6 +61,7 @@ interface WikiPersistedState {
   viewerTab?: WikiViewerTab;
   navWidth?: number;
   contextWidth?: number;
+  expandedIds?: string[];
 }
 
 interface WikiResizeState {
@@ -72,6 +75,19 @@ interface WikiDocLink {
   label: string;
   target: string;
   kind: 'doc' | 'anchor' | 'external';
+}
+
+type WikiMetricTone = 'good' | 'info' | 'warn' | 'bad' | 'muted';
+
+interface WikiMetricChip {
+  key: string;
+  icon: StudioIconName;
+  prefix: string;
+  value: string;
+  label: string;
+  tone: WikiMetricTone;
+  tooltip: string;
+  reportAnchor: string | null;
 }
 
 /**
@@ -93,6 +109,7 @@ interface WikiDocLink {
   imports: [
     FormsModule,
     MarkdownViewComponent,
+    MarkdownRichEditorComponent,
     MenuComponent,
     OverlayPortalDirective,
     StudioIconComponent,
@@ -122,6 +139,7 @@ export class ProjectWikiSectionComponent {
   readonly filterOpen = signal(false);
 
   readonly expanded = signal<ReadonlySet<string>>(new Set());
+  readonly focusedRowId = signal<string | null>(null);
   readonly navCollapsed = signal(false);
   readonly contextCollapsed = signal(false);
   readonly navWidth = signal(WIKI_NAV_DEFAULT_WIDTH);
@@ -140,6 +158,13 @@ export class ProjectWikiSectionComponent {
   readonly openedContent = signal<string>('');
   readonly loadingDoc = signal(false);
   readonly viewerTab = signal<WikiViewerTab>('doc');
+  readonly reportContent = signal('');
+  readonly reportAnchor = signal<string | null>(null);
+  readonly reportError = signal<string | null>(null);
+  readonly loadingReport = signal(false);
+  readonly saveBusy = signal(false);
+  readonly saveError = signal<string | null>(null);
+  readonly saveResult = signal<WikiFileSaveResult | null>(null);
   readonly history = signal<WikiFileHistory | null>(null);
   readonly loadingHistory = signal(false);
 
@@ -173,9 +198,9 @@ export class ProjectWikiSectionComponent {
   readonly driftModel = signal('');
   readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle');
 
-  private seeded = false;
   private copyResetTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingOpenRestore: { rel: string; tab: WikiViewerTab } | null = null;
+  private loadedReportPath: string | null = null;
   private resizeState: WikiResizeState | null = null;
 
   protected readonly nodeId = nodeId;
@@ -186,15 +211,6 @@ export class ProjectWikiSectionComponent {
       if (p) {
         this.restorePersistedState(p);
         this.refresh();
-      }
-    });
-    // Expand every folder the first time the tree loads so it opens fully.
-    // Guarded so manual collapses survive later refreshes.
-    effect(() => {
-      const t = this.tree();
-      if (!this.seeded && t) {
-        this.expanded.set(new Set(collectFolderIds(t.root)));
-        this.seeded = true;
       }
     });
   }
@@ -258,6 +274,14 @@ export class ProjectWikiSectionComponent {
   readonly trustedHtml = computed<SafeHtml>(() =>
     this.sanitizer.bypassSecurityTrustHtml(this.displayContent()));
 
+  readonly trustedReportHtml = computed<SafeHtml>(() =>
+    this.sanitizer.bypassSecurityTrustHtml(this.reportHtmlForAnchor(
+      this.reportContent(),
+      this.reportAnchor())));
+
+  /** Pretty JSON preview for metadata files; invalid JSON falls back to source. */
+  readonly displayJson = computed(() => this.formatJson(this.displayContent()));
+
   /**
    * Latest commit for the open doc (history is newest-first), surfaced as the
    * doc-header "last modified" line: when + who + the commit subject (= why).
@@ -268,6 +292,8 @@ export class ProjectWikiSectionComponent {
     const rel = this.openedRel();
     return rel ? this.findNode(this.roots(), rel) : null;
   });
+
+  readonly reportPath = computed(() => this.openedNode()?.metadata?.reportPath ?? null);
 
   readonly openedTitle = computed(() =>
     this.openedNode()?.title ?? this.basename(this.openedRel() ?? 'Document'));
@@ -281,9 +307,19 @@ export class ProjectWikiSectionComponent {
   readonly openedKindLabel = computed(() => {
     switch (this.openedType()) {
       case 'html': return 'HTML';
+      case 'json': return 'JSON';
       case 'md': return 'Markdown';
       default: return 'Page';
     }
+  });
+
+  readonly canEditDoc = computed(() =>
+    this.openedType() === 'md' && !this.revisionSha());
+
+  readonly editDisabledReason = computed(() => {
+    if (this.revisionSha()) return 'Old revisions are read-only.';
+    if (this.openedType() !== 'md') return 'Rich editing is currently available for Markdown pages.';
+    return null;
   });
 
   readonly wordCount = computed(() => {
@@ -335,7 +371,6 @@ export class ProjectWikiSectionComponent {
   refresh(): void {
     const p = this.projectName();
     if (!p) return;
-    this.seeded = false;
     this.loading.set(true);
     this.docs.getWikiTree(p).subscribe({
       next: t => {
@@ -349,11 +384,20 @@ export class ProjectWikiSectionComponent {
 
   // ---- viewer ----
 
-  openFile(rel: string, type: WikiNodeType = 'md', tab: WikiViewerTab = 'doc'): void {
+  openFile(rel: string, type: WikiNodeType = 'md', tab: WikiViewerTab = 'doc', reportAnchor: string | null = null): void {
+    this.expandAncestors(rel);
+    this.focusedRowId.set(rel);
     this.openedRel.set(rel);
     this.openedType.set(type);
     this.viewerTab.set(tab);
     this.openedContent.set('');
+    this.reportContent.set('');
+    this.reportAnchor.set(reportAnchor);
+    this.reportError.set(null);
+    this.loadingReport.set(false);
+    this.loadedReportPath = null;
+    this.saveError.set(null);
+    this.saveResult.set(null);
     this.revisionSha.set(null);
     this.revisionContent.set('');
     this.loadingDoc.set(true);
@@ -376,12 +420,20 @@ export class ProjectWikiSectionComponent {
       },
       error: () => this.loadingHistory.set(false),
     });
+    if (tab === 'report') this.loadReport();
     this.persistState();
   }
 
   closeFile(): void {
     this.openedRel.set(null);
     this.openedContent.set('');
+    this.reportContent.set('');
+    this.reportAnchor.set(null);
+    this.reportError.set(null);
+    this.loadingReport.set(false);
+    this.loadedReportPath = null;
+    this.saveError.set(null);
+    this.saveResult.set(null);
     this.history.set(null);
     this.revisionSha.set(null);
     this.revisionContent.set('');
@@ -390,8 +442,84 @@ export class ProjectWikiSectionComponent {
   }
 
   selectTab(tab: WikiViewerTab): void {
+    if (tab === 'edit' && !this.canEditDoc()) return;
     this.viewerTab.set(tab);
+    if (tab === 'report') this.loadReport();
     this.persistState();
+  }
+
+  openReportSection(event: Event, node: WikiTreeNode, anchor: string | null): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!node.relPath || !anchor) return;
+    this.reportAnchor.set(anchor);
+    if (this.openedRel() === node.relPath) {
+      this.viewerTab.set('report');
+      this.loadReport();
+      this.persistState();
+      return;
+    }
+    this.openFile(node.relPath, node.type, 'report', anchor);
+  }
+
+  saveWikiContent(content: string): void {
+    const rel = this.openedRel();
+    if (!rel || this.openedType() !== 'md') return;
+    this.saveBusy.set(true);
+    this.saveError.set(null);
+    this.saveResult.set(null);
+    this.docs.putWikiFile(this.projectName(), rel, content).subscribe({
+      next: result => {
+        this.saveBusy.set(false);
+        this.saveResult.set(result);
+        this.openedContent.set(content);
+        this.reloadHistory(rel);
+        this.refresh();
+      },
+      error: err => {
+        this.saveBusy.set(false);
+        this.saveError.set(err?.error?.error ?? 'Saving failed.');
+      },
+    });
+  }
+
+  private loadReport(): void {
+    const path = this.reportPath();
+    if (!path) {
+      this.reportContent.set('');
+      this.reportError.set('No reasoning report is linked to this document yet.');
+      this.loadingReport.set(false);
+      this.loadedReportPath = null;
+      return;
+    }
+    if (this.loadedReportPath === path && this.reportContent()) return;
+
+    this.loadedReportPath = path;
+    this.reportContent.set('');
+    this.reportError.set(null);
+    this.loadingReport.set(true);
+    this.docs.getWikiFile(this.projectName(), path).subscribe({
+      next: r => {
+        this.reportContent.set(r.content);
+        this.loadingReport.set(false);
+      },
+      error: () => {
+        this.reportError.set('Failed to load the linked reasoning report.');
+        this.loadingReport.set(false);
+      },
+    });
+  }
+
+  private reloadHistory(rel: string): void {
+    this.history.set(null);
+    this.loadingHistory.set(true);
+    this.docs.getWikiFileHistory(this.projectName(), rel).subscribe({
+      next: h => {
+        this.history.set(h);
+        this.loadingHistory.set(false);
+      },
+      error: () => this.loadingHistory.set(false),
+    });
   }
 
   openFirstDoc(): void {
@@ -605,6 +733,8 @@ export class ProjectWikiSectionComponent {
     if (next.has(id)) next.delete(id);
     else next.add(id);
     this.expanded.set(next);
+    this.focusedRowId.set(id);
+    this.persistState();
   }
 
   private expand(id: string): void {
@@ -612,6 +742,85 @@ export class ProjectWikiSectionComponent {
     const next = new Set(this.expanded());
     next.add(id);
     this.expanded.set(next);
+    this.persistState();
+  }
+
+  focusTreeRow(node: WikiTreeNode): void {
+    this.focusedRowId.set(nodeId(node));
+  }
+
+  focusTreeRowElement(event: MouseEvent, node: WikiTreeNode): void {
+    this.focusedRowId.set(nodeId(node));
+    const row = event.currentTarget as HTMLElement | null;
+    if (!row) return;
+    queueMicrotask(() => row.focus());
+  }
+
+  rowTabIndex(row: WikiTreeRow, index: number): number {
+    const id = nodeId(row.node);
+    const focused = this.focusedRowId();
+    if (focused) return focused === id ? 0 : -1;
+    const active = this.openedRel();
+    if (active && active === id) return 0;
+    return index === 0 ? 0 : -1;
+  }
+
+  treeItemExpanded(row: WikiTreeRow): boolean | null {
+    return row.node.type === 'folder' && row.hasChildren ? row.expanded : null;
+  }
+
+  onTreeKeydown(event: KeyboardEvent): void {
+    const rows = this.rows();
+    if (rows.length === 0) return;
+
+    const currentIndex = this.currentTreeRowIndex(event, rows);
+    const row = rows[currentIndex];
+    if (!row) return;
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        this.focusRowAt(Math.min(currentIndex + 1, rows.length - 1));
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        this.focusRowAt(Math.max(currentIndex - 1, 0));
+        break;
+      case 'ArrowRight':
+        event.preventDefault();
+        if (row.node.type === 'folder' && row.hasChildren) {
+          if (!row.expanded) {
+            this.expand(nodeId(row.node));
+            this.focusRowAt(currentIndex);
+          } else {
+            this.focusRowAt(Math.min(currentIndex + 1, this.rows().length - 1));
+          }
+        }
+        break;
+      case 'ArrowLeft':
+        event.preventDefault();
+        if (row.node.type === 'folder' && row.expanded) {
+          this.toggleExpand(nodeId(row.node));
+          this.focusRowAt(currentIndex);
+        } else {
+          const parent = this.parentRowIndex(rows, currentIndex);
+          if (parent >= 0) this.focusRowAt(parent);
+        }
+        break;
+      case 'Home':
+        event.preventDefault();
+        this.focusRowAt(0);
+        break;
+      case 'End':
+        event.preventDefault();
+        this.focusRowAt(rows.length - 1);
+        break;
+      case 'Enter':
+      case ' ':
+        event.preventDefault();
+        this.activateTreeRow(row);
+        break;
+    }
   }
 
   // ---- context menu ----
@@ -785,9 +994,18 @@ export class ProjectWikiSectionComponent {
     this.contextCollapsed.set(state?.contextCollapsed === true);
     this.navWidth.set(this.clampNavWidth(state?.navWidth ?? WIKI_NAV_DEFAULT_WIDTH));
     this.contextWidth.set(this.clampContextWidth(state?.contextWidth ?? WIKI_CONTEXT_DEFAULT_WIDTH));
+    this.expanded.set(new Set(state?.expandedIds ?? []));
+    this.focusedRowId.set(state?.openedRel ?? null);
     this.viewerTab.set(this.safeViewerTab(state?.viewerTab));
     this.openedRel.set(null);
     this.openedContent.set('');
+    this.reportContent.set('');
+    this.reportAnchor.set(null);
+    this.reportError.set(null);
+    this.loadingReport.set(false);
+    this.loadedReportPath = null;
+    this.saveError.set(null);
+    this.saveResult.set(null);
     this.history.set(null);
     this.revisionSha.set(null);
     this.revisionContent.set('');
@@ -818,6 +1036,7 @@ export class ProjectWikiSectionComponent {
       viewerTab: this.viewerTab(),
       navWidth: this.navWidth(),
       contextWidth: this.contextWidth(),
+      expandedIds: [...this.expanded()],
     };
     this.writePersistedState(projectName, state);
   }
@@ -834,6 +1053,7 @@ export class ProjectWikiSectionComponent {
         viewerTab: this.safeViewerTab(parsed.viewerTab),
         navWidth: this.readStoredWidth(parsed.navWidth, WIKI_NAV_MIN_WIDTH, WIKI_NAV_MAX_WIDTH),
         contextWidth: this.readStoredWidth(parsed.contextWidth, WIKI_CONTEXT_MIN_WIDTH, WIKI_CONTEXT_MAX_WIDTH),
+        expandedIds: this.readStoredExpandedIds(parsed.expandedIds),
       };
     } catch {
       return null;
@@ -853,7 +1073,26 @@ export class ProjectWikiSectionComponent {
   }
 
   private safeViewerTab(value: unknown): WikiViewerTab {
-    return value === 'source' || value === 'doc' ? value : 'doc';
+    return value === 'source' || value === 'doc' || value === 'report' || value === 'edit'
+      ? value
+      : 'doc';
+  }
+
+  private reportHtmlForAnchor(html: string, anchor: string | null): string {
+    const cleanAnchor = this.safeReportAnchor(anchor);
+    if (!cleanAnchor || !html) return html;
+    const injection = `<meta http-equiv="refresh" content="0;url=#${cleanAnchor}">`
+      + `<style>:target{outline:2px solid #2563eb;outline-offset:6px;scroll-margin-top:18px;}</style>`;
+    if (/<head[^>]*>/i.test(html)) {
+      return html.replace(/<head([^>]*)>/i, `<head$1>${injection}`);
+    }
+    return injection + html;
+  }
+
+  private safeReportAnchor(anchor: string | null): string | null {
+    if (!anchor) return null;
+    const clean = anchor.trim().toLowerCase();
+    return /^[a-z0-9-]+$/.test(clean) ? clean : null;
   }
 
   private applyPanelWidth(panel: WikiResizablePanel, width: number): void {
@@ -879,6 +1118,11 @@ export class ProjectWikiSectionComponent {
   private readStoredWidth(value: unknown, min: number, max: number): number | undefined {
     if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
     return this.clampWidth(value, min, max);
+  }
+
+  private readStoredExpandedIds(value: unknown): string[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
   }
 
   private resolveDriftProjectContext(after: () => void): void {
@@ -1002,6 +1246,16 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
     return null;
   }
 
+  private expandAncestors(rel: string): void {
+    const parts = rel.split('/');
+    if (parts.length <= 1) return;
+    const next = new Set(this.expanded());
+    for (let i = 1; i < parts.length; i++) {
+      next.add(parts.slice(0, i).join('/'));
+    }
+    this.expanded.set(next);
+  }
+
   private collectDocs(nodes: readonly WikiTreeNode[]): WikiTreeNode[] {
     const docs: WikiTreeNode[] = [];
     const walk = (items: readonly WikiTreeNode[]): void => {
@@ -1065,8 +1319,156 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
     return parent || 'root folder';
   }
 
+  documentMetricChips(node: WikiTreeNode): WikiMetricChip[] {
+    const meta = node.metadata ?? null;
+    if (!meta) {
+      return [
+        {
+          key: 'unscored',
+          icon: 'file',
+          prefix: 'Meta',
+          value: 'None',
+          label: 'Metadata unscored',
+          tone: 'muted',
+          tooltip: 'No JSON metadata record under docs/meta/documents describes this document yet.',
+          reportAnchor: null,
+        },
+      ];
+    }
+
+    const chips = [
+      this.driftChip(meta.hasDrift, meta.driftGrade, meta.summary),
+      this.directionChip(meta.temporalState),
+    ].filter((chip): chip is WikiMetricChip => chip !== null);
+    return chips;
+  }
+
+  private driftChip(hasDrift: boolean | null, grade: string | null, summary: string | null): WikiMetricChip {
+    const cleanGrade = this.cleanGrade(grade);
+    if (hasDrift === false) {
+      return {
+        key: 'drift',
+        icon: 'check',
+        prefix: 'Drift',
+        value: cleanGrade ?? 'A',
+        label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift stable',
+        tone: 'good',
+        tooltip: this.joinTooltip('No drift is currently suspected.', summary),
+        reportAnchor: 'why-drift',
+      };
+    }
+    if (hasDrift === true) {
+      return {
+        key: 'drift',
+        icon: 'diff',
+        prefix: 'Drift',
+        value: cleanGrade ?? '?',
+        label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift unknown grade',
+        tone: cleanGrade === 'D' ? 'bad' : 'warn',
+        tooltip: this.joinTooltip('Drift is suspected for this document.', summary),
+        reportAnchor: 'why-drift',
+      };
+    }
+    return {
+      key: 'drift',
+      icon: 'diff',
+      prefix: 'Drift',
+      value: cleanGrade ?? '?',
+      label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift unknown',
+      tone: 'muted',
+      tooltip: this.joinTooltip('Drift state is not classified yet.', summary),
+      reportAnchor: 'why-drift',
+    };
+  }
+
+  private directionChip(state: string | null): WikiMetricChip {
+    const normalized = this.normalizeMetric(state);
+    switch (normalized) {
+      case 'present':
+      case 'current':
+      case 'now':
+        return {
+          key: 'direction',
+          icon: 'activity',
+          prefix: 'Direction',
+          value: 'Current',
+          label: 'Direction Current',
+          tone: 'muted',
+          tooltip: 'Direction: describes current behavior.',
+          reportAnchor: 'temporal-reasoning',
+        };
+      case 'future':
+      case 'planned':
+      case 'vision':
+        return {
+          key: 'direction',
+          icon: 'branch',
+          prefix: 'Direction',
+          value: 'Future',
+          label: 'Direction Future',
+          tone: 'muted',
+          tooltip: 'Direction: describes planned or future behavior.',
+          reportAnchor: 'temporal-reasoning',
+        };
+      case 'past':
+      case 'historic':
+      case 'obsolete':
+        return {
+          key: 'direction',
+          icon: 'archive',
+          prefix: 'Direction',
+          value: 'Past',
+          label: 'Direction Past',
+          tone: 'muted',
+          tooltip: 'Direction: describes past or obsolete behavior.',
+          reportAnchor: 'temporal-reasoning',
+        };
+      case 'mixed':
+      case 'transition':
+        return {
+          key: 'direction',
+          icon: 'diff',
+          prefix: 'Direction',
+          value: 'Mixed',
+          label: 'Direction Mixed',
+          tone: 'muted',
+          tooltip: 'Direction: mixes current and planned behavior.',
+          reportAnchor: 'temporal-reasoning',
+        };
+      default:
+        return {
+          key: 'direction',
+          icon: 'activity',
+          prefix: 'Direction',
+          value: '?',
+          label: 'Direction unknown',
+          tone: 'muted',
+          tooltip: 'Direction has not been classified yet.',
+          reportAnchor: 'temporal-reasoning',
+        };
+    }
+  }
+
+  private cleanGrade(grade: string | null): string | null {
+    const clean = grade?.trim().toUpperCase();
+    return clean && /^[A-D]$/.test(clean) ? clean : null;
+  }
+
+  private normalizeMetric(value: string | null): string {
+    return value?.trim().toLowerCase() ?? '';
+  }
+
+  private joinTooltip(primary: string, summary: string | null): string {
+    const clean = summary?.trim();
+    return clean ? `${primary} ${clean}` : primary;
+  }
+
   fileTypeLabel(node: WikiTreeNode): string {
-    return node.type === 'html' ? 'HTML page' : 'Markdown page';
+    switch (node.type) {
+      case 'html': return 'HTML page';
+      case 'json': return 'JSON metadata';
+      default: return 'Markdown page';
+    }
   }
 
   private toSlug(value: string): string {
@@ -1093,6 +1495,51 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
 
   rowPad(depth: number): number {
     return 6 + depth * 16;
+  }
+
+  private currentTreeRowIndex(event: KeyboardEvent, rows: readonly WikiTreeRow[]): number {
+    const target = event.target as HTMLElement | null;
+    const rowEl = target?.closest?.('.pwiki__row') as HTMLElement | null;
+    const domId = rowEl?.dataset['wikiRowId'];
+    const id = domId || this.focusedRowId() || this.openedRel();
+    const index = id ? rows.findIndex(r => nodeId(r.node) === id) : -1;
+    return index >= 0 ? index : 0;
+  }
+
+  private focusRowAt(index: number): void {
+    const rows = this.rows();
+    const row = rows[index];
+    if (!row) return;
+    this.focusedRowId.set(nodeId(row.node));
+    queueMicrotask(() => {
+      const root = this.host.nativeElement as HTMLElement;
+      root.querySelectorAll<HTMLElement>('.pwiki__row')[index]?.focus();
+    });
+  }
+
+  private activateTreeRow(row: WikiTreeRow): void {
+    if (row.node.type === 'folder') {
+      this.toggleExpand(nodeId(row.node));
+      return;
+    }
+    if (row.node.relPath) this.openFile(row.node.relPath, row.node.type);
+  }
+
+  private parentRowIndex(rows: readonly WikiTreeRow[], index: number): number {
+    const depth = rows[index]?.depth ?? 0;
+    if (depth <= 0) return -1;
+    for (let i = index - 1; i >= 0; i--) {
+      if (rows[i].depth === depth - 1) return i;
+    }
+    return -1;
+  }
+
+  private formatJson(content: string): string {
+    try {
+      return JSON.stringify(JSON.parse(content), null, 2);
+    } catch {
+      return content;
+    }
   }
 
   /** Locale date-time for the doc-header last-modified line; blank on bad input. */
