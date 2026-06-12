@@ -14,15 +14,6 @@
         (openReport)="openReport($event)" />
     }
   }
-  @defer (when activeRail() === 'jobs') {
-    @if (activeRail() === 'jobs') {
-      <app-project-detail
-        [projectName]="projectName()"
-        view="jobs"
-        (openFeed)="openFeedFromDetail($event)"
-        (openReport)="openReport($event)" />
-    }
-  }
   @defer (when activeRail() === 'security') {
     @if (activeRail() === 'security') {
       <app-security-panel
@@ -79,11 +70,6 @@
         (openReport)="openReport($event)" />
     }
   }
-  @defer (when activeRail() === 'product-runtime') {
-    @if (activeRail() === 'product-runtime') {
-      <app-project-product-runtime-panel [projectName]="projectName()" />
-    }
-  }
   @defer (when activeRail() === 'steering') {
     @if (activeRail() === 'steering') {
       <app-project-steering-docs-section [projectName]="projectName()" />
@@ -126,15 +112,6 @@
       <app-project-detail
         [projectName]="projectName()"
         view="orchestrator"
-        (openFeed)="openFeedFromDetail($event)"
-        (openReport)="openReport($event)" />
-    }
-  }
-  @defer (when activeRail() === 'activity') {
-    @if (activeRail() === 'activity') {
-      <app-project-detail
-        [projectName]="projectName()"
-        view="activity"
         (openFeed)="openFeedFromDetail($event)"
         (openReport)="openReport($event)" />
     }

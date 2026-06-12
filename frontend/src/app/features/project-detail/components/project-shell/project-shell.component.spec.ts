@@ -9,9 +9,8 @@ import type { ProjectRailKey } from './project-shell.config';
 
 /**
  * Render-path coverage for the Project-Hub nav IA (ASS-1711): collapsible
- * main segments, tree-expandable parents (Project Knowledge / Settings), the
- * "Agent Docs" rename, the standalone "Runtime Prompts" point, and the
- * shared tree-row icon rail.
+ * main segments, the tree-expandable Settings parent, the "Agent Docs"
+ * rename, the Context main point, and the shared tree-row icon rail.
  */
 function mount(activeRail: ProjectRailKey = 'overview') {
   TestBed.configureTestingModule({
@@ -111,7 +110,7 @@ describe('ProjectShellComponent rail IA', () => {
     expect(component.railCollapsed()).toBe(true);
     expect(component.railWidth()).toBe(320);
     expect(component.isGroupCollapsed('insight')).toBe(true);
-    expect(component.isExpanded('steering-docs')).toBe(false);
+    expect(component.isExpanded('settings')).toBe(true);
     expect(host.querySelector('[data-testid="project-shell-sidebar-header"]')).toBeNull();
   });
 
@@ -153,82 +152,121 @@ describe('ProjectShellComponent rail IA', () => {
     expect(component.railWidth()).toBeGreaterThanOrEqual(component.minRailWidth);
   });
 
-  it('renders all four collapsible main segments', () => {
+  it('renders the four collapsible main segments', () => {
     const host = mount().nativeElement as HTMLElement;
-    for (const id of ['insight', 'quality', 'operations', 'config']) {
+    for (const id of ['insight', 'quality', 'context', 'config']) {
       const header = host.querySelector(`[data-testid="project-shell-group-${id}"]`);
       expect(header, `segment header ${id}`).toBeTruthy();
       expect(header!.getAttribute('aria-expanded')).toBe('true');
     }
+    expect(host.querySelector('[data-testid="project-shell-group-operations"]')).toBeNull();
   });
 
-  it('collapsing a segment hides its items, expanding shows them again', () => {
-    const fixture = mount();
+  it('keeps Token Usage inside Insight and removes the Activity rail', () => {
+    const fixture = mount('security');
     const host = fixture.nativeElement as HTMLElement;
     const insightHeader = host.querySelector<HTMLElement>('[data-testid="project-shell-group-insight"]')!;
 
-    expect(railEl(host, 'overview')).toBeTruthy();
-    insightHeader.click();
-    fixture.detectChanges();
-    expect(insightHeader.getAttribute('aria-expanded')).toBe('false');
-    expect(railEl(host, 'overview')).toBeNull();
+    expect(railEl(host, 'token-usage')).toBeTruthy();
+    expect(railEl(host, 'activity')).toBeNull();
 
     insightHeader.click();
     fixture.detectChanges();
-    expect(railEl(host, 'overview')).toBeTruthy();
+
+    expect(railEl(host, 'token-usage')).toBeNull();
   });
 
-  it('groups knowledge rails under a non-navigable "Project Knowledge" tree parent', () => {
+  it('collapsing a non-active segment hides its items, expanding shows them again', () => {
+    const fixture = mount();
+    const host = fixture.nativeElement as HTMLElement;
+    const qualityHeader = host.querySelector<HTMLElement>('[data-testid="project-shell-group-quality"]')!;
+
+    expect(railEl(host, 'security')).toBeTruthy();
+    qualityHeader.click();
+    fixture.detectChanges();
+    expect(qualityHeader.getAttribute('aria-expanded')).toBe('false');
+    expect(railEl(host, 'security')).toBeNull();
+
+    qualityHeader.click();
+    fixture.detectChanges();
+    expect(railEl(host, 'security')).toBeTruthy();
+  });
+
+  it('renders Context as its own collapsible main segment', () => {
     const fixture = mount();
     const host = fixture.nativeElement as HTMLElement;
 
-    // The container row is present and labelled, and ships a disclosure twisty.
-    const container = railEl(host, 'steering-docs')!;
-    expect(container.textContent).toContain('Project Knowledge');
-    expect(host.querySelector('[data-testid="project-shell-twisty-steering-docs"]')).toBeTruthy();
+    const contextHeader = host.querySelector<HTMLElement>('[data-testid="project-shell-group-context"]')!;
+    expect(contextHeader.textContent).toContain('Context');
+    expect(contextHeader.getAttribute('aria-expanded')).toBe('true');
+    expect(railEl(host, 'steering-docs')).toBeNull();
 
-    // Children are visible by default (parents seed expanded).
+    // Context rows are visible by default and are top-level rows.
     expect(railEl(host, 'architecture')).toBeTruthy();
     expect(railEl(host, 'wiki')).toBeTruthy();
-    expect(railEl(host, 'wiki')!.textContent).toContain('Root Folder');
+    expect(railEl(host, 'wiki')!.textContent).toContain('Wiki');
     expect(railEl(host, 'steering')).toBeTruthy();
+    expect(railEl(host, 'prompts')).toBeTruthy();
+    expect(railEl(host, 'runtime-prompts')).toBeTruthy();
 
-    // Collapsing the parent hides only its children, not the container row.
-    host.querySelector<HTMLElement>('[data-testid="project-shell-twisty-steering-docs"]')!.click();
+    // Collapsing the main segment hides its rows.
+    contextHeader.click();
     fixture.detectChanges();
     expect(railEl(host, 'architecture')).toBeNull();
     expect(railEl(host, 'wiki')).toBeNull();
     expect(railEl(host, 'steering')).toBeNull();
-    expect(railEl(host, 'steering-docs')).toBeTruthy();
+    expect(railEl(host, 'prompts')).toBeNull();
+    expect(railEl(host, 'runtime-prompts')).toBeNull();
+    expect(railEl(host, 'steering-docs')).toBeNull();
   });
 
-  it('clicking the non-navigable container toggles children without emitting a rail change', () => {
+  it('collapses Context without emitting a rail change', () => {
     const fixture = mount();
     const host = fixture.nativeElement as HTMLElement;
     let emitted: ProjectRailKey | null = null;
     fixture.componentInstance.railChange.subscribe(k => (emitted = k));
 
-    const containerLabel = railEl(host, 'steering-docs')!;
-    containerLabel.click();
+    host.querySelector<HTMLElement>('[data-testid="project-shell-group-context"]')!.click();
     fixture.detectChanges();
 
     expect(emitted).toBeNull();
-    expect(railEl(host, 'architecture')).toBeNull(); // collapsed
+    expect(railEl(host, 'architecture')).toBeNull();
   });
 
   it('labels the agent-read leaf "Agent Docs" and keeps the steering key', () => {
     const host = mount().nativeElement as HTMLElement;
     const leaf = railEl(host, 'steering')!;
     expect(leaf.textContent).toContain('Agent Docs');
-    expect(leaf.textContent).not.toContain('Project Knowledge');
+    expect(leaf.textContent).not.toContain('Context');
   });
 
-  it('exposes Runtime Prompts as its own top-level point in Config', () => {
-    const host = mount().nativeElement as HTMLElement;
+  it('lists Prompts and Runtime Prompts inside Context', () => {
+    const fixture = mount();
+    const host = fixture.nativeElement as HTMLElement;
+    const prompts = railEl(host, 'prompts')!;
     const runtime = railEl(host, 'runtime-prompts')!;
+    expect(prompts.textContent).toContain('Prompts');
     expect(runtime.textContent).toContain('Runtime Prompts');
-    // It is not nested under the Project Knowledge container (no twisty, top-level row).
+    expect(host.querySelector('[data-testid="project-shell-twisty-prompts"]')).toBeNull();
     expect(host.querySelector('[data-testid="project-shell-twisty-runtime-prompts"]')).toBeNull();
+
+    host.querySelector<HTMLElement>('[data-testid="project-shell-group-context"]')!.click();
+    fixture.detectChanges();
+    expect(railEl(host, 'prompts')).toBeNull();
+    expect(railEl(host, 'runtime-prompts')).toBeNull();
+  });
+
+  it('opens Context when an active rail was hidden by persisted state', () => {
+    localStorage.setItem(projectShellStorageKey(), JSON.stringify({
+      collapsedGroups: ['context'],
+    }));
+
+    const fixture = mount('prompts');
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(fixture.componentInstance.isGroupCollapsed('context')).toBe(false);
+    expect(railEl(host, 'prompts')).toBeTruthy();
+    expect(railEl(host, 'prompts')?.getAttribute('aria-current')).toBe('page');
   });
 
   it('expands Settings to its grouped sub-pages', () => {
@@ -242,17 +280,16 @@ describe('ProjectShellComponent rail IA', () => {
     const host = mount().nativeElement as HTMLElement;
     expect(railEl(host, 'overview')?.querySelector('app-studio-icon')).toBeTruthy();
     expect(railEl(host, 'security')?.querySelector('app-studio-icon')).toBeTruthy();
-    expect(railEl(host, 'steering-docs')?.querySelector('app-studio-icon')).toBeTruthy();
+    expect(railEl(host, 'architecture')?.querySelector('app-studio-icon')).toBeTruthy();
     expect(railEl(host, 'overview')?.querySelector('.tree-row__chev--placeholder')).toBeTruthy();
   });
 
   // T5a nav-rebuild step 1: the target navigation gains three reachable
-  // shells (Pipeline / Workflow / Prompts) at project level. They live in
-  // Config and render the generic placeholder panel until step 2 moves real
-  // content in.
-  it('exposes the Pipeline / Workflow / Prompts shells as reachable Config rows', () => {
+  // shells (Pipeline / Workflow / Prompts) at project level. Pipeline and
+  // Workflow stay top-level Config rows; Prompts now lives in the Context segment.
+  it('exposes the Pipeline / Workflow shells as reachable Config rows', () => {
     const host = mount().nativeElement as HTMLElement;
-    for (const key of ['pipeline', 'workflow', 'prompts']) {
+    for (const key of ['pipeline', 'workflow']) {
       const row = railEl(host, key);
       expect(row, `rail row ${key}`).toBeTruthy();
       // Top-level points in Config, not nested containers (no twisty).

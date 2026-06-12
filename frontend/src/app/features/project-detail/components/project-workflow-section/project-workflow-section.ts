@@ -42,8 +42,7 @@ interface TransitionRow {
  *
  * Read-mostly transparency surface for the lane model and what the platform
  * does at each transition *today*:
- *  - the lane list in board order with each lane's role,
- *  - the per-lane sort-order controls (relocated here in T5b; the only writes),
+ *  - one board-order lane list with each lane's role and sort-order control,
  *  - a read-only transition view (auto-commit, attribution, gates, auto-push)
  *    driven by the project's live settings + pipeline config,
  *  - placeholder sections for stage 2/3 that land only after the Git-concept
@@ -74,7 +73,7 @@ export class ProjectWorkflowSectionComponent implements OnInit {
     role: LANE_ROLES[lane.state] ?? '',
   }));
 
-  // ---- Sort order per lane (the only writeable controls; moved in T5b) ----
+  // ---- Board sort per lane (the only writeable controls; shown in the lane list) ----
   readonly sortableLanes = SORTABLE_LANES;
   readonly laneSortOptions = USER_VISIBLE_LANE_SORT_STRATEGIES;
   /** Per-lane sort-strategy selection, keyed by lane state. */

@@ -99,7 +99,7 @@ export class ProjectShellComponent {
   /**
    * Tree parents whose children are currently shown. Seeded with every parent
    * so the tree opens fully expanded — keeps existing deep-links to nested
-   * rails (Architecture / Wiki / Agent Docs) reachable on first paint.
+   * rails (currently Settings sub-pages) reachable on first paint.
    */
   private readonly expandedParents = signal<ReadonlySet<ProjectRailKey>>(
     new Set(PROJECT_RAIL_PARENT_KEYS),
@@ -109,19 +109,23 @@ export class ProjectShellComponent {
     effect(() => {
       this.restorePersistedState(this.projectName());
     });
+
+    effect(() => {
+      this.ensureActiveRailVisible(this.activeRail());
+    });
   }
 
   /**
    * Rail items as a collapsible-segment → tree-node structure. Top-level nodes
    * are items without a `parent`; each carries the children that point back at
    * its key. Group order follows the canonical Project Hub taxonomy:
-   * Insight → Quality → Operations → Config.
+   * Insight → Quality → Context → Config.
    */
   readonly railGroups = computed<readonly ProjectRailGroupView[]>(() => {
     const order: { id: ProjectRailGroup; label: string }[] = [
       { id: 'insight',    label: 'Insight' },
       { id: 'quality',    label: 'Quality' },
-      { id: 'operations', label: 'Operations' },
+      { id: 'context',    label: 'Context' },
       { id: 'config',     label: 'Config' },
     ];
     return order.map(({ id, label }) => {
@@ -334,7 +338,7 @@ export class ProjectShellComponent {
 
   private readStoredGroups(value: unknown): ProjectRailGroup[] | undefined {
     if (!Array.isArray(value)) return undefined;
-    const valid = new Set<ProjectRailGroup>(['insight', 'quality', 'operations', 'config']);
+    const valid = new Set<ProjectRailGroup>(['insight', 'quality', 'context', 'config']);
     return value.filter((item): item is ProjectRailGroup => valid.has(item));
   }
 
@@ -342,6 +346,29 @@ export class ProjectShellComponent {
     if (!Array.isArray(value)) return undefined;
     const valid = new Set<ProjectRailKey>(PROJECT_RAIL_PARENT_KEYS);
     return value.filter((item): item is ProjectRailKey => valid.has(item));
+  }
+
+  private ensureActiveRailVisible(activeKey: ProjectRailKey): void {
+    const item = PROJECT_RAIL_ITEMS.find(i => i.key === activeKey);
+    if (!item) return;
+
+    let changed = false;
+    if (this.collapsedGroups().has(item.group)) {
+      this.collapsedGroups.update(current => {
+        const next = new Set(current);
+        next.delete(item.group);
+        return next;
+      });
+      changed = true;
+    }
+
+    const parent = item.parent;
+    if (parent && !this.expandedParents().has(parent)) {
+      this.expandedParents.update(current => new Set([...current, parent]));
+      changed = true;
+    }
+
+    if (changed) this.persistState();
   }
 
   private storageKey(projectName: string): string {
