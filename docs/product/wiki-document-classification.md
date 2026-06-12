@@ -9,6 +9,24 @@ questions an operator usually asks first:
 
 Detailed evidence stays in the document Report tab.
 
+## Storage Contract
+
+Classification is stored beside the document:
+
+```text
+source.md
+source.md.meta.json
+source.md.report.html
+```
+
+The `.meta.json` companion follows
+[`docs/schemas/wiki-document-companion.schema.json`](../schemas/wiki-document-companion.schema.json).
+It stores the drift grade, direction, findings, duplicate hints, and the source
+fingerprint used during review. The `.report.html` file is generated from that
+JSON and is loaded by the Wiki Report tab. Companion files are physical files,
+but the navigation attaches them to the source document row instead of showing
+them as ordinary pages.
+
 ## Primary Signals
 
 | Signal | Meaning | Tree display |

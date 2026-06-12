@@ -200,10 +200,9 @@
                                 [attr.aria-label]="chip.label"
                                 [appTooltip]="chip.tooltip"
                                 (click)="openReportSection($event, row.node, chip.reportAnchor)">
-                          <span class="pwiki__metric-prefix">{{ chip.prefix }}</span>
                           <span class="pwiki__metric-value">
                             <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
-                            <span>{{ chip.value }}</span>
+                            <span>{{ chip.display }}</span>
                           </span>
                         </button>
                       }
@@ -575,15 +574,50 @@
 
               <section class="pwiki__landing-grid" aria-label="Suggested pages">
                 @for (doc of suggestedDocs(); track doc.relPath) {
-                  <button class="pwiki__doc-card" type="button"
-                          [attr.data-testid]="'project-wiki-suggested-' + doc.relPath"
-                          (click)="openFile(doc.relPath!, doc.type)">
-                    <span class="pwiki__doc-card-kind">
-                      {{ doc.type === 'html' ? 'HTML' : doc.type === 'json' ? 'JSON' : 'MD' }}
+                  <article class="pwiki__doc-card"
+                           [attr.data-testid]="'project-wiki-suggested-card-' + doc.relPath">
+                    <button class="pwiki__doc-card-main" type="button"
+                            [attr.data-testid]="'project-wiki-suggested-' + doc.relPath"
+                            (click)="openFile(doc.relPath!, doc.type)">
+                      <span class="pwiki__doc-card-kind">
+                        {{ doc.type === 'html' ? 'HTML' : doc.type === 'json' ? 'JSON' : 'MD' }}
+                      </span>
+                      <strong>{{ doc.title }}</strong>
+                      <code>{{ doc.relPath }}</code>
+                    </button>
+                    <span class="pwiki__metric-strip pwiki__metric-strip--card"
+                          [attr.data-testid]="'project-wiki-suggested-ratings-' + doc.relPath">
+                      @for (chip of documentMetricChips(doc); track chip.key) {
+                        @if (chip.reportAnchor) {
+                          <button class="pwiki__metric"
+                                  type="button"
+                                  [attr.data-tone]="chip.tone"
+                                  [attr.data-kind]="chip.key"
+                                  [attr.data-testid]="'project-wiki-suggested-metric-' + doc.relPath + '-' + chip.key"
+                                  [attr.aria-label]="chip.label"
+                                  [appTooltip]="chip.tooltip"
+                                  (click)="openReportSection($event, doc, chip.reportAnchor)">
+                            <span class="pwiki__metric-value">
+                              <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
+                              <span>{{ chip.display }}</span>
+                            </span>
+                          </button>
+                        } @else {
+                          <span class="pwiki__metric"
+                                [attr.data-tone]="chip.tone"
+                                [attr.data-kind]="chip.key"
+                                [attr.data-testid]="'project-wiki-suggested-metric-' + doc.relPath + '-' + chip.key"
+                                [attr.aria-label]="chip.label"
+                                [appTooltip]="chip.tooltip">
+                            <span class="pwiki__metric-value">
+                              <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
+                              <span>{{ chip.display }}</span>
+                            </span>
+                          </span>
+                        }
+                      }
                     </span>
-                    <strong>{{ doc.title }}</strong>
-                    <code>{{ doc.relPath }}</code>
-                  </button>
+                  </article>
                 }
               </section>
             </article>

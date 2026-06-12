@@ -1,0 +1,102 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Operations setup metadata",
+  "source": {
+    "path": "docs/operations/setup/README.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "dbe8a3b5ebbd3e96ed7afd17f481699c150aedab0cc3c6ad2870ac2e553ba477",
+      "sizeBytes": 2165,
+      "lineCount": 23,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    }
+  },
+  "report": {
+    "path": "docs/operations/setup/README.md.report.html",
+    "generatedAt": "2026-06-12T08:30:00Z",
+    "generator": "scripts/wiki/generate-companion-metadata.mjs",
+    "template": "wiki-document-companion-report/v1"
+  },
+  "classification": {
+    "owner": "operations",
+    "documentMode": "documentation",
+    "temporalState": "present",
+    "implementationState": "implemented"
+  },
+  "review": {
+    "date": "2026-06-11",
+    "method": "sample metadata pass",
+    "model": "codex",
+    "sourceFingerprint": {
+      "algorithm": "sha256",
+      "hash": "dbe8a3b5ebbd3e96ed7afd17f481699c150aedab0cc3c6ad2870ac2e553ba477",
+      "sizeBytes": 2165,
+      "lineCount": 23,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    },
+    "sourceChangedSinceReview": false
+  },
+  "drift": {
+    "grade": "B",
+    "hasDrift": true,
+    "score": 0.19,
+    "summary": "The setup entry point remains useful, with minor risk around dev-backend and demo-data expectations.",
+    "rationale": [
+      "The current dev workflow still uses the documented split between backend and frontend.",
+      "Recent discussion around lightweight dev data should be reflected when that backend mode lands.",
+      "No immediate operator-blocking contradiction is visible."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "high",
+    "implementationAlignment": "medium",
+    "freshness": "medium",
+    "operatorUsefulness": "high"
+  },
+  "duplicates": {
+    "suspected": false,
+    "groupSize": 1,
+    "similarTo": []
+  },
+  "findings": [
+    {
+      "id": "drift-summary",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The setup entry point remains useful, with minor risk around dev-backend and demo-data expectations.",
+      "rationale": [
+        "The current dev workflow still uses the documented split between backend and frontend.",
+        "Recent discussion around lightweight dev data should be reflected when that backend mode lands.",
+        "No immediate operator-blocking contradiction is visible."
+      ],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-1",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The current dev workflow still uses the documented split between backend and frontend.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-2",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Recent discussion around lightweight dev data should be reflected when that backend mode lands.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-3",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "No immediate operator-blocking contradiction is visible.",
+      "rationale": [],
+      "evidence": []
+    }
+  ],
+  "nextAction": "Add a note once the fast dev-backend data scenario is implemented."
+}

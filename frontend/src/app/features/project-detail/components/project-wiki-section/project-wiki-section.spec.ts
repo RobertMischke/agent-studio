@@ -30,8 +30,11 @@ const TREE: WikiTree = {
             quality: 'medium',
             duplicateSuspected: false,
             duplicateGroupSize: 1,
-            reportPath: 'meta/reports/documents/concept-overview.report.html',
+            reportPath: 'concepts/overview.md.report.html',
             summary: 'Light sample drift.',
+            companionPath: 'concepts/overview.md.meta.json',
+            sourceChangedSinceReview: false,
+            findingsCount: 2,
           },
         },
         { name: 'page.html', title: 'HTML page', relPath: 'concepts/page.html', type: 'html', children: [] },
@@ -153,6 +156,12 @@ describe('ProjectWikiSectionComponent', () => {
     expect(
       ratings!.querySelector('[data-testid="project-wiki-metric-concepts/overview.md-direction"]')?.getAttribute('aria-label')
     ).toBe('Direction Current');
+    expect(ratings!.textContent).toContain('B');
+    expect(ratings!.textContent).toContain('Now');
+    expect(ratings!.textContent).not.toContain('D:');
+    expect(ratings!.textContent).not.toContain('Dir:');
+    expect(ratings!.textContent).not.toContain('DriftB');
+    expect(ratings!.textContent).not.toContain('DirectionCurrent');
     expect(ratings!.textContent).not.toContain('S 76');
     expect(ratings!.textContent).not.toContain('Q B');
     expect(
@@ -192,9 +201,9 @@ describe('ProjectWikiSectionComponent', () => {
     // The Report tab loads the linked metadata reasoning HTML as a third view.
     el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-tab-report"]')!.click();
     fixture.detectChanges();
-    http.expectOne('/api/projects/Demo/wiki/files/meta/reports/documents/concept-overview.report.html')
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md.report.html')
       .flush({
-        relPath: 'meta/reports/documents/concept-overview.report.html',
+        relPath: 'concepts/overview.md.report.html',
         content: '<main><h1>Concept overview report</h1><p>Why drift: sampled evidence.</p></main>',
       });
     fixture.detectChanges();
@@ -223,9 +232,9 @@ describe('ProjectWikiSectionComponent', () => {
     http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
       .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n\nBody text.' });
     http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
-    http.expectOne('/api/projects/Demo/wiki/files/meta/reports/documents/concept-overview.report.html')
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md.report.html')
       .flush({
-        relPath: 'meta/reports/documents/concept-overview.report.html',
+        relPath: 'concepts/overview.md.report.html',
         content: '<!doctype html><html><head><title>r</title></head><body><h2 id="why-drift">Why drift?</h2></body></html>',
       });
     fixture.detectChanges();
@@ -327,6 +336,38 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
+  it('shows sidecar chips on suggested root cards and opens the report from there', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+
+    const card = root.querySelector('[data-testid="project-wiki-suggested-card-concepts/overview.md"]');
+    expect(card?.textContent).toContain('B');
+    expect(card?.textContent).toContain('Now');
+    expect(card?.textContent).not.toContain('D:');
+    expect(card?.textContent).not.toContain('Dir:');
+    expect(card?.textContent).not.toContain('DriftB');
+    expect(card?.textContent).not.toContain('DirectionCurrent');
+
+    root.querySelector<HTMLButtonElement>(
+      '[data-testid="project-wiki-suggested-metric-concepts/overview.md-drift"]'
+    )!.click();
+    fixture.detectChanges();
+
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n\nBody text.' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md.report.html')
+      .flush({
+        relPath: 'concepts/overview.md.report.html',
+        content: '<!doctype html><html><body><h2 id="why-drift">Why drift?</h2></body></html>',
+      });
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="project-wiki-tab-report"]')?.className)
+      .toContain('pwiki__tab--active');
+    http.verify();
+  });
+
   it('restores collapsed panels, selected document, and active tab from localStorage', async () => {
     localStorage.setItem(wikiStorageKey(), JSON.stringify({
       navCollapsed: true,
@@ -366,9 +407,9 @@ describe('ProjectWikiSectionComponent', () => {
     http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
       .flush({ relPath: 'concepts/overview.md', content: '# Restored report\n\nBody text.' });
     http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
-    http.expectOne('/api/projects/Demo/wiki/files/meta/reports/documents/concept-overview.report.html')
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md.report.html')
       .flush({
-        relPath: 'meta/reports/documents/concept-overview.report.html',
+        relPath: 'concepts/overview.md.report.html',
         content: '<main><h1>Restored reasoning report</h1></main>',
       });
     fixture.detectChanges();

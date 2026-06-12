@@ -1,0 +1,102 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Knowledge map metadata",
+  "source": {
+    "path": "docs/architecture/maps/knowledge-map.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "e60c1f9bae7cf33b30651e624d4c1253cf86210a2672785ec4c281be0b413b75",
+      "sizeBytes": 5353,
+      "lineCount": 211,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    }
+  },
+  "report": {
+    "path": "docs/architecture/maps/knowledge-map.html.report.html",
+    "generatedAt": "2026-06-12T08:30:00Z",
+    "generator": "scripts/wiki/generate-companion-metadata.mjs",
+    "template": "wiki-document-companion-report/v1"
+  },
+  "classification": {
+    "owner": "architecture",
+    "documentMode": "documentation",
+    "temporalState": "mixed",
+    "implementationState": "partially implemented"
+  },
+  "review": {
+    "date": "2026-06-11",
+    "method": "first-ten metadata scoring pass",
+    "model": "codex",
+    "sourceFingerprint": {
+      "algorithm": "sha256",
+      "hash": "e60c1f9bae7cf33b30651e624d4c1253cf86210a2672785ec4c281be0b413b75",
+      "sizeBytes": 5353,
+      "lineCount": 211,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    },
+    "sourceChangedSinceReview": false
+  },
+  "drift": {
+    "grade": "C",
+    "hasDrift": true,
+    "score": 0.48,
+    "summary": "The HTML map is useful as a visual artifact, but Wiki navigation and metadata now provide newer ways to inspect knowledge structure.",
+    "rationale": [
+      "HTML knowledge maps can drift quickly from the physical docs tree.",
+      "The new Wiki tree now exposes real folders, file types, and metadata.",
+      "The map should either be regenerated or framed as illustrative."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "medium",
+    "implementationAlignment": "medium",
+    "freshness": "low",
+    "operatorUsefulness": "medium"
+  },
+  "duplicates": {
+    "suspected": false,
+    "groupSize": 1,
+    "similarTo": []
+  },
+  "findings": [
+    {
+      "id": "drift-summary",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The HTML map is useful as a visual artifact, but Wiki navigation and metadata now provide newer ways to inspect knowledge structure.",
+      "rationale": [
+        "HTML knowledge maps can drift quickly from the physical docs tree.",
+        "The new Wiki tree now exposes real folders, file types, and metadata.",
+        "The map should either be regenerated or framed as illustrative."
+      ],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-1",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "HTML knowledge maps can drift quickly from the physical docs tree.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-2",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The new Wiki tree now exposes real folders, file types, and metadata.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-3",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The map should either be regenerated or framed as illustrative.",
+      "rationale": [],
+      "evidence": []
+    }
+  ],
+  "nextAction": "Regenerate from the current docs tree or mark it as a historical visualization."
+}

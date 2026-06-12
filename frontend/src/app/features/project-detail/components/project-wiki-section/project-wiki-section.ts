@@ -24,6 +24,7 @@ import {
   WikiFileHistory,
   WikiNodeType,
   WikiTree,
+  WikiTreeMetadata,
   WikiTreeNode,
 } from '../../../../models/project-docs.model';
 import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
@@ -82,8 +83,7 @@ type WikiMetricTone = 'good' | 'info' | 'warn' | 'bad' | 'muted';
 interface WikiMetricChip {
   key: string;
   icon: StudioIconName;
-  prefix: string;
-  value: string;
+  display: string;
   label: string;
   tone: WikiMetricTone;
   tooltip: string;
@@ -1326,43 +1326,41 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
         {
           key: 'unscored',
           icon: 'file',
-          prefix: 'Meta',
-          value: 'None',
+          display: 'None',
           label: 'Metadata unscored',
           tone: 'muted',
-          tooltip: 'No JSON metadata record under docs/meta/documents describes this document yet.',
+          tooltip: 'No adjacent companion metadata file describes this document yet.',
           reportAnchor: null,
         },
       ];
     }
 
     const chips = [
-      this.driftChip(meta.hasDrift, meta.driftGrade, meta.summary),
+      this.driftChip(meta),
       this.directionChip(meta.temporalState),
     ].filter((chip): chip is WikiMetricChip => chip !== null);
     return chips;
   }
 
-  private driftChip(hasDrift: boolean | null, grade: string | null, summary: string | null): WikiMetricChip {
-    const cleanGrade = this.cleanGrade(grade);
-    if (hasDrift === false) {
+  private driftChip(meta: WikiTreeMetadata): WikiMetricChip {
+    const cleanGrade = this.cleanGrade(meta.driftGrade);
+    const summary = this.companionTooltipSummary(meta);
+    if (meta.hasDrift === false) {
       return {
         key: 'drift',
         icon: 'check',
-        prefix: 'Drift',
-        value: cleanGrade ?? 'A',
+        display: cleanGrade ?? 'A',
         label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift stable',
         tone: 'good',
         tooltip: this.joinTooltip('No drift is currently suspected.', summary),
         reportAnchor: 'why-drift',
       };
     }
-    if (hasDrift === true) {
+    if (meta.hasDrift === true) {
       return {
         key: 'drift',
         icon: 'diff',
-        prefix: 'Drift',
-        value: cleanGrade ?? '?',
+        display: cleanGrade ?? '?',
         label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift unknown grade',
         tone: cleanGrade === 'D' ? 'bad' : 'warn',
         tooltip: this.joinTooltip('Drift is suspected for this document.', summary),
@@ -1372,8 +1370,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
     return {
       key: 'drift',
       icon: 'diff',
-      prefix: 'Drift',
-      value: cleanGrade ?? '?',
+      display: cleanGrade ?? '?',
       label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift unknown',
       tone: 'muted',
       tooltip: this.joinTooltip('Drift state is not classified yet.', summary),
@@ -1390,8 +1387,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
         return {
           key: 'direction',
           icon: 'activity',
-          prefix: 'Direction',
-          value: 'Current',
+          display: 'Now',
           label: 'Direction Current',
           tone: 'muted',
           tooltip: 'Direction: describes current behavior.',
@@ -1403,8 +1399,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
         return {
           key: 'direction',
           icon: 'branch',
-          prefix: 'Direction',
-          value: 'Future',
+          display: 'Fut',
           label: 'Direction Future',
           tone: 'muted',
           tooltip: 'Direction: describes planned or future behavior.',
@@ -1416,8 +1411,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
         return {
           key: 'direction',
           icon: 'archive',
-          prefix: 'Direction',
-          value: 'Past',
+          display: 'Past',
           label: 'Direction Past',
           tone: 'muted',
           tooltip: 'Direction: describes past or obsolete behavior.',
@@ -1428,8 +1422,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
         return {
           key: 'direction',
           icon: 'diff',
-          prefix: 'Direction',
-          value: 'Mixed',
+          display: 'Mix',
           label: 'Direction Mixed',
           tone: 'muted',
           tooltip: 'Direction: mixes current and planned behavior.',
@@ -1439,8 +1432,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
         return {
           key: 'direction',
           icon: 'activity',
-          prefix: 'Direction',
-          value: '?',
+          display: '?',
           label: 'Direction unknown',
           tone: 'muted',
           tooltip: 'Direction has not been classified yet.',
@@ -1461,6 +1453,19 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
   private joinTooltip(primary: string, summary: string | null): string {
     const clean = summary?.trim();
     return clean ? `${primary} ${clean}` : primary;
+  }
+
+  private companionTooltipSummary(meta: WikiTreeMetadata): string | null {
+    const parts: string[] = [];
+    if (meta.sourceChangedSinceReview === true) {
+      parts.push('Source changed since the companion review.');
+    }
+    if (meta.summary?.trim()) parts.push(meta.summary.trim());
+    if (meta.findingsCount && meta.findingsCount > 0) {
+      parts.push(`${meta.findingsCount} finding${meta.findingsCount === 1 ? '' : 's'} in the companion report.`);
+    }
+    if (meta.companionPath?.trim()) parts.push(`Companion: ${meta.companionPath.trim()}.`);
+    return parts.length ? parts.join(' ') : null;
   }
 
   fileTypeLabel(node: WikiTreeNode): string {

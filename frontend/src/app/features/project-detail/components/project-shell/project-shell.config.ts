@@ -75,7 +75,7 @@ export interface ProjectRailItem {
 export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
   // ---- INSIGHT: what the project IS / does ----
   // Order matches the agent-orchestrator.zip mockup (hub-view.png):
-  // Overview · Visual Evidence · Drift · UX / UI · Observability.
+  // Overview · Visual Evidence · Drift · Observability.
   // Architecture used to live here; it now sits under the "Project Knowledge"
   // documentation container in CONFIG (ASS-1711) because it is thematically a
   // doc surface, not a live-health surface.
@@ -108,16 +108,6 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     empty: 'No drift reports yet. Run a comparison to produce the first one.',
     icon: '↯',
     railIcon: 'diff',
-  },
-  {
-    key: 'uxui',
-    group: 'insight',
-    label: 'UX / UI',
-    panelTitle: 'UX / UI',
-    description: 'Design references, screenshots, council critique, and next-version actions',
-    empty: 'UX/UI placeholder. Design surfaces and council critique arrive in a later slice.',
-    icon: '◐',
-    railIcon: 'eye',
   },
   {
     key: 'observability',
