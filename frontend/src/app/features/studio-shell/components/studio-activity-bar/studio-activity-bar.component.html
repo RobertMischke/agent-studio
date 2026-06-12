@@ -90,7 +90,7 @@
   </button>
   <button type="button"
           class="studio-ab__btn"
-          [class.studio-ab__btn--active]="activePanel() === 'settings' && sidebarVisible()"
+          [class.studio-ab__btn--active]="settingsActive() || (activePanel() === 'settings' && sidebarVisible())"
           appTooltip="Settings"
           data-testid="studio-ab-settings"
           (click)="panelToggle.emit('settings')">

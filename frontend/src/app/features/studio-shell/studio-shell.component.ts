@@ -35,7 +35,7 @@ import { UpdateClientService } from '../../services/update.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { NotificationService } from '../../services/notification.service';
 import { copyTextToClipboard } from '../../services/clipboard.util';
-import { WorkspaceManagerService, ProjectDragDropService } from '../shell';
+import { WorkspaceManagerService, ProjectDragDropService, WorkspaceOverlaysService } from '../shell';
 import { WorkspaceSettingsService } from '../shell/state/workspace-settings.service';
 import { ProjectLookupService } from '../../services/project-lookup.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
@@ -68,6 +68,8 @@ function cliColorFor(cli: string): string {
     default:        return '#6e6e6e';
   }
 }
+
+const SETTINGS_WORKSPACES_COLLAPSED_KEY = 'atp.studio.settingsWorkspacesCollapsed';
 
 /**
  * Top-level "Agent Software Studio" shell — the VS-Code-inspired chrome
@@ -128,6 +130,7 @@ export class StudioShellComponent {
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly notifications = inject(NotificationService);
   private readonly workspaceManager = inject(WorkspaceManagerService);
+  private readonly workspaceOverlays = inject(WorkspaceOverlaysService);
   private readonly projectLookup = inject(ProjectLookupService);
   readonly wsSettings = inject(WorkspaceSettingsService);
 
@@ -143,6 +146,7 @@ export class StudioShellComponent {
   readonly sidebarWidth = this.panelState.sidebarWidth;
   readonly activityBarSide = this.panelState.activityBarSide;
   readonly chatRailOpen = this.panelState.chatRailOpen;
+  readonly settingsWorkspacesCollapsed = signal(this.readSettingsWorkspacesCollapsed());
 
   /** Settings segmented-control option sets (label/value pairs). */
   readonly themeOptions: readonly SegmentedOption<'dark' | 'light'>[] = [
@@ -793,12 +797,31 @@ export class StudioShellComponent {
   closeTab(key: string, event?: Event): void {
     event?.stopPropagation();
     this.tabState.close(key);
+    this.closeWorkspaceSettingsStateIfTabMissing();
   }
 
-  closeOthers(key: string): void { this.tabState.closeOthers(key); }
-  closeRight(key: string): void { this.tabState.closeRight(key); }
-  closeLeft(key: string): void { this.tabState.closeLeft(key); }
-  closeAll(): void { this.tabState.closeAll(); }
+  closeOthers(key: string): void {
+    this.tabState.closeOthers(key);
+    this.closeWorkspaceSettingsStateIfTabMissing();
+  }
+  closeRight(key: string): void {
+    this.tabState.closeRight(key);
+    this.closeWorkspaceSettingsStateIfTabMissing();
+  }
+  closeLeft(key: string): void {
+    this.tabState.closeLeft(key);
+    this.closeWorkspaceSettingsStateIfTabMissing();
+  }
+  closeAll(): void {
+    this.tabState.closeAll();
+    this.closeWorkspaceSettingsStateIfTabMissing();
+  }
+
+  private closeWorkspaceSettingsStateIfTabMissing(): void {
+    if (!this.tabs().some(tab => studioTabKey(tab) === 'workspace-settings')) {
+      this.workspaceOverlays.close();
+    }
+  }
 
   // ---- drag-reorder ---------------------------------------------------
   // Tracks which tab is currently being dragged and which tab the
@@ -1044,7 +1067,15 @@ export class StudioShellComponent {
   }
 
   togglePanel(panel: StudioActivityPanelKey | 'settings' | 'admin'): void {
-    this.panelState.toggle(panel);
+    const visible = this.panelState.toggle(panel);
+    if (panel === 'settings' && visible) {
+      this.openWorkspaceSettingsTab();
+    }
+  }
+
+  openWorkspaceSettingsTab(): void {
+    this.workspaceOverlays.open(this.workspaceOverlays.section());
+    this.tabState.open({ kind: 'workspace-settings' });
   }
 
   toggleTheme(): void {
@@ -1065,6 +1096,25 @@ export class StudioShellComponent {
 
   toggleCompactCards(): void {
     this.uiPrefs.toggleCompactCards();
+  }
+
+  setSettingsWorkspacesCollapsed(collapsed: boolean): void {
+    this.settingsWorkspacesCollapsed.set(collapsed);
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage?.setItem(SETTINGS_WORKSPACES_COLLAPSED_KEY, collapsed ? '1' : '0');
+    } catch {
+      /* storage may be full / blocked */
+    }
+  }
+
+  private readSettingsWorkspacesCollapsed(): boolean {
+    if (typeof window === 'undefined') return true;
+    try {
+      return window.localStorage?.getItem(SETTINGS_WORKSPACES_COLLAPSED_KEY) !== '0';
+    } catch {
+      return true;
+    }
   }
 
   clearAllFilters(): void {
@@ -1181,6 +1231,8 @@ export class StudioShellComponent {
         const job = this.findJob(tab.taskKey);
         return `Activity · ${job?.title || tab.taskKey}`;
       }
+      case 'workspace-settings':
+        return 'Workspace settings';
       case 'welcome':
         return 'Welcome';
       default:

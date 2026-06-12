@@ -40,4 +40,18 @@ describe('StudioPanelStateService', () => {
     expect(service.active()).toBe('explorer');
     expect(service.visible()).toBe(false);
   });
+
+  it('opens a panel explicitly without toggling it closed', () => {
+    const service = TestBed.inject(StudioPanelStateService);
+
+    service.open('settings');
+    service.open('settings');
+
+    expect(service.active()).toBe('settings');
+    expect(service.visible()).toBe(true);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')).toEqual({
+      active: 'settings',
+      visible: true,
+    });
+  });
 });

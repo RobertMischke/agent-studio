@@ -134,6 +134,7 @@
       [backlogCount]="backlogCount()"
       [epicsActive]="activeTab()?.kind === 'epics'"
       [hasEpics]="hasEpics()"
+      [settingsActive]="activeTab()?.kind === 'workspace-settings'"
       (panelToggle)="togglePanel($event)"
       (openBacklogRequest)="onActivityBarOpenBacklog()"
       (openEpicsRequest)="onActivityBarOpenEpics()" />
@@ -465,8 +466,14 @@
                   Open update history
                 </button>
 
-                <app-section-header title="Workspaces" [divider]="true"
-                                    testid="settings-workspaces-head" />
+                <app-section-header title="Workspaces"
+                                    [divider]="true"
+                                    [collapsible]="true"
+                                    [collapsed]="settingsWorkspacesCollapsed()"
+                                    [count]="registryWorkspaces().length"
+                                    testid="settings-workspaces-head"
+                                    (collapsedChange)="setSettingsWorkspacesCollapsed($event)" />
+                @if (!settingsWorkspacesCollapsed()) {
                 <div class="studio-settings-workspaces"
                      data-testid="settings-workspaces"
                      [attr.aria-busy]="registryWorkspacesLoading() ? 'true' : null">
@@ -639,6 +646,7 @@
                     use the action buttons for color, reorder, workspace move, archive, and delete.
                   </p>
                 </div>
+                }
               </section>
             }
             @default {

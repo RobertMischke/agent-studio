@@ -9,7 +9,7 @@
  */
 
 /** Discrete tab kinds the editor area can host. */
-export type StudioTabKind = 'board' | 'backlog' | 'epics' | 'epic' | 'task' | 'hub' | 'diff' | 'activity' | 'welcome';
+export type StudioTabKind = 'board' | 'backlog' | 'epics' | 'epic' | 'task' | 'hub' | 'diff' | 'activity' | 'workspace-settings' | 'welcome';
 
 /** Sidebar panel kinds reachable from the ActivityBar. */
 export type StudioPanelKind = 'explorer' | 'filters' | 'cli' | 'activity' | 'runbook' | 'admin' | 'settings';
@@ -38,10 +38,13 @@ export interface DiffTab { kind: 'diff'; commitSha: string; }
 /** Full-screen activity tab; key `activity:<taskKey>`. */
 export interface ActivityTab { kind: 'activity'; taskKey: string; }
 
+/** Workspace settings tab — global settings surface opened from the ActivityBar gear. */
+export interface WorkspaceSettingsTab { kind: 'workspace-settings'; }
+
 /** Welcome screen — no real tab, no key. */
 export interface WelcomeTab { kind: 'welcome'; }
 
-export type StudioTab = BoardTab | BacklogTab | EpicsTab | EpicTab | TaskTab | HubTab | DiffTab | ActivityTab | WelcomeTab;
+export type StudioTab = BoardTab | BacklogTab | EpicsTab | EpicTab | TaskTab | HubTab | DiffTab | ActivityTab | WorkspaceSettingsTab | WelcomeTab;
 
 /** Build the stable string key for a tab; used for selection + persistence. */
 export function studioTabKey(tab: StudioTab): string {
@@ -54,6 +57,7 @@ export function studioTabKey(tab: StudioTab): string {
     case 'hub':      return `hub:${tab.projectName}`;
     case 'diff':     return `diff:${tab.commitSha}`;
     case 'activity': return `activity:${tab.taskKey}`;
+    case 'workspace-settings': return 'workspace-settings';
     case 'welcome':  return 'welcome';
   }
 }

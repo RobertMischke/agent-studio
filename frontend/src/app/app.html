@@ -440,6 +440,12 @@
                 }
               }
             }
+            @case ('workspace-settings') {
+              <app-workspace-overlays [inline]="true"
+                                      (openTask)="onOpenTaskFromReel($event)"
+                                      (openProjectSettings)="onOpenProjectSettingsFromUsage($event)"
+                                      (openJobDetail)="onOpenTaskFromSession($event)" />
+            }
             @default {
               <!-- Welcome screen owned by the shell itself when no tab is active. -->
             }
@@ -512,9 +518,6 @@
         (uxuiFollowUp)="onUxuiFollowUp($event)"
         (uxuiActionQueued)="onUxuiActionQueued($event)"
         (openTask)="onOpenTaskFromReel($event)" />
-      <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)"
-                              (openProjectSettings)="onOpenProjectSettingsFromUsage($event)"
-                              (openJobDetail)="onOpenTaskFromSession($event)" />
       @defer (when verboseDebugContext() !== null) {
         @if (verboseDebugContext(); as ctx) {
           <app-verbose-debug-overlay

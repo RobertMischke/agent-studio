@@ -67,6 +67,20 @@ describe('StudioTabStateService', () => {
     expect(svc.activeTab()).toEqual(tab);
   });
 
+  it('opens workspace settings as a persistent editor tab', () => {
+    const tab: StudioTab = { kind: 'workspace-settings' };
+    svc.open(tab);
+    expect(studioTabKey(tab)).toBe('workspace-settings');
+    expect(svc.activeKey()).toBe('workspace-settings');
+
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+    const restored = TestBed.inject(StudioTabStateService);
+
+    expect(restored.activeKey()).toBe('workspace-settings');
+    expect(restored.activeTab()).toEqual(tab);
+  });
+
   it('focuses an already-open tab instead of duplicating', () => {
     const tab: StudioTab = { kind: 'task', taskKey: 'demo|x' };
     svc.open(tab);

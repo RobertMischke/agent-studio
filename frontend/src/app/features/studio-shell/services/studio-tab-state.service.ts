@@ -296,6 +296,8 @@ export class StudioTabStateService {
         return { kind: 'diff', commitSha: tab.commitSha };
       case 'activity':
         return { kind: 'activity', taskKey: tab.taskKey };
+      case 'workspace-settings':
+        return { kind: 'workspace-settings' };
       case 'welcome':
         return { kind: 'welcome' };
     }

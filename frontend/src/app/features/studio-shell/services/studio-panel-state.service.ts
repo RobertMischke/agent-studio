@@ -66,6 +66,12 @@ export class StudioPanelStateService {
     return true;
   }
 
+  open(panel: StudioPanelKind): void {
+    this._active.set(panel);
+    this._visible.set(true);
+    this.persist();
+  }
+
   setVisible(visible: boolean): void {
     this._visible.set(visible);
     this.persist();

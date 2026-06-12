@@ -67,6 +67,7 @@ import {
   WorkspaceManagerService,
   WorkspaceOverlaysComponent,
   WorkspaceOverlaysService,
+  type WorkspaceSettingsSection,
 } from './features/shell';
 import { E2ECleanupDialogComponent, TagManagerDialogComponent } from './features/dev-tools';
 import {
@@ -344,9 +345,10 @@ export class App implements OnInit, OnDestroy {
   readonly workspaceScreenshotsOpen = this.workspaceOverlays.screenshotsOpen;
   readonly workspaceSummaryOpen = this.workspaceOverlays.summaryOpen;
   readonly cliAdminOpen = this.workspaceOverlays.cliAdminOpen;
-  /** True while the global Workspace-settings home is open in any section.
-   *  Drives the status-bar Settings button's pressed/active state. */
-  readonly workspaceSettingsOpen = this.workspaceOverlays.anyOpen;
+  /** Drives the status-bar Settings button's pressed/active state. */
+  readonly workspaceSettingsOpen = computed(() => this.featureFlags.vsCodeLayout()
+    ? this.studioTabState.activeTab()?.kind === 'workspace-settings'
+    : this.workspaceOverlays.anyOpen());
   private hashListener: (() => void) | null = null;
   private initialHashSyncComplete = false;
   private kanbanKeyListener: ((ev: KeyboardEvent) => void) | null = null;
@@ -1067,6 +1069,23 @@ export class App implements OnInit, OnDestroy {
       });
     });
 
+    // Studio Workspace Settings render as an editor tab. Keep the existing
+    // WorkspaceOverlaysService as the section/hash state holder, but close
+    // that state when the settings tab is no longer the active surface.
+    effect(() => {
+      if (!this.featureFlags.vsCodeLayout()) return;
+      const tab = this.studioTabState.activeTab();
+      const open = this.workspaceOverlays.settingsOpen();
+      untracked(() => {
+        if (tab?.kind === 'workspace-settings') {
+          this.studioPanelState.open('settings');
+          if (!open) this.workspaceOverlays.open(this.workspaceOverlays.section());
+        } else if (open) {
+          this.workspaceOverlays.close();
+        }
+      });
+    });
+
     effect(() => {
       const selected = this.selectedJob();
       const jobs = this.jobService.jobs();
@@ -1182,6 +1201,9 @@ export class App implements OnInit, OnDestroy {
     // editor-tab destinations.
     const applyHash = () => {
       this.workspaceOverlays.syncFromHash();
+      if (this.featureFlags.vsCodeLayout() && this.workspaceOverlays.settingsOpen()) {
+        this.openWorkspaceSettingsInStudio(this.workspaceOverlays.section());
+      }
       this.applyProjectShellHash();
       this.syncBacklogTabFromHash();
       this.syncEpicsTabFromHash();
@@ -2069,48 +2091,101 @@ export class App implements OnInit, OnDestroy {
     this.studioTabState.open({ kind: 'epics', projectName });
   }
 
-  // Cycle 9g: workspace overlay open/close + URL-hash sync delegated to
-  // WorkspaceOverlaysService. The shell keeps these thin pass-throughs
-  // because external call sites (status bar, usage hover panel, dev-tools
-  // menu, screenshot reel) and deep-link entry points still go through
-  // the shell.
+  private openWorkspaceSettingsInStudio(section: WorkspaceSettingsSection): void {
+    this.workspaceOverlays.open(section);
+    this.studioPanelState.open('settings');
+    this.studioTabState.open({ kind: 'workspace-settings' });
+  }
+
+  private toggleWorkspaceSettingsInStudio(section: WorkspaceSettingsSection): void {
+    const alreadyActive =
+      this.studioTabState.activeTab()?.kind === 'workspace-settings' &&
+      this.workspaceOverlays.section() === section &&
+      this.studioPanelState.active() === 'settings' &&
+      this.studioPanelState.visible();
+    if (alreadyActive) {
+      this.studioPanelState.setVisible(false);
+      return;
+    }
+    this.openWorkspaceSettingsInStudio(section);
+  }
+
+  // Cycle 9g: workspace settings open/close + URL-hash sync delegated to
+  // WorkspaceOverlaysService. In Studio layout the same state renders in a
+  // normal editor tab; legacy layout keeps the modal shell.
   openWorkspaceSettings(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.openWorkspaceSettingsInStudio('overview');
+      return;
+    }
     this.workspaceOverlays.openSettings();
   }
   toggleWorkspaceSettings(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.toggleWorkspaceSettingsInStudio('overview');
+      return;
+    }
     this.workspaceOverlays.toggleSettings();
   }
   openWorkspaceTokens(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.openWorkspaceSettingsInStudio('tokens');
+      return;
+    }
     this.workspaceOverlays.openTokens();
   }
   closeWorkspaceTokens(): void {
     this.workspaceOverlays.closeTokens();
   }
   openWorkspaceScreenshots(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.openWorkspaceSettingsInStudio('screenshots');
+      return;
+    }
     this.workspaceOverlays.openScreenshots();
   }
   closeWorkspaceScreenshots(): void {
     this.workspaceOverlays.closeScreenshots();
   }
   toggleWorkspaceScreenshots(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.toggleWorkspaceSettingsInStudio('screenshots');
+      return;
+    }
     this.workspaceOverlays.toggleScreenshots();
   }
   openWorkspaceSummary(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.openWorkspaceSettingsInStudio('summary');
+      return;
+    }
     this.workspaceOverlays.openSummary();
   }
   closeWorkspaceSummary(): void {
     this.workspaceOverlays.closeSummary();
   }
   toggleWorkspaceSummary(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.toggleWorkspaceSettingsInStudio('summary');
+      return;
+    }
     this.workspaceOverlays.toggleSummary();
   }
   openCliAdmin(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.openWorkspaceSettingsInStudio('caps');
+      return;
+    }
     this.workspaceOverlays.openCliAdmin();
   }
   closeCliAdmin(): void {
     this.workspaceOverlays.closeCliAdmin();
   }
   toggleCliAdmin(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.toggleWorkspaceSettingsInStudio('caps');
+      return;
+    }
     this.workspaceOverlays.toggleCliAdmin();
   }
 
