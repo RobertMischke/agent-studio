@@ -14,8 +14,28 @@ const TREE: WikiTree = {
   root: [
     {
       name: 'concepts', title: 'concepts', relPath: 'concepts', type: 'folder', children: [
-        { name: 'overview.md', title: 'Concept overview', relPath: 'concepts/overview.md', type: 'md', children: [] },
+        {
+          name: 'overview.md',
+          title: 'Concept overview',
+          relPath: 'concepts/overview.md',
+          type: 'md',
+          children: [],
+          metadata: {
+            documentMode: 'documentation',
+            temporalState: 'present',
+            implementationState: 'implemented',
+            driftGrade: 'B',
+            hasDrift: true,
+            driftScore: 0.24,
+            quality: 'medium',
+            duplicateSuspected: false,
+            duplicateGroupSize: 1,
+            reportPath: 'meta/reports/documents/concept-overview.report.html',
+            summary: 'Light sample drift.',
+          },
+        },
         { name: 'page.html', title: 'HTML page', relPath: 'concepts/page.html', type: 'html', children: [] },
+        { name: 'page.metadata.json', title: 'Page metadata', relPath: 'concepts/page.metadata.json', type: 'json', children: [] },
       ],
     },
     { name: 'README.md', title: 'Docs index', relPath: 'README.md', type: 'md', children: [] },
@@ -44,6 +64,11 @@ async function setup(tree: WikiTree = TREE) {
 }
 
 const el = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
+
+function expandConcepts(fixture: { componentInstance: ProjectWikiSectionComponent; detectChanges: () => void }): void {
+  fixture.componentInstance.toggleExpand('concepts');
+  fixture.detectChanges();
+}
 
 function wikiStorageKey(projectName = 'Demo'): string {
   return `atp.projectWiki.v1.${encodeURIComponent(projectName)}`;
@@ -74,13 +99,14 @@ function fireDrag(target: Element, type: string, dt: DataTransfer): void {
 }
 
 function fakePointer(clientX: number, pointerId = 1): PointerEvent {
+  const noop = () => undefined;
   return {
     clientX,
     pointerId,
-    preventDefault() {},
+    preventDefault: noop,
     currentTarget: {
-      setPointerCapture() {},
-      releasePointerCapture() {},
+      setPointerCapture: noop,
+      releasePointerCapture: noop,
     },
   } as unknown as PointerEvent;
 }
@@ -102,25 +128,46 @@ describe('ProjectWikiSectionComponent', () => {
     clearWikiStorage();
   });
 
-  it('renders the physical folder tree with folders and md/html files', async () => {
+  it('renders the physical folder tree with folders collapsed by default and md/html/json files when expanded', async () => {
     const { fixture, http } = await setup();
-    const text = el(fixture).textContent ?? '';
-    // Folders expand by default (seed effect), so children are visible.
+    let text = el(fixture).querySelector('[data-testid="project-wiki-tree"]')?.textContent ?? '';
     expect(text).toContain('concepts');
-    expect(text).toContain('Concept overview');
+    expect(text).not.toContain('Concept overview');
     expect(text).toContain('Docs index');
-    expect(text).toContain('3 pages'); // overview.md + page.html + README.md
-    // The nav exposes the physical root path, parent path, and subtle file type icon.
+    expect(el(fixture).textContent).toContain('4 pages'); // overview.md + page.html + page.metadata.json + README.md
+    expect(el(fixture).querySelector('[data-testid="project-wiki-node-concepts"]')?.getAttribute('aria-expanded'))
+      .toBe('false');
+
+    expandConcepts(fixture);
+    text = el(fixture).querySelector('[data-testid="project-wiki-tree"]')?.textContent ?? '';
+    expect(text).toContain('Concept overview');
+    expect(text).toContain('Page metadata');
+    // The nav exposes the physical root path, compact per-document ratings, and subtle file type icons.
     expect(el(fixture).querySelector('[data-testid="project-wiki-root-path"]')!.textContent)
       .toContain('/repo/docs');
-    expect(el(fixture).querySelector('[data-testid="project-wiki-file-path-concepts/page.html"]')!.textContent)
-      .toContain('concepts');
+    const ratings = el(fixture).querySelector('[data-testid="project-wiki-ratings-concepts/overview.md"]');
+    expect(ratings, 'document ratings').toBeTruthy();
+    expect(
+      ratings!.querySelector('[data-testid="project-wiki-metric-concepts/overview.md-drift"]')?.getAttribute('aria-label')
+    ).toBe('Drift B');
+    expect(
+      ratings!.querySelector('[data-testid="project-wiki-metric-concepts/overview.md-direction"]')?.getAttribute('aria-label')
+    ).toBe('Direction Current');
+    expect(ratings!.textContent).not.toContain('S 76');
+    expect(ratings!.textContent).not.toContain('Q B');
+    expect(
+      el(fixture)
+        .querySelector('[data-testid="project-wiki-metric-concepts/page.html-unscored"]')
+        ?.getAttribute('aria-label')
+    ).toBe('Metadata unscored');
     expect(el(fixture).querySelector('[data-file-type="html"]')).toBeTruthy();
+    expect(el(fixture).querySelector('[data-file-type="json"]')).toBeTruthy();
     http.verify();
   });
 
   it('loads a document and its history on click', async () => {
     const { fixture, http } = await setup();
+    expandConcepts(fixture);
     const btn = el(fixture)
       .querySelector<HTMLButtonElement>('[data-testid="project-wiki-file-concepts/overview.md"]');
     expect(btn).toBeTruthy();
@@ -142,6 +189,20 @@ describe('ProjectWikiSectionComponent', () => {
     expect(source!.textContent).toContain('# Hello wiki');
     expect(source!.querySelector('[data-testid="project-wiki-source-line"]')!.textContent).toContain('1');
 
+    // The Report tab loads the linked metadata reasoning HTML as a third view.
+    el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-tab-report"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/meta/reports/documents/concept-overview.report.html')
+      .flush({
+        relPath: 'meta/reports/documents/concept-overview.report.html',
+        content: '<main><h1>Concept overview report</h1><p>Why drift: sampled evidence.</p></main>',
+      });
+    fixture.detectChanges();
+    const reportFrame = el(fixture).querySelector<HTMLIFrameElement>('[data-testid="project-wiki-report-frame"]');
+    expect(reportFrame, 'report iframe').toBeTruthy();
+    expect(reportFrame!.getAttribute('sandbox')).toBe('');
+    expect(reportFrame!.getAttribute('srcdoc') ?? reportFrame!.srcdoc).toContain('Why drift');
+
     // History is no longer a document tab; it lives in the right context rail.
     const text = el(fixture).textContent ?? '';
     expect(el(fixture).querySelector('[data-testid="project-wiki-history-panel"]')).toBeTruthy();
@@ -150,8 +211,75 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
+  it('opens the report tab at the matching heading when a classification chip is clicked', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    const metric = el(fixture)
+      .querySelector<HTMLButtonElement>('[data-testid="project-wiki-metric-concepts/overview.md-drift"]');
+    expect(metric).toBeTruthy();
+    metric!.click();
+    fixture.detectChanges();
+
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n\nBody text.' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    http.expectOne('/api/projects/Demo/wiki/files/meta/reports/documents/concept-overview.report.html')
+      .flush({
+        relPath: 'meta/reports/documents/concept-overview.report.html',
+        content: '<!doctype html><html><head><title>r</title></head><body><h2 id="why-drift">Why drift?</h2></body></html>',
+      });
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('[data-testid="project-wiki-tab-report"]')?.className)
+      .toContain('pwiki__tab--active');
+    const srcdoc = el(fixture)
+      .querySelector<HTMLIFrameElement>('[data-testid="project-wiki-report-frame"]')!
+      .getAttribute('srcdoc') ?? '';
+    expect(srcdoc).toContain('url=#why-drift');
+    http.verify();
+  });
+
+  it('opens Markdown edit mode and saves through the wiki file API', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture)
+      .querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!
+      .click();
+    fixture.detectChanges();
+
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n\nBody text.' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-edit"]')!.click();
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('[data-testid="project-wiki-editor-shell"]')).toBeTruthy();
+
+    fixture.componentInstance.saveWikiContent('# Changed\n');
+    const save = http.expectOne(req =>
+      req.method === 'PUT' && req.url === '/api/projects/Demo/wiki/files/concepts/overview.md');
+    expect(save.request.body).toEqual({ content: '# Changed\n' });
+    save.flush({
+      relPath: 'concepts/overview.md',
+      saved: true,
+      changed: true,
+      sha: 'def123456',
+      branch: 'docs-branch',
+    });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.openedContent()).toBe('# Changed\n');
+    expect(el(fixture).querySelector('[data-testid="project-wiki-save-result"]')!.textContent)
+      .toContain('docs-branch');
+    http.verify();
+  });
+
   it('shows last-modified (date, author, commit subject) in the doc header from git metadata', async () => {
     const { fixture, http } = await setup();
+    expandConcepts(fixture);
     el(fixture)
       .querySelector<HTMLButtonElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!
       .click();
@@ -207,6 +335,7 @@ describe('ProjectWikiSectionComponent', () => {
       viewerTab: 'source',
       navWidth: 340,
       contextWidth: 360,
+      expandedIds: ['concepts'],
     }));
 
     const { fixture, http } = await setup();
@@ -222,6 +351,32 @@ describe('ProjectWikiSectionComponent', () => {
     expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent).toContain('concepts/overview.md');
     expect(fixture.componentInstance.navWidth()).toBe(340);
     expect(fixture.componentInstance.contextWidth()).toBe(360);
+    expect(JSON.parse(localStorage.getItem(wikiStorageKey()) ?? '{}').expandedIds).toContain('concepts');
+    http.verify();
+  });
+
+  it('restores the report tab and loads the linked reasoning report from localStorage', async () => {
+    localStorage.setItem(wikiStorageKey(), JSON.stringify({
+      openedRel: 'concepts/overview.md',
+      viewerTab: 'report',
+      expandedIds: ['concepts'],
+    }));
+
+    const { fixture, http } = await setup();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Restored report\n\nBody text.' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    http.expectOne('/api/projects/Demo/wiki/files/meta/reports/documents/concept-overview.report.html')
+      .flush({
+        relPath: 'meta/reports/documents/concept-overview.report.html',
+        content: '<main><h1>Restored reasoning report</h1></main>',
+      });
+    fixture.detectChanges();
+
+    const root = el(fixture);
+    expect(root.querySelector('[data-testid="project-wiki-tab-report"]')?.className)
+      .toContain('pwiki__tab--active');
+    expect(root.querySelector('[data-testid="project-wiki-report-frame"]')!).toBeTruthy();
     http.verify();
   });
 
@@ -305,6 +460,7 @@ describe('ProjectWikiSectionComponent', () => {
   it('opens a TEXT-ONLY right-click context menu for files and folders', async () => {
     const { fixture, http } = await setup();
     const root = el(fixture);
+    expandConcepts(fixture);
 
     const openCtx = (id: string) => {
       const row = root.querySelector<HTMLElement>(`[data-testid="project-wiki-node-${id}"]`);
@@ -343,6 +499,7 @@ describe('ProjectWikiSectionComponent', () => {
 
   it('renders an HTML doc inside a script-disabled sandboxed iframe', async () => {
     const { fixture, http } = await setup();
+    expandConcepts(fixture);
     el(fixture)
       .querySelector<HTMLButtonElement>('[data-testid="project-wiki-file-concepts/page.html"]')!
       .click();
@@ -363,6 +520,33 @@ describe('ProjectWikiSectionComponent', () => {
     expect(frame!.getAttribute('sandbox')).toBe('');
     const srcdoc = frame!.getAttribute('srcdoc') ?? frame!.srcdoc;
     expect(srcdoc).toContain('Sandboxed');
+    http.verify();
+  });
+
+  it('renders JSON metadata in preview and source modes', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture)
+      .querySelector<HTMLButtonElement>('[data-testid="project-wiki-file-concepts/page.metadata.json"]')!
+      .click();
+    fixture.detectChanges();
+
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/page.metadata.json')
+      .flush({ relPath: 'concepts/page.metadata.json', content: '{"title":"Page metadata","drift":{"grade":"B"}}' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/page.metadata.json').flush({
+      relPath: 'concepts/page.metadata.json', model: null,
+      metadata: { model: null, updatedAt: null, reason: null, taskKey: null, status: null, runCount: null, hasFrontmatter: false },
+      commits: [],
+    });
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('[data-testid="project-wiki-json-preview"]')!.textContent)
+      .toContain('"grade": "B"');
+
+    el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-tab-source"]')!.click();
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('[data-testid="project-wiki-source-editor"]')!.textContent)
+      .toContain('"title":"Page metadata"');
     http.verify();
   });
 
@@ -409,6 +593,7 @@ describe('ProjectWikiSectionComponent', () => {
 
   it('previews an old revision from the history panel', async () => {
     const { fixture, http } = await setup();
+    expandConcepts(fixture);
     el(fixture)
       .querySelector<HTMLButtonElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!
       .click();
@@ -430,6 +615,46 @@ describe('ProjectWikiSectionComponent', () => {
     const text = el(fixture).textContent ?? '';
     expect(text).toContain('Old revision');
     expect(el(fixture).querySelector('[data-testid="project-wiki-rev-banner"]')).toBeTruthy();
+    http.verify();
+  });
+
+  it('supports arrow-key tree navigation and persists expanded folders', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+    const tree = root.querySelector<HTMLElement>('[data-testid="project-wiki-tree"]')!;
+    expect(tree).toBeTruthy();
+    const folder = root.querySelector<HTMLElement>('[data-testid="project-wiki-node-concepts"]')!;
+    folder.querySelector<HTMLButtonElement>('.pwiki__label')!.click();
+    fixture.detectChanges();
+    await Promise.resolve();
+
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('project-wiki-node-concepts');
+    expect(folder.getAttribute('aria-expanded')).toBe('true');
+
+    folder.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    fixture.detectChanges();
+    expect(folder.getAttribute('aria-expanded')).toBe('false');
+
+    folder.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="project-wiki-file-concepts/overview.md"]')).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem(wikiStorageKey()) ?? '{}').expandedIds).toContain('concepts');
+
+    folder.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    fixture.detectChanges();
+    await Promise.resolve();
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('project-wiki-node-concepts/overview.md');
+
+    document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Keyboard\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
+      .toContain('concepts/overview.md');
     http.verify();
   });
 });

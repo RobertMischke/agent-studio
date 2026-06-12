@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Backend Structure Target - Metadata Reasoning</title>
+  <style>
+    :root { color-scheme: light; --ink: #172033; --muted: #667085; --line: #d9e2ef; --soft: #f5f8fc; --panel: #fff; --accent: #2563eb; --warn: #b45309; --ok: #15803d; --bad: #b91c1c; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: var(--ink); font: 14px/1.55 Inter, "Segoe UI", Arial, sans-serif; }
+    main { max-width: 1180px; margin: 0 auto; padding: 28px; }
+    header { display: grid; gap: 14px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 1.55rem; line-height: 1.18; }
+    h2 { font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; color: #475467; }
+    h3 { font-size: .9rem; }
+    code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; color: #344054; }
+    .path { color: var(--muted); }
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: end; }
+    .scoreboard { display: grid; grid-template-columns: repeat(4, minmax(90px, 1fr)); gap: 8px; min-width: 410px; }
+    .score { padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--soft); }
+    .score strong { display: block; font-size: 1.05rem; color: var(--ink); }
+    .score span { color: var(--muted); font-size: .75rem; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr); gap: 16px; margin-top: 18px; }
+    section { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+    section > h2 { padding: 12px 14px; border-bottom: 1px solid var(--line); background: #f8fafc; }
+    .body { padding: 14px; display: grid; gap: 12px; }
+    .steps { display: grid; gap: 10px; counter-reset: step; }
+    .step { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; }
+    .step::before { counter-increment: step; content: counter(step); width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: #e8f0ff; color: var(--accent); font-weight: 700; font-size: .76rem; }
+    .callout { padding: 12px; border-left: 3px solid var(--accent); background: #f6f9ff; border-radius: 8px; }
+    .callout.warn { border-left-color: var(--warn); background: #fff8ed; }
+    .callout.ok { border-left-color: var(--ok); background: #f0fdf4; }
+    .pill-row { display: flex; flex-wrap: wrap; gap: 7px; }
+    .pill { padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #344054; font-size: .76rem; }
+    .axis { display: grid; gap: 8px; }
+    .axis div { display: grid; grid-template-columns: 150px minmax(0, 1fr) 56px; gap: 10px; align-items: center; }
+    .bar { height: 7px; border-radius: 999px; background: #edf2f7; overflow: hidden; }
+    .bar span { display: block; height: 100%; background: var(--accent); }
+    ul { margin: 0; padding-left: 18px; }
+    li + li { margin-top: 6px; }
+    footer { margin-top: 18px; color: var(--muted); font-size: .78rem; }
+    @media (max-width: 900px) { main { padding: 18px; } .hero, .grid { grid-template-columns: 1fr; } .scoreboard { min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="hero">
+      <div>
+        <h1>Backend Structure Target</h1>
+        <p class="path"><code>docs/architecture/backend-structure/structure-target.md</code></p>
+      </div>
+      <div class="scoreboard" aria-label="Metadata score summary">
+        <div class="score"><strong>B</strong><span>drift grade</span></div>
+        <div class="score"><strong>66</strong><span>health score</span></div>
+        <div class="score"><strong>Future</strong><span>direction</span></div>
+        <div class="score"><strong>Planned</strong><span>implementation</span></div>
+      </div>
+    </div>
+    <div class="pill-row">
+      <span class="pill">review: 2026-06-11</span>
+      <span class="pill">mode: documentation</span>
+      <span class="pill">owner: architecture</span>
+      <span class="pill">duplicate: no candidate</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section>
+      <h2 id="how-derived">How the result was derived</h2>
+      <div class="body">
+        <div class="steps">
+          <div class="step"><p>The review starts from the source document and its metadata record, then checks whether the page reads like current operational truth, future architecture direction, or mixed state.</p></div>
+          <div class="step" id="temporal-reasoning"><p>The document is explicitly target-state material, so the direction is <strong>future</strong> rather than current implementation documentation.</p></div>
+          <div class="step"><p>The drift score is <code>0.34</code>. The visible score is derived as <code>100 - driftScore * 100 = 66</code>.</p></div>
+          <div class="step" id="implementation-reasoning"><p>The grade remains <strong>B</strong> because the target is still useful and coherent, but it should not be read as fully landed backend structure.</p></div>
+        </div>
+        <div class="callout warn">
+          <h3 id="why-drift">Why drift?</h3>
+          <p>It describes a desired backend structure. The current backend is moving toward that shape, but the page is not yet a reliable statement of what every folder and service does today.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="axis-evidence">Axis evidence</h2>
+      <div class="body axis">
+        <div><span>Architecture</span><div class="bar"><span style="width: 88%"></span></div><strong>high</strong></div>
+        <div><span>Implementation</span><div class="bar"><span style="width: 58%"></span></div><strong>med</strong></div>
+        <div><span>Freshness</span><div class="bar"><span style="width: 60%"></span></div><strong>med</strong></div>
+        <div><span>Operator value</span><div class="bar"><span style="width: 62%"></span></div><strong>med</strong></div>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="duplicate-reasoning">Duplicate reasoning</h2>
+      <div class="body">
+        <div class="callout ok">
+          <h3>What is a duplicate?</h3>
+          <p>A duplicate is not only copied text. It is a second document that claims the same ownership of a concept, rule, architecture decision, or operational source of truth.</p>
+        </div>
+        <p>No duplicate candidate is attached in this pass. The page has a clear role as a backend target-state document.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="next-action">Next action</h2>
+      <div class="body">
+        <p>Re-score after the backend structure migration has a concrete implementation milestone. If the implementation lands, the page can move from future/planned to present/partially implemented or implemented.</p>
+      </div>
+    </section>
+  </div>
+  <footer>Generated from visible Wiki metadata during the first-five reasoning report pilot.</footer>
+</main>
+</body>
+</html>

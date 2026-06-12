@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Message Bus - Metadata Reasoning</title>
+  <style>
+    :root { color-scheme: light; --ink: #172033; --muted: #667085; --line: #d9e2ef; --soft: #f5f8fc; --panel: #fff; --accent: #2563eb; --ok: #15803d; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: var(--ink); font: 14px/1.55 Inter, "Segoe UI", Arial, sans-serif; }
+    main { max-width: 1180px; margin: 0 auto; padding: 28px; }
+    header { display: grid; gap: 14px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 1.55rem; line-height: 1.18; }
+    h2 { font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; color: #475467; }
+    h3 { font-size: .9rem; }
+    code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; color: #344054; }
+    .path { color: var(--muted); }
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: end; }
+    .scoreboard { display: grid; grid-template-columns: repeat(4, minmax(90px, 1fr)); gap: 8px; min-width: 410px; }
+    .score { padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--soft); }
+    .score strong { display: block; font-size: 1.05rem; color: var(--ink); }
+    .score span { color: var(--muted); font-size: .75rem; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr); gap: 16px; margin-top: 18px; }
+    section { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+    section > h2 { padding: 12px 14px; border-bottom: 1px solid var(--line); background: #f8fafc; }
+    .body { padding: 14px; display: grid; gap: 12px; }
+    .steps { display: grid; gap: 10px; counter-reset: step; }
+    .step { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; }
+    .step::before { counter-increment: step; content: counter(step); width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: #e8f0ff; color: var(--accent); font-weight: 700; font-size: .76rem; }
+    .callout { padding: 12px; border-left: 3px solid var(--ok); background: #f0fdf4; border-radius: 8px; }
+    .pill-row { display: flex; flex-wrap: wrap; gap: 7px; }
+    .pill { padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #344054; font-size: .76rem; }
+    .axis { display: grid; gap: 8px; }
+    .axis div { display: grid; grid-template-columns: 150px minmax(0, 1fr) 56px; gap: 10px; align-items: center; }
+    .bar { height: 7px; border-radius: 999px; background: #edf2f7; overflow: hidden; }
+    .bar span { display: block; height: 100%; background: var(--ok); }
+    footer { margin-top: 18px; color: var(--muted); font-size: .78rem; }
+    @media (max-width: 900px) { main { padding: 18px; } .hero, .grid { grid-template-columns: 1fr; } .scoreboard { min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="hero">
+      <div>
+        <h1>Agent Message Bus</h1>
+        <p class="path"><code>docs/architecture/bus/agent-message-bus.md</code></p>
+      </div>
+      <div class="scoreboard" aria-label="Metadata score summary">
+        <div class="score"><strong>A</strong><span>drift grade</span></div>
+        <div class="score"><strong>89</strong><span>health score</span></div>
+        <div class="score"><strong>Current</strong><span>direction</span></div>
+        <div class="score"><strong>Done</strong><span>implementation</span></div>
+      </div>
+    </div>
+    <div class="pill-row">
+      <span class="pill">review: 2026-06-11</span>
+      <span class="pill">mode: documentation</span>
+      <span class="pill">owner: architecture</span>
+      <span class="pill">duplicate: no candidate</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section>
+      <h2 id="how-derived">How the result was derived</h2>
+      <div class="body">
+        <div class="steps">
+          <div class="step"><p>The page describes an implemented cross-cutting architecture piece, so the review treats it as present architecture documentation.</p></div>
+          <div class="step"><p>The drift score is <code>0.11</code>. The visible score is <code>89</code>, which is high enough for an <strong>A</strong> chip.</p></div>
+          <div class="step" id="implementation-reasoning"><p>No strong contradiction was found between the document intent and the current runtime direction captured in recent Wiki work.</p></div>
+          <div class="step"><p>The next review can be routine unless bus semantics change or new projections start depending on a different contract.</p></div>
+        </div>
+        <div class="callout">
+          <h3 id="why-drift">Why no drift?</h3>
+          <p>The concept is still a stable architecture anchor. It has implementation alignment, high operator usefulness, and no competing document claiming the same role.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="axis-evidence">Axis evidence</h2>
+      <div class="body axis">
+        <div><span>Architecture</span><div class="bar"><span style="width: 92%"></span></div><strong>high</strong></div>
+        <div><span>Implementation</span><div class="bar"><span style="width: 90%"></span></div><strong>high</strong></div>
+        <div><span>Freshness</span><div class="bar"><span style="width: 86%"></span></div><strong>high</strong></div>
+        <div><span>Operator value</span><div class="bar"><span style="width: 88%"></span></div><strong>high</strong></div>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="temporal-reasoning">Temporal reasoning</h2>
+      <div class="body">
+        <p>The page is marked <strong>present</strong> because it explains behavior that should be understood as active architecture, not an old migration note and not only future intent.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="duplicate-reasoning">Duplicate reasoning</h2>
+      <div class="body">
+        <p><strong>What is a duplicate?</strong> A duplicate is another source trying to own the same architectural truth. No such candidate is attached here, so the bus page can stay a high-confidence anchor.</p>
+      </div>
+    </section>
+  </div>
+  <footer>Generated from visible Wiki metadata during the first-five reasoning report pilot.</footer>
+</main>
+</body>
+</html>

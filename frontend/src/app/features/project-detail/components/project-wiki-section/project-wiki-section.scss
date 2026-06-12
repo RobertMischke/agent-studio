@@ -358,6 +358,12 @@
   min-height: 30px;
   border: 1px solid transparent;
   border-radius: 5px;
+  outline: 0;
+}
+
+.pwiki__row:focus-visible {
+  border-color: color-mix(in srgb, var(--studio-accent) 48%, transparent);
+  background: color-mix(in srgb, var(--studio-accent) 8%, transparent);
 }
 
 .pwiki__row--drop {
@@ -429,7 +435,7 @@
   flex: 1 1 auto;
   flex-direction: column;
   justify-content: center;
-  gap: 1px;
+  gap: var(--studio-spacing-1);
   line-height: 1.2;
 }
 
@@ -441,27 +447,85 @@
   white-space: nowrap;
 }
 
-.pwiki__label-path {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  background: transparent;
-  color: var(--studio-fg-muted);
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  font-weight: 400;
-  line-height: 1.15;
-  opacity: 0.86;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .pwiki__label--group .pwiki__label-text {
   font-weight: 650;
 }
 
-.pwiki__label--group .pwiki__label-path {
+.pwiki__metric-strip {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, max-content);
+  flex-wrap: nowrap;
+  align-items: center;
+  column-gap: var(--studio-spacing-2);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.pwiki__metric {
+  min-width: 0;
+  min-height: 15px;
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, auto);
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  font-size: 0.58rem;
+  font-weight: 600;
   font-family: inherit;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pwiki__metric[data-kind='direction'] {
+  padding-left: var(--studio-spacing-2);
+  border-left: 1px solid color-mix(in srgb, var(--studio-border) 70%, transparent);
+}
+
+.pwiki__metric:hover:not(:disabled),
+.pwiki__metric:focus-visible {
+  outline: 0;
+  color: var(--studio-fg);
+}
+
+.pwiki__metric:disabled {
+  cursor: default;
+}
+
+.pwiki__metric-prefix {
+  color: color-mix(in srgb, var(--studio-fg-muted) 78%, transparent);
+  font-size: 0.52rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.pwiki__metric-value {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  color: color-mix(in srgb, var(--studio-fg) 84%, var(--studio-fg-muted));
+  font-variant-numeric: tabular-nums;
+}
+
+.pwiki__metric[data-tone='good'] {
+  color: var(--studio-fg-muted);
+}
+
+.pwiki__metric[data-tone='info'] {
+  color: var(--studio-fg-muted);
+}
+
+.pwiki__metric[data-tone='warn'] {
+  color: color-mix(in srgb, var(--studio-fg) 88%, var(--studio-fg-muted));
+}
+
+.pwiki__metric[data-tone='bad'] {
+  color: color-mix(in srgb, var(--studio-fg) 88%, var(--studio-fg-muted));
 }
 
 .pwiki__file-type {
@@ -478,6 +542,10 @@
 
 .pwiki__file-type[data-file-type='html'] {
   color: var(--studio-accent-strong);
+}
+
+.pwiki__file-type[data-file-type='json'] {
+  color: var(--studio-accent-teal, var(--studio-accent-strong));
 }
 
 .pwiki__group-count {
@@ -592,12 +660,12 @@
   color: var(--pwiki-paper-muted);
 }
 
+.pwiki__viewer-action,
 .pwiki__viewer-close {
   display: inline-flex;
   align-items: center;
   gap: var(--studio-spacing-1);
   min-height: 34px;
-  margin-left: auto;
   padding: 0 var(--studio-spacing-2);
   border: 0;
   border-left: 1px solid var(--studio-border);
@@ -609,6 +677,20 @@
   cursor: pointer;
 }
 
+.pwiki__viewer-action {
+  margin-left: auto;
+}
+
+.pwiki__viewer-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pwiki__viewer-close {
+  margin-left: 0;
+}
+
+.pwiki__viewer-action:hover:not(:disabled),
 .pwiki__viewer-close:hover {
   background: var(--studio-bg-hover);
   color: var(--studio-fg);
@@ -745,6 +827,99 @@
   width: 100%;
   border: 0;
   background: var(--pwiki-paper-bg);
+}
+
+.pwiki__report-view {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  overflow: hidden;
+  background: var(--pwiki-paper-bg);
+}
+
+.pwiki__report-frame {
+  background: #fff;
+}
+
+.pwiki__report-empty {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--studio-spacing-2);
+  padding: var(--studio-spacing-4);
+  color: var(--pwiki-paper-muted);
+  text-align: center;
+}
+
+.pwiki__report-empty p {
+  max-width: 24rem;
+  margin: 0;
+}
+
+.pwiki__edit-shell {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  padding: var(--studio-spacing-3);
+  background: var(--pwiki-paper-bg);
+}
+
+.pwiki__editor {
+  min-height: 0;
+}
+
+.pwiki__edit-prefix {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  color: var(--pwiki-paper-muted);
+  font-size: 0.72rem;
+}
+
+.pwiki__edit-prefix code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--pwiki-paper-muted);
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pwiki__save-error {
+  margin: var(--studio-spacing-2) 0 0;
+  padding: var(--studio-spacing-2);
+  border: 1px solid color-mix(in srgb, var(--studio-danger, #be123c) 36%, var(--studio-border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--studio-danger, #be123c) 8%, transparent);
+  color: color-mix(in srgb, var(--studio-danger, #be123c) 76%, var(--studio-fg));
+  font-size: 0.78rem;
+}
+
+.pwiki__json-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--studio-spacing-4);
+  background: var(--pwiki-paper-bg);
+  color: var(--pwiki-paper-fg);
+  @include m.thin-scroll;
+}
+
+.pwiki__json-preview pre {
+  min-width: max-content;
+  margin: 0;
+  padding: var(--studio-spacing-4);
+  border: 1px solid var(--pwiki-paper-border);
+  border-radius: 7px;
+  background: rgb(248 250 252);
+  color: rgb(30 41 59);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.6;
 }
 
 .pwiki__aside {

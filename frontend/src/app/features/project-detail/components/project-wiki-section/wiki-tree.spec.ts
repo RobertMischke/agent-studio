@@ -7,7 +7,7 @@ import {
   nodeId,
 } from './wiki-tree';
 
-const file = (relPath: string, type: 'md' | 'html' = 'md', title = relPath): WikiTreeNode => ({
+const file = (relPath: string, type: 'md' | 'html' | 'json' = 'md', title = relPath): WikiTreeNode => ({
   name: relPath.split('/').pop()!,
   title,
   relPath,
@@ -38,11 +38,15 @@ describe('flattenWikiTree', () => {
     expect(expanded[1].depth).toBe(1);
   });
 
-  it('surfaces html doc nodes alongside markdown', () => {
-    const roots = [folder('concepts', [file('concepts/page.html', 'html', 'Page')])];
+  it('surfaces html and json doc nodes alongside markdown', () => {
+    const roots = [folder('concepts', [
+      file('concepts/page.html', 'html', 'Page'),
+      file('concepts/page.metadata.json', 'json', 'Page metadata'),
+    ])];
     const rows = flattenWikiTree(roots, new Set(['concepts']));
     const leaf = rows.find(r => r.node.relPath === 'concepts/page.html')!;
     expect(leaf.node.type).toBe('html');
+    expect(rows.find(r => r.node.relPath === 'concepts/page.metadata.json')?.node.type).toBe('json');
   });
 });
 

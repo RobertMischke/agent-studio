@@ -1,0 +1,37 @@
+{
+  "title": "Agent message bus metadata",
+  "sourcePath": "docs/architecture/bus/agent-message-bus.md",
+  "reportPath": "docs/meta/reports/documents/architecture-agent-message-bus.report.html",
+  "owner": "architecture",
+  "documentMode": "documentation",
+  "temporalState": "present",
+  "implementationState": "implemented",
+  "lastReview": {
+    "date": "2026-06-11",
+    "method": "first-ten metadata scoring pass",
+    "model": "codex"
+  },
+  "drift": {
+    "grade": "A",
+    "hasDrift": false,
+    "score": 0.11,
+    "summary": "The bus concept remains aligned with the current runtime and is a strong architecture reference.",
+    "rationale": [
+      "The document describes an implemented cross-cutting architecture piece.",
+      "Recent Wiki and navigation work did not change bus semantics.",
+      "Only routine re-checks are needed."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "high",
+    "implementationAlignment": "high",
+    "freshness": "high",
+    "operatorUsefulness": "high"
+  },
+  "duplicates": {
+    "suspected": false,
+    "groupSize": 1,
+    "similarTo": []
+  },
+  "nextAction": "Keep as a high-confidence architecture anchor."
+}

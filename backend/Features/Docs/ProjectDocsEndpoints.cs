@@ -66,9 +66,9 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(ov);
         });
 
-        // The physical docs/ folder hierarchy (folders + .md/.html files) that
-        // backs the wiki navigation tree. No git is touched here so loading it
-        // stays cheap; per-doc commit metadata is fetched lazily via /history.
+        // The physical docs/ folder hierarchy (folders + .md/.html/.json files)
+        // that backs the wiki navigation tree. No git is touched here so loading
+        // it stays cheap; per-doc commit metadata is fetched lazily via /history.
         app.MapGet("/api/projects/{projectName}/wiki/tree", (string projectName, ProjectDocsService docs) =>
         {
             var tree = docs.GetWikiTree(projectName);
@@ -83,6 +83,30 @@ public static class ProjectDocsEndpoints
             return file == null
                 ? Results.NotFound(new { error = "File not found or path rejected" })
                 : Results.Ok(file);
+        });
+
+        app.MapPut("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, WikiSaveRequest body, ProjectDocsService docs, GitService git) =>
+        {
+            var rel = Normalize(relPath);
+            if (rel == null) return Results.BadRequest(new { error = "relPath is required" });
+            if (body.Content == null) return Results.BadRequest(new { error = "content field required" });
+
+            var result = docs.WriteWikiFile(projectName, rel, body.Content);
+            if (!result.Success) return Results.BadRequest(new { error = result.Error });
+
+            var repoRoot = git.ResolveRepoRootForProject(projectName);
+            if (string.IsNullOrWhiteSpace(repoRoot))
+                return Results.BadRequest(new { error = "Repository not found" });
+
+            var branch = git.GetStatusForRepoRoot(repoRoot).Branch;
+            if (!result.Changed)
+                return Results.Ok(new { relPath = rel, saved = true, changed = false, sha = (string?)null, branch });
+
+            var repoRel = Path.GetRelativePath(repoRoot, result.FullPath!).Replace('\\', '/');
+            var commit = git.CommitPaths(repoRoot, $"wiki: update {rel}", new[] { repoRel });
+            return commit.Success
+                ? Results.Ok(new { relPath = rel, saved = true, changed = true, sha = commit.Sha, branch })
+                : Results.BadRequest(new { error = commit.Error, branch });
         });
 
         // Serves images/diagrams referenced from wiki docs so relative
@@ -142,8 +166,8 @@ public static class ProjectDocsEndpoints
 
         // ---- Wiki mutations (commit-backed create / move / delete) ----
 
-        // Create a new wiki page (.md/.html). The file is written to disk then
-        // committed into the project repo so it shows up in git history.
+        // Create a new wiki page (.md/.html/.json). The file is written to disk
+        // then committed into the project repo so it shows up in git history.
         app.MapPost("/api/projects/{projectName}/wiki/pages", (string projectName, WikiCreatePageRequest body, ProjectDocsService docs, GitService git) =>
         {
             var rel = Normalize(body.RelPath);
@@ -246,3 +270,4 @@ public static class ProjectDocsEndpoints
 public record WikiCreatePageRequest(string RelPath, string? Content);
 public record WikiCreateFolderRequest(string RelPath);
 public record WikiMoveRequest(string FromRelPath, string ToRelPath);
+public record WikiSaveRequest(string? Content);
