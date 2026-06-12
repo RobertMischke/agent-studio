@@ -496,6 +496,10 @@
   cursor: default;
 }
 
+.pwiki__metric:not(button) {
+  cursor: default;
+}
+
 .pwiki__metric-prefix {
   color: color-mix(in srgb, var(--studio-fg-muted) 78%, transparent);
   font-size: 0.52rem;
@@ -915,7 +919,7 @@
   padding: var(--studio-spacing-4);
   border: 1px solid var(--pwiki-paper-border);
   border-radius: 7px;
-  background: rgb(248 250 252);
+  background: var(--pwiki-paper-soft);
   color: rgb(30 41 59);
   font-family: var(--font-mono);
   font-size: 0.78rem;
@@ -1236,7 +1240,7 @@
   padding: 0 var(--studio-spacing-3);
   border: 1px solid var(--pwiki-paper-border);
   border-radius: 6px;
-  background: white;
+  background: var(--pwiki-paper-bg);
   color: var(--pwiki-paper-fg);
   font-size: 0.82rem;
   font-family: inherit;
@@ -1258,20 +1262,40 @@
 .pwiki__doc-card {
   min-width: 0;
   display: grid;
-  gap: var(--studio-spacing-1);
-  padding: var(--studio-spacing-3);
+  gap: var(--studio-spacing-2);
+  padding: var(--studio-spacing-2);
   border: 1px solid var(--pwiki-paper-border);
   border-radius: 7px;
   background: rgb(248 250 252);
   color: var(--pwiki-paper-fg);
   text-align: left;
   font-family: inherit;
-  cursor: pointer;
 }
 
 .pwiki__doc-card:hover {
   border-color: color-mix(in srgb, var(--studio-accent) 36%, var(--pwiki-paper-border));
   background: white;
+}
+
+.pwiki__doc-card-main {
+  min-width: 0;
+  display: grid;
+  gap: var(--studio-spacing-1);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pwiki__metric-strip--card {
+  min-width: 0;
+}
+
+.pwiki__metric-strip--card .pwiki__metric {
+  min-width: 0;
 }
 
 .pwiki__doc-card-kind {

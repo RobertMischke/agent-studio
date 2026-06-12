@@ -330,6 +330,36 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
+  it('shows sidecar chips on suggested root cards and opens the report from there', async () => {
+    const { fixture, http } = await setup();
+    const root = el(fixture);
+
+    const card = root.querySelector('[data-testid="project-wiki-suggested-card-concepts/overview.md"]');
+    expect(card?.textContent).toContain('Drift');
+    expect(card?.textContent).toContain('B');
+    expect(card?.textContent).toContain('Direction');
+    expect(card?.textContent).toContain('Current');
+
+    root.querySelector<HTMLButtonElement>(
+      '[data-testid="project-wiki-suggested-metric-concepts/overview.md-drift"]'
+    )!.click();
+    fixture.detectChanges();
+
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n\nBody text.' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md.report.html')
+      .flush({
+        relPath: 'concepts/overview.md.report.html',
+        content: '<!doctype html><html><body><h2 id="why-drift">Why drift?</h2></body></html>',
+      });
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="project-wiki-tab-report"]')?.className)
+      .toContain('pwiki__tab--active');
+    http.verify();
+  });
+
   it('restores collapsed panels, selected document, and active tab from localStorage', async () => {
     localStorage.setItem(wikiStorageKey(), JSON.stringify({
       navCollapsed: true,
