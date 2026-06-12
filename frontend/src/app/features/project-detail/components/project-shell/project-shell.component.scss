@@ -100,6 +100,7 @@
   flex: 0 0 1px;
   width: 1px;
   min-width: 1px;
+  /* stylelint-disable-next-line declaration-property-unit-disallowed-list -- 1px overlap prevents a double divider beside the splitter. */
   margin-left: -1px;
   align-self: stretch;
   display: grid;
@@ -192,6 +193,13 @@
   height: 100%;
   max-width: none;
 }
+
+.proj-shell__panel[data-rail-key='architecture'] .proj-shell__panel-content,
+.proj-shell__panel[data-rail-key='steering'] .proj-shell__panel-content {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
 .proj-shell__panel-head {
   flex: 0 0 auto;
   padding-bottom: var(--studio-spacing-3);
@@ -259,6 +267,7 @@
     min-width: 0;
     height: 1px;
     min-height: 1px;
+    /* stylelint-disable-next-line declaration-property-unit-disallowed-list -- 1px overlap prevents a double divider beside the splitter. */
     margin-top: -1px;
     margin-left: 0;
     border-left: 0;
