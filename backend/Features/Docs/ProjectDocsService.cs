@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -326,8 +327,8 @@ public class ProjectDocsService
         {
             if (file.Name.StartsWith('.')) continue;
             var ext = file.Extension;
-            if (!WikiDocExtensions.Contains(ext)) continue;
             var rel = Path.GetRelativePath(docsRoot, file.FullName).Replace('\\', '/');
+            if (!WikiDocExtensions.Contains(ext) || IsWikiCompanionFile(rel)) continue;
             var type = ext.Equals(".md", StringComparison.OrdinalIgnoreCase)
                 ? "md"
                 : ext.Equals(".json", StringComparison.OrdinalIgnoreCase)
@@ -344,42 +345,55 @@ public class ProjectDocsService
     }
 
     /// <summary>
-    /// Reads visible JSON metadata documents from <c>docs/meta/documents/</c>
-    /// and indexes them by the source document they describe. The tree only
-    /// needs a compact summary; full JSON remains readable as a normal page.
+    /// Reads adjacent companion sidecars (<c>source.md.meta.json</c>) and
+    /// indexes them by the source document they describe. Companion files are
+    /// physical files beside the document but are not rendered as separate
+    /// navigation rows; their compact summary enriches the source row.
     /// </summary>
     private static IReadOnlyDictionary<string, WikiTreeMetadata> LoadWikiMetadataIndex(string wikiDir)
     {
         var index = new Dictionary<string, WikiTreeMetadata>(StringComparer.OrdinalIgnoreCase);
-        var metaDir = Path.Combine(wikiDir, "meta", "documents");
-        if (!Directory.Exists(metaDir)) return index;
+        if (!Directory.Exists(wikiDir)) return index;
 
-        foreach (var file in Directory.EnumerateFiles(metaDir, "*.json", SearchOption.TopDirectoryOnly))
+        foreach (var file in Directory.EnumerateFiles(wikiDir, "*.meta.json", SearchOption.AllDirectories))
         {
             try
             {
+                var companionRel = Path.GetRelativePath(wikiDir, file).Replace('\\', '/');
                 using var doc = JsonDocument.Parse(File.ReadAllText(file));
                 var root = doc.RootElement;
                 if (root.ValueKind != JsonValueKind.Object) continue;
 
-                var sourceRel = NormalizeMetadataSourcePath(JsonString(root, "sourcePath"));
-                if (sourceRel == null) continue;
-
+                TryJsonObject(root, "source", out var source);
+                TryJsonObject(root, "classification", out var classification);
+                TryJsonObject(root, "report", out var report);
                 TryJsonObject(root, "drift", out var drift);
                 TryJsonObject(root, "duplicates", out var duplicates);
 
+                var sourceRel = NormalizeMetadataSourcePath(JsonString(source, "path") ?? JsonString(root, "sourcePath"));
+                if (sourceRel == null) continue;
+                if (!string.Equals(companionRel, sourceRel + ".meta.json", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var sourceFull = Path.GetFullPath(Path.Combine(wikiDir, sourceRel));
+                if (!File.Exists(sourceFull)) continue;
+
                 var metadata = new WikiTreeMetadata(
-                    DocumentMode: JsonString(root, "documentMode"),
-                    TemporalState: JsonString(root, "temporalState"),
-                    ImplementationState: JsonString(root, "implementationState"),
+                    DocumentMode: JsonString(classification, "documentMode") ?? JsonString(root, "documentMode"),
+                    TemporalState: JsonString(classification, "temporalState") ?? JsonString(root, "temporalState"),
+                    ImplementationState: JsonString(classification, "implementationState") ?? JsonString(root, "implementationState"),
                     DriftGrade: JsonString(drift, "grade"),
                     HasDrift: JsonBool(drift, "hasDrift"),
                     DriftScore: JsonDouble(drift, "score"),
                     Quality: ExtractQuality(root),
                     DuplicateSuspected: JsonBool(duplicates, "suspected"),
                     DuplicateGroupSize: JsonInt(duplicates, "groupSize"),
-                    ReportPath: NormalizeMetadataSourcePath(JsonString(root, "reportPath")),
-                    Summary: JsonString(drift, "summary") ?? JsonString(root, "summary"));
+                    ReportPath: NormalizeMetadataSourcePath(JsonString(report, "path") ?? JsonString(root, "reportPath"))
+                        ?? sourceRel + ".report.html",
+                    Summary: JsonString(drift, "summary") ?? JsonString(root, "summary"),
+                    CompanionPath: companionRel,
+                    SourceChangedSinceReview: SourceChangedSinceReview(root, sourceFull),
+                    FindingsCount: JsonArrayLength(root, "findings"));
                 index[sourceRel] = metadata;
             }
             catch (Exception __ex)
@@ -390,6 +404,11 @@ public class ProjectDocsService
 
         return index;
     }
+
+    private static bool IsWikiCompanionFile(string relPath) =>
+        relPath.EndsWith(".meta.json", StringComparison.OrdinalIgnoreCase)
+        || relPath.EndsWith(".report.html", StringComparison.OrdinalIgnoreCase)
+        || relPath.EndsWith(".report.htm", StringComparison.OrdinalIgnoreCase);
 
     private static string? NormalizeMetadataSourcePath(string? sourcePath)
     {
@@ -446,6 +465,54 @@ public class ProjectDocsService
         if (element.ValueKind != JsonValueKind.Object) return null;
         if (!element.TryGetProperty(property, out var value)) return null;
         return value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) ? number : null;
+    }
+
+    private static int? JsonArrayLength(JsonElement element, string property)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+        if (!element.TryGetProperty(property, out var value)) return null;
+        return value.ValueKind == JsonValueKind.Array ? value.GetArrayLength() : null;
+    }
+
+    private static bool? SourceChangedSinceReview(JsonElement root, string sourceFull)
+    {
+        var expectedHash = ExtractReviewSourceHash(root);
+        if (string.IsNullOrWhiteSpace(expectedHash))
+        {
+            return TryJsonObject(root, "review", out var review)
+                ? JsonBool(review, "sourceChangedSinceReview")
+                : null;
+        }
+
+        try
+        {
+            using var stream = File.OpenRead(sourceFull);
+            var currentHash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+            return !string.Equals(currentHash, expectedHash.Trim().ToLowerInvariant(), StringComparison.Ordinal);
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: unable to compare wiki companion source fingerprint.");
+            return null;
+        }
+    }
+
+    private static string? ExtractReviewSourceHash(JsonElement root)
+    {
+        if (TryJsonObject(root, "review", out var review)
+            && TryJsonObject(review, "sourceFingerprint", out var reviewFingerprint))
+        {
+            var reviewHash = JsonString(reviewFingerprint, "hash");
+            if (!string.IsNullOrWhiteSpace(reviewHash)) return reviewHash;
+        }
+
+        if (TryJsonObject(root, "source", out var source)
+            && TryJsonObject(source, "fingerprint", out var sourceFingerprint))
+        {
+            return JsonString(sourceFingerprint, "hash");
+        }
+
+        return null;
     }
 
     private static string? ExtractQuality(JsonElement root)
@@ -609,6 +676,7 @@ public class ProjectDocsService
             if (!WikiDocExtensions.Contains(ext)) continue;
             var fi = new FileInfo(f);
             var rel = Path.GetRelativePath(root, f).Replace('\\', '/');
+            if (IsWikiCompanionFile(rel)) continue;
             results.Add(new WikiFileEntry(
                 Name: Path.GetFileName(f),
                 RelPath: rel,
@@ -824,7 +892,7 @@ public record WikiDocMetadata(
 /// cref="RelPath"/> is the docs-root-relative path; <see cref="Title"/> is the
 /// display label (first H1 for docs, order-prefix-stripped name otherwise).
 /// <see cref="Metadata"/> is an optional compact summary read from visible
-/// <c>docs/meta/documents/*.json</c> records.
+/// adjacent <c>*.meta.json</c> companion records.
 /// </summary>
 public record WikiTreeMetadata(
     string? DocumentMode,
@@ -837,7 +905,10 @@ public record WikiTreeMetadata(
     bool? DuplicateSuspected,
     int? DuplicateGroupSize,
     string? ReportPath,
-    string? Summary);
+    string? Summary,
+    string? CompanionPath,
+    bool? SourceChangedSinceReview,
+    int? FindingsCount);
 
 public record WikiTreeNode(
     string Name,

@@ -99,6 +99,9 @@ export interface WikiTreeMetadata {
   duplicateGroupSize: number | null;
   reportPath: string | null;
   summary: string | null;
+  companionPath: string | null;
+  sourceChangedSinceReview: boolean | null;
+  findingsCount: number | null;
 }
 
 /**
@@ -106,7 +109,7 @@ export interface WikiTreeMetadata {
  * carries `children`; a document node (`md` / `html` / `json`) is a leaf whose
  * `relPath` is the docs-root-relative path. `title` is the display label (first
  * H1 or JSON title for docs, order-prefix-stripped name otherwise). `metadata`
- * is present only when a visible JSON record under `docs/meta/documents/`
+ * is present only when an adjacent `<source-file>.meta.json` companion
  * describes the source document.
  */
 export interface WikiTreeNode {

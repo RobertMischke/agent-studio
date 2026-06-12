@@ -1,0 +1,102 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Backend structure target metadata",
+  "source": {
+    "path": "docs/architecture/backend-structure/structure-target.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "c55474abcedbb6b51bd6a13ac69870727721fc8609eb633e01940017a2a3b583",
+      "sizeBytes": 3839,
+      "lineCount": 66,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    }
+  },
+  "report": {
+    "path": "docs/architecture/backend-structure/structure-target.md.report.html",
+    "generatedAt": "2026-06-12T08:30:00Z",
+    "generator": "scripts/wiki/generate-companion-metadata.mjs",
+    "template": "wiki-document-companion-report/v1"
+  },
+  "classification": {
+    "owner": "architecture",
+    "documentMode": "documentation",
+    "temporalState": "future",
+    "implementationState": "planned"
+  },
+  "review": {
+    "date": "2026-06-11",
+    "method": "first-ten metadata scoring pass",
+    "model": "codex",
+    "sourceFingerprint": {
+      "algorithm": "sha256",
+      "hash": "c55474abcedbb6b51bd6a13ac69870727721fc8609eb633e01940017a2a3b583",
+      "sizeBytes": 3839,
+      "lineCount": 66,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    },
+    "sourceChangedSinceReview": false
+  },
+  "drift": {
+    "grade": "B",
+    "hasDrift": true,
+    "score": 0.34,
+    "summary": "Still useful as a target, but it intentionally describes a desired structure more than the fully landed backend.",
+    "rationale": [
+      "The document is target-state material.",
+      "Current backend structure is moving toward it but has not fully converged.",
+      "It should stay visible as future-oriented architecture guidance."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "high",
+    "implementationAlignment": "medium",
+    "freshness": "medium",
+    "operatorUsefulness": "medium"
+  },
+  "duplicates": {
+    "suspected": false,
+    "groupSize": 1,
+    "similarTo": []
+  },
+  "findings": [
+    {
+      "id": "drift-summary",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Still useful as a target, but it intentionally describes a desired structure more than the fully landed backend.",
+      "rationale": [
+        "The document is target-state material.",
+        "Current backend structure is moving toward it but has not fully converged.",
+        "It should stay visible as future-oriented architecture guidance."
+      ],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-1",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The document is target-state material.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-2",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Current backend structure is moving toward it but has not fully converged.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-3",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "It should stay visible as future-oriented architecture guidance.",
+      "rationale": [],
+      "evidence": []
+    }
+  ],
+  "nextAction": "Re-score after the backend structure migration has a concrete implementation milestone."
+}

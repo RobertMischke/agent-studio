@@ -85,20 +85,55 @@ public class ProjectWikiEnhancementsTests : IDisposable
         var projectRoot = Path.Combine(_tempDir, "tree-proj");
         var docsDir = Path.Combine(projectRoot, "docs");
         Directory.CreateDirectory(Path.Combine(docsDir, "01-concepts"));
-        Directory.CreateDirectory(Path.Combine(docsDir, "meta", "documents"));
         File.WriteAllText(Path.Combine(docsDir, "README.md"), "# Index\n");
         File.WriteAllText(Path.Combine(docsDir, "01-concepts", "10-overview.md"), "# Overview\n");
         File.WriteAllText(Path.Combine(docsDir, "01-concepts", "page.html"), "<h1>HTML page</h1>");
         File.WriteAllText(Path.Combine(docsDir, "01-concepts", "page.metadata.json"),
             "{ \"title\": \"Page metadata\", \"drift\": { \"grade\": \"B\" } }");
-        File.WriteAllText(Path.Combine(docsDir, "meta", "documents", "concept-overview.metadata.json"),
+        File.WriteAllText(Path.Combine(docsDir, "01-concepts", "10-overview.md.report.html"),
+            "<h1>Overview report</h1>");
+        File.WriteAllText(Path.Combine(docsDir, "01-concepts", "10-overview.md.meta.json"),
             """
             {
-              "sourcePath": "docs/01-concepts/10-overview.md",
-              "documentMode": "documentation",
-              "temporalState": "present",
-              "implementationState": "implemented",
-              "reportPath": "docs/meta/reports/documents/concept-overview.report.html",
+              "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+              "schemaVersion": "wiki-document-companion/v1",
+              "title": "Concept overview metadata",
+              "source": {
+                "path": "docs/01-concepts/10-overview.md",
+                "type": "markdown",
+                "fingerprint": {
+                  "algorithm": "sha256",
+                  "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+                  "sizeBytes": 1,
+                  "lineCount": 1,
+                  "capturedAt": "2026-06-12T08:30:00Z"
+                }
+              },
+              "report": {
+                "path": "docs/01-concepts/10-overview.md.report.html",
+                "generatedAt": "2026-06-12T08:30:00Z",
+                "generator": "scripts/wiki/generate-companion-metadata.mjs",
+                "template": "wiki-document-companion-report/v1"
+              },
+              "classification": {
+                "owner": "architecture",
+                "documentMode": "documentation",
+                "temporalState": "present",
+                "implementationState": "implemented"
+              },
+              "review": {
+                "date": "2026-06-12",
+                "method": "unit test",
+                "model": "codex",
+                "sourceFingerprint": {
+                  "algorithm": "sha256",
+                  "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+                  "sizeBytes": 1,
+                  "lineCount": 1,
+                  "capturedAt": "2026-06-12T08:30:00Z"
+                },
+                "sourceChangedSinceReview": false
+              },
               "drift": { "grade": "B", "hasDrift": true, "score": 0.24, "summary": "Light sample drift." },
               "axes": {
                 "architectureAlignment": "high",
@@ -106,7 +141,11 @@ public class ProjectWikiEnhancementsTests : IDisposable
                 "freshness": "medium",
                 "operatorUsefulness": "high"
               },
-              "duplicates": { "suspected": false, "groupSize": 1 }
+              "duplicates": { "suspected": false, "groupSize": 1, "similarTo": [] },
+              "findings": [
+                { "id": "drift-summary", "severity": "warn", "axis": "drift", "summary": "Light sample drift." }
+              ],
+              "nextAction": "Refresh if source changes."
             }
             """);
 
@@ -116,11 +155,11 @@ public class ProjectWikiEnhancementsTests : IDisposable
         Assert.NotNull(tree);
         Assert.True(tree!.Exists);
         // Folders sort before the loose README file.
-        Assert.Equal(3, tree.Root.Count);
+        Assert.Equal(2, tree.Root.Count);
         Assert.Equal("folder", tree.Root[0].Type);
         Assert.Equal("concepts", tree.Root[0].Title); // NN- prefix stripped
         Assert.Equal("01-concepts", tree.Root[0].Name);
-        Assert.Equal("README.md", tree.Root[2].Name);
+        Assert.Equal("README.md", tree.Root[1].Name);
 
         var folder = tree.Root[0];
         Assert.Equal(3, folder.Children.Count);
@@ -138,7 +177,10 @@ public class ProjectWikiEnhancementsTests : IDisposable
         Assert.Equal("B", overview.Metadata.DriftGrade);
         Assert.Equal("medium", overview.Metadata.Quality);
         Assert.False(overview.Metadata.DuplicateSuspected);
-        Assert.Equal("meta/reports/documents/concept-overview.report.html", overview.Metadata.ReportPath);
+        Assert.Equal("01-concepts/10-overview.md.report.html", overview.Metadata.ReportPath);
+        Assert.Equal("01-concepts/10-overview.md.meta.json", overview.Metadata.CompanionPath);
+        Assert.True(overview.Metadata.SourceChangedSinceReview);
+        Assert.Equal(1, overview.Metadata.FindingsCount);
     }
 
     [Fact]

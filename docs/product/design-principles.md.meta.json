@@ -1,0 +1,102 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Product design principles metadata",
+  "source": {
+    "path": "docs/product/design-principles.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "1fd24ba889de81418c6a50df26b4e7bf703dc5147e5826876aabdde37f1a14d9",
+      "sizeBytes": 24461,
+      "lineCount": 258,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    }
+  },
+  "report": {
+    "path": "docs/product/design-principles.md.report.html",
+    "generatedAt": "2026-06-12T08:30:00Z",
+    "generator": "scripts/wiki/generate-companion-metadata.mjs",
+    "template": "wiki-document-companion-report/v1"
+  },
+  "classification": {
+    "owner": "product",
+    "documentMode": "vision",
+    "temporalState": "future",
+    "implementationState": "planned"
+  },
+  "review": {
+    "date": "2026-06-11",
+    "method": "sample metadata pass",
+    "model": "codex",
+    "sourceFingerprint": {
+      "algorithm": "sha256",
+      "hash": "1fd24ba889de81418c6a50df26b4e7bf703dc5147e5826876aabdde37f1a14d9",
+      "sizeBytes": 24461,
+      "lineCount": 258,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    },
+    "sourceChangedSinceReview": false
+  },
+  "drift": {
+    "grade": "B",
+    "hasDrift": true,
+    "score": 0.31,
+    "summary": "The vision still fits, but the current Wiki and Project Hub implementation can now ground parts of it more concretely.",
+    "rationale": [
+      "The document is intentionally future-facing.",
+      "Several navigation ideas are now no longer abstract because they have implementation examples.",
+      "It should preserve vision language while marking realized parts."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "medium",
+    "implementationAlignment": "medium",
+    "freshness": "medium",
+    "operatorUsefulness": "medium"
+  },
+  "duplicates": {
+    "suspected": false,
+    "groupSize": 1,
+    "similarTo": []
+  },
+  "findings": [
+    {
+      "id": "drift-summary",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The vision still fits, but the current Wiki and Project Hub implementation can now ground parts of it more concretely.",
+      "rationale": [
+        "The document is intentionally future-facing.",
+        "Several navigation ideas are now no longer abstract because they have implementation examples.",
+        "It should preserve vision language while marking realized parts."
+      ],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-1",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The document is intentionally future-facing.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-2",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Several navigation ideas are now no longer abstract because they have implementation examples.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-3",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "It should preserve vision language while marking realized parts.",
+      "rationale": [],
+      "evidence": []
+    }
+  ],
+  "nextAction": "Split realized shell behavior from still-open product ambition."
+}

@@ -24,6 +24,7 @@ import {
   WikiFileHistory,
   WikiNodeType,
   WikiTree,
+  WikiTreeMetadata,
   WikiTreeNode,
 } from '../../../../models/project-docs.model';
 import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
@@ -1330,22 +1331,23 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
           value: 'None',
           label: 'Metadata unscored',
           tone: 'muted',
-          tooltip: 'No JSON metadata record under docs/meta/documents describes this document yet.',
+          tooltip: 'No adjacent companion metadata file describes this document yet.',
           reportAnchor: null,
         },
       ];
     }
 
     const chips = [
-      this.driftChip(meta.hasDrift, meta.driftGrade, meta.summary),
+      this.driftChip(meta),
       this.directionChip(meta.temporalState),
     ].filter((chip): chip is WikiMetricChip => chip !== null);
     return chips;
   }
 
-  private driftChip(hasDrift: boolean | null, grade: string | null, summary: string | null): WikiMetricChip {
-    const cleanGrade = this.cleanGrade(grade);
-    if (hasDrift === false) {
+  private driftChip(meta: WikiTreeMetadata): WikiMetricChip {
+    const cleanGrade = this.cleanGrade(meta.driftGrade);
+    const summary = this.companionTooltipSummary(meta);
+    if (meta.hasDrift === false) {
       return {
         key: 'drift',
         icon: 'check',
@@ -1357,7 +1359,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
         reportAnchor: 'why-drift',
       };
     }
-    if (hasDrift === true) {
+    if (meta.hasDrift === true) {
       return {
         key: 'drift',
         icon: 'diff',
@@ -1461,6 +1463,19 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
   private joinTooltip(primary: string, summary: string | null): string {
     const clean = summary?.trim();
     return clean ? `${primary} ${clean}` : primary;
+  }
+
+  private companionTooltipSummary(meta: WikiTreeMetadata): string | null {
+    const parts: string[] = [];
+    if (meta.sourceChangedSinceReview === true) {
+      parts.push('Source changed since the companion review.');
+    }
+    if (meta.summary?.trim()) parts.push(meta.summary.trim());
+    if (meta.findingsCount && meta.findingsCount > 0) {
+      parts.push(`${meta.findingsCount} finding${meta.findingsCount === 1 ? '' : 's'} in the companion report.`);
+    }
+    if (meta.companionPath?.trim()) parts.push(`Companion: ${meta.companionPath.trim()}.`);
+    return parts.length ? parts.join(' ') : null;
   }
 
   fileTypeLabel(node: WikiTreeNode): string {

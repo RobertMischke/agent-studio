@@ -30,8 +30,11 @@ const TREE: WikiTree = {
             quality: 'medium',
             duplicateSuspected: false,
             duplicateGroupSize: 1,
-            reportPath: 'meta/reports/documents/concept-overview.report.html',
+            reportPath: 'concepts/overview.md.report.html',
             summary: 'Light sample drift.',
+            companionPath: 'concepts/overview.md.meta.json',
+            sourceChangedSinceReview: false,
+            findingsCount: 2,
           },
         },
         { name: 'page.html', title: 'HTML page', relPath: 'concepts/page.html', type: 'html', children: [] },
@@ -192,9 +195,9 @@ describe('ProjectWikiSectionComponent', () => {
     // The Report tab loads the linked metadata reasoning HTML as a third view.
     el(fixture).querySelector<HTMLButtonElement>('[data-testid="project-wiki-tab-report"]')!.click();
     fixture.detectChanges();
-    http.expectOne('/api/projects/Demo/wiki/files/meta/reports/documents/concept-overview.report.html')
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md.report.html')
       .flush({
-        relPath: 'meta/reports/documents/concept-overview.report.html',
+        relPath: 'concepts/overview.md.report.html',
         content: '<main><h1>Concept overview report</h1><p>Why drift: sampled evidence.</p></main>',
       });
     fixture.detectChanges();
@@ -223,9 +226,9 @@ describe('ProjectWikiSectionComponent', () => {
     http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
       .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n\nBody text.' });
     http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
-    http.expectOne('/api/projects/Demo/wiki/files/meta/reports/documents/concept-overview.report.html')
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md.report.html')
       .flush({
-        relPath: 'meta/reports/documents/concept-overview.report.html',
+        relPath: 'concepts/overview.md.report.html',
         content: '<!doctype html><html><head><title>r</title></head><body><h2 id="why-drift">Why drift?</h2></body></html>',
       });
     fixture.detectChanges();
@@ -366,9 +369,9 @@ describe('ProjectWikiSectionComponent', () => {
     http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
       .flush({ relPath: 'concepts/overview.md', content: '# Restored report\n\nBody text.' });
     http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
-    http.expectOne('/api/projects/Demo/wiki/files/meta/reports/documents/concept-overview.report.html')
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md.report.html')
       .flush({
-        relPath: 'meta/reports/documents/concept-overview.report.html',
+        relPath: 'concepts/overview.md.report.html',
         content: '<main><h1>Restored reasoning report</h1></main>',
       });
     fixture.detectChanges();

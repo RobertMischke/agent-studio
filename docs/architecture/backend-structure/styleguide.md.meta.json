@@ -1,0 +1,114 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Backend styleguide metadata",
+  "source": {
+    "path": "docs/architecture/backend-structure/styleguide.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "d6475726168fee0286803093231d6085da1116ef212f0f2cc308fd39edab1ce5",
+      "sizeBytes": 2713,
+      "lineCount": 57,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    }
+  },
+  "report": {
+    "path": "docs/architecture/backend-structure/styleguide.md.report.html",
+    "generatedAt": "2026-06-12T08:30:00Z",
+    "generator": "scripts/wiki/generate-companion-metadata.mjs",
+    "template": "wiki-document-companion-report/v1"
+  },
+  "classification": {
+    "owner": "architecture",
+    "documentMode": "documentation",
+    "temporalState": "present",
+    "implementationState": "partially implemented"
+  },
+  "review": {
+    "date": "2026-06-11",
+    "method": "first-ten metadata scoring pass",
+    "model": "codex",
+    "sourceFingerprint": {
+      "algorithm": "sha256",
+      "hash": "d6475726168fee0286803093231d6085da1116ef212f0f2cc308fd39edab1ce5",
+      "sizeBytes": 2713,
+      "lineCount": 57,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    },
+    "sourceChangedSinceReview": false
+  },
+  "drift": {
+    "grade": "B",
+    "hasDrift": true,
+    "score": 0.26,
+    "summary": "The style direction is mostly current, with light drift where newer feature folders and endpoint patterns have evolved.",
+    "rationale": [
+      "The styleguide still describes useful backend conventions.",
+      "Some recent endpoint and feature slices should be cross-checked against it.",
+      "No severe contradiction was found in the sampled pass."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "high",
+    "implementationAlignment": "medium",
+    "freshness": "medium",
+    "operatorUsefulness": "high"
+  },
+  "duplicates": {
+    "suspected": true,
+    "groupSize": 2,
+    "similarTo": [
+      "docs/contracts/code-patterns.md"
+    ]
+  },
+  "findings": [
+    {
+      "id": "drift-summary",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The style direction is mostly current, with light drift where newer feature folders and endpoint patterns have evolved.",
+      "rationale": [
+        "The styleguide still describes useful backend conventions.",
+        "Some recent endpoint and feature slices should be cross-checked against it.",
+        "No severe contradiction was found in the sampled pass."
+      ],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-1",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The styleguide still describes useful backend conventions.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-2",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Some recent endpoint and feature slices should be cross-checked against it.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-3",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "No severe contradiction was found in the sampled pass.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "duplicate-candidate",
+      "severity": "warn",
+      "axis": "duplicate",
+      "summary": "This document has possible duplicate ownership candidates.",
+      "rationale": [
+        "docs/contracts/code-patterns.md"
+      ],
+      "evidence": []
+    }
+  ],
+  "nextAction": "Separate backend structure style from general code-pattern rules."
+}
