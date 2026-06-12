@@ -200,10 +200,9 @@
                                 [attr.aria-label]="chip.label"
                                 [appTooltip]="chip.tooltip"
                                 (click)="openReportSection($event, row.node, chip.reportAnchor)">
-                          <span class="pwiki__metric-prefix">{{ chip.prefix }}</span>
                           <span class="pwiki__metric-value">
                             <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
-                            <span>{{ chip.value }}</span>
+                            <span>{{ chip.display }}</span>
                           </span>
                         </button>
                       }
@@ -598,10 +597,9 @@
                                   [attr.aria-label]="chip.label"
                                   [appTooltip]="chip.tooltip"
                                   (click)="openReportSection($event, doc, chip.reportAnchor)">
-                            <span class="pwiki__metric-prefix">{{ chip.prefix }}</span>
                             <span class="pwiki__metric-value">
                               <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
-                              <span>{{ chip.value }}</span>
+                              <span>{{ chip.display }}</span>
                             </span>
                           </button>
                         } @else {
@@ -611,10 +609,9 @@
                                 [attr.data-testid]="'project-wiki-suggested-metric-' + doc.relPath + '-' + chip.key"
                                 [attr.aria-label]="chip.label"
                                 [appTooltip]="chip.tooltip">
-                            <span class="pwiki__metric-prefix">{{ chip.prefix }}</span>
                             <span class="pwiki__metric-value">
                               <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
-                              <span>{{ chip.value }}</span>
+                              <span>{{ chip.display }}</span>
                             </span>
                           </span>
                         }

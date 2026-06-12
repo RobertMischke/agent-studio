@@ -451,6 +451,21 @@
   font-weight: 650;
 }
 
+.pwiki__label--doc .pwiki__label-copy {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  line-height: 1;
+}
+
+.pwiki__label--doc .pwiki__label-text {
+  flex: 1 1 auto;
+}
+
+.pwiki__label--doc .pwiki__metric-strip {
+  flex: 0 0 auto;
+}
+
 .pwiki__metric-strip {
   display: grid;
   grid-template-columns: minmax(0, max-content) minmax(0, max-content);
@@ -464,8 +479,7 @@
 .pwiki__metric {
   min-width: 0;
   min-height: 15px;
-  display: inline-grid;
-  grid-template-columns: auto minmax(0, auto);
+  display: inline-flex;
   align-items: center;
   gap: var(--studio-spacing-1);
   padding: 0;
@@ -514,6 +528,7 @@
   gap: var(--studio-spacing-1);
   color: color-mix(in srgb, var(--studio-fg) 84%, var(--studio-fg-muted));
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .pwiki__metric[data-tone='good'] {

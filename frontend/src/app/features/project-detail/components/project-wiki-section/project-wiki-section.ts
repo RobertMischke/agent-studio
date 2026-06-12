@@ -83,8 +83,7 @@ type WikiMetricTone = 'good' | 'info' | 'warn' | 'bad' | 'muted';
 interface WikiMetricChip {
   key: string;
   icon: StudioIconName;
-  prefix: string;
-  value: string;
+  display: string;
   label: string;
   tone: WikiMetricTone;
   tooltip: string;
@@ -1327,8 +1326,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
         {
           key: 'unscored',
           icon: 'file',
-          prefix: 'Meta',
-          value: 'None',
+          display: 'None',
           label: 'Metadata unscored',
           tone: 'muted',
           tooltip: 'No adjacent companion metadata file describes this document yet.',
@@ -1351,8 +1349,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
       return {
         key: 'drift',
         icon: 'check',
-        prefix: 'Drift',
-        value: cleanGrade ?? 'A',
+        display: cleanGrade ?? 'A',
         label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift stable',
         tone: 'good',
         tooltip: this.joinTooltip('No drift is currently suspected.', summary),
@@ -1363,8 +1360,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
       return {
         key: 'drift',
         icon: 'diff',
-        prefix: 'Drift',
-        value: cleanGrade ?? '?',
+        display: cleanGrade ?? '?',
         label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift unknown grade',
         tone: cleanGrade === 'D' ? 'bad' : 'warn',
         tooltip: this.joinTooltip('Drift is suspected for this document.', summary),
@@ -1374,8 +1370,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
     return {
       key: 'drift',
       icon: 'diff',
-      prefix: 'Drift',
-      value: cleanGrade ?? '?',
+      display: cleanGrade ?? '?',
       label: cleanGrade ? `Drift ${cleanGrade}` : 'Drift unknown',
       tone: 'muted',
       tooltip: this.joinTooltip('Drift state is not classified yet.', summary),
@@ -1392,8 +1387,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
         return {
           key: 'direction',
           icon: 'activity',
-          prefix: 'Direction',
-          value: 'Current',
+          display: 'Now',
           label: 'Direction Current',
           tone: 'muted',
           tooltip: 'Direction: describes current behavior.',
@@ -1405,8 +1399,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
         return {
           key: 'direction',
           icon: 'branch',
-          prefix: 'Direction',
-          value: 'Future',
+          display: 'Fut',
           label: 'Direction Future',
           tone: 'muted',
           tooltip: 'Direction: describes planned or future behavior.',
@@ -1418,8 +1411,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
         return {
           key: 'direction',
           icon: 'archive',
-          prefix: 'Direction',
-          value: 'Past',
+          display: 'Past',
           label: 'Direction Past',
           tone: 'muted',
           tooltip: 'Direction: describes past or obsolete behavior.',
@@ -1430,8 +1422,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
         return {
           key: 'direction',
           icon: 'diff',
-          prefix: 'Direction',
-          value: 'Mixed',
+          display: 'Mix',
           label: 'Direction Mixed',
           tone: 'muted',
           tooltip: 'Direction: mixes current and planned behavior.',
@@ -1441,8 +1432,7 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
         return {
           key: 'direction',
           icon: 'activity',
-          prefix: 'Direction',
-          value: '?',
+          display: '?',
           label: 'Direction unknown',
           tone: 'muted',
           tooltip: 'Direction has not been classified yet.',

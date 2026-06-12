@@ -156,6 +156,12 @@ describe('ProjectWikiSectionComponent', () => {
     expect(
       ratings!.querySelector('[data-testid="project-wiki-metric-concepts/overview.md-direction"]')?.getAttribute('aria-label')
     ).toBe('Direction Current');
+    expect(ratings!.textContent).toContain('B');
+    expect(ratings!.textContent).toContain('Now');
+    expect(ratings!.textContent).not.toContain('D:');
+    expect(ratings!.textContent).not.toContain('Dir:');
+    expect(ratings!.textContent).not.toContain('DriftB');
+    expect(ratings!.textContent).not.toContain('DirectionCurrent');
     expect(ratings!.textContent).not.toContain('S 76');
     expect(ratings!.textContent).not.toContain('Q B');
     expect(
@@ -335,10 +341,12 @@ describe('ProjectWikiSectionComponent', () => {
     const root = el(fixture);
 
     const card = root.querySelector('[data-testid="project-wiki-suggested-card-concepts/overview.md"]');
-    expect(card?.textContent).toContain('Drift');
     expect(card?.textContent).toContain('B');
-    expect(card?.textContent).toContain('Direction');
-    expect(card?.textContent).toContain('Current');
+    expect(card?.textContent).toContain('Now');
+    expect(card?.textContent).not.toContain('D:');
+    expect(card?.textContent).not.toContain('Dir:');
+    expect(card?.textContent).not.toContain('DriftB');
+    expect(card?.textContent).not.toContain('DirectionCurrent');
 
     root.querySelector<HTMLButtonElement>(
       '[data-testid="project-wiki-suggested-metric-concepts/overview.md-drift"]'
