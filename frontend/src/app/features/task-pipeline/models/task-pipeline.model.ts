@@ -206,6 +206,16 @@ export interface PipelineCatalogueStep {
   displayName: string;
   kind: StepKind;
   phase?: string | null;
+  runMode?: StepRunMode | null;
+  dependsOn?: string[] | null;
+  idempotent?: boolean | null;
+  stub?: boolean | null;
+  deferred?: boolean | null;
+  model?: string | null;
+  resolvedModel?: string | null;
+  modelSource?: string | null;
+  resolvedThinkingLevel?: string | null;
+  thinkingLevelSource?: string | null;
   usesModel: boolean;
   usesPrompt: boolean;
   supportsMode: boolean;

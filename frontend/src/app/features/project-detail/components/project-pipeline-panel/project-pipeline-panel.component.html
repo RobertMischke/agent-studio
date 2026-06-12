@@ -2,9 +2,8 @@
   <header class="pp__head">
     <h2 class="pp__title">Pipeline</h2>
     <p class="pp__sub">
-      Per-project step pipeline: activation, order, the model each step runs on, its
-      prompt binding, and the gate / run condition. Prompt <em>content</em> is managed
-      in the Prompts registry — here you only bind to it. Changes apply to the next run.
+      Compact per-project order, agent, prompt binding, and gates. Prompt
+      <em>content</em> lives in Prompts; changes apply to the next run.
     </p>
   </header>
 
@@ -18,71 +17,125 @@
     </p>
   } @else {
     @for (group of groups(); track group.phase) {
-      <section class="pp__group" [attr.data-testid]="'pipeline-group-' + group.phase">
-        <h3 class="pp__group-title">{{ group.label }}</h3>
+      <details class="pp__group" open [attr.data-testid]="'pipeline-group-' + group.phase">
+        <summary class="pp__group-head">
+          <span class="pp__group-title">{{ group.label }}</span>
+          <span class="pp__group-meta">{{ groupSummary(group) }}</span>
+          <span class="pp__group-caret" aria-hidden="true">▾</span>
+        </summary>
 
         <div class="pp__rows" role="list">
           @for (step of group.rows; track step.id) {
-            <div class="pp__row"
-                 role="listitem"
-                 [class.pp__row--off]="!step.enabled"
-                 [attr.data-enabled]="step.enabled"
-                 [attr.data-testid]="'pipeline-step-row-' + step.id">
+            <details class="pp__row"
+                     role="listitem"
+                     [class.pp__row--off]="!step.enabled"
+                     [class.pp__row--dragging]="draggingStepId() === step.id"
+                     [class.pp__row--drop-target]="dragTargetStepId() === step.id"
+                     [attr.data-enabled]="step.enabled"
+                     [attr.data-kind]="kindKey(step.kind)"
+                     [attr.data-testid]="'pipeline-step-row-' + step.id"
+                     (dragover)="onStepDragOver($event, step)"
+                     (drop)="onStepDrop($event, step)"
+                     (dragend)="onStepDragEnd()">
+              <summary class="pp__summary">
+                <button type="button"
+                        class="pp__drag"
+                        [class.pp__drag--disabled]="!canDragStep(step)"
+                        [attr.draggable]="canDragStep(step) ? 'true' : null"
+                        [attr.aria-label]="canDragStep(step) ? 'Drag to reorder ' + step.displayName : 'Fixed pipeline position'"
+                        [attr.data-testid]="'pipeline-step-drag-' + step.id"
+                        [appTooltip]="canDragStep(step) ? 'Drag this step within its pipeline section.' : 'This step has a fixed position.'"
+                        (click)="$event.preventDefault(); $event.stopPropagation()"
+                        (dragstart)="onStepDragStart($event, step)">⠿</button>
 
-              <div class="pp__order">
-                @if (step.canMoveUp || step.canMoveDown) {
-                  <button type="button" class="pp__order-btn"
-                          [attr.aria-label]="'Move ' + step.displayName + ' earlier'"
-                          [attr.data-testid]="'pipeline-step-move-up-' + step.id"
-                          [appTooltip]="'Move this step earlier in the pipeline.'"
-                          [disabled]="!step.canMoveUp || orderBusy()"
-                          (click)="onStepMove(step.id, -1)">↑</button>
-                  <button type="button" class="pp__order-btn"
-                          [attr.aria-label]="'Move ' + step.displayName + ' later'"
-                          [attr.data-testid]="'pipeline-step-move-down-' + step.id"
-                          [appTooltip]="'Move this step later in the pipeline.'"
-                          [disabled]="!step.canMoveDown || orderBusy()"
-                          (click)="onStepMove(step.id, 1)">↓</button>
-                } @else {
-                  <span class="pp__order-fixed" [appTooltip]="'Core steps keep a fixed position.'">•</span>
-                }
-              </div>
-
-              <div class="pp__main">
-                <div class="pp__row-head">
+                <span class="pp__summary-main">
                   <span class="pp__name">{{ step.displayName }}</span>
-                  <span class="pp__kind" [attr.data-kind]="step.kind">{{ step.kind }}</span>
-                  <span class="pp__head-spacer"></span>
-                  @if (step.canDisable) {
-                    <label class="pp__toggle"
-                           [appTooltip]="step.enabled ? 'Step runs for this project. Click to skip it.' : 'Step is skipped. Click to enable.'">
-                      <input type="checkbox"
-                             [attr.data-testid]="'pipeline-step-enabled-' + step.id"
-                             [disabled]="stepBusy[step.id]"
-                             [ngModel]="step.enabled"
-                             (ngModelChange)="onStepEnabledChange(step.id, $event)">
-                      <span class="pp__toggle-text">{{ step.enabled ? 'On' : 'Off' }}</span>
-                    </label>
-                  } @else {
-                    <span class="pp__locked" [appTooltip]="'Core step; always runs on the task own CLI and model.'">always on</span>
+                  <span class="pp__kind"
+                        [attr.data-kind]="kindKey(step.kind)"
+                        [appTooltip]="'Step kind: ' + step.kind">{{ kindAbbrev(step.kind) }}</span>
+                  <button type="button"
+                          class="pp__info"
+                          [attr.aria-label]="'Explain ' + step.displayName"
+                          [attr.data-testid]="'pipeline-step-info-' + step.id"
+                          [appTooltip]="stepTooltip(step)"
+                          tooltipPosition="right"
+                          (click)="$event.preventDefault(); $event.stopPropagation()">i</button>
+                </span>
+
+                <span class="pp__summary-chips">
+                  <span class="pp__state" [class.pp__state--off]="!step.enabled">
+                    {{ step.canDisable ? (step.enabled ? 'On' : 'Off') : 'always on' }}
+                  </span>
+                  @if (step.usesModel) {
+                    <span class="pp__chip"
+                          [appTooltip]="'Effective model: ' + modelSummary(step) + ' (' + modelSourceLabel(step.effectiveModelSource) + ')'">
+                      {{ modelSummary(step) }}
+                    </span>
                   }
+                  @if (step.usesPrompt) {
+                    <span class="pp__chip pp__chip--muted"
+                          [appTooltip]="'Prompt binding: ' + promptSummary(step)">
+                      {{ promptSummary(step) }}
+                    </span>
+                  }
+                  @if (step.supportsMode) {
+                    <span class="pp__chip pp__chip--muted">Gate {{ modeSummary(step) }}</span>
+                  }
+                  @if (step.supportsCondition) {
+                    <span class="pp__chip pp__chip--muted">When {{ conditionSummary(step) }}</span>
+                  }
+                </span>
+
+                <span class="pp__summary-caret" aria-hidden="true">▾</span>
+              </summary>
+
+              <div class="pp__details">
+                <div class="pp__details-head">
+                  <span class="pp__details-copy">{{ stepTooltip(step).body }}</span>
                 </div>
 
                 <div class="pp__controls">
+                  @if (step.canDisable) {
+                    <div class="pp__field pp__field--toggle">
+                      <span class="pp__field-label">Active</span>
+                      <label class="pp__toggle"
+                             [appTooltip]="step.enabled ? 'Step runs for this project. Click to skip it.' : 'Step is skipped. Click to enable.'">
+                        <input type="checkbox"
+                               [attr.data-testid]="'pipeline-step-enabled-' + step.id"
+                               [disabled]="stepBusy[step.id]"
+                               [ngModel]="step.enabled"
+                               (ngModelChange)="onStepEnabledChange(step.id, $event)">
+                        <span class="pp__toggle-text">{{ step.enabled ? 'On' : 'Off' }}</span>
+                      </label>
+                    </div>
+                  } @else {
+                    <div class="pp__field pp__field--toggle">
+                      <span class="pp__field-label">Active</span>
+                      <span class="pp__locked" [appTooltip]="'Core step; always runs on the task own CLI and model.'">always on</span>
+                    </div>
+                  }
+
                   @if (step.usesModel) {
                     <div class="pp__field">
                       <span class="pp__field-label">Model</span>
                       <app-cli-model-selector
-                        [cliType]="asCliType(step.cliType)"
-                        [model]="step.model"
-                        [thinkingLevel]="step.thinkingLevel || null"
+                        [cliType]="asCliType(step.effectiveCliType)"
+                        [model]="step.effectiveModel || step.model"
+                        [thinkingLevel]="step.effectiveThinkingLevel || null"
                         [disabled]="!step.enabled || !!stepBusy[step.id]"
                         [disabledReason]="!step.enabled ? 'Enable this step before changing its agent.' : 'Pipeline step update in progress.'"
-                        [tooltipOverride]="'CLI, model, and thinking level for this step LLM call. Empty model uses the project / runtime default.'"
+                        [tooltipOverride]="'CLI, model, and thinking level for this step LLM call. Current value is resolved from ' + modelSourceLabel(step.effectiveModelSource) + '.'"
                         eyebrow="Pipeline step"
                         [triggerTestid]="'pipeline-step-agent-' + step.id"
                         [pickerTestidPrefix]="'pipeline-step-agent-picker-' + step.id"
                         (commit)="onStepAgentCommit(step.id, $event)" />
+                      @if (step.model || step.thinkingLevel || step.cliType) {
+                        <button type="button" class="pp__link"
+                                [attr.data-testid]="'pipeline-step-agent-reset-' + step.id"
+                                [disabled]="!step.enabled || stepBusy[step.id]"
+                                [appTooltip]="'Clear this step agent override and fall back to the project / runtime default.'"
+                                (click)="resetStepAgent(step.id)">Use default</button>
+                      }
                     </div>
                   }
 
@@ -115,7 +168,7 @@
                         <button type="button" class="pp__link pp__link--manage"
                                 [attr.data-testid]="'pipeline-step-prompt-manage-' + step.id"
                                 [appTooltip]="'Open the Prompts registry to edit this prompt template.'"
-                                (click)="openPrompts.emit()">Manage in Prompts ↗</button>
+                                (click)="openPrompts.emit()">Prompts</button>
                       </div>
                     </div>
                   }
@@ -164,10 +217,10 @@
                   }
                 </div>
               </div>
-            </div>
+            </details>
           }
         </div>
-      </section>
+      </details>
     }
 
     <section class="pp__cost" data-testid="pipeline-cost" aria-label="Pipeline cost by step kind">

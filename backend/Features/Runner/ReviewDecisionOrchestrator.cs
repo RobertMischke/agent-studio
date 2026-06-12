@@ -2726,15 +2726,38 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (!_configuration.GetValue("CodeReviewStep:AutoGrade", true)) return;
 
         var stepId = PipelineCatalogue.CodeReviewGradeStepId;
+        var projectSettings = _projectSettings?.Get(entry.Name);
+        var catalogueStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
+            string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase));
+        if (catalogueStep is not null
+            && !PipelineStepConfigResolver.ShouldRun(projectSettings, catalogueStep, new PipelineStepConditionContext
+            {
+                Aborted = false,
+                ExitCode = 0,
+                AnyAspectFailed = false,
+                TaskType = job.TaskType,
+                Tags = job.Tags,
+            }))
+        {
+            return;
+        }
+
         var startedAt = DateTime.UtcNow;
         try
         {
             // Quality over cost: the grade pass defaults to Opus 4.8 even though
             // the four cheap aspect reviews stay on Haiku. Configurable so a
             // deployment can dial the grade model without touching the aspects.
-            var (model, cli) = AgentStudio.Review.CodeReviewGradeModelSelector.Resolve(
+            var (defaultModel, defaultCli) = AgentStudio.Review.CodeReviewGradeModelSelector.Resolve(
                 _configuration["CodeReviewStep:DefaultModel"],
                 _configuration["CodeReviewStep:DefaultCli"]);
+            var model = catalogueStep is null
+                ? defaultModel
+                : PipelineStepConfigResolver.ResolveModel(projectSettings, catalogueStep, defaultModel);
+            var cli = PipelineStepConfigResolver.ResolveCliType(projectSettings, stepId) ?? defaultCli;
+            var thinkingLevel = catalogueStep is null
+                ? null
+                : PipelineStepConfigResolver.ResolveThinkingLevel(projectSettings, catalogueStep, cli, model);
 
             var (diff, commitLabel) = BuildGradeDiff(entry.Name, entry.Path, job);
 
@@ -2750,6 +2773,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             {
                 Mode = AgentStudio.Review.CodeReviewMode.Grade,
                 Commit = commitLabel,
+                ThinkingLevel = thinkingLevel,
             };
 
             var report = await _codeReviewStep.RunAsync(request, ct);

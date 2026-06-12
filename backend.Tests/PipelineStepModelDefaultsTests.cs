@@ -8,8 +8,8 @@ namespace AgentStudio.Tests;
 /// Tests for <see cref="PipelineStepModelDefaults"/>: the pre-run effective
 /// model the Overview pipeline shows for each step. It must mirror the runtime
 /// default each call site already passes to the resolver (aspect -> orchestrator
-/// default, drift -> drift default, prep -> prep fallback) and layer the
-/// per-project + per-step overrides over it via
+/// default, drift -> drift default, grade -> code-review default, prep -> prep
+/// fallback) and layer the per-project + per-step overrides over it via
 /// <see cref="PipelineStepConfigResolver"/>, so what the operator sees before a
 /// run is what the run would actually use.
 /// </summary>
@@ -51,6 +51,25 @@ public class PipelineStepModelDefaultsTests
         var r = PipelineStepModelDefaults.Resolve(null, Step(PipelineCatalogue.PreOrchestratorPrepStepId));
         Assert.NotNull(r);
         Assert.Equal(OrchestratorPrepHostedService.PrepFallbackModel, r!.Model);
+    }
+
+    [Fact]
+    public void CodeReviewGradeStep_FallsBackToGradeDefault_WhenNoOverride()
+    {
+        var r = PipelineStepModelDefaults.Resolve(null, Step(PipelineCatalogue.CodeReviewGradeStepId));
+        Assert.NotNull(r);
+        Assert.Equal(CodeReviewGradeModelSelector.DefaultModel, r!.Model);
+    }
+
+    [Fact]
+    public void OrchestratorDecisionSteps_FallBackToOrchestratorDefault_WhenNoOverride()
+    {
+        Assert.Equal(OrchestratorRunner.DefaultModel,
+            PipelineStepModelDefaults.Resolve(null, Step(PipelineCatalogue.OrchestratorDecisionStepId))!.Model);
+        Assert.Equal(OrchestratorRunner.DefaultModel,
+            PipelineStepModelDefaults.Resolve(null, Step(PipelineCatalogue.ConflictResolutionStepId))!.Model);
+        Assert.Equal(OrchestratorRunner.DefaultModel,
+            PipelineStepModelDefaults.Resolve(null, PipelineCatalogue.AbortReviewStep)!.Model);
     }
 
     [Fact]
