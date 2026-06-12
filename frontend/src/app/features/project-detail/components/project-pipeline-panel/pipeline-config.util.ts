@@ -39,6 +39,11 @@ export interface PipelineAdminRow {
   id: string;
   displayName: string;
   kind: string;
+  runMode: string;
+  dependsOn: string[];
+  idempotent: boolean;
+  stub: boolean;
+  deferred: boolean;
   usesModel: boolean;
   usesPrompt: boolean;
   supportsMode: boolean;
@@ -49,6 +54,10 @@ export interface PipelineAdminRow {
   cliType: string;
   model: string;
   thinkingLevel: string;
+  effectiveCliType: string;
+  effectiveModel: string;
+  effectiveModelSource: string;
+  effectiveThinkingLevel: string;
   /** Inline prompt override text (legacy). Empty = bound to the registry template. */
   prompt: string;
   /** Registry template this step renders from, when the catalogue declares one. */

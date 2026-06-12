@@ -1,51 +1,39 @@
 <!--
   Workflow / Lanes page - stage 1 (T6a). Read-mostly transparency surface:
-  lane list + roles, the per-lane sort controls (the only writes), a read-only
-  view of what the platform does at each transition today, and clearly-labelled
-  placeholders for the stage 2/3 work that lands only after the Git-concept
-  decisions (docs/concepts/git-branching-integration-zielbild.md SS7).
+  lane roles + per-lane sort controls in one board-order list (the only writes),
+  a read-only view of what the platform does at each transition today, and
+  clearly-labelled placeholders for the stage 2/3 work that lands only after
+  the Git-concept decisions (docs/concepts/git-branching-integration-zielbild.md SS7).
 -->
 
 <section class="wf__group" data-testid="workflow-lane-list">
-  <h3>Lanes in board order</h3>
-  <div class="wf__lanes">
+  <h3>Lanes &amp; board sort</h3>
+  <div class="wf__lanes" data-testid="project-detail-lane-sort">
     @for (lane of lanes; track lane.state) {
       <div class="wf__lane-row" [attr.data-testid]="'workflow-lane-' + lane.state">
         <span class="wf__lane-icon" aria-hidden="true">{{ lane.icon }}</span>
-        <span class="wf__lane-label">{{ lane.label }}</span>
-        <span class="wf__lane-role">{{ lane.role }}</span>
+        <div class="wf__lane-main">
+          <span class="wf__lane-label">{{ lane.label }}</span>
+          <span class="wf__lane-role">{{ lane.role }}</span>
+        </div>
+        <label class="wf__lane-sort-control">
+          <span>Sort</span>
+          <select class="wf__lane-sort-select"
+                  [attr.data-testid]="'lane-sort-select-' + lane.state"
+                  [appTooltip]="laneSortMeta(laneSortDraft[lane.state]).hint"
+                  [(ngModel)]="laneSortDraft[lane.state]"
+                  (ngModelChange)="onLaneSortChange(lane.state)">
+            @for (opt of laneSortOptions; track opt.value) {
+              <option [value]="opt.value">{{ opt.icon }} {{ opt.label }}</option>
+            }
+          </select>
+        </label>
       </div>
     }
   </div>
   <p class="wf__hint">
-    The fixed lane sequence a task moves through, top to bottom. Lanes are part
-    of the platform model and are not configurable here.
-  </p>
-</section>
-
-<section class="wf__group">
-  <h3>Sort order per lane</h3>
-  <div class="wf__lane-sort" data-testid="project-detail-lane-sort">
-    @for (lane of sortableLanes; track lane.state) {
-      <div class="wf__lane-sort-row" [attr.data-testid]="'lane-sort-row-' + lane.state">
-        <span class="wf__lane-sort-name">
-          <span class="wf__lane-sort-icon" aria-hidden="true">{{ lane.icon }}</span>
-          {{ lane.label }}
-        </span>
-        <select class="wf__lane-sort-select"
-                [attr.data-testid]="'lane-sort-select-' + lane.state"
-                [appTooltip]="laneSortMeta(laneSortDraft[lane.state]).hint"
-                [(ngModel)]="laneSortDraft[lane.state]"
-                (ngModelChange)="onLaneSortChange(lane.state)">
-          @for (opt of laneSortOptions; track opt.value) {
-            <option [value]="opt.value">{{ opt.icon }} {{ opt.label }}</option>
-          }
-        </select>
-      </div>
-    }
-  </div>
-  <p class="wf__hint">
-    Controls the order cards appear in each board lane. <strong>Manual</strong>
+    The fixed board sequence runs top to bottom. The sort control defines how
+    cards appear inside each lane. <strong>Manual</strong>
     enables drag-and-drop reordering; the other strategies sort automatically and
     disable drag on that lane. The auto-pickup runner always uses its own priority
     order regardless of this setting.

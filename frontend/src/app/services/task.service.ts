@@ -1559,8 +1559,12 @@ export class TaskService {
    * flags). The Settings panel renders one control row per step from this,
    * so the step list is never hardcoded on the frontend.
    */
-  getPipelineCatalogue() {
-    return this.http.get<PipelineCatalogue>(`${this.baseUrl}/projects/pipeline-catalogue`);
+  getPipelineCatalogue(projectName?: string | null) {
+    const params = projectName ? new HttpParams().set('projectName', projectName) : undefined;
+    return this.http.get<PipelineCatalogue>(
+      `${this.baseUrl}/projects/pipeline-catalogue`,
+      params ? { params } : {},
+    );
   }
 
   /**

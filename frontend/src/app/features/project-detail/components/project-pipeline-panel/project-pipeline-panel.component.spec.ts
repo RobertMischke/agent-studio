@@ -48,13 +48,23 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     return [
       {
         id: 'core-run', displayName: 'Agent run', kind: 'core', phase: 'core',
-        usesModel: true, usesPrompt: false, supportsMode: false, cliType: 'claude',
+        runMode: 'sequential', dependsOn: [], idempotent: false, stub: false,
+        usesModel: false, usesPrompt: false, supportsMode: false, cliType: 'claude',
         promptTemplate: null, canDisable: false, defaultEnabled: true, supportsCondition: false,
       },
       {
         id: 'aspect-requirement-fit', displayName: 'Requirement fit', kind: 'aspect', phase: 'aspect',
+        runMode: 'parallel', dependsOn: ['core-run'], idempotent: true, stub: false,
+        resolvedModel: 'claude-opus-4.8', modelSource: 'runtime', resolvedThinkingLevel: 'medium',
         usesModel: true, usesPrompt: true, supportsMode: true, cliType: 'claude',
         promptTemplate: 'aspect-requirement-fit', canDisable: true, defaultEnabled: true, supportsCondition: true,
+      },
+      {
+        id: 'aspect-code-quality', displayName: 'Code quality', kind: 'aspect', phase: 'aspect',
+        runMode: 'parallel', dependsOn: ['core-run'], idempotent: true, stub: false,
+        resolvedModel: 'claude-sonnet-4.5', modelSource: 'project',
+        usesModel: true, usesPrompt: true, supportsMode: true, cliType: 'claude',
+        promptTemplate: 'aspect-code-quality', canDisable: true, defaultEnabled: true, supportsCondition: true,
       },
     ];
   }
@@ -106,7 +116,12 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(host.querySelector('[data-testid="pipeline-group-core"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-group-aspect"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-row-core-run"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="pipeline-step-row-aspect-requirement-fit"]')).toBeTruthy();
+    const aspectRow = host.querySelector('[data-testid="pipeline-step-row-aspect-requirement-fit"]');
+    expect(aspectRow).toBeTruthy();
+    expect(aspectRow?.getAttribute('data-kind')).toBe('aspect');
+    expect(aspectRow?.textContent).toContain('claude-opus-4.8');
+    expect(host.querySelector('[data-testid="pipeline-step-info-aspect-requirement-fit"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-step-drag-aspect-requirement-fit"]')?.getAttribute('draggable')).toBe('true');
 
     // Core step is locked on; the aspect step exposes its enable toggle.
     expect(host.querySelector('[data-testid="pipeline-step-enabled-core-run"]')).toBeNull();

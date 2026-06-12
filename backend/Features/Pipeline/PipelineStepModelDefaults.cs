@@ -10,15 +10,17 @@ namespace AgentStudio.Pipeline;
 /// so the pre-run pipeline view can show the same effective model the run would
 /// actually use: aspect verdicts fall back to the orchestrator default
 /// (<see cref="OrchestratorRunner.DefaultModel"/>), drift dimensions to the drift
-/// default (<see cref="DriftPostStepRunner.DefaultModel"/>), the opt-in prep pass
-/// to its fallback (<see cref="OrchestratorPrepHostedService.PrepFallbackModel"/>).
+/// default (<see cref="DriftPostStepRunner.DefaultModel"/>), the code-review
+/// grade to its quality-first default, and the opt-in prep pass to its fallback
+/// (<see cref="OrchestratorPrepHostedService.PrepFallbackModel"/>).
 ///
 /// <para>
 /// Deterministic steps (loop guard, reissue check, git-commit attribution,
-/// lint-scss, regression radar, the orchestrator gate rows) and the core agent
-/// run do not resolve a per-step LLM model through the resolver - the core run
-/// uses the task's own model, the gate rows are policy code - so they return
-/// null here and the pre-run view shows no resolved model for them.
+/// lint-scss, regression radar, the early post-core completeness gate) and the
+/// core agent run do not resolve a per-step LLM model through the resolver -
+/// the core run uses the task's own model and the deterministic gate rows are
+/// policy code - so they return null here and the pre-run view shows no
+/// resolved model for them.
 /// </para>
 /// </summary>
 public static class PipelineStepModelDefaults
@@ -34,6 +36,18 @@ public static class PipelineStepModelDefaults
         StepKind.Module when string.Equals(
             step.Id, PipelineCatalogue.PreOrchestratorPrepStepId, StringComparison.OrdinalIgnoreCase)
             => OrchestratorPrepHostedService.PrepFallbackModel,
+        StepKind.Orchestrator when string.Equals(
+            step.Id, PipelineCatalogue.CodeReviewGradeStepId, StringComparison.OrdinalIgnoreCase)
+            => AgentStudio.Review.CodeReviewGradeModelSelector.DefaultModel,
+        StepKind.Orchestrator when string.Equals(
+            step.Id, PipelineCatalogue.OrchestratorDecisionStepId, StringComparison.OrdinalIgnoreCase)
+            => OrchestratorRunner.DefaultModel,
+        StepKind.Orchestrator when string.Equals(
+            step.Id, PipelineCatalogue.ConflictResolutionStepId, StringComparison.OrdinalIgnoreCase)
+            => OrchestratorRunner.DefaultModel,
+        StepKind.Orchestrator when string.Equals(
+            step.Id, PipelineCatalogue.PostAbortReviewStepId, StringComparison.OrdinalIgnoreCase)
+            => OrchestratorRunner.DefaultModel,
         _ => null,
     };
 

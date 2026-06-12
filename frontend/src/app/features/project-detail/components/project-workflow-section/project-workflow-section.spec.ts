@@ -8,9 +8,9 @@ import { TaskService } from '../../../../services/task.service';
 /**
  * Render-path spec for the T6a Workflow / Lanes page (stage 1). Stubs
  * TaskService so the read-only surface renders from seeded settings:
- * the lane list, the live transition view (auto-commit / attribution /
+ * the combined lane + sort list, the live transition view (auto-commit / attribution /
  * gates / auto-push), and the stage 2/3 placeholders. Also verifies the
- * relocated per-lane sort controls reflect the resolved strategy map.
+ * per-lane sort controls reflect the resolved strategy map.
  */
 describe('ProjectWorkflowSectionComponent', () => {
   function mount() {
@@ -72,7 +72,7 @@ describe('ProjectWorkflowSectionComponent', () => {
     return fixture;
   }
 
-  it('renders the lane list in board order with one row per lane', () => {
+  it('renders the lane list in board order with one combined row per lane', () => {
     const el = mount().nativeElement as HTMLElement;
     const list = el.querySelector('[data-testid="workflow-lane-list"]');
     expect(list).toBeTruthy();
@@ -101,7 +101,7 @@ describe('ProjectWorkflowSectionComponent', () => {
     ).toBe('On completed');
   });
 
-  it('shows the relocated per-lane sort controls reflecting the resolved map', async () => {
+  it('shows per-lane sort controls inside the board-order rows', async () => {
     const fixture = mount();
     // ngModel defers its initial model->view write to a microtask, so wait for
     // the fixture to settle before reading the rendered <select> value.

@@ -120,8 +120,16 @@ public static class ProjectSettingsEndpoints
         // project can enable/disable, set a model on, or set a gate mode on.
         // The Settings panel reads this to render one control per step
         // without hardcoding the step list on the frontend.
-        app.MapGet("/api/projects/pipeline-catalogue", () =>
+        app.MapGet("/api/projects/pipeline-catalogue", (string? projectName, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
+            ProjectSettings? projectSettings = null;
+            if (!string.IsNullOrWhiteSpace(projectName))
+            {
+                var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+                if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+                projectSettings = settings.Get(projectName.Trim());
+            }
+
             var pipeline = PipelineCatalogue.Standard;
             var steps = pipeline.Pre.Select(s => ProjectPipelineStepDto(s, "pre"))
                 .Concat(pipeline.Core.Select(s => ProjectPipelineStepDto(s, "core")))
@@ -138,54 +146,59 @@ public static class ProjectSettingsEndpoints
                 return "post";
             }
 
-            static object ProjectPipelineStepDto(PipelineStep s, string phase) => new
+            object ProjectPipelineStepDto(PipelineStep s, string phase)
             {
-                id = s.Id,
-                displayName = s.DisplayName,
-                kind = s.Kind.ToString(),
-                phase,
-                // The core agent run cannot be disabled or model-overridden
-                // here (it uses the task's own CLI + model). Aspect, drift,
-                // and orchestrator review/decision rows invoke LLMs, so the
-                // admin exposes the shared CLI/model/thinking/prompt controls.
-                usesModel = s.Kind is StepKind.Aspect or StepKind.Drift or StepKind.Orchestrator,
-                usesPrompt = s.Kind is StepKind.Aspect or StepKind.Drift or StepKind.Orchestrator,
-                supportsMode = s.Kind is StepKind.Tool or StepKind.Orchestrator,
-                cliType = s.CliType,
-                promptTemplate = s.PromptTemplate,
-                // The loop guard is a safety net that always runs (the
-                // StuckLoopGuard circuit-breaker fires regardless of this row);
-                // the pipeline step only mirrors its state, so it is not an
-                // opt-out toggle - making it disable-able would let a project
-                // hide a loop the breaker still acts on.
-                canDisable = s.Kind != StepKind.Core
-                    && !string.Equals(s.Id, PipelineCatalogue.LoopGuardStepId, StringComparison.Ordinal),
-                // The drift post-steps default off (opt-in); every other step
-                // defaults on. The Settings UI uses this to render the toggle's
-                // initial state when the project has no explicit override.
-                defaultEnabled = s.DefaultEnabled,
-                supportsCondition = s.Kind != StepKind.Core,
-            };
+                var resolved = PipelineStepModelDefaults.Resolve(projectSettings, s);
+                var configured = PipelineStepConfigResolver.Lookup(projectSettings, s.Id);
+                var cliType = configured?.CliType ?? s.CliType ?? (resolved is null ? null : CliTypes.Claude);
+                var thinking = resolved is null
+                    ? null
+                    : PipelineStepConfigResolver.ResolveThinkingLevelWithSource(projectSettings, s, cliType, resolved.Model);
+                return new
+                {
+                    id = s.Id,
+                    displayName = s.DisplayName,
+                    kind = s.Kind.ToString(),
+                    phase,
+                    runMode = s.RunMode.ToString(),
+                    dependsOn = s.DependsOn,
+                    idempotent = s.Idempotent,
+                    stub = s.Stub,
+                    deferred = s.Deferred,
+                    model = s.Model,
+                    resolvedModel = resolved?.Model,
+                    modelSource = resolved?.Source,
+                    resolvedThinkingLevel = thinking?.ThinkingLevel,
+                    thinkingLevelSource = thinking?.Source,
+                    // The core agent run cannot be disabled or model-overridden
+                    // here (it uses the task's own CLI + model). Only steps that
+                    // the runtime actually resolves through PipelineStepConfigResolver
+                    // expose the shared CLI/model/thinking controls.
+                    usesModel = PipelineStepModelDefaults.UsesModel(s),
+                    usesPrompt = PipelineStepModelDefaults.UsesModel(s),
+                    supportsMode = s.Kind is StepKind.Tool or StepKind.Orchestrator,
+                    cliType,
+                    promptTemplate = s.PromptTemplate,
+                    // The loop guard is a safety net that always runs (the
+                    // StuckLoopGuard circuit-breaker fires regardless of this row);
+                    // the pipeline step only mirrors its state, so it is not an
+                    // opt-out toggle - making it disable-able would let a project
+                    // hide a loop the breaker still acts on.
+                    canDisable = s.Kind != StepKind.Core
+                        && !string.Equals(s.Id, PipelineCatalogue.LoopGuardStepId, StringComparison.Ordinal),
+                    // The drift post-steps default off (opt-in); every other step
+                    // defaults on. The Settings UI uses this to render the toggle's
+                    // initial state when the project has no explicit override.
+                    defaultEnabled = s.DefaultEnabled,
+                    supportsCondition = s.Kind != StepKind.Core,
+                };
+            }
 
             // The abort-triggered review step lives off the linear AllSteps list
             // (it only fires after a non-clean run end) but is configurable
             // through the same per-project override mechanism.
             var abort = PipelineCatalogue.AbortReviewStep;
-            steps.Add(new
-            {
-                id = abort.Id,
-                displayName = abort.DisplayName,
-                kind = abort.Kind.ToString(),
-                phase = "abort",
-                usesModel = true,
-                usesPrompt = true,
-                supportsMode = false,
-                cliType = abort.CliType,
-                promptTemplate = abort.PromptTemplate,
-                canDisable = true,
-                defaultEnabled = abort.DefaultEnabled,
-                supportsCondition = true,
-            });
+            steps.Add(ProjectPipelineStepDto(abort, "abort"));
 
             return Results.Ok(new { pipelineId = pipeline.Id, steps });
         });

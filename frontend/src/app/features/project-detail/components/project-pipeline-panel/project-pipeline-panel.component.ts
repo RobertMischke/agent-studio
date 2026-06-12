@@ -20,6 +20,7 @@ import type {
 import type { ProjectPipelineCostTimeline } from '../../../project-token-usage';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { TooltipDirective } from '../../../../components/tooltip';
+import type { StructuredTooltip } from '../../../../components/tooltip';
 import {
   PIPELINE_GATE_MODES,
   PIPELINE_CONDITIONS,
@@ -80,6 +81,8 @@ export class ProjectPipelinePanelComponent {
   /** Per-step write in flight; disables that row's controls until the PUT resolves. */
   readonly stepBusy: Record<string, boolean> = {};
   readonly orderBusy = signal(false);
+  readonly draggingStepId = signal<string | null>(null);
+  readonly dragTargetStepId = signal<string | null>(null);
 
   /**
    * In-progress condition edits, keyed by step id. Shadows the persisted
@@ -113,6 +116,11 @@ export class ProjectPipelinePanelComponent {
         id: step.id,
         displayName: step.displayName,
         kind: step.kind,
+        runMode: step.runMode ?? '',
+        dependsOn: step.dependsOn ?? [],
+        idempotent: step.idempotent ?? false,
+        stub: step.stub ?? false,
+        deferred: step.deferred ?? false,
         usesModel: step.usesModel,
         usesPrompt: step.usesPrompt,
         supportsMode: step.supportsMode,
@@ -123,6 +131,10 @@ export class ProjectPipelinePanelComponent {
         cliType: ov?.cliType ?? step.cliType ?? '',
         model: ov?.model ?? '',
         thinkingLevel: ov?.thinkingLevel ?? '',
+        effectiveCliType: ov?.cliType ?? step.cliType ?? (step.usesModel ? 'claude' : ''),
+        effectiveModel: ov?.model ?? step.resolvedModel ?? step.model ?? '',
+        effectiveModelSource: ov?.model ? 'step' : (step.modelSource ?? ''),
+        effectiveThinkingLevel: ov?.thinkingLevel ?? step.resolvedThinkingLevel ?? '',
         prompt: ov?.prompt ?? '',
         promptTemplate: step.promptTemplate ?? '',
         mode: ov?.mode ?? '',
@@ -162,7 +174,7 @@ export class ProjectPipelinePanelComponent {
   });
 
   private load(project: string): void {
-    this.jobService.getPipelineCatalogue().subscribe({
+    this.jobService.getPipelineCatalogue(project).subscribe({
       next: (cat) => { this.catalogue.set(cat.steps ?? []); this.loadError.set(null); },
       error: () => this.loadError.set('Could not load the pipeline catalogue.'),
     });
@@ -205,6 +217,88 @@ export class ProjectPipelinePanelComponent {
     const next = [...rows];
     [next[index], next[target]] = [next[target], next[index]];
     const stepIds = next
+      .filter(step => pipelineOrderSection(step) !== 'core')
+      .map(step => step.id);
+
+    this.orderBusy.set(true);
+    this.order.set(stepIds);
+    this.jobService.setProjectPipelineStepOrder(this.projectName(), stepIds).subscribe({
+      next: (res) => {
+        this.orderBusy.set(false);
+        this.order.set(res.pipelineStepOrder ?? stepIds);
+      },
+      error: () => {
+        this.orderBusy.set(false);
+        this.refreshOverrides(this.projectName());
+      },
+    });
+  }
+
+  canDragStep(step: PipelineAdminRow): boolean {
+    return (step.canMoveUp || step.canMoveDown) && !this.orderBusy();
+  }
+
+  onStepDragStart(event: DragEvent, step: PipelineAdminRow): void {
+    if (!this.canDragStep(step)) {
+      event.preventDefault();
+      return;
+    }
+    this.draggingStepId.set(step.id);
+    this.dragTargetStepId.set(null);
+    event.dataTransfer?.setData('text/plain', step.id);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  }
+
+  onStepDragOver(event: DragEvent, target: PipelineAdminRow): void {
+    const sourceId = this.draggingStepId() ?? event.dataTransfer?.getData('text/plain') ?? null;
+    if (!sourceId || sourceId === target.id || !this.canDropStep(sourceId, target.id)) return;
+    event.preventDefault();
+    this.dragTargetStepId.set(target.id);
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  }
+
+  onStepDrop(event: DragEvent, target: PipelineAdminRow): void {
+    const sourceId = this.draggingStepId() ?? event.dataTransfer?.getData('text/plain') ?? null;
+    this.draggingStepId.set(null);
+    this.dragTargetStepId.set(null);
+    if (!sourceId || sourceId === target.id || !this.canDropStep(sourceId, target.id)) return;
+
+    event.preventDefault();
+    const rect = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect();
+    const insertAfter = rect ? event.clientY > rect.top + rect.height / 2 : false;
+    this.reorderStep(sourceId, target.id, insertAfter);
+  }
+
+  onStepDragEnd(): void {
+    this.draggingStepId.set(null);
+    this.dragTargetStepId.set(null);
+  }
+
+  private canDropStep(sourceId: string, targetId: string): boolean {
+    const rows = orderedPipelineCatalogue(this.catalogue(), this.order());
+    const source = rows.find(step => step.id === sourceId);
+    const target = rows.find(step => step.id === targetId);
+    return !!source
+      && !!target
+      && pipelineOrderSection(source) !== 'core'
+      && pipelineOrderSection(source) === pipelineOrderSection(target);
+  }
+
+  private reorderStep(sourceId: string, targetId: string, insertAfter: boolean): void {
+    if (this.orderBusy()) return;
+    const rows = [...orderedPipelineCatalogue(this.catalogue(), this.order())];
+    const sourceIndex = rows.findIndex(step => step.id === sourceId);
+    const targetIndex = rows.findIndex(step => step.id === targetId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    const section = pipelineOrderSection(rows[sourceIndex]);
+    if (section === 'core' || section !== pipelineOrderSection(rows[targetIndex])) return;
+
+    const [source] = rows.splice(sourceIndex, 1);
+    const targetAfterRemoval = rows.findIndex(step => step.id === targetId);
+    if (targetAfterRemoval < 0) return;
+    rows.splice(targetAfterRemoval + (insertAfter ? 1 : 0), 0, source);
+
+    const stepIds = rows
       .filter(step => pipelineOrderSection(step) !== 'core')
       .map(step => step.id);
 
@@ -357,6 +451,124 @@ export class ProjectPipelinePanelComponent {
 
   asCliType(value: string | null | undefined): CliType | null {
     return value && (CLI_TYPES as readonly string[]).includes(value) ? value as CliType : null;
+  }
+
+  groupSummary(group: PipelineGroup): string {
+    const total = group.rows.length;
+    const on = group.rows.filter(row => row.enabled).length;
+    const llm = group.rows.filter(row => row.usesModel).length;
+    return `${total} steps · ${on} on${llm ? ` · ${llm} LLM` : ''}`;
+  }
+
+  modelSummary(step: PipelineAdminRow): string {
+    if (!step.usesModel) return 'no model';
+    return step.effectiveModel || 'runtime default';
+  }
+
+  modelSourceLabel(source: string | null | undefined): string {
+    switch ((source ?? '').trim().toLowerCase()) {
+      case 'step': return 'step override';
+      case 'project': return 'project default';
+      case 'global': return 'global default';
+      case 'catalogue': return 'catalogue default';
+      case 'runtime': return 'runtime default';
+      default: return 'default';
+    }
+  }
+
+  promptSummary(step: PipelineAdminRow): string {
+    if (!step.usesPrompt) return 'no prompt';
+    if (step.prompt) return 'inline override';
+    return step.promptTemplate || 'catalogue default';
+  }
+
+  modeSummary(step: PipelineAdminRow): string {
+    return step.mode || 'default';
+  }
+
+  conditionSummary(step: PipelineAdminRow): string {
+    if (!step.condition) return 'always';
+    if (step.conditionValue) return `${step.condition}: ${step.conditionValue}`;
+    return step.condition;
+  }
+
+  stepTooltip(step: PipelineAdminRow): StructuredTooltip {
+    const parts = [
+      this.stepPurpose(step),
+      `Run: ${this.runModeLabel(step.runMode)}${step.dependsOn.length ? ` after ${step.dependsOn.join(', ')}` : ''}.`,
+      step.usesModel
+        ? `Model: ${this.modelSummary(step)} (${this.modelSourceLabel(step.effectiveModelSource)}).`
+        : 'Model: not an LLM call for this step.',
+      step.usesPrompt ? `Prompt: ${this.promptSummary(step)}.` : 'Prompt: none.',
+      step.supportsMode ? `Gate: ${this.modeSummary(step)}.` : 'Gate: not configurable.',
+      step.supportsCondition ? `When: ${this.conditionSummary(step)}.` : 'When: always runs as part of the core step.',
+      step.deferred ? 'Deferred: this is triggered by an operator action, not automatically.' : '',
+      step.stub ? 'Planned slot: the pipeline records the slot, but implementation is outside this executor bracket.' : '',
+      step.idempotent ? 'Safe to retry.' : 'Not idempotent; repeated runs can have side effects.',
+    ].filter(Boolean);
+    return { title: step.displayName, body: parts.join('\n') };
+  }
+
+  private runModeLabel(value: string): string {
+    return value.toLowerCase() === 'parallel' ? 'parallel' : 'sequential';
+  }
+
+  private stepPurpose(step: PipelineAdminRow): string {
+    switch (step.id) {
+      case 'pre-loop-guard':
+        return 'Detects stuck auto-mode loops and surfaces the loop guard state before the agent run.';
+      case 'pre-orchestrator-prep':
+        return 'Optional prep pass that checks prompt clarity before work is admitted to Ready.';
+      case 'pre-reissue-open-items':
+        return 'On reissues, foregrounds unresolved open items so the next agent run does not restart blindly.';
+      case 'core-agent-run':
+        return 'Runs the task-owning CLI agent with the task prompt, branch/worktree context, and selected task model.';
+      case 'post-orchestrator-review':
+        return 'Early post-core completeness scan over close-out evidence before spending review tokens.';
+      case 'post-orchestrator-decision':
+        return 'Final orchestrator decision that accepts, reissues, or escalates after reviews and gates.';
+      case 'post-code-review-grade':
+        return 'LLM code-review pass that assigns the A/B/C/D quality grade visible on the task card.';
+      case 'post-build-test-gate':
+        return 'Runs the configured build/test gate and can reissue when the repository is red.';
+      case 'post-worktree-containment':
+        return 'Checks that work stayed inside the task worktree and did not leak into shared state.';
+      case 'post-integrate-merge':
+        return 'Keeps parallel task worktrees integrated with the project integration line.';
+      case 'post-conflict-resolution':
+        return 'Uses orchestrator reasoning when integration detects conflicts that need structured handling.';
+      case 'post-git-commit-attribution':
+        return 'Attributes commits to the task so review and merge screens know which changes belong together.';
+      case 'post-merge-into-develop':
+        return 'Operator-triggered delivery step that merges accepted task work into develop.';
+      case 'post-lint-scss':
+        return 'Runs frontend stylelint for SCSS quality and can warn or fail depending on gate mode.';
+      case 'post-regression-radar':
+        return 'Classifies changed specs as intended, at-risk, or drift without gating the lane decision.';
+      case 'post-wiki-maintenance':
+        return 'Maintains common-problem wiki entries from run outcomes when enabled.';
+      case 'post-wiki-learnings':
+        return 'Writes per-task learnings into the project wiki from structured run evidence.';
+      case 'post-abort-review':
+        return 'Optional review pass after an aborted or stopped run to decide rerun, reissue, or escalation.';
+      default:
+        if (step.id.startsWith('aspect-')) return 'Runs an LLM aspect review and records a focused verdict for auto-review.';
+        if (step.id.startsWith('post-drift-')) return 'Runs an opt-in drift analysis dimension after the main task decision.';
+        return 'Pipeline step in the project processing flow.';
+    }
+  }
+
+  kindKey(value: string | null | undefined): string {
+    return (value ?? '').trim().toLowerCase();
+  }
+
+  kindAbbrev(value: string | null | undefined): string {
+    switch (this.kindKey(value)) {
+      case 'orchestrator': return 'ORCH';
+      case 'module': return 'MOD';
+      case 'aspect': return 'ASP';
+      default: return (value ?? '').trim().toUpperCase();
+    }
   }
 
   formatCost = formatCost;

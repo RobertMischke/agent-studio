@@ -1,6 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
-import { TaskService } from '../../../../services/task.service';
-import type { TaskInfo } from '../../../../models/task.model';
+import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal } from '@angular/core';
 import {
   ProjectShellComponent,
   ProjectDetailComponent,
@@ -8,7 +6,6 @@ import {
   SecurityPanelComponent,
   UxuiPanelComponent,
   ProjectObservabilityPanelComponent,
-  ProjectProductRuntimePanelComponent,
   ProjectPipelinePanelComponent,
   ProjectSteeringDocsSectionComponent,
   ProjectSkillReadinessSectionComponent,
@@ -36,13 +33,11 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   'uxui',
   'token-usage',
   'observability',
-  'product-runtime',
   'steering',
   'wiki',
-  'jobs',
-  // Nav-rebuild step 2 (T5b): the Pipeline / Workflow / Prompts shells now
-  // host real content moved out of Project Settings (pipeline steps, lane
-  // sort) and the application-wide prompt-admin surface.
+  // Nav-rebuild step 2 (T5b): Pipeline / Workflow host real content moved
+  // out of Project Settings, and Prompts keeps the application-wide
+  // prompt-admin surface from the Context segment.
   'pipeline',
   'workflow',
   'prompts',
@@ -51,9 +46,8 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   'settings-defaults',
   'settings-overrides',
   'orchestrator',
-  'activity',
-  // Note: 'steering-docs' (tree container) and 'runtime-prompts' deliberately
-  // fall through to the shell's generic placeholder panel.
+  // Note: 'runtime-prompts' deliberately falls through to the shell's generic
+  // placeholder panel.
 ]);
 
 /**
@@ -63,9 +57,9 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
  * and every rail uses its real content panel where one exists.
  *
  * The rail is a collapsible-segment tree (ASS-1711): Insight / Quality /
- * Operations / Config segments fold; the "Steering Docs" container expands
- * to Architecture / Wiki / Agent Docs; "Runtime Prompts" is its own point;
- * and Settings expands to Workspace Defaults / Project Overrides.
+ * Context / Config segments fold; Context contains Architecture / Wiki /
+ * Agent Docs / Prompts / Runtime Prompts, and Settings expands to Workspace
+ * Defaults / Project Overrides.
  */
 @Component({
   selector: 'app-project-hub-view',
@@ -78,7 +72,6 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     UxuiPanelComponent,
     ProjectTokenUsagePanelComponent,
     ProjectObservabilityPanelComponent,
-    ProjectProductRuntimePanelComponent,
     ProjectPipelinePanelComponent,
     ProjectSteeringDocsSectionComponent,
     ProjectSkillReadinessSectionComponent,
@@ -91,7 +84,6 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   styleUrl: './project-hub-view.component.scss',
 })
 export class ProjectHubViewComponent {
-  private readonly jobService = inject(TaskService);
   private readonly overlays = inject(ProjectOverlaysService);
   private readonly tabState = inject(StudioTabStateService);
 
@@ -110,17 +102,6 @@ export class ProjectHubViewComponent {
       this.activeRail.set(isProjectRailKey(raw) ? raw : DEFAULT_PROJECT_RAIL_KEY);
     });
   }
-
-  readonly jobsForProject = computed<TaskInfo[]>(() => {
-    const grouped = this.jobService.grouped();
-    const out: TaskInfo[] = [];
-    for (const lane of Object.values(grouped)) {
-      for (const job of lane as TaskInfo[]) {
-        if (job.projectName === this.projectName()) out.push(job);
-      }
-    }
-    return out;
-  });
 
   hasCustomPanel(rail: ProjectRailKey): boolean {
     return RAILS_WITH_CUSTOM_PANEL.has(rail);
