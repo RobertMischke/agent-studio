@@ -113,6 +113,10 @@
                     @if (item.target) {
                       <span class="msg__target">→ {{ item.target }}</span>
                     }
+                    <time class="msg__item-time"
+                          data-testid="conversation-message-item-time"
+                          [attr.datetime]="item.timestamp"
+                          [appTooltip]="formatDateTime(item.timestamp)">{{ formatTime(item.timestamp) }}</time>
                     <app-markdown class="msg__body" [source]="item.body" />
                     @if (item.attachments?.length) {
                       <ul class="msg__attachments" aria-label="Attachments">
