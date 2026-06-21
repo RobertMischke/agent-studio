@@ -30,6 +30,9 @@ state.
   start, stop, continue, and mode surface.
 - `backend/Services/Runner/ProjectRunner.cs`: per-project pickup tick, active
   job latch, progress-first resume, dead-letter handling, and CLI spawn path.
+- `backend/Features/Runner/WorktreeRunPolicy.cs`: pure always-worktree policy -
+  whether a run must be worktree-isolated, the main-checkout guard condition, and
+  the cwd-keyed session-resume gate (see ADR-0057).
 - `backend/Services/Runner/AgentOutcomeAnalyzer.cs`: terminal sentinel and
   issue-kind classification.
 - `backend/Services/Runner/RunOutcomePolicy.cs`: deterministic outcome action
@@ -60,6 +63,13 @@ state.
   detection.
 - No-progress failures count across auto-pickup and `UserContinue` reissues
   until progress, review, or quarantine resets the streak.
+- Every coding run is worktree-isolated - single-slot resume/reissue included,
+  not just parallel slots. The shared main checkout is read-only reference + the
+  integration target; on a failed worktree prepare the run is deferred, never
+  run in the main checkout, and a coding run that resolves to the main checkout
+  is refused + escalated. Read-only (planning / research) and epic-planning runs
+  run in-place. See
+  [ADR-0057](../architecture/decisions/adr-archive.md#adr-0057---always-worktree-garantie-every-coding-run-is-worktree-isolated-including-single-slot-resumereissue-with-a-main-checkout-guard-2026-06-22).
 - Supervisor code is advice-first. Emergency primitives must call runner
   services, not poke task state directly.
 
