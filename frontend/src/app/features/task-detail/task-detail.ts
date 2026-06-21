@@ -33,6 +33,7 @@ import { NowTickService } from '../../services/now-tick.service';
 import { LayoutPanesService } from './services/layout-panes.service';
 import { TaskArtifactsService } from './services/task-artifacts.service';
 import { LanePagerService } from './state/lane-pager.service';
+import { TaskSelectionService } from './state/task-selection.service';
 import { ClaudeSessionPollService } from '../polling/services/claude-session-poll.service';
 import { SessionEventsPollService } from '../polling/services/session-events-poll.service';
 import { RunTimelinePollService } from '../polling/services/run-timeline-poll.service';
@@ -176,6 +177,13 @@ export class TaskDetailComponent implements OnDestroy {
 
   /** Lane-pager snapshot state for the header (read-only facades). */
   private readonly lanePager = inject(LanePagerService);
+  private readonly jobSelection = inject(TaskSelectionService);
+  /**
+   * True while the selection is fetching the next/previous task without a
+   * warmed prefetch to paint instantly. Drives the header's small loading
+   * indicator so pager/cursor steps over not-yet-cached tasks show feedback.
+   */
+  readonly detailLoading = this.jobSelection.detailLoading;
   /**
    * Pager position for the current job. Returns the 1-based index when
    * the job is still part of the snapshot, or 0 when the job has left

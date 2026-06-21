@@ -282,6 +282,14 @@ export class App implements OnInit, OnDestroy {
    * fetch yank the user back onto the task — the very F5 symptom, mid-session.
    */
   private studioActiveTabWasTask = false;
+  /**
+   * Set for one selection-change tick when the user steps through the lane
+   * via the pager / cursor keys (j/k/arrows/Prev/Next). The studio-shell
+   * mirror effect consumes it to RETARGET the active task tab in place
+   * rather than opening a fresh tab per step — so walking a lane reloads
+   * the one tab instead of leaving a trail of them.
+   */
+  private laneNavRetarget = false;
   private relatedOpenToken = 0;
   /**
    * Read-only "Verbose Debug" overlay state opened from the orchestrator
@@ -995,31 +1003,13 @@ export class App implements OnInit, OnDestroy {
     // path would set selectedJob() but the new shell would show no tab.
     effect(() => {
       const selected = this.selectedJob();
+      // Consume the pager/cursor retarget hint up-front (and unconditionally,
+      // so a no-op step never leaks the flag into a later genuine open).
+      const retargetNav = this.laneNavRetarget;
+      this.laneNavRetarget = false;
       if (!this.featureFlags.vsCodeLayout()) return;
       if (!selected) return;
-      if (selected.info.kind === 'epic') {
-        const key = `epic:${selected.info.taskKey}`;
-        const tabs = untracked(() => this.studioTabState.tabs());
-        const present = tabs.some((t) => t.kind === 'epic' && t.epicKey === selected.info.taskKey);
-        untracked(() => {
-          if (!present) {
-            this.studioTabState.open({ kind: 'epic', epicKey: selected.info.taskKey });
-          } else {
-            this.studioTabState.select(key);
-          }
-        });
-        return;
-      }
-      const key = `task:${selected.info.taskKey}`;
-      const tabs = untracked(() => this.studioTabState.tabs());
-      const present = tabs.some((t) => t.kind === 'task' && t.taskKey === selected.info.taskKey);
-      untracked(() => {
-        if (!present) {
-          this.studioTabState.open({ kind: 'task', taskKey: selected.info.taskKey });
-        } else {
-          this.studioTabState.select(key);
-        }
-      });
+      untracked(() => this.mirrorSelectionToStudioTab(selected, retargetNav));
     });
 
     // Studio-shell active-tab → selection sync (F5/reload fix). Makes the
@@ -1459,10 +1449,12 @@ export class App implements OnInit, OnDestroy {
     this.triage.start(info, ev);
   }
   onTriageNext(info: TaskInfo) {
-    this.triage.next(info);
+    // Pager / cursor navigation reuses the current task tab (see the
+    // studio-shell mirror effect) instead of stacking a fresh tab per step.
+    if (this.triage.next(info)) this.laneNavRetarget = true;
   }
   onTriagePrev(info: TaskInfo) {
-    this.triage.prev(info);
+    if (this.triage.prev(info)) this.laneNavRetarget = true;
   }
 
   // Cycle 10b: board-mutation handlers delegate to BoardMutationsService.
@@ -1862,6 +1854,46 @@ export class App implements OnInit, OnDestroy {
         });
       },
     });
+  }
+
+  /**
+   * Map the current `selectedJob` onto a studio editor tab (vsCodeLayout):
+   * focus the existing tab when present, otherwise open a fresh one — except
+   * for a pager / cursor step (`retargetNav`), which reuses the active task
+   * tab in place so walking a lane reloads one tab instead of stacking a
+   * trail of them. Extracted from the mirror effect so the open-vs-retarget
+   * decision is unit-testable without driving the full app lifecycle.
+   */
+  private mirrorSelectionToStudioTab(selected: TaskDetail, retargetNav: boolean): void {
+    if (selected.info.kind === 'epic') {
+      const key = `epic:${selected.info.taskKey}`;
+      const present = this.studioTabState.tabs().some(
+        (t) => t.kind === 'epic' && t.epicKey === selected.info.taskKey,
+      );
+      if (!present) {
+        this.studioTabState.open({ kind: 'epic', epicKey: selected.info.taskKey });
+      } else {
+        this.studioTabState.select(key);
+      }
+      return;
+    }
+    const key = `task:${selected.info.taskKey}`;
+    const present = this.studioTabState.tabs().some(
+      (t) => t.kind === 'task' && t.taskKey === selected.info.taskKey,
+    );
+    if (present) {
+      // Already open elsewhere → just focus it (never duplicate).
+      this.studioTabState.select(key);
+      return;
+    }
+    const active = this.studioTabState.activeTab();
+    if (retargetNav && active?.kind === 'task') {
+      // Pager / cursor step from one task to the next: reuse the tab we
+      // navigated away from instead of opening a new one.
+      this.studioTabState.retarget(studioTabKey(active), { kind: 'task', taskKey: selected.info.taskKey });
+    } else {
+      this.studioTabState.open({ kind: 'task', taskKey: selected.info.taskKey });
+    }
   }
 
   private openEpicDetailFromTaskAnchor(detail: TaskDetail, anchorTaskKey: string): void {

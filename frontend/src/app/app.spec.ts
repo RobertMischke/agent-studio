@@ -318,3 +318,118 @@ describe('App epic tab navigation', () => {
     expect(app.selectedJob()?.info.id).toBe('epic-a');
   });
 });
+
+describe('App studio-tab mirror (pager reuse)', () => {
+  const TAB_STORAGE_KEY = 'atp.studio.tabs.v1';
+  const VSCODE_FLAG_KEY = 'atp.flag.vsCodeLayout';
+
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    localStorage.removeItem(TAB_STORAGE_KEY);
+    localStorage.removeItem(VSCODE_FLAG_KEY);
+  });
+
+  async function configure(): Promise<App> {
+    TestBed.resetTestingModule();
+    localStorage.removeItem(TAB_STORAGE_KEY);
+    localStorage.setItem(VSCODE_FLAG_KEY, '1');
+    await TestBed.configureTestingModule({
+      imports: [App],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    return TestBed.createComponent(App).componentInstance;
+  }
+
+  function taskDetail(id: string): TaskDetail {
+    return {
+      info: {
+        id,
+        taskKey: `C:/watch::${id}`,
+        title: id,
+        state: '2-ready',
+        order: 1,
+        agent: 'codex',
+        createdAt: '2026-01-01T00:00:00Z',
+        watchPath: 'C:/watch',
+        projectName: 'Project A',
+        folderPath: `C:/watch/.orchestrator/jobs/${id}`,
+        lastActivity: '2026-01-01T00:00:00Z',
+        sessionName: null,
+        model: null,
+        cliType: 'codex',
+        useOwnSession: null,
+        lastUsage: null,
+        execution: null,
+        commit: null,
+      } as TaskInfo,
+      promptMarkdown: '',
+      promptHistory: [],
+      titleHistory: [],
+      statusMarkdown: null,
+      contextUsage: null,
+      log: [],
+      summaryState: null,
+      reviewEvidence: [],
+    };
+  }
+
+  /** Directly drive the extracted mirror mapping (the effect body). */
+  function mirror(app: App, detail: TaskDetail, retargetNav: boolean): void {
+    (app as unknown as { mirrorSelectionToStudioTab(d: TaskDetail, r: boolean): void })
+      .mirrorSelectionToStudioTab(detail, retargetNav);
+  }
+
+  it('retargets the active task tab in place on a pager/cursor step (no new tab)', async () => {
+    const app = await configure();
+    app.studioTabState.open({ kind: 'task', taskKey: 'C:/watch::task-a' });
+    expect(app.studioTabState.tabs().map(studioTabKey)).toEqual([
+      'board:__all__',
+      'task:C:/watch::task-a',
+    ]);
+
+    // Pager step from A → B reuses A's tab.
+    mirror(app, taskDetail('task-b'), true);
+
+    expect(app.studioTabState.tabs().map(studioTabKey)).toEqual([
+      'board:__all__',
+      'task:C:/watch::task-b',
+    ]);
+    expect(app.studioTabState.activeKey()).toBe('task:C:/watch::task-b');
+  });
+
+  it('opens a fresh tab for a non-pager selection (board click)', async () => {
+    const app = await configure();
+    app.studioTabState.open({ kind: 'task', taskKey: 'C:/watch::task-a' });
+
+    // No retarget hint → the second task gets its own tab.
+    mirror(app, taskDetail('task-b'), false);
+
+    expect(app.studioTabState.tabs().map(studioTabKey)).toEqual([
+      'board:__all__',
+      'task:C:/watch::task-a',
+      'task:C:/watch::task-b',
+    ]);
+    expect(app.studioTabState.activeKey()).toBe('task:C:/watch::task-b');
+  });
+
+  it('focuses an already-open tab instead of duplicating, even on a pager step', async () => {
+    const app = await configure();
+    app.studioTabState.open({ kind: 'task', taskKey: 'C:/watch::task-a' });
+    app.studioTabState.open({ kind: 'task', taskKey: 'C:/watch::task-b' });
+
+    // Paging back to A, which still has its own tab → focus it, keep both.
+    mirror(app, taskDetail('task-a'), true);
+
+    expect(app.studioTabState.tabs().map(studioTabKey)).toEqual([
+      'board:__all__',
+      'task:C:/watch::task-a',
+      'task:C:/watch::task-b',
+    ]);
+    expect(app.studioTabState.activeKey()).toBe('task:C:/watch::task-a');
+  });
+});

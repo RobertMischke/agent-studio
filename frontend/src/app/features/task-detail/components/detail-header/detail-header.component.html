@@ -94,6 +94,16 @@
               (click)="pagerNext.emit()">›</button>
     </div>
   }
+  @if (loading()) {
+    <span class="detail__loading"
+          data-testid="detail-loading"
+          role="status"
+          aria-live="polite"
+          [appTooltip]="'Loading task…'"
+          aria-label="Loading task">
+      <span class="detail__loading-ring" aria-hidden="true"></span>
+    </span>
+  }
   <select #stateSelect
           class="detail__state detail__state--select"
           [class]="'detail__state detail__state--select state--' + selectedLane()"

@@ -58,6 +58,12 @@ export class DetailHeaderComponent {
   readonly pagerTotal = input(0);
   readonly pagerCanPrev = input(false);
   readonly pagerCanNext = input(false);
+  /**
+   * True while the selection is fetching the next/previous task without a
+   * warmed prefetch. Renders a small spinner in the pager cluster so a
+   * (non-instant) pager/cursor step shows the reload is in progress.
+   */
+  readonly loading = input(false);
   /** Human-readable label of the snapshot's original lane (e.g. "Ready"). */
   readonly pagerLaneLabel = input<string>('');
   /** Index of the open job inside the live lane peers (0-based; -1 == unknown). */
