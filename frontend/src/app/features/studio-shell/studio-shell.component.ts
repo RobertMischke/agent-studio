@@ -673,7 +673,7 @@ export class StudioShellComponent {
     const tab = this.activeTab();
     if (!tab) return null;
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : 'board';
-    if (tab.kind === 'hub') return 'hub';
+    if (tab.kind === 'hub') return tab.section === 'wiki' ? 'wiki' : 'hub';
     if (tab.kind === 'backlog') return tab.projectName === null ? null : 'backlog';
     if (tab.kind === 'epics') return tab.projectName === null ? null : 'epics';
     return null;
@@ -769,6 +769,15 @@ export class StudioShellComponent {
 
   openHub(projectName: string): void {
     this.tabState.open({ kind: 'hub', projectName });
+  }
+
+  /**
+   * Explorer "Wiki" link for a single project. Opens (or focuses) the
+   * project's Project Hub tab deep-linked to its Wiki rail, so the wiki is
+   * reachable as a top-level sidebar item under Project Hub.
+   */
+  openWiki(projectName: string): void {
+    this.tabState.open({ kind: 'hub', projectName, section: 'wiki' });
   }
 
   /**

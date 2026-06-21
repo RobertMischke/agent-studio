@@ -177,6 +177,12 @@
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'hub' ? 'page' : null"
                               [testid]="'studio-explorer-project-hub-' + p.name"
                               (selectRequest)="openHubRequest.emit(p.name)" />
+                <app-tree-row level="child" glyph="book"
+                              label="Wiki"
+                              [active]="p.isActive && activeProjectSurface() === 'wiki'"
+                              [ariaCurrent]="p.isActive && activeProjectSurface() === 'wiki' ? 'page' : null"
+                              [testid]="'studio-explorer-project-wiki-' + p.name"
+                              (selectRequest)="openWikiRequest.emit(p.name)" />
                 <app-tree-row level="child" glyph="list"
                               label="Backlog"
                               [active]="p.isActive && activeProjectSurface() === 'backlog'"

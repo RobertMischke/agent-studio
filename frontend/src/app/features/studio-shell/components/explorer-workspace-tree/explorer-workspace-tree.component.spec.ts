@@ -240,6 +240,52 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(hub?.getAttribute('aria-current')).toBe('page');
   });
 
+  it('renders a Wiki row under Project Hub that emits openWikiRequest', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha', { isActive: true })]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.detectChanges();
+
+    const emitted: string[] = [];
+    cmp.openWikiRequest.subscribe(name => emitted.push(name));
+
+    const root: HTMLElement = fixture.nativeElement;
+    const rows = Array.from(
+      root.querySelectorAll<HTMLElement>('.studio-tree-children .tree-row[data-testid^="studio-explorer-project-"]'),
+    ).map(el => el.getAttribute('data-testid'));
+    // Wiki sits directly after Project Hub in the per-project child list.
+    expect(rows).toEqual([
+      'studio-explorer-project-board-Alpha',
+      'studio-explorer-project-hub-Alpha',
+      'studio-explorer-project-wiki-Alpha',
+      'studio-explorer-project-backlog-Alpha',
+      'studio-explorer-project-epics-Alpha',
+    ]);
+
+    const wiki = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-wiki-Alpha"]');
+    wiki?.click();
+    expect(emitted).toEqual(['Alpha']);
+  });
+
+  it('highlights only the Wiki row when the active surface is the wiki rail', () => {
+    const fixture = mount();
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha', { isActive: true })]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.componentRef.setInput('activeProjectSurface', 'wiki');
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const hub = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-hub-Alpha"]');
+    const wiki = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-wiki-Alpha"]');
+
+    expect(hub?.classList.contains('tree-row--active')).toBe(false);
+    expect(wiki?.classList.contains('tree-row--active')).toBe(true);
+    expect(wiki?.getAttribute('aria-current')).toBe('page');
+  });
+
   it('right-click opens a text-only Rename menu that starts the inline rename', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;
