@@ -39,6 +39,11 @@ under `frontend/`.
   PR text are English.
 - When adding a document under `docs/`, add one row to
   [docs/README.md](docs/README.md) in the same change.
+- CLI crashes, run-outcome classification, retries, or orchestrator
+  drive-to-conclusion: read
+  [docs/wiki/concepts/orchestrator-drive-to-conclusion.html](docs/wiki/concepts/orchestrator-drive-to-conclusion.html)
+  before changing that logic, and maintain it after. Append each incident to
+  its case log (date, slug, what crashed, which terminal it reached).
 - Agent shell policy: default to bash/sh, prefer existing `.sh` scripts, and
   avoid PowerShell-specific file creation.
 

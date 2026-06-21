@@ -38,6 +38,16 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
 - If an operation is missing from the API, create a follow-up task instead of
   reaching around the API.
 
+## Related Concepts
+
+- [../wiki/concepts/task-integration-and-merge-workflow.md](../wiki/concepts/task-integration-and-merge-workflow.md):
+  how a finished task's branch reaches `develop` (worktree, deferred merge, the
+  `5-human-review -> 6-completed` accept trigger).
+- [../wiki/concepts/task-integration-merge-config-analysis.html](../wiki/concepts/task-integration-merge-config-analysis.html):
+  why integration semantics should not depend on `maxParallelism`.
+- [../wiki/concepts/auto-review-evidence-gate-analysis.html](../wiki/concepts/auto-review-evidence-gate-analysis.html):
+  why auto-review reissues good work ("Needs rework") and the evidence-gate fix.
+
 ## Key Code
 
 - `backend/Endpoints/Tasks/*`: task CRUD, runner, files, git, review evidence,

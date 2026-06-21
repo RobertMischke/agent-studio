@@ -14,6 +14,10 @@ state.
 - Use [docs/contracts/run-outcome.md](../contracts/run-outcome.md) for the shared
   classification that drives lane routing, `status.md`, and frontend failure
   surfacing.
+- Read [docs/wiki/concepts/orchestrator-drive-to-conclusion.html](../wiki/concepts/orchestrator-drive-to-conclusion.html)
+  before touching reissue, retry, CLI-crash, or classifier logic: it holds the
+  target model (retry-with-cooldown, no classifier-unknown, honest human-review
+  terminal) and a running case log. Append new crash incidents there.
 - Use [docs/contracts/agent-task.md](../contracts/agent-task.md) for the boundary
   between the application-owned lifecycle and the CLI-owned task work.
 - Use [docs/research/orchestrator-decision-protocol-2026-05.md](../research/orchestrator-decision-protocol-2026-05.md)
