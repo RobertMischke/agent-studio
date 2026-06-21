@@ -48,6 +48,7 @@ Use this page as the first stop when you need the right document quickly.
 | Supported CLIs | [cli/supported-clis.md](cli/supported-clis.md) |
 | Setup | [operations/setup/README.md](operations/setup/README.md) |
 | Common problems | [wiki/common-problems/README.md](wiki/common-problems/README.md) |
+| API project identity / watchPath | [wiki/concepts/api-project-identity-and-watchpath.md](wiki/concepts/api-project-identity-and-watchpath.md) |
 
 ## Organization Rules
 

@@ -41,6 +41,11 @@ Every mutating request **must** carry the `X-Client-Id: local-default` header.
 The `ClientIdentityMiddleware` rejects mutations without it as 401. Read
 requests do not need the header but it is harmless to include.
 
+**Use `/api/tasks`, not `/api/jobs`.** `/api/jobs` is a legacy compatibility
+alias mapped to the same handlers; the canonical route is `/api/tasks`. The raw
+`watchPath` key and the path-versus-shortCode direction are explained in
+[../../../docs/wiki/concepts/api-project-identity-and-watchpath.md](../../../docs/wiki/concepts/api-project-identity-and-watchpath.md).
+
 ## Common pitfall: the watchPath quirk
 
 Every mutation that targets a specific task needs a `watchPath` query parameter.
