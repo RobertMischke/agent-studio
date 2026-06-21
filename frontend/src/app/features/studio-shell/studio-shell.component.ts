@@ -29,6 +29,13 @@ import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
 import { TaskSelectionService } from '../task-detail';
 import { ProjectDetailComponent } from '../project-detail';
+import {
+  PROJECT_RAIL_ITEMS,
+  DEFAULT_PROJECT_RAIL_KEY,
+  isProjectRailKey,
+  type ProjectRailItem,
+} from '../project-detail/components/project-shell/project-shell.config';
+import type { StudioIconName } from '../../components/studio-icon/studio-icon.component';
 import { UiPreferencesService } from '../shell';
 import { BoardFiltersService, BacklogTriageService, flattenGrouped } from '../board';
 import { UpdateClientService } from '../../services/update.service';
@@ -662,6 +669,18 @@ export class StudioShellComponent {
     return map;
   });
 
+  /** Project display name → registry shortCode (e.g. "Agent Software Studio"
+   *  → "ASS"), used to keep project-scoped tab titles short and scannable. */
+  readonly projectShortCodeByName = computed<ReadonlyMap<string, string>>(() => {
+    const map = new Map<string, string>();
+    for (const ws of this.registryWorkspaces()) {
+      for (const p of ws.projects) {
+        if (p.displayName && p.shortCode) map.set(p.displayName, p.shortCode);
+      }
+    }
+    return map;
+  });
+
   /** Project name driving the currently open Board tab (or null when none). */
   readonly activeBoardProject = computed<string | null>(() => {
     const tab = this.activeTab();
@@ -1214,15 +1233,32 @@ export class StudioShellComponent {
     window.addEventListener('mouseup', onUp);
   }
 
+  /** Project's registry shortCode (e.g. "ASS") when known, else the full
+   *  display name. Keeps project-scoped tab titles short and scannable while
+   *  degrading cleanly for projects without a registry shortCode. */
+  private projectShortLabel(projectName: string): string {
+    return this.projectShortCodeByName().get(projectName) ?? projectName;
+  }
+
+  /** Resolve a hub tab's `section` to its rail item (label, icon). A missing
+   *  or unknown section falls back to the default rail (`overview`). */
+  private railItemForSection(section: string | undefined): ProjectRailItem {
+    const key = isProjectRailKey(section) ? section : DEFAULT_PROJECT_RAIL_KEY;
+    return (
+      PROJECT_RAIL_ITEMS.find(i => i.key === key) ??
+      PROJECT_RAIL_ITEMS.find(i => i.key === DEFAULT_PROJECT_RAIL_KEY)!
+    );
+  }
+
   /** Map a tab to its displayable label so the template stays terse. */
   tabLabel(tab: StudioTab): string {
     switch (tab.kind) {
       case 'board':
-        return tab.projectName === '__all__' ? 'All projects · Board' : `${tab.projectName} · Board`;
+        return tab.projectName === '__all__' ? 'All projects · Board' : `${this.projectShortLabel(tab.projectName)} · Board`;
       case 'backlog':
-        return tab.projectName === null ? 'All projects · Backlog' : `${tab.projectName} · Backlog`;
+        return tab.projectName === null ? 'All projects · Backlog' : `${this.projectShortLabel(tab.projectName)} · Backlog`;
       case 'epics':
-        return tab.projectName === null ? 'All projects · Epics' : `${tab.projectName} · Epics`;
+        return tab.projectName === null ? 'All projects · Epics' : `${this.projectShortLabel(tab.projectName)} · Epics`;
       case 'epic': {
         const labelKey = tab.viewTaskKey ?? tab.epicKey;
         const job = this.findJob(labelKey);
@@ -1233,7 +1269,7 @@ export class StudioShellComponent {
         return job?.title || job?.id || tab.taskKey;
       }
       case 'hub':
-        return `${tab.projectName} · Hub`;
+        return `${this.projectShortLabel(tab.projectName)} · ${this.railItemForSection(tab.section).label}`;
       case 'diff':
         return tab.commitSha;
       case 'activity': {
@@ -1259,6 +1295,16 @@ export class StudioShellComponent {
       const job = this.findJob(tab.taskKey);
       if (!job) return null;
       return job.key || `#${job.order ?? '?'}`;
+    }
+    return null;
+  }
+
+  /** Leading icon for the tab strip. Hub tabs show their active section's
+   *  rail icon (e.g. `book` for Wiki); other kinds render none here (the
+   *  epic tab keeps its own dedicated glyph in the template). */
+  tabIcon(tab: StudioTab): StudioIconName | null {
+    if (tab.kind === 'hub') {
+      return this.railItemForSection(tab.section).railIcon ?? null;
     }
     return null;
   }
