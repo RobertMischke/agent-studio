@@ -16,7 +16,8 @@ namespace AgentStudio.Tests;
 public class RunQuarantineBreakerTests
 {
     [Theory]
-    [InlineData(RunIssueKind.ClassifierUnknown)]
+    [InlineData(RunIssueKind.InfraCrash)]
+    [InlineData(RunIssueKind.OrchestratorInconclusive)]
     [InlineData(RunIssueKind.MissingTerminalSentinel)]
     [InlineData(RunIssueKind.NoAgentOutput)]
     [InlineData(RunIssueKind.HeuristicDone)]

@@ -141,15 +141,15 @@ public class RunOutcomeContractTests
         Assert.True(terminal.ShouldShowFailureToast);
     }
 
-    // Classifier-unknown hardening (AC#1 / AC#3): a failed run whose agent text
-    // could not be deterministically classified (RunIssueKind.ClassifierUnknown)
+    // Committed-partial hardening (AC#1 / AC#3): a failed run whose agent text
+    // could not be mapped to a terminal verdict (RunIssueKind.OrchestratorInconclusive)
     // but which committed real work must surface at the terminal layer as an
     // honest "committed-partial" - routed to review, Partial verdict, and NO
-    // crash toast. The classifier-unknown cause is carried by the TASK-level
-    // RunOutcomePolicy (reissue-once-then-accept-with-marker); the per-run
-    // terminal report must not pile a hard FAILURE on top of it.
+    // crash toast. The inconclusive cause is carried by the TASK-level
+    // RunOutcomePolicy (NotifyUserAndStop); the per-run terminal report must
+    // not pile a hard FAILURE on top of the committed work.
     [Fact]
-    public void ClassifierUnknownShape_WithCommits_IsCommittedPartial_NotHardFailure()
+    public void OrchestratorInconclusiveShape_WithCommits_IsCommittedPartial_NotHardFailure()
     {
         var outcome = new AgentOutcome(
             Kind: AgentOutcomeKind.Unknown,
@@ -161,7 +161,7 @@ public class RunOutcomeContractTests
             OutputLineCount: 40,
             DurationSeconds: 120.0)
         {
-            IssueKind = RunIssueKind.ClassifierUnknown
+            IssueKind = RunIssueKind.OrchestratorInconclusive
         };
 
         var terminal = TerminalRunOutcomeClassifier.Classify(
@@ -177,12 +177,12 @@ public class RunOutcomeContractTests
     // Layer separation pin: with zero commits the terminal layer still reports
     // the run itself as "failed" (honest per-RUN report, crash toast on). This
     // is deliberately NOT the same as a terminal user-visible TASK failure - the
-    // "never a terminal FAILURE for classifier-unknown" guarantee lives in
-    // RunOutcomePolicy (reissue-once-then-accept-with-marker), not here. This
-    // test exists so a future change cannot quietly collapse the two layers by
-    // softening the per-run report and calling the hardening "done".
+    // task-level handling of an inconclusive run lives in RunOutcomePolicy
+    // (NotifyUserAndStop), not here. This test exists so a future change cannot
+    // quietly collapse the two layers by softening the per-run report and
+    // calling the hardening "done".
     [Fact]
-    public void ClassifierUnknownShape_ZeroCommits_TerminalLayerReportsRunFailed()
+    public void OrchestratorInconclusiveShape_ZeroCommits_TerminalLayerReportsRunFailed()
     {
         var outcome = new AgentOutcome(
             Kind: AgentOutcomeKind.Unknown,
@@ -194,7 +194,7 @@ public class RunOutcomeContractTests
             OutputLineCount: 40,
             DurationSeconds: 120.0)
         {
-            IssueKind = RunIssueKind.ClassifierUnknown
+            IssueKind = RunIssueKind.OrchestratorInconclusive
         };
 
         var terminal = TerminalRunOutcomeClassifier.Classify(
@@ -204,6 +204,33 @@ public class RunOutcomeContractTests
         Assert.Equal("Failed", terminal.ProtocolResult);
         Assert.False(terminal.ShouldMoveToReview);
         Assert.True(terminal.ShouldShowFailureToast);
+    }
+
+    // Drive-to-conclusion step 1 acceptance: the legacy "classifier-unknown"
+    // verdict is fully retired from live emission. The enum member must be gone
+    // from both the issue-kind and the chat-surface enums, and NO live surface
+    // (chat tag or bus topic) may emit the string "classifier-unknown". The new
+    // InfraCrash / OrchestratorInconclusive kinds replace it. (Archived on-disk
+    // logs that still carry the old chip are recognised by TaskScannerService
+    // for backward-compatible rendering; that is a separate, deliberate path and
+    // is not "live emission".)
+    [Fact]
+    public void ClassifierUnknown_IsFullyRetiredFromLiveEmission()
+    {
+        Assert.DoesNotContain("ClassifierUnknown", Enum.GetNames<RunIssueKind>());
+        Assert.DoesNotContain("ClassifierUnknown", Enum.GetNames<OrchestratorMessageKind>());
+
+        foreach (var kind in Enum.GetValues<OrchestratorMessageKind>())
+        {
+            Assert.NotEqual("classifier-unknown", kind.ToTag());
+            Assert.NotEqual("classifier-unknown", kind.ToBusTopic());
+        }
+
+        // The replacements are present and wired to their honest tags/topics.
+        Assert.Equal("infra-crash", OrchestratorMessageKind.InfraCrash.ToTag());
+        Assert.Equal("infra-crash", OrchestratorMessageKind.InfraCrash.ToBusTopic());
+        Assert.Equal("orchestrator-inconclusive", OrchestratorMessageKind.OrchestratorInconclusive.ToTag());
+        Assert.Equal("orchestrator-inconclusive", OrchestratorMessageKind.OrchestratorInconclusive.ToBusTopic());
     }
 
     // The bug this guards: five identical Codex runs (all exitCode=-1, all

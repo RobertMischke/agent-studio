@@ -156,14 +156,16 @@ public enum OrchestratorMessageKind
     MissingTerminalSentinel,
     /// <summary>The agent reported done without a structured sentinel; kept as visible legacy heuristic.</summary>
     HeuristicDone,
-    /// <summary>The classifier could not map the agent text to a known outcome.</summary>
-    ClassifierUnknown,
+    /// <summary>The agent CLI crashed hard (process death, exitCode &lt; 0) before reaching a terminal verdict; the orchestrator stops and surfaces it for review.</summary>
+    InfraCrash,
+    /// <summary>The run failed with real agent text the contract could not map to a terminal verdict; the orchestrator stops and hands the task to the user.</summary>
+    OrchestratorInconclusive,
     /// <summary>
     /// The agent CLI failed to launch or its <c>--resume</c> target was
     /// rejected before any agent turn happened (exit != 0, ~0s, only a CLI
     /// error fragment). The orchestrator treats this as a recoverable
     /// host/CLI condition and rebuilds from disk via Recovery on the next
-    /// attempt, rather than surfacing a terminal classifier-unknown FAILURE.
+    /// attempt, rather than surfacing a terminal inconclusive FAILURE.
     /// </summary>
     CliLaunchFailed,
     /// <summary>
@@ -249,7 +251,8 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.WatchdogWarning   => "watchdog",
         OrchestratorMessageKind.MissingTerminalSentinel => "missing-terminal-sentinel",
         OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
-        OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
+        OrchestratorMessageKind.InfraCrash        => "infra-crash",
+        OrchestratorMessageKind.OrchestratorInconclusive => "orchestrator-inconclusive",
         OrchestratorMessageKind.CliLaunchFailed   => "cli-launch-failed",
         OrchestratorMessageKind.EmptyFastExit     => "empty-fast-exit",
         OrchestratorMessageKind.GiveUp            => "giveup",
@@ -276,7 +279,8 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.WatchdogWarning   => "watchdog-warning",
         OrchestratorMessageKind.MissingTerminalSentinel => "missing-terminal-sentinel",
         OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
-        OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
+        OrchestratorMessageKind.InfraCrash        => "infra-crash",
+        OrchestratorMessageKind.OrchestratorInconclusive => "orchestrator-inconclusive",
         OrchestratorMessageKind.CliLaunchFailed   => "cli-launch-failed",
         OrchestratorMessageKind.EmptyFastExit     => "empty-fast-exit",
         OrchestratorMessageKind.EnvironmentBlocker => "environment-blocker",
