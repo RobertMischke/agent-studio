@@ -303,6 +303,66 @@ public class ProjectDocsService
     }
 
     /// <summary>
+    /// The most-recently-edited wiki documents for the dashboard "recent edits"
+    /// list: page (rel path + title), git author, and timestamp, newest first,
+    /// one entry per document. Author + time come from git history (ground
+    /// truth) rather than any app-internal edit log, mirroring the per-doc
+    /// history panel. Companion sidecars, non-document files, and paths that no
+    /// longer exist on disk (deletions in the log) are dropped. Returns an empty
+    /// list - never null payload fields - when the project, base dir, or repo
+    /// can't be resolved so the surface degrades to "no recent edits".
+    /// </summary>
+    public WikiRecentEdits? GetWikiRecentEdits(string projectName, GitService git, int limit = 12)
+    {
+        var entry = FindProject(projectName);
+        if (entry == null) return null;
+        var baseDir = ResolveBaseDir(entry);
+        if (baseDir == null) return null;
+        if (limit <= 0) limit = 12;
+
+        var wikiDir = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
+        var exists = Directory.Exists(wikiDir);
+        if (!exists) return new WikiRecentEdits(projectName, wikiDir, false, []);
+
+        var repoRoot = git.ResolveRepoRootForProject(projectName);
+        if (string.IsNullOrWhiteSpace(repoRoot))
+            return new WikiRecentEdits(projectName, wikiDir, true, []);
+
+        var docsRepoRel = Path.GetRelativePath(repoRoot, wikiDir).Replace('\\', '/');
+        // Ask git for more distinct files than we need: some will be filtered
+        // out as companions, deletions, or non-doc files below.
+        var raw = git.GetRecentEditsUnderPath(repoRoot, docsRepoRel, Math.Min(limit * 4, 200));
+
+        var results = new List<WikiRecentEdit>();
+        foreach (var e in raw)
+        {
+            var full = Path.GetFullPath(Path.Combine(repoRoot, e.RepoRelPath));
+            if (!full.StartsWith(wikiDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                && !full.Equals(wikiDir, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
+            var ext = Path.GetExtension(full);
+            if (!WikiDocExtensions.Contains(ext)) continue;
+            if (IsWikiCompanionFile(docsRel)) continue;
+            if (!File.Exists(full)) continue; // a deletion in the log
+
+            var title = ExtractDocTitle(full, ext)
+                ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(full));
+            results.Add(new WikiRecentEdit(
+                RelPath: docsRel,
+                Title: title,
+                Author: e.Author,
+                AuthorDateUtc: e.AuthorDateUtc,
+                Sha: e.Sha,
+                ShortSha: e.ShortSha,
+                Subject: e.Subject));
+            if (results.Count >= limit) break;
+        }
+
+        return new WikiRecentEdits(projectName, wikiDir, true, results);
+    }
+
+    /// <summary>
     /// Recursively maps a docs directory into wiki tree nodes. Folders with no
     /// document descendants are dropped so the tree only surfaces navigable
     /// content. Hidden entries (dot-prefixed) are skipped.
@@ -936,6 +996,19 @@ public record WikiSaveResult(bool Success, string? FullPath, bool Changed, strin
 
 /// <summary>History + provenance payload for one wiki doc.</summary>
 public record WikiFileHistory(string RelPath, string? Model, WikiDocMetadata Metadata, List<GitCommitInfo> Commits);
+
+/// <summary>One row in the wiki dashboard's "recent edits" list.</summary>
+public record WikiRecentEdit(
+    string RelPath,
+    string Title,
+    string Author,
+    DateTime AuthorDateUtc,
+    string Sha,
+    string ShortSha,
+    string Subject);
+
+/// <summary>Recent-edits payload backing the wiki dashboard landing surface.</summary>
+public record WikiRecentEdits(string ProjectName, string BaseDir, bool Exists, List<WikiRecentEdit> Edits);
 
 public record SecurityMeta(string? LastReviewDate, string? Rating, string? Summary);
 public record SecurityFileEntry(string Name, string RelPath, DateTime UpdatedAt, long Size);

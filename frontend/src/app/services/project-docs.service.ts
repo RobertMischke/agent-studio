@@ -9,6 +9,7 @@ import {
   WikiFileHistory,
   WikiFileSaveResult,
   WikiOverview,
+  WikiRecentEdits,
   WikiRevisionContent,
   WikiTree
 } from '../models/project-docs.model';
@@ -59,6 +60,13 @@ export class ProjectDocsService {
   getWikiTree(projectName: string) {
     return this.http.get<WikiTree>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/tree`
+    );
+  }
+
+  /** Recently-edited wiki pages (page / git author / when), newest first. */
+  getWikiRecentEdits(projectName: string, limit = 12) {
+    return this.http.get<WikiRecentEdits>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/recent?limit=${limit}`
     );
   }
 

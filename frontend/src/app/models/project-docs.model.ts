@@ -129,6 +129,25 @@ export interface WikiTree {
   root: WikiTreeNode[];
 }
 
+/** One recently-edited wiki page (page / git author / when), newest first. */
+export interface WikiRecentEdit {
+  relPath: string;
+  title: string;
+  author: string;
+  authorDateUtc: string;
+  sha: string;
+  shortSha: string;
+  subject: string;
+}
+
+/** Recent-edits payload backing the wiki dashboard landing surface. */
+export interface WikiRecentEdits {
+  projectName: string;
+  baseDir: string;
+  exists: boolean;
+  edits: WikiRecentEdit[];
+}
+
 /** Content of a wiki doc at a past commit (the "view old revision" payload). */
 export interface WikiRevisionContent {
   relPath: string;

@@ -91,6 +91,22 @@ public record GitCommitInfo(
 public record GenerateMessageResult(string? Message, string? Error);
 
 /// <summary>
+/// The most-recent commit that touched a single file under a directory walk.
+/// Backs the wiki dashboard's "recent edits" list (page / author / when),
+/// derived from git history rather than any app-internal edit log so the
+/// author + timestamp are ground truth. Returned by
+/// <see cref="GitService.GetRecentEditsUnderPath"/>, newest first, one entry
+/// per distinct path.
+/// </summary>
+public record GitRecentFileEdit(
+    string RepoRelPath,
+    string Sha,
+    string ShortSha,
+    DateTime AuthorDateUtc,
+    string Author,
+    string Subject);
+
+/// <summary>
 /// Per-commit enrichment for the deterministic commit-attribution step: the
 /// full commit body (<c>%B</c>, scanned for <c>Co-Authored-By:</c> trailers
 /// so an agent co-author is detected even when the operator is the author)
@@ -2552,6 +2568,81 @@ public class GitService
             "--shortstat", $"--pretty=format:{fmt}", "--", repoRelPath.Replace('\\', '/'));
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
         return ParseLogBlocks(output);
+    }
+
+    /// <summary>
+    /// Walks the commit history under <paramref name="repoRelDir"/> and returns
+    /// the most-recent commit that touched each distinct file, newest first.
+    /// Backs the wiki dashboard's "recent edits" surface: which page changed
+    /// last, by whom (git author), and when. One entry per path; a file that
+    /// appears in several commits is reported only at its newest one. The walk
+    /// is bounded by <paramref name="commitScan"/> (how many commits to read)
+    /// and the result by <paramref name="limit"/> (how many distinct files to
+    /// return). Returns an empty list when the repo or directory can't be
+    /// resolved, mirroring the other read-only git lookups on this service.
+    /// </summary>
+    public List<GitRecentFileEdit> GetRecentEditsUnderPath(
+        string repoRoot, string repoRelDir, int limit = 20, int commitScan = 200)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot)) return [];
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        if (!Directory.Exists(root)) return [];
+        if (limit <= 0) limit = 20;
+        if (commitScan <= 0) commitScan = 200;
+
+        // Records are separated by Record Separator (0x1E); fields inside the
+        // header line by Unit Separator (0x1F). --name-only lists each changed
+        // path on its own line after the header. Because git log is newest
+        // first, the first time we see a path is its most-recent commit.
+        const string fmt = "%x1e%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
+        var pathspec = string.IsNullOrWhiteSpace(repoRelDir) ? "." : repoRelDir.Replace('\\', '/');
+        var (output, _, code) = RunGitArgs(root,
+            "log", "--no-merges", $"--max-count={commitScan}",
+            "--name-only", $"--pretty=format:{fmt}", "--", pathspec);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+        return ParseRecentEdits(output, limit);
+    }
+
+    /// <summary>
+    /// Parses <c>git log --name-only --pretty=format:&lt;RS&gt;%H&lt;US&gt;...</c>
+    /// output (see <see cref="GetRecentEditsUnderPath"/>) into per-file
+    /// most-recent-commit records. Split out for unit testing.
+    /// </summary>
+    internal static List<GitRecentFileEdit> ParseRecentEdits(string output, int limit)
+    {
+        const char RS = '\x1e';
+        const char US = '\x1f';
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var list = new List<GitRecentFileEdit>();
+        var raw = output.Replace("\r\n", "\n");
+        foreach (var record in raw.Split(RS, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var lines = record.Split('\n');
+            if (lines.Length == 0) continue;
+            var header = lines[0];
+            var parts = header.Split(US);
+            if (parts.Length < 5) continue;
+            if (!DateTime.TryParse(parts[2], System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var ts))
+                continue;
+            var when = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
+            for (var i = 1; i < lines.Length; i++)
+            {
+                var path = lines[i].Trim();
+                if (string.IsNullOrEmpty(path)) continue;
+                if (!seen.Add(path)) continue;
+                list.Add(new GitRecentFileEdit(
+                    RepoRelPath: path,
+                    Sha: parts[0],
+                    ShortSha: parts[1],
+                    AuthorDateUtc: when,
+                    Author: parts[3],
+                    Subject: parts[4]));
+                if (list.Count >= limit) return list;
+            }
+        }
+        return list;
     }
 
     /// <summary>

@@ -1,0 +1,75 @@
+<section class="wdash" data-testid="project-wiki-dashboard">
+  <div class="wdash__grid">
+    <article class="wdash__panel" data-testid="project-wiki-dashboard-recent">
+      <header class="wdash__head">
+        <app-studio-icon name="activity" [size]="13"></app-studio-icon>
+        <h3>Recently edited</h3>
+        <span class="wdash__count">{{ recent().length }}</span>
+      </header>
+
+      @if (hasRecent()) {
+        <ul class="wdash__list">
+          @for (row of recent(); track row.relPath) {
+            <li class="wdash__row" [attr.data-testid]="'project-wiki-dashboard-recent-row-' + row.relPath">
+              <button class="wdash__row-main" type="button"
+                      [attr.data-testid]="'project-wiki-dashboard-recent-open-' + row.relPath"
+                      (click)="openPage.emit({ relPath: row.relPath, type: row.type })">
+                <span class="wdash__kind">{{ kindLabel(row.type) }}</span>
+                <span class="wdash__text">
+                  <strong class="wdash__title">{{ row.title }}</strong>
+                  <span class="wdash__meta">
+                    <span class="wdash__author">{{ row.author }}</span>
+                    <span class="wdash__dot" aria-hidden="true">&middot;</span>
+                    <time [attr.datetime]="row.authorDateUtc"
+                          [appTooltip]="absoluteTime(row.authorDateUtc)">{{ relativeTime(row.authorDateUtc) }}</time>
+                  </span>
+                </span>
+              </button>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="wdash__empty" data-testid="project-wiki-dashboard-recent-empty">
+          No recent edits found in git history.
+        </p>
+      }
+    </article>
+
+    <article class="wdash__panel" data-testid="project-wiki-dashboard-drift">
+      <header class="wdash__head">
+        <app-studio-icon name="diff" [size]="13"></app-studio-icon>
+        <h3>Needs attention</h3>
+        <span class="wdash__count">{{ highDrift().length }}</span>
+      </header>
+
+      @if (hasDrift()) {
+        <ul class="wdash__list">
+          @for (row of highDrift(); track row.relPath) {
+            <li class="wdash__row" [attr.data-testid]="'project-wiki-dashboard-drift-row-' + row.relPath">
+              <button class="wdash__row-main" type="button"
+                      [attr.data-testid]="'project-wiki-dashboard-drift-open-' + row.relPath"
+                      (click)="openDrift.emit({ relPath: row.relPath, type: row.type })">
+                <span class="wdash__grade" [attr.data-tone]="row.tone"
+                      [attr.aria-label]="row.grade ? 'Drift grade ' + row.grade : 'Drift suspected'">
+                  {{ row.grade ?? '?' }}
+                </span>
+                <span class="wdash__text">
+                  <strong class="wdash__title">{{ row.title }}</strong>
+                  @if (row.summary) {
+                    <span class="wdash__summary">{{ row.summary }}</span>
+                  } @else {
+                    <code class="wdash__path">{{ row.relPath }}</code>
+                  }
+                </span>
+              </button>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="wdash__empty" data-testid="project-wiki-dashboard-drift-empty">
+          No high-drift pages. Knowledge looks aligned.
+        </p>
+      }
+    </article>
+  </div>
+</section>
