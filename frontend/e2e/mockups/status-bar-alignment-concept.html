@@ -351,17 +351,70 @@
     }
 
     .statusbar__quota-card {
+      appearance: none;
+      font: inherit;
       gap: 6px;
       flex: 0 1 auto;
-      max-width: 178px;
-      padding: 0 7px;
+      max-width: 210px;
+      padding: 0 6px;
+      border: 1px solid transparent;
       background: var(--status-chip);
       color: var(--status-muted);
+      cursor: pointer;
     }
 
-    .statusbar__quota-card strong {
+    .statusbar__quota-card:hover {
+      background: var(--status-chip-hover);
+      border-color: var(--status-border);
+      color: var(--status-text);
+    }
+
+    .statusbar__quota-card[data-tone="warn"] {
+      border-color: color-mix(in srgb, var(--status-warn) 34%, transparent);
+    }
+
+    .statusbar__quota-card[data-tone="hot"] {
+      border-color: color-mix(in srgb, #f38ba8 44%, transparent);
+    }
+
+    .statusbar__cli-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 13px;
+      height: 13px;
+      flex: 0 0 13px;
+      font-size: 12px;
+      line-height: 1;
+    }
+
+    .statusbar__quota-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--status-muted);
+      font-weight: 620;
+    }
+
+    .statusbar__quota-metric {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .statusbar__quota-value {
+      min-width: 24px;
+      text-align: right;
       color: var(--status-text);
       font-weight: 650;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .statusbar__quota-tag {
+      color: var(--status-faint);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
 
     .statusbar__meter {
@@ -434,10 +487,11 @@
       }
 
       .statusbar__quota-card {
-        max-width: 112px;
+        max-width: 154px;
+        gap: 5px;
+        padding-inline: 5px;
       }
 
-      .statusbar__quota-label,
       .statusbar__meter {
         display: none;
       }
@@ -449,11 +503,16 @@
 
     @container statusbar (width <= 940px) {
       .statusbar__left {
-        max-width: 42%;
+        max-width: 52%;
       }
 
-      .statusbar__quota {
+      .statusbar__quota-label,
+      .statusbar__quota-tag {
         display: none;
+      }
+
+      .statusbar__quota-card {
+        max-width: none;
       }
 
       .statusbar__defaults-meta {
@@ -508,6 +567,19 @@
         display: none;
       }
 
+      .statusbar__quota {
+        gap: 3px;
+      }
+
+      .statusbar__quota-card {
+        gap: 3px;
+        padding-inline: 4px;
+      }
+
+      .statusbar__quota-metric--secondary {
+        display: none;
+      }
+
       .statusbar__defaults {
         width: var(--status-item-height);
         padding: 0;
@@ -521,6 +593,16 @@
         clip: rect(0 0 0 0);
         clip-path: inset(50%);
         white-space: nowrap;
+      }
+    }
+
+    @container statusbar (width <= 460px) {
+      .statusbar__running-word {
+        display: none;
+      }
+
+      .statusbar__chip {
+        padding-inline: 5px;
       }
     }
 
@@ -597,7 +679,7 @@
           <div class="statusbar__left">
             <span class="statusbar__chip statusbar__chip--live">
               <span class="statusbar__dot" aria-hidden="true"></span>
-              <span><strong>2</strong> running</span>
+              <span><strong>2</strong> <span class="statusbar__running-word">running</span></span>
             </span>
             <span class="statusbar__chip statusbar__chip--quiet statusbar__chip--auto">
               <span class="statusbar__glyph" aria-hidden="true">↻</span>
@@ -605,16 +687,43 @@
             </span>
             <span class="statusbar__sep" aria-hidden="true"></span>
             <span class="statusbar__quota">
-              <span class="statusbar__quota-card">
-                <span class="statusbar__quota-label">Daily</span>
-                <strong>68%</strong>
-                <span class="statusbar__meter" aria-hidden="true"><span style="width: 68%"></span></span>
-              </span>
-              <span class="statusbar__quota-card">
-                <span class="statusbar__quota-label">Month</span>
-                <strong>42%</strong>
-                <span class="statusbar__meter statusbar__meter--warn" aria-hidden="true"><span style="width: 42%"></span></span>
-              </span>
+              <button class="statusbar__quota-card" type="button" aria-label="Claude usage: 83 percent in 5 hours, 51 percent this week" data-tone="hot">
+                <span class="statusbar__cli-icon" aria-hidden="true">◆</span>
+                <span class="statusbar__quota-label">Claude</span>
+                <span class="statusbar__quota-metric">
+                  <span class="statusbar__quota-value">83</span>
+                  <span class="statusbar__quota-tag">5H</span>
+                  <span class="statusbar__meter statusbar__meter--warn" aria-hidden="true"><span style="width: 83%"></span></span>
+                </span>
+                <span class="statusbar__quota-metric statusbar__quota-metric--secondary">
+                  <span class="statusbar__quota-value">51</span>
+                  <span class="statusbar__quota-tag">WK</span>
+                  <span class="statusbar__meter" aria-hidden="true"><span style="width: 51%"></span></span>
+                </span>
+              </button>
+              <button class="statusbar__quota-card" type="button" aria-label="Codex usage: 41 percent in 5 hours, 19 percent this week">
+                <span class="statusbar__cli-icon" aria-hidden="true">✦</span>
+                <span class="statusbar__quota-label">Codex</span>
+                <span class="statusbar__quota-metric">
+                  <span class="statusbar__quota-value">41</span>
+                  <span class="statusbar__quota-tag">5H</span>
+                  <span class="statusbar__meter" aria-hidden="true"><span style="width: 41%"></span></span>
+                </span>
+                <span class="statusbar__quota-metric statusbar__quota-metric--secondary">
+                  <span class="statusbar__quota-value">19</span>
+                  <span class="statusbar__quota-tag">WK</span>
+                  <span class="statusbar__meter" aria-hidden="true"><span style="width: 19%"></span></span>
+                </span>
+              </button>
+              <button class="statusbar__quota-card" type="button" aria-label="Copilot usage: 72 percent this month" data-tone="warn">
+                <span class="statusbar__cli-icon" aria-hidden="true">⌁</span>
+                <span class="statusbar__quota-label">Copilot</span>
+                <span class="statusbar__quota-metric">
+                  <span class="statusbar__quota-value">72</span>
+                  <span class="statusbar__quota-tag">MO</span>
+                  <span class="statusbar__meter statusbar__meter--warn" aria-hidden="true"><span style="width: 72%"></span></span>
+                </span>
+              </button>
             </span>
           </div>
 
