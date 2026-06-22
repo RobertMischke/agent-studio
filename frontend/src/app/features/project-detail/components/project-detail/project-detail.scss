@@ -415,33 +415,6 @@
 .proj-detail__count-num { color: var(--studio-fg); font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .proj-detail__count-state { color: var(--studio-fg-muted); font-size: 0.70rem; text-transform: uppercase; letter-spacing: 0.04em; }
 
-.proj-detail__status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px;
-}
-.proj-detail__status-cell {
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 6px;
-  background: rgba(255,255,255,0.035);
-}
-.proj-detail__status-label,
-.proj-detail__status-note {
-  display: block;
-  color: var(--studio-fg-muted);
-  font-size: 0.72rem;
-}
-.proj-detail__status-cell strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--studio-fg, #e2e8f0);
-  font-size: 0.9rem;
-  overflow-wrap: anywhere;
-}
-.proj-detail__status-note { margin-top: 3px; }
-
 .proj-detail__health {
   display: flex;
   align-items: center;

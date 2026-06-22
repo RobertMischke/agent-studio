@@ -8,27 +8,11 @@
       </dl>
     }
 
-    <section class="proj-detail__group">
-      <h3>Pipeline snapshot</h3>
-      <div class="proj-detail__status-grid">
-        <div class="proj-detail__status-cell">
-          <span class="proj-detail__status-label">Mode</span>
-          <strong>{{ effectiveMode() }}</strong>
-        </div>
-        <div class="proj-detail__status-cell">
-          <span class="proj-detail__status-label">Active task</span>
-          <strong>{{ activeRunner()?.activeJobId || 'none' }}</strong>
-          @if (activeLaneLabel(); as lane) {
-            <span class="proj-detail__status-note">{{ lane }}</span>
-          }
-        </div>
-        <div class="proj-detail__status-cell">
-          <span class="proj-detail__status-label">Queued</span>
-          <strong>{{ activeRunner()?.queuedJobIds?.length ?? 0 }}</strong>
-        </div>
-      </div>
-      <p class="proj-detail__hint">{{ modeHint() }}</p>
-    </section>
+    <app-project-cli-environment-section
+      [projectName]="projectName()"
+      [paths]="paths()"
+      [modeRows]="cliEnvironmentModeRows()"
+      [contextModeRows]="cliEnvironmentContextModeRows()" />
 
     <section class="proj-detail__group">
       <h3>Lane counts</h3>
@@ -40,34 +24,6 @@
           </div>
         }
       </div>
-    </section>
-
-    <section class="proj-detail__group">
-      <h3>Queue health</h3>
-      @if (queueHealth(); as health) {
-        <div class="proj-detail__health" [class.proj-detail__health--critical]="health.severity === 'critical'">
-          <strong>{{ queueHealthLabel(health, 'Healthy', 'issue') }}</strong>
-          <span>{{ health.severity }}</span>
-        </div>
-        @if (health.missingJobJson.length > 0) {
-          <h4>Folders without job.json</h4>
-          <ul class="proj-detail__compact-list">
-            @for (item of health.missingJobJson.slice(0, 8); track item.path) {
-              <li><code>{{ item.lane }}</code> {{ item.id }}</li>
-            }
-          </ul>
-        }
-        @if (health.duplicates.length > 0) {
-          <h4>Duplicate slugs</h4>
-          <ul class="proj-detail__compact-list">
-            @for (dup of health.duplicates.slice(0, 8); track dup.id) {
-              <li><code>{{ dup.id }}</code> in {{ dup.locations.length }} lanes</li>
-            }
-          </ul>
-        }
-      } @else {
-        <p class="studio-empty">Queue health is loading.</p>
-      }
     </section>
 
     <section class="proj-detail__group">

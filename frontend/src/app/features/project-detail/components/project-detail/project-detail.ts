@@ -21,6 +21,7 @@ import { AutonomySliderComponent } from '../autonomy-slider/autonomy-slider';
 import { AnalysisReport } from '../../../../models/analysis-report.model';
 import { TooltipDirective } from '../../../../components/tooltip';
 import { ProjectWorkflowSectionComponent } from '../project-workflow-section/project-workflow-section';
+import { ProjectCliEnvironmentSectionComponent } from '../project-cli-environment-section/project-cli-environment-section';
 interface ProjectSettingsRow {
   autoCommit: boolean;
   autoPushStrategy: AutoPushStrategy;
@@ -72,6 +73,7 @@ export type ProjectDetailView =
     ProjectAnalysisReportsSectionComponent,
     ProjectWorkspaceSectionComponent,
     ProjectWorkflowSectionComponent,
+    ProjectCliEnvironmentSectionComponent,
     AutonomySliderComponent,
     TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -126,9 +128,9 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     'custom': { label: 'Custom', hint: 'Inject no permission flags — the CLI obeys whatever its own config files dictate.' },
   };
   readonly cliSourceMeta: Record<string, { label: string; hint: string }> = {
-    'project': { label: 'project', hint: 'Set explicitly for this project — overrides global config and the platform default.' },
-    'global': { label: 'global', hint: 'Inherited from the CLI’s own global config file (e.g. ~/.codex/config.toml).' },
-    'default': { label: 'default', hint: 'Platform default (YOLO) — no project override and no global config detected.' },
+    'project': { label: 'project override', hint: 'Set explicitly for this project — overrides global config and the platform default.' },
+    'global': { label: 'global config', hint: 'Inherited from the CLI’s own global config file (e.g. ~/.codex/config.toml).' },
+    'default': { label: 'platform default', hint: 'Platform default (YOLO) — no project override and no global config detected.' },
   };
 
   cliModeLabel(mode: string | null | undefined) { return this.cliModeMeta[mode ?? '']?.label ?? mode ?? ''; }
@@ -152,6 +154,12 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     });
   });
 
+  readonly cliEnvironmentModeRows = computed(() => this.cliModeRows().map(row => ({
+    cliType: row.cliType,
+    mode: row.mode,
+    source: this.cliSourceLabel(row.source),
+  })));
+
   // T1b / ASS-1742: per-project CLI context mode (clean isolated home vs the
   // operator's shared global state). Default CLEAN for reproducible coding
   // runs. Shared-only CLIs (Copilot, Gemini) render the dropdown disabled and
@@ -168,8 +176,8 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     'shared': { label: 'Shared', hint: 'Der globale CLI-Zustand des Operators (Session-Historie, Memory, Settings). Nur bewusst waehlen.' },
   };
   readonly cliContextSourceMeta: Record<string, { label: string; hint: string }> = {
-    'project': { label: 'project', hint: 'Explizit fuer dieses Projekt gesetzt — ueberschreibt den Plattform-Default.' },
-    'default': { label: 'default', hint: 'Plattform-Default (clean) — kein Projekt-Override gesetzt.' },
+    'project': { label: 'project override', hint: 'Explizit fuer dieses Projekt gesetzt — ueberschreibt den Plattform-Default.' },
+    'default': { label: 'platform default', hint: 'Plattform-Default (clean) — kein Projekt-Override gesetzt.' },
   };
 
   cliContextModeLabel(mode: string | null | undefined) { return this.cliContextModeMeta[mode ?? '']?.label ?? mode ?? ''; }
@@ -192,6 +200,13 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       };
     });
   });
+
+  readonly cliEnvironmentContextModeRows = computed(() => this.cliContextModeRows().map(row => ({
+    cliType: row.cliType,
+    mode: row.mode,
+    source: this.cliContextSourceLabel(row.source),
+    supported: row.supported,
+  })));
 
   /**
    * Mode buttons. The four runner modes are: manual (off), auto-single
@@ -277,25 +292,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   });
 
   readonly activeRunner = computed(() => this.runnerStatus()?.projects?.[this.projectName()] ?? null);
-
-  readonly activeLaneLabel = computed(() => {
-    const activeId = this.activeRunner()?.activeJobId;
-    if (!activeId) return null;
-    const grouped = this.grouped();
-    if (!grouped) return null;
-    const lanes: readonly [string, readonly { id: string }[]][] = [
-      ['Backlog', grouped.backlog ?? []],
-      ['Preparation', grouped.preparation ?? []],
-      ['Ready', grouped.ready ?? []],
-      ['Progress', grouped.progress ?? []],
-      ['Post Processing', grouped.autoReview ?? grouped.review],
-      ['Review', grouped.humanReview ?? []],
-      ['Escalated', grouped.escalated ?? []],
-      ['Delivered', grouped.completed],
-      ['Archive', grouped.archive],
-    ];
-    return lanes.find(([, jobs]) => jobs.some(j => j.id === activeId))?.[0] ?? null;
-  });
 
   queueHealthLabel(health: ProjectQueueHealth, emptyLabel: string, noun: string): string {
     if (health.issueCount === 0) return emptyLabel;

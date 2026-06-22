@@ -122,12 +122,13 @@ public sealed class SessionRegistry
 
     private CliUsageSection BuildSection(ICliExecutionService cli)
     {
-        var (available, version, _) = cli.TestCliPath();
+        var (available, version, path) = cli.TestCliPath();
         var section = new CliUsageSection
         {
             CliType = cli.CliType,
             Available = available,
-            Version = version
+            Version = version,
+            Path = path
         };
 
         try

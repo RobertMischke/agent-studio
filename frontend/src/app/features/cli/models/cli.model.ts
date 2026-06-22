@@ -93,6 +93,7 @@ export interface CliUsageSection {
   cliType: CliType;
   available: boolean;
   version: string | null;
+  path: string | null;
   error: string | null;
   projects: CliUsageProjectGroup[];
 }

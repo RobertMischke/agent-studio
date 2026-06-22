@@ -123,6 +123,8 @@ public record CliUsageSection
     public string CliType { get; init; } = "";
     public bool Available { get; init; }
     public string? Version { get; init; }
+    /// <summary>Resolved executable path used by the backend for this CLI.</summary>
+    public string? Path { get; init; }
     public string? Error { get; init; }
     /// <summary>Sessions grouped by project (cwd or project name).</summary>
     public List<CliUsageProjectGroup> Projects { get; init; } = [];

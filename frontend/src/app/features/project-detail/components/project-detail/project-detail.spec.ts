@@ -83,4 +83,31 @@ describe('ProjectDetailComponent (smoke)', () => {
     expect(host.querySelector('.proj-detail__head')).toBeNull();
     expect(host.querySelector('[data-testid="project-detail-open-feed"]')).toBeNull();
   });
+
+  it('renders CLI environment on overview instead of pipeline and queue summaries', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ProjectDetailComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ProjectDetailComponent);
+    fixture.componentRef.setInput('projectName', 'Demo Project');
+    fixture.componentRef.setInput('view', 'overview');
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const directGroupTitles = Array
+      .from(host.querySelectorAll<HTMLElement>('.proj-detail__group > h3'))
+      .map(el => el.textContent?.trim());
+    expect(directGroupTitles).not.toContain('Pipeline snapshot');
+    expect(directGroupTitles).not.toContain('Queue health');
+
+    const cliEnv = host.querySelector('[data-testid="project-detail-cli-environment"]');
+    expect(cliEnv?.textContent).toContain('CLI environment');
+  });
 });

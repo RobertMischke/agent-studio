@@ -1,0 +1,84 @@
+<section class="cli-env" data-testid="project-detail-cli-environment">
+  <div class="cli-env__title">
+    <div>
+      <h3>CLI environment</h3>
+      <p>
+        {{ summary().available }} / {{ summary().total }} CLIs ready;
+        {{ summary().sessions }} project session{{ summary().sessions === 1 ? '' : 's' }} found.
+      </p>
+    </div>
+    <button type="button"
+            class="cli-env__refresh"
+            [disabled]="cliUsageLoading()"
+            (click)="refresh()">
+      {{ cliUsageLoading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </div>
+
+  @if (cliUsageError(); as err) {
+    <p class="cli-env__warn" data-testid="project-detail-cli-environment-error">
+      <span aria-hidden="true">!</span>
+      <span>{{ err }}</span>
+    </p>
+  }
+
+  @if (cliUsageLoading() && !cliUsageLoaded()) {
+    <p class="studio-empty">CLI environment is loading.</p>
+  } @else {
+    <div class="cli-env__grid">
+      @for (row of rows(); track row.cliType) {
+        <article class="cli-env__card"
+                 [class.cli-env__card--offline]="!row.available"
+                 [attr.data-testid]="'project-detail-cli-env-' + row.cliType">
+          <header class="cli-env__head">
+            <span class="cli-env__icon" aria-hidden="true">{{ row.icon }}</span>
+            <strong>{{ row.label }}</strong>
+            <span class="cli-env__status"
+                  [class.cli-env__status--ready]="row.available"
+                  [class.cli-env__status--issue]="!row.available && row.error">
+              {{ statusLabel(row) }}
+            </span>
+          </header>
+
+          <dl class="cli-env__facts">
+            <div>
+              <dt>Version</dt>
+              <dd>{{ row.version || (row.available ? 'unknown' : 'not available') }}</dd>
+            </div>
+            <div>
+              <dt>Executable</dt>
+              <dd [appTooltip]="row.path || 'No executable resolved'">{{ row.path || 'not resolved' }}</dd>
+            </div>
+            <div>
+              <dt>Session</dt>
+              <dd [appTooltip]="latestSessionTooltip(row)">
+                {{ latestSessionLabel(row) }}
+                @if (row.latestSession?.updatedAt; as updated) {
+                  <span>- {{ formatTime(updated) }}</span>
+                }
+              </dd>
+            </div>
+            <div>
+              <dt>Project sessions</dt>
+              <dd>{{ row.sessionCount }}</dd>
+            </div>
+            <div>
+              <dt>Permissions</dt>
+              <dd>{{ modeLabel(row.mode) }} <span>({{ sourceLabel(row.modeSource) }})</span></dd>
+            </div>
+            <div>
+              <dt>Context</dt>
+              <dd>
+                {{ contextModeLabel(row.contextMode) }}
+                <span>({{ sourceLabel(row.contextSource) }})</span>
+                @if (!row.contextSupported) {
+                  <span>- shared-only</span>
+                }
+              </dd>
+            </div>
+          </dl>
+        </article>
+      }
+    </div>
+  }
+</section>

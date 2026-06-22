@@ -40,6 +40,7 @@ function buildUsageReport(
         cliType: 'claude',
         available: true,
         version: 'stub-1.0',
+        path: '/usr/local/bin/claude',
         error: null,
         projects: [
           {
@@ -66,9 +67,9 @@ function buildUsageReport(
           }
         ]
       },
-      { cliType: 'copilot', available: true, version: null, error: null, projects: [] },
-      { cliType: 'codex',   available: true, version: null, error: null, projects: [] },
-      { cliType: 'gemini',  available: true, version: null, error: null, projects: [] }
+      { cliType: 'copilot', available: true, version: null, path: '/usr/local/bin/copilot', error: null, projects: [] },
+      { cliType: 'codex',   available: true, version: null, path: '/usr/local/bin/codex', error: null, projects: [] },
+      { cliType: 'gemini',  available: true, version: null, path: '/usr/local/bin/gemini', error: null, projects: [] }
     ]
   };
 }
