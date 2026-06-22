@@ -36,7 +36,6 @@ import { StudioIconComponent, type StudioIconName } from '../../../../components
 import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
 import {
-  WikiDashboardComponent,
   WikiDashboardDriftRow,
   WikiDashboardOpenRequest,
   WikiDashboardRecentRow,
@@ -121,7 +120,6 @@ interface WikiMetricChip {
     OverlayPortalDirective,
     StudioIconComponent,
     TooltipDirective,
-    WikiDashboardComponent,
     WikiDocHistoryComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,

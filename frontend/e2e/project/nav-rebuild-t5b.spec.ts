@@ -90,8 +90,25 @@ test('Prompts rail hosts the prompt-admin surface', async ({ page }) => {
   await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
 
   await expect(page.getByTestId('prompt-admin-panel')).toBeVisible({ timeout: 10_000 });
-  await expect.poll(() => page.getByTestId('prompt-admin-list').locator('.section-header').count()).toBeGreaterThan(0);
-  await expect.poll(() => page.getByTestId('prompt-admin-list').locator('.tree-row').count()).toBeGreaterThan(0);
+  const promptPanel = page.getByTestId('project-shell-panel-prompts');
+  const promptList = page.getByTestId('prompt-admin-list');
+  const promptDetail = page.getByTestId('prompt-admin-detail');
+  await expect.poll(() => promptList.locator('[data-testid^="prompt-admin-group-"]').count()).toBeGreaterThan(0);
+  await expect.poll(() => promptList.locator('[data-testid^="prompt-admin-item-"]').count()).toBeGreaterThan(0);
+
+  await expect.poll(() => promptList.evaluate(el => getComputedStyle(el).resize)).toBe('horizontal');
+  const panelBox = await promptPanel.boundingBox();
+  const listBox = await promptList.boundingBox();
+  const detailBox = await promptDetail.boundingBox();
+  expect(panelBox && listBox && detailBox).toBeTruthy();
+  expect(Math.abs(listBox!.x - panelBox!.x), 'prompt list is flush to the project panel').toBeLessThanOrEqual(1);
+  expect(Math.abs(detailBox!.x - (listBox!.x + listBox!.width)), 'prompt list and detail abut').toBeLessThanOrEqual(1);
+
+  await page.mouse.move(listBox!.x + listBox!.width - 2, listBox!.y + listBox!.height - 2);
+  await page.mouse.down();
+  await page.mouse.move(listBox!.x + listBox!.width + 72, listBox!.y + listBox!.height - 2, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => (await promptList.boundingBox())?.width ?? 0).toBeGreaterThan(listBox!.width + 24);
 
   const nav = await sampleColours(page, '[data-testid="prompt-admin-list"] [data-testid^="prompt-admin-item-"]');
   const editor = await sampleColours(page, '[data-testid="prompt-admin-editor"]');

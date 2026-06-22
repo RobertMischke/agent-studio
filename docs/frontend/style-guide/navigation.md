@@ -45,6 +45,12 @@ The rail itself owns only containment: width, scroll, border, sidebar surface,
 and vertical padding. Row geometry, active state, hover, chevron spacing,
 glyph spacing, and count alignment stay inside the shared components.
 
+Secondary rails mounted inside a panel should abut their detail pane. Remove
+the host panel padding for that rail, set the inner layout gap to `0`, and put
+reading padding on the detail pane instead. If the secondary rail width must be
+operator-controlled, make the rail column `auto` and the rail element itself
+`resize: horizontal` with a bounded `width` / `min-width` / `max-width`.
+
 ## Active State
 
 Set `[active]="..."` and `ariaCurrent="page"` on the active

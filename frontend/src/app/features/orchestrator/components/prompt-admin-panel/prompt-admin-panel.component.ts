@@ -10,6 +10,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
+import { PromptNavSplitterDirective } from './prompt-nav-splitter.directive';
 import {
   PromptAdminService,
   PromptCatalogItem,
@@ -39,7 +40,7 @@ interface PromptDiffLine {
 @Component({
   selector: 'app-prompt-admin-panel',
   standalone: true,
-  imports: [FormsModule, DatePipe, SectionHeaderComponent, TreeRowComponent],
+  imports: [FormsModule, DatePipe, SectionHeaderComponent, TreeRowComponent, PromptNavSplitterDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './prompt-admin-panel.component.html',
   styleUrl: './prompt-admin-panel.component.scss',

@@ -188,10 +188,16 @@
   padding: 0;
 }
 
-.proj-shell__panel[data-rail-key='wiki'] .proj-shell__panel-content {
+.proj-shell__panel[data-rail-key='wiki'] .proj-shell__panel-content,
+.proj-shell__panel[data-rail-key='prompts'] .proj-shell__panel-content {
   width: 100%;
   height: 100%;
   max-width: none;
+}
+
+.proj-shell__panel[data-rail-key='prompts'] {
+  overflow: hidden;
+  padding: 0;
 }
 
 .proj-shell__panel[data-rail-key='architecture'] .proj-shell__panel-content,
