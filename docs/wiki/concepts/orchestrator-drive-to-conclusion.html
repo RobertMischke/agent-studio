@@ -176,10 +176,27 @@
     <div class="sub">A maintained concept page: how the orchestrator carries every task home, treats infra death as normal, and never strands a task in <span class="lane">3-progress</span>.</div>
     <div class="meta">
       <span><strong>Audience:</strong> operator, engineers, future agents</span>
-      <span><strong>Status:</strong> concept (proposed)</span>
+      <span><strong>Status:</strong> partially implemented (Slice 1 live on stable 2026-06-22)</span>
       <span><strong>Seed case:</strong> ASS-1757</span>
     </div>
   </header>
+
+  <div style="background:#eaf6ee;border:1px solid #8fc7a3;border-radius:8px;padding:14px 18px;margin:0 0 24px;font-size:14px;line-height:1.55;">
+    <strong style="display:block;margin-bottom:6px;">Implementation status (2026-06-22) — keep this current</strong>
+    <div style="margin:6px 0;"><strong>Live on stable</strong> (commits <code>f0892ed6</code> AGT-1770 + <code>d941d6e7</code>):
+      classifier-unknown is removed at the source — a failed/unclassified run is split into
+      <code>InfraCrash</code> (hard CLI death, exit&lt;0) or <code>OrchestratorInconclusive</code> in
+      <code>AgentOutcomeAnalyzer.ResolveIssueKind</code>; <code>RunOutcomePolicy</code> returns
+      <code>NotifyUserAndStop</code> for both (no silent accept); and
+      <code>ProjectRunner.ShouldRouteIssueToHumanReview</code> now routes both to
+      <span class="lane">5-human-review</span> with honest categories
+      (<code>infra-crash</code> / <code>orchestrator-inconclusive</code>).
+      <strong>A failed run never strands in <span class="lane">3-progress</span> anymore.</strong>
+      112 outcome-contract / policy / analyzer tests pass.</div>
+    <div style="margin:6px 0;"><strong>Still open</strong> (epic AGT-1769): retry + cooldown on infra crash with
+      session-resume (AGT-1771); stranded-task self-flag; CooldownRetry banner + gave-up reason in the UI (AGT-1773);
+      the evidence-gate fix so good work is not falsely reissued (AGT-1774).</div>
+  </div>
 
   <nav class="toc">
     <h2>Contents</h2>
