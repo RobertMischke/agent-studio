@@ -264,21 +264,19 @@
     }
 
     .statusbar__left {
-      flex: 0 1 auto;
-      max-width: min(640px, 50%);
+      flex: 1 1 auto;
       overflow: hidden;
       gap: 4px;
     }
 
     .statusbar__center {
-      flex: 1 1 auto;
-      min-width: 18px;
+      flex: 0 0 6px;
+      min-width: 6px;
     }
 
     .statusbar__right {
       flex: 0 0 auto;
       justify-content: flex-end;
-      margin-left: auto;
       gap: 5px;
     }
 
@@ -354,8 +352,7 @@
       appearance: none;
       font: inherit;
       gap: 6px;
-      flex: 0 1 auto;
-      max-width: 210px;
+      flex: 0 0 auto;
       padding: 0 6px;
       border: 1px solid transparent;
       background: var(--status-chip);
@@ -380,9 +377,9 @@
     .statusbar__cli-icon {
       display: inline-grid;
       place-items: center;
-      width: 13px;
-      height: 13px;
-      flex: 0 0 13px;
+      width: 15px;
+      height: 15px;
+      flex: 0 0 15px;
       font-size: 12px;
       line-height: 1;
     }
@@ -482,12 +479,7 @@
     }
 
     @container statusbar (width <= 1180px) {
-      .statusbar__left {
-        max-width: min(560px, 47%);
-      }
-
       .statusbar__quota-card {
-        max-width: 154px;
         gap: 5px;
         padding-inline: 5px;
       }
@@ -502,17 +494,13 @@
     }
 
     @container statusbar (width <= 940px) {
-      .statusbar__left {
-        max-width: 52%;
-      }
-
       .statusbar__quota-label,
       .statusbar__quota-tag {
         display: none;
       }
 
       .statusbar__quota-card {
-        max-width: none;
+        gap: 4px;
       }
 
       .statusbar__defaults-meta {
@@ -525,12 +513,9 @@
         --status-item-height: 21px;
       }
 
-      .statusbar__left {
-        max-width: calc(100% - 214px);
-      }
-
       .statusbar__center {
-        min-width: 8px;
+        flex-basis: 4px;
+        min-width: 4px;
       }
 
       .statusbar__action {
@@ -558,10 +543,6 @@
         padding-inline: 6px;
       }
 
-      .statusbar__left {
-        max-width: calc(100% - 150px);
-      }
-
       .statusbar__chip--auto,
       .statusbar__left .statusbar__sep {
         display: none;
@@ -574,10 +555,6 @@
       .statusbar__quota-card {
         gap: 3px;
         padding-inline: 4px;
-      }
-
-      .statusbar__quota-metric--secondary {
-        display: none;
       }
 
       .statusbar__defaults {
@@ -603,6 +580,14 @@
 
       .statusbar__chip {
         padding-inline: 5px;
+      }
+
+      .statusbar__quota {
+        gap: 2px;
+      }
+
+      .statusbar__quota-card {
+        padding-inline: 3px;
       }
     }
 
@@ -688,7 +673,7 @@
             <span class="statusbar__sep" aria-hidden="true"></span>
             <span class="statusbar__quota">
               <button class="statusbar__quota-card" type="button" aria-label="Claude usage: 83 percent in 5 hours, 51 percent this week" data-tone="hot">
-                <span class="statusbar__cli-icon" aria-hidden="true">◆</span>
+                <span class="statusbar__cli-icon" aria-hidden="true">✴️</span>
                 <span class="statusbar__quota-label">Claude</span>
                 <span class="statusbar__quota-metric">
                   <span class="statusbar__quota-value">83</span>
@@ -702,7 +687,7 @@
                 </span>
               </button>
               <button class="statusbar__quota-card" type="button" aria-label="Codex usage: 41 percent in 5 hours, 19 percent this week">
-                <span class="statusbar__cli-icon" aria-hidden="true">✦</span>
+                <span class="statusbar__cli-icon" aria-hidden="true">🌀</span>
                 <span class="statusbar__quota-label">Codex</span>
                 <span class="statusbar__quota-metric">
                   <span class="statusbar__quota-value">41</span>
@@ -716,12 +701,21 @@
                 </span>
               </button>
               <button class="statusbar__quota-card" type="button" aria-label="Copilot usage: 72 percent this month" data-tone="warn">
-                <span class="statusbar__cli-icon" aria-hidden="true">⌁</span>
+                <span class="statusbar__cli-icon" aria-hidden="true">🐙</span>
                 <span class="statusbar__quota-label">Copilot</span>
                 <span class="statusbar__quota-metric">
                   <span class="statusbar__quota-value">72</span>
                   <span class="statusbar__quota-tag">MO</span>
                   <span class="statusbar__meter statusbar__meter--warn" aria-hidden="true"><span style="width: 72%"></span></span>
+                </span>
+              </button>
+              <button class="statusbar__quota-card" type="button" aria-label="Gemini usage: 18 percent today">
+                <span class="statusbar__cli-icon" aria-hidden="true">♊</span>
+                <span class="statusbar__quota-label">Gemini</span>
+                <span class="statusbar__quota-metric">
+                  <span class="statusbar__quota-value">18</span>
+                  <span class="statusbar__quota-tag">DY</span>
+                  <span class="statusbar__meter" aria-hidden="true"><span style="width: 18%"></span></span>
                 </span>
               </button>
             </span>

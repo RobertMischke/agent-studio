@@ -1,22 +1,17 @@
-// F50 follow-up (2026-05-29) — Status Bar Layout konsolidieren:
-// - all items share one height + radius + padding via local custom
-//   properties so chips / quota cards / pickers sit on the same
-//   baseline (left icons no longer "rutsch nach unten");
-// - container switches from raw flex to a 3-column grid so the
-//   center spacer reliably right-anchors the right cluster regardless
-//   of how the left cluster grows;
-// - quota card height is constrained to the item height (was 28 px
-//   in a 22 px bar — the source of the vertical mismatch);
-// - light-theme overrides in styles.scss continue to win on color
-//   without re-declaring layout.
+// Status bar layout:
+// - left side owns the live status + per-CLI quota strip and may use the
+//   middle space aggressively;
+// - the tiny center group only preserves the DOM contract from earlier
+//   tests and acts as a compact gutter;
+// - the right side is a fixed dock for actions + defaults.
 
-:host {
+app-status-bar {
   display: block;
   flex: 1 1 auto;
-  // Stretch across the projected studio-statusbar footer so the grid's
-  // center spacer can actually push the right cluster to the right
-  // edge. Without this the host stays intrinsic-width and the right
-  // cluster collapses next to the left one.
+  min-width: 0;
+  // Stretch across the projected studio-statusbar footer so the right
+  // dock can anchor to the actual edge. ViewEncapsulation.None leaves
+  // `:host` untransformed, so target the element explicitly.
   width: 100%;
 }
 
@@ -31,10 +26,10 @@
   --statusbar-font-size: 11px;
   --statusbar-icon-size: 12px;
 
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(20px, auto) auto;
+  container: statusbar / inline-size;
+  display: flex;
   align-items: center;
-  column-gap: var(--studio-spacing-2);
+  gap: var(--studio-spacing-1);
   padding: 0 var(--studio-spacing-2);
   height: var(--statusbar-bar-height);
   background: var(--studio-bg-activitybar, #181825);
@@ -54,24 +49,31 @@
   height: 100%;
 }
 .statusbar__group--left  {
-  justify-self: stretch;
+  flex: 1 1 auto;
   overflow: hidden;
 }
 .statusbar__group--center {
-  // Pure spacer — the grid's `1fr` column already does the work; the
-  // empty flex stays for selector compatibility with the F50 spec.
-  justify-self: stretch;
+  flex: 0 0 var(--studio-spacing-1);
+  min-width: var(--studio-spacing-1);
 }
-.statusbar__group--spacer { min-width: var(--studio-spacing-5); }
 .statusbar__group--right {
-  justify-self: end;
   flex: 0 0 auto;
+  justify-content: flex-end;
   gap: var(--studio-spacing-1);
 }
 
 .statusbar__quota {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
+}
+
+.statusbar__quota app-usage-hover-panel {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .statusbar__quota .uhp,
@@ -81,10 +83,17 @@
   overflow: hidden;
 }
 
+.statusbar .statusbar__quota .hquota {
+  display: flex;
+  gap: var(--studio-spacing-1);
+}
+
 .statusbar .statusbar__quota .hquota__card {
   cursor: pointer;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
+  gap: var(--studio-spacing-1);
+  padding: 0 var(--studio-spacing-2);
 }
 
 .statusbar__item {
@@ -181,14 +190,14 @@
   max-width: 15ch;
 }
 
-@media (width <= 1280px) {
+@container statusbar (width <= 1180px) {
   .statusbar .hquota__bar {
     display: none;
   }
 
   .statusbar .hquota__card {
     gap: var(--studio-spacing-1);
-    padding: 0 var(--studio-spacing-2);
+    padding-inline: var(--studio-spacing-1);
   }
 
   .statusbar .hquota__value {
@@ -196,7 +205,7 @@
   }
 }
 
-@media (width <= 1160px) {
+@container statusbar (width <= 940px) {
   .statusbar .hquota__label,
   .statusbar .hquota__tag {
     display: none;
@@ -211,19 +220,10 @@
   }
 }
 
-@media (width <= 900px) {
-  .statusbar__quota {
-    display: none;
-  }
-}
-
-@media (width <= 860px) {
-  .statusbar {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
+@container statusbar (width <= 760px) {
   .statusbar__group--center {
-    display: none;
+    flex-basis: var(--studio-spacing-1);
+    min-width: var(--studio-spacing-1);
   }
 
   .statusbar__group--right .statusbar__item {
@@ -240,17 +240,41 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
+
+  .statusbar__defaults .cli-model-selector__tags {
+    display: none;
+  }
 }
 
-@media (width <= 700px) {
+@container statusbar (width <= 560px) {
+  .statusbar {
+    padding-inline: var(--studio-spacing-1);
+  }
+
+  .statusbar__group--left app-statusbar-item:nth-of-type(2),
+  .statusbar__group--left .statusbar__sep {
+    display: none;
+  }
+
+  .statusbar .hquota {
+    gap: var(--studio-spacing-1);
+  }
+
+  .statusbar .hquota__card {
+    padding-inline: var(--studio-spacing-1);
+  }
+
   .statusbar__defaults .cli-model-selector__name {
     display: none;
   }
 }
 
-@media (width <= 520px) {
-  .statusbar__group--left app-statusbar-item:nth-of-type(2),
-  .statusbar__group--left .statusbar__sep {
-    display: none;
+@container statusbar (width <= 460px) {
+  .statusbar__item {
+    padding-inline: var(--studio-spacing-1);
+  }
+
+  .statusbar .hquota {
+    gap: 0;
   }
 }
