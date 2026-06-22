@@ -405,6 +405,82 @@ public class ProjectWikiEnhancementsTests : IDisposable
         Assert.Empty(git.GetFileHistory(repoRoot, "docs/does-not-exist.md"));
     }
 
+    // ---- ParseRecentEdits (pure) ----
+
+    [Fact]
+    public void ParseRecentEdits_DedupesByPath_NewestCommitWins_RespectsLimit()
+    {
+        const char RS = '\x1e';
+        const char US = '\x1f';
+        // Two records (newest first). docs/a.md appears in both; it must be
+        // attributed to the newer commit only. docs/b.md only in the older one.
+        var output =
+            $"{RS}sha2{US}s2{US}2026-06-20T10:00:00Z{US}Alice{US}update a\ndocs/a.md\n" +
+            $"{RS}sha1{US}s1{US}2026-06-10T09:00:00Z{US}Bob{US}seed\ndocs/a.md\ndocs/b.md\n";
+
+        var edits = GitService.ParseRecentEdits(output, limit: 10);
+
+        Assert.Equal(2, edits.Count);
+        Assert.Equal("docs/a.md", edits[0].RepoRelPath);
+        Assert.Equal("sha2", edits[0].Sha);
+        Assert.Equal("Alice", edits[0].Author);
+        Assert.Equal("docs/b.md", edits[1].RepoRelPath);
+        Assert.Equal("Bob", edits[1].Author);
+
+        var capped = GitService.ParseRecentEdits(output, limit: 1);
+        Assert.Single(capped);
+        Assert.Equal("docs/a.md", capped[0].RepoRelPath);
+    }
+
+    // ---- GetWikiRecentEdits (real git) ----
+
+    [Fact]
+    public void GetWikiRecentEdits_ReturnsNewestFirst_WithAuthorAndTitle_FiltersNonDocsAndDeletions()
+    {
+        var repoRoot = Path.Combine(_tempDir, "recent");
+        var docsDir = Path.Combine(repoRoot, "docs");
+        Directory.CreateDirectory(docsDir);
+
+        RunGit(repoRoot, "init -q -b main");
+        RunGit(repoRoot, "config user.email test@example.com");
+        RunGit(repoRoot, "config user.name test");
+
+        // Commit 1 (oldest): two docs + a companion sidecar + a non-doc file.
+        File.WriteAllText(Path.Combine(docsDir, "alpha.md"), "# Alpha Title\nbody");
+        File.WriteAllText(Path.Combine(docsDir, "beta.md"), "# Beta Title\nbody");
+        File.WriteAllText(Path.Combine(docsDir, "alpha.md.meta.json"), "{}");
+        File.WriteAllText(Path.Combine(repoRoot, "notes.txt"), "ignore me");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "seed docs");
+
+        // Commit 2: add a doc that we then delete (must not appear).
+        File.WriteAllText(Path.Combine(docsDir, "ghost.md"), "# Ghost\n");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "add ghost");
+        File.Delete(Path.Combine(docsDir, "ghost.md"));
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "remove ghost");
+
+        // Commit 3 (newest): touch beta.md so it sorts first.
+        File.WriteAllText(Path.Combine(docsDir, "beta.md"), "# Beta Title\nupdated");
+        RunGit(repoRoot, "add -A");
+        RunGitArgs(repoRoot, "commit", "-q", "-m", "update beta");
+
+        var docs = BuildDocsService(("Recent", repoRoot));
+        var git = BuildGitService(("Recent", repoRoot));
+
+        var recent = docs.GetWikiRecentEdits("Recent", git, 10);
+
+        Assert.NotNull(recent);
+        Assert.True(recent!.Exists);
+        Assert.Equal(2, recent.Edits.Count); // alpha + beta; no companion, txt, ghost
+        Assert.Equal("beta.md", recent.Edits[0].RelPath); // newest first
+        Assert.Equal("Beta Title", recent.Edits[0].Title);
+        Assert.Equal("test", recent.Edits[0].Author);
+        Assert.Equal("alpha.md", recent.Edits[1].RelPath);
+        Assert.Equal("Alpha Title", recent.Edits[1].Title);
+    }
+
     // ---- helpers ----
 
     private ProjectDocsService BuildDocsService(params (string Name, string RootPath)[] entries)

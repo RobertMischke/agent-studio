@@ -23,6 +23,7 @@ import {
   WikiFileSaveResult,
   WikiFileHistory,
   WikiNodeType,
+  WikiRecentEdit,
   WikiTree,
   WikiTreeMetadata,
   WikiTreeNode,
@@ -34,6 +35,12 @@ import { MenuItem, MenuItemClickEvent } from '../../../../components/menu/menu.t
 import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
+import {
+  WikiDashboardComponent,
+  WikiDashboardDriftRow,
+  WikiDashboardOpenRequest,
+  WikiDashboardRecentRow,
+} from './wiki-dashboard/wiki-dashboard.component';
 import {
   WikiTreeRow,
   collectFolderIds,
@@ -114,6 +121,7 @@ interface WikiMetricChip {
     OverlayPortalDirective,
     StudioIconComponent,
     TooltipDirective,
+    WikiDashboardComponent,
     WikiDocHistoryComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -133,6 +141,7 @@ export class ProjectWikiSectionComponent {
   readonly cliTypes = CLI_TYPES;
 
   readonly tree = signal<WikiTree | null>(null);
+  readonly recentEdits = signal<WikiRecentEdit[]>([]);
   readonly loading = signal(false);
   readonly busy = signal(false);
   readonly filter = signal('');
@@ -336,6 +345,67 @@ export class ProjectWikiSectionComponent {
 
   readonly suggestedDocs = computed(() => this.collectDocs(this.roots()).slice(0, 6));
 
+  // Dashboard: recently-edited rows (git author + time). Titles are taken from
+  // the tree node when the path still resolves there (matches the nav label),
+  // else from the git-reported title.
+  readonly dashboardRecentRows = computed<WikiDashboardRecentRow[]>(() => {
+    const byPath = new Map(this.collectDocs(this.roots()).map(d => [d.relPath, d]));
+    return this.recentEdits().map(e => {
+      const node = e.relPath ? byPath.get(e.relPath) : undefined;
+      return {
+        relPath: e.relPath,
+        title: node?.title || e.title || e.relPath,
+        author: e.author,
+        authorDateUtc: e.authorDateUtc,
+        type: node?.type ?? this.typeFromRelPath(e.relPath),
+      };
+    });
+  });
+
+  // Dashboard: pages a companion sidecar flags as drifting, worst first (grade
+  // D, then by descending drift score). Derived entirely from tree metadata -
+  // no extra fetch - so it stays in sync with the tree's own drift chips.
+  readonly dashboardDriftRows = computed<WikiDashboardDriftRow[]>(() => {
+    const rows = this.collectDocs(this.roots())
+      .filter(d => d.relPath && d.metadata?.hasDrift === true)
+      .map(d => {
+        const meta = d.metadata!;
+        const grade = this.cleanGrade(meta.driftGrade);
+        return {
+          relPath: d.relPath!,
+          title: d.title,
+          type: d.type,
+          grade,
+          score: meta.driftScore ?? null,
+          tone: (grade === 'D' ? 'bad' : 'warn') as 'warn' | 'bad',
+          summary: meta.summary?.trim() || null,
+        };
+      });
+    rows.sort((a, b) => this.driftRank(b) - this.driftRank(a));
+    return rows.slice(0, 8);
+  });
+
+  /** Sort key for high-drift rows: grade D outranks others, then drift score. */
+  private driftRank(row: WikiDashboardDriftRow): number {
+    const gradeWeight = row.grade === 'D' ? 4 : row.grade === 'C' ? 3 : row.grade === 'B' ? 2 : row.grade === 'A' ? 1 : 0;
+    return gradeWeight * 1000 + Math.round((row.score ?? 0) * 100);
+  }
+
+  private typeFromRelPath(relPath: string): WikiNodeType {
+    const ext = relPath.toLowerCase().split('.').pop() ?? '';
+    if (ext === 'html' || ext === 'htm') return 'html';
+    if (ext === 'json') return 'json';
+    return 'md';
+  }
+
+  onDashboardOpen(req: WikiDashboardOpenRequest): void {
+    this.openFile(req.relPath, req.type);
+  }
+
+  onDashboardOpenDrift(req: WikiDashboardOpenRequest): void {
+    this.openFile(req.relPath, req.type, 'report', 'why-drift');
+  }
+
   readonly rootFolderLabel = computed(() => {
     const base = this.tree()?.baseDir?.trim();
     return base || 'root folder';
@@ -379,6 +449,12 @@ export class ProjectWikiSectionComponent {
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
+    });
+    // Recent edits are git-backed and only feed the landing dashboard, so they
+    // load independently and never block the tree render.
+    this.docs.getWikiRecentEdits(p, 8).subscribe({
+      next: r => this.recentEdits.set(r.edits ?? []),
+      error: () => this.recentEdits.set([]),
     });
   }
 

@@ -77,6 +77,19 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(tree);
         });
 
+        // Recently-edited wiki pages (page / git author / timestamp), newest
+        // first, for the dashboard landing surface. Touches git (one log walk),
+        // so it is a separate call from the cheap /tree. `limit` is clamped
+        // server-side. Sits before the /files catch-all for path precedence.
+        app.MapGet("/api/projects/{projectName}/wiki/recent", (string projectName, ProjectDocsService docs, GitService git, int? limit) =>
+        {
+            var n = Math.Clamp(limit ?? 12, 1, 50);
+            var recent = docs.GetWikiRecentEdits(projectName, git, n);
+            return recent == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(recent);
+        });
+
         app.MapGet("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs) =>
         {
             var file = docs.ReadWikiFile(projectName, relPath);
