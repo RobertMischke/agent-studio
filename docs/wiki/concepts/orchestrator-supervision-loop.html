@@ -1,0 +1,17 @@
+Wrote the self-contained HTML wiki concept page to:
+
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\docs\wiki\concepts\orchestrator-supervision-loop.html
+
+It is a single self-contained .html (inline <style>, no scripts, iframe-readable, 920px max-width container, small TOC), styled to match the sibling page orchestrator-drive-to-conclusion.html in the same folder. English, no em dashes. All claims are grounded in the provided FINDINGS/CONCEPT and cite real file paths that I verified exist under backend/Features/Supervisor/ and prompts/runtime/.
+
+Sections delivered:
+1. Mission and vision - keep the pipeline running, decide cleverly, close the supervision gap; L1/L2/L3 layering framing.
+2. How it works today and the gap - a table of the six hosted services (interval/default/detects/acts) plus the "0 cycles" explanation (ChatNoteSummary.Build / BuildCyclePhrase) and the detect-but-do-not-act gap callout.
+3. The supervision loop - one new SupervisionLoopHostedService; interval default 10s (configurable, live-reloadable), busy 30s, deep-tick every 30th; a 5-step tick diagram as an HTML table (READ -> TRIAGE -> DECIDE -> ACT -> RECORD with an LLM? column); heartbeat write to SupervisorLogPaths.HeartbeatFile and an independent dead-loop watchdog (LoopDeadAfterSeconds=60 -> supervision-loop-dead advisory + banner + restart).
+4. Suspicion model - table A (problem-reporting OutcomeIssue kinds, advisories, TaskRunActivity, mode-drift, reissue-guard with High/Warn pills) and table B (the 4-phase stranded self-flag: ExecutionStalled -> [stranded] marker -> scanner Kind="stranded" -> loop triage).
+5. Transparency - rolled-up clear ticks vs full decision lines, a sample decision line in a <pre> block, the decidedByModel gap on EmitOrchestratorChatAsync, dead-loop banner, thumbs/undo controls (text-only, no menu icons).
+6. Parallel orchestrators - participant identity change (orchestrator:{project}:{instanceKey}), fast/deep role split, lease-based claim/arbitration/deferred coordination, peer cross-watch, opt-in via Supervisor:LoopInstances.
+7. The dedicated supervision prompt - the supervisor-loop-decision.md slot sketch in a <pre> block with the [[SUPERVISOR_DECISION]] sentinel and rules; cites SoftReasoningParsing.cs as the parser to mirror.
+8. Build plan (S0-S9 as a numbered step list) + a config-keys table (new + reused) + the 8 open questions.
+
+File paths cited in <code> (verified to exist): backend/Features/Supervisor/{HardHealthCheckHostedService,ChatNoteHostedService,ChatNoteSummary,MetaCycleHostedService,MetaCycleRules,SoftReasoningHostedService,SoftReasoningParsing,AutoInterventionHostedService,AutoInterventionMapping,OrchestratorPrepHostedService,HardHealthChecks,ProjectObservationService,SupervisorInterventionService,SupervisorLogPaths}.cs; backend/Features/Bus/{AgentMessageBusBridge,AgentMessageBusStore}.cs; backend/Features/Runner/{OrchestratorChatLog,OrchestratorSession,ProjectRunner}.cs; backend/Features/Tasks/TaskScannerService.cs; backend/Shared/Models/{TaskStates,RunnerStatus}.cs; and the canonical prompt slot prompts/runtime/supervisor-soft-reasoning.md (sibling of the proposed supervisor-loop-decision.md).
