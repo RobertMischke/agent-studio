@@ -48,8 +48,9 @@ glyph spacing, and count alignment stay inside the shared components.
 Secondary rails mounted inside a panel should abut their detail pane. Remove
 the host panel padding for that rail, set the inner layout gap to `0`, and put
 reading padding on the detail pane instead. If the secondary rail width must be
-operator-controlled, make the rail column `auto` and the rail element itself
-`resize: horizontal` with a bounded `width` / `min-width` / `max-width`.
+operator-controlled, use a visible `role="separator"` splitter between the rail
+and detail pane. The rail column stays `auto`; the splitter updates the rail's
+bounded pixel width.
 
 ## Active State
 
@@ -61,9 +62,9 @@ shared active state already flips across light and dark themes through
 ## Trailing Status
 
 Projected trailing content is allowed when the row needs compact status such as
-`default`, `overridden`, or `default changed`. Keep it to small chips or a
-single count. If the row needs multi-line metadata, it is a content list, not a
-rail.
+`shipped`, `overridden`, or `shipped changed`. `Shipped` means the bundled
+application default is active. Keep trailing status to small chips or a single
+count. If the row needs multi-line metadata, it is a content list, not a rail.
 
 ## Do Not
 

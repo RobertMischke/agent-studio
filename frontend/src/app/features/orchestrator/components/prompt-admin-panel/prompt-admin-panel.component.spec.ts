@@ -168,7 +168,7 @@ async function mount() {
 }
 
 describe('PromptAdminPanelComponent', () => {
-  it('renders the inventory grouped by source with default / override pills', async () => {
+  it('renders the inventory grouped by source with shipped / override pills', async () => {
     const fixture = await mount();
     const host = fixture.nativeElement as HTMLElement;
 
@@ -179,7 +179,7 @@ describe('PromptAdminPanelComponent', () => {
     expect(groupHeads).toEqual(['Runner', 'Review']);
     expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)?.classList).toContain('tree-row--active');
 
-    // The overridden + drifted Review template surfaces the "default changed" pill.
+    // The overridden + drifted Review template surfaces the shipped-changed pill.
     expect(host.querySelector(`[data-testid="prompt-admin-drift-${DRIFT}"]`)).not.toBeNull();
   });
 

@@ -92,21 +92,26 @@ test('Prompts rail hosts the prompt-admin surface', async ({ page }) => {
   await expect(page.getByTestId('prompt-admin-panel')).toBeVisible({ timeout: 10_000 });
   const promptPanel = page.getByTestId('project-shell-panel-prompts');
   const promptList = page.getByTestId('prompt-admin-list');
+  const promptSplitter = page.getByTestId('prompt-admin-splitter');
   const promptDetail = page.getByTestId('prompt-admin-detail');
   await expect.poll(() => promptList.locator('[data-testid^="prompt-admin-group-"]').count()).toBeGreaterThan(0);
   await expect.poll(() => promptList.locator('[data-testid^="prompt-admin-item-"]').count()).toBeGreaterThan(0);
+  await expect(promptList.locator('[data-testid^="prompt-admin-item-"]').first()).toContainText('shipped');
 
-  await expect.poll(() => promptList.evaluate(el => getComputedStyle(el).resize)).toBe('horizontal');
+  await expect(promptSplitter).toBeVisible();
+  await expect(promptSplitter).toHaveAttribute('role', 'separator');
   const panelBox = await promptPanel.boundingBox();
   const listBox = await promptList.boundingBox();
+  const splitterBox = await promptSplitter.boundingBox();
   const detailBox = await promptDetail.boundingBox();
-  expect(panelBox && listBox && detailBox).toBeTruthy();
+  expect(panelBox && listBox && splitterBox && detailBox).toBeTruthy();
   expect(Math.abs(listBox!.x - panelBox!.x), 'prompt list is flush to the project panel').toBeLessThanOrEqual(1);
-  expect(Math.abs(detailBox!.x - (listBox!.x + listBox!.width)), 'prompt list and detail abut').toBeLessThanOrEqual(1);
+  expect(Math.abs(splitterBox!.x - (listBox!.x + listBox!.width)), 'splitter abuts prompt list').toBeLessThanOrEqual(1);
+  expect(Math.abs(detailBox!.x - (splitterBox!.x + splitterBox!.width)), 'detail abuts splitter').toBeLessThanOrEqual(1);
 
-  await page.mouse.move(listBox!.x + listBox!.width - 2, listBox!.y + listBox!.height - 2);
+  await page.mouse.move(splitterBox!.x + splitterBox!.width / 2, splitterBox!.y + splitterBox!.height / 2);
   await page.mouse.down();
-  await page.mouse.move(listBox!.x + listBox!.width + 72, listBox!.y + listBox!.height - 2, { steps: 6 });
+  await page.mouse.move(splitterBox!.x + splitterBox!.width / 2 + 72, splitterBox!.y + splitterBox!.height / 2, { steps: 6 });
   await page.mouse.up();
   await expect.poll(async () => (await promptList.boundingBox())?.width ?? 0).toBeGreaterThan(listBox!.width + 24);
 
