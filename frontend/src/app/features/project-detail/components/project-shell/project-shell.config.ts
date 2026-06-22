@@ -26,7 +26,6 @@ export type ProjectRailKey =
   | 'pipeline'
   | 'workflow'
   | 'prompts'
-  | 'runtime-prompts'
   | 'audits'
   | 'settings'
   | 'settings-defaults'
@@ -188,22 +187,9 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     label: 'Prompts',
     panelTitle: 'Prompts',
     description: 'Prompt registry for this project: inventory, source / override matrix, and coverage.',
-    empty: 'Prompts shell — navigation only. Step 2 (T5b) moves the prompt-admin surface here unchanged: registry inventory, source/override matrix, and coverage. Distinct from Runtime Prompts below, which is the read-only browse over prompts/runtime/*.md.',
+    empty: 'Prompts shell — navigation only. Step 2 (T5b) moves the prompt-admin surface here unchanged: registry inventory, source/override matrix, and coverage.',
     icon: '✎',
     railIcon: 'file',
-  },
-  {
-    // Runtime prompts are a SEPARATE main point from the agent-read docs above:
-    // these are the pipeline / aspect / review / orchestrator prompts under
-    // prompts/runtime/*.md that the platform feeds to CLIs at run time.
-    key: 'runtime-prompts',
-    group: 'context',
-    label: 'Runtime Prompts',
-    panelTitle: 'Runtime Prompts',
-    description: 'Pipeline, aspect, review, and orchestrator prompts the platform injects at run time (prompts/runtime/*.md)',
-    empty: 'Runtime Prompts placeholder. A read-only browse over prompts/runtime/*.md lands in a later slice; these are CLI-behaviour prompts, distinct from the agent-read Agent Docs.',
-    icon: '⌥',
-    railIcon: 'cli',
   },
 
   // ---- CONFIG: how the project is set up ----

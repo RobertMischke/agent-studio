@@ -207,7 +207,6 @@ describe('ProjectShellComponent rail IA', () => {
     expect(railEl(host, 'wiki')!.textContent).toContain('Wiki');
     expect(railEl(host, 'steering')).toBeTruthy();
     expect(railEl(host, 'prompts')).toBeTruthy();
-    expect(railEl(host, 'runtime-prompts')).toBeTruthy();
 
     // Collapsing the main segment hides its rows.
     contextHeader.click();
@@ -216,7 +215,6 @@ describe('ProjectShellComponent rail IA', () => {
     expect(railEl(host, 'wiki')).toBeNull();
     expect(railEl(host, 'steering')).toBeNull();
     expect(railEl(host, 'prompts')).toBeNull();
-    expect(railEl(host, 'runtime-prompts')).toBeNull();
     expect(railEl(host, 'steering-docs')).toBeNull();
   });
 
@@ -240,20 +238,17 @@ describe('ProjectShellComponent rail IA', () => {
     expect(leaf.textContent).not.toContain('Context');
   });
 
-  it('lists Prompts and Runtime Prompts inside Context', () => {
+  it('lists Prompts inside Context without a Runtime Prompts placeholder', () => {
     const fixture = mount();
     const host = fixture.nativeElement as HTMLElement;
     const prompts = railEl(host, 'prompts')!;
-    const runtime = railEl(host, 'runtime-prompts')!;
     expect(prompts.textContent).toContain('Prompts');
-    expect(runtime.textContent).toContain('Runtime Prompts');
+    expect(railEl(host, 'runtime-prompts')).toBeNull();
     expect(host.querySelector('[data-testid="project-shell-twisty-prompts"]')).toBeNull();
-    expect(host.querySelector('[data-testid="project-shell-twisty-runtime-prompts"]')).toBeNull();
 
     host.querySelector<HTMLElement>('[data-testid="project-shell-group-context"]')!.click();
     fixture.detectChanges();
     expect(railEl(host, 'prompts')).toBeNull();
-    expect(railEl(host, 'runtime-prompts')).toBeNull();
   });
 
   it('opens Context when an active rail was hidden by persisted state', () => {

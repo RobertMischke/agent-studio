@@ -51,11 +51,10 @@ const RAILS_WITH_CUSTOM_PANEL = new Set<string>([
   'activity',
 ]);
 
-// ASS-1711 IA: documentation rails (Architecture / Wiki / Agent Docs) are
-// nested under a non-navigable "Steering Docs" tree container, "Runtime
-// Prompts" is its own point, and Settings expands to its sub-pages. The tree
-// seeds fully expanded, so every leaf below is reachable by its testid without
-// first expanding a parent.
+// ASS-1711 IA: documentation rails (Architecture / Wiki / Agent Docs / Prompts)
+// sit in Context, and Settings expands to its sub-pages. The tree seeds fully
+// expanded, so every leaf below is reachable by its testid without first
+// expanding a parent.
 const RAIL_ITEMS: readonly { key: string; label: string; title: string; descriptionFragment: string }[] = [
   { key: 'overview',         label: 'Overview',          title: 'Overview',         descriptionFragment: 'Snapshot of project health' },
   { key: 'security',         label: 'Security',          title: 'Security',         descriptionFragment: 'Baseline, reviews, and active findings' },
@@ -65,7 +64,6 @@ const RAIL_ITEMS: readonly { key: string; label: string; title: string; descript
   { key: 'token-usage',      label: 'Token Usage',       title: 'Token Usage',      descriptionFragment: 'Inference spend by job' },
   { key: 'observability',    label: 'Observability',     title: 'Observability',    descriptionFragment: 'Agent communication on the message bus' },
   { key: 'steering',         label: 'Agent Docs',        title: 'Agent Docs',       descriptionFragment: 'Instruction files agents read on their own' },
-  { key: 'runtime-prompts',  label: 'Runtime Prompts',   title: 'Runtime Prompts',  descriptionFragment: 'prompts the platform injects at run time' },
   { key: 'audits',           label: 'Audits & Checks',   title: 'Audits & Checks',  descriptionFragment: 'Review definitions, per-task checks' },
   { key: 'jobs',             label: 'Jobs',              title: 'Jobs',             descriptionFragment: 'Tasks queued, in progress' },
   { key: 'settings',         label: 'Settings',          title: 'Settings',         descriptionFragment: 'How the orchestrator behaves' },

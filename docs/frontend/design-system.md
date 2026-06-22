@@ -320,24 +320,20 @@ The Project Hub rail items live in
 [project-shell.config.ts](../../frontend/src/app/features/project-detail/components/project-shell/project-shell.config.ts).
 They are grouped into four buckets:
 
-- **Insight** — what the project *is* (Overview, Design, Visual
-  Evidence, Architecture, Drift, UX/UI, Observability).
+- **Insight** — what the project *is* and does (Overview, Visual
+  Evidence, Drift, Observability, Token Usage).
 - **Quality** — what guards the project (Security, Test Quality,
   Audits & Checks).
-- **Operations** — what's running right now (Jobs, Token Usage,
-  Product Runtime, Activity).
-- **Config** — how the project is set up. Documentation surfaces nest
-  under a non-navigable "Steering Docs" tree container (Architecture,
-  Wiki / Docs, and "Agent Docs", the AGENTS.md-style instructions agents
-  read on their own). "Runtime Prompts" (the run-time CLI-behaviour
-  prompts under `prompts/runtime/`) is its own top-level point, alongside
-  Orchestrator and Settings (which expands to Workspace Defaults and
+- **Context** — documentation and agent-readable project context
+  (Architecture, Wiki, "Agent Docs", and Prompts).
+- **Config** — how the project is set up (Pipeline, Workflow,
+  Orchestrator, and Settings, which expands to Workspace Defaults and
   Project Overrides).
 
-The four buckets render as collapsible segments, and some Config rows are
-tree parents with a disclosure twisty (Steering Docs, Settings).
-`project-shell.config.ts` is the authoritative inventory; its `parent` and
-`navigable` flags decide nesting and whether a row routes to a panel.
+The four buckets render as collapsible segments, and Settings is a tree
+parent with a disclosure twisty. `project-shell.config.ts` is the
+authoritative inventory; its `parent` and `navigable` flags decide nesting
+and whether a row routes to a panel.
 
 Each rail item carries a monochrome Unicode icon (`▤ ◇ ◉ ⊞ ↯ ◐ ⌁ ⊡ ✓ ⊟
 ☰ ▦ ⊜ ⌖ ⊕ ◈ ⚙`), a panel title, a one-line description, and an empty

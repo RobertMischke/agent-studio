@@ -46,8 +46,6 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   'settings-defaults',
   'settings-overrides',
   'orchestrator',
-  // Note: 'runtime-prompts' deliberately falls through to the shell's generic
-  // placeholder panel.
 ]);
 
 /**
@@ -58,8 +56,8 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
  *
  * The rail is a collapsible-segment tree (ASS-1711): Insight / Quality /
  * Context / Config segments fold; Context contains Architecture / Wiki /
- * Agent Docs / Prompts / Runtime Prompts, and Settings expands to Workspace
- * Defaults / Project Overrides.
+ * Agent Docs / Prompts, and Settings expands to Workspace Defaults / Project
+ * Overrides.
  */
 @Component({
   selector: 'app-project-hub-view',
