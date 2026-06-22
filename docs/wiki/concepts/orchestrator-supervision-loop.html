@@ -1,17 +1,869 @@
-Wrote the self-contained HTML wiki concept page to:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orchestrator Supervision Loop</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --ink: #1f2329;
+    --ink-soft: #4a5159;
+    --line: #e2e6ea;
+    --accent: #2c5f8a;
+    --accent-soft: #eaf2f9;
+    --warn-bg: #fff6e6;
+    --warn-line: #e6c478;
+    --ok-bg: #eaf6ee;
+    --ok-line: #8fc7a3;
+    --bad-bg: #fbecec;
+    --bad-line: #d8a0a0;
+    --code-bg: #eef1f4;
+    --code-ink: #b8341f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+  }
+  header.page {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+  }
+  header.page h1 {
+    font-size: 26px;
+    line-height: 1.25;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  header.page .sub {
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+  header.page .meta {
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  header.page .meta span { display: inline-block; margin-right: 18px; }
+  nav.toc {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 28px;
+  }
+  nav.toc h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    margin: 0 0 8px;
+  }
+  nav.toc ol { margin: 0; padding-left: 20px; }
+  nav.toc li { margin: 3px 0; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 22px 26px;
+    margin-bottom: 24px;
+  }
+  section > h2 {
+    font-size: 20px;
+    margin: 0 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
+  }
+  section h3 {
+    font-size: 15.5px;
+    margin: 22px 0 8px;
+    color: var(--accent);
+  }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12.5px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    word-break: break-word;
+  }
+  pre {
+    background: #1f2329;
+    color: #e6e9ec;
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+    margin: 14px 0;
+  }
+  pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    border-radius: 0;
+    font-size: 12.5px;
+    word-break: normal;
+  }
+  .callout {
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  .callout.zielbild { background: var(--accent-soft); border: 1px solid #b9d4e8; }
+  .callout.warn { background: var(--warn-bg); border: 1px solid var(--warn-line); }
+  .callout.gap { background: var(--bad-bg); border: 1px solid var(--bad-line); }
+  .callout strong { color: var(--ink); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 13.5px;
+  }
+  th, td {
+    border: 1px solid var(--line);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #f0f3f6;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  tr:nth-child(even) td { background: #fafbfc; }
+  .pill {
+    display: inline-block;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .pill.transient { background: var(--warn-bg); border: 1px solid var(--warn-line); color: #7a5b15; }
+  .pill.ok { background: var(--ok-bg); border: 1px solid var(--ok-line); color: #2e6a44; }
+  .pill.review { background: var(--accent-soft); border: 1px solid #b9d4e8; color: #1f4d72; }
+  .pill.human { background: var(--bad-bg); border: 1px solid var(--bad-line); color: #8a3030; }
+  .pill.high { background: var(--bad-bg); border: 1px solid var(--bad-line); color: #8a3030; }
+  .pill.warn { background: var(--warn-bg); border: 1px solid var(--warn-line); color: #7a5b15; }
+  .pill.off { background: #eef1f4; border: 1px solid var(--line); color: var(--ink-soft); }
+  .pill.on { background: var(--ok-bg); border: 1px solid var(--ok-line); color: #2e6a44; }
+  .lane { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; }
+  .filelist code { display: inline-block; margin: 2px 0; }
+  ol.plan > li { margin: 12px 0; }
+  ol.plan > li > strong { color: var(--ink); }
+  .note-append {
+    font-style: italic;
+    color: var(--ink-soft);
+    border-left: 3px solid var(--accent);
+    padding: 6px 12px;
+    margin: 14px 0 0;
+    background: #fbfcfd;
+  }
+  footer.page {
+    margin-top: 28px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .small { font-size: 12.5px; color: var(--ink-soft); }
+  .layer { font-family: "SFMono-Regular", Consolas, monospace; font-weight: 600; color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
 
-C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\docs\wiki\concepts\orchestrator-supervision-loop.html
+  <header class="page">
+    <h1>Orchestrator Supervision Loop</h1>
+    <div class="sub">A maintained concept page: the always-on watch loop whose one job is to keep the pipeline running, decide cleverly, act through the existing primitives, and show every decision live on the bus.</div>
+    <div class="meta">
+      <span><strong>Audience:</strong> operator, engineers, future agents</span>
+      <span><strong>Status:</strong> concept (proposed)</span>
+      <span><strong>Codename:</strong> the watch loop</span>
+    </div>
+  </header>
 
-It is a single self-contained .html (inline <style>, no scripts, iframe-readable, 920px max-width container, small TOC), styled to match the sibling page orchestrator-drive-to-conclusion.html in the same folder. English, no em dashes. All claims are grounded in the provided FINDINGS/CONCEPT and cite real file paths that I verified exist under backend/Features/Supervisor/ and prompts/runtime/.
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#mission">Mission and vision</a></li>
+      <li><a href="#today">How it works today, and the gap</a></li>
+      <li><a href="#loop">The supervision loop</a></li>
+      <li><a href="#suspicion">Suspicion model</a></li>
+      <li><a href="#transparency">Transparency</a></li>
+      <li><a href="#parallel">Parallel orchestrators with different models</a></li>
+      <li><a href="#prompt">The dedicated supervision prompt</a></li>
+      <li><a href="#plan">Build plan, config keys, open questions</a></li>
+    </ol>
+  </nav>
 
-Sections delivered:
-1. Mission and vision - keep the pipeline running, decide cleverly, close the supervision gap; L1/L2/L3 layering framing.
-2. How it works today and the gap - a table of the six hosted services (interval/default/detects/acts) plus the "0 cycles" explanation (ChatNoteSummary.Build / BuildCyclePhrase) and the detect-but-do-not-act gap callout.
-3. The supervision loop - one new SupervisionLoopHostedService; interval default 10s (configurable, live-reloadable), busy 30s, deep-tick every 30th; a 5-step tick diagram as an HTML table (READ -> TRIAGE -> DECIDE -> ACT -> RECORD with an LLM? column); heartbeat write to SupervisorLogPaths.HeartbeatFile and an independent dead-loop watchdog (LoopDeadAfterSeconds=60 -> supervision-loop-dead advisory + banner + restart).
-4. Suspicion model - table A (problem-reporting OutcomeIssue kinds, advisories, TaskRunActivity, mode-drift, reissue-guard with High/Warn pills) and table B (the 4-phase stranded self-flag: ExecutionStalled -> [stranded] marker -> scanner Kind="stranded" -> loop triage).
-5. Transparency - rolled-up clear ticks vs full decision lines, a sample decision line in a <pre> block, the decidedByModel gap on EmitOrchestratorChatAsync, dead-loop banner, thumbs/undo controls (text-only, no menu icons).
-6. Parallel orchestrators - participant identity change (orchestrator:{project}:{instanceKey}), fast/deep role split, lease-based claim/arbitration/deferred coordination, peer cross-watch, opt-in via Supervisor:LoopInstances.
-7. The dedicated supervision prompt - the supervisor-loop-decision.md slot sketch in a <pre> block with the [[SUPERVISOR_DECISION]] sentinel and rules; cites SoftReasoningParsing.cs as the parser to mirror.
-8. Build plan (S0-S9 as a numbered step list) + a config-keys table (new + reused) + the 8 open questions.
+  <!-- ============================ 1. MISSION ============================ -->
+  <section id="mission">
+    <h2>1. Mission and vision</h2>
 
-File paths cited in <code> (verified to exist): backend/Features/Supervisor/{HardHealthCheckHostedService,ChatNoteHostedService,ChatNoteSummary,MetaCycleHostedService,MetaCycleRules,SoftReasoningHostedService,SoftReasoningParsing,AutoInterventionHostedService,AutoInterventionMapping,OrchestratorPrepHostedService,HardHealthChecks,ProjectObservationService,SupervisorInterventionService,SupervisorLogPaths}.cs; backend/Features/Bus/{AgentMessageBusBridge,AgentMessageBusStore}.cs; backend/Features/Runner/{OrchestratorChatLog,OrchestratorSession,ProjectRunner}.cs; backend/Features/Tasks/TaskScannerService.cs; backend/Shared/Models/{TaskStates,RunnerStatus}.cs; and the canonical prompt slot prompts/runtime/supervisor-soft-reasoning.md (sibling of the proposed supervisor-loop-decision.md).
+    <div class="callout zielbild">
+      <strong>Mission, one sentence: keep the pipeline RUNNING.</strong> The watch loop is a single named, always-on
+      control loop that reads every signal, makes a clever decision through a dedicated supervision prompt, ACTS through
+      the existing emergency primitives and state machine, and publishes both the tick and the decision on the bus so the
+      operator can watch it think.
+    </div>
+
+    <p>Today's supervisor stack already <em>detects</em> well and <em>advises</em> loudly, but the line between detection
+       and action is where tasks strand. <code>HardHealthCheck</code> advises, <code>ChatNote</code> reports
+       "<code>N advisories ... 0 cycles</code>", and the act-capable services (<code>MetaCycle</code>,
+       <code>AutoIntervention</code>) are default-off and event-triggered rather than time-driven. The watch loop is the
+       missing piece: it is time-driven (default 10s), it OWNS an action verb on every non-clear tick, and it closes the
+       "detect but do not act" gap structurally.</p>
+
+    <h3>The "detect but do not act" gap</h3>
+    <p>"Detected but did nothing" is the failure mode this concept exists to make impossible. A suspicion on any tick must
+       resolve to exactly one of: an executed ACT, or an explicit, logged WAIT-with-reason. There is no third "noticed and
+       moved on" outcome. The loop promotes the six existing hosted services from advise-only to act-capable without
+       reinventing infrastructure: it is a thin <em>decide plus act</em> coordinator wrapped around them.</p>
+
+    <h3>L1 / L2 / L3 layering (vocabulary already in the code)</h3>
+    <p>The heartbeat comment in the supervisor code already names a "Layer 3 system review". The watch loop unifies the
+       three layers under one prompt-driven decision step:</p>
+    <table>
+      <thead>
+        <tr><th style="width:60px;">Layer</th><th>Scope</th><th>Cadence today</th><th>Status today</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="layer">L1</span></td>
+          <td>Per-task hard checks (no-progress, error-burst, quota, tool-repeat)</td>
+          <td>10s</td>
+          <td>Exists (advisory only)</td>
+        </tr>
+        <tr>
+          <td><span class="layer">L2</span></td>
+          <td>Per-project meta-cycle (pause, inspect, resume, queue-fix)</td>
+          <td>Event-driven</td>
+          <td>Exists (acts, but default-off)</td>
+        </tr>
+        <tr>
+          <td><span class="layer">L3</span></td>
+          <td>Workspace / system review (watches heartbeats)</td>
+          <td>Periodic</td>
+          <td>Exists (watches, does not act)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The watch loop unifies <span class="layer">L1</span>'s cadence with <span class="layer">L2</span> and
+       <span class="layer">L3</span>'s authority. It is explicitly NOT a rewrite of these layers; it wraps them. It also
+       reframes the old supervisor-doc line "not a parallel orchestrator" into a sharper claim: the watch loop IS the
+       orchestrator's self-supervision organ, and it is designed from day one so that MULTIPLE instances with different
+       models can run in parallel and coordinate through the bus (see Section 6).</p>
+  </section>
+
+  <!-- ============================ 2. TODAY + GAP ============================ -->
+  <section id="today">
+    <h2>2. How it works today, and the gap</h2>
+
+    <p>The supervisor is six hosted background services running periodic loops at configurable intervals. They detect and
+       advise well; only two of them act, and those two are default-off and event-triggered. Here is the full inventory as
+       it stands:</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th style="width:90px;">Interval</th>
+          <th style="width:80px;">Default</th>
+          <th>Detects</th>
+          <th>Acts?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>HardHealthCheckHostedService</code></td>
+          <td>10s</td>
+          <td><span class="pill on">ON</span></td>
+          <td>no-progress, error-burst, quota-critical, tool-call-repeat</td>
+          <td><span class="pill off">advise only</span> &mdash; appends to <code>observations.jsonl</code> + bus, no primitives</td>
+        </tr>
+        <tr>
+          <td><code>ChatNoteHostedService</code></td>
+          <td>60s tick / 30min window</td>
+          <td><span class="pill on">ON</span></td>
+          <td>advisories + meta-cycle reports + jobs reaching 4/5-review</td>
+          <td><span class="pill off">advise only</span> &mdash; emits the one-liner, never modifies state</td>
+        </tr>
+        <tr>
+          <td><code>MetaCycleHostedService</code></td>
+          <td>30s</td>
+          <td><span class="pill off">OFF</span></td>
+          <td>project-level stall / fix conditions (event-driven)</td>
+          <td><span class="pill on">acts</span> &mdash; pause/resume projects, queue fixes</td>
+        </tr>
+        <tr>
+          <td><code>SoftReasoningHostedService</code></td>
+          <td>600s (CLI-driven)</td>
+          <td><span class="pill off">OFF</span></td>
+          <td>LLM soft-reasoning over recent state</td>
+          <td><span class="pill off">advise only</span></td>
+        </tr>
+        <tr>
+          <td><code>AutoInterventionHostedService</code></td>
+          <td>30s (rate-limited)</td>
+          <td><span class="pill off">OFF</span></td>
+          <td>high-severity advisories</td>
+          <td><span class="pill on">acts</span> &mdash; CancelRun etc., per-project/hour limiter</td>
+        </tr>
+        <tr>
+          <td><code>ProjectObservationService</code></td>
+          <td>read helper</td>
+          <td>n/a</td>
+          <td>reads ProjectRunnerStatus + advisories for the others</td>
+          <td><span class="pill off">read helper</span> (shared by the act-capable services)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>The "0 cycles" explanation</h3>
+    <p>The "<code>Supervisor: N advisories on topic/topic, 0 cycles, 0 jobs reached review</code>" line that the operator
+       sees comes from <code>ChatNoteSummary.Build()</code>. It reports observed state and takes NO action itself; the
+       "0 cycles" phrase is produced by <code>ChatNoteSummary.BuildCyclePhrase()</code>. It is, by design, a mirror, not a
+       hand. The advise-only services see the problem and write it down; the act-capable services are off and only fire on
+       events. Nothing time-driven turns a detected problem into an action.</p>
+
+    <div class="callout gap">
+      <strong>The gap:</strong> detection without a time-driven act step. <code>HardHealthCheck</code> advises every 10s,
+      <code>ChatNote</code> reports "0 cycles" every minute, and the two services that <em>can</em> act
+      (<code>MetaCycle</code>, <code>AutoIntervention</code>) are default-off and event-triggered. A task that strands in
+      <span class="lane">3-progress</span> is detected and described, but no always-on loop owns the decision to do
+      something about it.
+    </div>
+
+    <p class="filelist">
+      <code>backend/Features/Supervisor/HardHealthCheckHostedService.cs</code><br>
+      <code>backend/Features/Supervisor/HardHealthChecks.cs</code><br>
+      <code>backend/Features/Supervisor/ChatNoteHostedService.cs</code><br>
+      <code>backend/Features/Supervisor/ChatNoteSummary.cs</code><br>
+      <code>backend/Features/Supervisor/MetaCycleHostedService.cs</code><br>
+      <code>backend/Features/Supervisor/MetaCycleRules.cs</code><br>
+      <code>backend/Features/Supervisor/SoftReasoningHostedService.cs</code><br>
+      <code>backend/Features/Supervisor/AutoInterventionHostedService.cs</code><br>
+      <code>backend/Features/Supervisor/ProjectObservationService.cs</code>
+    </p>
+  </section>
+
+  <!-- ============================ 3. THE LOOP ============================ -->
+  <section id="loop">
+    <h2>3. The supervision loop</h2>
+
+    <div class="callout zielbild">
+      One new hosted service: <code>SupervisionLoopHostedService</code>, built beside the existing six and reusing their
+      helpers. Time-driven, act-capable, and transparent on the bus. It does not reinvent infrastructure; it is the thin
+      decide-plus-act coordinator that the six services were missing.
+    </div>
+
+    <h3>Interval and cadence</h3>
+    <p>The loop reads <code>Supervisor:LoopIntervalSeconds</code> every tick, so cadence is live-reloadable (the same
+       re-read-each-tick pattern <code>MetaCycleHostedService</code> already uses, around line 97). The default is
+       <strong>10s</strong>, the "nothing-is-wrong heartbeat" rate. When the loop opens a longer remediation cycle (for
+       example pause then quiescence then inspect then resume) it backs its own cadence off to
+       <code>Supervisor:LoopBusyIntervalSeconds</code> (default <strong>30s</strong>) so it does not spam while a fix is in
+       flight, then returns to 10s. A periodic "deep tick" runs a model call every Nth tick
+       (<code>Supervisor:LoopDeepTickEvery</code>, default 30 ticks, roughly 5 minutes) even when nothing looks wrong.</p>
+
+    <h3>Tick body: the five steps</h3>
+    <p>The deterministic part of the tick is cheap and runs every 10s. Only one step ever spends a model call, and even
+       then only conditionally.</p>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:90px;">Step</th>
+          <th>What it does</th>
+          <th style="width:90px;">Model?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1. READ</strong></td>
+          <td>Per project, pull <code>ProjectRunnerStatus</code> (<code>TaskRunnerService.GetStatus</code>), new advisories
+              since cursor from <code>observations.jsonl</code>, task <code>OutcomeIssue</code> kinds from the scanner
+              projection, <code>LifecyclePhase</code> (<code>ExecutionStalled</code>), <code>TaskRunActivity</code>
+              (<code>FailedBackoff</code> / <code>FailedIdle</code> / <code>NoActiveRun</code>), and recent bus
+              decision / intervention messages.</td>
+          <td><span class="pill off">no</span></td>
+        </tr>
+        <tr>
+          <td><strong>2. TRIAGE</strong></td>
+          <td>Compute a suspicion set (see Section 4). If the set is EMPTY and the runner is healthy, emit a lightweight
+              "tick: clear" rolled-up bus heartbeat and return. Keeps the 10s loop cheap and quiet.</td>
+          <td><span class="pill off">no</span></td>
+        </tr>
+        <tr>
+          <td><strong>3. DECIDE</strong></td>
+          <td>Only when the suspicion set is non-empty (or on a periodic deep tick) does it spend a model call. The
+              supervision prompt receives the suspicion set + runner state + recent decisions and returns a structured
+              DECISION (action + target + reason + confidence). Cheap, obvious cases (a watchdog-timeout on a dead PID)
+              resolve on a deterministic fast-path with NO model, so the loop never stalls waiting on a CLI call.</td>
+          <td><span class="pill warn">conditional</span></td>
+        </tr>
+        <tr>
+          <td><strong>4. ACT</strong></td>
+          <td>Execute the decision through existing primitives:
+              <code>SupervisorInterventionService.{CancelRun, PausePickup, ForceFail, Resume}</code>, MetaCycle's
+              <code>ResumeWithRetry</code> / <code>UpdateStableThenResume</code>, <code>TaskStateMachine.MoveJob</code>
+              (park a looping task to <span class="lane">5-human-review</span>), or <code>QueueFix</code>
+              (a <span class="lane">1-preparation</span> follow-up). Every act is rate-limited (reuse AutoIntervention's
+              per-project/hour limiter) and idempotent (do not re-pause an already-paused project, do not re-park a parked
+              task). This is the step today's stack skips.</td>
+          <td><span class="pill off">no</span></td>
+        </tr>
+        <tr>
+          <td><strong>5. RECORD</strong></td>
+          <td>Append the decision to <code>interventions.jsonl</code> (canonical), emit a bus <code>decision</code> message
+              (transparency), then write the loop heartbeat.</td>
+          <td><span class="pill off">no</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout warn">
+      <strong>Decide then act, not detect then advise.</strong> The contract change is that the loop OWNS an action verb on
+      every non-clear tick. "Detected but did not act" becomes structurally impossible: a suspicion either resolves to an
+      ACT or to an explicit, logged WAIT-with-reason (for example "watchdog-timeout but PID still alive and producing
+      tokens, wait one more tick").
+    </div>
+
+    <h3>Heartbeat and dead-loop watchdog</h3>
+    <p>The loop writes <code>SupervisorLogPaths.HeartbeatFile</code> every tick (the mechanism already exists, around line
+       171 of the hard-check service). A SEPARATE, independent watchdog (the <span class="layer">L3</span> system review,
+       or a tiny always-on timer that does not share the loop's thread or scheduler) checks whether the loop heartbeat is
+       older than <code>Supervisor:LoopDeadAfterSeconds</code> (default <strong>60s</strong>, six missed ticks). If so it:</p>
+    <ol>
+      <li>emits a HIGH-severity bus advisory <code>topic=supervision-loop-dead</code>;</li>
+      <li>shows a red "supervision stopped" banner in the activity feed header; and</li>
+      <li>attempts an in-process restart of the hosted service.</li>
+    </ol>
+    <p>A dead supervisor is the worst silent failure, so the heartbeat-watcher is the one component that must itself be
+       dead-simple and dependency-free. Parallel orchestrators (Section 6) also cross-watch each other's heartbeats, so a
+       peer death is surfaced even if <span class="layer">L3</span> is down.</p>
+  </section>
+
+  <!-- ============================ 4. SUSPICION ============================ -->
+  <section id="suspicion">
+    <h2>4. Suspicion model</h2>
+
+    <p>A SUSPICION is "a task or project reports a problem, OR strands silently." Two intake paths feed one suspicion set
+       per tick. Each member carries a severity (<span class="pill high">High</span> /
+       <span class="pill warn">Warn</span>) and an age. The deterministic triage decides model-versus-fast-path:
+       High and actionable (dead PID + watchdog-timeout, quarantined, mode-drift) takes the fast-path act; ambiguous, Warn,
+       or multiple interacting signals are handed to the prompt for a clever call. The common case stays instant; the model
+       is reserved for genuine judgment.</p>
+
+    <h3>Table A: problem-reporting signals (already exist, the loop just consumes them)</h3>
+    <table>
+      <thead>
+        <tr><th>Source</th><th>Signal</th><th style="width:70px;">Severity</th></tr>
+      </thead>
+      <tbody>
+        <tr><td rowspan="9"><code>TaskScannerService</code> OutcomeIssue kinds</td><td><code>agent-git-violation</code> &mdash; committed before platform transition</td><td><span class="pill high">High</span></td></tr>
+        <tr><td><code>environment-blocker</code> &mdash; host/sandbox/logon/ACL refused execution</td><td><span class="pill high">High</span></td></tr>
+        <tr><td><code>permission-blocked</code> &mdash; tool permission failure</td><td><span class="pill high">High</span></td></tr>
+        <tr><td><code>watchdog-timeout</code> &mdash; run killed after silence threshold</td><td><span class="pill high">High</span></td></tr>
+        <tr><td><code>empty-fast-exit</code> &mdash; CLI exited instantly, no agent turn</td><td><span class="pill high">High</span></td></tr>
+        <tr><td><code>quarantined</code> &mdash; per-task circuit breaker tripped</td><td><span class="pill high">High</span></td></tr>
+        <tr><td><code>context-overflow</code> &mdash; prompt exceeds model input window</td><td><span class="pill high">High</span></td></tr>
+        <tr><td><code>worktree-containment</code> / <code>integration-conflict</code> / <code>integration-error</code></td><td><span class="pill high">High</span></td></tr>
+        <tr><td><code>classifier-unknown</code>, <code>missing-terminal-sentinel</code>, <code>heuristic-done</code>, <code>task-branch-unpushed</code></td><td><span class="pill warn">Warn</span></td></tr>
+        <tr><td rowspan="4"><code>HardHealthChecks</code> advisories</td><td><code>no-progress</code> &mdash; no log line for &gt;10min on active job</td><td><span class="pill warn">Warn</span></td></tr>
+        <tr><td><code>error-burst</code> &mdash; &gt;5 error lines in the last hour</td><td><span class="pill warn">Warn</span></td></tr>
+        <tr><td><code>quota-critical</code> &mdash; quota usage &gt;95%</td><td><span class="pill high">High</span></td></tr>
+        <tr><td><code>tool-call-repeat</code> &mdash; same tool call &gt;5 times</td><td><span class="pill warn">Warn</span></td></tr>
+        <tr><td rowspan="3"><code>TaskRunActivity</code></td><td><code>FailedBackoff</code> &mdash; rapid-crash</td><td><span class="pill high">High</span></td></tr>
+        <tr><td><code>NoActiveRun</code> &mdash; orphan after restart</td><td><span class="pill warn">Warn</span></td></tr>
+        <tr><td><code>FailedIdle</code></td><td><span class="pill warn">Warn</span></td></tr>
+        <tr><td>Runner-mode drift</td><td>project expected auto-continuous but found manual/paused (the classic "pipeline silently stopped")</td><td><span class="pill high">High</span></td></tr>
+        <tr><td>Reissue-loop guard</td><td><code>branch-unpushed</code> / no commit on a failed-status run (re-pick would wipe correct work, park instead)</td><td><span class="pill high">High</span></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Table B: the 4-phase stranded self-flag (new)</h3>
+    <p>The vision's hard requirement: a task in <span class="lane">3-progress</span> must report its OWN stalling rather
+       than relying solely on the external observer. The external no-progress check can be fooled (a wedged process that
+       still flushes a keepalive line looks alive), but the task's own phase machine knows it produced no real work. All
+       four hook points already exist in the code.</p>
+    <table>
+      <thead>
+        <tr><th style="width:80px;">Phase</th><th>What happens</th><th>Where</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Phase 1</strong></td>
+          <td>When no append to <code>{jobFolder}/logs/*</code> for <code>Supervisor:SelfStrandSeconds</code> (default
+              120s), the per-task monitor sets <code>LifecycleSnapshot.Phase=ExecutionStalled</code> with
+              <code>PhaseEnteredAt</code> + <code>BlockingReason="self-detected no-progress"</code>.</td>
+          <td><code>ProjectRunner</code> monitor; <code>TaskStates.cs</code> sidecar <code>lifecycle.json</code></td>
+        </tr>
+        <tr>
+          <td><strong>Phase 2</strong></td>
+          <td>It appends a <code>[system] [stranded] self-report: no log append for {n}s, phase=...</code> marker to
+              <code>cli-output.log</code>. This is the self-flag: the task raises its own hand.</td>
+          <td><code>ProjectRunner</code> per-task monitor</td>
+        </tr>
+        <tr>
+          <td><strong>Phase 3</strong></td>
+          <td><code>TaskScannerService</code> gains a <code>[stranded]</code> matcher producing
+              <code>OutcomeIssue.Kind="stranded"</code> (Warn), so the chip renders on the card and the endpoint exposes
+              it.</td>
+          <td><code>TaskScannerService.cs</code></td>
+        </tr>
+        <tr>
+          <td><strong>Phase 4</strong></td>
+          <td>The watch loop sees <code>Kind="stranded"</code> in its tick triage and treats it as a first-class
+              suspicion.</td>
+          <td><code>SupervisionLoopHostedService</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="filelist">
+      <code>backend/Features/Tasks/TaskScannerService.cs</code> (OutcomeIssue kinds 773-966)<br>
+      <code>backend/Shared/Models/TaskStates.cs</code> (lifecycle phases 18-46; PhaseEnteredAt + BlockingReason 117-145)<br>
+      <code>backend/Shared/Models/RunnerStatus.cs</code> (TaskRunActivity 45-158)<br>
+      <code>backend/Features/Supervisor/HardHealthChecks.cs</code> (advisory checks 9-97)
+    </p>
+  </section>
+
+  <!-- ============================ 5. TRANSPARENCY ============================ -->
+  <section id="transparency">
+    <h2>5. Transparency</h2>
+
+    <p>Everything the loop does is on the bus, so the operator literally watches it work. The design balances "every tick
+       and decision is visible" against "do not bury the feed at 10s times N projects."</p>
+
+    <h3>Rolled-up clear ticks versus full decision lines</h3>
+    <p>Every tick emits exactly one bus message from participant <code>orchestrator:{project}</code> (or
+       <code>supervisor:{project}</code> for pure-safety acts), <code>kind=heartbeat</code> when clear and
+       <code>kind=decision</code> when it acts. To avoid flooding, clear ticks are ROLLED UP into a single workspace-level
+       line such as <code>tick: N projects clear, M suspicions, 0 acts</code>, and per-project clear state shows as a quiet
+       pulsing dot in the participant graph rather than a chat line. The moment a suspicion appears or an act happens, a
+       full decision line is emitted and never rolled up. The operator sees a steady pulse (proof the loop is alive) plus
+       loud, legible decisions.</p>
+
+    <h3>A sample decision line</h3>
+    <p>The decision message mirrors <code>OrchestratorChatLog</code> to a bus <code>decision</code> message. It carries an
+       <code>artifact:log-slice</code> ref back to the evidence line and a <code>replyToId</code> linking to the advisory
+       that triggered it, so the timeline shows cause then decision then effect as a chain:</p>
+    <pre><code>[supervision] tick #4821 . suspicion=watchdog-timeout(job ASS-1769, age 11m)
+  . decided=force-fail+park-&gt;5-human-review
+  . model=haiku-4.5 . confidence=0.82
+  . reason="PID dead, no commit, 2nd watchdog this hour"
+  . artifact=log-slice:cli-output.log#L3187 . replyTo=adv-01J9...</code></pre>
+
+    <h3>The <code>decidedByModel</code> gap</h3>
+    <p>Today decision messages carry NO model field; only token messages do
+       (<code>EmitTokenUsageRichAsync</code> includes <code>tokens.model</code>, but
+       <code>EmitOrchestratorChatAsync</code> does not). The fix is to add <code>payload.decidedByModel</code> to
+       <code>EmitOrchestratorChatAsync</code> so the feed shows WHICH supervisor made the call. This is essential once
+       parallel orchestrators run (Section 6), because otherwise two loops are indistinguishable in the feed.</p>
+
+    <h3>Dead-loop visibility and operator controls</h3>
+    <ul>
+      <li>A missed heartbeat fires the HIGH bus advisory <code>supervision-loop-dead</code> plus a persistent red banner
+          "Supervision loop stopped at HH:MM, auto-restart attempted" in the activity feed header, so a stopped watch loop
+          is itself the loudest thing on screen.</li>
+      <li>Each decision line carries a thumbs-up/down (fed back as a User-source advisory, never counted as a trigger per
+          AutoIntervention's feedback guard) and an undo/override for reversible acts (resume a pause, un-park a task).
+          This makes the loop steerable without a config edit. Text-only controls, no menu icons.</li>
+    </ul>
+
+    <p class="filelist">
+      <code>backend/Features/Bus/AgentMessageBusBridge.cs</code> (ParticipantOrchestratorFor / ParticipantSupervisor 71-78; EmitOrchestratorChatAsync 123-161; EmitTokenUsageRich 428-501)<br>
+      <code>backend/Features/Runner/OrchestratorChatLog.cs</code> (canonical write + bus bridge 28-125)<br>
+      <code>backend/Shared/Models/AgentBus.cs</code> (message envelope, participantId field 1-82)<br>
+      <code>backend/Features/Bus/AgentMessageBusStore.cs</code> (Query, participantId filter 128-166)
+    </p>
+  </section>
+
+  <!-- ============================ 6. PARALLEL ============================ -->
+  <section id="parallel">
+    <h2>6. Parallel orchestrators with different models</h2>
+
+    <p>Because all loop output is bus messages attributed to a participant, multiple watch loops with DIFFERENT MODELS can
+       run and coordinate without a shared in-memory coordinator. The bus is the coordination substrate.</p>
+
+    <h3>Participant identity (the one real schema change)</h3>
+    <p>Extend the derivation from <code>orchestrator:{project}</code> to
+       <code>orchestrator:{project}:{instanceKey}</code>, where <code>instanceKey</code> encodes model and role, for
+       example <code>orchestrator:web:haiku-fast</code> and <code>orchestrator:web:opus-deep</code>.
+       <code>AgentMessageBusBridge.ParticipantOrchestratorFor</code> gains an <code>instanceKey</code> argument.
+       <code>participantId</code> has no format restriction, so the bus and the participant-graph UI render each as its own
+       node for free (Query already filters by <code>participantId</code>).</p>
+
+    <h3>Role split (the natural parallel pattern)</h3>
+    <table>
+      <thead>
+        <tr><th style="width:90px;">Role</th><th>Model / cadence</th><th>Owns</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>FAST</strong></td>
+          <td>Haiku, 10s</td>
+          <td>Cheap deterministic + light-judgment triage. Common acts: force-fail dead PIDs, resume mode-drift, park
+              quarantined tasks. Keeps the pipeline alive.</td>
+        </tr>
+        <tr>
+          <td><strong>DEEP</strong></td>
+          <td>Opus/Sonnet, 60-120s</td>
+          <td>Subscribes to the SAME bus, picks up suspicions the fast loop flagged with <code>escalate:deep</code>, and
+              renders the hard calls (is this classifier-unknown actually done? is this reissue loop destroying work?). The
+              fast loop never blocks on the deep loop.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Coordination via bus (no locks, lease-based)</h3>
+    <ul>
+      <li><strong>Claim.</strong> Before acting on a target, a loop emits a <code>claim</code> message
+          (<code>participantId</code> + <code>jobId</code> + <code>intendedAction</code> + <code>leaseSeconds</code>). A
+          loop must not act on a target with a live unexpired claim from another participant: cheap optimistic
+          mutual-exclusion, consistent with the lease-based distribution direction in the worktree/lanes concept.</li>
+      <li><strong>Arbitration.</strong> Conflicting decisions are resolved by an explicit priority field on the claim (role
+          rank: deep &gt; fast for judgment calls; fast &gt; deep for liveness/kill acts) with a ULID tie-break. The loser
+          emits a <code>deferred</code> message ("haiku deferred park decision to opus") so the operator sees the
+          coordination, not just the outcome.</li>
+      <li><strong>Chaining.</strong> <code>replyToId</code> / <code>correlationId</code> chain every claim then decision
+          then effect, so the timeline reads as a multi-supervisor conversation.</li>
+    </ul>
+
+    <h3>Peer cross-watch</h3>
+    <p>Each loop watches its peers' heartbeats. If the deep loop dies, the fast loop emits <code>peer-supervisor-dead</code>
+       and (configurably) absorbs the deep role at reduced confidence until it returns. The parallel set is self-healing,
+       and "a loop that dies is a problem" holds even with the <span class="layer">L3</span> watcher down.</p>
+
+    <div class="callout zielbild">
+      <strong>Opt-in default.</strong> Ship single-loop (fast/Haiku) first. Parallel is opt-in via
+      <code>Supervisor:LoopInstances</code>, a config list of <code>{instanceKey, model, role}</code> entries. The
+      architecture is parallel-ready from day one because identity and claims are designed in, but a second model is not
+      enabled until the single loop is trusted.
+    </div>
+
+    <p class="filelist">
+      <code>backend/Features/Bus/AgentMessageBusBridge.cs</code> (ParticipantOrchestratorFor derivation 71-78; SeedBuiltInParticipants 90-116)<br>
+      <code>backend/Features/Bus/AgentMessageBusStore.cs</code> (participantId filter 128-166)
+    </p>
+  </section>
+
+  <!-- ============================ 7. PROMPT ============================ -->
+  <section id="prompt">
+    <h2>7. The dedicated supervision prompt</h2>
+
+    <p>A named prompt slot <code>supervisor-loop-decision.md</code>, a sibling of
+       <code>prompts/runtime/supervisor-soft-reasoning.md</code>, NOT inline (the Registry+Slots rule). Unlike the
+       soft-reasoning prompt, which says "You are advisory. You do not fix things," this one is DECIDE-AND-ACT. The backend
+       parses <code>[[SUPERVISOR_DECISION]]</code> sentinels (a mirror of the existing
+       <code>[[SUPERVISOR_OBSERVATION]]</code> parser), validates <code>action</code> is in the allowed set and
+       <code>confidence</code> is at or above threshold, applies the claim/lease check, then executes via
+       <code>SupervisorInterventionService</code> / <code>TaskStateMachine</code> and records to
+       <code>interventions.jsonl</code> + bus.</p>
+
+    <pre><code># Supervisor loop -- decision prompt
+
+You are a supervision loop for this project. Your MISSION is one thing:
+keep the pipeline RUNNING and healthy. Unlike the advisory supervisor,
+you DECIDE and you ACT. Every call you make resolves to exactly one
+action -- including an explicit, justified WAIT. "Detected but did
+nothing" is a failure.
+
+## Your model &amp; role
+You are `{{instance_key}}` running `{{model}}`, role=`{{role}}`
+(fast=keep-alive/liveness; deep=hard-judgment). Defer judgment calls to
+a higher-ranked peer if one holds a live claim.
+
+## State this tick (tick #{{seq}})
+Runner: `{{runner_status}}` . active job `{{current_job_id}}`
+  (`{{current_run_state}}`, phase `{{lifecycle_phase}}`)
+Suspicions (deterministic triage already ran):
+```
+{{suspicion_set}}   // each: kind, severity, jobId, age, evidence-line
+```
+Recent supervisor decisions (yours and peers'):
+```
+{{recent_decisions}}
+```
+Live peer claims:
+```
+{{peer_claims}}
+```
+
+## Decide
+For the suspicion set as a whole, output ONE structured decision per
+actionable target:
+```
+[[SUPERVISOR_DECISION: target=&lt;jobId|project&gt;;
+  action=&lt;force-fail|cancel-run|pause-pickup|resume|
+          update-stable-then-resume|park-to-human-review|
+          queue-fix|wait|escalate-deep&gt;;
+  reason=&lt;one line, &lt;200 chars&gt;; confidence=&lt;0..1&gt;;
+  lease=&lt;seconds&gt;]]
+```
+Rules:
+- Prefer the LEAST destructive action that keeps the pipeline moving.
+  Resume a stalled-but-recoverable runner before you kill a job.
+- NEVER re-pick a failed run that produced uncommitted work -- park it
+  to 5-human-review (reissue loops destroy work).
+- A dead PID + watchdog-timeout + no commit => force-fail + park.
+  A live PID still emitting tokens => wait (say so).
+- Mode drift (expected auto-continuous, found paused) with no blocking
+  error => resume.
+- classifier-unknown / heuristic-done on otherwise-clean work =>
+  escalate-deep (if you are fast) or judge it (if you are deep); do not
+  silently complete.
+- Respect peer claims; if a higher-ranked peer claims the target, emit
+  action=wait with reason="deferred to {peer}".
+- Emit action=wait with a reason rather than inventing work.
+  Idle-but-healthy is a valid, good state.
+
+End with `[[TASK_DONE]]`. No prose outside sentinels.</code></pre>
+
+    <p class="filelist">
+      <code>prompts/runtime/supervisor-soft-reasoning.md</code> (the advisory sibling this prompt diverges from)<br>
+      New: <code>prompts/runtime/supervisor-loop-decision.md</code> (the decide-and-act slot)
+    </p>
+  </section>
+
+  <!-- ============================ 8. PLAN ============================ -->
+  <section id="plan">
+    <h2>8. Build plan, config keys, open questions</h2>
+
+    <h3>Ordered build steps (S0 to S9)</h3>
+    <ol class="plan">
+      <li><strong>S0 &mdash; Promote intent in the docs.</strong> Update <code>concept-docs/supervisor.md</code> + this
+          <code>orchestrator-supervision-loop.html</code> so the operator-facing story is decide-AND-act, not advisory-only.
+          Cross-link the drive-to-conclusion concept and the stranding epic. Doc-only, no code risk.</li>
+      <li><strong>S1 &mdash; Stranded self-flag.</strong> Implement the 4-phase self-flag: the <code>ProjectRunner</code>
+          per-task monitor sets <code>LifecyclePhase=ExecutionStalled</code> + appends the <code>[stranded]</code> marker
+          after <code>SelfStrandSeconds</code> (120s); <code>TaskScannerService</code> matches <code>[stranded]</code> to
+          <code>OutcomeIssue.Kind='stranded'</code>; UI chip. Independently valuable, directly closes the stranding bug.</li>
+      <li><strong>S2 &mdash; Decision sentinel + prompt slot.</strong> Add <code>supervisor-loop-decision.md</code> to the
+          runtime slot registry and a <code>[[SUPERVISOR_DECISION]]</code> parser mirroring the observation parser.
+          Validate the action enum, confidence, and lease.</li>
+      <li><strong>S3 &mdash; SupervisionLoopHostedService (single, fast, act-capable).</strong> New hosted service beside
+          the six. Reuses <code>ProjectObservationService</code> + <code>HardHealthChecks</code> for the read,
+          AutoIntervention's limiter, <code>SupervisorInterventionService</code> for acts. Deterministic fast-path acts
+          first; model deep-tick on suspicion. Writes the loop heartbeat each tick. Default <code>LoopEnabled=false</code>.
+          Wrap MetaCycle's verified <code>ResumeWithRetry</code>/quiescence logic, do not rewrite it.</li>
+      <li><strong>S4 &mdash; Transparency on the bus.</strong> Add <code>decidedByModel</code> to
+          <code>EmitOrchestratorChatAsync</code>; emit rolled-up clear-tick heartbeat + full decision lines with
+          <code>replyToId</code> chains; participant-graph pulse + dead-loop red banner; thumbs/undo controls in the feed.</li>
+      <li><strong>S5 &mdash; Dead-loop watchdog.</strong> Independent heartbeat-watcher (<span class="layer">L3</span> /
+          dependency-free timer) producing the <code>supervision-loop-dead</code> advisory + banner + in-process restart
+          attempt. Test by killing the loop thread and asserting the alarm fires within <code>LoopDeadAfterSeconds</code>.</li>
+      <li><strong>S6 &mdash; Bake-in single loop.</strong> Enable <code>LoopEnabled=true</code> on dev only; run a night
+          with acts capped (<code>LoopActRateLimit=3</code>, <code>LoopSeverityThreshold=High</code>). Compare decisions
+          against what a human operator would have done; tune thresholds live.</li>
+      <li><strong>S7 &mdash; Parallel identity + claims.</strong> Extend <code>ParticipantOrchestratorFor</code> with
+          <code>instanceKey</code>; add claim/lease + arbitration messages; peer heartbeat cross-watch. Still single
+          instance running, but the wire format is parallel-ready and unit-tested.</li>
+      <li><strong>S8 &mdash; Enable deep loop (Opus) in parallel.</strong> Add a second <code>LoopInstances</code> entry
+          <code>{opus-deep, role=deep}</code>; fast escalates judgment via <code>escalate-deep</code>; verify lease
+          mutual-exclusion and deferred-message visibility on the bus.</li>
+      <li><strong>S9 &mdash; Product homepage section.</strong> Author the 'Product' marketing section on
+          agent-studio-marketing: "Self-supervising pipeline: a watch loop that keeps your agents running, decides
+          cleverly, and shows every decision live." Operator screenshot of the feed pulse + a decision line. Derived from
+          this same wiki concept (single source, two audiences).</li>
+    </ol>
+
+    <h3>Config keys (all under <code>Supervisor:</code>, live-reloadable, re-read each tick)</h3>
+    <table>
+      <thead>
+        <tr><th>Key</th><th style="width:130px;">Default</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>Supervisor:LoopEnabled</code></td><td>false</td><td>Master switch for the new service (true after bake-in).</td></tr>
+        <tr><td><code>Supervisor:LoopIntervalSeconds</code></td><td>10</td><td>BASE/idle cadence.</td></tr>
+        <tr><td><code>Supervisor:LoopBusyIntervalSeconds</code></td><td>30</td><td>Cadence while a remediation cycle is in flight.</td></tr>
+        <tr><td><code>Supervisor:LoopDeepTickEvery</code></td><td>30</td><td>Run a model deep tick every Nth tick (about 5min) even with no suspicion.</td></tr>
+        <tr><td><code>Supervisor:LoopDeadAfterSeconds</code></td><td>60</td><td>Heartbeat-miss threshold (dead-loop alarm + restart).</td></tr>
+        <tr><td><code>Supervisor:LoopModel</code></td><td>claude-haiku-4-5</td><td>Cheap default; per-project override; same key style as SoftReasoningModel.</td></tr>
+        <tr><td><code>Supervisor:LoopCli</code></td><td>claude</td><td>CLI for the decision call.</td></tr>
+        <tr><td><code>Supervisor:LoopCallsPerHour</code></td><td>60</td><td>Model-call budget; deterministic fast-path acts do not count.</td></tr>
+        <tr><td><code>Supervisor:LoopActRateLimit</code></td><td>3 / project / hr</td><td>Reuse AutoIntervention limiter.</td></tr>
+        <tr><td><code>Supervisor:LoopSeverityThreshold</code></td><td>High</td><td>Threshold for autonomous ACT; Warn suspicions get advisory + queued, not autonomous destructive acts.</td></tr>
+        <tr><td><code>Supervisor:SelfStrandSeconds</code></td><td>120</td><td>No-log-append window that triggers the task self-flag.</td></tr>
+        <tr><td><code>Supervisor:LoopInstances</code></td><td>(empty)</td><td>Opt-in parallel: list of <code>{instanceKey, model, role}</code> entries.</td></tr>
+      </tbody>
+    </table>
+    <p class="small"><strong>Reused existing keys (no change):</strong> <code>Supervisor:HardCheckIntervalSeconds=10</code>,
+       <code>NoProgressThresholdSeconds=600</code>, <code>ErrorBurstThreshold=5</code>,
+       <code>QuotaCriticalFraction=0.95</code>, <code>ToolCallRepeatLimit=5</code>, <code>AdvisoryCooldownSeconds=300</code>,
+       <code>MetaCyclePauseQuiescenceTimeoutSeconds=1800</code>, <code>AutoInterventionRateLimit=3</code>. Per-project
+       overrides live in the project's pipeline-config so one project can run a stricter loop or a different model than
+       another, consistent with the operator-principles "no inline prompt; Registry+Slots" rule.</p>
+
+    <h3>Open questions</h3>
+    <ul>
+      <li><strong>Clear-tick channel.</strong> Should the 10s clear-tick heartbeat be a real bus message (auditable, but
+          adds volume) or a separate lightweight liveness channel the feed renders as a pulse without persisting per-tick?
+          Leaning: persist a rolled-up workspace line per minute, pulse the rest.</li>
+      <li><strong>Autonomy ceiling.</strong> Which acts may the loop perform fully autonomously vs. require a one-click
+          operator confirm? Proposal: force-fail/park/resume autonomous at High; update-stable-then-resume and queue-fix
+          autonomous; anything that could discard uncommitted work always parks (never deletes), matching the
+          reissue-loop-destroys-work rule.</li>
+      <li><strong>Cost.</strong> A Haiku deep-tick every 5min times N projects plus per-suspicion calls: is
+          <code>LoopCallsPerHour=60</code> the right ceiling, and should the loop degrade to deterministic-only when the
+          budget is exhausted rather than going blind?</li>
+      <li><strong>Parallel arbitration priority.</strong> Is role-rank (deep &gt; fast for judgment, fast &gt; deep for
+          liveness) the right default, or should it be per-action-class configurable? Does the lease + cooldown fully
+          prevent a pause/resume oscillation war, or do we need a global per-target action cooldown across all instances?</li>
+      <li><strong>Relationship to MetaCycle.</strong> Does the watch loop SUBSUME MetaCycle (fold its
+          pause-inspect-resume rules into the act step) or RUN ALONGSIDE it? Subsuming is cleaner long-term but risks
+          regressing the verified ResumeWithRetry/quiescence logic; recommend wrapping, not rewriting, in S3.</li>
+      <li><strong>Dead-loop watchdog placement.</strong> In-process timer (simple, but dies if the host process dies) vs.
+          external (survives a host crash, needs a second process). For a keep-the-pipeline-running mission, does
+          host-process death need an out-of-process guardian, and is that the existing UpdateService/:5039 or a new minimal
+          one?</li>
+      <li><strong>Self-flag false positives.</strong> A legitimately long single tool call (large build, long test run)
+          produces no log append for &gt;120s and would self-flag as stranded. Do we need a work-in-flight signal
+          (CPU/child-process liveness) to distinguish a genuine stall from slow-but-working before the self-flag fires?</li>
+      <li><strong>Marketing scope.</strong> How much of the internal mechanism (parallel models, lease arbitration) belongs
+          on the public Product page vs. staying in the operator wiki? Proposal: the homepage tells the outcome story
+          (self-supervising, always-running, transparent); the wiki holds the mechanism.</li>
+    </ul>
+
+    <div class="callout zielbild">
+      <strong>AGENTS rule (to be added):</strong> Before changing any supervisor hosted service, advisory, intervention
+      primitive, or bus participant identity, read this page (the decide-then-act contract; the five-step tick; the
+      suspicion model; the dead-loop watchdog; parallel identity + claims). The watch loop wraps the six existing services,
+      it does not rewrite them. Keep the config-keys table and the service inventory accurate as the code drifts.
+    </div>
+  </section>
+
+  <footer class="page">
+    This page is a living concept doc. It must be maintained: keep the service inventory and config-keys tables accurate,
+    and keep the decide-then-act contract front and center. Code references are grounded in
+    <code>agent-taskboard-dev/backend</code> and <code>agent-taskboard-dev/prompts</code> as of the concept date
+    (2026-06-19); update file paths and line numbers if they drift. Cross-link:
+    <code>docs/wiki/concepts/orchestrator-drive-to-conclusion.html</code>.
+  </footer>
+
+</div>
+</body>
+</html>
