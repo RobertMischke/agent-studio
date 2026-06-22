@@ -21,6 +21,7 @@
     [commitMessageDraft]="commitMessage()"
     [generatingCommitMessage]="generatingMsg()"
     [committing]="committing()"
+    [landedState]="landedState()"
     (back)="back.emit()"
     (titleDraftChange)="titleDraft.set($event)"
     (startTitleEdit)="startTitleEdit()"

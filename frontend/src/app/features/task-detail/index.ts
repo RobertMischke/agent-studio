@@ -19,7 +19,9 @@ export {
   overflowActionsFor,
   primaryActionFor,
   laneLabelFor,
+  mergeAcceptViewFor,
   LANE_LABELS,
+  type MergeAcceptView,
   type TriageActionPayload,
   type TriageButton,
 } from './state/triage-actions.model';

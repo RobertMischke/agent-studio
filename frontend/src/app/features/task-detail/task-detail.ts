@@ -246,6 +246,8 @@ export class TaskDetailComponent implements OnDestroy {
   readonly commitMessage = this.git.commitMessage;
   readonly committing = this.git.committing;
   readonly generatingMsg = this.git.generatingMsg;
+  /** Live-derived landed position of the task's work; null while unknown/loading. */
+  readonly landedState = computed(() => this.git.provenance()?.landedState ?? null);
   readonly commitActionsAvailable = computed(() => {
     const status = this.git.status();
     return this.git.viewMode() === 'worktree'

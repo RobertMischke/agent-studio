@@ -15,12 +15,15 @@ import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../compone
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import {
+  MergeAcceptView,
   TriageActionPayload,
   TriageButton,
   laneLabelFor,
+  mergeAcceptViewFor,
   overflowActionsFor,
   primaryActionFor,
 } from '../../state/triage-actions.model';
+import type { LandedState } from '../../../git';
 /**
  * Top header of the job-detail view: back button, editable title,
  * state pill, and — top-right — the lane's primary triage action plus
@@ -76,6 +79,14 @@ export class DetailHeaderComponent {
   readonly triageActingId = input<string | null>(null);
   /** Whether the task-level commit actions should be exposed in the overflow menu. */
   readonly commitActionsAvailable = input(false);
+  /**
+   * Live-derived landed position of the task's work (graph-derived provenance
+   * view; null when unknown / still loading). Lets the Human Review acceptance
+   * primary read "Released to main" when the recorded merge fact only proves
+   * develop. The persisted `info.provenance.merge` fact is still the synchronous
+   * fallback, so a "Merged to develop" status renders even before this resolves.
+   */
+  readonly landedState = input<LandedState | null>(null);
   readonly commitMessageDraft = input<string>('');
   readonly generatingCommitMessage = input(false);
   readonly committing = input(false);
@@ -179,6 +190,25 @@ export class DetailHeaderComponent {
     primaryActionFor(this.info().state),
   );
 
+  /**
+   * State-dependent presentation for the Human Review acceptance primary. Null
+   * for every other primary (Run now, Stop run, ...). When the work has already
+   * landed it carries the landed-status pill text and relabels the button to
+   * "Accept"; otherwise the offer stays "Merge into Develop".
+   */
+  readonly mergeAcceptView = computed<MergeAcceptView | null>(() => {
+    const p = this.triagePrimary();
+    if (!p || p.id !== 'mark-done') return null;
+    return mergeAcceptViewFor(this.info(), this.landedState());
+  });
+
+  /** Effective primary label (state-aware for the Human Review acceptance). */
+  readonly primaryLabel = computed(() => {
+    const p = this.triagePrimary();
+    if (!p) return '';
+    return this.mergeAcceptView()?.acceptLabel ?? p.label;
+  });
+
   /** Remaining lane actions + always-on Edit/Delete fallbacks. */
   readonly triageOverflow = computed<TriageButton[]>(() =>
     overflowActionsFor(this.info().state),
@@ -239,8 +269,11 @@ export class DetailHeaderComponent {
     const p = this.triagePrimary();
     if (!p) return '';
     if (this.mutationsBlocked()) return 'Update in progress — actions paused.';
-    if (this.triageActingId() === p.id) return `${p.label}…`;
-    return `${p.label} (Enter)`;
+    const label = this.primaryLabel();
+    if (this.triageActingId() === p.id) return `${label}…`;
+    const merge = this.mergeAcceptView();
+    if (merge?.landed && merge.statusTooltip) return `${merge.statusTooltip} (Enter)`;
+    return `${label} (Enter)`;
   }
 
   overflowTooltip(): string {

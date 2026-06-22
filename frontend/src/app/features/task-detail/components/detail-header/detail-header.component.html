@@ -135,6 +135,16 @@
       <span class="detail__triage-counter visually-hidden"
             data-testid="triage-counter"
             aria-live="polite">{{ triageCounterText() }}</span>
+      @if (mergeAcceptView()?.statusLabel; as mergeStatus) {
+        <span class="detail__triage-merge-status"
+              [class.detail__triage-merge-status--released]="mergeAcceptView()?.landedState === 'released-to-main'"
+              data-testid="triage-merge-status"
+              [attr.data-landed-state]="mergeAcceptView()?.landedState"
+              [appTooltip]="mergeAcceptView()?.statusTooltip || ''">
+          <span class="detail__triage-merge-status-glyph" aria-hidden="true">⬇</span>
+          {{ mergeStatus }}
+        </span>
+      }
       @if (triagePrimary(); as primary) {
         <button type="button"
                 class="detail__triage-primary"
@@ -146,9 +156,9 @@
                 (click)="onPrimaryClick()">
           @if (triageActingId() === primary.id) {
             <span aria-hidden="true">⏳</span>
-            <span>{{ primary.label }}…</span>
+            <span>{{ primaryLabel() }}…</span>
           } @else {
-            {{ primary.label }}
+            {{ primaryLabel() }}
           }
         </button>
       }

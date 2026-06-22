@@ -1,5 +1,44 @@
 import { describe, expect, it } from 'vitest';
-import { overflowActionsFor, primaryActionFor } from './triage-actions.model';
+import { mergeAcceptViewFor, overflowActionsFor, primaryActionFor } from './triage-actions.model';
+import { TaskState } from '../../../models/task.model';
+import type { TaskInfo } from '../../../models/task.model';
+import type { LandedState, TaskProvenanceRecord } from '../../../features/git';
+
+function reviewJob(provenance: TaskProvenanceRecord | null = null): TaskInfo {
+  return {
+    id: 'task-1',
+    taskKey: 'test::task-1',
+    key: 'ATP-1',
+    title: 'Task 1',
+    state: TaskState.HumanReview,
+    order: 1,
+    agent: 'codex',
+    createdAt: '2026-06-10T09:00:00Z',
+    watchPath: '/tmp/watch',
+    projectName: 'Test',
+    folderPath: '/tmp/watch/5-human-review/task-1',
+    lastActivity: '2026-06-10T09:30:00Z',
+    sessionName: null,
+    model: null,
+    cliType: 'codex',
+    useOwnSession: null,
+    lastUsage: null,
+    execution: null,
+    commit: null,
+    provenance,
+  };
+}
+
+function mergedProvenance(mergeCommit: string | null): TaskProvenanceRecord {
+  return {
+    branch: 'task/task-1',
+    base: 'base000',
+    transitions: [],
+    merge: mergeCommit
+      ? { mergeCommit, workBranchHeadBefore: 'dev0000', workBranchHeadAfter: mergeCommit, atUtc: '2026-06-10T10:30:00Z' }
+      : null,
+  };
+}
 
 function overflowIds(state: string): string[] {
   return overflowActionsFor(state).map(b => b.id);
@@ -76,5 +115,57 @@ describe('overflowActionsFor — Move to Completed / Move to Archive', () => {
     expect(ids).not.toContain('move-to-archive');
     // Moving an archived card forward to Completed is still allowed.
     expect(ids).toContain('move-to-completed');
+  });
+});
+
+describe('mergeAcceptViewFor — state-dependent Human Review acceptance primary', () => {
+  it('keeps the "Merge into Develop" offer when nothing has landed yet', () => {
+    const view = mergeAcceptViewFor(reviewJob(mergedProvenance(null)));
+    expect(view.landed).toBe(false);
+    expect(view.acceptLabel).toBe('Merge into Develop');
+    expect(view.statusLabel).toBeNull();
+    expect(view.landedState).toBe('on-branch-only');
+  });
+
+  it('treats a recorded merge fact as landed and relabels to "Accept"', () => {
+    const view = mergeAcceptViewFor(reviewJob(mergedProvenance('ddddddd9abc')));
+    expect(view.landed).toBe(true);
+    expect(view.landedState).toBe('merged-to-develop');
+    expect(view.acceptLabel).toBe('Accept');
+    expect(view.statusLabel).toBe('Merged to develop @ddddddd');
+    expect(view.statusTooltip).toContain('already merged into develop at ddddddd');
+  });
+
+  it('upgrades wording to "Released to main" from the live landed-state hint', () => {
+    const view = mergeAcceptViewFor(reviewJob(mergedProvenance('ddddddd9')), 'released-to-main');
+    expect(view.landed).toBe(true);
+    expect(view.landedState).toBe('released-to-main');
+    expect(view.acceptLabel).toBe('Accept');
+    expect(view.statusLabel).toBe('Released to main');
+  });
+
+  it('lands purely on the live hint when no merge fact is persisted yet', () => {
+    const view = mergeAcceptViewFor(reviewJob(mergedProvenance(null)), 'merged-to-develop');
+    expect(view.landed).toBe(true);
+    expect(view.acceptLabel).toBe('Accept');
+    expect(view.statusLabel).toBe('Merged to develop');
+  });
+
+  it('never lets a stale on-branch-only hint mask a recorded merge fact', () => {
+    const view = mergeAcceptViewFor(reviewJob(mergedProvenance('ddddddd9')), 'on-branch-only');
+    expect(view.landed).toBe(true);
+    expect(view.landedState).toBe('merged-to-develop');
+  });
+
+  it('ignores a blank/whitespace merge commit string', () => {
+    const view = mergeAcceptViewFor(reviewJob(mergedProvenance('   ')));
+    expect(view.landed).toBe(false);
+    expect(view.acceptLabel).toBe('Merge into Develop');
+  });
+
+  it('stays an offer for a legacy card with no provenance at all', () => {
+    const view = mergeAcceptViewFor(reviewJob(null));
+    expect(view.landed).toBe(false);
+    expect(view.acceptLabel).toBe('Merge into Develop');
   });
 });

@@ -1571,6 +1571,34 @@
   padding: 0 2px;
 }
 
+/* Landed-status pill beside the Human Review acceptance primary once the work
+   is already on develop (or released): a read-only state, not a merge offer.
+   Green (accent-3) for develop, blue (accent) once released to main. */
+.studio-tab-action__merge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: var(--studio-accent-3-strong);
+  background: color-mix(in srgb, var(--studio-accent-3) 14%, var(--studio-bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--studio-accent-3) 34%, transparent);
+}
+.studio-tab-action__merge-status--released {
+  color: var(--studio-accent);
+  background: color-mix(in srgb, var(--studio-accent) 14%, var(--studio-bg-elevated));
+  border-color: color-mix(in srgb, var(--studio-accent) 34%, transparent);
+}
+.studio-tab-action__merge-status-glyph {
+  font-size: 12px;
+  line-height: 1;
+}
+
 /* ASS-1751: run-activity pill in the slim tab-bar header (the studio shell
    hides <app-detail-header>, so the open task's run state surfaces here).
    Mirrors the board-card / detail-header pill — quiet, no alarm design.

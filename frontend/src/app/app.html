@@ -214,14 +214,24 @@
             @if (studioTriageHasActions()) {
               <span class="studio-tab-actions-sep" aria-hidden="true"></span>
               <div class="studio-tab-action__triage" data-testid="studio-triage-panel" data-triage-root>
+                @if (studioMergeAcceptView()?.statusLabel; as mergeStatus) {
+                  <span class="studio-tab-action__merge-status"
+                        [class.studio-tab-action__merge-status--released]="studioMergeAcceptView()?.landedState === 'released-to-main'"
+                        data-testid="studio-triage-merge-status"
+                        [attr.data-landed-state]="studioMergeAcceptView()?.landedState"
+                        [appTooltip]="studioMergeAcceptView()?.statusTooltip || ''">
+                    <span class="studio-tab-action__merge-status-glyph" aria-hidden="true">⬇</span>
+                    {{ mergeStatus }}
+                  </span>
+                }
                 @if (studioTriagePrimary(); as primary) {
                   <button type="button"
                           class="studio-tab-action studio-tab-action--primary"
                           [attr.data-testid]="'studio-triage-action-' + primary.id"
                           [attr.data-action-id]="primary.id"
                           [disabled]="updateClient.mutationsBlocked()"
-                          [appTooltip]="primary.label + ' (Enter)'"
-                          (click)="onStudioTriagePrimary()">{{ primary.label }}</button>
+                          [appTooltip]="(studioMergeAcceptView()?.statusTooltip || studioPrimaryLabel()) + ' (Enter)'"
+                          (click)="onStudioTriagePrimary()">{{ studioPrimaryLabel() }}</button>
                 }
                 <button type="button"
                         class="studio-tab-action studio-tab-action--icon"

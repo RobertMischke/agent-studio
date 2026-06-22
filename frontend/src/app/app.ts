@@ -45,6 +45,8 @@ import {
   LANE_LABELS,
   overflowActionsFor,
   primaryActionFor,
+  mergeAcceptViewFor,
+  type MergeAcceptView,
   type TriageButton,
 } from './features/task-detail';
 import {
@@ -1330,6 +1332,26 @@ export class App implements OnInit, OnDestroy {
   readonly studioTriageOverflow = computed<TriageButton[]>(() => {
     const sel = this.selectedJob();
     return sel ? overflowActionsFor(sel.info.state) : [];
+  });
+  /**
+   * State-dependent presentation for the studio Human Review acceptance primary
+   * (`mark-done`). Null for every other primary. When the work has already
+   * landed it carries the landed-status pill text and relabels "Merge into
+   * Develop" to "Accept"; the live `landedState` (graph-derived) upgrades the
+   * wording to "Released to main" when known, with the persisted merge fact as
+   * the synchronous fallback.
+   */
+  readonly studioMergeAcceptView = computed<MergeAcceptView | null>(() => {
+    const sel = this.selectedJob();
+    const p = this.studioTriagePrimary();
+    if (!sel || !p || p.id !== 'mark-done') return null;
+    return mergeAcceptViewFor(sel.info, this.jobDetailSig()?.landedState() ?? null);
+  });
+  /** Effective studio primary label (state-aware for the Human Review acceptance). */
+  readonly studioPrimaryLabel = computed(() => {
+    const p = this.studioTriagePrimary();
+    if (!p) return '';
+    return this.studioMergeAcceptView()?.acceptLabel ?? p.label;
   });
   readonly studioTriageHasActions = computed(
     () => this.studioTriagePrimary() !== null || this.studioTriageOverflow().length > 0 || this.studioCommitActionsAvailable(),
