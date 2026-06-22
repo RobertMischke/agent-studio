@@ -9,7 +9,9 @@ import {
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
+import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
+import { TooltipDirective } from '../../../../components/tooltip';
 import { PromptNavSplitterDirective } from './prompt-nav-splitter.directive';
 import {
   PromptAdminService,
@@ -40,7 +42,7 @@ interface PromptDiffLine {
 @Component({
   selector: 'app-prompt-admin-panel',
   standalone: true,
-  imports: [FormsModule, DatePipe, SectionHeaderComponent, TreeRowComponent, PromptNavSplitterDirective],
+  imports: [FormsModule, DatePipe, SectionHeaderComponent, StudioIconComponent, TreeRowComponent, TooltipDirective, PromptNavSplitterDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './prompt-admin-panel.component.html',
   styleUrl: './prompt-admin-panel.component.scss',
@@ -129,6 +131,10 @@ export class PromptAdminPanelComponent implements OnInit {
     if (collapsed) next.add(name);
     else next.delete(name);
     this.collapsedGroups.set(next);
+  }
+
+  overrideTooltip(item: PromptCatalogItem): string {
+    return item.defaultChangedSinceOverride ? 'Local override active. The shipped default changed since this override was created.' : 'Local override active.';
   }
 
   setSlotValue(slot: string, value: string): void {

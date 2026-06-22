@@ -67,10 +67,11 @@ shared active state already flips across light and dark themes through
 
 ## Trailing Status
 
-Projected trailing content is allowed when the row needs compact status such as
-`shipped`, `overridden`, or `shipped changed`. `Shipped` means the bundled
-application default is active. Keep trailing status to small chips or a single
-count. If the row needs multi-line metadata, it is a content list, not a rail.
+Projected trailing content is allowed when the row needs compact exceptional
+status such as a local override icon with a tooltip. Do not show default or
+shipped states in navigation rows; quiet rows are the default. Keep trailing
+status to a small icon or a single count. If the row needs multi-line metadata,
+it is a content list, not a rail.
 
 ## Do Not
 

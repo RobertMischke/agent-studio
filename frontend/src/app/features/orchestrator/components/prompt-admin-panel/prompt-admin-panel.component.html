@@ -29,12 +29,12 @@
               (selectRequest)="select(item.name)">
               <span class="prompts__item-tags">
                 @if (item.hasOverride) {
-                  <span class="prompts__pill prompts__pill--override">overridden</span>
-                } @else {
-                  <span class="prompts__pill">shipped</span>
-                }
-                @if (item.defaultChangedSinceOverride) {
-                  <span class="prompts__pill prompts__pill--warn" [attr.data-testid]="'prompt-admin-drift-' + item.name">shipped changed</span>
+                  <span class="prompts__override-icon"
+                        aria-label="Local override active"
+                        [appTooltip]="overrideTooltip(item)"
+                        [attr.data-testid]="'prompt-admin-override-' + item.name">
+                    <app-studio-icon name="diff" [size]="12"></app-studio-icon>
+                  </span>
                 }
               </span>
             </app-tree-row>

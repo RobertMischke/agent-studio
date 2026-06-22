@@ -96,7 +96,12 @@ test('Prompts rail hosts the prompt-admin surface', async ({ page }) => {
   const promptDetail = page.getByTestId('prompt-admin-detail');
   await expect.poll(() => promptList.locator('[data-testid^="prompt-admin-group-"]').count()).toBeGreaterThan(0);
   await expect.poll(() => promptList.locator('[data-testid^="prompt-admin-item-"]').count()).toBeGreaterThan(0);
-  await expect(promptList.locator('[data-testid^="prompt-admin-item-"]').first()).toContainText('shipped');
+  await expect(promptList).not.toContainText('shipped');
+  await expect(promptList).not.toContainText('overridden');
+  const overrideIcon = promptList.locator('[data-testid^="prompt-admin-override-"]').first();
+  await expect(overrideIcon).toBeVisible();
+  await overrideIcon.hover();
+  await expect(page.getByTestId('app-tooltip').locator('.app-tooltip__body')).toContainText('Local override active');
   const firstGroup = promptList.locator('[data-testid^="prompt-admin-group-"]').first();
   await expect(firstGroup).toHaveAttribute('aria-expanded', 'true');
   await firstGroup.click();

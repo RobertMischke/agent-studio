@@ -168,9 +168,10 @@ async function mount() {
 }
 
 describe('PromptAdminPanelComponent', () => {
-  it('renders the inventory grouped by source with shipped / override pills', async () => {
+  it('renders the inventory grouped by source with quiet defaults and override icons', async () => {
     const fixture = await mount();
     const host = fixture.nativeElement as HTMLElement;
+    const list = host.querySelector<HTMLElement>('[data-testid="prompt-admin-list"]')!;
 
     expect(host.querySelector('[data-testid="prompt-admin-panel"]')).not.toBeNull();
     expect(host.querySelectorAll('.tree-row').length).toBe(2);
@@ -180,8 +181,10 @@ describe('PromptAdminPanelComponent', () => {
     expect(host.querySelector('[data-testid="prompt-admin-group-Runner"]')?.getAttribute('aria-expanded')).toBe('true');
     expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)?.classList).toContain('tree-row--active');
 
-    // The overridden + drifted Review template surfaces the shipped-changed pill.
-    expect(host.querySelector(`[data-testid="prompt-admin-drift-${DRIFT}"]`)).not.toBeNull();
+    expect(list.textContent).not.toContain('shipped');
+    expect(list.textContent).not.toContain('overridden');
+    expect(host.querySelector(`[data-testid="prompt-admin-override-${DRIFT}"]`)).not.toBeNull();
+    expect(host.querySelector(`[data-testid="prompt-admin-drift-${DRIFT}"]`)).toBeNull();
   });
 
   it('collapses prompt groups through the shared section header control', async () => {

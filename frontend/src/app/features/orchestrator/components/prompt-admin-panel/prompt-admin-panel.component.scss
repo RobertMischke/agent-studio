@@ -61,6 +61,8 @@
 
 .prompts__pill--ok { border-color: color-mix(in srgb, var(--studio-accent-success) 34%, transparent); background: color-mix(in srgb, var(--studio-accent-success) 12%, transparent); color: var(--studio-accent-success-strong); }
 
+.prompts__override-icon { display: inline-flex; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; border: 1px solid color-mix(in srgb, var(--studio-accent-4) 32%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--studio-accent-4) 10%, transparent); color: var(--studio-accent-4-strong); }
+
 .prompts__banner,
 .prompts__meta,
 .prompts__probe,
