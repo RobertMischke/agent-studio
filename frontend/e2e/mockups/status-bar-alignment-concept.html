@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Status Bar Alignment Concept</title>
+  <style>
+    :root {
+      --page-bg: #0f1117;
+      --panel-bg: #11111b;
+      --panel-bg-soft: #181825;
+      --panel-border: rgba(205, 214, 244, 0.10);
+      --status-bg: #181825;
+      --status-border: rgba(205, 214, 244, 0.14);
+      --status-chip: rgba(205, 214, 244, 0.055);
+      --status-chip-hover: rgba(205, 214, 244, 0.11);
+      --status-text: #cdd6f4;
+      --status-muted: #a6adc8;
+      --status-faint: #6c7086;
+      --status-accent: #d97757;
+      --status-accent-text: #1a1110;
+      --status-success: #94e2d5;
+      --status-info: #89b4fa;
+      --status-warn: #f9e2af;
+      --status-radius: 5px;
+      --status-height: 26px;
+      --status-item-height: 20px;
+      --preview-width: 1280px;
+      color-scheme: dark;
+    }
+
+    html[data-theme="light"] {
+      --page-bg: #e8eaed;
+      --panel-bg: #f6f7f9;
+      --panel-bg-soft: #ffffff;
+      --panel-border: rgba(24, 24, 37, 0.14);
+      --status-bg: #eceff3;
+      --status-border: rgba(24, 24, 37, 0.16);
+      --status-chip: rgba(24, 24, 37, 0.045);
+      --status-chip-hover: rgba(24, 24, 37, 0.09);
+      --status-text: #1f2937;
+      --status-muted: #4b5563;
+      --status-faint: #6b7280;
+      --status-accent: #d97757;
+      --status-accent-text: #1a1110;
+      --status-success: #047857;
+      --status-info: #2563eb;
+      --status-warn: #92400e;
+      color-scheme: light;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 30%),
+        var(--page-bg);
+      color: var(--status-text);
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 13px;
+      letter-spacing: 0;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .concept {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 100vh;
+      gap: 18px;
+      padding: 18px;
+    }
+
+    .concept__toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      width: min(100%, 1120px);
+      margin-inline: auto;
+      color: var(--status-muted);
+    }
+
+    .concept__title {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .concept__title strong {
+      color: var(--status-text);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .concept__title span {
+      color: var(--status-faint);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .concept__controls {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .concept__range {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--status-muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .concept__range input {
+      width: 220px;
+      accent-color: var(--status-accent);
+    }
+
+    .concept__toggle,
+    .concept__step {
+      height: 24px;
+      border: 1px solid var(--status-border);
+      border-radius: 6px;
+      background: var(--status-chip);
+      color: var(--status-muted);
+      padding: 0 9px;
+      cursor: pointer;
+    }
+
+    .concept__toggle[aria-pressed="true"],
+    .concept__step:hover,
+    .concept__toggle:hover {
+      background: var(--status-chip-hover);
+      color: var(--status-text);
+    }
+
+    .preview {
+      display: grid;
+      place-items: center;
+      min-width: 0;
+    }
+
+    .preview__frame {
+      container: preview / inline-size;
+      display: grid;
+      grid-template-rows: 30px 1fr auto;
+      width: min(100%, var(--preview-width));
+      height: min(620px, calc(100vh - 110px));
+      min-height: 360px;
+      overflow: hidden;
+      border: 1px solid var(--panel-border);
+      border-radius: 9px;
+      background: var(--panel-bg);
+      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.36);
+    }
+
+    .mock-titlebar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding-inline: 10px;
+      border-bottom: 1px solid var(--panel-border);
+      background: var(--panel-bg-soft);
+      color: var(--status-muted);
+      font-size: 11px;
+    }
+
+    .mock-titlebar__dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--status-accent);
+      opacity: 0.85;
+    }
+
+    .mock-workbench {
+      display: grid;
+      grid-template-columns: 210px 1fr 280px;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .mock-rail,
+    .mock-panel,
+    .mock-editor {
+      min-width: 0;
+      min-height: 0;
+      border-right: 1px solid var(--panel-border);
+    }
+
+    .mock-rail {
+      background: color-mix(in srgb, var(--panel-bg-soft) 78%, black);
+    }
+
+    .mock-editor {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      padding: 16px;
+      background: var(--panel-bg);
+    }
+
+    .mock-panel {
+      border-right: 0;
+      border-left: 1px solid var(--panel-border);
+      background: var(--panel-bg-soft);
+    }
+
+    .mock-line {
+      height: 10px;
+      border-radius: 999px;
+      background: var(--status-chip);
+    }
+
+    .mock-line:nth-child(1) {
+      width: 62%;
+    }
+
+    .mock-line:nth-child(2) {
+      width: 84%;
+    }
+
+    .mock-line:nth-child(3) {
+      width: 48%;
+    }
+
+    .statusbar {
+      container: statusbar / inline-size;
+      display: flex;
+      align-items: center;
+      width: 100%;
+      min-width: 0;
+      height: var(--status-height);
+      padding: 0 8px;
+      border-top: 1px solid var(--status-border);
+      background: var(--status-bg);
+      color: var(--status-muted);
+      font-size: 11px;
+      line-height: 1;
+      overflow: hidden;
+    }
+
+    .statusbar__left,
+    .statusbar__right,
+    .statusbar__actions,
+    .statusbar__quota {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .statusbar__left {
+      flex: 0 1 auto;
+      max-width: min(640px, 50%);
+      overflow: hidden;
+      gap: 4px;
+    }
+
+    .statusbar__center {
+      flex: 1 1 auto;
+      min-width: 18px;
+    }
+
+    .statusbar__right {
+      flex: 0 0 auto;
+      justify-content: flex-end;
+      margin-left: auto;
+      gap: 5px;
+    }
+
+    .statusbar__actions {
+      justify-content: flex-end;
+      gap: 3px;
+    }
+
+    .statusbar__sep {
+      flex: 0 0 auto;
+      width: 1px;
+      height: 14px;
+      margin-inline: 4px;
+      background: var(--status-border);
+    }
+
+    .statusbar__chip,
+    .statusbar__action,
+    .statusbar__defaults,
+    .statusbar__quota-card {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: var(--status-item-height);
+      min-width: 0;
+      border: 0;
+      border-radius: var(--status-radius);
+      background: transparent;
+      color: inherit;
+      white-space: nowrap;
+    }
+
+    .statusbar__chip {
+      gap: 5px;
+      flex: 0 1 auto;
+      padding: 0 7px;
+    }
+
+    .statusbar__chip--quiet {
+      color: var(--status-faint);
+    }
+
+    .statusbar__chip--live {
+      color: var(--status-text);
+    }
+
+    .statusbar__dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--status-success);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-success) 16%, transparent);
+    }
+
+    .statusbar__glyph {
+      display: inline-grid;
+      place-items: center;
+      width: 13px;
+      height: 13px;
+      flex: 0 0 13px;
+      color: var(--status-faint);
+      font-size: 12px;
+      line-height: 1;
+    }
+
+    .statusbar__quota {
+      flex: 1 1 auto;
+      gap: 4px;
+      overflow: hidden;
+    }
+
+    .statusbar__quota-card {
+      gap: 6px;
+      flex: 0 1 auto;
+      max-width: 178px;
+      padding: 0 7px;
+      background: var(--status-chip);
+      color: var(--status-muted);
+    }
+
+    .statusbar__quota-card strong {
+      color: var(--status-text);
+      font-weight: 650;
+    }
+
+    .statusbar__meter {
+      width: 40px;
+      height: 3px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--status-muted) 18%, transparent);
+    }
+
+    .statusbar__meter span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--status-info);
+    }
+
+    .statusbar__meter--warn span {
+      background: var(--status-warn);
+    }
+
+    .statusbar__action {
+      gap: 5px;
+      flex: 0 0 auto;
+      padding: 0 7px;
+      color: var(--status-muted);
+      cursor: pointer;
+    }
+
+    .statusbar__action:hover {
+      background: var(--status-chip-hover);
+      color: var(--status-text);
+    }
+
+    .statusbar__action--active,
+    .statusbar__action--active:hover {
+      background: var(--status-accent);
+      color: var(--status-accent-text);
+    }
+
+    .statusbar__action--active .statusbar__glyph {
+      color: currentColor;
+    }
+
+    .statusbar__defaults {
+      gap: 6px;
+      flex: 0 1 auto;
+      max-width: 228px;
+      padding: 0 8px;
+      background: var(--status-chip);
+      color: var(--status-text);
+      cursor: pointer;
+    }
+
+    .statusbar__defaults-meta {
+      color: var(--status-faint);
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .statusbar__defaults-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 620;
+    }
+
+    @container statusbar (width <= 1180px) {
+      .statusbar__left {
+        max-width: min(560px, 47%);
+      }
+
+      .statusbar__quota-card {
+        max-width: 112px;
+      }
+
+      .statusbar__quota-label,
+      .statusbar__meter {
+        display: none;
+      }
+
+      .statusbar__defaults {
+        max-width: 172px;
+      }
+    }
+
+    @container statusbar (width <= 940px) {
+      .statusbar__left {
+        max-width: 42%;
+      }
+
+      .statusbar__quota {
+        display: none;
+      }
+
+      .statusbar__defaults-meta {
+        display: none;
+      }
+    }
+
+    @container statusbar (width <= 760px) {
+      .statusbar {
+        --status-item-height: 21px;
+      }
+
+      .statusbar__left {
+        max-width: calc(100% - 214px);
+      }
+
+      .statusbar__center {
+        min-width: 8px;
+      }
+
+      .statusbar__action {
+        width: var(--status-item-height);
+        padding: 0;
+      }
+
+      .statusbar__action-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      .statusbar__defaults {
+        max-width: 98px;
+      }
+    }
+
+    @container statusbar (width <= 560px) {
+      .statusbar {
+        padding-inline: 6px;
+      }
+
+      .statusbar__left {
+        max-width: calc(100% - 150px);
+      }
+
+      .statusbar__chip--auto,
+      .statusbar__left .statusbar__sep {
+        display: none;
+      }
+
+      .statusbar__defaults {
+        width: var(--status-item-height);
+        padding: 0;
+      }
+
+      .statusbar__defaults-name {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+    }
+
+    @container preview (width <= 780px) {
+      .mock-workbench {
+        grid-template-columns: 56px 1fr;
+      }
+
+      .mock-panel {
+        display: none;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .concept {
+        padding: 10px;
+      }
+
+      .concept__toolbar {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .concept__controls {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+      }
+
+      .concept__range input {
+        width: 150px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="concept">
+    <div class="concept__toolbar">
+      <div class="concept__title">
+        <strong>Status bar concept</strong>
+        <span>right-docked actions, calmer left signal group</span>
+      </div>
+      <div class="concept__controls" aria-label="Concept controls">
+        <label class="concept__range">
+          Width
+          <input id="widthRange" type="range" min="420" max="1500" value="1280" step="20">
+          <span id="widthValue">1280 px</span>
+        </label>
+        <button class="concept__step" type="button" data-width="1500">Wide</button>
+        <button class="concept__step" type="button" data-width="940">Medium</button>
+        <button class="concept__step" type="button" data-width="620">Narrow</button>
+        <button class="concept__toggle" type="button" data-theme-choice="dark" aria-pressed="true">Dark</button>
+        <button class="concept__toggle" type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+      </div>
+    </div>
+
+    <section class="preview" aria-label="Status bar preview">
+      <div class="preview__frame" id="previewFrame">
+        <header class="mock-titlebar">
+          <span class="mock-titlebar__dot" aria-hidden="true"></span>
+          <span>Agent Task Processor</span>
+        </header>
+
+        <div class="mock-workbench" aria-hidden="true">
+          <aside class="mock-rail"></aside>
+          <section class="mock-editor">
+            <span class="mock-line"></span>
+            <span class="mock-line"></span>
+            <span class="mock-line"></span>
+          </section>
+          <aside class="mock-panel"></aside>
+        </div>
+
+        <footer class="statusbar" aria-label="Concept status bar">
+          <div class="statusbar__left">
+            <span class="statusbar__chip statusbar__chip--live">
+              <span class="statusbar__dot" aria-hidden="true"></span>
+              <span><strong>2</strong> running</span>
+            </span>
+            <span class="statusbar__chip statusbar__chip--quiet statusbar__chip--auto">
+              <span class="statusbar__glyph" aria-hidden="true">↻</span>
+              <span>4/6 auto</span>
+            </span>
+            <span class="statusbar__sep" aria-hidden="true"></span>
+            <span class="statusbar__quota">
+              <span class="statusbar__quota-card">
+                <span class="statusbar__quota-label">Daily</span>
+                <strong>68%</strong>
+                <span class="statusbar__meter" aria-hidden="true"><span style="width: 68%"></span></span>
+              </span>
+              <span class="statusbar__quota-card">
+                <span class="statusbar__quota-label">Month</span>
+                <strong>42%</strong>
+                <span class="statusbar__meter statusbar__meter--warn" aria-hidden="true"><span style="width: 42%"></span></span>
+              </span>
+            </span>
+          </div>
+
+          <div class="statusbar__center" aria-hidden="true"></div>
+
+          <div class="statusbar__right">
+            <div class="statusbar__actions" aria-label="Workspace actions">
+              <button class="statusbar__action" type="button" aria-label="Usage">
+                <span class="statusbar__glyph" aria-hidden="true">▦</span>
+                <span class="statusbar__action-label">Usage</span>
+              </button>
+              <button class="statusbar__action statusbar__action--active" type="button" aria-label="Orchestrator" aria-pressed="true">
+                <span class="statusbar__glyph" aria-hidden="true">◇</span>
+                <span class="statusbar__action-label">Orchestrator</span>
+              </button>
+              <button class="statusbar__action" type="button" aria-label="Feed">
+                <span class="statusbar__glyph" aria-hidden="true">≋</span>
+                <span class="statusbar__action-label">Feed</span>
+              </button>
+              <button class="statusbar__action" type="button" aria-label="Settings">
+                <span class="statusbar__glyph" aria-hidden="true">⚙</span>
+                <span class="statusbar__action-label">Settings</span>
+              </button>
+            </div>
+
+            <span class="statusbar__sep" aria-hidden="true"></span>
+
+            <button class="statusbar__defaults" type="button" aria-label="Defaults for new tasks">
+              <span class="statusbar__glyph" aria-hidden="true">✦</span>
+              <span class="statusbar__defaults-name">Codex</span>
+              <span class="statusbar__defaults-meta">gpt-5 high</span>
+            </button>
+          </div>
+        </footer>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const root = document.documentElement;
+    const range = document.querySelector("#widthRange");
+    const value = document.querySelector("#widthValue");
+    const toggles = [...document.querySelectorAll("[data-theme-choice]")];
+
+    function setWidth(width) {
+      const next = Number(width);
+      root.style.setProperty("--preview-width", `${next}px`);
+      range.value = String(next);
+      value.textContent = `${next} px`;
+    }
+
+    function setTheme(theme) {
+      root.dataset.theme = theme;
+      for (const toggle of toggles) {
+        toggle.setAttribute("aria-pressed", String(toggle.dataset.themeChoice === theme));
+      }
+    }
+
+    range.addEventListener("input", event => setWidth(event.target.value));
+    document.querySelectorAll("[data-width]").forEach(button => {
+      button.addEventListener("click", () => setWidth(button.dataset.width));
+    });
+    toggles.forEach(button => {
+      button.addEventListener("click", () => setTheme(button.dataset.themeChoice));
+    });
+  </script>
+</body>
+</html>

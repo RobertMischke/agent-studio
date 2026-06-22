@@ -21,25 +21,21 @@
 }
 
 .statusbar {
-  // -----------------------------------------------------------------
-  // Shared sizing tokens (component-scoped). One source of truth for
-  // every chip in the bar — quota cards, statusbar items, CLI picker,
-  // model picker. Mockup target (docs/mockups/vscode-layout/ui.html):
-  // 22 px bar, 11 px font.
-  // -----------------------------------------------------------------
-  --statusbar-bar-height: 22px;
-  --statusbar-item-height: 18px;
-  --statusbar-item-pad-x: 7px;
-  --statusbar-item-radius: 4px;
+  // Shared sizing tokens. One source of truth for every chip in the bar:
+  // status items, quota cards and the default CLI/model picker.
+  --statusbar-bar-height: 24px;
+  --statusbar-item-height: 20px;
+  --statusbar-item-pad-x: 8px;
+  --statusbar-item-radius: 5px;
   --statusbar-item-gap-inner: 5px;
   --statusbar-font-size: 11px;
-  --statusbar-icon-size: 11px;
+  --statusbar-icon-size: 12px;
 
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr) minmax(20px, auto) auto;
   align-items: center;
-  column-gap: 8px;
-  padding: 0 8px;
+  column-gap: var(--studio-spacing-2);
+  padding: 0 var(--studio-spacing-2);
   height: var(--statusbar-bar-height);
   background: var(--studio-bg-activitybar, #181825);
   border-top: 1px solid var(--studio-border, rgba(255, 255, 255, 0.06));
@@ -47,28 +43,49 @@
   line-height: 1;
   color: var(--studio-fg-dim, rgba(255, 255, 255, 0.70));
   letter-spacing: 0;
+  overflow: hidden;
 }
 
 .statusbar__group {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--studio-spacing-1);
   min-width: 0;
   height: 100%;
 }
-.statusbar__group--left  { justify-self: start; }
+.statusbar__group--left  {
+  justify-self: stretch;
+  overflow: hidden;
+}
 .statusbar__group--center {
   // Pure spacer — the grid's `1fr` column already does the work; the
   // empty flex stays for selector compatibility with the F50 spec.
   justify-self: stretch;
 }
-.statusbar__group--spacer { min-width: 40px; }
+.statusbar__group--spacer { min-width: var(--studio-spacing-5); }
 .statusbar__group--right {
   justify-self: end;
-  gap: 2px;
+  flex: 0 0 auto;
+  gap: var(--studio-spacing-1);
 }
 
-.statusbar .statusbar__quota .hquota__card { cursor: pointer; }
+.statusbar__quota {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.statusbar__quota .uhp,
+.statusbar__quota .hquota {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.statusbar .statusbar__quota .hquota__card {
+  cursor: pointer;
+  flex: 0 1 auto;
+  min-width: 0;
+}
 
 .statusbar__item {
   display: inline-flex;
@@ -85,6 +102,7 @@
   font-size: var(--statusbar-font-size);
   line-height: 1;
   white-space: nowrap;
+  min-width: 0;
 }
 .statusbar__item--ro { color: rgba(255, 255, 255, 0.55); }
 .statusbar__item--btn {
@@ -136,14 +154,103 @@
 .statusbar__sep {
   display: inline-block;
   width: 1px;
-  height: 12px;
+  height: 14px;
   background: rgba(255, 255, 255, 0.10);
-  margin: 0 4px;
+  margin: 0 var(--studio-spacing-1);
   flex: 0 0 auto;
 }
 
-.statusbar__pickers {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
+.statusbar__defaults {
+  min-width: 0;
+}
+
+.statusbar__defaults .cli-model-selector {
+  height: var(--statusbar-item-height);
+  padding: 0 var(--statusbar-item-pad-x);
+  border-radius: var(--statusbar-item-radius);
+  font-size: var(--statusbar-font-size);
+  line-height: 1;
+  color: inherit;
+}
+
+.statusbar__defaults .cli-model-selector__icon {
+  font-size: 12px;
+}
+
+.statusbar__defaults .cli-model-selector__name {
+  max-width: 15ch;
+}
+
+@media (width <= 1280px) {
+  .statusbar .hquota__bar {
+    display: none;
+  }
+
+  .statusbar .hquota__card {
+    gap: var(--studio-spacing-1);
+    padding: 0 var(--studio-spacing-2);
+  }
+
+  .statusbar .hquota__value {
+    min-width: auto;
+  }
+}
+
+@media (width <= 1160px) {
+  .statusbar .hquota__label,
+  .statusbar .hquota__tag {
+    display: none;
+  }
+
+  .statusbar .hquota__metric {
+    gap: 0;
+  }
+
+  .statusbar__defaults .cli-model-selector__name {
+    max-width: 10ch;
+  }
+}
+
+@media (width <= 900px) {
+  .statusbar__quota {
+    display: none;
+  }
+}
+
+@media (width <= 860px) {
+  .statusbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .statusbar__group--center {
+    display: none;
+  }
+
+  .statusbar__group--right .statusbar__item {
+    width: var(--statusbar-item-height);
+    padding-inline: 0;
+  }
+
+  .statusbar__group--right .statusbar__item > span:last-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (width <= 700px) {
+  .statusbar__defaults .cli-model-selector__name {
+    display: none;
+  }
+}
+
+@media (width <= 520px) {
+  .statusbar__group--left app-statusbar-item:nth-of-type(2),
+  .statusbar__group--left .statusbar__sep {
+    display: none;
+  }
 }
