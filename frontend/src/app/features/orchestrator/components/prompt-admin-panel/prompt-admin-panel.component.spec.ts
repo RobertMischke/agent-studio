@@ -177,10 +177,26 @@ describe('PromptAdminPanelComponent', () => {
 
     const groupHeads = Array.from(host.querySelectorAll('.section-header__title')).map(e => e.textContent?.trim());
     expect(groupHeads).toEqual(['Runner', 'Review']);
+    expect(host.querySelector('[data-testid="prompt-admin-group-Runner"]')?.getAttribute('aria-expanded')).toBe('true');
     expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)?.classList).toContain('tree-row--active');
 
     // The overridden + drifted Review template surfaces the shipped-changed pill.
     expect(host.querySelector(`[data-testid="prompt-admin-drift-${DRIFT}"]`)).not.toBeNull();
+  });
+
+  it('collapses prompt groups through the shared section header control', async () => {
+    const fixture = await mount();
+    const host = fixture.nativeElement as HTMLElement;
+    const runnerHead = host.querySelector<HTMLButtonElement>('[data-testid="prompt-admin-group-Runner"]');
+
+    expect(runnerHead).not.toBeNull();
+    runnerHead!.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.isGroupCollapsed('Runner')).toBe(true);
+    expect(runnerHead!.getAttribute('aria-expanded')).toBe('false');
+    expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)).toBeNull();
+    expect(host.querySelector(`[data-testid="prompt-admin-item-${DRIFT}"]`)).not.toBeNull();
   });
 
   it('auto-selects the first template and shows its slots + registered usages', async () => {

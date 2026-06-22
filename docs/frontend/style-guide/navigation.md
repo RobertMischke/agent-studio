@@ -14,11 +14,17 @@ destinations, and active state is a filled row against the sidebar surface.
 
 ## Rail Recipe
 
-Use this structure for a left-side navigation list:
+Use this structure for a left-side navigation list. When a rail has multiple
+sections, make the section headers collapsible so operators can reduce visual
+density without losing the shared navigation rhythm:
 
 ```html
 <aside class="my-rail" aria-label="Project sections">
-  <app-section-header title="Context" />
+  <app-section-header
+    title="Context"
+    [collapsible]="true"
+    [collapsed]="contextCollapsed"
+    (collapsedChange)="contextCollapsed = $event" />
   <app-tree-row
     level="root"
     glyph="book"

@@ -56,6 +56,7 @@ export class PromptAdminPanelComponent implements OnInit {
   readonly draft = signal<string>('');
   readonly busy = signal(false);
   readonly actionError = signal<string | null>(null);
+  readonly collapsedGroups = signal<ReadonlySet<string>>(new Set());
   /** Toggles the read-only "shipped default" comparison block. */
   readonly showDefault = signal(false);
 
@@ -117,6 +118,17 @@ export class PromptAdminPanelComponent implements OnInit {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  isGroupCollapsed(name: string): boolean {
+    return this.collapsedGroups().has(name);
+  }
+
+  setGroupCollapsed(name: string, collapsed: boolean): void {
+    const next = new Set(this.collapsedGroups());
+    if (collapsed) next.add(name);
+    else next.delete(name);
+    this.collapsedGroups.set(next);
   }
 
   setSlotValue(slot: string, value: string): void {

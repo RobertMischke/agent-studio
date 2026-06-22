@@ -97,6 +97,13 @@ test('Prompts rail hosts the prompt-admin surface', async ({ page }) => {
   await expect.poll(() => promptList.locator('[data-testid^="prompt-admin-group-"]').count()).toBeGreaterThan(0);
   await expect.poll(() => promptList.locator('[data-testid^="prompt-admin-item-"]').count()).toBeGreaterThan(0);
   await expect(promptList.locator('[data-testid^="prompt-admin-item-"]').first()).toContainText('shipped');
+  const firstGroup = promptList.locator('[data-testid^="prompt-admin-group-"]').first();
+  await expect(firstGroup).toHaveAttribute('aria-expanded', 'true');
+  await firstGroup.click();
+  await expect(firstGroup).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('prompt-admin-item-commit-message.md')).toBeHidden();
+  await firstGroup.click();
+  await expect(firstGroup).toHaveAttribute('aria-expanded', 'true');
 
   await expect(promptSplitter).toBeVisible();
   await expect(promptSplitter).toHaveAttribute('role', 'separator');
