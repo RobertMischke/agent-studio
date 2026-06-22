@@ -154,7 +154,7 @@ state. The intent is set by the composer at Send time.
   only. No new files in the job folder. No new task. The orchestrator is
   responsible for refusing to mutate the closed task during this call.
 - **Defer** - the composer creates a follow-up task through the existing
-  `POST /api/jobs` endpoint with a back-reference to the parent task slug. The
+  `POST /api/tasks` endpoint with a back-reference to the parent task slug. The
   follow-up's `prompt.md` includes the parent task title, the relevant
   transcript turn, and a one-line hint that the change should be made in the
   parent's domain. The follow-up lands in `1-preparation` by default so the
@@ -223,19 +223,19 @@ mode by highlighting one button based on a heuristic ("starts with a
 question word" -> Ask). The user still has to press Send. No silent
 auto-submit. This polish is tracked but is not blocking.
 
-### 2. Backend lane-move is required for Promote - `POST /api/jobs/{id}/reopen`
+### 2. Backend lane-move is required for Promote - `POST /api/tasks/{id}/reopen`
 
 **Decision:** Promote depends on a new backend endpoint that moves a job
 from `6-completed` (or `7-archive`) back into `3-progress`. Until the
 endpoint lands, the Promote mode is **hidden in the composer**, and the
 implementation job must guard the UI on a server capability probe
-(`/api/jobs/capabilities` already advertises feature flags). Ask and Defer
+(`/api/tasks/capabilities` already advertises feature flags). Ask and Defer
 ship without the endpoint.
 
 **Endpoint contract (proposed):**
 
 ```text
-POST /api/jobs/{id}/reopen
+POST /api/tasks/{id}/reopen
 Body:  { "watchPath": "<repo-relative path>", "confirmedAt": <iso-8601> }
 200:   updated JobInfo with state="3-progress"
 409:   { "error": "lane_locked" }   if the lane move is not allowed
@@ -253,7 +253,7 @@ slice deliverable without backend coupling.
 ### 3. Side sheet and task chat share the `feedback.queued` stream
 
 **Decision:** `feedback.queued` events are published on the per-job event
-stream the existing job feed already uses (`/api/jobs/{id}/events` SSE).
+stream the existing job feed already uses (`/api/tasks/{id}/events` SSE).
 Both surfaces subscribe by job id and render the same marker row through the
 shared `ConversationEventRenderer`. There is no second write path and no
 separate side-sheet event kind.

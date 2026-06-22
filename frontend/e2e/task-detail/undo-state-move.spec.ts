@@ -12,7 +12,7 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE',
     headers: { 'x-client-id': process.env.PW_CLIENT_ID?.trim() || 'local-default' },
   });
@@ -23,7 +23,7 @@ function uid(suffix: string) {
 }
 
 async function listForProject(watchPath: string, projectName: string, state: string): Promise<Job[]> {
-  const all = await api<Job[]>('/api/jobs?includeFixtures=true');
+  const all = await api<Job[]>('/api/tasks?includeFixtures=true');
   return all.filter(j => j.state === state && j.watchPath === watchPath && j.projectName === projectName);
 }
 

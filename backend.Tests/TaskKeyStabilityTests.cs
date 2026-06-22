@@ -254,7 +254,7 @@ public class TaskKeyStabilityTests : IDisposable
         }
     }
 
-    private CreateJobRequest NewRequest(string title, string? targetState = TaskStates.Ready) => new()
+    private CreateTaskRequest NewRequest(string title, string? targetState = TaskStates.Ready) => new()
     {
         Title = title,
         WatchPath = _watchPath,

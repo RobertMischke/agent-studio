@@ -133,7 +133,7 @@ async function stubProjectsAndJobs(page: Page) {
     review: [], completed: [], archive: []
   };
 
-  await page.route(/\/api\/jobs\/grouped(?:\?.*)?$/, async (route) => {
+  await page.route(/\/api\/tasks\/grouped(?:\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -144,7 +144,7 @@ async function stubProjectsAndJobs(page: Page) {
       })
     });
   });
-  await page.route(/\/api\/jobs(?:\?.*)?$/, async (route) => {
+  await page.route(/\/api\/tasks(?:\?.*)?$/, async (route) => {
     if (route.request().method() !== 'GET') { await route.continue(); return; }
     await route.fulfill({
       status: 200,
@@ -155,7 +155,7 @@ async function stubProjectsAndJobs(page: Page) {
 }
 
 async function stubJobDetail(page: Page) {
-  await page.route(new RegExp(`/api/jobs/${TASK_ID}(\\?.*)?$`), async (route) => {
+  await page.route(new RegExp(`/api/tasks/${TASK_ID}(\\?.*)?$`), async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -202,7 +202,7 @@ test.describe('Project chat context awareness', () => {
     const captured = await stubChatAndCapture(page);
 
     // Stub sub-endpoints the detail panel fetches (runs, output, etc.).
-    await page.route(new RegExp(`/api/jobs/${TASK_ID}/`), async (route) => {
+    await page.route(new RegExp(`/api/tasks/${TASK_ID}/`), async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
 

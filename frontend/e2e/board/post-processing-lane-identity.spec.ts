@@ -137,10 +137,10 @@ async function installRoutes(page: Page, jobs: JobInfoStub[]): Promise<void> {
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
-    if (p === '/api/tasks/grouped' || p === '/api/jobs/grouped') {
+    if (p === '/api/tasks/grouped' || p === '/api/tasks/grouped') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(groupedBody) });
     }
-    if (p === '/api/tasks' || p === '/api/tasks/' || p === '/api/jobs' || p === '/api/jobs/') {
+    if (p === '/api/tasks' || p === '/api/tasks/' || p === '/api/tasks' || p === '/api/tasks/') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobs) });
     }
     if (p === '/api/auto-review/status') {

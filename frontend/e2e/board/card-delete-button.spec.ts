@@ -11,14 +11,14 @@ async function firstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJobApi(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE',
     headers: { 'x-client-id': 'local-default' },
   });
 }
 
 async function cleanup(prefix: string, watchPath: string): Promise<void> {
-  const all = await api<Array<{ id: string; watchPath: string }>>('/api/jobs?includeFixtures=true');
+  const all = await api<Array<{ id: string; watchPath: string }>>('/api/tasks?includeFixtures=true');
   const stale = all.filter(j => j.watchPath === watchPath && j.id.startsWith(prefix));
   await Promise.all(stale.map(j => deleteJobApi(j.id, j.watchPath).catch(() => {})));
 }

@@ -247,19 +247,19 @@ Canonical endpoints:
 
 **Task lifecycle**
 
-- `POST /api/jobs` - create a task. `CreateJobRequest` accepts `targetState` to land directly in `1-preparation` or `2-ready`.
-- `POST /api/jobs/{id}/move?watchPath=...` - move a task to another lane.
-- `PUT /api/jobs/{id}/state` - drive a task through a typed state transition.
-- `POST /api/jobs/reorder` - reorder tasks within a lane.
-- `DELETE /api/jobs/{id}?watchPath=...` - delete a task.
+- `POST /api/tasks` - create a task. `CreateTaskRequest` accepts `targetState` to land directly in `1-preparation` or `2-ready`.
+- `POST /api/tasks/{id}/move?watchPath=...` - move a task to another lane.
+- `PUT /api/tasks/{id}/state` - drive a task through a typed state transition.
+- `POST /api/tasks/reorder` - reorder tasks within a lane.
+- `DELETE /api/tasks/{id}?watchPath=...` - delete a task.
 - `DELETE /api/tasks/orphan-folder` - delete a scanner-invisible terminal-lane residue folder with body `{"watchPath":"...","lane":"7-archive","folder":"..."}`. It refuses non-terminal lanes and folders that contain `job.json`, and logs `task-orphan-folder-deleted` / `task-orphan-folder-delete-failed`.
-- `GET /api/jobs`, `GET /api/jobs/grouped`, `GET /api/jobs/{id}` - list and read.
+- `GET /api/tasks`, `GET /api/tasks/grouped`, `GET /api/tasks/{id}` - list and read.
 
 **Task runner and content**
 
-- `POST /api/jobs/{id}/start`, `POST /api/jobs/{id}/stop`, `POST /api/jobs/{id}/continue` - process lifecycle.
-- `PUT /api/jobs/{id}/title`, `PUT /api/jobs/{id}/model`, `PUT /api/jobs/{id}/cli-type` - typed field updates.
-- Git, attachments, run history, and per-run diff endpoints under the same `/api/jobs/{id}` group.
+- `POST /api/tasks/{id}/start`, `POST /api/tasks/{id}/stop`, `POST /api/tasks/{id}/continue` - process lifecycle.
+- `PUT /api/tasks/{id}/title`, `PUT /api/tasks/{id}/model`, `PUT /api/tasks/{id}/cli-type` - typed field updates.
+- Git, attachments, run history, and per-run diff endpoints under the same `/api/tasks/{id}` group.
 
 **Clients**
 

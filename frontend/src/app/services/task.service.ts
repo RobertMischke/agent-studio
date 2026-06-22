@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { map } from 'rxjs';
 import type {
   ArchivedTasksResponse,
-  CreateJobRequest,
+  CreateTaskRequest,
   GroupedJobs,
   TaskArtifactsResponse,
   TaskFileHistoryEntry,
@@ -604,7 +604,7 @@ export class TaskService {
     );
   }
 
-  createJob(req: CreateJobRequest) {
+  createJob(req: CreateTaskRequest) {
     return this.http.post<{ id: string }>(`${this.baseUrl}/tasks`, req);
   }
 

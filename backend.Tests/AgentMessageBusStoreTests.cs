@@ -377,7 +377,7 @@ public class AgentMessageBusStoreTests : IDisposable
     /// warmup must be a hot dictionary lookup.
     ///
     /// <para>Regression context: with no warmup, the first
-    /// <c>/api/jobs/grouped</c> after a backend restart triggers the
+    /// <c>/api/tasks/grouped</c> after a backend restart triggers the
     /// disk replay of every per-day JSONL inside <c>GetOrLoad</c>. On a
     /// real workspace (Runbook = ~100MB / >100k lines) that load runs
     /// longer than the verifier's 10s per-attempt timeout, and because
@@ -466,7 +466,7 @@ public class AgentMessageBusStoreTests : IDisposable
     /// <summary>
     /// Regression guard for the post-restart hang documented in
     /// "Update-Service has had 0/20 successful runs since 2026-05-23": the
-    /// first <c>/api/jobs/grouped</c> call after a backend restart kicked off
+    /// first <c>/api/tasks/grouped</c> call after a backend restart kicked off
     /// a multi-megabyte JSONL replay on the request thread, the verifier
     /// cancelled at 10s, and because <see cref="System.Collections.Concurrent.ConcurrentDictionary{TKey,TValue}.GetOrAdd(TKey,Func{TKey,TValue})"/>
     /// does not cache a throwing factory, each retry restarted the load from

@@ -59,8 +59,8 @@ async function installRoutes(page: Page) {
     const json = (body: unknown) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
-    if (url.includes('/api/tasks/grouped') || url.includes('/api/jobs/grouped')) return json(GROUPED_PAYLOAD);
-    if (/\/api\/tasks(\?|$)/.test(url) || /\/api\/jobs(\?|$)/.test(url)) {
+    if (url.includes('/api/tasks/grouped')) return json(GROUPED_PAYLOAD);
+    if (/\/api\/tasks(\?|$)/.test(url)) {
       return json([EPIC, SUB_READY, SUB_REVIEW]);
     }
     if (url.includes('/api/watch-paths')) {

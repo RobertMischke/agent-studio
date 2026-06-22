@@ -12,7 +12,7 @@ namespace AgentStudio.Tests;
 /// <summary>
 /// HTTP-level coverage for the consolidation API routes. The service tests
 /// prove the folder/timeline/audit behavior; these tests pin the public
-/// operator-facing <c>/api/jobs</c> contract required by the task spec.
+/// operator-facing <c>/api/tasks</c> contract required by the task spec.
 /// </summary>
 public sealed class MergeEndpointsIntegrationTests : IDisposable
 {
@@ -47,7 +47,7 @@ public sealed class MergeEndpointsIntegrationTests : IDisposable
         using var client = factory.CreateClient();
         var watchPath = Uri.EscapeDataString(_watchPath);
 
-        using var candidates = await client.GetAsync($"/api/jobs/primary/merge/candidates?watchPath={watchPath}");
+        using var candidates = await client.GetAsync($"/api/tasks/primary/merge/candidates?watchPath={watchPath}");
         candidates.EnsureSuccessStatusCode();
         var candidatesJson = await candidates.Content.ReadAsStringAsync();
         Assert.Contains("human-decision-needed-primary", candidatesJson);
@@ -59,13 +59,13 @@ public sealed class MergeEndpointsIntegrationTests : IDisposable
             Reason = "wrapper history belongs on primary",
         };
 
-        using var preview = await client.PostAsJsonAsync($"/api/jobs/primary/merge/preview?watchPath={watchPath}", mergeRequest);
+        using var preview = await client.PostAsJsonAsync($"/api/tasks/primary/merge/preview?watchPath={watchPath}", mergeRequest);
         preview.EnsureSuccessStatusCode();
         var previewJson = await preview.Content.ReadAsStringAsync();
         Assert.Contains(TimelineEventKinds.MergedIn, previewJson);
         Assert.Contains(TimelineEventKinds.AgentRunStarted, previewJson);
 
-        using var merge = await client.PostAsJsonAsync($"/api/jobs/primary/merge?watchPath={watchPath}", mergeRequest);
+        using var merge = await client.PostAsJsonAsync($"/api/tasks/primary/merge?watchPath={watchPath}", mergeRequest);
         merge.EnsureSuccessStatusCode();
         using var mergeBody = JsonDocument.Parse(await merge.Content.ReadAsStringAsync());
         var restoreToken = mergeBody.RootElement.GetProperty("restoreToken").GetString();
@@ -76,7 +76,7 @@ public sealed class MergeEndpointsIntegrationTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_workspace, ".audit", "merges.jsonl")));
 
         using var undo = await client.PostAsJsonAsync(
-            "/api/jobs/primary/merge/undo",
+            "/api/tasks/primary/merge/undo",
             new MergeUndoRequest { RestoreToken = restoreToken! });
         undo.EnsureSuccessStatusCode();
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Backlog, "human-decision-needed-primary")));
@@ -94,7 +94,7 @@ public sealed class MergeEndpointsIntegrationTests : IDisposable
         using var client = factory.CreateClient();
         var watchPath = Uri.EscapeDataString(_watchPath);
 
-        using var response = await client.PostAsync($"/api/jobs/false-done/re-evaluate?watchPath={watchPath}", content: null);
+        using var response = await client.PostAsync($"/api/tasks/false-done/re-evaluate?watchPath={watchPath}", content: null);
 
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync();

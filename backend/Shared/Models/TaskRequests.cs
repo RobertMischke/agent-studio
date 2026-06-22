@@ -143,7 +143,7 @@ public record BatchMoveResponse
     public List<BatchMoveItemResult> Results { get; init; } = [];
 }
 
-public record CreateJobRequest
+public record CreateTaskRequest
 {
     public string Id { get; init; } = "";
     public string Title { get; init; } = "";

@@ -200,7 +200,7 @@ public class JobsEndpointPerfTests : IDisposable
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
             var sw = Stopwatch.StartNew();
-            using var response = await client.GetAsync("/api/jobs/grouped", timeout.Token);
+            using var response = await client.GetAsync("/api/tasks/grouped", timeout.Token);
             sw.Stop();
 
             response.EnsureSuccessStatusCode();
@@ -210,7 +210,7 @@ public class JobsEndpointPerfTests : IDisposable
             Assert.NotNull(grouped);
             Assert.Contains(grouped!.Keys, key => string.Equals(key, "progress", StringComparison.OrdinalIgnoreCase));
             Assert.True(sw.ElapsedMilliseconds < 5_000,
-                $"/api/jobs/grouped over {jobCount} jobs and {messageCount} warmed bus messages took {sw.ElapsedMilliseconds} ms; "
+                $"/api/tasks/grouped over {jobCount} jobs and {messageCount} warmed bus messages took {sw.ElapsedMilliseconds} ms; "
                 + "the grouped endpoint must stay below the post-restart verifier regression budget.");
         }
         finally

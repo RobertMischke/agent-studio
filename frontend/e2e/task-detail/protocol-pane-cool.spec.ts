@@ -12,7 +12,7 @@ async function pickJobWithProtocol(): Promise<JobDetail | null> {
   for (const j of await listJobs()) {
     try {
       const detail = await api<JobDetail>(
-        `/api/jobs/${encodeURIComponent(j.id)}?watchPath=${encodeURIComponent(j.watchPath)}`
+        `/api/tasks/${encodeURIComponent(j.id)}?watchPath=${encodeURIComponent(j.watchPath)}`
       );
       if (detail.statusMarkdown && detail.statusMarkdown.length > 10) return detail;
     } catch { /* ignore */ }
@@ -25,7 +25,7 @@ async function pickAnyJob(): Promise<JobDetail | null> {
   if (!jobs.length) return null;
   const j = jobs[0];
   return api<JobDetail>(
-    `/api/jobs/${encodeURIComponent(j.id)}?watchPath=${encodeURIComponent(j.watchPath)}`
+    `/api/tasks/${encodeURIComponent(j.id)}?watchPath=${encodeURIComponent(j.watchPath)}`
   );
 }
 

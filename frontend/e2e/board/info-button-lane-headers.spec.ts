@@ -103,7 +103,7 @@ async function installMocks(page: Page, jobs: JobInfoStub[]): Promise<void> {
       });
     }
 
-    if (p === '/api/jobs/grouped') {
+    if (p === '/api/tasks/grouped') {
       const body = {
         backlog: jobs.filter(j => j.state === '0-backlog'),
         preparation: jobs.filter(j => j.state === '1-preparation'),
@@ -119,7 +119,7 @@ async function installMocks(page: Page, jobs: JobInfoStub[]): Promise<void> {
       };
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     }
-    if (p === '/api/jobs' || p === '/api/jobs/') {
+    if (p === '/api/tasks' || p === '/api/tasks/') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobs) });
     }
     if (p === '/api/auto-review/status') {

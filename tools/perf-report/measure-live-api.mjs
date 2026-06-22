@@ -31,7 +31,7 @@ async function bootstrap() {
   if (!Array.isArray(watch) || watch.length === 0) {
     throw new Error('No watch paths configured on the dev backend');
   }
-  const grouped = await (await fetch(`${baseUrl}/api/jobs/grouped`)).json();
+  const grouped = await (await fetch(`${baseUrl}/api/tasks/grouped`)).json();
   // Pick a job id from the largest non-empty lane (archive usually wins).
   const lanes = ['archive', 'completed', 'humanReview', 'autoReview', 'ready', 'progress', 'backlog', 'preparation'];
   let sampleJob = null;
@@ -99,11 +99,11 @@ function gitOut(args) {
 
   const endpoints = [
     { name: 'GET /api/watch-paths',                      url: `${baseUrl}/api/watch-paths` },
-    { name: 'GET /api/jobs',                             url: `${baseUrl}/api/jobs` },
-    { name: 'GET /api/jobs/grouped',                     url: `${baseUrl}/api/jobs/grouped` },
-    { name: `GET /api/jobs/{id}`,                        url: `${baseUrl}/api/jobs/${encodeURIComponent(sampleJob.id)}?watchPath=${sampleWatchPath}` },
-    { name: `GET /api/jobs/{id}/output`,                 url: `${baseUrl}/api/jobs/${encodeURIComponent(sampleJob.id)}/output?watchPath=${sampleWatchPath}` },
-    { name: `GET /api/jobs/{id}/runs`,                   url: `${baseUrl}/api/jobs/${encodeURIComponent(sampleJob.id)}/runs?watchPath=${sampleWatchPath}` },
+    { name: 'GET /api/tasks',                             url: `${baseUrl}/api/tasks` },
+    { name: 'GET /api/tasks/grouped',                     url: `${baseUrl}/api/tasks/grouped` },
+    { name: `GET /api/tasks/{id}`,                        url: `${baseUrl}/api/tasks/${encodeURIComponent(sampleJob.id)}?watchPath=${sampleWatchPath}` },
+    { name: `GET /api/tasks/{id}/output`,                 url: `${baseUrl}/api/tasks/${encodeURIComponent(sampleJob.id)}/output?watchPath=${sampleWatchPath}` },
+    { name: `GET /api/tasks/{id}/runs`,                   url: `${baseUrl}/api/tasks/${encodeURIComponent(sampleJob.id)}/runs?watchPath=${sampleWatchPath}` },
     { name: 'GET /api/runner/status',                    url: `${baseUrl}/api/runner/status` },
     { name: 'GET /api/cli/usage',                        url: `${baseUrl}/api/cli/usage` },
     { name: 'GET /api/cli/quota',                        url: `${baseUrl}/api/cli/quota` },

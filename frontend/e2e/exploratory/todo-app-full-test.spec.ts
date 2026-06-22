@@ -159,7 +159,7 @@ test('full lifecycle: create → steer → complete (Playwright Test sandbox)', 
   // board) means we no longer rely on the UI's polling tick to refresh
   // the DOM before we look — the backend's state machine moves first.
   const watchPath = await page.evaluate<string | null>(async () => {
-    const res = await fetch('/api/jobs/playwright-probe-tiny-todo-sandbox', {
+    const res = await fetch('/api/tasks/playwright-probe-tiny-todo-sandbox', {
       headers: { 'X-Client-Id': 'local-default' },
     }).catch(() => null);
     if (!res || !res.ok) return null;
@@ -173,7 +173,7 @@ test('full lifecycle: create → steer → complete (Playwright Test sandbox)', 
     if (!watchPath) return null;
     const json = await page.evaluate<{ state?: string } | null>(
       async (wp: string) => {
-        const url = `/api/jobs/playwright-probe-tiny-todo-sandbox?watchPath=${encodeURIComponent(wp)}`;
+        const url = `/api/tasks/playwright-probe-tiny-todo-sandbox?watchPath=${encodeURIComponent(wp)}`;
         const res = await fetch(url, { headers: { 'X-Client-Id': 'local-default' } }).catch(() => null);
         if (!res || !res.ok) return null;
         return res.json().catch(() => null);

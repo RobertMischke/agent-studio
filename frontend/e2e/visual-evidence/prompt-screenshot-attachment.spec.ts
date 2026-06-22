@@ -86,7 +86,7 @@ async function createPromptJob(): Promise<{ id: string; watchPath: string }> {
 
 async function deleteJob(id: string, watchPath: string): Promise<void> {
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
       method: 'DELETE'
     });
   } catch {
@@ -131,7 +131,7 @@ test.describe('Prompt editor — screenshot attachments', () => {
       await expect(renderedImage).toBeVisible({ timeout: 10_000 });
       const src = await renderedImage.getAttribute('src');
       expect(src).toBeTruthy();
-      expect(src!).toContain(`/api/jobs/${encodeURIComponent(job.id)}/attachments/`);
+      expect(src!).toContain(`/api/tasks/${encodeURIComponent(job.id)}/attachments/`);
       expect(src!).toContain(`watchPath=${encodeURIComponent(job.watchPath)}`);
 
       // The browser must actually be able to load the image (image is decoded).
@@ -156,7 +156,7 @@ test.describe('Prompt editor — screenshot attachments', () => {
       await expect(source).toBeVisible();
       const sourceText = await source.inputValue();
       expect(sourceText).toMatch(/!\[[^\]]*\]\(attachments\/[a-z0-9]+\.png\)/i);
-      expect(sourceText).not.toContain('/api/jobs/');
+      expect(sourceText).not.toContain('/api/tasks/');
 
       // Backend has the same markdown stored in prompt.md.
       const detail = await getJobDetail(job.id, job.watchPath);
@@ -167,7 +167,7 @@ test.describe('Prompt editor — screenshot attachments', () => {
       expect(match).not.toBeNull();
       const fileName = match![1];
       const apiResp = await page.request.get(
-        `http://localhost:5030/api/jobs/${encodeURIComponent(job.id)}/attachments/${encodeURIComponent(fileName)}?watchPath=${encodeURIComponent(job.watchPath)}`
+        `http://localhost:5030/api/tasks/${encodeURIComponent(job.id)}/attachments/${encodeURIComponent(fileName)}?watchPath=${encodeURIComponent(job.watchPath)}`
       );
       expect(apiResp.ok()).toBeTruthy();
       expect(apiResp.headers()['content-type']).toContain('image/');

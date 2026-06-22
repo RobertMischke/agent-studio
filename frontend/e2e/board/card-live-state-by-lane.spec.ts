@@ -23,7 +23,7 @@ import { test, expect, Page } from '@playwright/test';
  *
  * The spec is fixture-driven and uses Playwright route interception so it
  * runs against any backend that is up - the assertions never depend on the
- * real `/api/jobs/grouped` payload.
+ * real `/api/tasks/grouped` payload.
  */
 
 const PROJECT = 'fixture';
@@ -111,14 +111,14 @@ async function installRoutes(page: Page) {
     const url = route.request().url();
     // Default empty array for unknown endpoints; routes registered below
     // win because Playwright matches in registration order (most recent first).
-    if (url.endsWith('/api/jobs')) {
+    if (url.endsWith('/api/tasks')) {
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
       return;
     }
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
 
-  await page.route('**/api/jobs/grouped**', (route) =>
+  await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',

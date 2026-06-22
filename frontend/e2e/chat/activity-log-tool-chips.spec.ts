@@ -8,7 +8,7 @@ async function findJobWithToolBurst(): Promise<{ id: string; watchPath: string }
   const jobs = await listJobs();
   for (const j of jobs) {
     try {
-      const out = await api<OutLine[]>(`/api/jobs/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`);
+      const out = await api<OutLine[]>(`/api/tasks/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`);
       if (!Array.isArray(out)) continue;
       // Need at least 2 tool action starts so the conversation view renders
       // the per-kind chips. The marker is whatever non-word character the CLI

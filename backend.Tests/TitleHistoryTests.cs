@@ -35,7 +35,7 @@ public class TitleHistoryTests : IDisposable
         var (machine, scanner, mutations) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "rename-me",
             Title = "Original title",
@@ -68,7 +68,7 @@ public class TitleHistoryTests : IDisposable
         var (machine, scanner, mutations) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "stable",
             Title = "Same",

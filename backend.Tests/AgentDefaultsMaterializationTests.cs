@@ -36,7 +36,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     {
         var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "task-1",
             Title = "Test",
@@ -57,7 +57,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     {
         var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7", defaultThinkingLevel: "xhigh");
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "task-thinking",
             Title = "Test thinking",
@@ -75,7 +75,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     {
         var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-sonnet-4-6", defaultThinkingLevel: "max");
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "task-sonnet",
             Title = "Test sonnet",
@@ -93,7 +93,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     {
         var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "task-2",
             Title = "Test",
@@ -115,7 +115,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     {
         var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-8");
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "task-codex-default",
             Title = "Codex default",
@@ -138,7 +138,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     {
         var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-8");
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "task-codex-foreign",
             Title = "Codex foreign",
@@ -160,7 +160,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     {
         var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "manual-task",
             Title = "Manual",
@@ -179,7 +179,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     {
         var (_, scanner, mutations) = Build(defaultCliType: null, defaultModel: null);
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "no-defaults",
             Title = "No defaults",

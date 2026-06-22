@@ -58,7 +58,7 @@ test.describe('Git pane — diff viewer + maximize', () => {
     });
 
     try {
-      await page.route('**/api/jobs/*/git/status**', async (route) => {
+      await page.route('**/api/tasks/*/git/status**', async (route) => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -66,7 +66,7 @@ test.describe('Git pane — diff viewer + maximize', () => {
         });
       });
 
-      await page.route('**/api/jobs/*/git/diff**', async (route) => {
+      await page.route('**/api/tasks/*/git/diff**', async (route) => {
         await route.fulfill({
           status: 200,
           contentType: 'text/plain',
@@ -120,7 +120,7 @@ test.describe('Git pane — diff viewer + maximize', () => {
       await expect(wrap).not.toHaveClass(/git-view__diff-wrap--maximized/);
       await expect(wrap.locator('.git-view__diff-mode')).toHaveText('line-by-line');
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 });

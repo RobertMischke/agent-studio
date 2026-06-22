@@ -11,7 +11,7 @@ async function pickWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE',
   }).catch(() => { /* best-effort cleanup */ });
 }
@@ -95,7 +95,7 @@ test.describe('Open-Tabs hover → TaskStatusCard popover', () => {
     const id = uid('truncated');
     // Title long enough to overflow the explorer's narrow column.
     const title = 'A very long task title that the explorer column will absolutely truncate with ellipsis ' + id;
-    // fixture=false so the job shows up in /api/jobs/grouped (the default
+    // fixture=false so the job shows up in /api/tasks/grouped (the default
     // omits fixtures, which would leave findJob(jobKey) → null and the
     // popover directive would never fire). The finally block deletes it.
     await createJob({ id, title, watchPath: wp.path, targetState: '2-ready', fixture: false });

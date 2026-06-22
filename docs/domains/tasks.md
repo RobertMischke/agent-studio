@@ -31,9 +31,9 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   [.agents/skills/job-api/SKILL.md](../../.agents/skills/job-api/SKILL.md).
 - The skill covers `watchPath`, `X-Client-Id`, lane names, creation, move,
   reorder, archive, and triage templates.
-- Canonical route is `/api/tasks`; `/api/jobs` is a legacy alias. How the API
-  identifies a project (raw `watchPath` today, `shortCode`/`projectId` target)
-  is documented in
+- The route is `/api/tasks` (the former `/api/jobs` alias was removed, ADR-0057).
+  How the API identifies a project (raw `watchPath` today, `shortCode`/`projectId`
+  target) is documented in
   [../wiki/concepts/api-project-identity-and-watchpath.md](../wiki/concepts/api-project-identity-and-watchpath.md).
 - If an operation is missing from the API, create a follow-up task instead of
   reaching around the API.

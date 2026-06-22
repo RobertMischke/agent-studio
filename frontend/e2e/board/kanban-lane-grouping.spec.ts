@@ -12,7 +12,7 @@ import { test, expect, Page } from '@playwright/test';
  * rail that still surfaces task count plus running / needs-input /
  * error / CLI badges.
  *
- * The spec is API-mocked: it stubs `/api/jobs/grouped` (and supporting
+ * The spec is API-mocked: it stubs `/api/tasks/grouped` (and supporting
  * read endpoints) with a deterministic fixture that exercises all four
  * indicator types, so the screenshots are stable and the test does not
  * compete with whatever live state the dev backend is in.
@@ -121,10 +121,10 @@ async function installBoardMocks(page: Page): Promise<void> {
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify([{ name: FIXTURE_PROJECT, path: FIXTURE_WATCH, rootPath: FIXTURE_WATCH }]) });
   });
-  await page.route('**/api/jobs', async (route) => {
+  await page.route('**/api/tasks', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(allJobs) });
   });
-  await page.route('**/api/jobs/grouped', async (route) => {
+  await page.route('**/api/tasks/grouped', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(grouped) });
   });
   await page.route('**/api/runner/status', async (route) => {
@@ -210,7 +210,7 @@ test.describe('Kanban lane grouping and collapse', () => {
     await page.reload();
     await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
 
-    // Wait for the running job card to appear so we know /api/jobs/grouped has resolved.
+    // Wait for the running job card to appear so we know /api/tasks/grouped has resolved.
     await expect(page.locator('[data-running="true"]')).toHaveCount(1);
 
     // Collapse Preparation, Ready, Completed, Archive. That leaves

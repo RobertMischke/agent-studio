@@ -72,7 +72,7 @@
     },
     "runId": {
       "type": ["string", "null"],
-      "description": "Stable id of the CLI invocation this message belongs to. Matches the run id used by the per-job run timeline (/api/jobs/{id}/runs). Null when the message is not bound to one specific run (e.g. lifecycle:JobCreated, supervisor PausePickup)."
+      "description": "Stable id of the CLI invocation this message belongs to. Matches the run id used by the per-job run timeline (/api/tasks/{id}/runs). Null when the message is not bound to one specific run (e.g. lifecycle:JobCreated, supervisor PausePickup)."
     },
     "cliSessionId": {
       "type": ["string", "null"],

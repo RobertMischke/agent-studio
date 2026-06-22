@@ -4,7 +4,7 @@ import { test, expect, Page, Route } from '@playwright/test';
  * Slice E: chat-input directive `/bug <description>`.
  *
  * Posting `/bug <description>` in the project chat should:
- *   1. Hit `POST /api/jobs` with `taskType=bug`, `targetState=0-backlog`,
+ *   1. Hit `POST /api/tasks` with `taskType=bug`, `targetState=0-backlog`,
  *      a meaningful title derived from the first line, and the original
  *      description body with a `Reported via /bug from project chat`
  *      trailer. Hashtag patterns `#tag1 #tag2` at the start of any line
@@ -16,7 +16,7 @@ import { test, expect, Page, Route } from '@playwright/test';
  *      severity=`error` and the error text — never a JS toast.
  *
  * The spec stubs both the orchestrator-chat history endpoint and the
- * `POST /api/jobs` create call so it can run without a live backend.
+ * `POST /api/tasks` create call so it can run without a live backend.
  */
 
 interface CapturedRequest {
@@ -44,7 +44,7 @@ async function captureCreateJob(
   responder: (req: CapturedRequest, route: Route) => Promise<void>
 ): Promise<{ requests: CapturedRequest[] }> {
   const requests: CapturedRequest[] = [];
-  await page.route(/\/api\/jobs(?:\?.*)?$/, async (route) => {
+  await page.route(/\/api\/tasks(?:\?.*)?$/, async (route) => {
     if (route.request().method() !== 'POST') {
       await route.continue();
       return;
@@ -100,7 +100,7 @@ test.describe('Project chat — Slice E /bug directive', () => {
     await expect(send).toBeEnabled();
 
     const createCallPromise = page.waitForRequest(
-      (req) => req.method() === 'POST' && /\/api\/jobs(?:\?.*)?$/.test(req.url()),
+      (req) => req.method() === 'POST' && /\/api\/tasks(?:\?.*)?$/.test(req.url()),
       { timeout: 5_000 }
     );
     await send.click();
@@ -166,7 +166,7 @@ test.describe('Project chat — Slice E /bug directive', () => {
     }, { timeout: 5_000 }).toBe('fixture-bug-12345');
   });
 
-  test('renders an error card with severity=error when POST /api/jobs fails — no JS toast', async ({ page }) => {
+  test('renders an error card with severity=error when POST /api/tasks fails — no JS toast', async ({ page }) => {
     await stubOrchestratorChat(page);
     await captureCreateJob(page, async (_req, route) => {
       await route.fulfill({
@@ -183,7 +183,7 @@ test.describe('Project chat — Slice E /bug directive', () => {
     await expect(send).toBeEnabled();
 
     const createCallPromise = page.waitForRequest(
-      (req) => req.method() === 'POST' && /\/api\/jobs(?:\?.*)?$/.test(req.url()),
+      (req) => req.method() === 'POST' && /\/api\/tasks(?:\?.*)?$/.test(req.url()),
       { timeout: 5_000 }
     );
     await send.click();

@@ -10,7 +10,7 @@ interface WatchPath { name: string; path: string; rootPath: string; }
  * Verifies the image flow described in docs/contracts/protocol-style.md:
  *
  *   <job>/results/<name>.png  +  status.md `![](results/<name>.png)`
- *     ─►  rendered inline in the protocol pane via /api/jobs/{id}/results/{name}
+ *     ─►  rendered inline in the protocol pane via /api/tasks/{id}/results/{name}
  *
  * The spec creates a review-state job, drops a tiny PNG into its `results/`
  * folder, hand-writes a status.md that references it, then opens the detail
@@ -41,7 +41,7 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE'
   });
 }
@@ -97,7 +97,7 @@ test.describe('Protocol image flow', () => {
 
       // Backend should serve the file we just wrote.
       const directRes = await fetch(
-        `${BACKEND}/api/jobs/${encodeURIComponent(created.id)}/results/proof.png?watchPath=${encodeURIComponent(watchPath)}`
+        `${BACKEND}/api/tasks/${encodeURIComponent(created.id)}/results/proof.png?watchPath=${encodeURIComponent(watchPath)}`
       );
       expect(directRes.status).toBe(200);
       expect(directRes.headers.get('content-type')).toContain('image/png');
@@ -120,7 +120,7 @@ test.describe('Protocol image flow', () => {
       // image must actually decode (naturalWidth > 0) — proving the request
       // hit the backend successfully.
       const src = await img.getAttribute('src');
-      expect(src).toContain(`/api/jobs/${created.id}/results/proof.png`);
+      expect(src).toContain(`/api/tasks/${created.id}/results/proof.png`);
       expect(src).toContain('watchPath=');
 
       await expect.poll(

@@ -111,7 +111,7 @@
           },
           "runtimeSignals": {
             "type": "array",
-            "description": "Stable runtime event names, log streams, metric names, or REST endpoints the analyzer can use to confirm the element's runtime behavior. Example: 'event:cycle-resume-failed', 'log:logs/meta/<project>/observations.jsonl', 'endpoint:/api/jobs/grouped'.",
+            "description": "Stable runtime event names, log streams, metric names, or REST endpoints the analyzer can use to confirm the element's runtime behavior. Example: 'event:cycle-resume-failed', 'log:logs/meta/<project>/observations.jsonl', 'endpoint:/api/tasks/grouped'.",
             "items": { "type": "string", "minLength": 1 }
           },
           "notes": {

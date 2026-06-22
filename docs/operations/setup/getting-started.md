@@ -84,7 +84,7 @@ Agents and scripts must organize jobs through the application API, not by direct
 Use the API for normal job operations:
 
 - `GET /api/watch-paths` to discover the correct `watchPath`.
-- `POST /api/tasks` with `CreateJobRequest` to create a job. Set `targetState` when a job should land directly in `1-preparation` or `2-ready`.
+- `POST /api/tasks` with `CreateTaskRequest` to create a job. Set `targetState` when a job should land directly in `1-preparation` or `2-ready`.
 - `POST /api/tasks/{jobId}/move?watchPath=...` to move a job.
 - `POST /api/tasks/reorder` to reorder jobs.
 - `DELETE /api/tasks/{jobId}?watchPath=...` to delete a job.

@@ -45,12 +45,12 @@ describe('MarkdownImageLightboxDirective', () => {
   });
 
   it('opens the lightbox when a markdown image inside is clicked', () => {
-    const host = mount('<p>Screenshot: <img src="/api/jobs/x/attachments/y.png" alt="Y"></p>');
+    const host = mount('<p>Screenshot: <img src="/api/tasks/x/attachments/y.png" alt="Y"></p>');
     const img = host.querySelector('img')!;
     img.click();
     const active = svc.active();
     expect(active).not.toBeNull();
-    expect(active?.src).toContain('/api/jobs/x/attachments/y.png');
+    expect(active?.src).toContain('/api/tasks/x/attachments/y.png');
     expect(active?.alt).toBe('Y');
   });
 
@@ -67,11 +67,11 @@ describe('MarkdownImageLightboxDirective', () => {
 
   it('honours legacy data-results-lightbox button wrappers', () => {
     const host = mount(
-      '<figure><button type="button" data-results-lightbox="/api/jobs/x/results/foo.png" data-results-alt="Foo"><img src="/api/jobs/x/results/foo.png" alt="Foo"></button></figure>'
+      '<figure><button type="button" data-results-lightbox="/api/tasks/x/results/foo.png" data-results-alt="Foo"><img src="/api/tasks/x/results/foo.png" alt="Foo"></button></figure>'
     );
     const btn = host.querySelector('button')!;
     btn.click();
-    expect(svc.active()?.src).toBe('/api/jobs/x/results/foo.png');
+    expect(svc.active()?.src).toBe('/api/tasks/x/results/foo.png');
     expect(svc.active()?.alt).toBe('Foo');
   });
 

@@ -41,7 +41,7 @@ public class BacklogLaneAndTagsTests : IDisposable
         var (machine, scanner, mutations) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        var jobId = mutations.CreateJob(new CreateJobRequest
+        var jobId = mutations.CreateJob(new CreateTaskRequest
         {
             Id = "alpha",
             Title = "Alpha task",
@@ -64,7 +64,7 @@ public class BacklogLaneAndTagsTests : IDisposable
         var (machine, scanner, mutations) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        var jobId = mutations.CreateJob(new CreateJobRequest
+        var jobId = mutations.CreateJob(new CreateTaskRequest
         {
             Id = "beta",
             Title = "Beta task",
@@ -172,7 +172,7 @@ public class BacklogLaneAndTagsTests : IDisposable
 
         // Seed and create a job referencing the tag.
         tags.GetAll();
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "gamma",
             Title = "Gamma",
@@ -229,7 +229,7 @@ public class BacklogLaneAndTagsTests : IDisposable
         var (machine, scanner, mutations) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "delta",
             Title = "Delta",

@@ -12,7 +12,7 @@
  * row in the explorer while the scoped epic list stays empty, drives the UI
  * create flow, and asserts the freshly created epic appears. Routes are
  * `/api/tasks*`; the task helpers are inlined so this does not depend on the
- * still-`/api/jobs` shared helpers.
+ * still-`/api/tasks` shared helpers.
  */
 import { test, expect, type Page } from '@playwright/test';
 import { api, BACKEND } from '../helpers/api';

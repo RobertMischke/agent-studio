@@ -140,25 +140,25 @@ async function installMocks(
   const runsBody = JSON.stringify(buildRunTimeline());
 
   const escId = encodeURIComponent(target.id);
-  await page.route(`**/api/jobs/${escId}?**`, async (route) => {
+  await page.route(`**/api/tasks/${escId}?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: detailBody });
   });
-  await page.route(`**/api/jobs/${escId}/output?**`, async (route) => {
+  await page.route(`**/api/tasks/${escId}/output?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: outputBody });
   });
-  await page.route(`**/api/jobs/${escId}/runs?**`, async (route) => {
+  await page.route(`**/api/tasks/${escId}/runs?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: runsBody });
   });
-  await page.route(`**/api/jobs/${escId}/screenshots?**`, async (route) => {
+  await page.route(`**/api/tasks/${escId}/screenshots?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ jobId: target.id, screenshots: [] }) });
   });
-  await page.route(`**/api/jobs/${escId}/session-events?**`, async (route) => {
+  await page.route(`**/api/tasks/${escId}/session-events?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [], sessionChain: [], currentSessionId: null }) });
   });
-  await page.route(`**/api/jobs/${escId}/claude/session-info?**`, async (route) => {
+  await page.route(`**/api/tasks/${escId}/claude/session-info?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sessionInfo: null, rateLimit: null }) });
   });
-  await page.route(`**/api/jobs/${escId}/git/status?**`, async (route) => {
+  await page.route(`**/api/tasks/${escId}/git/status?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ isRepo: false, branch: null, filesChanged: 0, totalAdded: 0, totalRemoved: 0, files: [], error: null }) });
   });
 }

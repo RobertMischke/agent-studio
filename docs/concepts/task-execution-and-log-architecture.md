@@ -78,7 +78,7 @@ writer owning one file means no cross-writer contention by construction.
 ## 6. Migration sequence (big steps)
 
 1. **Rename Job → Task** across the backend (internal identifiers first; API
-   routes `/api/jobs`→`/api/tasks` as a coordinated breaking change with the FE).
+   routes `/api/tasks`→`/api/tasks` as a coordinated breaking change with the FE).
 2. **Extract `Shared`** (contracts/models) into its own project.
 3. **Per-Stream local log files + lock-per-stream** (kills the file-lock bug
    immediately, even before the split).

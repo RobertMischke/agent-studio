@@ -74,7 +74,7 @@ test.describe('F38: unified pane-header tab strip across prompt + protocol', () 
         fullPage: false,
       });
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 
@@ -104,7 +104,7 @@ test.describe('F38: unified pane-header tab strip across prompt + protocol', () 
       // Allow a 4px slack to absorb sub-pixel rendering differences.
       expect(Math.abs((promptBox!.height ?? 0) - (protocolBox!.height ?? 0))).toBeLessThanOrEqual(4);
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 
@@ -141,7 +141,7 @@ test.describe('F38: unified pane-header tab strip across prompt + protocol', () 
       await activity.click();
       await expect(activity).toHaveClass(/pane-tab--active/);
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 });

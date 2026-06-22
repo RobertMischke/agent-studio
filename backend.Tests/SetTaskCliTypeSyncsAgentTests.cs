@@ -42,7 +42,7 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
         var (machine, scanner, mutations) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "drift",
             Title = "Drift",
@@ -104,7 +104,7 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
         var (machine, scanner, mutations) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "model-drift",
             Title = "Model drift",
@@ -131,7 +131,7 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
         var (machine, scanner, mutations) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "bad-model-update",
             Title = "Bad model update",

@@ -512,7 +512,7 @@ public class TaskMutationService
         return Updated();
     }
 
-    public string? CreateJob(CreateJobRequest req)
+    public string? CreateJob(CreateTaskRequest req)
     {
         var watchPaths = _scanner.GetWatchPaths();
         var entry = string.IsNullOrEmpty(req.WatchPath)

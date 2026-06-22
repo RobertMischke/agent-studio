@@ -23,14 +23,14 @@ hold the mapping. So a clean "identify a project by its code, resolve the path
 on the server" path is mostly already available, it is just not the one the task
 API uses yet.
 
-## Canonical route versus legacy alias
+## Canonical route
 
-`/api/tasks` is canonical. `/api/jobs` is a thin compatibility alias mapped to
-the same handlers in
-[../../../backend/Host/EndpointMapping.cs](../../../backend/Host/EndpointMapping.cs)
-(`MapTaskCrudEndpoints` + `MapTaskMergeEndpoints`). The domain is "Task"
-throughout; the word "Job" survives only in the `CreateJobRequest` DTO and that
-alias route. Prefer `/api/tasks` for any new call or script.
+`/api/tasks` is the only public route. The former `/api/jobs` compatibility
+alias was removed in
+[ADR-0057](../../architecture/decisions/adr-archive.md#adr-0057---apijobs-compatibility-alias-removed-route-is-apitasks-only-2026-06-22)
+(Phase 1 of this cleanup) and the create DTO was renamed `CreateJobRequest` ->
+`CreateTaskRequest`, so the domain reads "Task" end to end. There is no `/api/jobs`
+route or `CreateJobRequest` type anymore.
 
 ## Current state (IST, 2026-06-21)
 
@@ -49,23 +49,26 @@ disk layout to every client:
   slightly-off path silently lands the task in the wrong project. This is the
   same trap captured in
   [../common-problems/project-name-divergence-watchpath-vs-registry/README.md](../common-problems/project-name-divergence-watchpath-vs-registry/README.md).
-- About 180 files still reference `/api/jobs`, mostly e2e specs, plus a few
-  backend files, the `tools/perf-report/*.mjs` tooling, and several docs.
+- The `/api/jobs` alias and its ~180 consumers have been migrated to `/api/tasks`
+  (Phase 1, done). Remaining `/api/jobs` mentions live only in immutable history:
+  superseded ADR entries above and dated research snapshots.
 
 ## Target
 
 1. Identify projects across the API surface by `shortCode` or `projectId`. The
    server resolves the `watchPath` internally and never returns the raw path in
    a response (or returns it only as an opaque handle).
-2. `/api/tasks` is the only public route. `/api/jobs` is removed, or kept as a
-   deprecated HTTP 308 redirect with a defined grace period.
+2. `/api/tasks` is the only public route. **Done** (ADR-0057): the `/api/jobs`
+   alias is removed outright; no redirect shim was needed (no operator scripts
+   depended on it).
 
 ## Migration shape
 
 This is epic-sized; split into slices rather than a big-bang change:
 
-- Phase 1: migrate all `/api/jobs` consumers to `/api/tasks`, then retire the
-  alias. Mechanical, low risk.
+- Phase 1 (**done**): migrated all `/api/jobs` consumers to `/api/tasks` and
+  retired the alias; renamed `CreateJobRequest` -> `CreateTaskRequest`.
+  Mechanical, low risk.
 - Phase 2a: a central server-side resolver `project (shortCode | projectId) ->
   watchPath`.
 - Phase 2b: endpoints accept `project` and resolve internally; `watchPath` stays

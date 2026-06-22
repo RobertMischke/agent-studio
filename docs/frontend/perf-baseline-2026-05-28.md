@@ -142,7 +142,7 @@ moving any of the existing P95 ceilings.
 
 ## Notes & follow-ups
 
-- **Backend ETag / `If-None-Match`** on `/api/jobs/{id}` was considered
+- **Backend ETag / `If-None-Match`** on `/api/tasks/{id}` was considered
   but deferred: that endpoint folds `cli-output.log`, which mutates during
   every active run, so 304s would be rare and the conditional-request
   bookkeeping is non-zero. The SHA-range cache below `GitService`

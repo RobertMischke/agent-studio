@@ -39,7 +39,7 @@ async function plantJobWithHistory(): Promise<{ id: string; watchPath: string }>
   // Append an extension so the prompt-history surface renders an
   // <app-markdown> instance.
   await api(
-    `/api/jobs/${encodeURIComponent(created.id)}/prompt-history?watchPath=${encodeURIComponent(watchPath)}`,
+    `/api/tasks/${encodeURIComponent(created.id)}/prompt-history?watchPath=${encodeURIComponent(watchPath)}`,
     {
       method: 'POST',
       body: JSON.stringify({ markdown: HISTORY_MARKDOWN }),
@@ -52,7 +52,7 @@ async function plantJobWithHistory(): Promise<{ id: string; watchPath: string }>
 
 async function deleteJob(id: string, watchPath: string): Promise<void> {
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
       method: 'DELETE',
     });
   } catch { /* best-effort */ }
@@ -98,12 +98,12 @@ test.describe('<app-markdown> central component', () => {
   test('agent turn in activity-log uses <app-markdown>', async ({ page }) => {
     // Find any job whose logs already exist so we can open Conversation
     // mode without having to start a run.
-    const jobs = await api<Array<{ id: string; watchPath: string }>>('/api/jobs');
+    const jobs = await api<Array<{ id: string; watchPath: string }>>('/api/tasks');
     let target: { id: string; watchPath: string } | null = null;
     for (const j of jobs.slice(0, 40)) {
       try {
         const out = await api<{ lines?: unknown[] }>(
-          `/api/jobs/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`,
+          `/api/tasks/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`,
         );
         if (Array.isArray(out.lines) && out.lines.length > 0) {
           target = j;

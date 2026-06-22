@@ -97,7 +97,7 @@ function json(route: Route, body: unknown): Promise<void> {
 async function installRoutes(page: Page): Promise<void> {
   await page.route('**/api/**', (route) => {
     const url = route.request().url();
-    if (url.includes('/api/tasks/grouped') || url.includes('/api/jobs/grouped')) {
+    if (url.includes('/api/tasks/grouped') || url.includes('/api/tasks/grouped')) {
       return json(route, GROUPED);
     }
     if (/\/api\/(?:tasks|jobs)(\?|$)/.test(url)) {

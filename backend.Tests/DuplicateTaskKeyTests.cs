@@ -183,7 +183,7 @@ public class DuplicateTaskKeyTests : IDisposable
         Assert.True(dupes.Count == 0, "duplicate keys present: " + string.Join(", ", dupes));
     }
 
-    private CreateJobRequest NewRequest(string title, string? targetState = null) => new()
+    private CreateTaskRequest NewRequest(string title, string? targetState = null) => new()
     {
         Title = title,
         WatchPath = _watchPath,

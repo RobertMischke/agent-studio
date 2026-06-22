@@ -334,11 +334,11 @@ sections.push(`<h2>Targets &amp; verdict (vs <code>${escapeHtml(verdictScn.scn)}
 const findStats = name => verdictScn.live?.endpoints?.find(e => e.name === name || e.name.includes(name))?.stats;
 const targetRows = [
   ['/api/runner/status p95',         '50ms',  findStats('runner/status')],
-  ['/api/jobs/grouped p95',          '100ms', findStats('jobs/grouped')],
-  ['/api/jobs p95',                  '100ms', verdictScn.live?.endpoints?.find(e => e.name === 'GET /api/jobs')?.stats],
-  ['/api/jobs/{id} p95',             '50ms',  verdictScn.live?.endpoints?.find(e => e.name === 'GET /api/jobs/{id}')?.stats],
-  ['/api/jobs/{id}/output p95',      '50ms',  findStats('output')],
-  ['/api/jobs/{id}/runs p95',        '50ms',  findStats('/runs')],
+  ['/api/tasks/grouped p95',          '100ms', findStats('jobs/grouped')],
+  ['/api/tasks p95',                  '100ms', verdictScn.live?.endpoints?.find(e => e.name === 'GET /api/tasks')?.stats],
+  ['/api/tasks/{id} p95',             '50ms',  verdictScn.live?.endpoints?.find(e => e.name === 'GET /api/tasks/{id}')?.stats],
+  ['/api/tasks/{id}/output p95',      '50ms',  findStats('output')],
+  ['/api/tasks/{id}/runs p95',        '50ms',  findStats('/runs')],
   ['/api/cli/usage p95',             '50ms',  findStats('cli/usage')],
 ];
 const targetTrs = targetRows.map(([label, target, st]) => {
@@ -348,7 +348,7 @@ const targetTrs = targetRows.map(([label, target, st]) => {
   return `<tr><td>${escapeHtml(label)}</td><td class="num">${escapeHtml(target)}</td><td class="num ${cls}">${fmt(cur)}</td><td class="${cls}">${ok ? 'PASS' : 'MISS'}</td></tr>`;
 });
 sections.push(`<table><thead><tr><th>Endpoint metric</th><th class="num">Target</th><th class="num">Current</th><th>Status</th></tr></thead><tbody>${targetTrs.join('')}</tbody></table>`);
-sections.push(`<p class="small">Targets are the user's "double-digit ms locally" bar applied to the polled endpoints. /api/jobs/grouped and /api/jobs allow 100ms because they materialize the full board; the rest should sit below 50ms with a healthy projection cache.</p>`);
+sections.push(`<p class="small">Targets are the user's "double-digit ms locally" bar applied to the polled endpoints. /api/tasks/grouped and /api/tasks allow 100ms because they materialize the full board; the rest should sit below 50ms with a healthy projection cache.</p>`);
 
 sections.push(`<h2>Live HTTP API ${isCompare ? '(before/after)' : '(p50 / p95)'}</h2>`);
 sections.push(`<p class="small">Wall-clock from a Node fetch loop, including network and JSON serialize. ` +

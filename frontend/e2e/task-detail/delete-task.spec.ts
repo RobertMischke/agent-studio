@@ -11,7 +11,7 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJobApi(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE',
     headers: { 'x-client-id': process.env.PW_CLIENT_ID?.trim() || 'local-default' }
   });
@@ -104,7 +104,7 @@ test.describe('Delete task', () => {
     await expect(confirmDialog).toBeVisible({ timeout: 5_000 });
     const deleteResponse = page.waitForResponse(resp =>
       resp.request().method() === 'DELETE'
-      && resp.url().includes(`/api/jobs/${encodeURIComponent(job.id)}`)
+      && resp.url().includes(`/api/tasks/${encodeURIComponent(job.id)}`)
     );
     await page.getByTestId('confirm-dialog-confirm').click();
     await expect((await deleteResponse).ok()).toBeTruthy();

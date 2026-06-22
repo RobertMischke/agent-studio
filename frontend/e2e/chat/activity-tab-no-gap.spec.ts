@@ -8,7 +8,7 @@ async function findJobWithOutput(): Promise<{ id: string; watchPath: string } | 
   for (const j of jobs) {
     try {
       const out = await api<unknown[]>(
-        `/api/jobs/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`
+        `/api/tasks/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`
       );
       if (Array.isArray(out) && out.length > 0 && (!best || out.length > best.n)) {
         best = { id: j.id, watchPath: j.watchPath, n: out.length };

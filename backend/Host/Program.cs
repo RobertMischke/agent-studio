@@ -688,11 +688,11 @@ _ = app.Services.GetRequiredService<AgentStudio.TaskAccess.ITaskAccessHost>()
 // BEFORE the HTTP listener starts. The grouped-jobs endpoint folds in
 // per-project token totals (BuildTokenLookup -> SummarizePerJob ->
 // BusTokenEntryConverter.LoadOrchestratorEntries -> Store.Query ->
-// GetOrLoad), so a cold projection forces the first /api/jobs/grouped
+// GetOrLoad), so a cold projection forces the first /api/tasks/grouped
 // caller to wait for tens of seconds while a multi-megabyte JSONL tree
 // is parsed. On real workspaces (Runbook ~ 100MB / >100k lines) that
 // lazy-load wedges the post-restart UpdateVerifier window — the verifier
-// sees /healthz=200 but /api/jobs/grouped never drains. Paying the
+// sees /healthz=200 but /api/tasks/grouped never drains. Paying the
 // parse cost here moves the cost out of the first request. Per-project
 // warmups run in parallel so total boot time is bounded by the slowest
 // project rather than the sum.

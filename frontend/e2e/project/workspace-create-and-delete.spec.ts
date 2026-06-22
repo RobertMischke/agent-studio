@@ -176,7 +176,7 @@ test('delete is blocked + tooltipped while the workspace still has jobs', async 
   let busyName: string | null = null;
   for (const wp of allPaths) {
     type Job = { projectName: string };
-    const jobs = await api<Job[]>('/api/jobs');
+    const jobs = await api<Job[]>('/api/tasks');
     const count = jobs.filter(j => j.projectName === wp.name).length;
     if (count > 0) { busyName = wp.name; break; }
   }

@@ -139,7 +139,7 @@ test('session->task chip transitions active -> linked and routes click', async (
     // Cleanup: fixtures (fixture:true) are filtered out of the default
     // kanban response, but deleting keeps the watch-path tree tidy.
     await fetch(
-      `${devBackend.baseUrl}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(wp!.path)}`,
+      `${devBackend.baseUrl}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(wp!.path)}`,
       { method: 'DELETE', headers: { 'x-client-id': 'local-default' } }
     ).catch(() => {});
   }

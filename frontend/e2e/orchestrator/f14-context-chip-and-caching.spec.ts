@@ -83,7 +83,7 @@ async function stubProjectsAndJobs(page: Page) {
       ])
     });
   });
-  await page.route(/\/api\/jobs\/grouped(?:\?.*)?$/, async (route) => {
+  await page.route(/\/api\/tasks\/grouped(?:\?.*)?$/, async (route) => {
     const emptyLanes = {
       backlog: [], preparation: [], orchestratorPrep: [],
       ready: [], progress: [], failedPickup: [], autoReview: [], humanReview: [],
@@ -131,7 +131,7 @@ async function stubProjectsAndJobs(page: Page) {
       })
     });
   });
-  await page.route(/\/api\/jobs(?:\?.*)?$/, async (route) => {
+  await page.route(/\/api\/tasks(?:\?.*)?$/, async (route) => {
     if (route.request().method() !== 'GET') { await route.continue(); return; }
     await route.fulfill({
       status: 200,

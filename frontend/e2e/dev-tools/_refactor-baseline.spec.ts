@@ -61,7 +61,7 @@ test.describe('@baseline refactor visual capture', () => {
       await page.waitForTimeout(500);
       await page.screenshot({ path: shot('02-detail-default'), fullPage: true });
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 
@@ -89,7 +89,7 @@ test.describe('@baseline refactor visual capture', () => {
         await deck.screenshot({ path: shot('04-command-deck') });
       }
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 
@@ -113,7 +113,7 @@ test.describe('@baseline refactor visual capture', () => {
         await page.screenshot({ path: shot('05-protocol-maximized'), fullPage: true });
       }
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 });

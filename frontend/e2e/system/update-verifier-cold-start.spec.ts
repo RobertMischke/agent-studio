@@ -3,7 +3,7 @@ import { test, expect, Page, Route } from '@playwright/test';
 /**
  * Regression coverage for the false "Update failed" toast that the operator
  * hit on 2026-05-28 (`human-decision-needed-bug-update-verifier-window-too-
- * short-for-cold-start`). F58 had given the post-restart /api/jobs/grouped
+ * short-for-cold-start`). F58 had given the post-restart /api/tasks/grouped
  * probe a 15 s retry window; a cold-started backend with several hundred job
  * folders routinely takes 60-120 s to drain, so the verifier flagged
  * "failed" while healthz was already green and the FE offered a roll back.
@@ -98,7 +98,7 @@ async function installUpdateMock(page: Page, getStatus: () => MockStatus) {
 test.describe('Update verifier cold-start toast (mocked)', () => {
   test('still-starting-up observed text renders the soft "still draining" copy', async ({ page }) => {
     // Mimics what the backend now emits when healthz answered 200 across
-    // the retry loop but /api/jobs/grouped did not drain inside the 120 s
+    // the retry loop but /api/tasks/grouped did not drain inside the 120 s
     // window. The bridge must NOT use the alarmist roll-back wording.
     const status: MockStatus = {
       ...baseStatus,

@@ -6,8 +6,8 @@ import { test, expect } from '@playwright/test';
  * The create dialog exposes a Mode picker (Coding | Planning | Research) and a
  * single web-access toggle. Per Decision 2 of the task-modes design the toggle
  * has a per-mode default (research = on, everything else = off) but stays user
- * overridable. The chosen values are sent as CreateJobRequest.mode /
- * CreateJobRequest.allowWebAccess (backend tests cover the job.json write).
+ * overridable. The chosen values are sent as CreateTaskRequest.mode /
+ * CreateTaskRequest.allowWebAccess (backend tests cover the job.json write).
  *
  * The create POST is intercepted so no real task is written to the backend.
  */

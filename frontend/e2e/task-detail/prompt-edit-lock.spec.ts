@@ -24,7 +24,7 @@ async function pickWatchPath(): Promise<string> {
 
 async function deleteJob(id: string, watchPath: string): Promise<void> {
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
       method: 'DELETE'
     });
   } catch {
@@ -119,7 +119,7 @@ test.describe('Prompt editor — lock semantics', () => {
 
     try {
       await api(
-        `/api/jobs/${encodeURIComponent(created.id)}/files/prompt.md?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(created.id)}/files/prompt.md?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'PUT', body: JSON.stringify({ content: '# Edited via API' }) }
       );
 
@@ -129,7 +129,7 @@ test.describe('Prompt editor — lock semantics', () => {
       // Same after a move into 3-progress — folder location must not gate edits.
       await moveJob(created.id, watchPath, '3-progress');
       await api(
-        `/api/jobs/${encodeURIComponent(created.id)}/files/prompt.md?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(created.id)}/files/prompt.md?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'PUT', body: JSON.stringify({ content: '# Edited in 3-progress' }) }
       );
 

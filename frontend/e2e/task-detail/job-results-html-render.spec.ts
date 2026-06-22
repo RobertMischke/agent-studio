@@ -137,7 +137,7 @@ test.describe('Beautiful HTML result rendering', () => {
       await expect(page.getByTestId('results-rendered')).toBeVisible();
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' }
       );
     }
@@ -172,7 +172,7 @@ test.describe('Beautiful HTML result rendering', () => {
       await expect(banner).toContainText('missing API key');
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' }
       );
     }

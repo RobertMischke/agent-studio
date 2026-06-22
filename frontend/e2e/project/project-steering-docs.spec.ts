@@ -124,7 +124,7 @@ test.describe('Project detail - Steering Docs section', () => {
       const paths = await api<WatchPath[]>('/api/watch-paths');
       const pref = paths.find(p => p.name === projectName) ?? paths[0];
       try {
-        await api(`/api/jobs/${encodeURIComponent(created)}?watchPath=${encodeURIComponent(pref.path)}`, { method: 'DELETE' });
+        await api(`/api/tasks/${encodeURIComponent(created)}?watchPath=${encodeURIComponent(pref.path)}`, { method: 'DELETE' });
       } catch { /* best-effort cleanup */ }
     }
   });

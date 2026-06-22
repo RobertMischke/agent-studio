@@ -12,7 +12,7 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 
 /**
  * Create a hidden fixture task via the canonical /api/tasks route. The
- * shared helpers/jobs.ts still targets the retired /api/jobs route (404),
+ * shared helpers/jobs.ts still targets the retired /api/tasks route (404),
  * so this spec talks to /api/tasks directly. `fixture: true` keeps the
  * task out of any auto-pick runner.
  */

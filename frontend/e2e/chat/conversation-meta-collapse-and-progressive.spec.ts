@@ -89,7 +89,7 @@ async function pickMountableJob(): Promise<Job | null> {
 async function installOutputMock(page: Page, jobId: string): Promise<void> {
   const outputBody = JSON.stringify(buildOutputBuffer());
   const escId = encodeURIComponent(jobId);
-  await page.route(`**/api/jobs/${escId}/output?**`, async (route) => {
+  await page.route(`**/api/tasks/${escId}/output?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: outputBody });
   });
 }

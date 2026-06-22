@@ -21,7 +21,7 @@ import { test, expect, type Page } from '@playwright/test';
  * Fully mocked via route interception so it runs against any served frontend
  * without depending on a real backend payload. Targets the dev build
  * (`/api/tasks/grouped`, `data-testid="task-card"`); the stable build still
- * uses the legacy `/api/jobs` route + `job-card` testid.
+ * uses the legacy `/api/tasks` route + `job-card` testid.
  */
 
 const PROJECT = 'fixture-pill-lane';

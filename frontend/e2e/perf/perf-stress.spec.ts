@@ -164,13 +164,13 @@ async function installRoutes(page: import('@playwright/test').Page, N: number) {
   const { jobs, grouped } = makeFixture(N);
 
   // Board endpoints - the load-bearing intercepts. The frontend
-  // bootstraps from /api/jobs (flat) and /api/jobs/grouped (lane
+  // bootstraps from /api/tasks (flat) and /api/tasks/grouped (lane
   // buckets); both must return our synthetic shape. Other endpoints
   // (watch-paths, tags, clients, environment, runner status, snapshot)
   // fall through to the dev backend and use real defaults so the page
   // boots cleanly.
-  await page.route(/\/api\/jobs\/grouped/, async route => route.fulfill({ json: grouped }));
-  await page.route(/\/api\/jobs(\?|$)/, async route => route.fulfill({ json: jobs }));
+  await page.route(/\/api\/tasks\/grouped/, async route => route.fulfill({ json: grouped }));
+  await page.route(/\/api\/tasks(\?|$)/, async route => route.fulfill({ json: jobs }));
 
   // All other endpoints (watch-paths, tags, clients, environment,
   // runner status, project snapshot, etc.) fall through to the real dev
@@ -300,16 +300,16 @@ test.describe('Frontend stress: render perf at scale', () => {
  * board stress, plus a focused activity-log scroll FPS reading.
  *
  * Files mocked here that the board test left to the dev backend:
- *   /api/jobs/{id}?watchPath=...           - JobDetail
- *   /api/jobs/{id}/output?watchPath=...    - CliOutputLine[]
- *   /api/jobs/{id}/runs?watchPath=...      - empty timeline
- *   /api/jobs/{id}/git/status?watchPath=... - 10 file changes
- *   /api/jobs/{id}/git/diff?path=...       - synthetic unified diff
- *   /api/jobs/{id}/git/hygiene?watchPath=...- empty hygiene
- *   /api/jobs/{id}/session-events          - empty
- *   /api/jobs/{id}/screenshots             - empty
- *   /api/jobs/{id}/claude/session-info     - null session
- *   /api/jobs/{id}/git/commit-detail/...   - null
+ *   /api/tasks/{id}?watchPath=...           - JobDetail
+ *   /api/tasks/{id}/output?watchPath=...    - CliOutputLine[]
+ *   /api/tasks/{id}/runs?watchPath=...      - empty timeline
+ *   /api/tasks/{id}/git/status?watchPath=... - 10 file changes
+ *   /api/tasks/{id}/git/diff?path=...       - synthetic unified diff
+ *   /api/tasks/{id}/git/hygiene?watchPath=...- empty hygiene
+ *   /api/tasks/{id}/session-events          - empty
+ *   /api/tasks/{id}/screenshots             - empty
+ *   /api/tasks/{id}/claude/session-info     - null session
+ *   /api/tasks/{id}/git/commit-detail/...   - null
  */
 
 const DETAIL_JOB_ID = 'stress-detail-target';
@@ -394,8 +394,8 @@ async function installDetailRoutes(page: import('@playwright/test').Page, chatLi
   };
 
   // Board: one card, makes click target obvious.
-  await page.route(/\/api\/jobs\/grouped/, async route => route.fulfill({ json: grouped }));
-  await page.route(/\/api\/jobs(\?|$)/, async route => route.fulfill({ json: [detailJob] }));
+  await page.route(/\/api\/tasks\/grouped/, async route => route.fulfill({ json: grouped }));
+  await page.route(/\/api\/tasks(\?|$)/, async route => route.fulfill({ json: [detailJob] }));
 
   // JobDetail.
   const log = makeOutputLines(chatLines);
@@ -409,40 +409,40 @@ async function installDetailRoutes(page: import('@playwright/test').Page, chatLi
     summaryState: null,
     reviewEvidence: [],
   };
-  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}(\\?|$)`), async route =>
+  await page.route(new RegExp(`/api/tasks/${DETAIL_JOB_ID}(\\?|$)`), async route =>
     route.fulfill({ json: detail }));
 
   // Output buffer that activity-log-view actually reads.
-  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/output`), async route =>
+  await page.route(new RegExp(`/api/tasks/${DETAIL_JOB_ID}/output`), async route =>
     route.fulfill({ json: log }));
 
   // Git status with 10 changes.
   const gitStatus = makeGitStatus(10);
-  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/git/status`), async route =>
+  await page.route(new RegExp(`/api/tasks/${DETAIL_JOB_ID}/git/status`), async route =>
     route.fulfill({ json: gitStatus }));
 
   // Diff for any path - the same synthetic diff for whichever file the
   // user clicks.
-  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/git/diff`), async route => {
+  await page.route(new RegExp(`/api/tasks/${DETAIL_JOB_ID}/git/diff`), async route => {
     const url = new URL(route.request().url());
     const p = url.searchParams.get('path') ?? gitStatus.files[0].path;
     await route.fulfill({ contentType: 'text/plain', body: makeUnifiedDiff(p) });
   });
 
   // Hygiene + commit-detail empty.
-  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/git/hygiene`), async route =>
+  await page.route(new RegExp(`/api/tasks/${DETAIL_JOB_ID}/git/hygiene`), async route =>
     route.fulfill({ json: { project: PROJECT_NAME, dirty: true, unpushed: 0, branch: 'stress-test' } }));
-  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/git/commit-detail`), async route =>
+  await page.route(new RegExp(`/api/tasks/${DETAIL_JOB_ID}/git/commit-detail`), async route =>
     route.fulfill({ json: null }));
 
   // Other per-job pollers - empty so they don't bias the measurement.
-  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/runs`), async route =>
+  await page.route(new RegExp(`/api/tasks/${DETAIL_JOB_ID}/runs`), async route =>
     route.fulfill({ json: { runs: [], runCount: 0, firstStartedAt: null, lastActivityAt: null, hasActiveRun: false } }));
-  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/session-events`), async route =>
+  await page.route(new RegExp(`/api/tasks/${DETAIL_JOB_ID}/session-events`), async route =>
     route.fulfill({ json: { events: [], sessionChain: [] } }));
-  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/screenshots`), async route =>
+  await page.route(new RegExp(`/api/tasks/${DETAIL_JOB_ID}/screenshots`), async route =>
     route.fulfill({ json: { screenshots: [] } }));
-  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/claude/session-info`), async route =>
+  await page.route(new RegExp(`/api/tasks/${DETAIL_JOB_ID}/claude/session-info`), async route =>
     route.fulfill({ json: { sessionInfo: null, rateLimit: null } }));
 }
 
@@ -475,14 +475,14 @@ test.describe('Frontend stress: detail page (long chat + 10-file diff)', () => {
       await page.getByTestId('job-card').first().waitFor({ state: 'visible', timeout: 15_000 });
 
       // 1. Click-to-detail-visible. Split into:
-      //    - network: time from click to /api/jobs/{id}? response received
+      //    - network: time from click to /api/tasks/{id}? response received
       //    - render:  time from response to detail-panes visible
       const card = page.getByTestId('job-card').first();
       // Settle a little so any pending polls don't queue behind the click.
       await page.waitForTimeout(200);
       const t0 = Date.now();
       const responsePromise = page.waitForResponse(
-        r => r.url().includes(`/api/jobs/${DETAIL_JOB_ID}?`) || r.url().includes(`/api/jobs/${DETAIL_JOB_ID}`),
+        r => r.url().includes(`/api/tasks/${DETAIL_JOB_ID}?`) || r.url().includes(`/api/tasks/${DETAIL_JOB_ID}`),
         { timeout: 10_000 }
       );
       await card.click();
@@ -491,7 +491,7 @@ test.describe('Frontend stress: detail page (long chat + 10-file diff)', () => {
       const tDetailVisible = Date.now();
       record(N, 'click-to-detail-visible', 'ms', tDetailVisible - t0);
       record(N, 'click-to-detail-network-ms', 'ms', tNetEnd - t0,
-        'time from click to /api/jobs/{id} response');
+        'time from click to /api/tasks/{id} response');
       record(N, 'click-to-detail-render-ms', 'ms', tDetailVisible - tNetEnd,
         'time from response to detail-panes visible');
 

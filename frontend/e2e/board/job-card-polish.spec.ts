@@ -92,7 +92,7 @@ const GROUPED_PAYLOAD = {
 async function installRoutes(page: Page) {
   await page.route('**/api/**', (route) => {
     const url = route.request().url();
-    if (url.endsWith('/api/jobs')) {
+    if (url.endsWith('/api/tasks')) {
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
       return;
     }
@@ -105,7 +105,7 @@ async function installRoutes(page: Page) {
       contentType: 'application/json',
       body: JSON.stringify(GROUPED_PAYLOAD),
     }));
-  await page.route('**/api/jobs/grouped**', (route) =>
+  await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',

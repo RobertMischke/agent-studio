@@ -89,7 +89,7 @@ async function installMocks(
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
-    if (p === '/api/tasks/grouped' || p === '/api/jobs/grouped') {
+    if (p === '/api/tasks/grouped' || p === '/api/tasks/grouped') {
       const body = {
         backlog: jobs.filter((j) => j.state === '0-backlog'),
         preparation: jobs.filter((j) => j.state === '1-preparation'),
@@ -105,7 +105,7 @@ async function installMocks(
       };
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     }
-    if (p === '/api/tasks' || p === '/api/tasks/' || p === '/api/jobs' || p === '/api/jobs/') {
+    if (p === '/api/tasks' || p === '/api/tasks/' || p === '/api/tasks' || p === '/api/tasks/') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobs) });
     }
     if (p === '/api/auto-review/status') {

@@ -680,7 +680,7 @@ export interface ArchivedTasksResponse {
   limit: number;
 }
 
-export interface CreateJobRequest {
+export interface CreateTaskRequest {
   id?: string;
   title: string;
   order?: number;

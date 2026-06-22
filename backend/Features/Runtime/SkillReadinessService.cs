@@ -192,7 +192,7 @@ public class SkillReadinessService
     }
 
     /// <summary>
-    /// Builds (without persisting) the <see cref="CreateJobRequest"/>
+    /// Builds (without persisting) the <see cref="CreateTaskRequest"/>
     /// payload used by the fix path. Surfaced separately from
     /// <see cref="CreateFixTask"/> so the frontend can preview the
     /// proposed title and prompt before queueing the task.
@@ -228,7 +228,7 @@ public class SkillReadinessService
         var preview = PreviewFixTask(projectName);
         if (preview == null) return null;
 
-        var req = new CreateJobRequest
+        var req = new CreateTaskRequest
         {
             Title = preview.Title,
             WatchPath = preview.WatchPath,

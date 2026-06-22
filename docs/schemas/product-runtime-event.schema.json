@@ -44,7 +44,7 @@
     "operation": {
       "type": ["string", "null"],
       "maxLength": 120,
-      "description": "Optional finer-grained operation label inside the subsystem: GET /api/jobs, JobScannerService.FindJob, render-protocol-pane, queue-tick. Free-form, but stable per code path so latency and error counters can group on it."
+      "description": "Optional finer-grained operation label inside the subsystem: GET /api/tasks, JobScannerService.FindJob, render-protocol-pane, queue-tick. Free-form, but stable per code path so latency and error counters can group on it."
     },
     "correlationId": {
       "type": ["string", "null"],
@@ -71,7 +71,7 @@
     },
     "runId": {
       "type": ["string", "null"],
-      "description": "Stable id of the orchestrator CLI invocation that produced this event. Matches the run id used by the per-job run timeline (/api/jobs/{id}/runs). Null when the event is not bound to one specific orchestrated run."
+      "description": "Stable id of the orchestrator CLI invocation that produced this event. Matches the run id used by the per-job run timeline (/api/tasks/{id}/runs). Null when the event is not bound to one specific orchestrated run."
     },
     "taskId": {
       "type": ["string", "null"],

@@ -177,7 +177,7 @@ public static class DesignSurfaceEndpoints
             .ToLowerInvariant();
         var slug = $"design-{slugStem}-{DateTime.UtcNow:yyyyMMdd-HHmmss}";
         var ownerHeader = ctx.Request.Headers["X-Client-Id"].FirstOrDefault();
-        var req = new CreateJobRequest
+        var req = new CreateTaskRequest
         {
             Id = slug,
             Title = $"{titlePrefix} {stamp}",

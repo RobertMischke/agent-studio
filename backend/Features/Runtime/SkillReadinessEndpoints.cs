@@ -60,7 +60,7 @@ public static class SkillReadinessEndpoints
             (string projectName, SkillReadinessFixTaskBody? body, HttpRequest http, SkillReadinessService svc) =>
             {
                 // Owner identity falls back to the request's X-Client-Id, then
-                // to the TaskMutationService's default. Same chain CreateJobRequest
+                // to the TaskMutationService's default. Same chain CreateTaskRequest
                 // documents under OwnerClientId.
                 var owner = body?.OwnerClientId;
                 if (string.IsNullOrWhiteSpace(owner)

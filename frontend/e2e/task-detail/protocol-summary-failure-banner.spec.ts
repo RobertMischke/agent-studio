@@ -37,7 +37,7 @@ test.describe('Protocol pane — summary failure banner', () => {
       // the backend records a Failed SummaryState with the German prerequisite
       // message instead of returning 400.
       const res = await page.request.post(
-        `http://localhost:5030/api/jobs/${encodeURIComponent(created.id)}/summary/regenerate?watchPath=${encodeURIComponent(watchPath)}`
+        `http://localhost:5030/api/tasks/${encodeURIComponent(created.id)}/summary/regenerate?watchPath=${encodeURIComponent(watchPath)}`
       );
       expect(res.status()).toBe(202);
 
@@ -71,7 +71,7 @@ test.describe('Protocol pane — summary failure banner', () => {
       });
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' }
       ).catch(() => { /* best-effort cleanup */ });
     }

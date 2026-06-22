@@ -11,7 +11,7 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE',
     headers: { 'x-client-id': 'local-default' },
   });
@@ -120,7 +120,7 @@ test.describe('External lane change keeps task in view', () => {
       // Move via the state dropdown (user-initiated) - should auto-advance.
       const moveResponse = page.waitForResponse(resp =>
         resp.request().method() === 'POST'
-        && resp.url().includes(`/api/jobs/${encodeURIComponent(ids[0])}/move`)
+        && resp.url().includes(`/api/tasks/${encodeURIComponent(ids[0])}/move`)
       );
       await page.getByTestId('detail-state-select').selectOption('4-auto-review');
       await moveResponse;

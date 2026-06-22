@@ -310,7 +310,7 @@ public static class TaskStates
 {
     /// <summary>
     /// Triage staging area for new tasks. Sits before <see cref="Preparation"/>
-    /// and is the default landing lane for <see cref="CreateJobRequest"/> when
+    /// and is the default landing lane for <see cref="CreateTaskRequest"/> when
     /// no explicit <c>targetState</c> is supplied. Auto-pickup never reaches
     /// into this lane: a backlog job must be promoted explicitly. The numeric
     /// prefix sorts it before <c>1-preparation</c> on disk and in the kanban.
