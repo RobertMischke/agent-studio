@@ -4882,7 +4882,15 @@ public class ProjectRunner
                      or RunIssueKind.EmptyFastExit
                      or RunIssueKind.ContextOverflow
                      or RunIssueKind.Quarantined
-                     or RunIssueKind.AgentGitViolation;
+                     or RunIssueKind.AgentGitViolation
+                     // Drive-to-conclusion: a failed run the deterministic
+                     // contract could not close out (a hard CLI crash, or real
+                     // text that maps to no terminal verdict) returns
+                     // NotifyUserAndStop and MUST reach human review. Without
+                     // these two it stayed in 3-progress forever (the old
+                     // classifier-unknown stranding: ASS-1757, AGT dashboard).
+                     or RunIssueKind.InfraCrash
+                     or RunIssueKind.OrchestratorInconclusive;
 
     /// <summary>Remaining completion-loop re-trigger budget for a job
     /// (loop id completion.retrigger-transient-abort-per-job). Counts down
@@ -4940,6 +4948,8 @@ public class ProjectRunner
         RunIssueKind.ContextOverflow    => HumanReviewEscalationCategories.ContextOverflow,
         RunIssueKind.Quarantined        => HumanReviewEscalationCategories.Quarantined,
         RunIssueKind.AgentGitViolation  => HumanReviewEscalationCategories.AgentGitViolation,
+        RunIssueKind.InfraCrash         => HumanReviewEscalationCategories.InfraCrash,
+        RunIssueKind.OrchestratorInconclusive => HumanReviewEscalationCategories.OrchestratorInconclusive,
         _                               => HumanReviewEscalationCategories.AutoFailurePark
     };
 
