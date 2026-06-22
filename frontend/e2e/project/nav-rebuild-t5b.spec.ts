@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { api } from '../helpers/api';
+import { contrastRatio } from '../helpers/contrast';
+import { sampleColours, setTheme } from '../helpers/theme';
 
 /**
  * Nav-rebuild step 2 (T5b) — relocation smoke.
@@ -82,11 +84,21 @@ test('Pipeline rail hosts the pipeline-step config', async ({ page }) => {
 });
 
 test('Prompts rail hosts the prompt-admin surface', async ({ page }) => {
+  await page.goto('/');
+  await setTheme(page, 'light');
   await page.goto(`/#/projects/${projectSlug}/prompts`);
   await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
 
   await expect(page.getByTestId('prompt-admin-panel')).toBeVisible({ timeout: 10_000 });
-  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04-prompts-admin.png'), fullPage: true });
+  await expect.poll(() => page.getByTestId('prompt-admin-list').locator('.section-header').count()).toBeGreaterThan(0);
+  await expect.poll(() => page.getByTestId('prompt-admin-list').locator('.tree-row').count()).toBeGreaterThan(0);
+
+  const nav = await sampleColours(page, '[data-testid="prompt-admin-list"] [data-testid^="prompt-admin-item-"]');
+  const editor = await sampleColours(page, '[data-testid="prompt-admin-editor"]');
+  expect(contrastRatio(nav.color, nav.bg), `prompt nav contrast ${nav.color} on ${nav.bg}`).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(editor.color, editor.bg), `prompt editor contrast ${editor.color} on ${editor.bg}`).toBeGreaterThanOrEqual(4.5);
+
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04-prompts-admin-light.png'), fullPage: true });
 });
 
 test('Admin / CLI & Modelle hosts the per-project CLI permission modes', async ({ page }) => {

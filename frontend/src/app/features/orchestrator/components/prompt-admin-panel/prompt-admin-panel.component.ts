@@ -8,6 +8,8 @@ import {
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
+import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
 import {
   PromptAdminService,
   PromptCatalogItem,
@@ -37,7 +39,7 @@ interface PromptDiffLine {
 @Component({
   selector: 'app-prompt-admin-panel',
   standalone: true,
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, SectionHeaderComponent, TreeRowComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './prompt-admin-panel.component.html',
   styleUrl: './prompt-admin-panel.component.scss',

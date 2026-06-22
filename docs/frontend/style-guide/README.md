@@ -8,6 +8,7 @@ This folder is the **second-look** for any visual or styling change. The first s
 - "I need a pill / badge / chip" → [pills.md](./pills.md)
 - "I need a card surface" → [cards.md](./cards.md)
 - "I need a modal" → [modals.md](./modals.md)
+- "I need sidebar / rail navigation" → [navigation.md](./navigation.md)
 - "I need a tab strip" → [tabs.md](./tabs.md)
 - "I need a form input" → [forms.md](./forms.md)
 - "What spacing / radius / shadow token do I use?" → [tokens.md](./tokens.md)
@@ -33,6 +34,7 @@ A change at layer N must not duplicate a fact at layer N-1. A button never hardc
 | Chip / pill        | SCSS mixin `m.chip($accent, $alpha-bg, $alpha-border)` in [`_mixins.scss`](../../../frontend/src/styles/_mixins.scss) | per-accent (`--studio-accent`, `--studio-accent-warn`, ...) | ✅ shipped (no Angular wrapper yet) |
 | Row / list item    | [`<app-row>`](../../../frontend/src/app/components/row/row.component.ts)                                           | `variant=compact\|default\|cozy`, `interactive` | ✅ shipped |
 | Tab strip          | [`<app-pane-tabs>`](../../../frontend/src/app/components/pane-tabs/pane-tabs.component.ts)                         | `variant=header\|pill`            | ✅ shipped (F38)  |
+| Sidebar navigation | [`<app-section-header>`](../../../frontend/src/app/components/section-header/section-header.component.ts) + [`<app-tree-row>`](../../../frontend/src/app/components/tree-row/tree-row.component.ts) | static/collapsible groups + root/child rows | ✅ shipped |
 | Side sheet         | [`<app-sidesheet>`](../../../frontend/src/app/components/sidesheet/sidesheet.component.ts)                         | `[width]`                         | ✅ shipped        |
 | Menu               | [`<app-menu>`](../../../frontend/src/app/components/menu/menu.component.ts)                                        | text-only rows                    | ✅ shipped        |
 | Notification       | [`<app-notification>`](../../../frontend/src/app/components/notification/notification.component.ts)                | toast / banner                    | ✅ shipped (F37)  |
@@ -52,6 +54,7 @@ The audit pages are the **inventory** of existing implementations of each family
 - [audit-pills.md](./audit-pills.md) — every pill / chip / badge / tag / count class found
 - [audit-cards.md](./audit-cards.md) — every card surface found
 - [audit-modals.md](./audit-modals.md) — every modal / dialog / overlay found
+- [navigation.md](./navigation.md) — canonical sidebar and rail navigation recipe
 - [audit-tabs.md](./audit-tabs.md) — every tab-strip / segmented-control found
 - [audit-forms.md](./audit-forms.md) — every input / select / textarea / checkbox / toggle found
 

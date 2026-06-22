@@ -35,6 +35,7 @@ Use this page as the first stop when you need the right document quickly.
 | Pipeline | [domains/pipeline.md](domains/pipeline.md) |
 | Tasks | [domains/tasks.md](domains/tasks.md) |
 | Frontend | [domains/frontend.md](domains/frontend.md) |
+| Frontend navigation style guide | [frontend/style-guide/navigation.md](frontend/style-guide/navigation.md) |
 | CLI | [domains/cli.md](domains/cli.md) |
 | Tokens | [domains/tokens.md](domains/tokens.md) |
 | ADR archive | [architecture/decisions/adr-archive.md](architecture/decisions/adr-archive.md) |

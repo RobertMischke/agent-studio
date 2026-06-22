@@ -173,10 +173,11 @@ describe('PromptAdminPanelComponent', () => {
     const host = fixture.nativeElement as HTMLElement;
 
     expect(host.querySelector('[data-testid="prompt-admin-panel"]')).not.toBeNull();
-    expect(host.querySelectorAll('.prompts__item').length).toBe(2);
+    expect(host.querySelectorAll('.tree-row').length).toBe(2);
 
-    const groupHeads = Array.from(host.querySelectorAll('.prompts__group-head')).map(e => e.textContent?.trim());
+    const groupHeads = Array.from(host.querySelectorAll('.section-header__title')).map(e => e.textContent?.trim());
     expect(groupHeads).toEqual(['Runner', 'Review']);
+    expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)?.classList).toContain('tree-row--active');
 
     // The overridden + drifted Review template surfaces the "default changed" pill.
     expect(host.querySelector(`[data-testid="prompt-admin-drift-${DRIFT}"]`)).not.toBeNull();

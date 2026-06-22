@@ -74,6 +74,15 @@ Tracker for the design-system convergence work. Each row is a **queueable task**
 | **T-Tabs: studio-shell editor tab strip evaluation** — migrate to `<app-pane-tabs variant="strip">` (new variant) or keep `.studio-tab` bespoke | ⚪ | Decision needed; the editor tab strip carries drag-reorder + close-per-tab |
 | **T-Tabs: top-header project switcher (`.project-tab`)** — bring onto `<app-pane-tabs>` tokens even if it stays a separate class | ⚪ | Small slice |
 
+## Family — Navigation
+
+| Slice                                                             | Status | Notes                                                                                       |
+| ----------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------- |
+| Sidebar / rail navigation canonical                               | 🟢     | `<app-section-header>` + `<app-tree-row>`; documented in [navigation.md](./navigation.md) |
+| Project Hub rail uses shared navigation controls                   | 🟢     | `project-shell` renders grouped rails through section-header + tree-row |
+| Prompts registry inventory uses shared navigation controls         | 🟢     | `prompt-admin-panel` no longer ships a dark-only custom button list |
+| Audit remaining per-feature navigation lists                       | ⚪     | Opportunistic sweep before adding a separate audit-navigation page |
+
 ## Family — Forms
 
 | Slice                                                             | Status | Notes                                                                                       |
