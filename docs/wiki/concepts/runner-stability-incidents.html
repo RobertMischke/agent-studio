@@ -52,6 +52,13 @@
     <thead><tr><th style="width:96px;">Date</th><th>Symptom</th><th>Root cause</th><th>Invariant</th><th style="width:120px;">Status</th></tr></thead>
     <tbody>
       <tr>
+        <td>2026-06-23 (overnight)</td>
+        <td>The <code>3-progress</code> lane "kaputt" again: tasks re-queued from escalated were picked, the claude CLI <em>resumed a stale session</em> and exited 1 in ~2&ndash;4 s with no output, and the card sat in <code>3-progress</code> forever.</td>
+        <td>A failed run with <em>zero agent text</em> classifies as <code>NoAgentOutput</code> &rarr; <code>RunOutcomePolicy</code> returns <code>Accept</code> (the "cause is already visible in chat, don't pile on a FAILURE" path) &rarr; it neither moved to review nor matched a typed human-review route &rarr; fell through to "leaving it in progress". Pickup only scans <code>2-ready</code>, so the card never came back: a permanent zombie. The earlier <code>ShouldRouteIssueToHumanReview</code> fix (d941d6e7) covered <code>InfraCrash</code>/<code>OrchestratorInconclusive</code> but not the no-output / launch-failure shapes.</td>
+        <td>Any genuinely FAILED run (status=failed, not a deliberate stop, not awaiting input) that no typed route claims is escalated to human review by a backstop &mdash; it can never be left in 3-progress.</td>
+        <td class="ok">FIXED &amp; tested (StrandedRunBackstop + ProjectRunner backstop; 13 new cases, full suite green); see <a href="process-termination-scenarios.html">scenario S2</a></td>
+      </tr>
+      <tr>
         <td>2026-06-12 .. 06-22</td>
         <td>Tasks stuck forever in <code>3-progress</code> ("classifier-unknown"); the lane fills, nothing advances (ASS-1757, wiki-dashboard).</td>
         <td>A failed/unclassified run returned <code>NotifyUserAndStop</code> with <code>InfraCrash</code>/<code>OrchestratorInconclusive</code>, but those kinds were missing from <code>ProjectRunner.ShouldRouteIssueToHumanReview</code> &rarr; the stop never escalated.</td>

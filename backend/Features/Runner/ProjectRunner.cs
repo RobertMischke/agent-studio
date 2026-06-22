@@ -4698,6 +4698,52 @@ public class ProjectRunner
                         jobId, moveOutcome.Status, moveOutcome.Message);
                 }
             }
+            else if (activeInfo != null
+                && StrandedRunBackstop.MustEscalateStrandedRun(execution.Status, outcome.Kind))
+            {
+                // Drive-to-conclusion backstop (invariant: no FAILED run ever
+                // stays in 3-progress). Some failure shapes reach here without
+                // being routed, retried, or moved to review: a failed run with
+                // no agent text (NoAgentOutput -> Accept) or a CLI launch/resume
+                // failure (CliLaunchFailed -> NotifyUserAndAccept). Left as-is
+                // they sit in 3-progress forever - pickup only scans 2-ready -
+                // a permanent zombie (the recurring "in-progress lane kaputt"
+                // incident: a rapid stale-session resume crash, exit=1, 0 output,
+                // that the typed routes above never claimed). A deliberate stop
+                // (status=stopped) and a manual-mode NeedsInput legitimately stay
+                // in progress and are excluded by the guard. See
+                // docs/wiki/concepts/runner-stability-incidents.html.
+                var backstopIssueKind = action?.IssueKind is RunIssueKind k and not RunIssueKind.None
+                    ? k
+                    : RunIssueKind.OrchestratorInconclusive;
+                var backstopTopic = ToIssueTopic(backstopIssueKind);
+                var backstopReason = !string.IsNullOrWhiteSpace(action?.MetaMessage)
+                    ? action!.MetaMessage!
+                    : $"Run failed ({backstopTopic}) and reached no terminal verdict; routed to human review so it cannot strand in 3-progress.";
+                _orchestratorLog.Append(activeInfo.WatchPath, new OrchestratorLogEntry
+                {
+                    Kind = OrchestratorLogKinds.Intervention,
+                    Topic = backstopTopic,
+                    JobId = jobId,
+                    Summary = $"Routed \"{activeInfo.Title}\" to human review: a failed run that no terminal route claimed ({backstopTopic}) would otherwise strand in 3-progress.",
+                    Reasoning = backstopReason
+                });
+                _completionRetriggerUsed.TryRemove(jobId, out _);
+                _consecutiveFailNoProgress.TryRemove(jobId, out _);
+                _rapidCrashBackoffUntil.TryRemove(jobId, out _);
+                TeardownWorktreeForJob(jobId);
+                var backstopMove = await _humanReviewEscalation.EscalateAsync(
+                    jobId, activeInfo.WatchPath, ProjectName,
+                    ToEscalationCategory(backstopIssueKind),
+                    backstopReason,
+                    CancellationToken.None);
+                if (backstopMove.Status != MoveJobStatus.Success)
+                {
+                    _logger.LogWarning(
+                        "Drive-to-conclusion backstop human-review routing failed for {JobId}: {Status} {Message}",
+                        jobId, backstopMove.Status, backstopMove.Message);
+                }
+            }
             else
             {
                 _logger.LogInformation(

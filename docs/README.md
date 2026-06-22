@@ -59,6 +59,7 @@ Use this page as the first stop when you need the right document quickly.
 | Admin CLI onboarding | [wiki/concepts/admin-cli-onboarding.html](wiki/concepts/admin-cli-onboarding.html) |
 | Orchestrator supervision loop | [wiki/concepts/orchestrator-supervision-loop.html](wiki/concepts/orchestrator-supervision-loop.html) |
 | Runner stability: incidents, invariants & goal | [wiki/concepts/runner-stability-incidents.html](wiki/concepts/runner-stability-incidents.html) |
+| Process termination & abort scenarios (test suite) | [wiki/concepts/process-termination-scenarios.html](wiki/concepts/process-termination-scenarios.html) |
 
 ## Organization Rules
 
