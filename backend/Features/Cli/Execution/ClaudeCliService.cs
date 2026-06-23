@@ -307,11 +307,17 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         {
             if (info.SessionLiveness != null) return;
             var jobKey = info.Execution.TaskKey;
+            // On a clean-context run (the DEFAULT), claude redirects its session
+            // transcript to CLAUDE_CONFIG_DIR (info.CleanContext.TempHome). The
+            // heartbeat MUST watch that dir, not the default ~/.claude, or it sees
+            // permanent silence and the watchdog kills the live run mid-work
+            // (exit=-1) - the "runs never complete / backlog never drains" bug.
             var heartbeat = new ClaudeSessionHeartbeat(
                 sessionId,
                 info.WorkingDirectory,
                 onActivity: () => RaiseRunEvent(jobKey, new CliRunEvent.Heartbeat { TaskKey = jobKey }),
-                logger: _logger);
+                logger: _logger,
+                configDir: info.CleanContext?.TempHome);
             info.SessionLiveness = heartbeat;
             _logger.LogInformation(
                 "Claude session-liveness watcher armed for {JobKey} (session {Session}, watching {Path})",
