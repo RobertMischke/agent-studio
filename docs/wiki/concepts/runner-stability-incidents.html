@@ -53,6 +53,20 @@
     <tbody>
       <tr>
         <td>2026-06-23 (overnight)</td>
+        <td><strong>The real "backlog never drains" cause.</strong> Fresh claude/Opus runs do 1&ndash;5 min of real work, commit <em>nothing</em>, then die with <code>exit=-1</code> and escalate. No task completes.</td>
+        <td><strong>claude.exe self-crashes</strong> (the CLI process, not the orchestrator). Proof: <code>RunStatusClassifier.Classify</code> returns <code>status=failed</code>+<code>exit=-1</code> ONLY when <code>StopReason==None</code> &mdash; any runner-initiated kill (watchdog/user/cancel) would be <code>status=stopped</code>. So the runner did NOT kill it; claude exited -1 on its own, mid-tool-call, with no error in its transcript. NOT the phase watchdog (budgets 600&ndash;1200 s), NOT clean-context (shared context crashed identically), NOT a Job-Object cap (none set). Correlates with <strong>memory saturation</strong>: ~1&ndash;1.5 GB free of 32 GB (full dev env: 2 backends + 4 Angular dev servers + VS Code + the user's browser), and death times <em>decreasing</em> 274&rarr;262&rarr;152 s as pressure grows. claude/Opus runs cannot allocate mid-run and abort.</td>
+        <td>The orchestrator must DETECT + ESCALATE a CLI self-crash honestly (done: InfraCrash route + backstop, no strand). A coding run needs enough free RAM; the operator surface should warn when free memory is below a safe floor before a heavy run. Mitigation: lighter coding model (Sonnet/Haiku) or fewer concurrent dev servers.</td>
+        <td class="part">DIAGNOSED &amp; HANDLED (no strand). Crash is a resource/CLI issue, not an orchestrator bug. Testing Sonnet vs Opus; ops rec = free RAM. Bug task filed.</td>
+      </tr>
+      <tr>
+        <td>2026-06-23 (overnight)</td>
+        <td>Clean-context claude runs were killed mid-work by a <em>false</em> silence watchdog (suspected; turned out not to be the dominant cause, but a real bug).</td>
+        <td>Clean context (the DEFAULT) redirects claude's session JSONL to <code>CLAUDE_CONFIG_DIR</code>, but the liveness heartbeat hardcoded <code>~/.claude/projects/&hellip;</code> &mdash; it watched a file claude never writes, so the silence watchdog had no heartbeat to reset. (The dominant death cause turned out to be the self-crash above, but on a genuinely-silent run this path would still false-kill.)</td>
+        <td>The liveness watcher resolves the session file under the run's actual config dir (clean-context <code>CLAUDE_CONFIG_DIR</code> or default <code>~/.claude</code>).</td>
+        <td class="ok">FIXED &amp; tested (cf8a8644; ResolveSessionFile configDir + 2 tests)</td>
+      </tr>
+      <tr>
+        <td>2026-06-23 (overnight)</td>
         <td>The <code>3-progress</code> lane "kaputt" again: tasks re-queued from escalated were picked, the claude CLI <em>resumed a stale session</em> and exited 1 in ~2&ndash;4 s with no output, and the card sat in <code>3-progress</code> forever.</td>
         <td>A failed run with <em>zero agent text</em> classifies as <code>NoAgentOutput</code> &rarr; <code>RunOutcomePolicy</code> returns <code>Accept</code> (the "cause is already visible in chat, don't pile on a FAILURE" path) &rarr; it neither moved to review nor matched a typed human-review route &rarr; fell through to "leaving it in progress". Pickup only scans <code>2-ready</code>, so the card never came back: a permanent zombie. The earlier <code>ShouldRouteIssueToHumanReview</code> fix (d941d6e7) covered <code>InfraCrash</code>/<code>OrchestratorInconclusive</code> but not the no-output / launch-failure shapes.</td>
         <td>Any genuinely FAILED run (status=failed, not a deliberate stop, not awaiting input) that no typed route claims is escalated to human review by a backstop &mdash; it can never be left in 3-progress.</td>
