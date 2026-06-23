@@ -1,5 +1,6 @@
 
 using Xunit;
+using RunOutcome = CodingAgentRunner.Model.RunOutcome;
 
 namespace AgentStudio.Tests;
 
@@ -120,20 +121,20 @@ public class CliRunEventTests
     }
 
     [Fact]
-    public void ProcessExited_AdvancesToExited()
+    public void RunEnded_Completed_AdvancesToExited()
     {
         var p = RunPhaseTransitions.Apply(
             RunPhase.OutputDelta,
-            new CliRunEvent.ProcessExited(0, "completed", 12.3));
+            new CliRunEvent.RunEnded(RunOutcome.Completed, null, 0, 12.3));
         Assert.Equal(RunPhase.Exited, p);
     }
 
     [Fact]
-    public void Killed_AdvancesToKilled()
+    public void RunEnded_Stopped_AdvancesToKilled()
     {
         var p = RunPhaseTransitions.Apply(
             RunPhase.OutputDelta,
-            new CliRunEvent.Killed("watchdog"));
+            new CliRunEvent.RunEnded(RunOutcome.Stopped, "watchdog", null, 0));
         Assert.Equal(RunPhase.Killed, p);
     }
 

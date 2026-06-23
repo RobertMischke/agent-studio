@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using LibOutcome = CodingAgentRunner.Model.RunOutcome;
 
 namespace AgentStudio.Cli;
 
@@ -1110,13 +1111,15 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             info.OutputLog.Append(exitLine);
             try { OnOutput?.Invoke(jobKey, exitLine); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:982"); }
 
-            // ADR-0013 typed events: emit ProcessExited (or Killed if the
-            // exit was a deliberate Stop) so the runner's phase tracker
-            // sees the terminal state on the typed channel too.
-            if (info.StopReason != RunStopReason.None)
-                RaiseRunEvent(jobKey, new CliRunEvent.Killed(info.StopReason.ToString()) { RunId = jobKey });
-            else
-                RaiseRunEvent(jobKey, new CliRunEvent.ProcessExited(exitCode, status, duration) { RunId = jobKey });
+            // ADR-0013 typed terminal event: one RunEnded (3-valued outcome) so the
+            // runner's phase tracker sees the terminal state on the typed channel.
+            var endOutcome = info.StopReason != RunStopReason.None
+                ? LibOutcome.Stopped
+                : string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ? LibOutcome.Completed : LibOutcome.Failed;
+            var endReason = info.StopReason != RunStopReason.None
+                ? info.StopReason.ToString()
+                : endOutcome == LibOutcome.Failed ? status : null;
+            RaiseRunEvent(jobKey, new CliRunEvent.RunEnded(endOutcome, endReason, exitCode, duration) { RunId = jobKey });
 
             try { OnFinished?.Invoke(jobKey, finalExecution); }
             catch (Exception ex) { _logger.LogWarning(ex, "OnFinished subscriber threw for {JobId}", jobKey); }

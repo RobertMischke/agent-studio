@@ -182,14 +182,14 @@ setInterval(() => {}, 600000);
         {
             int n;
             lock (events) n = events.Count;
-            if (events.OfType<CliRunEvent.ProcessExited>().Any()) break;
+            if (events.OfType<CliRunEvent.RunEnded>().Any()) break;
             await Task.Delay(50);
         }
 
         List<CliRunEvent> snap;
         lock (events) snap = events.ToList();
         Assert.Contains(snap, e => e is CliRunEvent.RunStarted);
-        Assert.Contains(snap, e => e is CliRunEvent.ProcessExited);
+        Assert.Contains(snap, e => e is CliRunEvent.RunEnded);
         // FakeNodeCliService has no MapLineToRunEvents override, so no
         // OutputDelta / SessionStarted events are expected here - that
         // wiring is per-CLI and tested in ClaudeEventAdapterTests.

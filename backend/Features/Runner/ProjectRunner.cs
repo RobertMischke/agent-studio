@@ -2449,7 +2449,7 @@ public class ProjectRunner
 
         // Clean up on terminal events so a later run with the same key
         // does not inherit stale phase state.
-        if (evt is CliRunEvent.ProcessExited or CliRunEvent.Killed)
+        if (evt is CliRunEvent.RunEnded)
         {
             _phaseByJob.TryRemove(jobKey, out _);
             _sentinelStopRequested.TryRemove(jobKey, out _);

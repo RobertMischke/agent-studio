@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using LibOutcome = CodingAgentRunner.Model.RunOutcome;
 
 namespace AgentStudio.Cli;
 
@@ -544,9 +545,13 @@ public class CopilotCliService : ICliExecutionService
         // runs too.
         try
         {
-            CliRunEvent terminal = info.StopReason != RunStopReason.None
-                ? new CliRunEvent.Killed(info.StopReason.ToString()) { RunId = jobKey }
-                : new CliRunEvent.ProcessExited(exitCode, status, duration) { RunId = jobKey };
+            var endOutcome = info.StopReason != RunStopReason.None
+                ? LibOutcome.Stopped
+                : string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ? LibOutcome.Completed : LibOutcome.Failed;
+            var endReason = info.StopReason != RunStopReason.None
+                ? info.StopReason.ToString()
+                : endOutcome == LibOutcome.Failed ? status : null;
+            CliRunEvent terminal = new CliRunEvent.RunEnded(endOutcome, endReason, exitCode, duration) { RunId = jobKey };
             OnRunEvent?.Invoke(jobKey, terminal);
         }
         catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent threw on Copilot terminal for {JobId}", jobKey); }
