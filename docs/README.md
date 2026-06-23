@@ -61,6 +61,7 @@ Use this page as the first stop when you need the right document quickly.
 | Runner stability: incidents, invariants & goal | [wiki/concepts/runner-stability-incidents.html](wiki/concepts/runner-stability-incidents.html) |
 | Process termination & abort scenarios (test suite) | [wiki/concepts/process-termination-scenarios.html](wiki/concepts/process-termination-scenarios.html) |
 | Overnight session summary 2026-06-23 (Zwischenstand) | [wiki/concepts/overnight-2026-06-23-summary.html](wiki/concepts/overnight-2026-06-23-summary.html) |
+| claude.exe mid-run termination — live investigation | [wiki/concepts/claude-termination-investigation.html](wiki/concepts/claude-termination-investigation.html) |
 
 ## Organization Rules
 

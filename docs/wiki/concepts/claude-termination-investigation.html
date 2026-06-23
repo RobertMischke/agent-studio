@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>claude.exe mid-run termination — live investigation log</title>
+<style>
+  :root{--fg:#1d2127;--muted:#5b626d;--line:#e3e6ea;--accent:#1f6feb;--bad:#b42318;--ok:#067647;--warn:#b54708;--bg:#fbfcfd;--code:#eff1f4;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1000px;margin:0 auto;padding:32px 24px 80px;}
+  h1{font-size:24px;margin:0 0 2px;} h2{font-size:18px;margin:28px 0 8px;padding-top:10px;border-top:1px solid var(--line);}
+  .sub{color:var(--muted);margin:0 0 16px;}
+  code{background:var(--code);padding:1px 5px;border-radius:4px;font:12.5px/1.5 ui-monospace,Consolas,monospace;}
+  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:13px;} th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top;}
+  th{background:#f3f5f7;font-weight:600;}
+  .ok{color:var(--ok);font-weight:600;} .open{color:var(--bad);font-weight:600;} .part{color:var(--warn);font-weight:600;}
+  .box{background:#fff;border-left:3px solid var(--accent);padding:10px 16px;margin:12px 0;}
+  li{margin:4px 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>claude.exe mid-run termination — live investigation log</h1>
+  <p class="sub">Goal: find why an orchestrator-spawned <code>claude</code> coding run terminates with <code>exit=-1</code> after 2&ndash;5 min, and a working configuration so tasks complete. Updated as experiments run. Companion to <a href="runner-stability-incidents.html">runner-stability-incidents</a> + <a href="process-termination-scenarios.html">process-termination-scenarios</a>.</p>
+
+  <div class="box">
+    <strong>Reproducible lab:</strong> <code>c:\Projects\agent-taskboard-devspace\crash-repro-lab\</code> (git repo). <code>material/</code> = 137 copied .cs files (work material). <code>scenario-prompt.txt</code> = a work-heavy read/grep/analyze prompt. Run a standalone experiment: <code>claude -p "$(cat scenario-prompt.txt)" --output-format stream-json --verbose --dangerously-skip-permissions --model &lt;m&gt; &gt; out.ndjson 2&gt; err.log</code> (this is the orchestrator's exact flag set). Vary ONE thing per experiment.
+  </div>
+
+  <h2>What the orchestrator actually does (verified)</h2>
+  <ul>
+    <li>Invocation: <code>claude -p &lt;prompt&gt; [-r &lt;uuid&gt;] --model &lt;m&gt; --output-format stream-json --verbose --dangerously-skip-permissions [--append-system-prompt-file &lt;rules&gt;]</code>.</li>
+    <li>Spawn: <code>ClaudeCli:UseHandleScrub</code> is <strong>OFF</strong> &rarr; the normal <code>Process.Start</code> path (NOT the handle-scrub spawner). Stdin/stdout/stderr are redirected pipes; the backend reads stdout via <code>ReadStreamAsync</code> (StreamReader.ReadLineAsync), transforms + persists each line.</li>
+    <li>The backend creates <strong>no</strong> Windows Job Object.</li>
+  </ul>
+
+  <h2>Experiment log</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Setup (vs orchestrator)</th><th>Result</th><th>Implication</th></tr></thead>
+    <tbody>
+      <tr><td><strong>EXP-1a</strong></td><td>Standalone claude, orchestrator's exact flags, Opus, stdout redirected to a <em>file</em> (<code>&gt; out.ndjson</code>), run from bash.</td><td class="part">Running &mdash; survived 6+ min (past the 152&ndash;274 s orchestrator death window), actively producing frames. <em>(pending final exit)</em></td><td>Preliminary: standalone claude does NOT die in the orchestrator's death window &rarr; the orchestrator's spawn/management is implicated, NOT claude-code alone.</td></tr>
+      <tr><td><strong>EXP-1b</strong></td><td>Same, but stdout piped to an active reader (<code>| cat</code>) instead of a file &mdash; tests pipe backpressure / reader-stall.</td><td>queued</td><td>If 1b dies but 1a lives &rarr; the active stdout-pipe-reader (backpressure / claude not flushing when piped, GH #25670) is the trigger.</td></tr>
+      <tr><td><strong>EXP-2</strong></td><td>codex as runner CLI (different spawn + protocol).</td><td>queued</td><td>A working pipeline path even if claude-code stays broken (user-sanctioned fallback).</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Eliminated (with evidence)</h2>
+  <ul>
+    <li><strong>Orchestrator Stop() / watchdog</strong> &mdash; both set <code>info.StopReason</code>; crash had <code>StopReason==None</code> (status=failed) &amp; no watchdog log.</li>
+    <li><strong>Orphan reaper</strong> &mdash; <code>"Reaped stale-orphan"</code> appears 0&times; in the entire log; it never fired.</li>
+    <li><strong>Handle-scrub spawner</strong> &mdash; flag OFF, 0 handle-scrub spawns logged.</li>
+    <li><strong>Job Object</strong> &mdash; backend creates none.</li>
+    <li><strong>node heap OOM</strong> &mdash; stderr captured unconditionally, was empty (OOM prints FATAL ERROR to stderr).</li>
+    <li><strong>Native crash / Defender</strong> &mdash; no Windows Error Reporting event; no Defender detections.</li>
+    <li><strong>Model / context-mode / system memory</strong> &mdash; Opus + Sonnet both die; clean + shared both die; freeing RAM didn't change it.</li>
+  </ul>
+
+  <h2>Leading hypotheses (ranked)</h2>
+  <ol>
+    <li><strong>Active stdout-pipe interaction.</strong> EXP-1a redirects stdout to a file (never blocks); the orchestrator reads the pipe. claude-code is documented to not flush stdout when piped non-TTY (GH #25670, #17248) and to have Windows stdio/subprocess deadlocks (#34457). A reader stall or flush gap could lead to a hang then an external kill. Test: EXP-1b.</li>
+    <li><strong>An orchestrator kill path with no StopReason + no log.</strong> Narrow (reaper ruled out), but possible. Test: instrument every kill entry point with a source log + a flag, run one task, read the trace.</li>
+    <li><strong>Web research</strong> (GH issues): exit=-1 + empty stderr + no WER = an external <code>TerminateProcess</code>, not a node self-crash; claude-code has no idle self-termination. So a parent terminates it. Most likely after a perceived hang from the stdout buffering issue.</li>
+  </ol>
+
+  <h2>Next decisive step</h2>
+  <p>Let EXP-1a finish (does standalone EVER die?). If it completes clean &rarr; the orchestrator's pipe-read is implicated &rarr; run EXP-1b (pipe) + instrument the orchestrator kill paths. If EXP-1a eventually dies &rarr; it is claude-code itself &rarr; pursue claude-code workarounds (version, output mode, NODE flags) + codex fallback.</p>
+</div>
+</body>
+</html>
