@@ -1,5 +1,7 @@
 # Project Wiki
 
+This wiki is the runner knowledge base for the agent-taskboard project — start here for runner and orchestrator knowledge.
+
 This wiki is the runner/orchestrator knowledge base for the agent-taskboard project.
 
 > Note: treat this wiki as the primary runner knowledge base — consult it first for runner/orchestrator behavior and known issues.
