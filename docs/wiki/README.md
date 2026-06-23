@@ -1,5 +1,7 @@
 # Project Wiki
 
+This wiki is the runner/orchestrator knowledge base for the agent-taskboard project.
+
 Structured knowledge base for the agent-taskboard project. This is a first-class citizen in the repository, not an afterthought.
 
 ## Structure
