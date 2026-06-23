@@ -1062,6 +1062,24 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
             int? exitCode = null;
             try { exitCode = process.ExitCode; } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase:953"); }
+            // [crash-diag] orchestrator-only mid-run termination probe: when a child
+            // exits with a negative code and we never called Stop(), capture the read-task
+            // state + silence gap so we can tell an external/self termination apart from a
+            // pipe break. Both claude AND codex die this way only under the full backend
+            // (a minimal .NET Process.Start harness survives) - see runner-stability wiki.
+            if (exitCode is < 0 && info.StopReason == RunStopReason.None)
+            {
+                string So = info.StdoutReadTask is null ? "null"
+                    : info.StdoutReadTask.IsFaulted ? "FAULTED:" + (info.StdoutReadTask.Exception?.GetBaseException().Message ?? "?")
+                    : info.StdoutReadTask.Status.ToString();
+                string Se = info.StderrReadTask is null ? "null"
+                    : info.StderrReadTask.IsFaulted ? "FAULTED:" + (info.StderrReadTask.Exception?.GetBaseException().Message ?? "?")
+                    : info.StderrReadTask.Status.ToString();
+                double ago = info.LastStreamedAt == default ? -1 : (DateTime.UtcNow - info.LastStreamedAt).TotalSeconds;
+                _logger.LogWarning(
+                    "[crash-diag] {Cli} job {JobId} exited code={Exit} after {Dur:F1}s, StopReason=None (no Stop() called). stdoutRead={So} stderrRead={Se} lastStreamedAgo={Ago:F0}s",
+                    CliType, jobKey, exitCode, duration, So, Se, ago);
+            }
             var status = RunStatusClassifier.Classify(exitCode, info.StopReason);
             var terminalOutcome = TerminalRunOutcomeClassifier.Classify(
                 status,
@@ -1476,6 +1494,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// </summary>
     private void SafeKillReap(Process proc, ActiveJob entry)
     {
+        _logger.LogWarning("[KILL-TRACE] SafeKillReap PID {Pid} ({Cli})\n{Stack}", entry.ProcessId, CliType, Environment.StackTrace);
         try
         {
             proc.Kill(entireProcessTree: true);
@@ -1499,6 +1518,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
     private void KillProcessTree(Process process, string jobKey)
     {
+        _logger.LogWarning("[KILL-TRACE] KillProcessTree job {JobId} ({Cli})\n{Stack}", jobKey, CliType, Environment.StackTrace);
         try
         {
             process.Kill(entireProcessTree: true);
