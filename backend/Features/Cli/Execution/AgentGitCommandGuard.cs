@@ -133,6 +133,22 @@ internal static class AgentGitCommandGuard
             var dir = Path.Combine(Path.GetTempPath(), "agent-taskboard-git-guard");
             Directory.CreateDirectory(dir);
 
+            // Always write the extensionless POSIX `git` wrapper. This is the one
+            // that actually guards the worker agent: on Windows the agent invokes
+            // git through its git-bash (MSYS) shell, and git-bash resolves the
+            // bare name `git` to this script - it does NOT pick up `git.cmd` for a
+            // bare `git` (only cmd.exe does, via PATHEXT). A `.cmd`-only guard was
+            // therefore silently bypassed by every git-bash `git commit`. git-bash
+            // treats NTFS files as executable by default, so no x-bit is required.
+            var shPath = Path.Combine(dir, "git");
+            if (!File.Exists(shPath) || !File.ReadAllText(shPath).Contains(AllowEnv, StringComparison.Ordinal))
+            {
+                File.WriteAllText(shPath, PosixWrapper.Replace("\r\n", "\n"));
+                TryMarkExecutable(shPath);
+            }
+
+            // On Windows ALSO write `git.cmd` so any cmd.exe-resolved git call
+            // (PATHEXT) is guarded as well.
             if (OperatingSystem.IsWindows())
             {
                 var cmdPath = Path.Combine(dir, "git.cmd");
@@ -141,20 +157,16 @@ internal static class AgentGitCommandGuard
                     File.WriteAllText(cmdPath, WindowsWrapper);
                 }
             }
-            else
-            {
-                var shPath = Path.Combine(dir, "git");
-                if (!File.Exists(shPath) || !File.ReadAllText(shPath).Contains(AllowEnv, StringComparison.Ordinal))
-                {
-                    File.WriteAllText(shPath, PosixWrapper.Replace("\r\n", "\n"));
-                    TryMarkExecutable(shPath);
-                }
-            }
 
             return dir;
         }
-        catch
+        catch (Exception ex)
         {
+            // A silent failure here is dangerous: the git guard is the only thing
+            // enforcing the platform-owns-commit boundary, so if the guard dir
+            // can't be prepared the worker agent runs git unrestricted and nobody
+            // notices. Surface it at Warning rather than swallowing.
+            SilentCatch.Warn(ex, "AgentGitCommandGuard: failed to prepare the git-guard directory; the agent git guard is NOT active for this run");
             return null;
         }
     }
