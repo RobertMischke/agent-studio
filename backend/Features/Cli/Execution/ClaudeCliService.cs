@@ -590,18 +590,32 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // 1. Shell PATH resolution (uses PATHEXT on Windows).
         var resolved = ResolveExecutable(nameOrPath);
 
-        // 2. Opt-in legacy probe — only kicks in for .cmd / .bat hits.
-        var useShim = string.Equals(
-            _configuration["ClaudeCli:UseNpmShimProbe"], "true",
+        // 2. Prefer the real claude.exe over a .cmd/.bat shim — DEFAULT ON.
+        //    ROOT CAUSE (2026-06-23 pipeline stall): when PATH resolves `claude`
+        //    to the npm `claude.CMD` shim (no claude.exe on PATH), spawning the
+        //    .CMD routes through `cmd.exe /c claude.CMD <args>`. cmd.exe treats
+        //    the newline inside the multi-line `-p <prompt>` argument as a
+        //    command separator, so the agent receives ONLY the first line
+        //    ("## Worktree containment") and never sees the task brief — every
+        //    run then flails / emits NEEDS_INPUT / escalates. ResolveCmdShimToExe
+        //    rewrites the shim to the bundled claude.exe the shim itself calls
+        //    (identical binary, minus the cmd.exe layer), which CreateProcess
+        //    parses via CommandLineToArgvW so the multi-line prompt survives
+        //    verbatim. This was wrongly gated behind an opt-IN flag; spawning a
+        //    .cmd with a multi-line argv is never safe on Windows, so the
+        //    conversion is now the default. Opt OUT with UseNpmShimProbe=false
+        //    only for unusual layouts where the bundled exe must not be used.
+        var optOut = string.Equals(
+            _configuration["ClaudeCli:UseNpmShimProbe"], "false",
             StringComparison.OrdinalIgnoreCase);
-        if (useShim)
+        if (!optOut)
         {
             var probed = ResolveCmdShimToExe(resolved);
             if (!string.Equals(probed, resolved, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogInformation(
-                    "[claude-bin] Legacy npm-shim probe enabled; using {Probed} instead of shell-resolved {Shell}",
-                    probed, resolved);
+                    "[claude-bin] Rewrote .cmd shim {Shell} -> bundled exe {Probed} (cmd.exe truncates multi-line -p prompts at the first newline)",
+                    resolved, probed);
                 return probed;
             }
         }
