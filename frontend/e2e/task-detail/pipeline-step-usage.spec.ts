@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const JOB_ID = 'tokens-by-model-fixture';
+const JOB_ID = 'pipeline-step-usage-fixture';
 const WATCH_PATH = 'C:/fixtures/agent-taskboard';
 const RESULTS_DIR = process.env.JOB_RESULTS_DIR ?? '';
 
@@ -19,7 +19,7 @@ function jobDetail() {
     info: {
       id: JOB_ID,
       jobKey: `${WATCH_PATH}::${JOB_ID}`,
-      title: 'Tokens by model fixture',
+      title: 'Pipeline step usage fixture',
       state: '4-auto-review',
       agent: 'codex',
       cliType: 'codex',
@@ -45,7 +45,7 @@ function jobDetail() {
       orchestratorVerdict: null,
       ownerClientId: 'local-default',
     },
-    promptMarkdown: '# Tokens by model fixture',
+    promptMarkdown: '# Pipeline step usage fixture',
     statusMarkdown: '## Done\n\nFixture status.',
     contextUsage: null,
     log: [],
@@ -56,8 +56,8 @@ function jobDetail() {
   };
 }
 
-// A run with the core agent on Opus plus the aspect reviewers on Haiku, so the
-// per-model breakdown has more than one model per run.
+// A run with the core agent on Opus plus the aspect reviewer on Haiku, so each
+// pipeline step can surface its own usage where the step is rendered.
 function runRecord(attempt: number, startedAt: string, completedAt: string) {
   return {
     pipelineId: 'standard-task-pipeline',
@@ -85,43 +85,23 @@ function runRecord(attempt: number, startedAt: string, completedAt: string) {
   };
 }
 
-function tokensByModel() {
-  // Haiku busiest (2.4M over 3 steps), Opus next (0.22M over 2 steps).
-  const haikuRun = {
-    model: 'claude-haiku-4-5', modelKnown: true, steps: 1,
-    inputTokens: 1000000, outputTokens: 200000, cacheReadTokens: 0, cacheCreationTokens: 0,
-    totalTokens: 1200000, costUsd: 2.0,
-  };
-  const opusRun = {
-    model: 'claude-opus-4-8', modelKnown: true, steps: 1,
-    inputTokens: 100000, outputTokens: 10000, cacheReadTokens: 0, cacheCreationTokens: 0,
-    totalTokens: 110000, costUsd: 0.75,
-  };
-  const run = (attempt: number, current: boolean, startedAt: string) => ({
-    attempt, current, startedAt, completedAt: startedAt,
-    models: [haikuRun, opusRun],
-    totalTokens: 1310000, totalCostUsd: 2.75, anyModelUnknown: false,
-  });
+function costStep(stepId: string, kind: string, model: string, totalTokens: number, costUsd: number) {
   return {
-    runs: [
-      run(1, false, '2026-06-08T10:00:00Z'),
-      run(2, true, '2026-06-09T10:00:00Z'),
-    ],
-    totalByModel: [
-      {
-        model: 'claude-haiku-4-5', modelKnown: true, steps: 2,
-        inputTokens: 2000000, outputTokens: 400000, cacheReadTokens: 0, cacheCreationTokens: 0,
-        totalTokens: 2400000, costUsd: 4.0,
-      },
-      {
-        model: 'claude-opus-4-8', modelKnown: true, steps: 2,
-        inputTokens: 200000, outputTokens: 20000, cacheReadTokens: 0, cacheCreationTokens: 0,
-        totalTokens: 220000, costUsd: 1.5,
-      },
-    ],
-    totalTokens: 2620000,
-    totalCostUsd: 5.5,
-    anyModelUnknown: false,
+    stepId,
+    kind,
+    model,
+    tokenUsageSource: 'AGENT (CLI FOOTER) / reported',
+    modelKnown: true,
+    inputTokens: Math.round(totalTokens * 0.8),
+    outputTokens: Math.round(totalTokens * 0.2),
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    totalTokens,
+    inputCostUsd: costUsd * 0.6,
+    outputCostUsd: costUsd * 0.4,
+    cacheReadCostUsd: 0,
+    cacheCreationCostUsd: 0,
+    costUsd,
   };
 }
 
@@ -144,13 +124,15 @@ function pipeline() {
     },
     execution: { ...current, previousAttempts: [previous] },
     cost: {
-      steps: [],
+      steps: [
+        costStep('core-agent-run', 'core', 'claude-opus-4-8', 110000, 0.75),
+        costStep('aspect-code-quality', 'aspect', 'claude-haiku-4-5', 1200000, 2.0),
+      ],
       totalInputTokens: 1100000, totalOutputTokens: 210000,
       totalCacheReadTokens: 0, totalCacheCreationTokens: 0, totalTokens: 1310000,
       totalInputCostUsd: 0, totalOutputCostUsd: 0, totalCacheReadCostUsd: 0,
       totalCacheCreationCostUsd: 0, totalCostUsd: 2.75, anyModelUnknown: false,
     },
-    tokensByModel: tokensByModel(),
     config: {},
   };
 }
@@ -201,60 +183,42 @@ async function saveShot(page: Page, name: string) {
   await writeFile(join(RESULTS_DIR, name), buf);
 }
 
-test('token usage: collapsible task total sum + per-run rows on one quiet surface', async ({ page }) => {
+test('token usage: each pipeline step surfaces its own usage, without the aggregate model block', async ({ page }) => {
   await page.addInitScript(() => {
     try {
-      localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: true, git: false }));
+      localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false }));
     } catch { /* ignore */ }
   });
   await installFixtureRoutes(page);
 
   await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
 
-  const surface = page.getByTestId('overview-pipeline-tokens-by-model');
-  await expect(surface).toBeVisible({ timeout: 10000 });
+  const pipeline = page.getByTestId('overview-pipeline');
+  await expect(pipeline).toBeVisible({ timeout: 10000 });
+  await expect(page.getByTestId('overview-pipeline-tokens-by-model')).toHaveCount(0);
 
-  // TASK TOTAL SUM is collapsed by default: the lifetime total + cost show on
-  // the toggle line, but the all-runs-by-model breakdown is hidden.
-  const total = page.getByTestId('pipeline-token-usage-total');
-  const totalToggle = page.getByTestId('pipeline-token-usage-total-toggle');
-  await expect(total).toBeVisible();
-  await expect(totalToggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByTestId('pipeline-token-usage-grand-total-tokens')).toContainText('2.62M');
-  await expect(page.getByTestId('pipeline-token-usage-grand-total-cost')).toContainText('$5.50');
-  await expect(page.getByTestId('pipeline-token-usage-total-model')).toHaveCount(0);
+  const coreRow = page.locator('[data-step-id="core-agent-run"]');
+  const aspectRow = page.locator('[data-step-id="aspect-code-quality"]');
+  await expect(coreRow.getByTestId('overview-pipeline-step-tokens')).toContainText('110.0k');
+  await expect(coreRow.getByTestId('overview-pipeline-step-cost')).toContainText('$0.75');
+  await expect(aspectRow.getByTestId('overview-pipeline-step-tokens')).toContainText('1.20M');
+  await expect(aspectRow.getByTestId('overview-pipeline-step-cost')).toContainText('$2.00');
+  await expect(page.getByTestId('overview-pipeline-total-tokens')).toContainText('1.31M');
+  await expect(page.getByTestId('overview-pipeline-total-cost')).toContainText('$2.75');
 
-  // Each run is its own collapsible row, collapsed by default (no model rows).
-  const runs = page.getByTestId('pipeline-token-usage-run');
-  await expect(runs).toHaveCount(2);
-  await expect(page.getByTestId('pipeline-token-usage-run-model')).toHaveCount(0);
-
-  // Newest-first: the current run renders on top and carries the badge + total.
-  const currentRun = runs.first();
-  await expect(currentRun).toHaveAttribute('data-current', 'true');
-  await expect(currentRun.getByTestId('pipeline-token-usage-run-current')).toBeVisible();
-  await expect(currentRun.getByTestId('pipeline-token-usage-run-total')).toContainText('1.31M');
-
-  await surface.screenshot({
-    path: RESULTS_DIR ? join(RESULTS_DIR, 'pipeline-tokens-collapsed.png') : 'test-results/pipeline-tokens-collapsed.png',
+  await pipeline.screenshot({
+    path: RESULTS_DIR ? join(RESULTS_DIR, 'pipeline-step-usage.png') : 'test-results/pipeline-step-usage.png',
   });
 
-  // Expand TASK TOTAL SUM -> all-runs-by-model breakdown appears inline.
-  await totalToggle.click();
-  await expect(totalToggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(total.getByTestId('pipeline-token-usage-total-model')).toHaveCount(2);
-  await expect(total).toContainText('claude-haiku-4-5');
-  await expect(total).toContainText('claude-opus-4-8');
+  await aspectRow.getByTestId('overview-pipeline-step-tokens').click();
+  const dialog = page.getByTestId('overview-step-token-modal');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Code quality');
+  await expect(dialog).toContainText('Input');
+  await expect(dialog).toContainText('960.0k');
+  await expect(dialog).toContainText('Output');
+  await expect(dialog).toContainText('240.0k');
+  await expect(dialog).toContainText('1.20M');
 
-  // Expand the current run -> only that run's per-model rows appear.
-  await currentRun.getByTestId('pipeline-token-usage-run-toggle').click();
-  await expect(currentRun.getByTestId('pipeline-token-usage-run-model')).toHaveCount(2);
-  await expect(page.getByTestId('pipeline-token-usage-run-model')).toHaveCount(2);
-  await expect(currentRun).toContainText('claude-haiku-4-5');
-  await expect(currentRun).toContainText('claude-opus-4-8');
-
-  await surface.screenshot({
-    path: RESULTS_DIR ? join(RESULTS_DIR, 'pipeline-tokens-expanded.png') : 'test-results/pipeline-tokens-expanded.png',
-  });
-  await saveShot(page, 'pipeline-tokens-by-model-full.png');
+  await saveShot(page, 'pipeline-step-usage-full.png');
 });

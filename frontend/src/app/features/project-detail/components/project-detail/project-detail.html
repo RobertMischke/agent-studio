@@ -12,19 +12,8 @@
       [projectName]="projectName()"
       [paths]="paths()"
       [modeRows]="cliEnvironmentModeRows()"
-      [contextModeRows]="cliEnvironmentContextModeRows()" />
-
-    <section class="proj-detail__group">
-      <h3>Lane counts</h3>
-      <div class="proj-detail__counts">
-        @for (lane of laneCounts(); track lane.state) {
-          <div class="proj-detail__count">
-            <span class="proj-detail__count-num">{{ lane.count }}</span>
-            <span class="proj-detail__count-state">{{ lane.label }}</span>
-          </div>
-        }
-      </div>
-    </section>
+      [contextModeRows]="cliEnvironmentContextModeRows()"
+      presentation="onboarding" />
 
     <section class="proj-detail__group">
       <app-regression-radar scope="project" [projectName]="projectName()" />
@@ -113,6 +102,12 @@
   }
 
   @if (view() === 'settings') {
+    <app-project-cli-environment-section
+      [projectName]="projectName()"
+      [paths]="paths()"
+      [modeRows]="cliEnvironmentModeRows()"
+      [contextModeRows]="cliEnvironmentContextModeRows()" />
+
     <section class="proj-detail__group">
       <h3>Runner mode</h3>
       <div class="proj-detail__modes">

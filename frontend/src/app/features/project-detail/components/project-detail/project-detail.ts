@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
-import type { GroupedJobs, ProjectQueueHealth, RunnerStatus } from '../../../../models/task.model';
-import { CLI_TYPES, TaskState, type CliType } from '../../../../models/task.model';
+import type { ProjectQueueHealth, RunnerStatus } from '../../../../models/task.model';
+import { CLI_TYPES, type CliType } from '../../../../models/task.model';
 import { cliTypeLabel, cliTypeIcon } from '../../../../services/format.util';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
 import { CliCatalogStore } from '../../../../services/cli-catalog.store';
@@ -91,7 +91,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   readonly settings = signal<ProjectSettingsRow | null>(null);
   readonly runnerStatus = signal<RunnerStatus | null>(null);
-  readonly grouped = signal<GroupedJobs | null>(null);
   readonly recentEntries = signal<OrchestratorLogEntry[]>([]);
   readonly orchSession = signal<OrchestratorSession | null>(null);
   readonly projectPaths = signal<{ path: string; rootPath: string | null; repositoryPath: string | null } | null>(null);
@@ -273,24 +272,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     };
   });
 
-  readonly laneCounts = computed(() => {
-    const grouped = this.grouped();
-    if (!grouped) return [] as readonly { state: string; label: string; count: number }[];
-    const proj = this.projectName();
-    const c = (jobs: readonly { projectName: string }[]) => jobs.filter(j => j.projectName === proj).length;
-    return [
-      { state: TaskState.Backlog,     label: 'Backlog',     count: c(grouped.backlog ?? []) },
-      { state: TaskState.Preparation, label: 'Preparation', count: c(grouped.preparation) },
-      { state: TaskState.Ready,       label: 'Ready',       count: c(grouped.ready) },
-      { state: TaskState.Progress,    label: 'Progress',    count: c(grouped.progress) },
-      { state: TaskState.AutoReview, label: 'Post Processing', count: c(grouped.autoReview ?? grouped.review) },
-      { state: TaskState.HumanReview, label: 'Review',      count: c(grouped.humanReview ?? []) },
-      { state: TaskState.Escalated,   label: 'Escalated',  count: c(grouped.escalated ?? []) },
-      { state: TaskState.Completed,   label: 'Delivered',   count: c(grouped.completed) },
-      { state: TaskState.Archive,     label: 'Archive',     count: c(grouped.archive) }
-    ];
-  });
-
   readonly activeRunner = computed(() => this.runnerStatus()?.projects?.[this.projectName()] ?? null);
 
   queueHealthLabel(health: ProjectQueueHealth, emptyLabel: string, noun: string): string {
@@ -368,10 +349,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       },
       error: () => { /* silent; keep last snapshot */ }
     });
-    // Board feed stays separate (it covers all projects, not just this
-    // one) and is owned by TaskService's own 2 s poll. We just nudge it.
-    this.jobService.refresh(true);
-    setTimeout(() => this.grouped.set(this.jobService.grouped()), 50);
   }
 
   /**

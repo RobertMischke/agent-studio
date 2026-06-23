@@ -61,6 +61,9 @@ describe('ProjectDetailComponent (smoke)', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Auto-commit on transition 3-progress -> 4-auto-review');
     expect(text).toContain('Changes apply immediately to the next job transition.');
+    expect(text).toContain('CLI environment');
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="project-detail-cli-environment"]')).toBeTruthy();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="project-cli-onboarding-status"]')).toBeNull();
   });
 
   it('does not render a duplicate overview feed header inside the project shell', async () => {
@@ -84,7 +87,7 @@ describe('ProjectDetailComponent (smoke)', () => {
     expect(host.querySelector('[data-testid="project-detail-open-feed"]')).toBeNull();
   });
 
-  it('renders CLI environment on overview instead of pipeline and queue summaries', async () => {
+  it('renders compact onboarding status on overview without lane counts or CLI details', async () => {
     await TestBed.configureTestingModule({
       imports: [ProjectDetailComponent],
       providers: [
@@ -106,8 +109,10 @@ describe('ProjectDetailComponent (smoke)', () => {
       .map(el => el.textContent?.trim());
     expect(directGroupTitles).not.toContain('Pipeline snapshot');
     expect(directGroupTitles).not.toContain('Queue health');
+    expect(directGroupTitles).not.toContain('Lane counts');
 
-    const cliEnv = host.querySelector('[data-testid="project-detail-cli-environment"]');
-    expect(cliEnv?.textContent).toContain('CLI environment');
+    const onboarding = host.querySelector('[data-testid="project-cli-onboarding-status"]');
+    expect(onboarding?.textContent).toContain('Onboarding status');
+    expect(host.querySelector('[data-testid="project-detail-cli-environment"]')).toBeNull();
   });
 });

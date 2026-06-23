@@ -10,6 +10,7 @@ import {
 } from '../../../../models/steering-docs.model';
 import { TaskState } from '../../../../models/task.model';
 import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
+import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 /**
@@ -40,19 +41,42 @@ interface SteeringAction {
   description: string;
 }
 
+interface AgentDocsTreeNode {
+  name: string;
+  title: string;
+  relPath: string | null;
+  source: SteeringDocsSource | null;
+  children: AgentDocsTreeNode[];
+}
+
+interface AgentDocsTreeRow {
+  node: AgentDocsTreeNode;
+  depth: number;
+  expanded: boolean;
+  hasChildren: boolean;
+}
+
+interface ToolUseMockRow {
+  label: string;
+  reads: number;
+  lastRead: string;
+  byCli: string;
+}
+
 const ACTIONS: SteeringAction[] = [
   { slug: 'summarize', label: 'Summarize Steering Docs', description: 'Spawn a task that reads the inventory below and produces a human summary of what agents are currently told.' },
   { slug: 'check-drift', label: 'Check Docs Drift', description: 'Spawn a task that compares the steering files against current code and flags stale rules or contradictions.' },
   { slug: 'analyze-failures', label: 'Analyze Recurring Job Failures', description: 'Spawn a task that scans recent blocked / needs-input outcomes and proposes steering-doc changes.' },
   { slug: 'propose-readme', label: 'Propose README Update', description: 'Spawn a task that drafts a README change for review, evidence-first.' },
   { slug: 'propose-agents', label: 'Propose AGENTS Update', description: 'Spawn a task that drafts an AGENTS.md change for review, evidence-first.' },
+  { slug: 'plan-tool-use-analytics', label: 'Plan Tool-Use Analytics', description: 'Queue the real feature behind the mockup: count which CLI tool-use reads consumed each agent doc.' },
   { slug: 'create-followup', label: 'Create Follow-up Task', description: 'Queue a generic follow-up tied to the steering surface for later scoping.' },
 ];
 
 @Component({
   selector: 'app-project-steering-docs-section',
   standalone: true,
-  imports: [TooltipDirective, MarkdownViewComponent],
+  imports: [TooltipDirective, MarkdownViewComponent, StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-steering-docs-section.html',
   styleUrl: './project-steering-docs-section.scss'
@@ -69,19 +93,31 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
   readonly loading = signal<boolean>(false);
   readonly error = signal<string | null>(null);
 
-  readonly openedId = signal<string | null>(null);
   readonly openedRel = signal<string | null>(null);
   readonly fileContent = signal<{ relPath: string; content: string } | null>(null);
-  readonly childContent = signal<{ relPath: string; content: string } | null>(null);
   readonly fileLoading = signal<boolean>(false);
   readonly fileError = signal<string | null>(null);
+  readonly expanded = signal<ReadonlySet<string>>(new Set());
+  readonly navCollapsed = signal<boolean>(false);
 
   readonly busyAction = signal<string | null>(null);
   readonly actionMessage = signal<string | null>(null);
   readonly actionError = signal<string | null>(null);
 
-  readonly presentCount = computed(() => this.overview()?.sources.filter(s => s.exists).length ?? 0);
+  readonly presentCount = computed(() => this.overview()?.sources.length ?? 0);
   readonly warningCount = computed(() => this.overview()?.warnings.length ?? 0);
+  readonly sourceTree = computed(() => this.buildTree(this.overview()?.sources ?? []));
+  readonly rows = computed(() => this.flattenTree(this.sourceTree(), this.expanded()));
+  readonly rootFolderLabel = computed(() => {
+    const ov = this.overview();
+    if (!ov?.baseDir) return 'project root';
+    return ov.baseDir.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? ov.baseDir;
+  });
+  readonly selectedSource = computed(() => {
+    const rel = this.openedRel();
+    if (!rel) return null;
+    return this.overview()?.sources.find(s => s.relPath === rel) ?? null;
+  });
 
   readonly statusBuckets = computed<StatusBucket[]>(() => {
     const ov = this.overview();
@@ -98,6 +134,16 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
     return buckets;
   });
 
+  readonly toolUseMockRows = computed<ToolUseMockRow[]>(() => {
+    const sources = this.overview()?.sources ?? [];
+    return sources.slice(0, 4).map((source, index) => ({
+      label: source.relPath,
+      reads: [18, 11, 7, 3][index] ?? 1,
+      lastRead: ['2h ago', 'yesterday', '3d ago', 'last week'][index] ?? 'last week',
+      byCli: (source.appliesToClis ?? []).map(cli => this.cliLabel(cli)).join(', ') || 'Unknown',
+    }));
+  });
+
   private timer?: VisibleIntervalHandle;
 
   constructor() {
@@ -105,10 +151,9 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
       const p = this.projectName();
       if (p) {
         // Reset cached drilldown state when the project changes.
-        this.openedId.set(null);
         this.openedRel.set(null);
         this.fileContent.set(null);
-        this.childContent.set(null);
+        this.expanded.set(new Set());
       }
     });
   }
@@ -131,6 +176,12 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
         this.overview.set(ov);
         this.loading.set(false);
         this.error.set(null);
+        this.expanded.set(new Set(this.collectFolderIds(this.sourceTree())));
+        const selected = this.openedRel();
+        const selectedStillExists = selected && ov.sources.some(source => source.relPath === selected);
+        if (!selectedStillExists && ov.sources.length > 0) {
+          this.openSource(ov.sources[0]);
+        }
       },
       error: (err) => {
         this.error.set(this.describe(err, 'Steering docs API call failed.'));
@@ -139,37 +190,22 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
     });
   }
 
-  toggle(s: SteeringDocsSource): void {
-    if (this.openedId() === s.id) {
-      this.openedId.set(null);
-      this.fileContent.set(null);
-      this.childContent.set(null);
-      this.openedRel.set(null);
-      return;
-    }
-    this.openedId.set(s.id);
+  openSource(s: SteeringDocsSource): void {
+    this.openedRel.set(s.relPath);
     this.fileContent.set(null);
-    this.childContent.set(null);
-    this.openedRel.set(null);
     this.fileError.set(null);
-    if (!s.exists) return;
-    if (s.children && s.children.length > 0) {
-      // Directory: wait for the user to pick a child file.
-      return;
-    }
     this.loadFile(s.relPath);
   }
 
-  openChild(relPath: string): void {
-    if (this.openedRel() === relPath) {
-      this.openedRel.set(null);
-      this.childContent.set(null);
-      return;
-    }
-    this.openedRel.set(relPath);
-    this.childContent.set(null);
-    this.fileError.set(null);
-    this.loadChildFile(relPath);
+  toggleFolder(id: string): void {
+    const current = new Set(this.expanded());
+    if (current.has(id)) current.delete(id);
+    else current.add(id);
+    this.expanded.set(current);
+  }
+
+  toggleNav(): void {
+    this.navCollapsed.update(v => !v);
   }
 
   private loadFile(relPath: string): void {
@@ -188,29 +224,13 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
     });
   }
 
-  private loadChildFile(relPath: string): void {
-    const project = this.projectName();
-    if (!project) return;
-    this.fileLoading.set(true);
-    this.svc.getFile(project, relPath).subscribe({
-      next: (f) => {
-        this.childContent.set(f);
-        this.fileLoading.set(false);
-      },
-      error: (err) => {
-        this.fileError.set(this.describe(err, 'Could not load file.'));
-        this.fileLoading.set(false);
-      },
-    });
-  }
-
   onWarningClick(w: SteeringDocsWarning): void {
     if (!w.sourceId) return;
     const ov = this.overview();
     if (!ov) return;
     const src = ov.sources.find(s => s.id === w.sourceId);
     if (!src) return;
-    if (this.openedId() !== src.id) this.toggle(src);
+    this.openSource(src);
   }
 
   runAction(action: SteeringAction): void {
@@ -263,7 +283,7 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
 
   private buildActionPrompt(action: SteeringAction): string {
     const ov = this.overview();
-    const sources = ov?.sources.map(s => `- \`${s.relPath}\`${s.exists ? '' : ' (missing)'} - ${s.label}`).join('\n') ?? '';
+    const sources = ov?.sources.map(s => `- \`${s.relPath}\` - applies to ${(s.appliesToClis ?? []).join(', ') || 'unknown'} - ${s.label}`).join('\n') ?? '';
     const warnings = (ov?.warnings ?? [])
       .map(w => `- [${w.severity}] ${w.message}`)
       .join('\n');
@@ -317,8 +337,102 @@ ${warnings || '_(no warnings at queue time)_'}
       case 'stale': return 'stale';
       case 'possibleConflict': return 'possible conflict';
       case 'recurringFailure': return 'recurring job failure';
+      case 'gatewayTooHeavy': return 'gateway warning';
       default: return k;
     }
+  }
+
+  cliLabel(cli: string): string {
+    switch ((cli ?? '').toLowerCase()) {
+      case 'claude': return 'Claude Code';
+      case 'codex': return 'Codex';
+      case 'copilot': return 'Copilot';
+      case 'gemini': return 'Gemini';
+      default: return cli || 'Unknown';
+    }
+  }
+
+  cliList(clis: readonly string[] | null | undefined): string {
+    const list = clis ?? [];
+    return list.length ? list.map(cli => this.cliLabel(cli)).join(', ') : 'Unknown';
+  }
+
+  rowId(node: AgentDocsTreeNode): string {
+    return node.relPath ?? node.title;
+  }
+
+  rowPad(depth: number): number {
+    return 8 + depth * 14;
+  }
+
+  sourceWarnings(source: SteeringDocsSource | null): SteeringDocsWarning[] {
+    if (!source) return [];
+    return this.overview()?.warnings.filter(w => w.sourceId === source.id) ?? [];
+  }
+
+  private buildTree(sources: readonly SteeringDocsSource[]): AgentDocsTreeNode[] {
+    const roots: AgentDocsTreeNode[] = [];
+    const ensureFolder = (children: AgentDocsTreeNode[], name: string, relPath: string): AgentDocsTreeNode => {
+      let existing = children.find(node => node.source === null && node.name === name);
+      if (!existing) {
+        existing = { name, title: name, relPath, source: null, children: [] };
+        children.push(existing);
+      }
+      return existing;
+    };
+
+    for (const source of [...sources].sort((a, b) => a.relPath.localeCompare(b.relPath))) {
+      const parts = source.relPath.split('/').filter(Boolean);
+      let level = roots;
+      let folderRel = '';
+      for (let i = 0; i < parts.length - 1; i++) {
+        folderRel = folderRel ? `${folderRel}/${parts[i]}` : parts[i];
+        level = ensureFolder(level, parts[i], folderRel).children;
+      }
+      const fileName = parts[parts.length - 1] ?? source.relPath;
+      level.push({
+        name: fileName,
+        title: fileName,
+        relPath: source.relPath,
+        source,
+        children: [],
+      });
+    }
+
+    const sortNodes = (nodes: AgentDocsTreeNode[]): AgentDocsTreeNode[] => nodes
+      .map(node => ({ ...node, children: sortNodes(node.children) }))
+      .sort((a, b) => {
+        if (!!a.source !== !!b.source) return a.source ? 1 : -1;
+        return a.title.localeCompare(b.title);
+      });
+    return sortNodes(roots);
+  }
+
+  private flattenTree(roots: readonly AgentDocsTreeNode[], expanded: ReadonlySet<string>): AgentDocsTreeRow[] {
+    const out: AgentDocsTreeRow[] = [];
+    const walk = (nodes: readonly AgentDocsTreeNode[], depth: number): void => {
+      for (const node of nodes) {
+        const id = this.rowId(node);
+        const hasChildren = node.children.length > 0;
+        const isOpen = !node.source && expanded.has(id);
+        out.push({ node, depth, expanded: isOpen, hasChildren });
+        if (isOpen) walk(node.children, depth + 1);
+      }
+    };
+    walk(roots, 0);
+    return out;
+  }
+
+  private collectFolderIds(roots: readonly AgentDocsTreeNode[]): string[] {
+    const out: string[] = [];
+    const walk = (nodes: readonly AgentDocsTreeNode[]): void => {
+      for (const node of nodes) {
+        if (!node.source) out.push(this.rowId(node));
+        if (node.children.length > 0) walk(node.children);
+      }
+    };
+    walk(roots);
+    return out;
   }
 
   private describe(err: unknown, fallback: string): string {

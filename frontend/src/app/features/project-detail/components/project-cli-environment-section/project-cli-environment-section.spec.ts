@@ -71,4 +71,72 @@ describe('ProjectCliEnvironmentSectionComponent', () => {
     expect(text).toContain('Shared');
     http.verify();
   });
+
+  it('renders compact onboarding tiles without the detailed CLI cards', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ProjectCliEnvironmentSectionComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ProjectCliEnvironmentSectionComponent);
+    fixture.componentRef.setInput('projectName', 'Demo Project');
+    fixture.componentRef.setInput('presentation', 'onboarding');
+    fixture.componentRef.setInput('paths', {
+      path: 'C:/Projects/demo',
+      rootPath: 'C:/Projects/demo',
+      repositoryPath: 'C:/Projects/demo',
+    });
+    fixture.componentRef.setInput('modeRows', [
+      { cliType: 'claude', mode: 'workspace-write', source: 'project override' },
+      { cliType: 'codex', mode: 'yolo', source: 'platform default' },
+    ]);
+    fixture.componentRef.setInput('contextModeRows', [
+      { cliType: 'claude', mode: 'clean', source: 'platform default', supported: true },
+      { cliType: 'codex', mode: 'clean', source: 'platform default', supported: true },
+    ]);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/cli/usage').flush({
+      at: '2026-06-22T10:00:00Z',
+      sections: [
+        {
+          cliType: 'claude',
+          available: true,
+          version: 'claude 1.2.3',
+          path: 'C:/tools/claude.cmd',
+          error: null,
+          projects: [{
+            projectName: 'Demo Project',
+            rootPath: 'C:/Projects/demo',
+            sessions: [{
+              id: '1234567890abcdef',
+              label: 'feature pass',
+              updatedAt: '2026-06-22T09:30:00Z',
+              cwd: 'C:/Projects/demo',
+              lastUsage: null,
+              isProjectDefault: false,
+              linkedJob: null,
+            }],
+          }],
+        },
+        { cliType: 'codex', available: true, version: 'codex 1.0.0', path: 'C:/tools/codex.cmd', error: null, projects: [] },
+      ],
+    });
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="project-cli-onboarding-status"]')?.textContent).toContain('Onboarding status');
+    expect(host.querySelector('[data-testid="project-cli-onboarding-tile-cli-ready"]')?.textContent).toContain('2 / 4');
+    expect(host.querySelector('[data-testid="project-cli-onboarding-tile-clean-context"]')?.textContent).toContain('2 / 2');
+    expect(host.querySelector('[data-testid="project-cli-onboarding-tile-project-sessions"]')?.textContent).toContain('feature pass');
+    expect(host.querySelector('[data-testid="project-cli-onboarding-tile-overrides"]')?.textContent).toContain('1');
+    expect(host.querySelector('[data-testid="project-detail-cli-environment"]')).toBeNull();
+    http.verify();
+  });
 });

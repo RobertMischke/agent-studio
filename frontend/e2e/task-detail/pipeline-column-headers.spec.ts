@@ -183,6 +183,17 @@ function pipelineWithAllPhases() {
   };
 }
 
+function pipelineWithDisabledStep() {
+  const body = pipelineWithAllPhases();
+  return {
+    ...body,
+    config: {
+      ...body.config,
+      'post-drift-adr-code': { enabled: false, model: null, mode: null },
+    },
+  };
+}
+
 async function installRoutes(page: Page, state: string, pipelineBody: () => unknown) {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const detail = makeDetail(state);
@@ -361,8 +372,8 @@ test.describe('Pipeline: per-step metric column headers', () => {
     const phases = page.getByTestId('overview-pipeline-phase');
     await expect(phases).toHaveCount(6);
     await expect(phases.locator('.ov-pl-phase__label')).toHaveText([
-      'PRE',
-      'CORE',
+      'PRE STEPS',
+      'CORE AGENT WORK',
       'ASPECT',
       'TOOL',
       'DECISION',
@@ -373,8 +384,8 @@ test.describe('Pipeline: per-step metric column headers', () => {
       els.map(el => el.getAttribute('aria-label') ?? ''),
     );
     expect(phaseAriaLabels).toEqual([
-      expect.stringContaining('PRE pipeline phase:'),
-      expect.stringContaining('CORE pipeline phase:'),
+      expect.stringContaining('PRE STEPS pipeline phase:'),
+      expect.stringContaining('CORE AGENT WORK pipeline phase:'),
       expect.stringContaining('ASPECT pipeline phase:'),
       expect.stringContaining('TOOL pipeline phase:'),
       expect.stringContaining('DECISION pipeline phase:'),
@@ -432,6 +443,54 @@ test.describe('Pipeline: per-step metric column headers', () => {
         fullPage: true,
       });
     }
+  });
+
+  test('phase headers stay wider than inset steps and the disabled-step filter hides disabled rows', async ({ page }) => {
+    await installRoutes(page, '4-auto-review', pipelineWithDisabledStep);
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(6);
+
+    const geometry = await page.evaluate(() => {
+      const rect = (selector: string): DOMRect => {
+        const el = document.querySelector<HTMLElement>(selector);
+        if (!el) throw new Error(`missing ${selector}`);
+        return el.getBoundingClientRect();
+      };
+      const phase = rect('[data-testid="overview-pipeline-phase"][data-phase="aspect"]');
+      const step = rect('[data-testid="overview-pipeline-step"][data-phase="aspect"]');
+      const header = rect('[data-testid="overview-pipeline-header"]');
+      return {
+        stepInset: step.left - phase.left,
+        stepRightOverhang: step.right - phase.right,
+        headerLeftDelta: Math.abs(header.left - step.left),
+        headerRightDelta: Math.abs(header.right - step.right),
+      };
+    });
+
+    expect(geometry.stepInset, `step inset ${geometry.stepInset}px`).toBeGreaterThan(4);
+    expect(geometry.stepRightOverhang, `step right overhang ${geometry.stepRightOverhang}px`).toBeLessThanOrEqual(1);
+    expect(geometry.headerLeftDelta, `header/step left delta ${geometry.headerLeftDelta}px`).toBeLessThanOrEqual(1.5);
+    expect(geometry.headerRightDelta, `header/step right delta ${geometry.headerRightDelta}px`).toBeLessThanOrEqual(1.5);
+
+    const disabledRow = page.locator('[data-step-id="post-drift-adr-code"]');
+    await expect(disabledRow).toHaveAttribute('data-status', 'disabled');
+
+    const toggle = page.getByTestId('overview-pipeline-toggle-disabled');
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(disabledRow).toHaveCount(0);
+    await expect(page.getByTestId('overview-pipeline-phase')).toHaveCount(5);
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(disabledRow).toHaveCount(1);
   });
 
   test('metric columns share one right edge across every phase group (no per-row drift)', async ({ page }) => {

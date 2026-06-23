@@ -69,7 +69,7 @@ Post: aspect-* (parallel) -> git-commit-attribution (Stub)
       -> drift-* (opt-in, default-off)
 ```
 
-The class comment names the Pre section as the home for exactly this work: "Pre-steps are reserved slots (no runtime today; future tasks plug requirement-clarification / context-retrieval / skill-readiness here)" ([PipelineCatalogue.cs:6-12](../../backend/Services/Pipeline/PipelineCatalogue.cs)). A prep step is a "requirement-clarification" Pre step by another name; ADR-0045 reserved this slot for it.
+The class comment names the Pre section as the home for exactly this work: "Pre-steps are reserved slots (no runtime today; future tasks plug requirement-clarification / context-retrieval / wiki-guidance upkeep here)" ([PipelineCatalogue.cs:6-12](../../backend/Services/Pipeline/PipelineCatalogue.cs)). A prep step is a "requirement-clarification" Pre step by another name; ADR-0045 reserved this slot for it.
 
 ### 2.5 Pre-step recording precedent
 

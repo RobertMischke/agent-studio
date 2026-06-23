@@ -130,7 +130,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
             psi.ArgumentList.Add(model);
         }
 
-        foreach (var flag in CliReasoningFlags.For(CliType, model, thinkingLevel))
+        foreach (var flag in CodingAgentRunner.Model.CliReasoningFlags.For(CliType, model, thinkingLevel))
             psi.ArgumentList.Add(flag);
 
         // The `resume <session-id>` subcommand comes AFTER the exec options

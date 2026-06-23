@@ -136,7 +136,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             psi.ArgumentList.Add(normalizedModel);
         }
 
-        foreach (var flag in CliReasoningFlags.For(CliType, normalizedModel, thinkingLevel))
+        foreach (var flag in CodingAgentRunner.Model.CliReasoningFlags.For(CliType, normalizedModel, thinkingLevel))
             psi.ArgumentList.Add(flag);
 
         psi.ArgumentList.Add("--output-format");

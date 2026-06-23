@@ -18,33 +18,7 @@ public static class AgentTypes
         !string.Equals(agent, Human, StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>
-/// Identifiers for the supported CLI backends. The string values are persisted
-/// to <c>job.json</c> and used as URL segments — keep them stable.
-/// </summary>
-public static class CliTypes
-{
-    public const string Copilot = "copilot";
-    public const string Claude  = "claude";
-    public const string Codex   = "codex";
-    public const string Gemini  = "gemini";
-
-    /// <summary>
-    /// Sentinel for "no automated CLI resolver" (e.g. a router fallback that needs
-    /// a human). Mirrors <see cref="AgentTypes.Human"/>. Deliberately NOT part of
-    /// <see cref="All"/>/<see cref="IsValid"/> — it is a comparison sentinel, not a
-    /// selectable backend.
-    /// </summary>
-    public const string Human   = "human";
-
-    public static readonly string[] All = [Copilot, Claude, Codex, Gemini];
-
-    public static bool IsValid(string? type) =>
-        !string.IsNullOrWhiteSpace(type) && All.Contains(type, StringComparer.OrdinalIgnoreCase);
-
-    public static string Normalize(string? type) =>
-        IsValid(type) ? type!.ToLowerInvariant() : Copilot;
-}
+// CliTypes now comes from the CodingAgentRunner package (aliased in the csproj).
 
 /// <summary>
 /// How a project's CLI sessions are managed when a job starts.

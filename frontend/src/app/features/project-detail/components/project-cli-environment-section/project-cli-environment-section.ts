@@ -41,6 +41,17 @@ interface ProjectCliEnvironmentRow {
   contextSupported: boolean;
 }
 
+type ProjectCliEnvironmentPresentation = 'detail' | 'onboarding';
+type ProjectCliOnboardingTone = 'ok' | 'warn' | 'alert' | 'muted' | 'info';
+
+interface ProjectCliOnboardingTile {
+  id: string;
+  label: string;
+  value: string;
+  detail: string;
+  tone: ProjectCliOnboardingTone;
+}
+
 @Component({
   selector: 'app-project-cli-environment-section',
   standalone: true,
@@ -54,6 +65,7 @@ export class ProjectCliEnvironmentSectionComponent implements OnInit {
   readonly paths = input.required<ProjectCliEnvironmentPaths>();
   readonly modeRows = input<readonly ProjectCliModeRow[]>([]);
   readonly contextModeRows = input<readonly ProjectCliContextModeRow[]>([]);
+  readonly presentation = input<ProjectCliEnvironmentPresentation>('detail');
 
   private readonly jobService = inject(TaskService);
 
@@ -104,6 +116,56 @@ export class ProjectCliEnvironmentSectionComponent implements OnInit {
       total: rows.length,
       sessions: rows.reduce((sum, row) => sum + row.sessionCount, 0),
     };
+  });
+
+  readonly onboardingTiles = computed<readonly ProjectCliOnboardingTile[]>(() => {
+    const rows = this.rows();
+    const summary = this.summary();
+    const unsupported = rows.filter(row => !row.available).length;
+    const contextRows = this.contextModeRows();
+    const supportedContexts = contextRows.filter(row => row.supported);
+    const cleanContexts = supportedContexts.filter(row => row.mode === 'clean').length;
+    const overrideCount = this.modeRows().filter(row => this.isProjectSource(row.source)).length
+      + contextRows.filter(row => this.isProjectSource(row.source)).length;
+    const latest = rows
+      .map(row => row.latestSession)
+      .filter((session): session is CliSessionInfo => !!session)
+      .sort((a, b) => this.sessionTime(b) - this.sessionTime(a))[0] ?? null;
+
+    return [
+      {
+        id: 'cli-ready',
+        label: 'CLI ready',
+        value: `${summary.available} / ${summary.total}`,
+        detail: unsupported === 0 ? 'all detected' : `${unsupported} need attention`,
+        tone: summary.available === summary.total ? 'ok' : summary.available > 0 ? 'warn' : 'alert',
+      },
+      {
+        id: 'clean-context',
+        label: 'Clean context',
+        value: supportedContexts.length === 0 ? 'n/a' : `${cleanContexts} / ${supportedContexts.length}`,
+        detail: supportedContexts.length === 0
+          ? 'support unknown'
+          : cleanContexts === supportedContexts.length
+            ? 'isolated where supported'
+            : `${supportedContexts.length - cleanContexts} shared`,
+        tone: supportedContexts.length === 0 ? 'muted' : cleanContexts === supportedContexts.length ? 'ok' : 'warn',
+      },
+      {
+        id: 'project-sessions',
+        label: 'Project sessions',
+        value: `${summary.sessions}`,
+        detail: latest?.label || (summary.sessions === 1 ? 'one session found' : summary.sessions > 1 ? 'sessions found' : 'none linked yet'),
+        tone: summary.sessions > 0 ? 'info' : 'muted',
+      },
+      {
+        id: 'overrides',
+        label: 'Project overrides',
+        value: overrideCount === 0 ? 'none' : `${overrideCount}`,
+        detail: overrideCount === 0 ? 'inherits defaults' : 'project-specific',
+        tone: overrideCount === 0 ? 'muted' : 'info',
+      },
+    ];
   });
 
   ngOnInit(): void {
@@ -222,6 +284,11 @@ export class ProjectCliEnvironmentSectionComponent implements OnInit {
 
   private projectNameMatches(value: string | null | undefined, projectName: string): boolean {
     return (value ?? '').trim().toLowerCase() === projectName.trim().toLowerCase();
+  }
+
+  private isProjectSource(source: string | null | undefined): boolean {
+    return (source ?? '').trim().toLowerCase() === 'project'
+      || (source ?? '').trim().toLowerCase() === 'project override';
   }
 
   private normalizedPath(value: string | null | undefined): string {

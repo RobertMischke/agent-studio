@@ -73,10 +73,13 @@
                     </span>
                   }
                   @if (step.usesPrompt) {
-                    <span class="pp__chip pp__chip--muted"
-                          [appTooltip]="'Prompt binding: ' + promptSummary(step)">
-                      {{ promptSummary(step) }}
-                    </span>
+                    <button type="button"
+                            class="pp__chip pp__chip--muted pp__chip--action"
+                            [attr.data-testid]="'pipeline-step-prompt-open-' + step.id"
+                            [appTooltip]="'Open Prompts for this step binding: ' + promptSummary(step)"
+                            (click)="openPrompts.emit(); $event.preventDefault(); $event.stopPropagation()">
+                      Prompt · {{ promptSummary(step) }}
+                    </button>
                   }
                   @if (step.supportsMode) {
                     <span class="pp__chip pp__chip--muted">Gate {{ modeSummary(step) }}</span>
@@ -90,14 +93,33 @@
               </summary>
 
               <div class="pp__details">
-                <div class="pp__details-head">
-                  <span class="pp__details-copy">{{ stepTooltip(step).body }}</span>
-                </div>
+                <p class="pp__purpose">{{ stepPurpose(step) }}</p>
 
-                <div class="pp__controls">
-                  @if (step.canDisable) {
-                    <div class="pp__field pp__field--toggle">
-                      <span class="pp__field-label">Active</span>
+                <div class="pp__settings"
+                     role="table"
+                     [attr.aria-label]="step.displayName + ' settings'">
+                  <div class="pp__settings-head" role="row">
+                    <span role="columnheader">Label</span>
+                    <span role="columnheader">Setting</span>
+                    <span role="columnheader">Explanation</span>
+                  </div>
+
+                  <div class="pp__settings-row"
+                       role="row"
+                       [attr.data-testid]="'pipeline-step-setting-run-' + step.id">
+                    <span class="pp__settings-label" role="cell">Run</span>
+                    <span class="pp__settings-value" role="cell">
+                      <span class="pp__setting-readonly">{{ runSetting(step) }}</span>
+                    </span>
+                    <span class="pp__settings-note" role="cell">{{ runExplanation(step) }}</span>
+                  </div>
+
+                  <div class="pp__settings-row"
+                       role="row"
+                       [attr.data-testid]="'pipeline-step-setting-active-' + step.id">
+                    <span class="pp__settings-label" role="cell">Active</span>
+                    <span class="pp__settings-value" role="cell">
+                      @if (step.canDisable) {
                       <label class="pp__toggle"
                              [appTooltip]="step.enabled ? 'Step runs for this project. Click to skip it.' : 'Step is skipped. Click to enable.'">
                         <input type="checkbox"
@@ -107,17 +129,19 @@
                                (ngModelChange)="onStepEnabledChange(step.id, $event)">
                         <span class="pp__toggle-text">{{ step.enabled ? 'On' : 'Off' }}</span>
                       </label>
-                    </div>
-                  } @else {
-                    <div class="pp__field pp__field--toggle">
-                      <span class="pp__field-label">Active</span>
+                      } @else {
                       <span class="pp__locked" [appTooltip]="'Core step; always runs on the task own CLI and model.'">always on</span>
-                    </div>
-                  }
+                      }
+                    </span>
+                    <span class="pp__settings-note" role="cell">{{ activeExplanation(step) }}</span>
+                  </div>
 
                   @if (step.usesModel) {
-                    <div class="pp__field">
-                      <span class="pp__field-label">Model</span>
+                    <div class="pp__settings-row"
+                         role="row"
+                         [attr.data-testid]="'pipeline-step-setting-model-' + step.id">
+                      <span class="pp__settings-label" role="cell">Model</span>
+                      <span class="pp__settings-value pp__setting-stack" role="cell">
                       <app-cli-model-selector
                         [cliType]="asCliType(step.effectiveCliType)"
                         [model]="step.effectiveModel || step.model"
@@ -136,13 +160,17 @@
                                 [appTooltip]="'Clear this step agent override and fall back to the project / runtime default.'"
                                 (click)="resetStepAgent(step.id)">Use default</button>
                       }
+                      </span>
+                      <span class="pp__settings-note" role="cell">{{ modelExplanation(step) }}</span>
                     </div>
                   }
 
                   @if (step.usesPrompt) {
-                    <div class="pp__field pp__field--prompt">
-                      <span class="pp__field-label">Prompt</span>
-                      <div class="pp__prompt" [attr.data-testid]="'pipeline-step-prompt-' + step.id">
+                    <div class="pp__settings-row"
+                         role="row"
+                         [attr.data-testid]="'pipeline-step-setting-prompt-' + step.id">
+                      <span class="pp__settings-label" role="cell">Prompt</span>
+                      <span class="pp__settings-value pp__prompt" role="cell" [attr.data-testid]="'pipeline-step-prompt-' + step.id">
                         @if (step.promptTemplate) {
                           <span class="pp__prompt-ref"
                                 [appTooltip]="'Bound to the ' + step.promptTemplate + ' registry template. Edit its content in Prompts.'">
@@ -169,13 +197,17 @@
                                 [attr.data-testid]="'pipeline-step-prompt-manage-' + step.id"
                                 [appTooltip]="'Open the Prompts registry to edit this prompt template.'"
                                 (click)="openPrompts.emit()">Prompts</button>
-                      </div>
+                      </span>
+                      <span class="pp__settings-note" role="cell">{{ promptExplanation(step) }}</span>
                     </div>
                   }
 
                   @if (step.supportsMode) {
-                    <div class="pp__field">
-                      <span class="pp__field-label">Gate</span>
+                    <div class="pp__settings-row"
+                         role="row"
+                         [attr.data-testid]="'pipeline-step-setting-gate-' + step.id">
+                      <span class="pp__settings-label" role="cell">Gate</span>
+                      <span class="pp__settings-value" role="cell">
                       <select class="pp__select"
                               [attr.data-testid]="'pipeline-step-mode-' + step.id"
                               [appTooltip]="'Gate mode: Off skips, Warn records but never blocks, Fail can block the transition.'"
@@ -186,12 +218,17 @@
                           <option [value]="opt.id">{{ opt.label }}</option>
                         }
                       </select>
+                      </span>
+                      <span class="pp__settings-note" role="cell">{{ gateExplanation(step) }}</span>
                     </div>
                   }
 
                   @if (step.supportsCondition) {
-                    <div class="pp__field">
-                      <span class="pp__field-label">When</span>
+                    <div class="pp__settings-row"
+                         role="row"
+                         [attr.data-testid]="'pipeline-step-setting-condition-' + step.id">
+                      <span class="pp__settings-label" role="cell">When</span>
+                      <span class="pp__settings-value" role="cell">
                       <select class="pp__select"
                               [attr.data-testid]="'pipeline-step-condition-' + step.id"
                               [appTooltip]="'When this step runs. Always runs whenever enabled; the other options gate it on the run outcome or the task type / tag.'"
@@ -213,6 +250,30 @@
                                (change)="onStepConditionValueCommit(step.id)"
                                (keyup.enter)="onStepConditionValueCommit(step.id)">
                       }
+                      </span>
+                      <span class="pp__settings-note" role="cell">{{ conditionExplanation(step) }}</span>
+                    </div>
+                  }
+
+                  <div class="pp__settings-row"
+                       role="row"
+                       [attr.data-testid]="'pipeline-step-setting-retry-' + step.id">
+                    <span class="pp__settings-label" role="cell">Retry safety</span>
+                    <span class="pp__settings-value" role="cell">
+                      <span class="pp__setting-readonly">{{ retrySetting(step) }}</span>
+                    </span>
+                    <span class="pp__settings-note" role="cell">{{ retryExplanation(step) }}</span>
+                  </div>
+
+                  @if (step.deferred || step.stub) {
+                    <div class="pp__settings-row"
+                         role="row"
+                         [attr.data-testid]="'pipeline-step-setting-state-' + step.id">
+                      <span class="pp__settings-label" role="cell">State</span>
+                      <span class="pp__settings-value" role="cell">
+                        <span class="pp__setting-readonly">{{ step.deferred ? 'Deferred' : 'Planned slot' }}</span>
+                      </span>
+                      <span class="pp__settings-note" role="cell">{{ step.deferred ? 'Triggered by an operator action instead of automatic pickup.' : 'The slot is recorded, but implementation sits outside this executor bracket.' }}</span>
                     </div>
                   }
                 </div>

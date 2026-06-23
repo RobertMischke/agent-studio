@@ -492,20 +492,68 @@ export class ProjectPipelinePanelComponent {
     return step.condition;
   }
 
+  runSetting(step: PipelineAdminRow): string {
+    const mode = this.runModeLabel(step.runMode);
+    return step.dependsOn.length ? `${mode} after ${step.dependsOn.join(', ')}` : mode;
+  }
+
+  runExplanation(step: PipelineAdminRow): string {
+    if (step.runMode.toLowerCase() === 'parallel') {
+      return 'May run together with sibling steps in this phase; dependencies still have to finish first.';
+    }
+    return 'Runs in sequence at this position in the pipeline.';
+  }
+
+  activeExplanation(step: PipelineAdminRow): string {
+    if (!step.canDisable) return 'Fixed catalogue step; it always runs when the pipeline reaches this phase.';
+    return step.enabled
+      ? 'Enabled for this project; switch off to skip this step.'
+      : 'Skipped for this project until it is enabled again.';
+  }
+
+  modelExplanation(step: PipelineAdminRow): string {
+    const source = this.modelSourceLabel(step.effectiveModelSource);
+    if (step.model || step.thinkingLevel || step.cliType) {
+      return `Step override is set; clear it to inherit from the ${source}.`;
+    }
+    return `Resolved from ${source}. The selector pins CLI, model, and thinking level for this step.`;
+  }
+
+  promptExplanation(step: PipelineAdminRow): string {
+    if (step.prompt) return 'Legacy inline override is active; clear it to use the registry or catalogue prompt.';
+    if (step.promptTemplate) return 'Bound to a prompt registry template. Edit the content in Prompts.';
+    return 'Uses the built-in catalogue prompt; no separate prompt content is stored here.';
+  }
+
+  gateExplanation(step: PipelineAdminRow): string {
+    if (!step.mode) return 'Default follows the catalogue or project gate policy.';
+    if (step.mode === 'off') return 'Off skips this gate even when the step is enabled.';
+    if (step.mode === 'warn') return 'Warn records the result but does not block the lane transition.';
+    if (step.mode === 'fail') return 'Fail can block or reissue when the gate reports a problem.';
+    return 'Gate mode for this step.';
+  }
+
+  conditionExplanation(step: PipelineAdminRow): string {
+    if (!step.condition) return 'Runs whenever the step is enabled.';
+    if (step.condition === 'task-type') return 'Runs only when the task type matches the entered value.';
+    if (step.condition === 'tag') return 'Runs only when the task carries the entered tag.';
+    return 'Runs only when the selected runtime condition is true.';
+  }
+
+  retrySetting(step: PipelineAdminRow): string {
+    return step.idempotent ? 'Safe to retry' : 'Side effects possible';
+  }
+
+  retryExplanation(step: PipelineAdminRow): string {
+    return step.idempotent
+      ? 'Repeated runs should produce the same outcome.'
+      : 'Repeated runs can have side effects; rerun deliberately.';
+  }
+
   stepTooltip(step: PipelineAdminRow): StructuredTooltip {
-    const parts = [
-      this.stepPurpose(step),
-      `Run: ${this.runModeLabel(step.runMode)}${step.dependsOn.length ? ` after ${step.dependsOn.join(', ')}` : ''}.`,
-      step.usesModel
-        ? `Model: ${this.modelSummary(step)} (${this.modelSourceLabel(step.effectiveModelSource)}).`
-        : 'Model: not an LLM call for this step.',
-      step.usesPrompt ? `Prompt: ${this.promptSummary(step)}.` : 'Prompt: none.',
-      step.supportsMode ? `Gate: ${this.modeSummary(step)}.` : 'Gate: not configurable.',
-      step.supportsCondition ? `When: ${this.conditionSummary(step)}.` : 'When: always runs as part of the core step.',
-      step.deferred ? 'Deferred: this is triggered by an operator action, not automatically.' : '',
-      step.stub ? 'Planned slot: the pipeline records the slot, but implementation is outside this executor bracket.' : '',
-      step.idempotent ? 'Safe to retry.' : 'Not idempotent; repeated runs can have side effects.',
-    ].filter(Boolean);
+    const parts = [this.stepPurpose(step)];
+    if (step.deferred) parts.push('Deferred: triggered by an operator action instead of automatic pickup.');
+    if (step.stub) parts.push('Planned slot: recorded in the pipeline, implemented outside this executor bracket.');
     return { title: step.displayName, body: parts.join('\n') };
   }
 
@@ -513,7 +561,7 @@ export class ProjectPipelinePanelComponent {
     return value.toLowerCase() === 'parallel' ? 'parallel' : 'sequential';
   }
 
-  private stepPurpose(step: PipelineAdminRow): string {
+  stepPurpose(step: PipelineAdminRow): string {
     switch (step.id) {
       case 'pre-loop-guard':
         return 'Detects stuck auto-mode loops and surfaces the loop guard state before the agent run.';

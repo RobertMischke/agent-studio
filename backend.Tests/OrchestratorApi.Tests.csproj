@@ -30,6 +30,16 @@
     </ProjectReference>
   </ItemGroup>
 
+  <!-- Block 6: same library-type aliases as the app, so tests resolve the adopted
+       types to the CodingAgentRunner package too. -->
+  <ItemGroup>
+    <Using Include="CodingAgentRunner.Model.CliTypes" Alias="CliTypes" />
+    <Using Include="CodingAgentRunner.Model.CliPermissionModes" Alias="CliPermissionModes" />
+    <Using Include="CodingAgentRunner.Model.CliPermissionFlags" Alias="CliPermissionFlags" />
+    <Using Include="CodingAgentRunner.Model.CliContextModes" Alias="CliContextModes" />
+    <Using Include="CodingAgentRunner.Model.CliThinkingLevels" Alias="CliThinkingLevels" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- Namespace alignment: feature namespaces visible test-wide (plain
          using OrchestratorApi.* lines were removed by the sweep). -->

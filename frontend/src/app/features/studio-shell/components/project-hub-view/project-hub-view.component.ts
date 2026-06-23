@@ -8,7 +8,6 @@ import {
   ProjectObservabilityPanelComponent,
   ProjectPipelinePanelComponent,
   ProjectSteeringDocsSectionComponent,
-  ProjectSkillReadinessSectionComponent,
   ProjectWikiSectionComponent,
 } from '../../../project-detail';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
@@ -72,7 +71,6 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     ProjectObservabilityPanelComponent,
     ProjectPipelinePanelComponent,
     ProjectSteeringDocsSectionComponent,
-    ProjectSkillReadinessSectionComponent,
     ProjectWikiSectionComponent,
     PromptAdminPanelComponent,
     WorkspaceScreenshotsComponent,

@@ -109,15 +109,15 @@ For managed task runs, the prompt stack should be explicit:
 4. Explicitly selected skills.
 5. Automatically suggested skills only after user confirmation, at least in the first version.
 
-For project validation, the orchestrator should provide a simple project-level action:
+For project validation, the orchestrator should use the same wiki-backed documentation flow as the rest of project context:
 
 1. User opens a watched project.
-2. User clicks "Check skill readiness".
-3. Orchestrator reads the project's README or agent instruction file.
-4. Orchestrator reports whether the skill lookup section exists and matches the expected shape.
-5. If it is missing or stale, user can create a normal agent task to add or update it.
+2. User opens the project Wiki or Agent Docs gateway.
+3. Orchestrator reads the skill guidance page and the linked agent instruction gateway.
+4. Orchestrator reports wiki drift or missing gateway links as normal documentation findings.
+5. If the guidance is missing or stale, user can create a normal agent task to update the wiki page.
 
-This keeps the product honest: the orchestrator checks the project contract and uses the same task pipeline to fix it.
+This keeps the product honest: the orchestrator checks the documented project contract and uses the same task pipeline to fix it, without a separate skill-readiness UI.
 
 ## Storage Shape
 
@@ -157,29 +157,28 @@ The `runtime-log-analysis` skill is the canonical example of a read-only analysi
 - **Prompt bloat.** Attach short skill excerpts first; link to full references.
 - **Unclear activation.** Show attached and suggested skills in the UI.
 - **Duplicate rules.** Core owns "must"; skills own "how".
-- **Stale project README lookup.** Add the project-level check and a task generator.
+- **Stale project wiki lookup.** Keep the canonical skill lookup in the project wiki and route AGENTS/README files there instead of duplicating skill detail.
 - **Unsafe scripts.** Skills may include scripts, but script execution should be explicit, local, and reviewable.
 - **Native CLI mismatch.** Treat native CLI skill exports as adapters, not as the source of truth.
 
 ## First Product Step
 
-Start with project-level skill readiness:
+Start with project-level wiki-backed skill guidance:
 
-- Add a project action button.
-- Show a modal with README lookup status.
-- Offer to create a task that updates the selected project to the skill lookup contract.
+- Keep the durable skill contract in the project wiki.
+- Let Agent Docs act as a gateway to that wiki material.
+- Avoid a separate "Check skill readiness" product surface; skill upkeep should be handled as normal wiki maintenance and drift work.
 
 This can be built after the project detail screen exists.
 
 ### v1 implementation
 
-The first naive flow ships under the project detail panel as `app-project-skill-readiness-section`:
+The first naive readiness flow exists as legacy code, but it is no longer mounted in Agent Docs or the Project Hub. Skills are managed through the wiki-backed guidance flow instead:
 
 - Backend: [`backend/Services/SkillReadinessService.cs`](../../backend/Services/SkillReadinessService.cs) parses `README.md`, `AGENTS.md`, and `.github/copilot-instructions.md` for an H2/H3 heading whose title contains "skill" plus four required phrases (`standardSkills`, `projectSkills`, `skillsPath`, `processorReference`). Verdicts are `pass` (heading + every phrase), `warning` (heading + at least one missing phrase), `fail` (no heading). The check is deterministic and never delegates to an LLM.
 - Endpoints (under [`backend/Endpoints/SkillReadinessEndpoints.cs`](../../backend/Endpoints/SkillReadinessEndpoints.cs)):
   - `GET /api/projects/{name}/skill-readiness` returns the verdict.
   - `GET /api/projects/{name}/skill-readiness/fix-task-preview` returns the title + prompt the fix path would queue.
   - `POST /api/projects/{name}/skill-readiness/fix-task` queues a normal `2-ready` task whose prompt embeds the canonical lookup snippet. The watched project's source tree is **never** edited from the endpoint - the agent updates the README through the regular pipeline.
-  - `GET /api/projects/{name}/skills` returns the catalog of standard skills (under `.agents/skills/`) and project-specific skills (under `.agents/projects/<key>/skills/`), each tagged `selected` or `suggested`.
-- Frontend: [`frontend/src/app/components/project-skill-readiness-section.ts`](../../frontend/src/app/components/project-skill-readiness-section.ts) renders the button and modal; the panel embeds it after Steering Docs.
+- Frontend: the legacy `project-skill-readiness-section` button/modal is intentionally not mounted. Agent Docs stays a document browser; skill guidance belongs in wiki pages and normal wiki drift maintenance.
 - Tests: [`backend.Tests/SkillReadinessServiceTests.cs`](../../backend.Tests/SkillReadinessServiceTests.cs) pins the parser matrix, the fail / warning / pass verdicts, and the invariant that `CreateFixTask` queues a `2-ready` task without writing into the watched project.

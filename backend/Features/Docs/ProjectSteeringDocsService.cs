@@ -4,11 +4,10 @@ namespace AgentStudio.Docs;
 
 /// <summary>
 /// Project-level Steering Docs surface. Lists the agent-facing instruction
-/// files that apply to a watched project (README, AGENTS, ROADMAP, the
-/// task contract, the skills lookup, the ADR archive, runtime prompt
-/// references, project settings, and project-specific steering notes),
-/// reports their existence, last-modified timestamp, and size, and
-/// produces a small heuristic warning set the UI can render alongside.
+/// files that actually exist for a watched project (AGENTS.md, CLAUDE.md,
+/// GEMINI.md, Copilot instructions, and scoped AGENTS.md files), reports their
+/// last-modified timestamp, size, and CLI scope, and produces a small heuristic
+/// warning set the UI can render alongside.
 ///
 /// The service does not summarize or rewrite docs. The "Summarize Steering
 /// Docs", "Check Docs Drift", "Analyze Recurring Failures", and
@@ -46,10 +45,9 @@ public class ProjectSteeringDocsService
     }
 
     /// <summary>
-    /// Inventory the canonical steering sources for a watched project. The
-    /// list is fixed (so the UI knows what to expect) but every entry can
-    /// be marked Missing or Stale. <see cref="SteeringDocsOverview.BaseDir"/>
-    /// is the resolved repo root the relative paths are evaluated against.
+    /// Inventory the steering sources that actually exist for a watched
+    /// project. <see cref="SteeringDocsOverview.BaseDir"/> is the resolved repo
+    /// root the relative paths are evaluated against.
     /// </summary>
     public SteeringDocsOverview? GetOverview(string projectName)
     {
@@ -58,18 +56,14 @@ public class ProjectSteeringDocsService
         var baseDir = ResolveBaseDir(entry);
         if (baseDir == null) return null;
 
-        var sources = new List<SteeringDocsSource>();
-        foreach (var d in CanonicalSources)
-        {
-            sources.Add(InspectSource(baseDir, d));
-        }
+        var sources = EnumerateAgentDocFiles(baseDir)
+            .Select(path => InspectAgentDoc(baseDir, path))
+            .OrderBy(s => s.RelPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        // Inspect prompts/runtime/ as a directory listing rather than one file.
-        sources.Add(InspectRuntimePromptsDir(baseDir));
-
-        var warnings = BuildWarnings(sources);
+        var warnings = BuildWarnings(baseDir, sources);
         var lastUpdated = sources
-            .Where(s => s.Exists && s.UpdatedAt.HasValue)
+            .Where(s => s.UpdatedAt.HasValue)
             .Select(s => s.UpdatedAt!.Value)
             .DefaultIfEmpty(default)
             .Max();
@@ -91,24 +85,15 @@ public class ProjectSteeringDocsService
         if (baseDir == null) return null;
         var full = Path.GetFullPath(Path.Combine(baseDir, relPath));
         var root = Path.GetFullPath(baseDir);
-        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return null;
+        if (!IsUnderRoot(root, full)) return null;
         if (!File.Exists(full)) return null;
         // Only allow files that the inventory exposes. Reading arbitrary
         // repository files would turn this into a generic file browser,
         // which is out of scope for the Steering Docs surface.
-        var allowed = CanonicalSources.Any(d =>
-            string.Equals(NormalizeRel(d.RelPath), NormalizeRel(relPath), StringComparison.OrdinalIgnoreCase));
-        if (!allowed)
-        {
-            // Allow sub-files inside prompts/runtime/ and docs/cli/skills/
-            // as well, since they are referenced as a directory.
-            var rel = NormalizeRel(relPath);
-            if (!rel.StartsWith("prompts/runtime/", StringComparison.OrdinalIgnoreCase) &&
-                !rel.StartsWith("docs/cli/skills/", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-        }
+        var overview = GetOverview(projectName);
+        var allowed = overview?.Sources.Any(s =>
+            string.Equals(NormalizeRel(s.RelPath), NormalizeRel(relPath), StringComparison.OrdinalIgnoreCase)) == true;
+        if (!allowed) return null;
         var content = File.ReadAllText(full);
         return new SteeringFileContent(NormalizeRel(relPath), content);
     }
@@ -117,178 +102,89 @@ public class ProjectSteeringDocsService
     // Inventory implementation
     // ----------------------------------------------------------------------
 
-    private record CanonicalSourceDef(
-        string Id,
-        string Label,
-        string RelPath,
-        SteeringDocsSourceKind Kind,
-        string Why);
-
-    /// <summary>
-    /// The set of files the surface promises to inspect for every project.
-    /// Missing entries are not silent failures: the UI shows a "missing
-    /// source" tile so the user knows the doc was expected.
-    /// </summary>
-    private static readonly IReadOnlyList<CanonicalSourceDef> CanonicalSources = new List<CanonicalSourceDef>
+    private static readonly string[] IgnoredDirectoryNames =
     {
-        new("readme", "README", "README.md", SteeringDocsSourceKind.ProjectReadme,
-            "Product description and on-boarding entry point. The first thing a new contributor reads."),
-        new("agents", "AGENTS.md", "AGENTS.md", SteeringDocsSourceKind.AgentInstructions,
-            "Single source of truth for agent instructions across CLIs."),
-        new("claude-shim", "CLAUDE.md", "CLAUDE.md", SteeringDocsSourceKind.AgentCliShim,
-            "Compatibility shim that points Claude Code at AGENTS.md. Should stay tiny."),
-        new("copilot-shim", ".github/copilot-instructions.md", ".github/copilot-instructions.md",
-            SteeringDocsSourceKind.AgentCliShim,
-            "Compatibility shim for the GitHub Copilot coding agent. Should stay tiny."),
-        new("frontend-agents", "frontend/AGENTS.md", "frontend/AGENTS.md",
-            SteeringDocsSourceKind.AgentInstructions,
-            "Frontend-scoped agent instructions; applies to changes under frontend/."),
-        new("roadmap", "ROADMAP.md", "ROADMAP.md", SteeringDocsSourceKind.Roadmap,
-            "Product thesis, near-term themes, hard boundaries, and decision principles."),
-        new("task-contract", "Task contract", "docs/contracts/agent-task.md",
-            SteeringDocsSourceKind.TaskContract,
-            "The boundary the application enforces against CLI agents per task."),
-        new("skills-architecture", "Skills architecture", "docs/product/skills-architecture.md",
-            SteeringDocsSourceKind.SkillsLookup,
-            "How portable skills are defined, distributed, and discovered."),
-        new("cli-skills-readme", "CLI skills lookup", "docs/cli/skills/README.md",
-            SteeringDocsSourceKind.SkillsLookup,
-            "Per-CLI skill index. Required reading before touching a CLI driver."),
-        new("adr", "Architecture decisions", "docs/architecture/decisions/adr-archive.md",
-            SteeringDocsSourceKind.AdrIndex,
-            "Durable archive of load-bearing architectural decisions."),
-        new("design-principles", "Design principles", "docs/product/design-principles.md",
-            SteeringDocsSourceKind.SteeringNote,
-            "UX contract + design principles that the agent-facing rules build on."),
-        new("commit-doctrine", "Commit / push doctrine", "docs/operations/git/commit-push-doctrine.md",
-            SteeringDocsSourceKind.SteeringNote,
-            "Where the application owns the commit and push boundary."),
-        new("appsettings", "Project settings", "backend/appsettings.json",
-            SteeringDocsSourceKind.ProjectSettings,
-            "Default backend settings (watch paths, supervisor toggles, etc.)."),
-        new("appsettings-local", "Local settings (gitignored)", "backend/appsettings.Local.json",
-            SteeringDocsSourceKind.ProjectSettings,
-            "Local-only overrides; gitignored. Existence flips dev-mode markers."),
+        ".git",
+        ".angular",
+        ".vs",
+        ".idea",
+        "bin",
+        "obj",
+        "node_modules",
+        "dist",
+        "coverage",
+        "playwright-report",
+        "test-results",
     };
 
-    private static SteeringDocsSource InspectSource(string baseDir, CanonicalSourceDef def)
+    private static IEnumerable<string> EnumerateAgentDocFiles(string baseDir)
     {
-        var rel = NormalizeRel(def.RelPath);
-        var full = Path.GetFullPath(Path.Combine(baseDir, rel));
-        if (!File.Exists(full))
+        var root = Path.GetFullPath(baseDir);
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
         {
-            return new SteeringDocsSource(
-                Id: def.Id,
-                Label: def.Label,
-                RelPath: rel,
-                Kind: def.Kind,
-                Why: def.Why,
-                Exists: false,
-                UpdatedAt: null,
-                Size: 0,
-                Children: null);
+            var dir = pending.Pop();
+            IEnumerable<string> files;
+            try { files = Directory.EnumerateFiles(dir, "*", SearchOption.TopDirectoryOnly).ToList(); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            foreach (var file in files)
+            {
+                var rel = NormalizeRel(Path.GetRelativePath(root, file));
+                if (IsAgentDocRelPath(rel)) yield return file;
+            }
+
+            IEnumerable<string> children;
+            try { children = Directory.EnumerateDirectories(dir, "*", SearchOption.TopDirectoryOnly).ToList(); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            foreach (var child in children)
+            {
+                var name = Path.GetFileName(child);
+                if (IgnoredDirectoryNames.Any(x => string.Equals(x, name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+                pending.Push(child);
+            }
         }
-        var fi = new FileInfo(full);
+    }
+
+    private static SteeringDocsSource InspectAgentDoc(string baseDir, string fullPath)
+    {
+        var root = Path.GetFullPath(baseDir);
+        var rel = NormalizeRel(Path.GetRelativePath(root, fullPath));
+        var fi = new FileInfo(fullPath);
         return new SteeringDocsSource(
-            Id: def.Id,
-            Label: def.Label,
+            Id: SourceId(rel),
+            Label: Path.GetFileName(rel),
             RelPath: rel,
-            Kind: def.Kind,
-            Why: def.Why,
+            Kind: SourceKindFor(rel),
+            Why: WhyFor(rel),
             Exists: true,
             UpdatedAt: fi.LastWriteTimeUtc,
             Size: fi.Length,
+            AppliesToClis: AppliesToClisFor(rel),
             Children: null);
     }
 
-    private static SteeringDocsSource InspectRuntimePromptsDir(string baseDir)
-    {
-        var dirRel = "prompts/runtime";
-        var full = Path.GetFullPath(Path.Combine(baseDir, dirRel));
-        if (!Directory.Exists(full))
-        {
-            return new SteeringDocsSource(
-                Id: "runtime-prompts",
-                Label: "Runtime prompts",
-                RelPath: dirRel,
-                Kind: SteeringDocsSourceKind.RuntimePrompt,
-                Why: "Editable Markdown templates rendered by backend runtime services.",
-                Exists: false,
-                UpdatedAt: null,
-                Size: 0,
-                Children: null);
-        }
-        var children = new List<SteeringDocsSourceChild>();
-        long totalSize = 0;
-        DateTime? newest = null;
-        foreach (var f in Directory.EnumerateFiles(full, "*.md", SearchOption.TopDirectoryOnly).OrderBy(p => p))
-        {
-            var fi = new FileInfo(f);
-            var rel = NormalizeRel(Path.Combine(dirRel, fi.Name));
-            children.Add(new SteeringDocsSourceChild(
-                Name: fi.Name,
-                RelPath: rel,
-                UpdatedAt: fi.LastWriteTimeUtc,
-                Size: fi.Length));
-            totalSize += fi.Length;
-            if (newest == null || fi.LastWriteTimeUtc > newest) newest = fi.LastWriteTimeUtc;
-        }
-        return new SteeringDocsSource(
-            Id: "runtime-prompts",
-            Label: "Runtime prompts",
-            RelPath: dirRel,
-            Kind: SteeringDocsSourceKind.RuntimePrompt,
-            Why: "Editable Markdown templates rendered by backend runtime services.",
-            Exists: children.Count > 0,
-            UpdatedAt: newest,
-            Size: totalSize,
-            Children: children);
-    }
-
-    private static List<SteeringDocsWarning> BuildWarnings(IList<SteeringDocsSource> sources)
+    private static List<SteeringDocsWarning> BuildWarnings(string baseDir, IList<SteeringDocsSource> sources)
     {
         var warnings = new List<SteeringDocsWarning>();
-        // Critical missing files first; the application requires these.
-        var criticalMissing = sources.Where(s =>
-            !s.Exists &&
-            (s.Kind == SteeringDocsSourceKind.AgentInstructions ||
-             s.Kind == SteeringDocsSourceKind.ProjectReadme ||
-             s.Kind == SteeringDocsSourceKind.TaskContract));
-        foreach (var s in criticalMissing)
-        {
-            // The frontend AGENTS scope is not load-bearing on every project,
-            // demote it to "info" by skipping when there's no frontend at all.
-            if (s.Id == "frontend-agents") continue;
-            warnings.Add(new SteeringDocsWarning(
-                Severity: SteeringDocsWarningSeverity.High,
-                Kind: SteeringDocsWarningKind.MissingSource,
-                Message: $"Required steering source is missing: {s.RelPath}.",
-                SourceId: s.Id,
-                EvidenceRefs: new List<string> { s.RelPath }));
-        }
-        // Optional missing files as warn.
-        foreach (var s in sources.Where(s => !s.Exists))
-        {
-            if (s.Kind == SteeringDocsSourceKind.AgentInstructions ||
-                s.Kind == SteeringDocsSourceKind.ProjectReadme ||
-                s.Kind == SteeringDocsSourceKind.TaskContract)
-            {
-                continue; // already emitted as critical above (or skipped)
-            }
-            warnings.Add(new SteeringDocsWarning(
-                Severity: SteeringDocsWarningSeverity.Info,
-                Kind: SteeringDocsWarningKind.MissingSource,
-                Message: $"No {s.Label} found at {s.RelPath}.",
-                SourceId: s.Id,
-                EvidenceRefs: new List<string> { s.RelPath }));
-        }
         // Stale file detection: if a source exists, but is older than the
         // staleness threshold and at least one other source has been
         // touched recently, surface a "may be out of date" warning.
-        var anyRecent = sources.Any(s => s.Exists && s.UpdatedAt is { } u && (DateTime.UtcNow - u) < TimeSpan.FromDays(30));
+        var anyRecent = sources.Any(s => s.UpdatedAt is { } u && (DateTime.UtcNow - u) < TimeSpan.FromDays(30));
         if (anyRecent)
         {
-            foreach (var s in sources.Where(s => s.Exists && s.UpdatedAt is { } u && (DateTime.UtcNow - u) > StaleThreshold))
+            foreach (var s in sources.Where(s => s.UpdatedAt is { } u && (DateTime.UtcNow - u) > StaleThreshold))
             {
                 warnings.Add(new SteeringDocsWarning(
                     Severity: SteeringDocsWarningSeverity.Warn,
@@ -301,7 +197,7 @@ public class ProjectSteeringDocsService
         // Conflict heuristic: AGENTS shim files (CLAUDE.md, copilot
         // instructions) larger than 1 KB suggest the shim has drifted from
         // its three-line contract.
-        foreach (var s in sources.Where(s => s.Kind == SteeringDocsSourceKind.AgentCliShim && s.Exists && s.Size > 1024))
+        foreach (var s in sources.Where(s => s.Kind == SteeringDocsSourceKind.AgentCliShim && s.Size > 1024))
         {
             warnings.Add(new SteeringDocsWarning(
                 Severity: SteeringDocsWarningSeverity.Warn,
@@ -309,6 +205,19 @@ public class ProjectSteeringDocsService
                 Message: $"{s.Label} is {s.Size:N0} bytes; compatibility shims should stay tiny and point at AGENTS.md.",
                 SourceId: s.Id,
                 EvidenceRefs: new List<string> { s.RelPath }));
+        }
+        foreach (var s in sources.Where(s => s.Size > 1800))
+        {
+            var content = TryReadText(Path.Combine(baseDir, s.RelPath));
+            if (content == null) continue;
+            var wikiLinks = CountOccurrences(content, "docs/wiki/");
+            if (wikiLinks >= 2) continue;
+            warnings.Add(new SteeringDocsWarning(
+                Severity: SteeringDocsWarningSeverity.Warn,
+                Kind: SteeringDocsWarningKind.GatewayTooHeavy,
+                Message: $"{s.RelPath} carries {s.Size:N0} bytes of local instructions but links to only {wikiLinks} wiki page(s). Agent docs should stay gateway-style and route durable detail into the project wiki.",
+                SourceId: s.Id,
+                EvidenceRefs: new List<string> { s.RelPath, "docs/wiki/" }));
         }
         return warnings;
     }
@@ -319,6 +228,96 @@ public class ProjectSteeringDocsService
 
     private static string NormalizeRel(string rel) =>
         (rel ?? "").Replace('\\', '/').TrimStart('/');
+
+    private static bool IsAgentDocRelPath(string rel)
+    {
+        var normalized = NormalizeRel(rel);
+        var name = Path.GetFileName(normalized);
+        if (string.Equals(name, "AGENTS.md", StringComparison.OrdinalIgnoreCase)) return true;
+        if (string.Equals(name, "CLAUDE.md", StringComparison.OrdinalIgnoreCase)) return true;
+        if (string.Equals(name, "GEMINI.md", StringComparison.OrdinalIgnoreCase)) return true;
+        return string.Equals(normalized, ".github/copilot-instructions.md", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static SteeringDocsSourceKind SourceKindFor(string rel)
+    {
+        var name = Path.GetFileName(rel);
+        if (string.Equals(name, "CLAUDE.md", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(NormalizeRel(rel), ".github/copilot-instructions.md", StringComparison.OrdinalIgnoreCase))
+        {
+            return SteeringDocsSourceKind.AgentCliShim;
+        }
+        return SteeringDocsSourceKind.AgentInstructions;
+    }
+
+    private static string WhyFor(string rel)
+    {
+        var normalized = NormalizeRel(rel);
+        var name = Path.GetFileName(normalized);
+        if (string.Equals(name, "AGENTS.md", StringComparison.OrdinalIgnoreCase))
+        {
+            return normalized.Equals("AGENTS.md", StringComparison.OrdinalIgnoreCase)
+                ? "Project-level agent instructions loaded from the repository root."
+                : "Scoped agent instructions loaded for work below this folder.";
+        }
+        if (string.Equals(name, "CLAUDE.md", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Claude Code compatibility file; should route to AGENTS.md or wiki pages instead of carrying divergent rules.";
+        }
+        if (string.Equals(name, "GEMINI.md", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Gemini CLI instruction file; should route to shared project guidance where possible.";
+        }
+        return "GitHub Copilot coding-agent instruction file; should stay aligned with AGENTS.md.";
+    }
+
+    private static List<string> AppliesToClisFor(string rel)
+    {
+        var normalized = NormalizeRel(rel);
+        var name = Path.GetFileName(normalized);
+        if (string.Equals(name, "CLAUDE.md", StringComparison.OrdinalIgnoreCase)) return new List<string> { "claude" };
+        if (string.Equals(name, "GEMINI.md", StringComparison.OrdinalIgnoreCase)) return new List<string> { "gemini" };
+        if (string.Equals(normalized, ".github/copilot-instructions.md", StringComparison.OrdinalIgnoreCase)) return new List<string> { "copilot" };
+        return new List<string> { "codex", "claude", "copilot" };
+    }
+
+    private static string SourceId(string rel)
+    {
+        var normalized = NormalizeRel(rel).ToLowerInvariant();
+        var chars = normalized.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray();
+        return new string(chars).Trim('-');
+    }
+
+    private static string? TryReadText(string fullPath)
+    {
+        try { return File.Exists(fullPath) ? File.ReadAllText(fullPath) : null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        if (string.IsNullOrEmpty(haystack) || string.IsNullOrEmpty(needle)) return 0;
+        var count = 0;
+        var index = 0;
+        while ((index = haystack.IndexOf(needle, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            count++;
+            index += needle.Length;
+        }
+        return count;
+    }
+
+    private static bool IsUnderRoot(string root, string fullPath)
+    {
+        var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedFull = Path.GetFullPath(fullPath);
+        return string.Equals(normalizedFull, normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
+               normalizedFull.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+               normalizedFull.StartsWith(normalizedRoot + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool IsSafeRelPath(string relPath)
     {
@@ -347,7 +346,7 @@ public enum SteeringDocsSourceKind
 
 public enum SteeringDocsWarningSeverity { Info, Warn, High }
 
-public enum SteeringDocsWarningKind { MissingSource, Stale, PossibleConflict, RecurringFailure }
+public enum SteeringDocsWarningKind { MissingSource, Stale, PossibleConflict, RecurringFailure, GatewayTooHeavy }
 
 public record SteeringDocsSourceChild(string Name, string RelPath, DateTime UpdatedAt, long Size);
 
@@ -360,6 +359,7 @@ public record SteeringDocsSource(
     bool Exists,
     DateTime? UpdatedAt,
     long Size,
+    List<string> AppliesToClis,
     List<SteeringDocsSourceChild>? Children);
 
 public record SteeringDocsWarning(

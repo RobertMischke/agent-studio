@@ -20,7 +20,7 @@ namespace AgentStudio.Cli;
 /// </summary>
 public sealed record CliCompletionContract
 {
-    /// <summary>CLI backend id (one of <see cref="Shared.CliTypes.All"/>).</summary>
+    /// <summary>CLI backend id (one of <see cref="CliTypes.All"/>).</summary>
     public required string CliType { get; init; }
 
     /// <summary>Wire format + invocation the runner parses (e.g. stream-json NDJSON).</summary>
@@ -60,7 +60,7 @@ public static class CliCompletionContracts
     [
         new CliCompletionContract
         {
-            CliType = Shared.CliTypes.Claude,
+            CliType = CliTypes.Claude,
             Transport = "stream-json NDJSON (claude --output-format stream-json --verbose)",
             SessionStartSignal = "system frame, subtype=init",
             CompletionSignal = "result frame, is_error=false",
@@ -71,7 +71,7 @@ public static class CliCompletionContracts
         },
         new CliCompletionContract
         {
-            CliType = Shared.CliTypes.Codex,
+            CliType = CliTypes.Codex,
             Transport = "JSONL (codex exec --json)",
             SessionStartSignal = "thread.started (legacy: session_meta)",
             CompletionSignal = "turn.completed",
@@ -82,7 +82,7 @@ public static class CliCompletionContracts
         },
         new CliCompletionContract
         {
-            CliType = Shared.CliTypes.Gemini,
+            CliType = CliTypes.Gemini,
             Transport = "stream-json NDJSON (gemini -o stream-json)",
             SessionStartSignal = "init frame",
             CompletionSignal = "result frame, status=success",
@@ -93,7 +93,7 @@ public static class CliCompletionContracts
         },
         new CliCompletionContract
         {
-            CliType = Shared.CliTypes.Copilot,
+            CliType = CliTypes.Copilot,
             Transport = "PTY / TUI (no structured event stream)",
             SessionStartSignal = "none (not surfaced by a typed adapter)",
             CompletionSignal = "process exit (heuristic, exit-based)",

@@ -7,7 +7,7 @@ namespace AgentStudio.Pipeline;
 /// <c>standard-task-pipeline</c>, derived from today's
 /// <c>3-progress -> 4-auto-review</c> flow. Pre-steps are reserved
 /// slots (no runtime today; future tasks plug requirement-clarification
-/// / context-retrieval / skill-readiness here). The Core step is the
+/// / context-retrieval / wiki-guidance upkeep here). The Core step is the
 /// CLI agent run owned by <see cref="TaskRunnerService"/>. Post-steps
 /// run the four <see cref="StepKind.Aspect"/> verdicts in parallel
 /// (the load-bearing behavioural change in this phase), the

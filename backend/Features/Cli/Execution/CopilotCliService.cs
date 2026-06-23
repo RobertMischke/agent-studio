@@ -186,7 +186,7 @@ public class CopilotCliService : ICliExecutionService
             PermissionMode = permissionMode,
             // Copilot is shared-only (no config-home redirect), so the
             // effective context mode is always shared even if clean was asked.
-            ContextMode = AgentStudio.Shared.CliContextModes.Shared
+            ContextMode = CliContextModes.Shared
         };
         try { info.OutputLog.Reset(); }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log dir {Path}", outputLogDir); }
@@ -409,7 +409,7 @@ public class CopilotCliService : ICliExecutionService
         {
             Cli = CliType,
             Model = info.Execution.Model,
-            PermissionMode = info.PermissionMode is { } m ? AgentStudio.Shared.CliPermissionModes.DisplayName(m) : null,
+            PermissionMode = info.PermissionMode is { } m ? CliPermissionModes.DisplayName(m) : null,
             Cwd = info.WorkingDirectory,
             ContextMode = info.ContextMode,
             CapturedAt = DateTime.UtcNow,

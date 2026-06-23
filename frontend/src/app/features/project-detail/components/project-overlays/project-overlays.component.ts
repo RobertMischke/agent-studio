@@ -11,7 +11,6 @@ import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { ProjectObservabilityPanelComponent } from '../project-observability/project-observability-panel.component';
 import { ProjectPipelinePanelComponent } from '../project-pipeline-panel/project-pipeline-panel.component';
 import { ProjectSteeringDocsSectionComponent } from '../project-steering-docs-section/project-steering-docs-section';
-import { ProjectSkillReadinessSectionComponent } from '../project-skill-readiness-section/project-skill-readiness-section';
 import { ProjectWikiSectionComponent } from '../project-wiki-section/project-wiki-section';
 import { AnalysisReportDrilldownComponent } from '../analysis-report-drilldown/analysis-report-drilldown';
 import { ProjectRailKey } from '../project-shell/project-shell.config';
@@ -45,7 +44,6 @@ import { TooltipDirective } from '../../../../components/tooltip';
     ProjectObservabilityPanelComponent,
     ProjectPipelinePanelComponent,
     ProjectSteeringDocsSectionComponent,
-    ProjectSkillReadinessSectionComponent,
     ProjectWikiSectionComponent,
     AnalysisReportDrilldownComponent,
     WorkspaceScreenshotsComponent,

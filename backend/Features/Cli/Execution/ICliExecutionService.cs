@@ -31,13 +31,13 @@ public interface ICliExecutionService
 
     /// <summary>
     /// Whether this adapter can isolate its persistent state for a
-    /// <see cref="AgentStudio.Shared.CliContextModes.Clean"/> run by relocating
+    /// <see cref="CliContextModes.Clean"/> run by relocating
     /// the CLI's config home to a per-run temp dir (T1b / ASS-1742). Claude and
     /// Codex can; Copilot and Gemini expose no such redirect and are shared-only.
     /// Defaults to false so a stub / shared-only backend opts out cleanly; the
     /// runner falls back to a shared run when this is false even if clean was
     /// requested. Must agree with
-    /// <see cref="AgentStudio.Shared.CliContextModes.SupportsClean"/>.
+    /// <see cref="CliContextModes.SupportsClean"/>.
     /// </summary>
     bool SupportsCleanContext => false;
 

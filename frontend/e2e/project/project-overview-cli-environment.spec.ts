@@ -100,11 +100,31 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('overview shows CLI environment instead of pipeline and queue summaries', async ({ page }) => {
+test('overview shows onboarding tiles and settings shows CLI environment details', async ({ page }) => {
   await openHub(page);
 
   await expect(page.getByRole('heading', { name: 'Pipeline snapshot' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Queue health' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Lane counts' })).toHaveCount(0);
+
+  const onboarding = page.getByTestId('project-cli-onboarding-status');
+  await expect(onboarding).toBeVisible();
+  await expect(onboarding).toContainText('Onboarding status');
+  await expect(page.getByTestId('project-detail-cli-environment')).toHaveCount(0);
+
+  await expect(page.getByTestId('project-cli-onboarding-tile-cli-ready')).toContainText('2 / 4');
+  await expect(page.getByTestId('project-cli-onboarding-tile-cli-ready')).toContainText('2 need attention');
+  await expect(page.getByTestId('project-cli-onboarding-tile-clean-context')).toContainText('2 / 2');
+  await expect(page.getByTestId('project-cli-onboarding-tile-project-sessions')).toContainText('project handoff');
+  await expect(page.getByTestId('project-cli-onboarding-tile-overrides')).toContainText('none');
+
+  await page.screenshot({
+    path: path.join(SCREENSHOT_DIR, '00-overview-onboarding-status.png'),
+    fullPage: true,
+  });
+
+  await page.goto(`/#/projects/${slugFor(projectName)}/settings`);
+  await expect(page.getByTestId('project-settings-panel')).toBeVisible({ timeout: 10_000 });
 
   const cliEnv = page.getByTestId('project-detail-cli-environment');
   await expect(cliEnv).toBeVisible();
@@ -121,7 +141,7 @@ test('overview shows CLI environment instead of pipeline and queue summaries', a
   await expect(claude).toContainText('platform default');
 
   await page.screenshot({
-    path: path.join(SCREENSHOT_DIR, '00-overview-cli-environment.png'),
+    path: path.join(SCREENSHOT_DIR, '01-settings-cli-environment.png'),
     fullPage: true,
   });
 });

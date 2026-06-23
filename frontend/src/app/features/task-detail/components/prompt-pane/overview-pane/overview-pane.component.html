@@ -88,50 +88,42 @@
         </span>
       </div>
 
-      <div class="ov-agent-inline studio-measure studio-measure--tabular" data-testid="overview-agent">
-        <div class="ov-row ov-row--wide">
-          <span class="ov-label">Model</span>
-          <span class="ov-value">
-            <app-cli-model-selector
-              [cliType]="effectiveCliType()"
-              [model]="effectiveModel()"
-              [thinkingLevel]="effectiveThinkingLevel()"
-              [availableModels]="availableModels()"
-              [disabled]="isRunning()"
-              triggerTestid="chat-compose-model"
-              pickerTestidPrefix="chat-model-picker"
-              (commit)="agentConfigCommit.emit($event)" />
-          </span>
-        </div>
+      <div class="ov-row ov-row--agent" data-testid="overview-agent">
+        <span class="ov-label">Agent</span>
+        <span class="ov-value ov-agent-combo">
+          <app-cli-model-selector
+            [cliType]="effectiveCliType()"
+            [model]="effectiveModel()"
+            [thinkingLevel]="effectiveThinkingLevel()"
+            [availableModels]="availableModels()"
+            [disabled]="isRunning()"
+            triggerTestid="chat-compose-model"
+            pickerTestidPrefix="chat-model-picker"
+            (commit)="agentConfigCommit.emit($event)" />
+          @if (effectiveCliType(); as ct) {
+            <span class="ov-agent-combo__cli"
+                  data-testid="overview-agent-cli"
+                  [appTooltip]="'CLI: ' + cliTypeLabel(ct)">
+              {{ cliTypeLabel(ct) }}
+            </span>
+          } @else {
+            <span class="ov-dim">CLI not set</span>
+          }
+        </span>
+      </div>
 
-        <div class="ov-row">
-          <span class="ov-label">CLI</span>
-          <span class="ov-value">
-            @if (job().cliType; as ct) {
-              <span class="ov-cli-chip">
-                <span aria-hidden="true">{{ cliTypeIcon(ct) }}</span>
-                {{ cliTypeLabel(ct) }}
-              </span>
-            } @else {
-              <span class="ov-dim">Not set</span>
-            }
-          </span>
-        </div>
-
-        <div class="ov-row">
-          <span class="ov-label">Owner</span>
-          <span class="ov-value">
-            @if (owner(); as ow) {
-              <span class="ov-owner-chip"
-                    [style.color]="ow.colour || 'var(--studio-fg)'"
-                    [appTooltip]="ow.displayName + ' (' + ow.kind + ')'">
-                <span aria-hidden="true">{{ ow.emoji || '·' }}</span>
-                {{ ow.displayName }}
-              </span>
-            }
-          </span>
-        </div>
-
+      <div class="ov-row">
+        <span class="ov-label">Owner</span>
+        <span class="ov-value">
+          @if (owner(); as ow) {
+            <span class="ov-owner-chip"
+                  [style.color]="ow.colour || 'var(--studio-fg)'"
+                  [appTooltip]="ow.displayName + ' (' + ow.kind + ')'">
+              <span aria-hidden="true">{{ ow.emoji || '·' }}</span>
+              {{ ow.displayName }}
+            </span>
+          }
+        </span>
       </div>
     </div>
   </section>
@@ -149,21 +141,39 @@
        strip rather than a separate block — it is the pipeline's outcome. -->
   @if (hasPipelineSection()) {
     <section class="ov-section studio-measure studio-measure--tabular-compact" data-testid="overview-pipeline">
-      <h3 class="ov-section__title"
-          [appTooltip]="'Pre steps, core agent work, and post steps for this task. Per-step model and enable/disable are configured in project Settings.'">
-        Pipeline
-        @if (isPipelineRestart()) {
-          <span class="ov-pl-restart-badge"
-                data-testid="overview-pipeline-restart-badge"
-                [attr.data-attempt]="pipelineAttempt()"
-                [appTooltip]="pipelineStartedAt()
-                  ? 'Restarted — current run started ' + formatAbsoluteTime(pipelineStartedAt()!)
-                  : 'This pipeline was restarted; the steps below are the latest run.'">
-            <span class="ov-pl-restart-badge__dot" aria-hidden="true"></span>
-            Restarted · Run #{{ pipelineAttempt() }}
-          </span>
+      <div class="ov-section__heading-row">
+        <h3 class="ov-section__title"
+            [appTooltip]="'Pre steps, core agent work, and post steps for this task. Per-step model and enable/disable are configured in project Settings.'">
+          Pipeline
+          @if (isPipelineRestart()) {
+            <span class="ov-pl-restart-badge"
+                  data-testid="overview-pipeline-restart-badge"
+                  [attr.data-attempt]="pipelineAttempt()"
+                  [appTooltip]="pipelineStartedAt()
+                    ? 'Restarted — current run started ' + formatAbsoluteTime(pipelineStartedAt()!)
+                    : 'This pipeline was restarted; the steps below are the latest run.'">
+              <span class="ov-pl-restart-badge__dot" aria-hidden="true"></span>
+              Restarted · Run #{{ pipelineAttempt() }}
+            </span>
+          }
+        </h3>
+        @if (disabledPipelineStepCount() > 0) {
+          <button type="button"
+                  class="ov-section__icon-action"
+                  data-testid="overview-pipeline-toggle-disabled"
+                  [class.ov-section__icon-action--active]="hideDisabledPipelineSteps()"
+                  [attr.aria-pressed]="hideDisabledPipelineSteps()"
+                  [attr.aria-label]="hideDisabledPipelineSteps()
+                    ? 'Show disabled pipeline steps'
+                    : 'Hide disabled pipeline steps'"
+                  [appTooltip]="hideDisabledPipelineSteps()
+                    ? 'Show disabled steps again'
+                    : 'Hide disabled steps (' + disabledPipelineStepCount() + ')'"
+                  (click)="toggleDisabledPipelineSteps()">
+            <span aria-hidden="true">⊘</span>
+          </button>
         }
-      </h3>
+      </div>
 
       <!-- Completion-loop attempt-cycle strip (ADR-0049 / ASS-566): latest
            verdict + Attempt N/M + re-open counter + gap, consolidated under
@@ -274,7 +284,7 @@
           <span class="ov-pl-header__cell ov-pl-header__tokens">Tokens</span>
           <span class="ov-pl-header__cell ov-pl-header__cost">Cost</span>
         </div>
-        @for (row of pipelineRows(); track row.id) {
+        @for (row of visiblePipelineRows(); track row.id) {
           @if (row.startsPhase) {
             <div class="ov-pl-phase"
                  [attr.data-phase]="row.phaseKey"
@@ -460,18 +470,6 @@
 
       }
     </section>
-  }
-
-  <!-- RUNS - tokens by model (ASS-1708): per-run breakdown grouped by model
-       plus a lifetime grand total summed over every run, set off as its own
-       card. Self-hides when the task has no recorded run tokens. -->
-  @if (pipelineTokenUsage(); as tokensByModel) {
-    @if (tokensByModel.runs.length > 0) {
-      <section class="ov-section studio-measure studio-measure--tabular-compact"
-               data-testid="overview-pipeline-tokens-by-model">
-        <app-pipeline-token-usage [summary]="tokensByModel" />
-      </section>
-    }
   }
 
   @if (selectedTokenRow(); as tokenRow) {

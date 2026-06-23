@@ -276,6 +276,24 @@
   color: var(--studio-fg-dim);
 }
 
+.pp__chip--action {
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pp__chip--action:hover,
+.pp__chip--action:focus-visible {
+  border-color: color-mix(in srgb, var(--studio-accent-teal) 42%, var(--studio-card-muted-border));
+  background: color-mix(in srgb, var(--studio-accent-teal) 12%, var(--studio-card-muted-bg));
+  color: var(--studio-fg-strong);
+}
+
+.pp__chip--action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--studio-accent-teal) 48%, transparent);
+  outline-offset: 2px;
+}
+
 .pp__details {
   display: flex;
   flex-direction: column;
@@ -285,38 +303,92 @@
   background: color-mix(in srgb, var(--studio-card-muted-bg) 64%, transparent);
 }
 
-.pp__details-head {
+.pp__purpose {
+  margin: 0;
   color: var(--studio-fg-muted);
   font-size: var(--studio-card-meta-size);
   line-height: 1.35;
 }
 
-.pp__details-copy {
-  display: block;
-  max-width: 110ch;
-  white-space: pre-line;
-}
+.pp__settings {
+  --pp-settings-columns: minmax(7rem, 0.58fr) minmax(12rem, 0.95fr) minmax(18rem, 1.45fr);
 
-.pp__controls {
-  display: grid;
-  grid-template-columns: minmax(5.5rem, 0.48fr) minmax(9rem, 0.9fr) minmax(11rem, 1.35fr) minmax(6rem, 0.62fr) minmax(8rem, 0.85fr);
-  gap: var(--studio-spacing-2);
-  align-items: end;
-  min-width: 0;
-}
-
-.pp__field {
   display: flex;
   flex-direction: column;
-  gap: calc(var(--studio-spacing-1) / 2);
-  min-width: 0;
+  border: 1px solid var(--studio-card-muted-border);
+  border-radius: var(--studio-card-compact-radius);
+  background: var(--studio-card-bg);
+  overflow: clip;
 }
 
-.pp__field-label {
+.pp__settings-head,
+.pp__settings-row {
+  display: grid;
+  grid-template-columns: var(--pp-settings-columns);
+  align-items: center;
+}
+
+.pp__settings-head {
+  min-height: var(--studio-card-pill-height);
+  background: var(--studio-card-muted-bg);
+  color: var(--studio-fg-dim);
+  font-size: var(--studio-card-meta-size);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pp__settings-row {
+  min-height: calc(var(--studio-card-pill-height) + var(--studio-spacing-3));
+  border-top: 1px solid var(--studio-card-muted-border);
+}
+
+.pp__settings-head > span,
+.pp__settings-label,
+.pp__settings-value,
+.pp__settings-note {
+  min-width: 0;
+  padding: var(--studio-spacing-2);
+}
+
+.pp__settings-label {
   color: var(--studio-fg-dim);
   font-size: var(--studio-card-meta-size);
   font-weight: 600;
+  line-height: 1.25;
+}
+
+.pp__settings-value {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+}
+
+.pp__settings-note {
+  color: var(--studio-fg-muted);
+  font-size: var(--studio-card-meta-size);
+  line-height: 1.35;
+}
+
+.pp__setting-stack {
+  flex-wrap: wrap;
+}
+
+.pp__setting-readonly {
+  min-height: var(--studio-card-pill-height);
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 0 var(--studio-card-pill-padding-x);
+  border: 1px solid var(--studio-card-muted-border);
+  border-radius: calc(var(--studio-card-compact-radius) - var(--studio-spacing-1));
+  background: var(--studio-card-muted-bg);
+  color: var(--studio-fg-muted);
+  font-size: var(--studio-card-meta-size);
   line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pp__toggle,
@@ -483,13 +555,35 @@
     justify-content: flex-start;
   }
 
-  .pp__controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pp__settings {
+    --pp-settings-columns: minmax(6rem, 0.55fr) minmax(12rem, 1fr) minmax(14rem, 1fr);
+  }
 }
 
 @media (max-width: 720px) {
   .pp__head { grid-template-columns: 1fr; row-gap: var(--studio-spacing-1); }
   .pp__summary { grid-template-columns: auto minmax(0, 1fr) auto; }
   .pp__summary-chips { grid-column: 1 / -1; }
-  .pp__controls { grid-template-columns: 1fr; }
+  .pp__settings-row {
+    grid-template-columns: 1fr;
+  }
+
+  .pp__settings-head { display: none; }
+
+  .pp__settings-label {
+    padding-bottom: 0;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .pp__settings-value {
+    padding-top: var(--studio-spacing-1);
+    padding-bottom: var(--studio-spacing-1);
+  }
+
+  .pp__settings-note {
+    padding-top: 0;
+  }
+
   .pp__cost-item--total { margin-left: 0; }
 }

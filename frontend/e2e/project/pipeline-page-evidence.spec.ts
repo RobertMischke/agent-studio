@@ -79,7 +79,7 @@ test.beforeAll(async () => {
 test('pipeline page: reworked panel shows steps, models, prompt bindings, cost', async ({ page }) => {
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
-  await page.route('**/api/projects/pipeline-catalogue', r => r.fulfill(json(CATALOGUE)));
+  await page.route('**/api/projects/pipeline-catalogue**', r => r.fulfill(json(CATALOGUE)));
   await page.route('**/api/projects/settings', r => r.fulfill(json({ [projectName]: SETTINGS_PROJECTION })));
   await page.route('**/token-usage/pipeline-cost*', r => r.fulfill(json(fakeCost(projectName))));
 
@@ -96,9 +96,17 @@ test('pipeline page: reworked panel shows steps, models, prompt bindings, cost',
   // Phase groups: core renders "always on"; aspects expose a model picker; a
   // prompt cell deep-links to the Prompts registry rather than editing inline.
   await expect(page.getByTestId('pipeline-step-row-core-run')).toBeVisible();
+  const codeQualityRow = page.getByTestId('pipeline-step-row-aspect-code-quality');
+  await codeQualityRow.evaluate(el => { (el as HTMLDetailsElement).open = true; });
+  await expect(codeQualityRow.getByTestId('pipeline-step-setting-run-aspect-code-quality')).toBeVisible();
+  await expect(codeQualityRow.getByTestId('pipeline-step-setting-run-aspect-code-quality')).toContainText('sequential');
+  await expect(codeQualityRow.getByTestId('pipeline-step-setting-model-aspect-code-quality')).toBeVisible();
+  await expect(page.getByTestId('pipeline-step-prompt-open-aspect-code-quality')).toBeVisible();
   await expect(page.getByTestId('pipeline-step-agent-aspect-code-quality')).toBeVisible();
+  await page.getByTestId('pipeline-step-row-aspect-requirement-fit').evaluate(el => { (el as HTMLDetailsElement).open = true; });
   await expect(page.getByTestId('pipeline-step-prompt-manage-aspect-requirement-fit')).toBeVisible();
   // The inline-override step exposes its clear-to-registry escape hatch.
+  await page.getByTestId('pipeline-step-row-aspect-security').evaluate(el => { (el as HTMLDetailsElement).open = true; });
   await expect(page.getByTestId('pipeline-step-prompt-clear-aspect-security')).toBeVisible();
   // Cost-by-step-kind rollup from the mocked window.
   await expect(page.getByTestId('pipeline-cost-legend-core')).toBeVisible();

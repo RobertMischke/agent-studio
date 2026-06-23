@@ -122,6 +122,22 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(aspectRow?.textContent).toContain('claude-opus-4.8');
     expect(host.querySelector('[data-testid="pipeline-step-info-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-drag-aspect-requirement-fit"]')?.getAttribute('draggable')).toBe('true');
+    expect(host.querySelector('[data-testid="pipeline-step-prompt-open-aspect-requirement-fit"]')?.textContent).toContain('Prompt');
+    expect(aspectRow?.textContent).toContain('Label');
+    expect(aspectRow?.textContent).toContain('Setting');
+    expect(aspectRow?.textContent).toContain('Explanation');
+    expect(host.querySelector('[data-testid="pipeline-step-setting-run-aspect-requirement-fit"]')?.textContent).toContain('parallel after core-run');
+    expect(host.querySelector('[data-testid="pipeline-step-setting-active-aspect-requirement-fit"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-step-setting-model-aspect-requirement-fit"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-step-setting-prompt-aspect-requirement-fit"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-step-setting-gate-aspect-requirement-fit"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-step-setting-condition-aspect-requirement-fit"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-step-setting-retry-aspect-requirement-fit"]')?.textContent).toContain('Safe to retry');
+    expect(aspectRow?.textContent).not.toContain('Run:');
+    expect(aspectRow?.textContent).not.toContain('Model:');
+    expect(aspectRow?.textContent).not.toContain('Prompt:');
+    expect(aspectRow?.textContent).not.toContain('Gate:');
+    expect(aspectRow?.textContent).not.toContain('When:');
 
     // Core step is locked on; the aspect step exposes its enable toggle.
     expect(host.querySelector('[data-testid="pipeline-step-enabled-core-run"]')).toBeNull();
@@ -140,7 +156,7 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(host.querySelector('[data-testid="pipeline-cost-total"]')?.textContent).toContain('$0.83');
   });
 
-  it('emits openPrompts when Manage in Prompts is clicked', async () => {
+  it('emits openPrompts from the summary prompt chip and Manage in Prompts', async () => {
     await TestBed.configureTestingModule({
       imports: [ProjectPipelinePanelComponent],
       providers: [
@@ -162,11 +178,17 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     let opened = 0;
     fixture.componentInstance.openPrompts.subscribe(() => opened++);
 
+    const summaryPrompt = host(fixture).querySelector<HTMLButtonElement>(
+      '[data-testid="pipeline-step-prompt-open-aspect-requirement-fit"]',
+    );
+    summaryPrompt?.click();
+    expect(opened).toBe(1);
+
     const manage = host(fixture).querySelector<HTMLButtonElement>(
       '[data-testid="pipeline-step-prompt-manage-aspect-requirement-fit"]',
     );
     manage?.click();
-    expect(opened).toBe(1);
+    expect(opened).toBe(2);
   });
 });
 
