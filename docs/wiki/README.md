@@ -84,6 +84,8 @@ related-adrs: []
 
 Use `[[slug]]` to reference other problem entries. These are plain-text markers for grepping, not rendered links.
 
+- The runner spawns `claude.exe` directly as a child process.
+
 ### Scripts
 
 | Script | Purpose |
