@@ -1494,6 +1494,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// </summary>
     private void SafeKillReap(Process proc, ActiveJob entry)
     {
+        AgentStudio.Diagnostics.CliKillAudit.Trace(proc, $"SafeKillReap job={entry.JobId} cli={CliType}");
         try
         {
             proc.Kill(entireProcessTree: true);
@@ -1517,6 +1518,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
     private void KillProcessTree(Process process, string jobKey)
     {
+        AgentStudio.Diagnostics.CliKillAudit.Trace(process, $"KillProcessTree job={jobKey} cli={CliType}");
         try
         {
             process.Kill(entireProcessTree: true);

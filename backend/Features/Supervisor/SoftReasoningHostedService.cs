@@ -223,6 +223,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
         }
         catch (OperationCanceledException)
         {
+            AgentStudio.Diagnostics.CliKillAudit.Trace(p, "SoftReasoningHostedService:226 (entireProcessTree)");
             try { p.Kill(true); } catch (Exception __ex) { SilentCatch.Note(__ex, "SoftReasoningHostedService:229"); }
             return string.Empty;
         }

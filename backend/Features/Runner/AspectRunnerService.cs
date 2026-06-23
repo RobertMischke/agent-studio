@@ -509,6 +509,7 @@ public sealed class AspectRunnerService
         }
         catch (OperationCanceledException)
         {
+            AgentStudio.Diagnostics.CliKillAudit.Trace(p, "AspectRunnerService:512 (entireProcessTree)");
             try { p.Kill(true); } catch (Exception __ex) { SilentCatch.Note(__ex, "AspectRunnerService:513"); }
             return string.Empty;
         }

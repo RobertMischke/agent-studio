@@ -198,6 +198,7 @@ public sealed class ClaudeOneShot : ICliOneShot
                 : "cancelled";
             _logger.LogWarning("Claude one-shot {Reason} (source={Source}, job={Job})",
                 reason, request.Source ?? "(none)", request.JobId ?? "(none)");
+            AgentStudio.Diagnostics.CliKillAudit.Trace(p, "ClaudeOneShot:201 timeout/cancel (entireProcessTree)");
             try { p?.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "ClaudeOneShot: best-effort"); /* best-effort */ }
             var fail = CliOneShotResult.SpawnFailure(reason, requestedAt, completedAt);
             RecordIfRequested(request, fail);
@@ -213,6 +214,7 @@ public sealed class ClaudeOneShot : ICliOneShot
             _logger.LogError(ex,
                 "Claude one-shot crashed (source={Source}, job={Job}, exceptionType={ExceptionType}): {Raw}",
                 request.Source ?? "(none)", request.JobId ?? "(none)", ex.GetType().Name, ex.Message);
+            AgentStudio.Diagnostics.CliKillAudit.Trace(p, "ClaudeOneShot:216 crash (entireProcessTree)");
             try { p?.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "ClaudeOneShot:220"); }
             var fail = CliOneShotResult.SpawnFailure(ex.Message, requestedAt, completedAt);
             RecordIfRequested(request, fail);

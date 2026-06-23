@@ -4658,6 +4658,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
         catch (OperationCanceledException)
         {
+            AgentStudio.Diagnostics.CliKillAudit.Trace(p, "ReviewDecisionOrchestrator:4661 (entireProcessTree)");
             try { p.Kill(true); } catch (Exception __ex) { SilentCatch.Note(__ex, "ReviewDecisionOrchestrator:4650"); }
             return string.Empty;
         }
