@@ -315,7 +315,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             var heartbeat = new ClaudeSessionHeartbeat(
                 sessionId,
                 info.WorkingDirectory,
-                onActivity: () => RaiseRunEvent(jobKey, new CliRunEvent.Heartbeat { TaskKey = jobKey }),
+                onActivity: () => RaiseRunEvent(jobKey, new CliRunEvent.Heartbeat { RunId = jobKey }),
                 logger: _logger,
                 configDir: info.CleanContext?.TempHome);
             info.SessionLiveness = heartbeat;

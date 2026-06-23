@@ -779,7 +779,7 @@ cliRouter.OnFinished += (cliType, jobId, exec) =>
 // the same job identifier as cliOutput so the frontend correlates identically.
 cliRouter.OnRunEvent += (cliType, jobId, evt) =>
 {
-    if (evt is AgentStudio.Cli.CliRunEvent.PlanUpdated)
+    if (evt is CliRunEvent.PlanUpdated)
         hubContext.Clients.All.SendAsync("planUpdated", jobId, cliType);
 };
 

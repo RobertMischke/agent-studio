@@ -48,6 +48,15 @@
     <Using Include="CodingAgentRunner.Model.CliModelInfo" Alias="CliModelInfo" />
     <Using Include="CodingAgentRunner.Model.CliModelCatalog" Alias="CliModelCatalog" />
     <Using Include="CodingAgentRunner.Model.RunStopReason" Alias="RunStopReason" />
+    <Using Include="CodingAgentRunner.Events.CliRunEvent" Alias="CliRunEvent" />
+    <Using Include="CodingAgentRunner.Events.RunPhase" Alias="RunPhase" />
+    <Using Include="CodingAgentRunner.Events.RunPhaseTransitions" Alias="RunPhaseTransitions" />
+    <Using Include="CodingAgentRunner.Events.PlanFrameItem" Alias="PlanFrameItem" />
+    <Using Include="CodingAgentRunner.Events.PlanItemId" Alias="PlanItemId" />
+    <Using Include="CodingAgentRunner.Events.PlanItemStatus" Alias="PlanItemStatus" />
+    <Using Include="CodingAgentRunner.Adapters.ClaudeEventAdapter" Alias="ClaudeEventAdapter" />
+    <Using Include="CodingAgentRunner.Adapters.CodexEventAdapter" Alias="CodexEventAdapter" />
+    <Using Include="CodingAgentRunner.Adapters.GeminiEventAdapter" Alias="GeminiEventAdapter" />
   </ItemGroup>
 
   <ItemGroup>

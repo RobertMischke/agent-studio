@@ -180,10 +180,10 @@ public interface ICliExecutionService
     /// <summary>
     /// Typed lifecycle events (ADR-0013). Subclasses with an adapter
     /// raise these alongside <see cref="OnOutput"/>; subclasses without
-    /// one only fire <see cref="Cli.CliRunEvent.RunStarted"/> and
-    /// <see cref="Cli.CliRunEvent.ProcessExited"/> (both come from the
+    /// one only fire <see cref="CliRunEvent.RunStarted"/> and
+    /// <see cref="CliRunEvent.ProcessExited"/> (both come from the
     /// base spawn / monitor flow). The runner uses these to drive the
     /// phase-aware watchdog.
     /// </summary>
-    event Action<string, Cli.CliRunEvent>? OnRunEvent;
+    event Action<string, CliRunEvent>? OnRunEvent;
 }

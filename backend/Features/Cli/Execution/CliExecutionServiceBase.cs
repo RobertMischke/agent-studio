@@ -499,7 +499,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         // ADR-0013: typed event channel. Subclasses with an adapter raise
         // their own events from the read loop; the base class always
         // raises RunStarted so the runner's phase tracker can initialize.
-        RaiseRunEvent(jobKey, new CliRunEvent.RunStarted(process.Id, CliType, invocationModel) { TaskKey = jobKey });
+        RaiseRunEvent(jobKey, new CliRunEvent.RunStarted(process.Id, CliType, invocationModel) { RunId = jobKey });
 
         // ADR-0030 follow-up: arm a stdout-independent liveness watcher so a
         // run whose stdout pipe is block-buffered (the Node-on-Windows
@@ -1114,9 +1114,9 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             // exit was a deliberate Stop) so the runner's phase tracker
             // sees the terminal state on the typed channel too.
             if (info.StopReason != RunStopReason.None)
-                RaiseRunEvent(jobKey, new CliRunEvent.Killed(info.StopReason.ToString()) { TaskKey = jobKey });
+                RaiseRunEvent(jobKey, new CliRunEvent.Killed(info.StopReason.ToString()) { RunId = jobKey });
             else
-                RaiseRunEvent(jobKey, new CliRunEvent.ProcessExited(exitCode, status, duration) { TaskKey = jobKey });
+                RaiseRunEvent(jobKey, new CliRunEvent.ProcessExited(exitCode, status, duration) { RunId = jobKey });
 
             try { OnFinished?.Invoke(jobKey, finalExecution); }
             catch (Exception ex) { _logger.LogWarning(ex, "OnFinished subscriber threw for {JobId}", jobKey); }

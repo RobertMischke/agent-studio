@@ -209,7 +209,7 @@ public class CopilotCliService : ICliExecutionService
         // Copilot does not yet have a content-level adapter (its TUI/PTY
         // shape needs screen-scraping heuristics; the runner falls back
         // to the legacy silence-only watchdog for content phases).
-        try { OnRunEvent?.Invoke(jobKey, new CliRunEvent.RunStarted(process.Id, "copilot", model) { TaskKey = jobKey }); }
+        try { OnRunEvent?.Invoke(jobKey, new CliRunEvent.RunStarted(process.Id, "copilot", model) { RunId = jobKey }); }
         catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent threw on Copilot RunStarted for {JobId}", jobKey); }
         _logger.LogInformation("Started Copilot CLI for job {JobId} (PID {Pid}) in {Cwd}", jobId, process.Id, workingDirectory);
 
@@ -545,8 +545,8 @@ public class CopilotCliService : ICliExecutionService
         try
         {
             CliRunEvent terminal = info.StopReason != RunStopReason.None
-                ? new CliRunEvent.Killed(info.StopReason.ToString()) { TaskKey = jobKey }
-                : new CliRunEvent.ProcessExited(exitCode, status, duration) { TaskKey = jobKey };
+                ? new CliRunEvent.Killed(info.StopReason.ToString()) { RunId = jobKey }
+                : new CliRunEvent.ProcessExited(exitCode, status, duration) { RunId = jobKey };
             OnRunEvent?.Invoke(jobKey, terminal);
         }
         catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent threw on Copilot terminal for {JobId}", jobKey); }
