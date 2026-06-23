@@ -375,7 +375,7 @@ public class CliSpawnIntegrationTests
             Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.ClaudeCliService>.Instance,
             cfg);
 
-        var lines = new List<AgentStudio.Shared.CliOutputLine>();
+        var lines = new List<CliOutputLine>();
         svc.OnOutput += (_, line) => { lock (lines) lines.Add(line); };
 
         var jobId = $"it-{Guid.NewGuid():N}";

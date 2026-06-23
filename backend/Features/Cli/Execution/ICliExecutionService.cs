@@ -60,7 +60,7 @@ public interface ICliExecutionService
     /// <c>status = "failed", exitCode = -1</c> the legacy implementation
     /// produced. Returns false when no process is tracked under that key.
     /// </summary>
-    bool Stop(string jobKey, AgentStudio.Shared.RunStopReason reason = AgentStudio.Shared.RunStopReason.UserStop);
+    bool Stop(string jobKey, RunStopReason reason = RunStopReason.UserStop);
     bool SendInput(string jobKey, string input);
 
     List<CliOutputLine> GetOutput(string jobKey);

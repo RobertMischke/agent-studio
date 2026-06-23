@@ -223,7 +223,7 @@ public class CopilotCliService : ICliExecutionService
         return (execution, null);
     }
 
-    public bool Stop(string jobKey, AgentStudio.Shared.RunStopReason reason = AgentStudio.Shared.RunStopReason.UserStop)
+    public bool Stop(string jobKey, RunStopReason reason = RunStopReason.UserStop)
     {
         if (!_processes.TryGetValue(jobKey, out var info)) return false;
 
@@ -507,7 +507,7 @@ public class CopilotCliService : ICliExecutionService
         }
         catch (OperationCanceledException)
         {
-            Stop(jobKey, AgentStudio.Shared.RunStopReason.Cancelled);
+            Stop(jobKey, RunStopReason.Cancelled);
         }
 
         var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
@@ -544,7 +544,7 @@ public class CopilotCliService : ICliExecutionService
         // runs too.
         try
         {
-            CliRunEvent terminal = info.StopReason != AgentStudio.Shared.RunStopReason.None
+            CliRunEvent terminal = info.StopReason != RunStopReason.None
                 ? new CliRunEvent.Killed(info.StopReason.ToString()) { TaskKey = jobKey }
                 : new CliRunEvent.ProcessExited(exitCode, status, duration) { TaskKey = jobKey };
             OnRunEvent?.Invoke(jobKey, terminal);
@@ -881,7 +881,7 @@ public class CopilotCliService : ICliExecutionService
         public DateTime LastStreamedAt { get; set; }
         public AgentStudio.Shared.WatchdogState LastWatchdogState { get; set; } = AgentStudio.Shared.WatchdogState.Healthy;
         /// <summary>See <c>CliExecutionServiceBase.ProcInfo.StopReason</c> for the rationale.</summary>
-        public AgentStudio.Shared.RunStopReason StopReason { get; set; } = AgentStudio.Shared.RunStopReason.None;
+        public RunStopReason StopReason { get; set; } = RunStopReason.None;
         /// <summary>Resolved platform permission mode for the run (ASS-1739 / T1a).</summary>
         public string? PermissionMode { get; set; }
         /// <summary>Effective context mode for the run (T1b / ASS-1742). Always shared for Copilot.</summary>

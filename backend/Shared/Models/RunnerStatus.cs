@@ -257,9 +257,4 @@ public record ProjectRunnerStatus
     public string? LastPickReason { get; init; }
 }
 
-public record CliOutputLine
-{
-    public DateTime Timestamp { get; init; }
-    public string Stream { get; init; } = "stdout";  // stdout | stderr
-    public string Text { get; init; } = "";
-}
+// CliOutputLine now comes from the CodingAgentRunner package (aliased in the csproj).

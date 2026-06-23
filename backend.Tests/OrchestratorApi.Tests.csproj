@@ -38,6 +38,10 @@
     <Using Include="CodingAgentRunner.Model.CliPermissionFlags" Alias="CliPermissionFlags" />
     <Using Include="CodingAgentRunner.Model.CliContextModes" Alias="CliContextModes" />
     <Using Include="CodingAgentRunner.Model.CliThinkingLevels" Alias="CliThinkingLevels" />
+    <Using Include="CodingAgentRunner.Model.CliOutputLine" Alias="CliOutputLine" />
+    <Using Include="CodingAgentRunner.Model.CliModelInfo" Alias="CliModelInfo" />
+    <Using Include="CodingAgentRunner.Model.CliModelCatalog" Alias="CliModelCatalog" />
+    <Using Include="CodingAgentRunner.Model.RunStopReason" Alias="RunStopReason" />
   </ItemGroup>
 
   <ItemGroup>

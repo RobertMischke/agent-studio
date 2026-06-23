@@ -46,9 +46,9 @@ public static class TaskRunnerEndpoints
             // fall back to UserStop rather than rejecting the request.
             var parsed = (reason ?? "user").Trim().ToLowerInvariant() switch
             {
-                "followup" or "followup-pause" => AgentStudio.Shared.RunStopReason.FollowupPause,
-                "watchdog" => AgentStudio.Shared.RunStopReason.Watchdog,
-                _ => AgentStudio.Shared.RunStopReason.UserStop
+                "followup" or "followup-pause" => RunStopReason.FollowupPause,
+                "watchdog" => RunStopReason.Watchdog,
+                _ => RunStopReason.UserStop
             };
             var success = runner.StopJob(jobId, watchPath, parsed);
             return success ? Results.Ok() : Results.NotFound();
