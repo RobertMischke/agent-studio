@@ -1494,7 +1494,6 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// </summary>
     private void SafeKillReap(Process proc, ActiveJob entry)
     {
-        _logger.LogWarning("[KILL-TRACE] SafeKillReap PID {Pid} ({Cli})\n{Stack}", entry.ProcessId, CliType, Environment.StackTrace);
         try
         {
             proc.Kill(entireProcessTree: true);
@@ -1518,7 +1517,6 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
     private void KillProcessTree(Process process, string jobKey)
     {
-        _logger.LogWarning("[KILL-TRACE] KillProcessTree job {JobId} ({Cli})\n{Stack}", jobKey, CliType, Environment.StackTrace);
         try
         {
             process.Kill(entireProcessTree: true);

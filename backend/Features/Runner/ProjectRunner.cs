@@ -2481,44 +2481,13 @@ public class ProjectRunner
         // Use the same regex the analyzer uses, so detection here matches
         // the post-run path exactly. SentinelRegex is the published surface.
         // ROOT CAUSE FIX (2026-06-23): the live-stream sentinel scanner used to
-        // match SentinelRegex on EVERY raw output line. But the backend's own
-        // runner code, AGENTS.md, and docs/contracts/agent-task.md are FULL of
-        // [[TASK_DONE]] / [[TASK_BLOCKED]] literals - so any run that READ such a
-        // file (the file content rides the "user"/tool-result stream) tripped
-        // this scanner and was killed mid-work as a false "completion"
-        // (status=completed via SentinelDetected, no commit). Both claude AND
-        // codex were affected; standalone runs survived because nothing watches
-        // their output. See docs/wiki/concepts/runner-stability-incidents.html.
-        // Two guards: (1) only the AGENT's own stream can carry a terminal
-        // sentinel - mirror AgentOutcomeAnalyzer.JoinAgentText and drop
-        // system/user(tool-result)/orchestrator/stderr lines; (2) only a
-        // STANDALONE sentinel line counts (the line is essentially just the
-        // token + light markdown decoration), not a sentinel mentioned inside
-        // prose or quoted code. Missing a real terminal sentinel is harmless
-        // (the run finalizes when the CLI exits / the watchdog); a false
-        // positive kills live work, so we err toward NOT stopping.
-        var found = false;
-        for (var i = snapshot.Count - 1; i >= 0; i--)
-        {
-            var ln = snapshot[i];
-            var stream = ln?.Stream ?? string.Empty;
-            if (string.Equals(stream, "system", StringComparison.OrdinalIgnoreCase)) continue;
-            if (string.Equals(stream, "user", StringComparison.OrdinalIgnoreCase)) continue;
-            if (string.Equals(stream, "orchestrator", StringComparison.OrdinalIgnoreCase)) continue;
-            if (string.Equals(stream, "stderr", StringComparison.OrdinalIgnoreCase)) continue;
-            var text = (ln?.Text ?? string.Empty).Trim();
-            if (text.Length == 0) continue;
-            var m = AgentOutcomeAnalyzer.SentinelRegex.Match(text);
-            // Standalone: the sentinel token (incl. its optional reason) is
-            // essentially the whole line; allow a little markdown/quote
-            // decoration (**, > , - , backticks).
-            if (m.Success && text.Length <= m.Length + 8)
-            {
-                found = true;
-                break;
-            }
-        }
-        if (!found) return;
+        // match SentinelRegex on EVERY raw output line, so a run that merely READ
+        // a file containing a [[TASK_DONE]] literal (the backend's own runner
+        // code, AGENTS.md, and docs/contracts/agent-task.md are full of them - the
+        // file content rides the "user"/tool-result stream) was killed mid-work as
+        // a false "completion". The decision now lives in the tested pure helper
+        // LiveSentinelScanner: agent-stream only + standalone sentinel line.
+        if (!LiveSentinelScanner.HasStandaloneAgentSentinel(snapshot)) return;
 
         _logger.LogInformation(
             "TurnCompleted with sentinel for {TaskKey}; killing lingering {Cli} process so OnCliFinished can run.",
