@@ -41,7 +41,8 @@ describe('ProjectPipelinePanelComponent (smoke)', () => {
  * state survives). Asserts: a phase group renders; a configurable aspect step
  * exposes its enable toggle while a core step is locked "always on"; the prompt
  * cell shows the registry template reference plus the legacy inline-override
- * Clear affordance; and the per-kind cost legend + total render.
+ * Clear affordance; and each step renders its 90-day token sum (no bottom
+ * total).
  */
 describe('ProjectPipelinePanelComponent (render)', () => {
   function catalogue(): PipelineCatalogueStep[] {
@@ -78,17 +79,21 @@ describe('ProjectPipelinePanelComponent (render)', () => {
   function fakeCost(): ProjectPipelineCostTimeline {
     const days = ['2026-06-08', '2026-06-09', '2026-06-10'];
     return {
-      project: 'demo', days, windowDays: 30,
+      project: 'demo', days, windowDays: 90,
       kinds: [
         { kind: 'core', totalTokens: 300_000, totalCostUsd: 0.75, anyModelUnknown: false, cells: [] },
         { kind: 'aspect', totalTokens: 80_000, totalCostUsd: 0.08, anyModelUnknown: true, cells: [] },
+      ],
+      steps: [
+        { stepId: 'aspect-requirement-fit', kind: 'aspect', totalTokens: 80_000, totalCostUsd: 0.08, anyModelUnknown: true },
+        { stepId: 'core-run', kind: 'core', totalTokens: 300_000, totalCostUsd: 0.75, anyModelUnknown: false },
       ],
       totalTokens: 380_000, totalCostUsd: 0.83, anyModelUnknown: true,
       taskCount: 4, hasData: true, fetchedAt: '2026-06-10T00:00:00Z',
     };
   }
 
-  it('renders groups, the prompt binding cell, and the cost legend', async () => {
+  it('renders groups, the prompt binding cell, and per-step token sums', async () => {
     await TestBed.configureTestingModule({
       imports: [ProjectPipelinePanelComponent],
       providers: [
@@ -149,11 +154,15 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(host.querySelector('[data-testid="pipeline-step-prompt-clear-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-prompt-manage-aspect-requirement-fit"]')).toBeTruthy();
 
-    // Cost legend: per-kind rows + total, with the unknown-price star.
-    expect(host.querySelector('[data-testid="pipeline-cost-empty"]')).toBeNull();
-    expect(host.querySelector('[data-testid="pipeline-cost-legend-core"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="pipeline-cost-legend-aspect"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="pipeline-cost-total"]')?.textContent).toContain('$0.83');
+    // Per-step token sum: the aspect step shows its 90-day token total with the
+    // unknown-price star; the core step shows its own sum. No bottom total.
+    const aspectTokens = host.querySelector('[data-testid="pipeline-step-tokens-aspect-requirement-fit"]');
+    expect(aspectTokens?.textContent).toContain('80.0k');
+    expect(aspectTokens?.textContent).toContain('*');
+    expect(host.querySelector('[data-testid="pipeline-step-tokens-core-run"]')?.textContent).toContain('300.0k');
+    expect(host.querySelector('[data-testid="pipeline-step-setting-tokens-aspect-requirement-fit"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-cost"]')).toBeNull();
+    expect(host.querySelector('[data-testid="pipeline-cost-total"]')).toBeNull();
   });
 
   it('emits openPrompts from the summary prompt chip and Manage in Prompts', async () => {

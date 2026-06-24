@@ -1,6 +1,17 @@
 :host { display: block; }
 
 .pp {
+  /**
+   * One control height + one chip radius shared by every interactive and
+   * read-only element in the panel, so chips, toggles, selects, inputs, the
+   * drag handle, and the model selector all line up at the same size. The
+   * row height is one consistent step taller so a control never touches the
+   * row edge.
+   */
+  --pp-control-h: var(--studio-card-pill-height);
+  --pp-row-min: var(--pp-row-min);
+  --pp-chip-radius: var(--pp-chip-radius);
+
   display: flex;
   flex-direction: column;
   gap: var(--studio-spacing-3);
@@ -71,7 +82,7 @@
   display: flex;
   align-items: center;
   gap: var(--studio-spacing-2);
-  min-height: var(--studio-card-pill-height);
+  min-height: var(--pp-control-h);
   cursor: pointer;
   user-select: none;
 }
@@ -153,21 +164,32 @@
   grid-template-columns: auto minmax(14rem, 0.95fr) minmax(0, 2.05fr) auto;
   align-items: center;
   column-gap: var(--studio-spacing-2);
-  min-height: calc(var(--studio-card-pill-height) + var(--studio-spacing-3));
+  min-height: var(--pp-row-min);
   padding: var(--studio-card-compact-padding-block) var(--studio-card-compact-padding-inline);
   cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.pp__summary:hover {
+  background: var(--studio-bg-hover);
+}
+
+/* When open, separate the summary from its details with the same hairline the
+   settings rows use, so the expanded body reads as one calm block. */
+.pp__row[open] > .pp__summary {
+  border-bottom: 1px solid color-mix(in srgb, var(--studio-card-muted-border) 55%, transparent);
 }
 
 .pp__drag {
   appearance: none;
-  width: var(--studio-card-pill-height);
-  height: var(--studio-card-pill-height);
+  width: var(--pp-control-h);
+  height: var(--pp-control-h);
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--studio-card-muted-border);
-  border-radius: calc(var(--studio-card-compact-radius) - var(--studio-spacing-1));
+  border-radius: var(--pp-chip-radius);
   background: var(--studio-card-muted-bg);
   color: var(--studio-fg-muted);
   cursor: grab;
@@ -204,10 +226,10 @@
 .pp__prompt-ref,
 .pp__prompt-inline,
 .pp__link {
-  min-height: var(--studio-card-pill-height);
+  min-height: var(--pp-control-h);
   display: inline-flex;
   align-items: center;
-  border-radius: calc(var(--studio-card-compact-radius) - var(--studio-spacing-1));
+  border-radius: var(--pp-chip-radius);
   font-size: var(--studio-card-meta-size);
   line-height: 1;
   white-space: nowrap;
@@ -224,8 +246,8 @@
 }
 
 .pp__info {
-  width: var(--studio-card-pill-height);
-  height: var(--studio-card-pill-height);
+  width: var(--pp-control-h);
+  height: var(--pp-control-h);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -276,6 +298,29 @@
   color: var(--studio-fg-dim);
 }
 
+/* Per-step 90-day token sum. Tinted in the step's own colour so the cost
+   feel reads at a glance; the empty variant stays muted and consistent in
+   size so every row keeps the same rhythm. */
+.pp__chip--tokens {
+  border-color: color-mix(in srgb, var(--pipeline-step-color) 30%, var(--studio-card-muted-border));
+  background: color-mix(in srgb, var(--pipeline-step-color) 10%, var(--studio-card-muted-bg));
+  color: var(--studio-fg-strong);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.pp__chip--tokens-empty {
+  border-color: var(--studio-card-muted-border);
+  background: var(--studio-card-muted-bg);
+  color: var(--studio-fg-dim);
+  font-weight: 500;
+}
+
+.pp__chip-unit {
+  color: var(--studio-fg-muted);
+  font-weight: 500;
+}
+
 .pp__chip--action {
   appearance: none;
   font: inherit;
@@ -299,7 +344,6 @@
   flex-direction: column;
   gap: var(--studio-spacing-2);
   padding: var(--studio-spacing-2) var(--studio-card-compact-padding-inline) var(--studio-card-compact-padding-block);
-  border-top: 1px solid var(--studio-card-muted-border);
   background: color-mix(in srgb, var(--studio-card-muted-bg) 64%, transparent);
 }
 
@@ -310,15 +354,13 @@
   line-height: 1.35;
 }
 
+/* Filigree settings list: no nested card box, just a light header label row
+   and hairline separators so the controls — not the chrome — carry the eye. */
 .pp__settings {
   --pp-settings-columns: minmax(7rem, 0.58fr) minmax(12rem, 0.95fr) minmax(18rem, 1.45fr);
 
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--studio-card-muted-border);
-  border-radius: var(--studio-card-compact-radius);
-  background: var(--studio-card-bg);
-  overflow: clip;
 }
 
 .pp__settings-head,
@@ -326,21 +368,21 @@
   display: grid;
   grid-template-columns: var(--pp-settings-columns);
   align-items: center;
+  column-gap: var(--studio-spacing-2);
 }
 
 .pp__settings-head {
-  min-height: var(--studio-card-pill-height);
-  background: var(--studio-card-muted-bg);
+  min-height: var(--pp-control-h);
   color: var(--studio-fg-dim);
   font-size: var(--studio-card-meta-size);
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .pp__settings-row {
-  min-height: calc(var(--studio-card-pill-height) + var(--studio-spacing-3));
-  border-top: 1px solid var(--studio-card-muted-border);
+  min-height: var(--pp-row-min);
+  border-top: 1px solid color-mix(in srgb, var(--studio-card-muted-border) 55%, transparent);
 }
 
 .pp__settings-head > span,
@@ -348,7 +390,7 @@
 .pp__settings-value,
 .pp__settings-note {
   min-width: 0;
-  padding: var(--studio-spacing-2);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
 }
 
 .pp__settings-label {
@@ -375,13 +417,13 @@
 }
 
 .pp__setting-readonly {
-  min-height: var(--studio-card-pill-height);
+  min-height: var(--pp-control-h);
   display: inline-flex;
   align-items: center;
   max-width: 100%;
   padding: 0 var(--studio-card-pill-padding-x);
   border: 1px solid var(--studio-card-muted-border);
-  border-radius: calc(var(--studio-card-compact-radius) - var(--studio-spacing-1));
+  border-radius: var(--pp-chip-radius);
   background: var(--studio-card-muted-bg);
   color: var(--studio-fg-muted);
   font-size: var(--studio-card-meta-size);
@@ -415,11 +457,11 @@
 .pp__select,
 .pp__input {
   width: 100%;
-  min-height: var(--studio-card-pill-height);
+  min-height: var(--pp-control-h);
   padding: 0 var(--studio-card-pill-padding-x);
   background: var(--studio-card-muted-bg);
   border: 1px solid var(--studio-card-muted-border);
-  border-radius: calc(var(--studio-card-compact-radius) - var(--studio-spacing-1));
+  border-radius: var(--pp-chip-radius);
   color: var(--studio-fg);
   font: inherit;
   font-size: var(--studio-card-meta-size);
@@ -431,14 +473,20 @@
   cursor: default;
 }
 
-.pp__input { margin-top: calc(var(--studio-spacing-1) / 2); }
+/* The condition value input stacks under its select; the value cell becomes a
+   flex column with the shared row gap, so no per-element margin offset is
+   needed and the two controls keep the same width. */
+.pp__settings-value:has(.pp__input) {
+  flex-direction: column;
+  align-items: stretch;
+}
 
 .pp__prompt {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--studio-spacing-1);
-  min-height: var(--studio-card-pill-height);
+  min-height: var(--pp-control-h);
 }
 
 .pp__prompt-ref {
@@ -489,59 +537,7 @@
 .pp__link--manage { color: var(--studio-fg-muted); }
 .pp__link--manage:hover { color: var(--studio-fg-strong); }
 
-.pp__cost {
-  display: flex;
-  flex-direction: column;
-  gap: var(--studio-spacing-2);
-  padding-top: var(--studio-spacing-3);
-  border-top: 1px solid var(--studio-card-muted-border);
-}
-
-.pp__cost-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--studio-spacing-1) var(--studio-spacing-2);
-  align-items: center;
-}
-
-.pp__cost-item {
-  --pipeline-step-color: var(--studio-fg-muted);
-
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--studio-spacing-1);
-  min-height: var(--studio-card-pill-height);
-  padding: 0 var(--studio-card-pill-padding-x);
-  border: 1px solid color-mix(in srgb, var(--pipeline-step-color) 22%, var(--studio-card-muted-border));
-  border-radius: calc(var(--studio-card-compact-radius) - var(--studio-spacing-1));
-  background: var(--studio-card-muted-bg);
-  font-size: var(--studio-card-meta-size);
-}
-
-.pp__cost-item[data-kind='core'] { --pipeline-step-color: var(--severity-info); }
-.pp__cost-item[data-kind='aspect'] { --pipeline-step-color: var(--severity-pass); }
-.pp__cost-item[data-kind='tool'] { --pipeline-step-color: var(--studio-accent-strong); }
-.pp__cost-item[data-kind='orchestrator'] { --pipeline-step-color: var(--severity-pending); }
-.pp__cost-item[data-kind='drift'] { --pipeline-step-color: var(--studio-accent-teal); }
-.pp__cost-item[data-kind='module'] { --pipeline-step-color: var(--lane-progress); }
-
-.pp__cost-item--total {
-  margin-left: auto;
-  border-color: var(--studio-card-border);
-  font-weight: 600;
-}
-
-.pp__cost-swatch {
-  width: calc(var(--studio-card-meta-size) - 2px);
-  height: calc(var(--studio-card-meta-size) - 2px);
-  border-radius: 2px;
-  align-self: center;
-  background: var(--pipeline-step-color);
-}
-
-.pp__cost-label { color: var(--studio-fg-muted); }
-.pp__cost-value { color: var(--studio-fg); font-variant-numeric: tabular-nums; }
-.pp__cost-tokens { color: var(--studio-fg-muted); font-size: var(--studio-card-meta-size); font-variant-numeric: tabular-nums; }
+/* Lower-bound marker shown next to a token sum whose price table had a gap. */
 .pp__cost-star { color: var(--studio-accent-strong); cursor: help; }
 
 @media (max-width: 1120px) {
@@ -584,6 +580,4 @@
   .pp__settings-note {
     padding-top: 0;
   }
-
-  .pp__cost-item--total { margin-left: 0; }
 }

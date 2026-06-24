@@ -2,7 +2,8 @@
   <header class="pp__head">
     <h2 class="pp__title">Pipeline</h2>
     <p class="pp__sub">
-      Compact per-project order, agent, prompt binding, and gates. Prompt
+      Compact per-project order, agent, prompt binding, and gates. Each step
+      shows its token spend over the last {{ tokenWindowDays }} days. Prompt
       <em>content</em> lives in Prompts; changes apply to the next run.
     </p>
   </header>
@@ -66,6 +67,16 @@
                   <span class="pp__state" [class.pp__state--off]="!step.enabled">
                     {{ step.canDisable ? (step.enabled ? 'On' : 'Off') : 'always on' }}
                   </span>
+                  <span class="pp__chip pp__chip--tokens"
+                        [class.pp__chip--tokens-empty]="step.tokenSum === null"
+                        [attr.data-testid]="'pipeline-step-tokens-' + step.id"
+                        [appTooltip]="stepTokenTooltip(step)">
+                    @if (step.tokenSum !== null) {
+                      {{ formatTokens(step.tokenSum) }}<span class="pp__chip-unit">&nbsp;tok</span>@if (step.tokenUnknown) {<span class="pp__cost-star">*</span>}
+                    } @else {
+                      <span class="pp__chip-unit">no tokens</span>
+                    }
+                  </span>
                   @if (step.usesModel) {
                     <span class="pp__chip"
                           [appTooltip]="'Effective model: ' + modelSummary(step) + ' (' + modelSourceLabel(step.effectiveModelSource) + ')'">
@@ -112,6 +123,20 @@
                       <span class="pp__setting-readonly">{{ runSetting(step) }}</span>
                     </span>
                     <span class="pp__settings-note" role="cell">{{ runExplanation(step) }}</span>
+                  </div>
+
+                  <div class="pp__settings-row"
+                       role="row"
+                       [attr.data-testid]="'pipeline-step-setting-tokens-' + step.id">
+                    <span class="pp__settings-label" role="cell">Tokens · {{ tokenWindowDays }}d</span>
+                    <span class="pp__settings-value" role="cell">
+                      <span class="pp__setting-readonly" [appTooltip]="stepTokenTooltip(step)">
+                        {{ stepTokenLabel(step) }}@if (step.tokenUnknown) {<span class="pp__cost-star">*</span>}
+                      </span>
+                    </span>
+                    <span class="pp__settings-note" role="cell">
+                      Tokens this step has spent across every task run in the last {{ tokenWindowDays }} days.
+                    </span>
                   </div>
 
                   <div class="pp__settings-row"
@@ -283,37 +308,5 @@
         </div>
       </details>
     }
-
-    <section class="pp__cost" data-testid="pipeline-cost" aria-label="Pipeline cost by step kind">
-      <h3 class="pp__group-title"
-          [appTooltip]="'Per-step-kind token + cost over the last 30 days, folded from every task pipeline run. Cost is theoretical (per-model price table); CLI subscriptions make the real bill zero.'">
-        Cost &amp; tokens · last 30 days
-      </h3>
-      @if (!pipelineCost()?.hasData) {
-        <p class="pp__empty" data-testid="pipeline-cost-empty">
-          No pipeline step telemetry recorded in this window yet.
-        </p>
-      } @else {
-        <div class="pp__cost-legend">
-          @for (row of costLegend(); track row.kind) {
-            <span class="pp__cost-item"
-                  [attr.data-kind]="row.kind"
-                  [attr.data-testid]="'pipeline-cost-legend-' + row.kind">
-              <span class="pp__cost-swatch" [attr.data-kind]="row.kind" aria-hidden="true"></span>
-              <span class="pp__cost-label">{{ row.label }}</span>
-              <span class="pp__cost-value">{{ formatCost(row.cost) }}@if (row.anyUnknown) {<span
-                    class="pp__cost-star"
-                    [appTooltip]="'Some steps used a model with no price on file; cost is a lower bound.'">*</span>}</span>
-              <span class="pp__cost-tokens">{{ formatTokens(row.tokens) }}</span>
-            </span>
-          }
-          <span class="pp__cost-item pp__cost-item--total" data-testid="pipeline-cost-total">
-            <span class="pp__cost-label">Total</span>
-            <span class="pp__cost-value">{{ formatCost(pipelineCost()!.totalCostUsd) }}</span>
-            <span class="pp__cost-tokens">{{ formatTokens(pipelineCost()!.totalTokens) }}</span>
-          </span>
-        </div>
-      }
-    </section>
   }
 </section>

@@ -12,7 +12,7 @@ import { api } from '../helpers/api';
  * activation + ordering, the per-step model picker, the prompt *binding*
  * reference to the Prompts registry (content lives there, never inline here)
  * plus the legacy inline-override escape hatch, the gate / run-condition
- * controls, and the cost-by-step-kind rollup. Pure reads + route mocks, so it
+ * controls, and each step's 90-day token sum. Pure reads + route mocks, so it
  * is safe against the shared stack; the captured shots are labelled --mocked
  * because the panel data is mocked (the component + SCSS are the real build).
  */
@@ -57,8 +57,16 @@ function fakeCost(project: string) {
   const k = (kind: string, tokens: number, cost: number, unknown = false) =>
     ({ kind, totalTokens: tokens, totalCostUsd: cost, anyModelUnknown: unknown, cells: [] });
   const kinds = [k('core', 480000, 1.44), k('aspect', 96000, 0.31), k('tool', 21000, 0.011, true)];
+  const s = (stepId: string, kind: string, tokens: number, cost: number, unknown = false) =>
+    ({ stepId, kind, totalTokens: tokens, totalCostUsd: cost, anyModelUnknown: unknown });
+  const steps = [
+    s('core-run', 'core', 480000, 1.44),
+    s('aspect-code-quality', 'aspect', 64000, 0.21),
+    s('aspect-requirement-fit', 'aspect', 32000, 0.10),
+    s('pre-context-scan', 'tool', 21000, 0.011, true),
+  ];
   return {
-    project, days: [], windowDays: 30, kinds,
+    project, days: [], windowDays: 90, kinds, steps,
     totalTokens: 597000, totalCostUsd: 1.761, anyModelUnknown: true,
     taskCount: 7, hasData: true, fetchedAt: '2026-06-10T00:00:00Z',
   };
@@ -76,7 +84,7 @@ test.beforeAll(async () => {
   projectSlug = slugFor(projectName);
 });
 
-test('pipeline page: reworked panel shows steps, models, prompt bindings, cost', async ({ page }) => {
+test('pipeline page: reworked panel shows steps, models, prompt bindings, per-step tokens', async ({ page }) => {
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
   await page.route('**/api/projects/pipeline-catalogue**', r => r.fulfill(json(CATALOGUE)));
@@ -84,7 +92,7 @@ test('pipeline page: reworked panel shows steps, models, prompt bindings, cost',
   await page.route('**/token-usage/pipeline-cost*', r => r.fulfill(json(fakeCost(projectName))));
 
   // Tall viewport so the shell's inner scroll area shows the whole panel
-  // (every phase group + the cost rollup) in one shot.
+  // (every phase group, each with its per-step token chips) in one shot.
   await page.setViewportSize({ width: 1440, height: 2400 });
 
   await page.goto(`/#/projects/${projectSlug}/pipeline`);
@@ -108,9 +116,11 @@ test('pipeline page: reworked panel shows steps, models, prompt bindings, cost',
   // The inline-override step exposes its clear-to-registry escape hatch.
   await page.getByTestId('pipeline-step-row-aspect-security').evaluate(el => { (el as HTMLDetailsElement).open = true; });
   await expect(page.getByTestId('pipeline-step-prompt-clear-aspect-security')).toBeVisible();
-  // Cost-by-step-kind rollup from the mocked window.
-  await expect(page.getByTestId('pipeline-cost-legend-core')).toBeVisible();
-  await expect(page.getByTestId('pipeline-cost-total')).toBeVisible();
+  // Per-step token sum from the mocked window, on each row; no bottom total.
+  await expect(page.getByTestId('pipeline-step-tokens-core-run')).toContainText('480.0k');
+  await expect(page.getByTestId('pipeline-step-tokens-aspect-code-quality')).toContainText('64.0k');
+  await expect(page.getByTestId('pipeline-cost')).toHaveCount(0);
+  await expect(page.getByTestId('pipeline-cost-total')).toHaveCount(0);
 
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-full--mocked.png'), fullPage: true });
   await section.screenshot({ path: path.join(SCREENSHOT_DIR, 'pipeline-page-section--mocked.png') });

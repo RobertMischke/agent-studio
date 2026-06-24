@@ -5,7 +5,6 @@
  * touches Angular — it operates on the catalogue + order arrays directly.
  */
 import type { PipelineCatalogueStep } from '../../../task-pipeline';
-import type { PipelineStepKindKey } from '../../../project-token-usage';
 
 /** Gate-mode choices for steps that expose a warn/fail gate (lint, decision). */
 export const PIPELINE_GATE_MODES: readonly { id: string; label: string }[] = [
@@ -33,6 +32,9 @@ export const PIPELINE_CONDITIONS: readonly { id: string; label: string; needsVal
 
 /** Condition tokens that require a free-text value entered next to the select. */
 export const PIPELINE_CONDITION_VALUE_TOKENS: readonly string[] = ['task-type', 'tag'];
+
+/** Window (days) for the per-step token sum shown on each pipeline row. */
+export const PIPELINE_TOKEN_WINDOW_DAYS = 90;
 
 /** One row per configurable step: catalogue metadata joined with the override. */
 export interface PipelineAdminRow {
@@ -68,6 +70,10 @@ export interface PipelineAdminRow {
   conditionNeedsValue: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  /** Token sum this step spent in the window, or null when none was recorded. */
+  tokenSum: number | null;
+  /** True when the step's token sum included a model with no price on file. */
+  tokenUnknown: boolean;
 }
 
 /** One pre/core/post phase grouping for the grid. */
@@ -75,28 +81,6 @@ export interface PipelineGroup {
   phase: string;
   label: string;
   rows: PipelineAdminRow[];
-}
-
-/** One step-kind window rollup for the cost legend. */
-export interface PipelineKindLegendRow {
-  kind: PipelineStepKindKey;
-  label: string;
-  tokens: number;
-  cost: number;
-  anyUnknown: boolean;
-}
-
-const PIPELINE_KIND_LABELS: Record<PipelineStepKindKey, string> = {
-  core: 'Core agent work',
-  aspect: 'Aspects',
-  tool: 'Tool steps',
-  orchestrator: 'Orchestrator',
-  drift: 'Drift',
-  module: 'Modules',
-};
-
-export function kindLabel(kind: PipelineStepKindKey): string {
-  return PIPELINE_KIND_LABELS[kind] ?? kind;
 }
 
 export function phaseForStep(step: PipelineCatalogueStep): string {
@@ -180,15 +164,6 @@ export function canMovePipelineStep(
   return false;
 }
 
-/** Theoretical USD cost. Sub-cent values still read as a number, not "$0.00". */
-export function formatCost(usd: number | null | undefined): string {
-  const v = usd ?? 0;
-  if (v <= 0) return '$0.00';
-  if (v < 0.01) return `$${v.toFixed(4)}`;
-  if (v < 1) return `$${v.toFixed(3)}`;
-  return `$${v.toFixed(2)}`;
-}
-
 export function formatTokens(n: number | null | undefined): string {
   const v = n ?? 0;
   const sign = v < 0 ? '-' : '';
@@ -197,4 +172,18 @@ export function formatTokens(n: number | null | undefined): string {
   if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1)}k`;
   return `${sign}${abs}`;
+}
+
+/** Read-only label for a step's window token sum, e.g. "12.3k tokens / 90d". */
+export function stepTokenLabel(row: Pick<PipelineAdminRow, 'tokenSum'>): string {
+  const d = PIPELINE_TOKEN_WINDOW_DAYS;
+  return row.tokenSum == null ? `No tokens / ${d}d` : `${formatTokens(row.tokenSum)} tokens / ${d}d`;
+}
+
+/** Verbose tooltip behind a step's token sum chip. */
+export function stepTokenTooltip(row: Pick<PipelineAdminRow, 'tokenSum' | 'tokenUnknown'>): string {
+  const d = PIPELINE_TOKEN_WINDOW_DAYS;
+  if (row.tokenSum == null) return `No token usage recorded for this step in the last ${d} days.`;
+  const base = `${row.tokenSum.toLocaleString()} tokens spent by this step across every task run in the last ${d} days.`;
+  return row.tokenUnknown ? `${base} Some runs used a model with no price on file.` : base;
 }

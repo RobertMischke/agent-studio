@@ -25,17 +25,17 @@ import {
   PIPELINE_GATE_MODES,
   PIPELINE_CONDITIONS,
   PIPELINE_CONDITION_VALUE_TOKENS,
+  PIPELINE_TOKEN_WINDOW_DAYS,
   type PipelineAdminRow,
   type PipelineGroup,
-  type PipelineKindLegendRow,
-  kindLabel,
   phaseForStep,
   pipelinePhaseLabel,
   pipelineOrderSection,
   orderedPipelineCatalogue,
   canMovePipelineStep,
-  formatCost,
   formatTokens,
+  stepTokenLabel,
+  stepTokenTooltip,
 } from './pipeline-config.util';
 
 /**
@@ -43,9 +43,9 @@ import {
  * pre/core/post step catalogue as a calm CSS grid where each configurable
  * step exposes activation, ordering, its per-step LLM model, a prompt
  * *binding reference* (content is managed in the Prompts registry, never
- * inline here), and the gate / run-condition controls. A compact "cost by
- * step kind" rollup sits below so the operator sees what the configuration
- * actually spends.
+ * inline here), and the gate / run-condition controls. Each step also shows
+ * the token sum it has spent over the last 90 days, folded across every task
+ * run, so the operator gets a feel for how expensive that step is.
  *
  * All writes go through `setProjectPipelineStep` /
  * `setProjectPipelineStepOrder`; the same backend contract the old Project
@@ -78,6 +78,9 @@ export class ProjectPipelinePanelComponent {
   readonly gateModes = PIPELINE_GATE_MODES;
   readonly conditions = PIPELINE_CONDITIONS;
 
+  /** Window for the per-step token rollup shown on each row. */
+  readonly tokenWindowDays = PIPELINE_TOKEN_WINDOW_DAYS;
+
   /** Per-step write in flight; disables that row's controls until the PUT resolves. */
   readonly stepBusy: Record<string, boolean> = {};
   readonly orderBusy = signal(false);
@@ -107,9 +110,14 @@ export class ProjectPipelinePanelComponent {
     const overrides = this.overrides();
     const drafts = this.conditionDraft();
     const catalogue = orderedPipelineCatalogue(this.catalogue(), this.order());
+    const tokenByStep = new Map<string, { tokens: number; unknown: boolean }>();
+    for (const s of this.pipelineCost()?.steps ?? []) {
+      tokenByStep.set(s.stepId, { tokens: s.totalTokens, unknown: s.anyModelUnknown });
+    }
     return catalogue.map((step, index) => {
       const ov = overrides[step.id];
       const draft = drafts[step.id];
+      const tok = tokenByStep.get(step.id);
       const conditionWhen = draft?.when ?? ov?.condition?.when ?? '';
       const conditionValue = draft?.value ?? ov?.condition?.value ?? '';
       return {
@@ -143,6 +151,8 @@ export class ProjectPipelinePanelComponent {
         conditionNeedsValue: PIPELINE_CONDITION_VALUE_TOKENS.includes(conditionWhen),
         canMoveUp: canMovePipelineStep(catalogue, index, -1),
         canMoveDown: canMovePipelineStep(catalogue, index, 1),
+        tokenSum: tok?.tokens ?? null,
+        tokenUnknown: tok?.unknown ?? false,
       };
     });
   });
@@ -161,27 +171,15 @@ export class ProjectPipelinePanelComponent {
     return groups;
   });
 
-  readonly costLegend = computed<PipelineKindLegendRow[]>(() => {
-    const t = this.pipelineCost();
-    if (!t) return [];
-    return t.kinds.map(k => ({
-      kind: k.kind,
-      label: kindLabel(k.kind),
-      tokens: k.totalTokens,
-      cost: k.totalCostUsd,
-      anyUnknown: k.anyModelUnknown,
-    }));
-  });
-
   private load(project: string): void {
     this.jobService.getPipelineCatalogue(project).subscribe({
       next: (cat) => { this.catalogue.set(cat.steps ?? []); this.loadError.set(null); },
       error: () => this.loadError.set('Could not load the pipeline catalogue.'),
     });
     this.refreshOverrides(project);
-    this.jobService.getProjectPipelineCost(project, 30).subscribe({
+    this.jobService.getProjectPipelineCost(project, this.tokenWindowDays).subscribe({
       next: (t) => this.pipelineCost.set(t),
-      error: () => { /* cost is a secondary read; leave it null -> section hides */ },
+      error: () => { /* tokens are a secondary read; leave null -> chips just hide */ },
     });
   }
 
@@ -619,6 +617,7 @@ export class ProjectPipelinePanelComponent {
     }
   }
 
-  formatCost = formatCost;
   formatTokens = formatTokens;
+  stepTokenLabel = stepTokenLabel;
+  stepTokenTooltip = stepTokenTooltip;
 }
