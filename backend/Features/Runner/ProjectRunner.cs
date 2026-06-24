@@ -2009,6 +2009,10 @@ public class ProjectRunner
                 Cli = cli.CliType,
                 InputSessionId = plan.EventInputSessionId,
                 CapturedSessionId = null,
+                // S2 (AGT-1784): record the cwd this session is born in (the
+                // worktree path) so a later reissue can detect a cross-path
+                // resume target and start fresh instead of crashing.
+                Cwd = runWorkingDir,
                 Resumed = plan.ResumeFlag,
                 Reason = plan.EventReason,
                 HeadShaBefore = headShaBefore,
@@ -2087,13 +2091,40 @@ public class ProjectRunner
             //    context from the task spec + the code in the worktree.
             var activeRunForSpawn = _activeRuns.Get(jobId);
             var isWorktreeRun = activeRunForSpawn?.IsWorktreeRun == true;
+            // S2 (AGT-1784): resolve where the session we're about to resume was
+            // BORN. A reissue/resume of a session whose birth cwd differs from
+            // this run's cwd (e.g. the worktree path moved because the project
+            // display name changed) must start fresh — the CLI keys --resume by
+            // cwd and would otherwise mint a dead session and crash (observed:
+            // claude exited -1 after 164s → infra-crash).
+            string? sessionBirthCwd = null;
+            if (!string.IsNullOrWhiteSpace(plan.SessionToResume))
+            {
+                try
+                {
+                    sessionBirthCwd = _sessions.ReadSessionEvents(jobId, Entry.Path)
+                        .LastOrDefault(e =>
+                            string.Equals(e.CapturedSessionId, plan.SessionToResume, StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(e.InputSessionId, plan.SessionToResume, StringComparison.OrdinalIgnoreCase))
+                        ?.Cwd;
+                }
+                catch (Exception ex) { _logger.LogDebug(ex, "[taskboard] {Job}: could not resolve session birth cwd; treating as unknown", jobId); }
+            }
             var canResumeSession = WorktreeRunPolicy.CanResumeSession(
-                isWorktreeRun, activeRunForSpawn?.WorktreeReused == true);
+                isWorktreeRun, activeRunForSpawn?.WorktreeReused == true, runWorkingDir, sessionBirthCwd);
             var effSessionToResume = canResumeSession ? plan.SessionToResume : null;
             var effResumeFlag = canResumeSession && plan.ResumeFlag;
             if (isWorktreeRun && !canResumeSession && plan.ResumeFlag)
-                _logger.LogInformation(
-                    "[taskboard] {Job}: starting FRESH session in freshly-cut worktree (prior session cwd was not this worktree)", jobId);
+            {
+                var why = !string.IsNullOrWhiteSpace(sessionBirthCwd)
+                    ? $"prior session born in {sessionBirthCwd} != this run cwd {runWorkingDir}"
+                    : "prior session cwd was not this worktree";
+                _logger.LogInformation("[taskboard] {Job}: starting FRESH session ({Why})", jobId, why);
+                // Keep session-events.jsonl truthful — the start event was written
+                // with Resumed=plan.ResumeFlag before this guard ran.
+                try { _sessions.BackfillLatestSessionEventResumed(jobId, false, why, Entry.Path); }
+                catch (Exception ex) { _logger.LogDebug(ex, "[taskboard] {Job}: resumed-backfill best-effort", jobId); }
+            }
             var (execution, cliError) = await cli.StartAsync(
                 jobId, GetJobKey(jobId), prompt, runWorkingDir,
                 effSessionToResume, effResumeFlag, runModel, runThinkingLevel, info.FolderPath, permissionMode, contextMode, ct);

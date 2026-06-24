@@ -63,6 +63,15 @@ public record SessionEvent
     public string? InputSessionId { get; init; }
     /// <summary>Session id the CLI emitted in this run (filled after the run starts streaming).</summary>
     public string? CapturedSessionId { get; init; }
+    /// <summary>
+    /// S2 (AGT-1784): the working directory this session was BORN in (the worktree
+    /// path the CLI actually ran in). The only durable ground truth that lets a
+    /// later reissue detect a cross-path resume target — the CLI keys
+    /// <c>--resume</c> by cwd, so a session born in a different dir must start
+    /// fresh, not resume. Null on legacy rows recorded before this was tracked
+    /// (treated as "unknown → fall back to reuse behavior").
+    /// </summary>
+    public string? Cwd { get; init; }
     /// <summary>True when we passed <c>-r</c> and the CLI accepted it; false on fresh start / recovery / dropped session.</summary>
     public bool Resumed { get; init; }
     /// <summary>Human-readable note when <see cref="Resumed"/> is false (e.g. <c>no session recorded</c>, <c>incompatible session id</c>).</summary>
