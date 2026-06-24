@@ -24,6 +24,7 @@ import { ProjectWorkflowSectionComponent } from '../project-workflow-section/pro
 import { ProjectCliEnvironmentSectionComponent } from '../project-cli-environment-section/project-cli-environment-section';
 interface ProjectSettingsRow {
   autoCommit: boolean;
+  crashRecoveryEnabled: boolean;
   autoPushStrategy: AutoPushStrategy;
   runnerMode: string | null;
   orchestratorModel: string | null;
@@ -105,6 +106,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly liveReplyErrors: Record<string, string | null> = {};
 
   autoCommitDraft = false;
+  crashRecoveryDraft = true;
   autoPushStrategyDraft: AutoPushStrategy = 'on-completed';
   orchModelDraft = '';
 
@@ -322,12 +324,14 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       next: (snap) => {
         const row = {
           autoCommit: snap.settings.autoCommit,
+          crashRecoveryEnabled: snap.settings.crashRecoveryEnabled,
           autoPushStrategy: snap.settings.autoPushStrategy,
           runnerMode: snap.settings.runnerMode,
           orchestratorModel: snap.settings.orchestratorModel,
         };
         this.settings.set(row);
         if (this.autoCommitDraft !== row.autoCommit) this.autoCommitDraft = row.autoCommit;
+        if (this.crashRecoveryDraft !== row.crashRecoveryEnabled) this.crashRecoveryDraft = row.crashRecoveryEnabled;
         if (this.autoPushStrategyDraft !== row.autoPushStrategy) this.autoPushStrategyDraft = row.autoPushStrategy;
         const wantedModel = row.orchestratorModel ?? '';
         if (this.orchModelDraft !== wantedModel) this.orchModelDraft = wantedModel;
@@ -389,6 +393,13 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   onAutoCommitChange(): void {
     this.jobService.setProjectAutoCommit(this.projectName(), this.autoCommitDraft).subscribe({
+      next: () => this.refreshAll(true),
+      error: () => this.refreshAll(true)
+    });
+  }
+
+  onCrashRecoveryChange(): void {
+    this.jobService.setProjectCrashRecovery(this.projectName(), this.crashRecoveryDraft).subscribe({
       next: () => this.refreshAll(true),
       error: () => this.refreshAll(true)
     });

@@ -52,6 +52,17 @@ public class ProjectSettingsService
         }
     }
 
+    public void SetCrashRecoveryEnabled(string projectName, bool enabled)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with { CrashRecoveryEnabled = enabled };
+            Persist();
+        }
+    }
+
     public void SetAutoPushStrategy(string projectName, string strategy)
     {
         EnsureLoaded();

@@ -19,11 +19,10 @@ namespace AgentStudio.Runner;
 ///   <see cref="TaskTransitionService.MoveAsync"/>, then clear the
 ///   marker.</item>
 ///   <item><b>Orphan changes.</b> If the project's working tree contains
-///   uncommitted changes that map to a known job folder
-///   (most-recently-active job in <c>3-progress</c> by <c>lastProgressAt</c>),
-///   we commit them with a fixed <c>crash-recovery</c> author tag so the
-///   work isn't silently overwritten by the next agent run. Recovery
-///   never pushes; that is still the user's gate.</item>
+///   uncommitted changes, we queue a pending recovery item for the
+///   operator. Only an explicit confirmation endpoint commits with the fixed
+///   <c>crash-recovery</c> author tag. Recovery never pushes; that is still
+///   the user's gate.</item>
 /// </list>
 ///
 /// Every recovery decision is appended to
@@ -43,17 +42,21 @@ public sealed class CrashRecoveryService
     private readonly TaskTransitionService _transitions;
     private readonly TaskMutationService _mutations;
     private readonly GitService _git;
+    private readonly ProjectSettingsService _settings;
     private readonly BackendFileLogSink _logSink;
     private readonly BackendFileLoggerOptions _logOptions;
     private readonly ILogger<CrashRecoveryService> _logger;
     private readonly IJsonlAppender _appender;
     private readonly PickupLockFile _pickupLock;
+    private readonly object _pendingLock = new();
+    private readonly List<PendingCrashRecovery> _pendingOrphanRecoveries = [];
 
     public CrashRecoveryService(
         TaskScannerService scanner,
         TaskTransitionService transitions,
         TaskMutationService mutations,
         GitService git,
+        ProjectSettingsService settings,
         BackendFileLogSink logSink,
         IOptions<BackendFileLoggerOptions> logOptions,
         ILogger<CrashRecoveryService> logger,
@@ -64,6 +67,7 @@ public sealed class CrashRecoveryService
         _transitions = transitions;
         _mutations = mutations;
         _git = git;
+        _settings = settings;
         _logSink = logSink;
         _logOptions = logOptions.Value;
         _logger = logger;
@@ -88,6 +92,14 @@ public sealed class CrashRecoveryService
         foreach (var entry in _scanner.GetWatchPaths())
         {
             if (string.IsNullOrWhiteSpace(entry.Path) || !Directory.Exists(entry.Path)) continue;
+
+            if (!_settings.Get(entry.Name).CrashRecoveryEnabled)
+            {
+                _logger.LogInformation(
+                    "CrashRecoveryService: recovery is disabled for project {Project}; boot sweep skipped.",
+                    entry.Name);
+                continue;
+            }
 
             // Phase 1: complete pending transitions for any 3-progress jobs
             // whose marker survived the crash.
@@ -234,39 +246,10 @@ public sealed class CrashRecoveryService
         // is about to be cleaned up.
         var (jobId, jobFolder) = FindMostRecentlyActiveProgressJob(entry);
 
-        // C1 (2026-05-22): if there is NO active 3-progress job to
-        // attribute the changes to, the uncommitted state is much more
-        // likely to be a human-driven editor session than a crashed
-        // agent run. The previous behaviour swept those edits into a
-        // crash-recovery commit on the next backend restart, which
-        // surprised the operator (and bit me twice during the
-        // F1-F11 work). Log a hint instead and let the human decide.
-        if (jobId == null)
-        {
-            var hint = new RecoveryDecision
-            {
-                At = DateTime.UtcNow,
-                Kind = RecoveryDecisionKinds.OrphanSkipped,
-                ProjectName = entry.Name,
-                JobId = null,
-                Reason = "uncommitted changes present but no 3-progress job to attribute to; skipped to avoid clobbering an active editor session"
-            };
-            decisions.Add(hint);
-            AppendRecoveryEntry(hint);
-            _logger.LogInformation(
-                "CrashRecoveryService: project {Project} has uncommitted changes but no active 3-progress job — leaving them for the operator. Set ATP_CRASH_RECOVERY_AGGRESSIVE=1 to re-enable the old auto-commit behaviour.",
-                entry.Name);
-            if (Environment.GetEnvironmentVariable("ATP_CRASH_RECOVERY_AGGRESSIVE") != "1")
-            {
-                return;
-            }
-        }
-
         var message = jobId == null
             ? $"chore(crash-recovery): rescue orphan changes for project {entry.Name}\n\n" +
               "Recovered uncommitted working-tree state after a backend crash. No active job\n" +
-              "found in 3-progress; review and re-attribute manually if needed. (Aggressive\n" +
-              "mode — ATP_CRASH_RECOVERY_AGGRESSIVE=1.)"
+              "found in 3-progress; review and re-attribute manually if needed."
             : $"chore(crash-recovery): rescue orphan changes for {jobId}\n\n" +
               $"Recovered uncommitted working-tree state after a backend crash. Last active\n" +
               $"3-progress job in project {entry.Name} (by lastProgressAt) was {jobId}.";
@@ -298,62 +281,227 @@ public sealed class CrashRecoveryService
                 entry.Name, jobId, pathspecs.Count);
         }
 
-        var commit = _git.CrashRecoveryCommit(entry.Name, repoRoot, message, pathspecs);
+        var pending = QueuePendingOrphanRecovery(entry, jobId, jobFolder, repoRoot, message, pathspecs);
+        var decision = new RecoveryDecision
+        {
+            At = DateTime.UtcNow,
+            Kind = RecoveryDecisionKinds.OrphanPending,
+            ProjectName = entry.Name,
+            JobId = jobId,
+            Reason = jobId == null
+                ? $"operator confirmation required before committing orphan changes; pendingId={pending.Id}; no active 3-progress job to attribute to"
+                : $"operator confirmation required before committing orphan changes for {jobId}; pendingId={pending.Id}"
+        };
+        decisions.Add(decision);
+        AppendRecoveryEntry(decision);
+        _logger.LogInformation(
+            "CrashRecoveryService: queued orphan changes for project {Project} job {JobId} as pending recovery {PendingId}; waiting for operator confirmation.",
+            entry.Name, jobId ?? "(none)", pending.Id);
+    }
+
+    public IReadOnlyList<PendingCrashRecovery> GetPendingOrphanRecoveries()
+    {
+        lock (_pendingLock)
+        {
+            return _pendingOrphanRecoveries
+                .OrderBy(p => p.CreatedAt)
+                .Select(p => p with { Files = p.Files.ToArray(), Pathspecs = p.Pathspecs?.ToArray() })
+                .ToArray();
+        }
+    }
+
+    public CrashRecoveryActionResult CommitPendingOrphanRecovery(string id)
+    {
+        var pending = TakePendingOrphanRecovery(id);
+        if (pending == null)
+            return new CrashRecoveryActionResult(CrashRecoveryActionStatuses.NotFound, Error: "Pending crash recovery item not found.");
+
+        var commit = _git.CrashRecoveryCommit(pending.ProjectName, pending.RepoRoot, pending.Message, pending.Pathspecs);
         if (!commit.Success)
         {
-            // "Nothing to commit" can race in if a concurrent process committed
-            // between RepoHasUncommittedChanges and CrashRecoveryCommit; treat
-            // it as a no-op rather than a failure.
             if (commit.Error != null && commit.Error.Contains("Nothing to commit", StringComparison.OrdinalIgnoreCase))
-                return;
+            {
+                var skipped = new RecoveryDecision
+                {
+                    At = DateTime.UtcNow,
+                    Kind = RecoveryDecisionKinds.OrphanSkipped,
+                    ProjectName = pending.ProjectName,
+                    JobId = pending.JobId,
+                    Reason = $"pending orphan recovery {pending.Id} was confirmed, but the working tree no longer had matching changes"
+                };
+                AppendRecoveryEntry(skipped);
+                return new CrashRecoveryActionResult(CrashRecoveryActionStatuses.NothingToCommit, pending);
+            }
 
+            PutPendingOrphanRecoveryBack(pending);
             var failed = new RecoveryDecision
             {
                 At = DateTime.UtcNow,
                 Kind = RecoveryDecisionKinds.OrphanCommitFailed,
-                ProjectName = entry.Name,
-                JobId = jobId,
-                Reason = $"git commit failed: {commit.Error}"
+                ProjectName = pending.ProjectName,
+                JobId = pending.JobId,
+                Reason = $"operator-confirmed git commit failed for pendingId={pending.Id}: {commit.Error}"
             };
-            decisions.Add(failed);
             AppendRecoveryEntry(failed);
             _logger.LogWarning(
-                "CrashRecoveryService: orphan commit failed for project {Project}: {Error}",
-                entry.Name, commit.Error);
-            return;
+                "CrashRecoveryService: confirmed orphan commit failed for project {Project}: {Error}",
+                pending.ProjectName, commit.Error);
+            return new CrashRecoveryActionResult(CrashRecoveryActionStatuses.Failed, pending, Error: commit.Error);
         }
 
         var decision = new RecoveryDecision
         {
             At = DateTime.UtcNow,
             Kind = RecoveryDecisionKinds.OrphanCommitted,
-            ProjectName = entry.Name,
-            JobId = jobId,
+            ProjectName = pending.ProjectName,
+            JobId = pending.JobId,
             CommitSha = commit.Sha,
-            Reason = jobId == null
-                ? "orphan changes committed; no active 3-progress job to attribute to"
-                : $"orphan changes committed and attributed to {jobId}"
+            Reason = pending.JobId == null
+                ? $"operator confirmed orphan changes commit; pendingId={pending.Id}; no active 3-progress job to attribute to"
+                : $"operator confirmed orphan changes commit for {pending.JobId}; pendingId={pending.Id}"
         };
-        decisions.Add(decision);
         AppendRecoveryEntry(decision);
         _logger.LogInformation(
-            "CrashRecoveryService: committed orphan changes for project {Project} as {Sha}",
-            entry.Name, commit.Sha);
+            "CrashRecoveryService: committed operator-confirmed orphan changes for project {Project} as {Sha}",
+            pending.ProjectName, commit.Sha);
 
-        // Attach the commit reference to the job's task.json so the UI shows
-        // the recovered SHA on the card. Only when we have a target job.
-        if (jobId != null && jobFolder != null && !string.IsNullOrWhiteSpace(commit.Sha))
+        AttachCommitToJob(pending, commit.Sha);
+        return new CrashRecoveryActionResult(CrashRecoveryActionStatuses.Committed, pending, commit.Sha);
+    }
+
+    public CrashRecoveryActionResult DismissPendingOrphanRecovery(string id)
+    {
+        var pending = TakePendingOrphanRecovery(id);
+        if (pending == null)
+            return new CrashRecoveryActionResult(CrashRecoveryActionStatuses.NotFound, Error: "Pending crash recovery item not found.");
+
+        var decision = new RecoveryDecision
         {
-            _mutations.SetJobCommitOnFolder(jobFolder, new TaskCommitInfo
+            At = DateTime.UtcNow,
+            Kind = RecoveryDecisionKinds.OrphanSkipped,
+            ProjectName = pending.ProjectName,
+            JobId = pending.JobId,
+            Reason = $"operator dismissed pending orphan recovery {pending.Id}; working tree left uncommitted"
+        };
+        AppendRecoveryEntry(decision);
+        _logger.LogInformation(
+            "CrashRecoveryService: dismissed pending orphan recovery {PendingId} for project {Project}",
+            pending.Id, pending.ProjectName);
+        return new CrashRecoveryActionResult(CrashRecoveryActionStatuses.Dismissed, pending);
+    }
+
+    private PendingCrashRecovery QueuePendingOrphanRecovery(
+        WatchPathEntry entry,
+        string? jobId,
+        string? jobFolder,
+        string repoRoot,
+        string message,
+        IReadOnlyList<string>? pathspecs)
+    {
+        var files = ReadPendingFiles(repoRoot, pathspecs);
+        lock (_pendingLock)
+        {
+            var existing = _pendingOrphanRecoveries.FirstOrDefault(p =>
+                string.Equals(p.ProjectName, entry.Name, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(p.RepoRoot, repoRoot, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(p.JobId, jobId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(p.Message, message, StringComparison.Ordinal)
+                && SamePaths(p.Pathspecs, pathspecs));
+            if (existing != null) return existing;
+
+            var pending = new PendingCrashRecovery
             {
-                Sha = commit.Sha!,
-                ShortSha = commit.Sha!.Length > 7 ? commit.Sha[..7] : commit.Sha,
-                Message = $"crash-recovery: orphan changes for {jobId}",
-                FilesChanged = pathspecs?.Count ?? 0,
-                Files = pathspecs?.ToList() ?? new List<string>(),
-                At = DateTime.UtcNow
-            });
+                Id = Guid.NewGuid().ToString("N"),
+                CreatedAt = DateTime.UtcNow,
+                ProjectName = entry.Name,
+                JobId = jobId,
+                RepoRoot = repoRoot,
+                Files = files,
+                Message = message,
+                Reason = jobId == null
+                    ? "Uncommitted changes were found at startup with no active job attribution."
+                    : $"Uncommitted changes were found at startup and attributed to {jobId}.",
+                JobFolder = jobFolder,
+                Pathspecs = pathspecs?.ToArray()
+            };
+            _pendingOrphanRecoveries.Add(pending);
+            return pending;
         }
+    }
+
+    private PendingCrashRecovery? TakePendingOrphanRecovery(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        lock (_pendingLock)
+        {
+            var index = _pendingOrphanRecoveries.FindIndex(p => string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (index < 0) return null;
+            var pending = _pendingOrphanRecoveries[index];
+            _pendingOrphanRecoveries.RemoveAt(index);
+            return pending;
+        }
+    }
+
+    private void PutPendingOrphanRecoveryBack(PendingCrashRecovery pending)
+    {
+        lock (_pendingLock)
+        {
+            if (_pendingOrphanRecoveries.Any(p => string.Equals(p.Id, pending.Id, StringComparison.OrdinalIgnoreCase))) return;
+            _pendingOrphanRecoveries.Add(pending);
+        }
+    }
+
+    private IReadOnlyList<string> ReadPendingFiles(string repoRoot, IReadOnlyList<string>? pathspecs)
+    {
+        if (pathspecs is { Count: > 0 })
+            return pathspecs.OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToArray();
+
+        var status = _git.GetStatusForRepoRoot(repoRoot);
+        if (!status.IsRepo || status.Files.Count == 0) return [];
+        return status.Files
+            .Select(f => f.Path)
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool SamePaths(IReadOnlyList<string>? left, IReadOnlyList<string>? right)
+    {
+        var l = left ?? [];
+        var r = right ?? [];
+        if (l.Count != r.Count) return false;
+        return l.OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .SequenceEqual(r.OrderBy(p => p, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void AttachCommitToJob(PendingCrashRecovery pending, string? sha)
+    {
+        if (pending.JobId == null || string.IsNullOrWhiteSpace(sha))
+            return;
+
+        var jobFolder = ResolveCurrentJobFolder(pending) ?? pending.JobFolder;
+        if (string.IsNullOrWhiteSpace(jobFolder) || !Directory.Exists(jobFolder))
+            return;
+
+        _mutations.SetJobCommitOnFolder(jobFolder, new TaskCommitInfo
+        {
+            Sha = sha!,
+            ShortSha = sha!.Length > 7 ? sha[..7] : sha,
+            Message = $"crash-recovery: orphan changes for {pending.JobId}",
+            FilesChanged = pending.Pathspecs?.Count ?? pending.Files.Count,
+            Files = pending.Pathspecs?.ToList() ?? pending.Files.ToList(),
+            At = DateTime.UtcNow
+        });
+    }
+
+    private string? ResolveCurrentJobFolder(PendingCrashRecovery pending)
+    {
+        if (pending.JobId == null) return null;
+        var entry = _scanner.GetWatchPaths().FirstOrDefault(e =>
+            string.Equals(e.Name, pending.ProjectName, StringComparison.OrdinalIgnoreCase));
+        if (entry == null) return null;
+        return _scanner.FindJob(pending.JobId, entry.Path)?.FolderPath;
     }
 
     private enum CrashRecoveryCommitScope
@@ -729,11 +877,43 @@ public sealed record RecoveryDecision
     [JsonPropertyName("reason")] public string Reason { get; init; } = "";
 }
 
+/// <summary>Operator-confirmable crash recovery item held in memory after boot.</summary>
+public sealed record PendingCrashRecovery
+{
+    [JsonPropertyName("id")] public string Id { get; init; } = "";
+    [JsonPropertyName("createdAt")] public DateTime CreatedAt { get; init; }
+    [JsonPropertyName("projectName")] public string ProjectName { get; init; } = "";
+    [JsonPropertyName("jobId")] public string? JobId { get; init; }
+    [JsonPropertyName("repoRoot")] public string RepoRoot { get; init; } = "";
+    [JsonPropertyName("files")] public IReadOnlyList<string> Files { get; init; } = [];
+    [JsonPropertyName("message")] public string Message { get; init; } = "";
+    [JsonPropertyName("reason")] public string Reason { get; init; } = "";
+
+    [JsonIgnore] public string? JobFolder { get; init; }
+    [JsonIgnore] public IReadOnlyList<string>? Pathspecs { get; init; }
+}
+
+public sealed record CrashRecoveryActionResult(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("pending")] PendingCrashRecovery? Pending = null,
+    [property: JsonPropertyName("commitSha")] string? CommitSha = null,
+    [property: JsonPropertyName("error")] string? Error = null);
+
+public static class CrashRecoveryActionStatuses
+{
+    public const string Committed = "committed";
+    public const string Dismissed = "dismissed";
+    public const string Failed = "failed";
+    public const string NotFound = "not-found";
+    public const string NothingToCommit = "nothing-to-commit";
+}
+
 /// <summary>String constants for <see cref="RecoveryDecision.Kind"/>.</summary>
 public static class RecoveryDecisionKinds
 {
     public const string TransitionCompleted = "transition-completed";
     public const string TransitionFailed = "transition-failed";
+    public const string OrphanPending = "orphan-pending-confirmation";
     public const string OrphanCommitted = "orphan-committed";
     public const string OrphanCommitFailed = "orphan-commit-failed";
     /// <summary>

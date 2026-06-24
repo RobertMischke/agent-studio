@@ -30,6 +30,12 @@ public record SetPipelineStepOrderRequest
     public List<string> StepIds { get; init; } = [];
 }
 
+/// <summary>Body for project-level boolean feature toggles.</summary>
+public record SetCrashRecoveryRequest
+{
+    public bool Enabled { get; init; }
+}
+
 /// <summary>
 /// Per-project preferences under <c>/api/projects</c> — read-all
 /// for the header bar plus the per-project auto-commit toggle.
@@ -49,6 +55,7 @@ public static class ProjectSettingsEndpoints
                 kv => new
                 {
                     autoCommit = kv.Value.AutoCommit,
+                    crashRecoveryEnabled = kv.Value.CrashRecoveryEnabled,
                     autoPushStrategy = AutoPushStrategies.Normalize(kv.Value.AutoPushStrategy),
                     runnerMode = kv.Value.RunnerMode,
                     orchestratorModel = kv.Value.OrchestratorModel,
@@ -285,6 +292,15 @@ public static class ProjectSettingsEndpoints
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             settings.SetAutoCommit(projectName, req.Enabled);
+            return Results.Ok(settings.Get(projectName));
+        });
+
+        app.MapPut("/api/projects/{projectName}/crash-recovery", (string projectName, SetCrashRecoveryRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            settings.SetCrashRecoveryEnabled(projectName, req.Enabled);
             return Results.Ok(settings.Get(projectName));
         });
 

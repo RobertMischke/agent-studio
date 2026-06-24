@@ -6,6 +6,12 @@ public record ProjectSettings
     public bool AutoCommit { get; init; } = true;
 
     /// <summary>
+    /// When true, the boot-time crash recovery sweep runs for this project.
+    /// Orphan working-tree commits still require operator confirmation.
+    /// </summary>
+    public bool CrashRecoveryEnabled { get; init; } = true;
+
+    /// <summary>
     /// Controls when the platform pushes runner-owned commits. Default is
     /// <see cref="AutoPushStrategies.OnCompleted"/> so only commits that have
     /// passed human review and reached <c>6-completed</c> are pushed.

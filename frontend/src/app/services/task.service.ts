@@ -13,6 +13,8 @@ import type {
   FileGenerationMeta,
   WatchPathEntry,
   RegistryWorkspaceListItem,
+  CrashRecoveryActionResult,
+  CrashRecoveryPending,
   CliOutputLine,
   RunnerStatus,
   CliSettings,
@@ -1444,6 +1446,26 @@ export class TaskService {
     );
   }
 
+  getPendingCrashRecoveries() {
+    return this.http.get<{ pending: CrashRecoveryPending[] }>(
+      `${this.baseUrl}/crash-recovery/pending`,
+    );
+  }
+
+  commitCrashRecovery(id: string) {
+    return this.http.post<CrashRecoveryActionResult>(
+      `${this.baseUrl}/crash-recovery/pending/${encodeURIComponent(id)}/commit`,
+      {},
+    );
+  }
+
+  dismissCrashRecovery(id: string) {
+    return this.http.post<CrashRecoveryActionResult>(
+      `${this.baseUrl}/crash-recovery/pending/${encodeURIComponent(id)}/dismiss`,
+      {},
+    );
+  }
+
   repairProjectQueueHealth(projectName: string) {
     return this.http.post<{
       project: string;
@@ -1460,6 +1482,7 @@ export class TaskService {
         string,
         {
           autoCommit: boolean;
+          crashRecoveryEnabled: boolean;
           autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
           runnerMode: string | null;
           orchestratorModel: string | null;
@@ -1602,6 +1625,13 @@ export class TaskService {
   setProjectAutoCommit(projectName: string, enabled: boolean) {
     return this.http.put(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/auto-commit`,
+      { enabled },
+    );
+  }
+
+  setProjectCrashRecovery(projectName: string, enabled: boolean) {
+    return this.http.put(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/crash-recovery`,
       { enabled },
     );
   }

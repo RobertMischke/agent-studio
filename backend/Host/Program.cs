@@ -553,10 +553,9 @@ catch (Exception ex)
 
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any
 // surviving completion-marker.json finishes its 3-progress -> 4-review move
-// here, and any orphan working-tree changes get committed under a
-// crash-recovery author tag so a second crash mid-recovery is itself
-// recoverable on the next boot. Sync wait is intentional: we want the
-// runner to see the recovered state on its first scan.
+// here, and any orphan working-tree changes are queued for operator
+// confirmation before a crash-recovery commit is created. Sync wait is
+// intentional: we want the runner to see the recovered state on its first scan.
 //
 // F21 boot order: CrashRecoveryService runs before StaleProgressArchiver
 // because crash-recovery may complete a half-finished transition

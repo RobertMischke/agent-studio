@@ -77,6 +77,8 @@ frontend/.ng-serve-*.log
 frontend/.ng-serve-*.out.log
 frontend/.ng-serve-*.err.log
 frontend/.ng-serve-*.pid
+**/.ng.run.out
+**/.ng.run.err
 # Catch ad-hoc ng-serve capture files that don't use the .ng-serve-<port> prefix
 # (e.g. .develop-layout-compare-ng-serve.out.log) - still runtime noise, never commit.
 frontend/*ng-serve*.log

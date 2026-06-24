@@ -157,6 +157,21 @@
     </section>
 
     <section class="proj-detail__group">
+      <h3>Crash recovery</h3>
+      <label class="proj-detail__toggle"
+             [appTooltip]="'Crash recovery scans this project on backend startup. Orphan working-tree commits never happen automatically; the startup modal asks for confirmation before committing.'">
+        <input type="checkbox"
+               data-testid="project-detail-crash-recovery"
+               [(ngModel)]="crashRecoveryDraft"
+               (ngModelChange)="onCrashRecoveryChange()">
+        <span>Scan this project on startup recovery</span>
+      </label>
+      <p class="proj-detail__hint">
+        Enabled by default. When orphan changes are found, the app opens a confirmation dialog and commits only after approval.
+      </p>
+    </section>
+
+    <section class="proj-detail__group">
       <h3>Auto-push</h3>
       <div class="proj-detail__push-options" data-testid="project-detail-auto-push">
         @for (opt of autoPushOptions; track opt.id) {

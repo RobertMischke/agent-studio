@@ -1,0 +1,203 @@
+:host {
+  display: contents;
+}
+
+.crp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-3);
+}
+
+.crp__error {
+  margin: 0;
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border: 1px solid color-mix(in srgb, var(--studio-danger, var(--severity-high)) 40%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--studio-danger, var(--severity-high)) 12%, transparent);
+  color: var(--studio-danger, var(--severity-high));
+  font-size: 0.82rem;
+}
+
+.crp__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-4);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 8px;
+  background: var(--studio-bg-hover);
+}
+
+.crp__item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--studio-spacing-3);
+}
+
+.crp__identity {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}
+
+.crp__project {
+  color: var(--studio-fg-strong);
+  font-size: 0.94rem;
+  font-weight: 600;
+}
+
+.crp__job {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 999px;
+  border: 1px solid var(--studio-border-muted);
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg-dim);
+  font-size: 0.75rem;
+}
+
+.crp__time {
+  flex: 0 0 auto;
+  color: var(--studio-fg-muted);
+  font-size: 0.76rem;
+}
+
+.crp__reason {
+  margin: 0;
+  color: var(--studio-fg-dim);
+  font-size: 0.84rem;
+}
+
+.crp__meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--studio-spacing-2);
+  margin: 0;
+}
+
+.crp__meta div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: var(--studio-spacing-2);
+}
+
+.crp__meta dt {
+  color: var(--studio-fg-muted);
+  font-size: 0.74rem;
+}
+
+.crp__meta dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--studio-fg);
+  font-size: 0.78rem;
+}
+
+.crp__meta code {
+  color: var(--studio-fg);
+  font-family: var(--app-font-mono, monospace);
+}
+
+.crp__files {
+  border: 1px solid var(--studio-border-muted);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--studio-fg-dim) 5%, transparent);
+}
+
+.crp__files summary {
+  cursor: pointer;
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  color: var(--studio-fg);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.crp__files ul {
+  max-height: 48vh;
+  overflow: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--studio-spacing-3) var(--studio-spacing-3);
+}
+
+.crp__files li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: var(--studio-spacing-1) 0;
+  color: var(--studio-fg-dim);
+  font-family: var(--app-font-mono, monospace);
+  font-size: 0.76rem;
+}
+
+.crp__empty {
+  margin: 0;
+  padding: 0 var(--studio-spacing-3) var(--studio-spacing-3);
+  color: var(--studio-fg-muted);
+  font-size: 0.78rem;
+}
+
+.crp__actions,
+.crp__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--studio-spacing-2);
+  flex-wrap: wrap;
+}
+
+.crp__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  min-height: 2rem;
+  padding: var(--studio-spacing-1) var(--studio-spacing-3);
+  border-radius: 6px;
+  border: 1px solid var(--studio-border-strong);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.crp__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.crp__button--ghost {
+  background: transparent;
+  color: var(--studio-fg);
+}
+
+.crp__button--ghost:not(:disabled):hover {
+  background: var(--studio-bg-selected);
+}
+
+.crp__button--primary {
+  border-color: var(--studio-accent);
+  background: var(--studio-accent);
+  color: var(--studio-on-accent);
+}
+
+.crp__button--primary:not(:disabled):hover {
+  filter: brightness(1.06);
+}
+
+@media (max-width: 42rem) {
+  .crp__item-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .crp__meta div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

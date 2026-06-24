@@ -975,6 +975,7 @@ export interface ProjectSnapshot {
   };
   settings: {
     autoCommit: boolean;
+    crashRecoveryEnabled: boolean;
     autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
     runnerMode: string | null;
     orchestratorModel: string | null;
@@ -987,6 +988,24 @@ export interface ProjectSnapshot {
   reviewDecisionsPending: { jobId: string; title: string; reason: string | null }[];
   runnerPendingDecisions: { jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }[];
   queueHealth: ProjectQueueHealth;
+}
+
+export interface CrashRecoveryPending {
+  id: string;
+  createdAt: string;
+  projectName: string;
+  jobId: string | null;
+  repoRoot: string;
+  files: string[];
+  message: string;
+  reason: string;
+}
+
+export interface CrashRecoveryActionResult {
+  status: 'committed' | 'dismissed' | 'failed' | 'not-found' | 'nothing-to-commit' | string;
+  pending: CrashRecoveryPending | null;
+  commitSha: string | null;
+  error: string | null;
 }
 
 export interface ProjectQueueHealthLocation {
