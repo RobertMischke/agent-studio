@@ -447,6 +447,18 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         }
         var process = child.Process;
 
+        // Contain the whole run subtree in a kill-on-close process group so
+        // helpers the agent spawns and lets detach (Playwright capture server,
+        // a stray `node serve.cjs`) die with the run instead of leaking and
+        // holding the worktree open — which wedges the post-run
+        // `git worktree remove` and orphans the worktree (AGT-1791). Assigned
+        // here, immediately after spawn, so the CLI's later children inherit
+        // group membership. Best-effort + Windows-only; null leaves the
+        // existing tree-kill path in force.
+        var processReaper = OperatingSystem.IsWindows()
+            ? TaskProcessReaper.CreateForProcess(process, _logger)
+            : null;
+
         var execution = new CliExecution
         {
             JobId = jobId,
@@ -469,7 +481,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             ChildStdin = child.Stdin,
             PermissionMode = permissionMode,
             ContextMode = CliContextModes.Normalize(contextMode),
-            CleanContext = cleanContext
+            CleanContext = cleanContext,
+            ProcessReaper = processReaper
         };
         try { info.OutputLog.Reset(); }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log dir {Path}", logDir); }
@@ -1121,6 +1134,19 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 : endOutcome == LibOutcome.Failed ? status : null;
             RaiseRunEvent(jobKey, new CliRunEvent.RunEnded(endOutcome, endReason, exitCode, duration) { RunId = jobKey });
 
+            // Reap any helper the agent spawned and let detach (Playwright
+            // capture server, stray `node serve.cjs`) BEFORE the OnFinished
+            // subscriber runs its lane move + worktree cleanup. Tree-kill
+            // misses these — they break away from the CLI PID tree — but they
+            // are still members of this run's job object. Leaving them alive
+            // holds the worktree open, so `git worktree remove` fails "Device
+            // or resource busy" and orphans the worktree (AGT-1791).
+            if (OperatingSystem.IsWindows())
+            {
+                try { info.ProcessReaper?.Terminate(); }
+                catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: process-reaper terminate best-effort"); }
+            }
+
             try { OnFinished?.Invoke(jobKey, finalExecution); }
             catch (Exception ex) { _logger.LogWarning(ex, "OnFinished subscriber threw for {JobId}", jobKey); }
 
@@ -1144,6 +1170,13 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                     // runs asynchronously after finish and must still see the
                     // temp paths intact (Exists=true) for the retention window.
                     try { removed.CleanContext?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: clean-context dispose"); }
+                    // Backstop: close the job handle (kill-on-close reaps any
+                    // straggler Terminate() missed). Normally a no-op because
+                    // the run-finish path already terminated it.
+                    if (OperatingSystem.IsWindows())
+                    {
+                        try { removed.ProcessReaper?.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "CliExecutionServiceBase: process-reaper dispose"); }
+                    }
                 }
             });
         }
@@ -1631,6 +1664,18 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         /// Null for shared runs and shared-only CLIs.
         /// </summary>
         public CleanContextPreparation? CleanContext { get; init; }
+
+        /// <summary>
+        /// Process group holding this run's CLI process and every process it
+        /// spawns — including helpers that detach from the PID tree (the
+        /// agent's Playwright capture server, a stray <c>node serve.cjs</c>).
+        /// Terminated at run-finish so those detached holders die BEFORE the
+        /// worktree cleanup, otherwise they wedge <c>git worktree remove</c>
+        /// "Device or resource busy" and orphan the worktree (AGT-1791). Null
+        /// on non-Windows or when the OS refused the assignment (best-effort;
+        /// the tree-kill fallback still applies).
+        /// </summary>
+        internal TaskProcessReaper? ProcessReaper { get; init; }
 
         /// <summary>
         /// For Claude: the parsed stream-json init frame (model, cwd,
