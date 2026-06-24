@@ -100,7 +100,6 @@ public sealed class AgentMessageBusBridge
             new AgentParticipant { Id = ParticipantOrchestrator, Kind = "Orchestrator", DisplayName = "Orchestrator" },
             new AgentParticipant { Id = "agent:claude", Kind = "CodingAgent", DisplayName = "Claude", Cli = "claude" },
             new AgentParticipant { Id = "agent:codex", Kind = "CodingAgent", DisplayName = "Codex", Cli = "codex" },
-            new AgentParticipant { Id = "agent:copilot", Kind = "CodingAgent", DisplayName = "Copilot", Cli = "copilot" },
             new AgentParticipant { Id = "agent:gemini", Kind = "CodingAgent", DisplayName = "Gemini", Cli = "gemini" },
             // support:adhoc covers one-shot Haiku calls (TitleGen, SummaryGen,
             // PromptEnhance, CommitMessage, ReviewDecision, SoftReasoning).
@@ -698,7 +697,7 @@ public sealed class AgentMessageBusBridge
     /// <param name="jobId">Optional job slug when the report scope is
     /// <c>Task</c> or <c>Run</c>.</param>
     /// <param name="cli">Optional CLI driver that produced the agent reply
-    /// (claude / codex / copilot / gemini). Recorded on the participant
+    /// (claude / codex / gemini). Recorded on the participant
     /// registry, surfaced as a tag (<c>cli-&lt;name&gt;</c>) on the message.</param>
     /// <param name="skill">Optional skill or workflow id; surfaced as a tag
     /// (<c>skill-&lt;name&gt;</c>) so the UI can filter by reusable workflow.</param>

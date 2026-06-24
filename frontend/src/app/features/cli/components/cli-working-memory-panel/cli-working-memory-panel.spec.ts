@@ -68,7 +68,6 @@ async function setup() {
   // One GET per CLI; claude carries a deletable memory + a protected auth row.
   http.expectOne((r) => r.url.endsWith('/cli/claude/working-memory')).flush(report('claude', [MEMORY, AUTH]));
   http.expectOne((r) => r.url.endsWith('/cli/codex/working-memory')).flush(report('codex', []));
-  http.expectOne((r) => r.url.endsWith('/cli/copilot/working-memory')).flush(report('copilot', []));
   http.expectOne((r) => r.url.endsWith('/cli/gemini/working-memory')).flush(report('gemini', []));
 
   return { http, fixture, component: fixture.componentInstance };

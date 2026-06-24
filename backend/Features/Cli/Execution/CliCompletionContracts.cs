@@ -40,8 +40,7 @@ public sealed record CliCompletionContract
 
     /// <summary>
     /// True when a typed <see cref="CliRunEvent"/> adapter classifies this CLI's
-    /// frames. False means completion is inferred from process exit / heuristics
-    /// (Copilot, until its TUI gets a screen-scraping adapter).
+    /// frames. False means completion is inferred from process exit / heuristics.
     /// </summary>
     public required bool Typed { get; init; }
 
@@ -90,17 +89,6 @@ public static class CliCompletionContracts
             UsageSource = "result.stats (input / output / cached tokens, tool_calls)",
             Typed = true,
             Notes = "GeminiEventAdapter maps native frames to typed CliRunEvent.",
-        },
-        new CliCompletionContract
-        {
-            CliType = CliTypes.Copilot,
-            Transport = "PTY / TUI (no structured event stream)",
-            SessionStartSignal = "none (not surfaced by a typed adapter)",
-            CompletionSignal = "process exit (heuristic, exit-based)",
-            FailureSignal = "non-zero process exit / watchdog kill",
-            UsageSource = "none",
-            Typed = false,
-            Notes = "No CliRunEvent adapter yet; completion is exit-based. Screen-scraping adapter is planned.",
         },
     ];
 }

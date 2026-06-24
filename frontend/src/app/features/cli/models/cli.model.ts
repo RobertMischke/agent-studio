@@ -48,10 +48,6 @@ export interface CliCompletionContract {
   notes: string;
 }
 
-// Backwards-compat aliases — the records were Copilot-named before the multi-CLI refactor.
-export type CopilotModelInfo = CliModelInfo;
-export type CopilotModelCatalog = CliModelCatalog;
-
 export interface CliSessionInfo {
   id: string;
   label: string | null;

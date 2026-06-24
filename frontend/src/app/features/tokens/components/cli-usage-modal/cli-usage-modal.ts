@@ -112,8 +112,6 @@ export class CliUsageModalComponent {
         return m.includes('claude') || m.includes('haiku') || m.includes('sonnet') || m.includes('opus');
       case 'codex':
         return m.includes('codex') || m.startsWith('gpt') || /^o\d/.test(m);
-      case 'copilot':
-        return m.includes('copilot');
       case 'gemini':
         return m.includes('gemini');
       default:
@@ -125,7 +123,6 @@ export class CliUsageModalComponent {
     switch (cli) {
       case 'claude': return 'Claude';
       case 'codex': return 'Codex';
-      case 'copilot': return 'Copilot';
       case 'gemini': return 'Gemini';
       default: return cli;
     }

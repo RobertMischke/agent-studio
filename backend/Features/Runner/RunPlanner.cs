@@ -174,14 +174,8 @@ public static class RunPlanner
         }
         var resume = !string.IsNullOrWhiteSpace(startSession);
         string? persistSessionName = null;
-        if (!resume && cliType == CliTypes.Copilot)
-        {
-            // Copilot uses the persisted name as the resume handle - pre-generate
-            // a slug now so the next run can find it. Other CLIs capture a real
-            // UUID during streaming and leave SessionName null until then.
-            startSession = BuildSessionName(jobId);
-            persistSessionName = startSession;
-        }
+        // Claude / Codex / Gemini capture a real session UUID during streaming and
+        // leave SessionName null until then; nothing to pre-generate here.
 
         var promptTemplate = SelectStartPromptTemplate(initialState, resume, sessionDropped);
 
@@ -340,9 +334,10 @@ public static class RunPlanner
         new(@"^taskboard-[A-Za-z0-9_-]+-\d{12}$", RegexOptions.Compiled);
 
     /// <summary>
-    /// Copilot uses the persisted name as a stable handle for <c>--resume</c>;
-    /// keep it short, deterministic, and unique per start. Other CLIs capture
-    /// a real UUID during streaming and never need this.
+    /// Builds the short, deterministic placeholder session slug some legacy runs
+    /// persisted before the surviving CLIs (Claude / Codex / Gemini) captured a
+    /// real streaming UUID. Retained so <see cref="IsPlaceholderSessionSlug"/> can
+    /// still recognise and drop those slugs on resume.
     /// </summary>
     public static string BuildSessionName(string jobId)
     {

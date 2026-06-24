@@ -97,9 +97,9 @@ public static class ClientEndpoints
 
             // Validate the CLI value against the known set if it's a non-empty set.
             string? cli = string.IsNullOrWhiteSpace(request.DefaultCliType) ? null : request.DefaultCliType!.Trim().ToLowerInvariant();
-            if (cli is not null && cli is not ("claude" or "codex" or "copilot" or "gemini"))
+            if (cli is not null && cli is not ("claude" or "codex" or "gemini"))
             {
-                return Results.BadRequest(new { error = "invalid-cli-type", allowed = new[] { "claude", "codex", "copilot", "gemini" } });
+                return Results.BadRequest(new { error = "invalid-cli-type", allowed = new[] { "claude", "codex", "gemini" } });
             }
 
             string? model = string.IsNullOrWhiteSpace(request.DefaultModel) ? null : request.DefaultModel!.Trim();

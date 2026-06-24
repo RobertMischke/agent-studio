@@ -38,13 +38,13 @@ public record TaskInfo
     /// when the job has had no orchestrator LLM activity yet.
     /// </summary>
     public TaskTokenSummary? TokenSummary { get; init; }
-    /// <summary>Name passed to Copilot CLI via <c>--name</c> on first start; reused with <c>--resume</c> for follow-ups.</summary>
+    /// <summary>CLI-native session identifier captured during streaming; reused on resume for follow-ups.</summary>
     public string? SessionName { get; init; }
     /// <summary>Preferred model for this job (e.g. <c>claude-sonnet-4.5</c>); passed via <c>--model</c> when supported.</summary>
     public string? Model { get; init; }
     /// <summary>Optional thinking / reasoning effort level for the selected CLI model.</summary>
     public string? ThinkingLevel { get; init; }
-    /// <summary>Which CLI backend executes this job: <c>copilot</c>, <c>claude</c>, or <c>codex</c>. Defaults to <c>copilot</c>.</summary>
+    /// <summary>Which CLI backend executes this job: <c>claude</c>, <c>codex</c>, or <c>gemini</c>. Defaults to <c>claude</c>.</summary>
     public string? CliType { get; init; }
     /// <summary>
     /// Card kind: <c>task</c> (default, a runnable unit of work) or <c>epic</c>

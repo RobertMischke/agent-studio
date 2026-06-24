@@ -37,7 +37,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
     public override string CliType => CliTypes.Codex;
 
     // Codex resumes by UUID captured from thread.started (or legacy session_meta).
-    // A slug from Copilot or any other CLI is invalid and would make
+    // A slug from any other CLI is invalid and would make
     // `codex exec resume` error out.
     private static readonly System.Text.RegularExpressions.Regex CodexUuidRegex =
         new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
@@ -205,8 +205,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
     {
         if (string.IsNullOrWhiteSpace(model)) return false;
         return model.StartsWith("claude-", StringComparison.OrdinalIgnoreCase)
-               || model.StartsWith("gemini-", StringComparison.OrdinalIgnoreCase)
-               || model.StartsWith("copilot", StringComparison.OrdinalIgnoreCase);
+               || model.StartsWith("gemini-", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

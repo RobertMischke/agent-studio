@@ -36,7 +36,6 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
   readonly refreshingAll = signal(false);
   // Per-CLI in-flight refresh flags so each card's spinner is independent.
   readonly refreshing = signal<Record<CliType, boolean>>({
-    copilot: false,
     claude: false,
     codex: false,
     gemini: false,
@@ -119,8 +118,6 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
 
   cliLabel(t: CliType): string {
     switch (t) {
-      case 'copilot':
-        return 'Copilot';
       case 'claude':
         return 'Claude Code';
       case 'codex':

@@ -1300,7 +1300,7 @@ export class OverviewPaneComponent {
   }
 
   asCliType(value: string | null | undefined): CliType | null {
-    return value && (['copilot', 'claude', 'codex', 'gemini'] as readonly string[]).includes(value)
+    return value && (['claude', 'codex', 'gemini'] as readonly string[]).includes(value)
       ? value as CliType
       : null;
   }

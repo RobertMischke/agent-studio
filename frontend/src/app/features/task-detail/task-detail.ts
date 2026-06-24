@@ -275,7 +275,7 @@ export class TaskDetailComponent implements OnDestroy {
   readonly thinkingLevelDraft = signal<string | null>(null);
   readonly availableModels = signal<CliModelInfo[]>([]);
   readonly cliTypes = CLI_TYPES;
-  readonly cliTypeDraft = signal<CliType>('copilot');
+  readonly cliTypeDraft = signal<CliType>('claude');
 
   modelMultiplier(id: string | null | undefined): number | null {
     if (!id) return null;
@@ -342,7 +342,7 @@ export class TaskDetailComponent implements OnDestroy {
   constructor() {
     // Load the initial catalog for whatever CLI the current job uses; the effect below
     // will re-trigger this when the user switches CLIs.
-    this.loadModelCatalog('copilot');
+    this.loadModelCatalog('claude');
     // Register the detail view as the bottom of the modal stack while it is
     // mounted. Any modal opened on top of it (Add Task, error dialog, verbose
     // debug, confirm-dialog) registers later and therefore wins Escape first.
@@ -447,7 +447,7 @@ export class TaskDetailComponent implements OnDestroy {
       this.modelDraft.set(def?.id ?? '');
     }
     this.thinkingLevelDraft.set(d.info.thinkingLevel ?? null);
-    const nextCliType = (d.info.cliType ?? 'copilot') as CliType;
+    const nextCliType = (d.info.cliType ?? 'claude') as CliType;
     if (nextCliType !== this.cliTypeDraft()) {
       this.cliTypeDraft.set(nextCliType);
       this.loadModelCatalog(nextCliType);
@@ -1418,7 +1418,8 @@ export class TaskDetailComponent implements OnDestroy {
   }
 
   openCliConfig(): void {
-    if (this.cliTypeDraft() !== 'copilot') return;
+    // Copilot removed: no CLI exposes the inline path/token config card.
+    return;
     this.showCliConfig.set(true);
     this.cliTestResult.set(null);
     this.jobService.getCliSettings().subscribe({
@@ -1504,6 +1505,8 @@ export class TaskDetailComponent implements OnDestroy {
   }
 
   private canOpenCliConfigForCurrentJob(message: string | null | undefined): boolean {
-    return this.cliTypeDraft() === 'copilot' && isCliErrorMessage(message);
+    // Copilot removed: no CLI exposes the inline config card.
+    void message;
+    return false;
   }
 }

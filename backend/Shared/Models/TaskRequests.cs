@@ -154,7 +154,7 @@ public record CreateTaskRequest
     public string? Model { get; init; }
     public string? ThinkingLevel { get; init; }
     public string? TargetState { get; init; }
-    /// <summary>Optional CLI backend (claude|codex|copilot|gemini). Defaults to claude when omitted.</summary>
+    /// <summary>Optional CLI backend (claude|codex|gemini). Defaults to claude when omitted.</summary>
     public string? CliType { get; init; }
     /// <summary>Card kind: <c>task</c> (default) or <c>epic</c>. See <see cref="TaskKinds"/>.</summary>
     public string? Kind { get; init; }

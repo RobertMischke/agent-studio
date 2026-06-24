@@ -344,7 +344,7 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
   });
 
   cliIconFor(cli: string): string {
-    if (cli === 'copilot' || cli === 'claude' || cli === 'codex' || cli === 'gemini') {
+    if (cli === 'claude' || cli === 'codex' || cli === 'gemini') {
       return cliTypeIcon(cli);
     }
     return '🤖';

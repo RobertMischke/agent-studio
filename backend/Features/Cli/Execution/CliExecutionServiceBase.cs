@@ -6,16 +6,10 @@ using LibOutcome = CodingAgentRunner.Model.RunOutcome;
 namespace AgentStudio.Cli;
 
 /// <summary>
-/// Shared process-orchestration logic for the slim non-Copilot CLI backends
-/// (Claude Code, Codex). Handles spawning, output streaming, persistence, and
-/// reattach. Subclasses provide the CLI-specific argument-building and
-/// session-name handling via <see cref="BuildStartInfo"/>.
-/// <para>
-/// CopilotCliService predates this base and keeps its own (heavily customised)
-/// implementation — it shares the public <see cref="ICliExecutionService"/>
-/// surface but not the code path. Refactoring it into this base would be a
-/// pure churn change with no behavioural win.
-/// </para>
+/// Shared process-orchestration logic for the slim CLI backends
+/// (Claude Code, Codex, Gemini). Handles spawning, output streaming,
+/// persistence, and reattach. Subclasses provide the CLI-specific
+/// argument-building and session-name handling via <see cref="BuildStartInfo"/>.
 /// </summary>
 public abstract class CliExecutionServiceBase : ICliExecutionService
 {
@@ -31,7 +25,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
     /// <summary>
     /// Typed lifecycle events from the CLI (ADR-0013). Subclasses with an
-    /// adapter (Claude / Codex / Gemini / Copilot) raise these alongside
+    /// adapter (Claude / Codex / Gemini) raise these alongside
     /// the legacy <see cref="OnOutput"/> stream so consumers can migrate
     /// incrementally. Subclasses without an adapter emit nothing here -
     /// the runner falls back to the silence-only watchdog in that case.
@@ -845,9 +839,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// double-execution risk and lets the resume-prompt logic in
     /// <see cref="ProjectRunner"/> drive a clean fresh continuation.
     /// <para>
-    /// Subclasses that genuinely want re-attach semantics (Copilot today) can
-    /// override this — Copilot does so in its own service and never enters
-    /// this base implementation because it doesn't extend the base class.
+    /// Subclasses that genuinely want re-attach semantics can override this.
     /// </para>
     /// </summary>
     public virtual void ReattachOnStartup() => ReapOrphans();

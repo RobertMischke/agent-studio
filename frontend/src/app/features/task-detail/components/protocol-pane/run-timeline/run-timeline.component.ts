@@ -364,8 +364,7 @@ export class RunTimelineComponent {
 
   private cliType(cli: string | null): CliType | null {
     const normalized = (cli ?? '').trim().toLowerCase();
-    return normalized === 'copilot' ||
-      normalized === 'claude' ||
+    return normalized === 'claude' ||
       normalized === 'codex' ||
       normalized === 'gemini'
         ? normalized

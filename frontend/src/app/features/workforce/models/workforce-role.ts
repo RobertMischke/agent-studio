@@ -270,7 +270,6 @@ export function resolveRole(input: RoleAttributionInput): WorkforceRole {
     author === 'agent' ||
     author === 'claude' ||
     author === 'codex' ||
-    author === 'copilot' ||
     author === 'gemini'
   ) {
     return ROLE_BY_ID.get('task-executor')!;

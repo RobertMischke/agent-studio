@@ -9,8 +9,6 @@ export type {
   CliModelInfo,
   CliModelCatalog,
   CliCompletionContract,
-  CopilotModelInfo,
-  CopilotModelCatalog,
   CliSessionInfo,
   CliUsageProjectGroup,
   CliUsageSection,

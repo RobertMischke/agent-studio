@@ -24,7 +24,6 @@ export type ChatRowAuthor =
   | 'supervisor'
   | 'claude'
   | 'codex'
-  | 'copilot'
   | 'gemini'
   | 'system';
 

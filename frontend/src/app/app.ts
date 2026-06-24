@@ -702,9 +702,9 @@ export class App implements OnInit, OnDestroy {
       },
     ];
   });
-  readonly selectedJobUsesCopilot = computed(
-    () => (this.selectedJob()?.info.cliType ?? 'copilot') === 'copilot',
-  );
+  // Copilot removed: no CLI exposes the inline path/token config card, so the
+  // error-dialog "Open CLI config" affordance is permanently disabled.
+  readonly selectedJobUsesCopilot = computed(() => false);
 
   // Cycle 9j: triageLanePeers lives in TaskSelectionService.
   readonly triageLanePeers = this.jobSelection.triageLanePeers;

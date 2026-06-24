@@ -9,7 +9,6 @@ namespace AgentStudio.Shared;
 public static class AgentTypes
 {
     public const string Human   = "human";
-    public const string Copilot = "copilot";
     public const string Claude  = "claude";
     public const string Codex   = "codex";
     public const string Gemini  = "gemini";
@@ -46,7 +45,7 @@ public static class SessionModes
 /// <summary>One known session belonging to a CLI for a given project (cwd).</summary>
 public record CliSessionInfo
 {
-    /// <summary>CLI-native session identifier (Copilot name, Claude UUID/name, Codex UUID).</summary>
+    /// <summary>CLI-native session identifier (Claude UUID/name, Codex UUID).</summary>
     public string Id { get; init; } = "";
     /// <summary>Display label — for Codex this is the auto-derived thread name.</summary>
     public string? Label { get; init; }

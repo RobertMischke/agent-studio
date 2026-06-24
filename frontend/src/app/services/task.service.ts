@@ -30,7 +30,7 @@ import type {
 } from '../models/task.model';
 import { TaskState } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
-import type { CopilotModelCatalog, CliModelCatalog, CliCompletionContract, CliUsageReport, CliWorkingMemoryReport, CliWorkingMemoryDeleteResult } from '../features/cli';
+import type { CliModelCatalog, CliCompletionContract, CliUsageReport, CliWorkingMemoryReport, CliWorkingMemoryDeleteResult } from '../features/cli';
 import type { GitFileChange, GitStatus, TaskCommitDetail, TaskProvenanceView } from '../features/git';
 import type {
   OrchestratorLogResponse,
@@ -1341,7 +1341,7 @@ export class TaskService {
   }
 
   getModelCatalog() {
-    return this.http.get<CopilotModelCatalog>(`${this.baseUrl}/settings/cli/models`);
+    return this.http.get<CliModelCatalog>(`${this.baseUrl}/settings/cli/models`);
   }
 
   getJobOutput(jobId: string, watchPath?: string) {

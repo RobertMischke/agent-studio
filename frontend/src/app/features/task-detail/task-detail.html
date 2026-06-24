@@ -65,22 +65,6 @@
     (toggleCollapsed)="toggleSetupCollapsed()" />
 
 
-  @if (showCliConfig() && cliTypeDraft() === 'copilot') {
-    <app-cli-config-card
-      [status]="cliStatus()"
-      [testResult]="cliTestResult()"
-      [pathDraft]="cliPathDraft()"
-      [tokenDraft]="tokenDraft()"
-      [testing]="cliTesting()"
-      [tokenSaving]="tokenSaving()"
-      (closeRequest)="showCliConfig.set(false)"
-      (pathDraftChange)="cliPathDraft.set($event)"
-      (tokenDraftChange)="tokenDraft.set($event)"
-      (testPath)="testCliPath()"
-      (savePath)="saveCliPath()"
-      (saveToken)="saveToken()" />
-  }
-
   <app-pane-toggle-bar
     [panesVisible]="panesVisible()"
     [commitCount]="gitCommitCount()"

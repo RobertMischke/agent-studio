@@ -70,7 +70,6 @@ function cliColorFor(cli: string): string {
   switch (cli) {
     case 'claude':  return '#d97757';
     case 'codex':   return '#569cd6';
-    case 'copilot': return '#4ec9b0';
     case 'gemini':  return '#c586c0';
     default:        return '#6e6e6e';
   }

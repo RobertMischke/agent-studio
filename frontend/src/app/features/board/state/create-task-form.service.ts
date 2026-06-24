@@ -38,7 +38,7 @@ export class CreateTaskFormService {
   // previous template ergonomics.
   newTitle = '';
   newWatchPath = '';
-  newAgent: CliType = 'copilot';
+  newAgent: CliType = 'claude';
   newPrompt = '';
   newTargetState: string = TaskState.Preparation;
   newTaskType = 'chore';
@@ -210,7 +210,7 @@ export class CreateTaskFormService {
     this.visible.set(false);
     this.newTitle = '';
     this.newPrompt = '';
-    this.newAgent = 'copilot';
+    this.newAgent = 'claude';
     this.newTaskType = 'chore';
     this.newTags = [];
     this.newTargetState = TaskState.Preparation;

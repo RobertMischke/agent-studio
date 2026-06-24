@@ -294,7 +294,7 @@ export interface EffectiveModelChip {
   tooltip: StructuredTooltip;
 }
 
-const CLI_TYPES_SET = new Set(['copilot', 'claude', 'codex', 'gemini']);
+const CLI_TYPES_SET = new Set(['claude', 'codex', 'gemini']);
 
 function isCliType(v: string | null | undefined): v is CliType {
   return !!v && CLI_TYPES_SET.has(v);

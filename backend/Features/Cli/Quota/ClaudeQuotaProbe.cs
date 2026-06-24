@@ -59,7 +59,7 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
     public ClaudeQuotaProbe(
         ILogger<ClaudeQuotaProbe> logger,
         CliRouter router,
-        CopilotCliEnvironment env,
+        CliEnvironment env,
         IConfiguration configuration)
         : base(logger, router, env)
     {

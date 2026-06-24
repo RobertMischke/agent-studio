@@ -27,7 +27,7 @@ import { cliTypeIcon, cliTypeLabel, formatRelativeTime } from '../../../../servi
 export class CliWorkingMemoryPanelComponent implements OnInit {
   private readonly jobService = inject(TaskService);
 
-  readonly cliTypes: CliType[] = ['claude', 'codex', 'copilot', 'gemini'];
+  readonly cliTypes: CliType[] = ['claude', 'codex', 'gemini'];
 
   readonly reports = signal<Record<string, CliWorkingMemoryReport | null>>({});
   readonly loading = signal(false);

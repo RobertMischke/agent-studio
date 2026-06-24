@@ -2811,7 +2811,7 @@ public class ProjectRunner
     /// <summary>
     /// One-shot post-restart slot reconcile (ASS-1753). A restart clears the
     /// in-memory slot registry, but the CLI router can still own live runs for
-    /// this project's tasks - a CLI that reattaches on startup (Copilot), or a
+    /// this project's tasks - a CLI that reattaches on startup, or a
     /// run whose OS process outlived the restart and is still tracked. Re-book
     /// those into the registry so occupied slots == genuinely-tracked live runs.
     /// Without this the pickup gate under-counts occupancy and, at
@@ -3907,7 +3907,7 @@ public class ProjectRunner
 
         if (input + output + cacheRead + cacheCreation == 0)
         {
-            // Copilot footer example:
+            // Arrow-compact footer example:
             // "↑ 38.6k • ↓ 514 • 34.7k (cached)".
             input = TryReadArrowCompact(value, '↑') ?? 0;
             output = TryReadArrowCompact(value, '↓') ?? 0;
@@ -4108,7 +4108,7 @@ public class ProjectRunner
             }
             catch (Exception ex) { _logger.LogDebug(ex, "Execution-context capture failed for {JobId}", jobId); }
             // Post-hoc token reconstruction (ASS-626 / ASS-665): the Claude
-            // CLI never reports a terminal usage footer the way Copilot does,
+            // CLI never reports a terminal usage footer,
             // so `usage` above is always null for Claude - and a killed run
             // loses even its final result frame. Read the per-turn usage
             // straight from the session transcript and aggregate it into

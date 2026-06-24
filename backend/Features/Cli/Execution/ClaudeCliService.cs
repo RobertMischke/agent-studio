@@ -691,7 +691,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     private static readonly ClaudeOutputRenderer _renderer = new();
 
     // Claude's `-r` flag expects a session UUID written by the CLI itself.
-    // Slug-style names from another CLI (e.g. Copilot's "taskboard-...") cause
+    // Slug-style names from another CLI (e.g. a legacy "taskboard-...") cause
     // the process to hang instead of erroring out, so reject anything that
     // isn't a 36-char canonical UUID.
     private static readonly Regex UuidRegex =

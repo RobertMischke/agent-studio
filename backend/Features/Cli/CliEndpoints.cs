@@ -3,10 +3,7 @@
 namespace AgentStudio.Cli;
 
 /// <summary>
-/// Cross-CLI configuration and observability surface:
-/// the Copilot-specific path / token settings under
-/// <c>/api/settings/cli</c> (legacy carry-over from the
-/// Copilot-only era), plus the multi-CLI introspection
+/// Cross-CLI observability surface: the multi-CLI introspection
 /// routes under <c>/api/cli</c> (model catalogs, session
 /// usage, quota windows, and the dev-only PTY probe).
 /// </summary>
@@ -14,46 +11,6 @@ public static class CliEndpoints
 {
     public static void MapCliEndpoints(this WebApplication app)
     {
-        // CLI settings endpoints — Copilot-specific path / token controls.
-        var settingsGroup = app.MapGroup("/api/settings");
-
-        settingsGroup.MapGet("/cli", (CopilotCliService cli) =>
-        {
-            var (available, version, path) = cli.TestCliPath();
-            return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
-        });
-
-        settingsGroup.MapPut("/cli", (SetCliPathRequest req, CopilotCliService cli) =>
-        {
-            cli.SetCliPath(req.Path);
-            var (available, version, path) = cli.TestCliPath();
-            return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
-        });
-
-        settingsGroup.MapPost("/cli/test", (SetCliPathRequest req, CopilotCliService cli) =>
-        {
-            var (available, version, path) = cli.TestCliPath(req.Path);
-            return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
-        });
-
-        settingsGroup.MapPut("/cli/token", (SetGitHubTokenRequest req, CopilotCliService cli) =>
-        {
-            cli.SetGitHubToken(req.Token);
-            var (available, version, path) = cli.TestCliPath();
-            return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
-        });
-
-        settingsGroup.MapGet("/cli/models", (CopilotCliService cli, bool? refresh) =>
-        {
-            try { return Results.Ok(cli.GetModelCatalog(forceRefresh: refresh ?? false)); }
-            catch (Exception ex)
-            {
-                return Results.Json(
-                    new { error = ex.Message },
-                    statusCode: StatusCodes.Status503ServiceUnavailable);
-            }
-        });
-
         // ── Multi-CLI endpoints ────────────────────────────────────────
 
         var cliGroup = app.MapGroup("/api/cli");
@@ -107,7 +64,7 @@ public static class CliEndpoints
             }
             catch (Exception ex)
             {
-                // Last-resort guard: discovery (e.g. Copilot's PTY probe) can
+                // Last-resort guard: discovery (e.g. a CLI's PTY probe) can
                 // fail when no cache exists. Return 503 with the reason so the
                 // UI can surface "models temporarily unavailable" rather than
                 // breaking the whole page on a 500.
@@ -184,7 +141,7 @@ public static class CliEndpoints
         // ── TEMPORARY: PTY slash-command probe for parser development ──
         // Spawns the requested CLI in a scratch dir, sends a slash command,
         // waits for output to settle, returns the ANSI-stripped snapshot.
-        // Example: /api/cli/_probe/copilot?cmd=/usage
+        // Example: /api/cli/_probe/claude?cmd=/usage
         cliGroup.MapGet("/_probe/{cliType}", async (
             string cliType,
             string? cmd,
@@ -192,7 +149,7 @@ public static class CliEndpoints
             int? settleMs,
             int? followUpSettleMs,
             CliRouter router,
-            CopilotCliEnvironment env,
+            CliEnvironment env,
             CancellationToken ct) =>
         {
             if (!CliTypes.IsValid(cliType))

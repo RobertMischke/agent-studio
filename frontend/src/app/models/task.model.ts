@@ -1,5 +1,5 @@
-export type CliType = 'copilot' | 'claude' | 'codex' | 'gemini';
-export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex', 'gemini'];
+export type CliType = 'claude' | 'codex' | 'gemini';
+export const CLI_TYPES: CliType[] = ['claude', 'codex', 'gemini'];
 
 /**
  * Single source of truth for lane / task-state keys. Mirrors backend

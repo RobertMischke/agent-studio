@@ -235,7 +235,7 @@ public class SkillReadinessService
             PromptMarkdown = preview.PromptMarkdown,
             TargetState = preview.TargetState,
             TaskType = preview.TaskType,
-            Agent = "copilot",
+            Agent = "claude",
             OwnerClientId = string.IsNullOrWhiteSpace(ownerClientId) ? null : ownerClientId,
         };
 

@@ -183,8 +183,6 @@ public static class ModelMetadataRegistry
     public static bool IsCompatibleWithCli(string? cliType, string? model)
     {
         if (string.IsNullOrWhiteSpace(cliType) || string.IsNullOrWhiteSpace(model)) return true;
-        if (string.Equals(CliTypes.Copilot, cliType, StringComparison.OrdinalIgnoreCase))
-            return true;
 
         var expectedVendor = VendorForCli(cliType);
         if (expectedVendor == null) return true;

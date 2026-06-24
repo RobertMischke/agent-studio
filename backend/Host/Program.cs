@@ -258,11 +258,9 @@ builder.Services.AddSingleton<AgentStudio.TaskAccess.ITaskAccess>(sp =>
     sp.GetRequiredService<AgentStudio.TaskAccess.TaskAccessService>());
 builder.Services.AddSingleton<AgentStudio.TaskAccess.ITaskAccessHost>(sp =>
     sp.GetRequiredService<AgentStudio.TaskAccess.TaskAccessService>());
-builder.Services.AddSingleton<CopilotCliEnvironment>();
-builder.Services.AddSingleton<CopilotModelDiscovery>();
+builder.Services.AddSingleton<CliEnvironment>();
 builder.Services.AddSingleton<CodexModelDiscovery>();
 builder.Services.AddSingleton<ClaudeModelDiscovery>();
-builder.Services.AddSingleton<CopilotCliService>();
 builder.Services.AddSingleton<ClaudeCliService>();
 builder.Services.AddSingleton<CodexCliService>();
 builder.Services.AddSingleton<AntigravityCliService>();
@@ -405,7 +403,6 @@ builder.Services.AddSingleton<ConceptDocsService>();
 builder.Services.AddSingleton<SecurityReviewService>();
 builder.Services.AddSingleton<AgentStudio.Design.DesignEvidenceService>();
 // Quota probes: each CLI gets its own probe instance, all surfaced through QuotaService.
-builder.Services.AddSingleton<IQuotaProbe, CopilotQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, ClaudeQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, CodexQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, AntigravityQuotaProbe>();
@@ -782,8 +779,7 @@ cliRouter.OnRunEvent += (cliType, jobId, evt) =>
         hubContext.Clients.All.SendAsync("planUpdated", jobId, cliType);
 };
 
-// Per-CLI startup hook. Copilot re-attaches to surviving processes (its own
-// implementation); Claude / Codex / Gemini reap orphans - see
+// Per-CLI startup hook. Claude / Codex / Gemini reap orphans - see
 // CliExecutionServiceBase.ReattachOnStartup. Must run before any new CLI run
 // is started so we never have two processes editing the same repo.
 cliRouter.ReattachAll();

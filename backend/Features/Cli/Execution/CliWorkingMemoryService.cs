@@ -179,7 +179,6 @@ public sealed class CliWorkingMemoryService
         {
             CliTypes.Claude => Path.Combine(home, ".claude"),
             CliTypes.Codex => Path.Combine(home, ".codex"),
-            CliTypes.Copilot => Path.Combine(home, ".copilot"),
             CliTypes.Gemini => Path.Combine(home, ".gemini"),
             _ => null,
         };
@@ -209,13 +208,6 @@ public sealed class CliWorkingMemoryService
                 yield return new("history.jsonl", "Prompt history", CliWorkingMemoryKinds.Session, false, true, null);
                 yield return new("auth.json", "Auth token", CliWorkingMemoryKinds.Auth, false, false, PROTECTED_AUTH);
                 yield return new("config.toml", "Global config", CliWorkingMemoryKinds.Config, false, false, PROTECTED_CONFIG);
-                break;
-
-            case CliTypes.Copilot:
-                yield return new("history", "Session history", CliWorkingMemoryKinds.Session, true, true, "Recorded Copilot sessions.");
-                yield return new("logs", "Session logs", CliWorkingMemoryKinds.Session, true, true, null);
-                yield return new("config.json", "Global config", CliWorkingMemoryKinds.Config, false, false, PROTECTED_CONFIG);
-                yield return new("settings.json", "Global settings", CliWorkingMemoryKinds.Config, false, false, PROTECTED_CONFIG);
                 break;
 
             case CliTypes.Gemini:

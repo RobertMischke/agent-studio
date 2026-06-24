@@ -18,7 +18,7 @@
       <input class="cli-config__input" type="text"
              [value]="pathDraft()"
              (input)="pathDraftChange.emit($any($event.target).value)"
-             placeholder="z.B. copilot, C:\\Program Files\\GitHub\\copilot.exe" />
+             placeholder="z.B. claude, C:\\Program Files\\Claude\\claude.exe" />
       <button class="btn-sm" (click)="testPath.emit()" [disabled]="testing()">
         {{ testing() ? '⏳' : '🧪 Test' }}
       </button>
