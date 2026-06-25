@@ -115,9 +115,6 @@ public sealed class AntigravityCliService : CliExecutionServiceBase
         _logger.LogInformation("Captured Antigravity session id {Id}", info.CapturedSessionId);
     }
 
-    public string? GetCapturedSessionId(string jobKey)
-        => _processes.TryGetValue(jobKey, out var info) ? info.CapturedSessionId : null;
-
     public override IEnumerable<CliOutputLine> TransformReadLine(CliOutputLine raw)
     {
         if (raw.Stream != "stdout" || string.IsNullOrWhiteSpace(raw.Text) || raw.Text[0] != '{')

@@ -2557,12 +2557,7 @@ public class ProjectRunner
         // CORE agent run is usually claude, so omitting it here was the
         // "no token activity recorded" symptom. Any other CLI stays a clean
         // no-op until its adapter moves onto the shared parser.
-        var snapshot = cli switch
-        {
-            CodexCliService codex   => codex.GetLastParsedTurnUsage(jobKey),
-            ClaudeCliService claude => claude.GetLastParsedTurnUsage(jobKey),
-            _ => null,
-        };
+        var snapshot = cli.GetLastParsedTurnUsage(jobKey);
         if (snapshot is null) return;
         var (usage, observedAt, startedAt) = snapshot.Value;
 
@@ -3871,12 +3866,7 @@ public class ProjectRunner
         string jobKey,
         SessionUsage? footerUsage)
     {
-        var parsed = cli switch
-        {
-            CodexCliService codex   => codex.GetLastParsedTurnUsage(jobKey),
-            ClaudeCliService claude => claude.GetLastParsedTurnUsage(jobKey),
-            _ => null,
-        };
+        var parsed = cli.GetLastParsedTurnUsage(jobKey);
         if (parsed is { } snapshot)
         {
             var u = snapshot.Usage;
@@ -4064,13 +4054,7 @@ public class ProjectRunner
             // surface it in their JSON output; we capture it during streaming
             // and write it back here. Without this, Continue always loses
             // context because info.SessionName never advances past the slug.
-            var capturedSessionId = cli switch
-            {
-                ClaudeCliService claude => claude.GetCapturedSessionId(jobKey),
-                CodexCliService codex   => codex.GetCapturedSessionId(jobKey),
-                AntigravityCliService gemini => gemini.GetCapturedSessionId(jobKey),
-                _ => null
-            };
+            var capturedSessionId = cli.GetCapturedSessionId(jobKey);
 
             // ASS-1739 / T1a: snapshot the read-only execution context (memory /
             // session paths, instruction-file chain, global config, MCP servers,
@@ -4115,7 +4099,7 @@ public class ProjectRunner
             // lastUsage so the Overview tab shows the real token spend instead
             // of nothing, even when the run was aborted. Guarded on the footer
             // being absent so we never clobber a real CLI-reported footer.
-            if (usage == null && cli is ClaudeCliService)
+            if (usage == null && cli.NeedsPostHocUsageReconstruction)
             {
                 coreUsage ??= TryRecordPostHocClaudeUsage(jobId, capturedSessionId, planSnapshot, finishedInfo);
             }
@@ -4171,9 +4155,7 @@ public class ProjectRunner
                     _consecutiveCaptureFailJobId = null;
                 }
             }
-            else if (cli is ClaudeCliService
-                  || cli is CodexCliService
-                  || cli is AntigravityCliService)
+            else if (cli.EmitsSessionId)
             {
                 // The CLI normally emits a session UUID on every run; missing
                 // it means the next follow-up will fall back to Recovery. Tell

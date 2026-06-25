@@ -682,6 +682,24 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     public SessionUsage? GetLastUsage(string jobKey) =>
         _processes.TryGetValue(jobKey, out var info) ? info.LastUsage : null;
 
+    /// <summary>The CLI-native session id captured for a run (from its init/thread frame), or null. Lifted to the base so the runner reads it without knowing which CLI ran.</summary>
+    public string? GetCapturedSessionId(string jobKey)
+        => _processes.TryGetValue(jobKey, out var info) ? info.CapturedSessionId : null;
+
+    /// <summary>The most recent parsed per-turn usage snapshot for a run (+ when observed + run start), or null. Read-only over the run's tracking entry.</summary>
+    public (ParsedTurnUsage Usage, DateTime ObservedAt, DateTime StartedAt)? GetLastParsedTurnUsage(string jobKey)
+    {
+        if (!_processes.TryGetValue(jobKey, out var info)) return null;
+        if (info.LastParsedUsage == null || info.LastParsedUsageAt == null) return null;
+        return (info.LastParsedUsage, info.LastParsedUsageAt.Value, info.Execution.StartedAt);
+    }
+
+    /// <summary>Real CLIs emit a session id on every run; a base-derived CLI that does not can override this to false.</summary>
+    public virtual bool EmitsSessionId => true;
+
+    /// <summary>Whether the runner should reconstruct usage post-hoc when a run finished without a usage footer (Claude reads its session JSONL). Default false.</summary>
+    public virtual bool NeedsPostHocUsageReconstruction => false;
+
     public bool IsRunningForProject(string rootPath) =>
         _processes.Values.Any(p => p.WorkingDirectory == rootPath && !p.Process.HasExited);
 

@@ -364,19 +364,8 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         catch (Exception ex) { _logger.LogDebug(ex, "Claude turn-usage capture skipped"); }
     }
 
-    /// <summary>
-    /// Surface the most recently parsed <c>result</c>-frame usage snapshot for
-    /// a job (captured by <see cref="TryCaptureTurnUsage"/>) along with the UTC
-    /// time it was observed and the run's start time. The runner uses this to
-    /// mirror per-turn usage onto the agent message bus. Mirrors
-    /// <see cref="CodexCliService.GetLastParsedTurnUsage"/>.
-    /// </summary>
-    public (ParsedTurnUsage Usage, DateTime ObservedAt, DateTime StartedAt)? GetLastParsedTurnUsage(string jobKey)
-    {
-        if (!_processes.TryGetValue(jobKey, out var info)) return null;
-        if (info.LastParsedUsage == null || info.LastParsedUsageAt == null) return null;
-        return (info.LastParsedUsage, info.LastParsedUsageAt.Value, info.Execution.StartedAt);
-    }
+    /// <summary>Claude reconstructs usage post-hoc from its session JSONL when a run finished without a result-frame footer. (GetCapturedSessionId / GetLastParsedTurnUsage now live on the base.)</summary>
+    public override bool NeedsPostHocUsageReconstruction => true;
 
     /// <summary>
     /// Stash the parsed init frame onto <see cref="CliExecutionServiceBase.ProcInfo"/>
@@ -783,9 +772,6 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
 
     private static string? NullIfPlaceholder(string v) =>
         string.IsNullOrEmpty(v) || v == "?" || v == "-" ? null : v;
-
-    public string? GetCapturedSessionId(string jobKey)
-        => _processes.TryGetValue(jobKey, out var info) ? info.CapturedSessionId : null;
 
     public ClaudeRateLimitSnapshot? GetLastRateLimit(string jobKey)
         => _processes.TryGetValue(jobKey, out var info) ? info.LastRateLimit : null;

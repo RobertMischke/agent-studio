@@ -84,6 +84,19 @@ public interface ICliExecutionService
 
     CliExecution? GetExecution(string jobKey);
     SessionUsage? GetLastUsage(string jobKey);
+
+    /// <summary>Captured CLI-native session id for a run (from its init/thread frame), or null. Default null keeps stubs compilable; real backends provide it.</summary>
+    string? GetCapturedSessionId(string jobKey) => null;
+
+    /// <summary>Most recent parsed per-turn usage snapshot (+ observed-at + run start), or null. The runner mirrors it onto the agent message bus.</summary>
+    (ParsedTurnUsage Usage, DateTime ObservedAt, DateTime StartedAt)? GetLastParsedTurnUsage(string jobKey) => null;
+
+    /// <summary>Whether this CLI emits a session id on every run. When true, a missing captured id is a capture-loss the runner routes to Recovery. A stub that never does stays false.</summary>
+    bool EmitsSessionId => false;
+
+    /// <summary>Whether the runner should attempt post-hoc usage reconstruction when a run finished without a usage footer (Claude reads its session JSONL).</summary>
+    bool NeedsPostHocUsageReconstruction => false;
+
     bool IsRunningForProject(string rootPath);
 
     /// <summary>

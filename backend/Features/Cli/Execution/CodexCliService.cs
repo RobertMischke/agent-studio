@@ -544,28 +544,6 @@ public sealed class CodexCliService : CliExecutionServiceBase
         return !string.IsNullOrWhiteSpace(id) && CodexUuidRegex.IsMatch(id) ? id : null;
     }
 
-    /// <summary>
-    /// After a Codex run finishes, surface the captured session UUID so callers can
-    /// persist it (the base class doesn't know about session ids).
-    /// </summary>
-    public string? GetCapturedSessionId(string jobKey)
-    {
-        return _processes.TryGetValue(jobKey, out var info) ? info.CapturedSessionId : null;
-    }
-
-    /// <summary>
-    /// Surface the most recently parsed <c>turn.completed</c> usage snapshot
-    /// for a job (captured by <see cref="TryCaptureTurnUsage"/>) along with
-    /// the UTC time it was observed and the run's start time. The runner uses
-    /// this to mirror per-turn usage onto the agent message bus.
-    /// </summary>
-    public (ParsedTurnUsage Usage, DateTime ObservedAt, DateTime StartedAt)? GetLastParsedTurnUsage(string jobKey)
-    {
-        if (!_processes.TryGetValue(jobKey, out var info)) return null;
-        if (info.LastParsedUsage == null || info.LastParsedUsageAt == null) return null;
-        return (info.LastParsedUsage, info.LastParsedUsageAt.Value, info.Execution.StartedAt);
-    }
-
     public override Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
         => _modelDiscovery.GetAsync(GetCliPath(), forceRefresh, ct);
 
