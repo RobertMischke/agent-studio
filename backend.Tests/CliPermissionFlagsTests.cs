@@ -74,19 +74,6 @@ public sealed class CliPermissionFlagsTests
             CliPermissionFlags.For(CliTypes.Gemini, CliPermissionModes.Custom));
 
     [Fact]
-    public void Copilot_Yolo_AllowAll()
-        => Assert.Equal(
-            ["--allow-all"],
-            CliPermissionFlags.For(CliTypes.Copilot, CliPermissionModes.Yolo));
-
-    [Theory]
-    [InlineData(CliPermissionModes.WorkspaceWrite)]
-    [InlineData(CliPermissionModes.ReadOnly)]
-    [InlineData(CliPermissionModes.Custom)]
-    public void Copilot_NonYolo_InjectsNothing(string mode)
-        => Assert.Empty(CliPermissionFlags.For(CliTypes.Copilot, mode));
-
-    [Fact]
     public void NullMode_NormalizesToYolo_PreservingHistoricBehaviour()
     {
         // A caller that never threads a mode keeps the maximum-autonomy default
@@ -101,10 +88,10 @@ public sealed class CliPermissionFlagsTests
 
     [Fact]
     public void UnknownCliType_NormalizesViaCliTypesContract()
-        // CliTypes.Normalize maps an unknown id to Copilot, so the mapper does
+        // CliTypes.Normalize maps an unknown id to Claude, so the mapper does
         // too — never throwing on an unexpected cliType.
         => Assert.Equal(
-            CliPermissionFlags.For(CliTypes.Copilot, CliPermissionModes.Yolo),
+            CliPermissionFlags.For(CliTypes.Claude, CliPermissionModes.Yolo),
             CliPermissionFlags.For("totally-made-up", CliPermissionModes.Yolo));
 
     [Fact]

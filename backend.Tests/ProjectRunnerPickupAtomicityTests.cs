@@ -58,7 +58,7 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         File.WriteAllText(
             Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":{order}," +
-            "\"agent\":\"copilot\",\"cliType\":\"copilot\",\"ownerClientId\":\"local-default\"}");
+            "\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"}");
     }
 
     private ProjectRunner BuildRunner(FailingCliService cli)
@@ -138,11 +138,11 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
 
     private sealed class FailingCliService : ICliExecutionService
     {
-        public string CliType => CliTypes.Copilot;
+        public string CliType => CliTypes.Claude;
         public bool StartCalled { get; private set; }
         public bool PickupLockExistedAtStart { get; private set; }
 
-        public string GetCliPath() => "fake-copilot";
+        public string GetCliPath() => "fake-claude";
         public bool IsAvailable() => true;
         public (bool Available, string? Version, string Path) TestCliPath(string? path = null) => (true, "test", path ?? GetCliPath());
 

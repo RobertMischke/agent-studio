@@ -282,7 +282,6 @@ public class AgentDefaultsMaterializationTests : IDisposable
         Assert.False(AgentTypes.IsAutoPickupEligible("HUMAN"));
         Assert.True(AgentTypes.IsAutoPickupEligible("claude"));
         Assert.True(AgentTypes.IsAutoPickupEligible("codex"));
-        Assert.True(AgentTypes.IsAutoPickupEligible("copilot"));
         Assert.True(AgentTypes.IsAutoPickupEligible("gemini"));
         Assert.True(AgentTypes.IsAutoPickupEligible(null));
         Assert.True(AgentTypes.IsAutoPickupEligible(""));

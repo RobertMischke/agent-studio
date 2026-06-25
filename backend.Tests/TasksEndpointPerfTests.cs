@@ -388,18 +388,13 @@ public class JobsEndpointPerfTests : IDisposable
         // calls router.Get(...).GetExecution(), which returns null when no
         // process is registered. That's exactly what we want for the perf
         // assertion: a fast no-op lookup.
-        var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
-        var copilot = new CopilotCliService(
-            NullLogger<CopilotCliService>.Instance, config,
-            new CopilotModelDiscovery(NullLogger<CopilotModelDiscovery>.Instance, cliEnv, config),
-            cliEnv);
         var codexDiscovery = new CodexModelDiscovery(NullLogger<CodexModelDiscovery>.Instance, config);
         var claude = new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, config);
         var codex = new CodexCliService(NullLogger<CodexCliService>.Instance, config, codexDiscovery,
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
         var gemini = new AntigravityCliService(NullLogger<AntigravityCliService>.Instance, config);
-        var router = new CliRouter(copilot, claude, codex, gemini);
+        var router = new CliRouter(claude, codex, gemini);
 
         var contextUsageParser = new ContextUsageParser();
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
@@ -427,7 +422,7 @@ public class JobsEndpointPerfTests : IDisposable
 
         var runners = new TaskRunnerService(
             config, NullLogger<TaskRunnerService>.Instance, scanner, states, mutations, sessions,
-            copilot, router, contextUsageParser, summary, prompts, transitions, projectSettings,
+            router, contextUsageParser, summary, prompts, transitions, projectSettings,
             quotaService, quotaCaps,
             chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickupFailures, infraBreaker, taskAccess);
         return (router, runners);

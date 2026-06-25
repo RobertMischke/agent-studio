@@ -249,10 +249,9 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         svc.SetCliMode("runbook", CliTypes.Claude, CliPermissionModes.ReadOnly);
 
         Assert.Equal(CliPermissionSources.Project, svc.ResolveCliMode("runbook", CliTypes.Claude).Source);
-        // Gemini/Copilot have no global-config probe, so an un-overridden CLI is
+        // Gemini has no global-config probe, so an un-overridden CLI is
         // always the platform default here regardless of the host's ~/.codex.
         Assert.Equal(CliPermissionSources.Default, svc.ResolveCliMode("runbook", CliTypes.Gemini).Source);
-        Assert.Equal(CliPermissionModes.Yolo, svc.ResolveCliMode("runbook", CliTypes.Copilot).Mode);
     }
 
     // --- T1b / ASS-1742: per-project / per-task context mode --------------
@@ -273,9 +272,6 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     public void ResolveContextMode_SharedOnlyCli_ReportsUnsupported()
     {
         var svc = Build();
-
-        var copilot = svc.ResolveContextMode("new-project", CliTypes.Copilot);
-        Assert.False(copilot.Supported);
 
         var gemini = svc.ResolveContextMode("new-project", CliTypes.Gemini);
         Assert.False(gemini.Supported);

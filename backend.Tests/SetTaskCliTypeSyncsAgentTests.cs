@@ -34,8 +34,6 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
     [Theory]
     [InlineData("claude", "codex")]
     [InlineData("codex", "claude")]
-    [InlineData("claude", "copilot")]
-    [InlineData("copilot", "gemini")]
     [InlineData("gemini", "claude")]
     public void SetJobCliType_AlsoUpdatesAgentField(string startAgent, string newCliType)
     {

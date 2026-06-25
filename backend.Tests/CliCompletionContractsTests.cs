@@ -48,11 +48,4 @@ public class CliCompletionContractsTests
         Assert.Contains(completionFrame, c.CompletionSignal);
     }
 
-    [Fact]
-    public void CopilotIsNotTyped_AndIsExitBased()
-    {
-        var copilot = CliCompletionContracts.All.Single(x => x.CliType == CliTypes.Copilot);
-        Assert.False(copilot.Typed);
-        Assert.Contains("exit", copilot.CompletionSignal, StringComparison.OrdinalIgnoreCase);
-    }
 }

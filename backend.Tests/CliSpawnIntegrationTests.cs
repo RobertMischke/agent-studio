@@ -30,7 +30,7 @@ namespace AgentStudio.Tests;
 /// </para>
 /// <para>
 /// <b>Per-CLI matrix (planned).</b> Claude is implemented first because it
-/// surfaced the hang. Codex / Copilot / Gemini get parallel test cases as
+/// surfaced the hang. Codex / Gemini get parallel test cases as
 /// the test infrastructure stabilises - the hang root cause (Node stdout
 /// block-buffering on a redirected pipe) is shared by Claude/Codex/Gemini
 /// (all Node-based) and the same fix should hold for all three.
@@ -609,41 +609,6 @@ public class CliSpawnIntegrationTests
             stdoutLines.Count >= 1,
             $"Expected at least one stdout frame from antigravity. Got:\n" +
             string.Join("\n", final.Select(l => $"  [{l.Stream}] {l.Text[..Math.Min(l.Text.Length, 200)]}")));
-    }
-
-    /// <summary>
-    /// Copilot smoke probe: Copilot is the odd CLI out - it is TUI-based
-    /// and the production driver spawns it via PtySession (NOT the pipe-
-    /// redirected CliExecutionServiceBase path that Claude / Codex /
-    /// Gemini share). The full StartAsync flow needs a valid GitHub token
-    /// and an interactive auth dance - too invasive for a default
-    /// integration probe. We instead verify the binary is invokable with
-    /// --version via plain Process redirection.
-    /// </summary>
-    [SkippableFact]
-    public void CopilotCli_VersionProbe_Succeeds()
-    {
-        Skip.IfNot(IntegrationEnabled, SkipReason);
-        var fromEnv = Environment.GetEnvironmentVariable("COPILOT_CMD");
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var candidate = !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : Path.Combine(appData, "npm", "copilot.cmd");
-        Skip.IfNot(File.Exists(candidate), $"copilot.cmd not at {candidate}");
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = candidate,
-            Arguments = "--version",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        using var p = new Process { StartInfo = psi };
-        p.Start();
-        var stdout = p.StandardOutput.ReadToEnd();
-        Assert.True(p.WaitForExit(15_000), "copilot --version did not exit within 15s");
-        Assert.Equal(0, p.ExitCode);
-        Assert.False(string.IsNullOrWhiteSpace(stdout), "copilot --version produced empty stdout");
     }
 
     /// <summary>

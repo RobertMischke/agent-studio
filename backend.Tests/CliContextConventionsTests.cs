@@ -5,7 +5,7 @@ namespace AgentStudio.Tests;
 /// <summary>
 /// Locks the pure, filesystem-probing convention builder that derives the
 /// context sources a CLI loads beyond the prompt (ASS-1739 / T1a). This is the
-/// only source of truth for Codex / Copilot / Gemini and the merged-under base
+/// only source of truth for Codex / Gemini and the merged-under base
 /// for Claude, so a regression here silently mis-reports what the agent saw.
 /// Tests build a throwaway directory tree, point the builder at it, and assert
 /// the memory / instruction chains, session store, and global config resolve to
@@ -151,28 +151,6 @@ public class CliContextConventionsTests : IDisposable
     }
 
     [Fact]
-    public void Copilot_IncludesInstructionFileAndProjectMemory()
-    {
-        Write(Path.Combine(_cwd, ".github", "copilot-instructions.md"));
-        Write(Path.Combine(_cwd, "AGENTS.md"));
-        Write(Path.Combine(_home, ".copilot", "config.json"));
-
-        var sources = CliContextConventions.For("copilot", _cwd, _home);
-
-        Assert.Contains(sources, s =>
-            s.Kind == CliContextSourceKinds.InstructionFile &&
-            s.Path == Path.Combine(_cwd, ".github", "copilot-instructions.md") &&
-            s.Exists == true);
-        Assert.Contains(sources, s =>
-            s.Kind == CliContextSourceKinds.Memory &&
-            s.Path == Path.Combine(_cwd, "AGENTS.md"));
-        Assert.Contains(sources, s =>
-            s.Kind == CliContextSourceKinds.GlobalConfig &&
-            s.Path == Path.Combine(_home, ".copilot", "config.json") &&
-            s.Exists == true);
-    }
-
-    [Fact]
     public void Gemini_FindsGeminiMdChainAndUserMemory()
     {
         Write(Path.Combine(_cwd, "GEMINI.md"));
@@ -191,16 +169,18 @@ public class CliContextConventionsTests : IDisposable
     }
 
     [Fact]
-    public void UnknownCli_FallsBackToCopilotConventions()
+    public void UnknownCli_FallsBackToClaudeConventions()
     {
-        // CliTypes.Normalize defaults any unrecognized value to Copilot, so the
-        // builder must produce Copilot's convention set rather than an empty
+        // CliTypes.Normalize defaults any unrecognized value to Claude, so the
+        // builder must produce Claude's convention set rather than an empty
         // list - the switch default is unreachable in practice.
-        Write(Path.Combine(_cwd, ".github", "copilot-instructions.md"));
+        Write(Path.Combine(_cwd, "CLAUDE.md"));
 
         var sources = CliContextConventions.For("totally-unknown", _cwd, _home);
 
-        Assert.Contains(sources, s => s.Kind == CliContextSourceKinds.InstructionFile);
+        Assert.Contains(sources, s =>
+            s.Kind == CliContextSourceKinds.Memory &&
+            s.Path == Path.Combine(_cwd, "CLAUDE.md"));
     }
 
     [Fact]

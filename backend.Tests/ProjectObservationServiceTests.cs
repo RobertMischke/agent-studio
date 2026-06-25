@@ -48,16 +48,13 @@ public class ProjectObservationServiceTests : IDisposable
         var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
         var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
         var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
-        var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
-        var copilot = new CopilotCliService(NullLogger<CopilotCliService>.Instance, config,
-            new CopilotModelDiscovery(NullLogger<CopilotModelDiscovery>.Instance, cliEnv, config), cliEnv);
         var claude = new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, config);
         var codex = new CodexCliService(NullLogger<CodexCliService>.Instance, config,
             new CodexModelDiscovery(NullLogger<CodexModelDiscovery>.Instance, config),
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
         var gemini = new AntigravityCliService(NullLogger<AntigravityCliService>.Instance, config);
-        var router = new CliRouter(copilot, claude, codex, gemini);
+        var router = new CliRouter(claude, codex, gemini);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var projectSettings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
@@ -81,7 +78,7 @@ public class ProjectObservationServiceTests : IDisposable
             NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
         _runners = new TaskRunnerService(
             config, NullLogger<TaskRunnerService>.Instance, scanner, states, mutations, sessions,
-            copilot, router, new ContextUsageParser(), summary, prompts, transitions, projectSettings,
+            router, new ContextUsageParser(), summary, prompts, transitions, projectSettings,
             quota, quotaCaps, chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickup, infraBreaker, taskAccess);
 
         // Manually construct a runner status with one active job so the
