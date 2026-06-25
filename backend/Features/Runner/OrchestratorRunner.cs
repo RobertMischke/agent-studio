@@ -36,27 +36,27 @@ public sealed record OrchestratorDecisionResult(
 /// usage, both of which we capture and surface in the orchestrator log.
 ///
 /// <para>
-/// Why a separate class instead of reusing <see cref="ClaudeCliService"/>:
-/// the existing CLI service is built for the long-running streaming
-/// task-execution path. The orchestrator's decision calls are short,
-/// one-shot, and need exact token-usage capture from the JSON envelope.
-/// Mixing those concerns into ClaudeCliService would force every existing
-/// streaming run through the JSON parser path. Cleaner to keep the
-/// orchestrator runtime as its own thin shell.
+/// Why a separate class instead of reusing the Claude execution engine:
+/// the engine is built for the long-running streaming task-execution path.
+/// The orchestrator's decision calls are short, one-shot, and need exact
+/// token-usage capture from the JSON envelope. Mixing those concerns into the
+/// streaming engine would force every existing streaming run through the JSON
+/// parser path. Cleaner to keep the orchestrator runtime as its own thin
+/// shell that only borrows the engine's resolved CLI path.
 /// </para>
 /// </summary>
 public class OrchestratorRunner
 {
     public const string DefaultModel = ModelIds.ClaudeHaiku45;
 
-    private readonly ClaudeCliService _claude;
+    private readonly GenericCliExecutionService _claude;
     private readonly ILogger<OrchestratorRunner> _logger;
     private readonly ICliUsageParser? _claudeUsageParser;
     private readonly ICliModelRegistry? _modelRegistry;
     private readonly CliOneShotRegistry? _oneShotRegistry;
 
     public OrchestratorRunner(
-        ClaudeCliService claude,
+        GenericCliExecutionService claude,
         ILogger<OrchestratorRunner> logger,
         CliUsageParserRegistry? parsers = null,
         ICliModelRegistry? modelRegistry = null,
@@ -272,7 +272,7 @@ public class OrchestratorRunner
 
         var psi = new ProcessStartInfo
         {
-            FileName = CliExecutionServiceBase.ResolveExecutable(_claude.GetCliPath()),
+            FileName = GenericCliExecutionService.ResolveExecutable(_claude.GetCliPath()),
             Arguments = string.Join(' ', args),
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,

@@ -60,7 +60,7 @@ public sealed class ClaudeOneShot : ICliOneShot
         ArgumentNullException.ThrowIfNull(request);
 
         var cliPath = _configuration["ClaudeCli:Path"] ?? "claude";
-        var executable = CliExecutionServiceBase.ResolveExecutable(cliPath);
+        var executable = GenericCliExecutionService.ResolveExecutable(cliPath);
         var timeout = request.Timeout ?? DefaultTimeout;
 
         // Pre-spawn self-heal symmetric to ClaudeCliService.EnsureCliHealthyAsync.

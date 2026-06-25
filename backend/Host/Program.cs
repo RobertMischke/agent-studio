@@ -227,7 +227,12 @@ builder.Services.AddSingleton<OrchestratorChatService>();
 builder.Services.AddSingleton<ProjectChatStore>();
 builder.Services.AddSingleton<ProjectChatIndex>();
 builder.Services.AddSingleton<ProjectChatMigration>();
-builder.Services.AddSingleton<OrchestratorRunner>();
+builder.Services.AddSingleton<OrchestratorRunner>(sp => new OrchestratorRunner(
+    sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Claude),
+    sp.GetRequiredService<ILogger<OrchestratorRunner>>(),
+    sp.GetService<CliUsageParserRegistry>(),
+    sp.GetService<ICliModelRegistry>(),
+    sp.GetService<CliOneShotRegistry>()));
 builder.Services.AddSingleton<OrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorBootstrap>();
@@ -261,12 +266,35 @@ builder.Services.AddSingleton<AgentStudio.TaskAccess.ITaskAccessHost>(sp =>
 builder.Services.AddSingleton<CliEnvironment>();
 builder.Services.AddSingleton<CodexModelDiscovery>();
 builder.Services.AddSingleton<ClaudeModelDiscovery>();
-builder.Services.AddSingleton<ClaudeCliService>();
-builder.Services.AddSingleton<CodexCliService>();
-builder.Services.AddSingleton<AntigravityCliService>();
+// The per-CLI execution engines: one concrete GenericCliExecutionService per
+// CLI, parameterized by a CliBehavior from BuiltInCliBehaviors. Keyed by CLI
+// type so the router + the Claude-specific consumers (orchestrator runner,
+// session-info endpoint) resolve the exact engine. The log category is kept
+// stable (per-CLI) via a named logger so existing log filters still match.
+builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Claude, (sp, _) =>
+    GenericCliExecutionService.ForClaude(
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Cli.ClaudeCliService"),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetService<CliUsageParserRegistry>(),
+        sp.GetService<ICliModelRegistry>(),
+        sp.GetService<ClaudeModelDiscovery>()));
+builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Codex, (sp, _) =>
+    GenericCliExecutionService.ForCodex(
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Cli.CodexCliService"),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<CodexModelDiscovery>(),
+        sp.GetRequiredService<CliUsageParserRegistry>(),
+        sp.GetRequiredService<ICliModelRegistry>()));
+builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Gemini, (sp, _) =>
+    GenericCliExecutionService.ForAntigravity(
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Cli.AntigravityCliService"),
+        sp.GetRequiredService<IConfiguration>()));
 builder.Services.AddSingleton<ClaudeSessionInspector>();
 builder.Services.AddSingleton<CliWorkingMemoryService>();
-builder.Services.AddSingleton<CliRouter>();
+builder.Services.AddSingleton<CliRouter>(sp => new CliRouter(
+    sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Claude),
+    sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Codex),
+    sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Gemini)));
 builder.Services.AddSingleton<SessionToTaskIndex>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
@@ -780,7 +808,7 @@ cliRouter.OnRunEvent += (cliType, jobId, evt) =>
 };
 
 // Per-CLI startup hook. Claude / Codex / Gemini reap orphans - see
-// CliExecutionServiceBase.ReattachOnStartup. Must run before any new CLI run
+// GenericCliExecutionService.ReattachOnStartup. Must run before any new CLI run
 // is started so we never have two processes editing the same repo.
 cliRouter.ReattachAll();
 

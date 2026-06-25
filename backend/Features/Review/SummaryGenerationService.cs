@@ -263,7 +263,7 @@ public sealed class SummaryGenerationService
         // fallback is for tests that build the service without DI.
         var psi = new ProcessStartInfo
         {
-            FileName = CliExecutionServiceBase.ResolveExecutable(claudePath),
+            FileName = GenericCliExecutionService.ResolveExecutable(claudePath),
             WorkingDirectory = Directory.Exists(workingDirectory) ? workingDirectory : Directory.GetCurrentDirectory(),
             RedirectStandardInput = true,
             RedirectStandardOutput = true,

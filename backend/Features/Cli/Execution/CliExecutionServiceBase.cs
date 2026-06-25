@@ -10,9 +10,9 @@ namespace AgentStudio.Cli;
 /// (Claude Code, Codex, Gemini). Handles spawning, output streaming,
 /// persistence, and reattach. Per-CLI behavior is supplied as a
 /// <see cref="CliBehavior"/> (delegates + data) rather than via subclass
-/// overrides; the thin per-CLI shims (<c>ClaudeCliService</c> /
-/// <c>CodexCliService</c> / <c>AntigravityCliService</c>) build a behavior and
-/// pass it to <c>base(...)</c>.
+/// overrides; the per-CLI behaviors live in <see cref="BuiltInCliBehaviors"/>
+/// and are wired into a concrete engine instance via the
+/// <c>ForClaude</c> / <c>ForCodex</c> / <c>ForAntigravity</c> factory helpers.
 /// </summary>
 public class GenericCliExecutionService : ICliExecutionService
 {
@@ -28,7 +28,7 @@ public class GenericCliExecutionService : ICliExecutionService
     /// </summary>
     private string? _cliPathOverride;
 
-    public string CliType => _behavior.CliTypeResolver?.Invoke(this) ?? _behavior.CliType;
+    public string CliType => _behavior.CliType;
 
     // ── Engine-context accessors for behaviors (same assembly) ──────────
     internal ILogger Logger => _logger;
@@ -77,6 +77,49 @@ public class GenericCliExecutionService : ICliExecutionService
         _logger = logger;
         _configuration = configuration;
     }
+
+    /// <summary>
+    /// Quality-first default for the code-review grade pass: Claude Opus 4.8.
+    /// Lives on the engine (the old <c>ClaudeCliService.DefaultOpusModel</c>
+    /// home was deleted with the shim) so
+    /// <c>CodeReviewGradeModelSelector</c> + <c>TaskCodeReviewEndpoints</c>
+    /// keep a single named constant.
+    /// </summary>
+    public const string DefaultOpusModel = ModelIds.ClaudeOpus48;
+
+    // ── Built-in CLI factory helpers ────────────────────────────────────
+    //
+    // The thin per-CLI shim classes were deleted; production DI (Program.cs)
+    // and the test fixtures build a concrete engine per CLI through these
+    // factories. Each wires the per-CLI CliBehavior from BuiltInCliBehaviors.
+
+    /// <summary>Build a Claude-Code engine from the per-CLI dependencies.</summary>
+    internal static GenericCliExecutionService ForClaude(
+        ILogger logger,
+        IConfiguration configuration,
+        CliUsageParserRegistry? usageParsers = null,
+        ICliModelRegistry? modelRegistry = null,
+        ClaudeModelDiscovery? modelDiscovery = null)
+        => new GenericCliExecutionService(
+            BuiltInCliBehaviors.Claude(usageParsers, modelRegistry ?? new CliModelRegistry(), modelDiscovery),
+            logger, configuration);
+
+    /// <summary>Build a Codex engine from the per-CLI dependencies.</summary>
+    internal static GenericCliExecutionService ForCodex(
+        ILogger logger,
+        IConfiguration configuration,
+        CodexModelDiscovery modelDiscovery,
+        CliUsageParserRegistry usageParsers,
+        ICliModelRegistry modelRegistry)
+        => new GenericCliExecutionService(
+            BuiltInCliBehaviors.Codex(modelDiscovery, usageParsers, modelRegistry),
+            logger, configuration);
+
+    /// <summary>Build an Antigravity/Gemini engine (no extra dependencies).</summary>
+    internal static GenericCliExecutionService ForAntigravity(
+        ILogger logger,
+        IConfiguration configuration)
+        => new GenericCliExecutionService(BuiltInCliBehaviors.Antigravity(), logger, configuration);
 
     public string GetCliPath() => _behavior.GetCliPath(this);
 
@@ -740,6 +783,74 @@ public class GenericCliExecutionService : ICliExecutionService
         if (info.LastParsedUsage == null || info.LastParsedUsageAt == null) return null;
         return (info.LastParsedUsage, info.LastParsedUsageAt.Value, info.Execution.StartedAt);
     }
+
+    /// <summary>
+    /// Claude: latest <c>rate_limit_event</c> snapshot parsed from the
+    /// stream-json output, or null. Read-only over the run's tracking entry;
+    /// surfaced via <c>GET /api/tasks/{id}/claude/session-info</c>.
+    /// </summary>
+    public ClaudeRateLimitSnapshot? GetLastRateLimit(string jobKey)
+        => TryGetProc(jobKey, out var info) ? info.LastRateLimit : null;
+
+    /// <summary>
+    /// Codex: inputs the runner's per-tick silent-completion check needs.
+    /// Returns <c>null</c> when no <c>command_execution</c> <c>item.completed</c>
+    /// has been observed yet for this run. Pure read on top of the per-CLI
+    /// capture done inside the behavior's <c>MapLineToRunEvents</c>.
+    /// </summary>
+    public CodexLastCommandSnapshot? GetLastCommandExecution(string jobKey)
+    {
+        if (!TryGetProc(jobKey, out var info)) return null;
+        if (info.LastCommandObservedAt is null) return null;
+        return new CodexLastCommandSnapshot(
+            ExitCode: info.LastCommandExitCode,
+            Command: info.LastCommandLine,
+            OutputTail: info.LastCommandOutputTail,
+            ObservedAt: info.LastCommandObservedAt.Value);
+    }
+
+    /// <summary>Codex: true once the per-tick silent-completion detector tripped for this run.</summary>
+    public bool IsSilentCompletionTripped(string jobKey)
+        => TryGetProc(jobKey, out var info) && info.SilentCompletionTripped;
+
+    /// <summary>
+    /// Test hook: build the spawn <see cref="ProcessStartInfo"/> for this CLI
+    /// directly (no process). Mirrors the old per-shim
+    /// <c>BuildStartInfoForTest</c> helpers — model is normalized through the
+    /// behavior first, matching the live <see cref="StartAsync"/> path.
+    /// </summary>
+    internal ProcessStartInfo BuildStartInfoForTest(
+        string prompt,
+        string workingDirectory,
+        string? sessionName,
+        bool resumeSession,
+        string? model,
+        string? thinkingLevel = null,
+        string? permissionMode = null)
+        => BuildStartInfo(
+            prompt,
+            workingDirectory,
+            sessionName,
+            resumeSession,
+            NormalizeModelForInvocation(model),
+            thinkingLevel,
+            permissionMode);
+
+    /// <summary>
+    /// Test hook: render the stdin payload this CLI would write (Codex pipes
+    /// the rendered prompt through stdin). Model is normalized first to match
+    /// the live path.
+    /// </summary>
+    internal string? BuildPromptStdinPayloadForTest(
+        string prompt,
+        string? sessionName,
+        bool resumeSession,
+        string? model)
+        => GetPromptStdinPayload(
+            prompt,
+            sessionName,
+            resumeSession,
+            NormalizeModelForInvocation(model));
 
     /// <summary>Real CLIs emit a session id on every run; a behavior that does not sets this false.</summary>
     public bool EmitsSessionId => _behavior.EmitsSessionId;
@@ -1742,7 +1853,7 @@ public class GenericCliExecutionService : ICliExecutionService
         /// <summary>
         /// For Claude: the parsed stream-json init frame (model, cwd,
         /// permission mode, MCP servers, ...). Populated by
-        /// <c>ClaudeCliService</c>'s output hook the moment the frame arrives;
+        /// the Claude behavior's output hook the moment the frame arrives;
         /// consumed by <c>DescribeContextSources</c> so the execution-context
         /// panel shows what the CLI itself reported it loaded. Null for other
         /// CLIs and before the init frame is seen.

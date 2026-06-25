@@ -5,9 +5,9 @@ namespace AgentStudio.Cli;
 /// <summary>
 /// Renders Anthropic <c>claude</c> <c>stream-json</c> NDJSON frames into the
 /// marker-line vocabulary the frontend activity-log parser classifies. This is
-/// a verbatim extraction of the switch that used to live inline in
-/// <see cref="ClaudeCliService"/>.<c>TransformReadLine</c>; the existing
-/// <c>ClaudeCliServiceTests</c> drive the service (which now delegates here),
+/// a verbatim extraction of the switch that used to live inline in the Claude
+/// behavior's <c>TransformReadLine</c>; the existing
+/// <c>ClaudeCliServiceTests</c> drive the engine (which now delegates here),
 /// so the output is pinned byte-for-byte.
 /// </summary>
 public sealed class ClaudeOutputRenderer : ICliOutputRenderer

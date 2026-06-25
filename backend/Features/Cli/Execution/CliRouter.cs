@@ -15,14 +15,6 @@ public sealed class CliRouter
     public event Action<string, string, CliExecution>?  OnFinished;
     public event Action<string, string, CliRunEvent>?   OnRunEvent;        // (cliType, jobKey, event)
 
-    public CliRouter(
-        ClaudeCliService claude,
-        CodexCliService codex,
-        AntigravityCliService gemini)
-        : this((ICliExecutionService)claude, codex, gemini)
-    {
-    }
-
     public CliRouter(params ICliExecutionService[] services)
     {
         _byType = new(StringComparer.OrdinalIgnoreCase);

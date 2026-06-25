@@ -99,7 +99,7 @@ public class CliSpawnIntegrationTests
         {
             var fromEnv = Environment.GetEnvironmentVariable("AGENTAPI_CMD") ?? Environment.GetEnvironmentVariable("ANTIGRAVITY_CMD");
             if (!string.IsNullOrWhiteSpace(fromEnv) && File.Exists(fromEnv)) return fromEnv;
-            var resolved = AgentStudio.Cli.AntigravityCliService.ResolveExecutable("agentapi");
+            var resolved = AgentStudio.Cli.GenericCliExecutionService.ResolveExecutable("agentapi");
             if (resolved != "agentapi" && File.Exists(resolved)) return resolved;
             var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             var candidate = Path.Combine(appData, "npm", "agentapi.cmd");
@@ -232,7 +232,7 @@ public class CliSpawnIntegrationTests
     /// <see cref="GetFrameSetWithinTimeoutAsync"/> to time out with at most
     /// the init frame visible. If a future Windows / .NET / npm change
     /// fixes the underlying inheritance, this test will start failing -
-    /// and we will know the <see cref="ClaudeCliService.ResolveCmdShimToExe"/>
+    /// and we will know the <c>BuiltInCliBehaviors.ResolveCmdShimToExe</c>
     /// workaround can be retired.
     /// </para>
     /// </summary>
@@ -294,7 +294,7 @@ public class CliSpawnIntegrationTests
 
     /// <summary>
     /// Probe 4: production code path with a fat prompt to mirror live
-    /// runner conditions. Pins that <see cref="ClaudeCliService.ResolveCmdShimToExe"/>
+    /// runner conditions. Pins that <c>BuiltInCliBehaviors.ResolveCmdShimToExe</c>
     /// continues to produce streaming frames at realistic prompt sizes.
     /// </summary>
     [SkippableFact]
@@ -316,8 +316,8 @@ public class CliSpawnIntegrationTests
             })
             .Build();
 
-        var svc = new AgentStudio.Cli.ClaudeCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.ClaudeCliService>.Instance,
+        var svc = AgentStudio.Cli.GenericCliExecutionService.ForClaude(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.GenericCliExecutionService>.Instance,
             cfg);
 
         var jobId = $"it-{Guid.NewGuid():N}";
@@ -349,7 +349,7 @@ public class CliSpawnIntegrationTests
     }
 
     /// <summary>
-    /// Probe 3: drive <see cref="ClaudeCliService"/> end-to-end (the
+    /// Probe 3: drive the Claude execution engine end-to-end (the
     /// production code path) with a tiny prompt. This is the test the
     /// actual fix needs to make green: the runner writes prompt to stdin,
     /// reads stream-json frames via the base class's
@@ -371,8 +371,8 @@ public class CliSpawnIntegrationTests
             })
             .Build();
 
-        var svc = new AgentStudio.Cli.ClaudeCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.ClaudeCliService>.Instance,
+        var svc = AgentStudio.Cli.GenericCliExecutionService.ForClaude(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.GenericCliExecutionService>.Instance,
             cfg);
 
         var lines = new List<CliOutputLine>();
@@ -408,7 +408,7 @@ public class CliSpawnIntegrationTests
     }
 
     /// <summary>
-    /// Probe 5: stress test. Three sequential <see cref="ClaudeCliService.StartAsync"/>
+    /// Probe 5: stress test. Three sequential <c>GenericCliExecutionService.StartAsync</c>
     /// calls in a row, each killed mid-run via <see cref="Stop"/>. The live
     /// runner produced this exact pattern when the watchdog cut the agent off
     /// after silence; subsequent runs went silent themselves. If accumulated
@@ -430,8 +430,8 @@ public class CliSpawnIntegrationTests
                 ["TaskRepository"] = Path.Combine(Path.GetTempPath(), $"cli-it-{Guid.NewGuid():N}")
             })
             .Build();
-        var svc = new AgentStudio.Cli.ClaudeCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.ClaudeCliService>.Instance,
+        var svc = AgentStudio.Cli.GenericCliExecutionService.ForClaude(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.GenericCliExecutionService>.Instance,
             cfg);
 
         var streamingObserved = new List<int>();
@@ -488,7 +488,7 @@ public class CliSpawnIntegrationTests
     }
 
     /// <summary>
-    /// Codex parity probe: drives <see cref="AgentStudio.Cli.CodexCliService.StartAsync"/>
+    /// Codex parity probe: drives <c>GenericCliExecutionService.StartAsync</c> for Codex
     /// against the live <c>codex exec --json</c> CLI with a tiny prompt. Codex
     /// has no bundled .exe (it ships as <c>node.exe + codex.js</c> via the
     /// <c>codex.cmd</c> npm shim), so unlike Claude there is no underlying
@@ -511,8 +511,8 @@ public class CliSpawnIntegrationTests
             })
             .Build();
 
-        var svc = new AgentStudio.Cli.CodexCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.CodexCliService>.Instance,
+        var svc = AgentStudio.Cli.GenericCliExecutionService.ForCodex(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.GenericCliExecutionService>.Instance,
             cfg,
             new AgentStudio.Cli.CodexModelDiscovery(
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.CodexModelDiscovery>.Instance,
@@ -560,7 +560,7 @@ public class CliSpawnIntegrationTests
     }
 
     /// <summary>
-    /// Antigravity parity probe: drives <see cref="AgentStudio.Cli.AntigravityCliService.StartAsync"/>
+    /// Antigravity parity probe: drives <c>GenericCliExecutionService.StartAsync</c> for Antigravity
     /// against the live <c>agentapi</c> CLI.
     /// </summary>
     [SkippableFact]
@@ -578,8 +578,8 @@ public class CliSpawnIntegrationTests
             })
             .Build();
 
-        var svc = new AgentStudio.Cli.AntigravityCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.AntigravityCliService>.Instance,
+        var svc = AgentStudio.Cli.GenericCliExecutionService.ForAntigravity(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.GenericCliExecutionService>.Instance,
             cfg);
 
         var jobId = $"it-{Guid.NewGuid():N}";

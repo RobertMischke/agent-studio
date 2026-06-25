@@ -105,7 +105,7 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
             NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
 
         var router = new CliRouter(cli);
-        var claude = new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, config);
+        var claude = GenericCliExecutionService.ForClaude(NullLogger<GenericCliExecutionService>.Instance, config);
         var orchestratorRunner = new OrchestratorRunner(claude, NullLogger<OrchestratorRunner>.Instance);
         var orchestratorSessions = new OrchestratorSessionStore(NullLogger<OrchestratorSessionStore>.Instance);
         var quotaCacheStore = new QuotaCacheStore(config, NullLogger<QuotaCacheStore>.Instance);

@@ -22,7 +22,7 @@ public static class CodeReviewGradeModelSelector
     /// regression test pins this so a future cost cut can't silently drag the
     /// grade pass back onto a weak model.
     /// </summary>
-    public const string DefaultModel = ClaudeCliService.DefaultOpusModel;
+    public const string DefaultModel = GenericCliExecutionService.DefaultOpusModel;
 
     /// <summary>Default CLI for the grade pass.</summary>
     public const string DefaultCli = "claude";

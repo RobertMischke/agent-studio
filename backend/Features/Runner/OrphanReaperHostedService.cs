@@ -3,7 +3,7 @@ namespace AgentStudio.Runner;
 
 /// <summary>
 /// Periodic safety net for orphaned CLI process trees. The startup reaper
-/// (<see cref="CliExecutionServiceBase.ReattachOnStartup"/>) only fires once at
+/// (<see cref="GenericCliExecutionService.ReattachOnStartup"/>) only fires once at
 /// boot, so a backend left up for days accumulates orphan codex / node
 /// processes from finished or crashed runs whose tree-kill fell back to a
 /// single-process kill or whose monitor died before it could clean up. Those

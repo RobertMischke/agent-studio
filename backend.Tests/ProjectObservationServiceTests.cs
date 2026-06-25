@@ -48,12 +48,12 @@ public class ProjectObservationServiceTests : IDisposable
         var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
         var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
         var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
-        var claude = new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, config);
-        var codex = new CodexCliService(NullLogger<CodexCliService>.Instance, config,
+        var claude = GenericCliExecutionService.ForClaude(NullLogger<GenericCliExecutionService>.Instance, config);
+        var codex = GenericCliExecutionService.ForCodex(NullLogger<GenericCliExecutionService>.Instance, config,
             new CodexModelDiscovery(NullLogger<CodexModelDiscovery>.Instance, config),
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
-        var gemini = new AntigravityCliService(NullLogger<AntigravityCliService>.Instance, config);
+        var gemini = GenericCliExecutionService.ForAntigravity(NullLogger<GenericCliExecutionService>.Instance, config);
         var router = new CliRouter(claude, codex, gemini);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var projectSettings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);

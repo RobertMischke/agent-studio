@@ -316,12 +316,12 @@ public sealed class RunnerSlotWiringTests : IDisposable
             scanner, mutations, states, transitions, indexCache,
             NullLogger<AgentStudio.TaskAccess.TaskAccessService>.Instance);
 
-        var claude = new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, config);
+        var claude = GenericCliExecutionService.ForClaude(NullLogger<GenericCliExecutionService>.Instance, config);
         var codexDiscovery = new CodexModelDiscovery(NullLogger<CodexModelDiscovery>.Instance, config);
-        var codex = new CodexCliService(NullLogger<CodexCliService>.Instance, config, codexDiscovery,
+        var codex = GenericCliExecutionService.ForCodex(NullLogger<GenericCliExecutionService>.Instance, config, codexDiscovery,
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
-        var gemini = new AntigravityCliService(NullLogger<AntigravityCliService>.Instance, config);
+        var gemini = GenericCliExecutionService.ForAntigravity(NullLogger<GenericCliExecutionService>.Instance, config);
         var router = new CliRouter(claude, codex, gemini);
 
         var orchestratorRunner = new OrchestratorRunner(claude, NullLogger<OrchestratorRunner>.Instance);

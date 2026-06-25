@@ -31,7 +31,7 @@ public static class TaskCodeReviewEndpoints
     public const string DefaultCliFallback = "claude";
 
     /// <summary>Hard fallback when neither config nor request specifies a model.</summary>
-    public const string DefaultModelFallback = ClaudeCliService.DefaultOpusModel;
+    public const string DefaultModelFallback = GenericCliExecutionService.DefaultOpusModel;
 
     /// <summary>Default per-run wall-clock cap when configuration omits it.</summary>
     public const int DefaultTimeoutSecondsFallback = 600;

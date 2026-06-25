@@ -534,7 +534,7 @@ public static class AgentOutcomeAnalyzer
     /// <summary>
     /// Pull the diagnosis text out of the synthetic
     /// <c>[environment-blocker] &lt;diagnosis&gt;</c> system line written by
-    /// <c>CliExecutionServiceBase.CheckEnvironmentBlocker</c>. Returns null
+    /// <c>GenericCliExecutionService.CheckEnvironmentBlocker</c>. Returns null
     /// when the run did not trip the detector. The marker is the only
     /// signal the analyzer trusts here: the underlying needles (codex
     /// sandbox text, EPERM, etc.) can appear inside an agent's own prose

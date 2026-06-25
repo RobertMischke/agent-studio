@@ -1028,7 +1028,7 @@ public class GitService
 
         var psi = new ProcessStartInfo
         {
-            FileName = CliExecutionServiceBase.ResolveExecutable(claudePath),
+            FileName = GenericCliExecutionService.ResolveExecutable(claudePath),
             WorkingDirectory = root,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -2934,7 +2934,7 @@ public class GitService
         {
             var psi = new ProcessStartInfo
             {
-                FileName = CliExecutionServiceBase.ResolveExecutable(codePath),
+                FileName = GenericCliExecutionService.ResolveExecutable(codePath),
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardError = true,

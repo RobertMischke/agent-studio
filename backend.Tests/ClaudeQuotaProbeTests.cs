@@ -108,6 +108,6 @@ public class ClaudeQuotaProbeTests
     [InlineData("gpt-5.5",                "gpt-5.5")]            // non-Claude unchanged
     public void NormalizeModelId_FixesDottedClaudeIdsLeavesOthers(string? input, string? expected)
     {
-        Assert.Equal(expected, ClaudeCliService.NormalizeModelId(input));
+        Assert.Equal(expected, BuiltInCliBehaviors.NormalizeModelId(input));
     }
 }

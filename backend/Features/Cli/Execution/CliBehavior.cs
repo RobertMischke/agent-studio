@@ -26,14 +26,6 @@ internal sealed class CliBehavior
     /// <summary>One of <c>CliTypes</c>. Required.</summary>
     public required string CliType { get; init; }
 
-    /// <summary>
-    /// Escape hatch for the legacy <c>CliExecutionServiceBase</c> compatibility
-    /// base, whose CLI type is a per-instance abstract override not known at
-    /// construction. When set, the engine prefers this over <see cref="CliType"/>.
-    /// Real per-CLI shims leave it null and set <see cref="CliType"/> to a constant.
-    /// </summary>
-    internal Func<GenericCliExecutionService, string>? CliTypeResolver { get; init; }
-
     /// <summary>Whether this CLI can isolate a clean run via a per-run config home (T1b).</summary>
     public bool SupportsCleanContext { get; init; }
 

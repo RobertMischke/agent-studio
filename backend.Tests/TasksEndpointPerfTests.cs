@@ -389,11 +389,11 @@ public class JobsEndpointPerfTests : IDisposable
         // process is registered. That's exactly what we want for the perf
         // assertion: a fast no-op lookup.
         var codexDiscovery = new CodexModelDiscovery(NullLogger<CodexModelDiscovery>.Instance, config);
-        var claude = new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, config);
-        var codex = new CodexCliService(NullLogger<CodexCliService>.Instance, config, codexDiscovery,
+        var claude = GenericCliExecutionService.ForClaude(NullLogger<GenericCliExecutionService>.Instance, config);
+        var codex = GenericCliExecutionService.ForCodex(NullLogger<GenericCliExecutionService>.Instance, config, codexDiscovery,
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
-        var gemini = new AntigravityCliService(NullLogger<AntigravityCliService>.Instance, config);
+        var gemini = GenericCliExecutionService.ForAntigravity(NullLogger<GenericCliExecutionService>.Instance, config);
         var router = new CliRouter(claude, codex, gemini);
 
         var contextUsageParser = new ContextUsageParser();

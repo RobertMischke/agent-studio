@@ -78,11 +78,11 @@ internal sealed class PerfBaselineFixture : IDisposable
         var mutations = new TaskMutationService(Scanner, new ClientIdentityStore(Config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(Config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
 
         var codexDiscovery = new CodexModelDiscovery(NullLogger<CodexModelDiscovery>.Instance, Config);
-        var claude = new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, Config);
-        var codex = new CodexCliService(NullLogger<CodexCliService>.Instance, Config, codexDiscovery,
+        var claude = GenericCliExecutionService.ForClaude(NullLogger<GenericCliExecutionService>.Instance, Config);
+        var codex = GenericCliExecutionService.ForCodex(NullLogger<GenericCliExecutionService>.Instance, Config, codexDiscovery,
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
-        var gemini = new AntigravityCliService(NullLogger<AntigravityCliService>.Instance, Config);
+        var gemini = GenericCliExecutionService.ForAntigravity(NullLogger<GenericCliExecutionService>.Instance, Config);
         Router = new CliRouter(claude, codex, gemini);
 
         var contextUsageParser = new ContextUsageParser();
