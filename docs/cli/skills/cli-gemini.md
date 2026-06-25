@@ -12,7 +12,7 @@ Google's Gemini CLI. Distributed as the npm package `@google/gemini-cli`. Verifi
 
 > **Source:** [`backend/Services/Cli/GeminiCliService.cs`](../../../backend/Services/Cli/GeminiCliService.cs) (extends `CliExecutionServiceBase`).
 > **Tests:** [`backend.Tests/GeminiCliServiceTests.cs`](../../../backend.Tests/GeminiCliServiceTests.cs) — most thorough driver-level test file in the project; use as a template for new CLIs.
-> **Contract:** [docs/cli/supported-clis.md §3.4](../supported-clis.md).
+> **Contract:** [docs/cli/supported-clis.md §3.3](../supported-clis.md).
 
 ## Commit / push boundary
 
@@ -48,7 +48,7 @@ gemini -p "<prompt>" -o stream-json --skip-trust -y [-m <id>]
 
 `--skip-trust` is **required**. Without it the CLI blocks on a workspace-trust modal that has no headless equivalent. With it, the CLI runs untrusted but still works for non-MCP, non-extension prompts.
 
-`-y` / `--yolo` is **required** for unattended runs. It auto-approves all tool calls (analogous to Claude's `--dangerously-skip-permissions` and Copilot's `--allow-all`). The CLI prints `YOLO mode is enabled.` to stderr — that's expected, not a bug.
+`-y` / `--yolo` is **required** for unattended runs. It auto-approves all tool calls (analogous to Claude's `--dangerously-skip-permissions`). The CLI prints `YOLO mode is enabled.` to stderr — that's expected, not a bug.
 
 `-o stream-json` selects the JSON Lines output format. Without it stdout is human-formatted text that the parser can't handle.
 
@@ -128,7 +128,7 @@ Symptoms:
 - The captured session UUID is correct and persisted, so resume works.
 - The on-disk `cli-output.log` is missing the same frames — it's a CLI-side flush issue, not a runner-side parser bug.
 
-Fixing this requires either a PTY-based spawn (analogous to the quota probe path) or a tiny Node wrapper that does line-buffered passthrough. Tracked in [docs/cli/supported-clis.md §3.4 "Known limitation"](../supported-clis.md). **When this lands, do not silently switch the spawn path** — it changes the semantics of `Process.Stop` (PTY kills behave differently) and the behaviour of the orphan reaper. Add a config flag, default off, validate the new path under the e2e billable spec first.
+Fixing this requires either a PTY-based spawn (analogous to the quota probe path) or a tiny Node wrapper that does line-buffered passthrough. Tracked in [docs/cli/supported-clis.md §3.3 "Known limitation"](../supported-clis.md). **When this lands, do not silently switch the spawn path** — it changes the semantics of `Process.Stop` (PTY kills behave differently) and the behaviour of the orphan reaper. Add a config flag, default off, validate the new path under the e2e billable spec first.
 
 ## Model handling
 

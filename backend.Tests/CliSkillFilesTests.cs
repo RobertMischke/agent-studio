@@ -21,7 +21,6 @@ public class CliSkillFilesTests
         "cli-overview",
         "cli-claude",
         "cli-codex",
-        "cli-copilot",
         "cli-gemini"
     ];
 
@@ -34,7 +33,7 @@ public class CliSkillFilesTests
         var dir = new DirectoryInfo(Path.GetDirectoryName(sourceFile)!);
         while (dir != null)
         {
-            var candidate = Path.Combine(dir.FullName, "docs", "cli-skills");
+            var candidate = Path.Combine(dir.FullName, "docs", "cli", "skills");
             if (Directory.Exists(candidate)) return candidate;
             dir = dir.Parent;
         }
@@ -46,7 +45,6 @@ public class CliSkillFilesTests
     [InlineData("cli-overview")]
     [InlineData("cli-claude")]
     [InlineData("cli-codex")]
-    [InlineData("cli-copilot")]
     [InlineData("cli-gemini")]
     public void EverySkill_HasFrontmatterAndSentinel(string skill)
     {

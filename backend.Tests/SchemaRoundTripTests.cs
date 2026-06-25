@@ -76,8 +76,8 @@ public class SchemaRoundTripTests
         var cliEnum = ReadStringArray(properties.GetProperty("cli"), "enum");
         Assert.Contains("claude", cliEnum);
         Assert.Contains("codex", cliEnum);
-        Assert.Contains("copilot", cliEnum);
         Assert.Contains("gemini", cliEnum);
+        Assert.DoesNotContain("copilot", cliEnum);   // Copilot driver removed — locked out of the schema
 
         var tokens = properties.GetProperty("tokens");
         var tokensRequired = ReadStringArray(tokens, "required");

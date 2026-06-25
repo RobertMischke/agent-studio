@@ -11,13 +11,13 @@ Whenever a CLI integration is added, changed, or audited, this file is updated *
 
 > **Language:** English. See [AGENTS.md](../../AGENTS.md#documentation-language).
 
-> **Operational knowledge** (frame catalogues, capture flows, known incidents, common tasks) lives in the per-CLI skills under [`docs/cli/skills/`](skills): [`cli-overview`](skills/cli-overview.md), [`cli-claude`](skills/cli-claude.md), [`cli-codex`](skills/cli-codex.md), [`cli-copilot`](skills/cli-copilot.md), [`cli-gemini`](skills/cli-gemini.md). This document is the contract; the skills are the working notes. Both must stay in sync.
+> **Operational knowledge** (frame catalogues, capture flows, known incidents, common tasks) lives in the per-CLI skills under [`docs/cli/skills/`](skills): [`cli-overview`](skills/cli-overview.md), [`cli-claude`](skills/cli-claude.md), [`cli-codex`](skills/cli-codex.md), [`cli-gemini`](skills/cli-gemini.md). This document is the contract; the skills are the working notes. Both must stay in sync.
 
 ---
 
 ## 1. What "supported" means
 
-A "supported CLI" is a coding-agent CLI (Claude Code, Codex, Copilot, Gemini, …) that the task processor can drive end-to-end:
+A "supported CLI" is a coding-agent CLI (Claude Code, Codex, Gemini, …) that the task processor can drive end-to-end:
 
 - The task processor can spawn a process for it from a job folder.
 - It surfaces live output in the Activity Log.
@@ -46,7 +46,7 @@ Each capability has: a contract, the code that implements it, and the test that 
 
 **Contract.** The driver decides whether the CLI has a usable session concept. If it does, it must:
 
-- Define `IsCompatibleSessionName(string?)` strictly — reject ids that came from a different CLI (Claude UUIDs vs. Copilot slugs etc.). Accepting an alien id leads to silent hangs.
+- Define `IsCompatibleSessionName(string?)` strictly — reject ids that came from a different CLI (a UUID handed to a CLI that expected a different id shape, or a leftover slug from the removed Copilot driver). Accepting an alien id leads to silent hangs.
 - Build the resume command in `BuildStartInfo` when `resumeSession=true`.
 - Optionally capture the session id from CLI output in `OnOutputLine` (Codex pattern).
 
@@ -62,7 +62,7 @@ If the CLI has no usable session concept, `IsCompatibleSessionName` returns `fal
 
 **Contract.** `GetModelCatalogAsync` returns a list of models the user can pick from. Acceptable sources, in preference order:
 
-1. **Live discovery** — query the CLI for its current model list (Copilot's PTY probe is the reference pattern).
+1. **Live discovery** — query the CLI for its current model list (a PTY-driven probe is the reference pattern).
 2. **Static list with version** — hardcoded list keyed off the CLI version when discovery isn't feasible (Claude pattern).
 3. **Empty list** — the CLI auto-picks; the user has no choice. Fine for v1, document it.
 
@@ -140,7 +140,6 @@ If the CLI emits plain text already in a parser-friendly shape, `TransformReadLi
 |-----|:---:|-----------|---------------------------|
 | Claude | ✅ | `CLAUDE_CONFIG_DIR` → per-run temp dir | `.credentials.json`, `settings.json` (excludes `CLAUDE.md`, `projects/`) |
 | Codex | ✅ | `CODEX_HOME` → per-run temp dir | `auth.json`, `config.toml` (excludes `history.jsonl`) |
-| Copilot | ❌ shared-only | `~/.copilot` is hardcoded with no env override | — |
 | Gemini / Antigravity | ❌ shared-only | agentapi driver exposes no documented home override | — |
 
 A CLI with no isolation mechanism honestly **declares `shared-only`** (`SupportsCleanContext => false`). A run that requested `clean` against a shared-only CLI is stamped `contextMode = "shared"` so the read-only Execution Context panel (§2.8) shows the truth rather than a mode the CLI couldn't honor.
@@ -198,25 +197,7 @@ A CLI with no isolation mechanism honestly **declares `shared-only`** (`Supports
 - Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a bare Enter. Sending `1<Enter>` works but leaves a stray `1` in the input box that prefixes the next slash command — use `<Enter>` alone.
 - Trust + welcome + `/status` is a fragile multi-step probe; see comments in [`CodexQuotaProbe`](../../backend/Services/Quota/CodexQuotaProbe.cs).
 
-### 3.3 GitHub Copilot CLI (`copilot`)
-
-| Aspect | Status |
-|--------|--------|
-| Process lifecycle | ✅ Custom code path in [`CopilotCliService`](../../backend/Services/CopilotCliService.cs) (predates `CliExecutionServiceBase`) |
-| Session model | ✅ Named slugs persisted in the job record |
-| Model selection | ✅ Live discovery via `CopilotModelDiscovery` |
-| Quota probe | ✅ Footer scrape — `Remaining reqs.: ±NN.N%`; absolute counts derived from the configured plan |
-| Logging | ✅ Pass-through; CLI already emits clean text |
-| Cancellation | ✅ |
-| Availability | ✅ `copilot --version`; additionally `HasGitHubToken()` checks the env / config |
-| Session storage | `~/.copilot/history/<name>.jsonl` (when present) |
-
-**Quirks.**
-- Copilot is the legacy code path — refactoring it onto `CliExecutionServiceBase` is out of scope.
-- Plan must be set in config (`Quota:CopilotPlan`) because the CLI doesn't echo it.
-- Premium-request counter resets on the 1st of the month, 00:00 UTC.
-
-### 3.4 Gemini CLI (`gemini`)
+### 3.3 Gemini CLI (`gemini`)
 
 Verified against `@google/gemini-cli` v0.39.1.
 

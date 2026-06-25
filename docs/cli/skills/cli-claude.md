@@ -64,7 +64,7 @@ claude -r <session-uuid> -p "<prompt>" \
 
 `-r` accepts only the canonical UUID written by Claude's CLI itself. There is no equivalent of `--name` in current versions — sessions are identified by the UUID emitted in the first `system` `stream-json` frame.
 
-The runner never pre-generates a slug for Claude (that's a Copilot pattern). On a fresh run we pass no `-r`, then capture the UUID from the first frame and write it back to `job.json` so the next continuation can resume.
+The runner never pre-generates a session id for Claude. On a fresh run we pass no `-r`, then capture the UUID from the first frame and write it back to `job.json` so the next continuation can resume.
 
 ### Anti-patterns
 
@@ -228,7 +228,7 @@ Three integration test classes pin three contract layers:
 
 | Test class | Pins |
 |---|---|
-| [`CliSpawnIntegrationTests`](../../../backend.Tests/CliSpawnIntegrationTests.cs) | Spawn-path correctness for Claude / Codex / Gemini / Copilot direct invocation, `.CMD` shim shape, sequential kill+restart |
+| [`CliSpawnIntegrationTests`](../../../backend.Tests/CliSpawnIntegrationTests.cs) | Spawn-path correctness for Claude / Codex / Gemini direct invocation, `.CMD` shim shape, sequential kill+restart |
 | [`CliKestrelHostingRepoTests`](../../../backend.Tests/CliKestrelHostingRepoTests.cs) | Spawn produces frames past `Session init` under the real Kestrel-hosted DI graph (closes the dotnet-run-vs-dotnet-test gap that previously masked claude-code#771) — both the default `Process.Start` path and the flag-gated `WindowsHandleScrubSpawner` path |
 | [`CliResumeContractTests`](../../../backend.Tests/CliResumeContractTests.cs) | Resume / continuation contract: fresh-then-resume produces init frames on both runs, dead-session-UUID fails cleanly within 30 s instead of hanging |
 

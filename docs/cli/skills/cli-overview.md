@@ -1,6 +1,6 @@
 ---
 name: cli-overview
-description: Cross-cutting reference for working on the four CLI integrations in agent-taskboard. Use this skill alongside the per-CLI skills (cli-claude / cli-codex / cli-copilot / cli-gemini) whenever you touch backend/Services/Cli/*, backend/Services/CopilotCliService.cs, backend/Services/Quota/*, the activity-log parser, or anything that consumes CLI output. Contains: the contract every driver must satisfy, where each piece of state lives on disk, the seven invariants we keep tripping over, and an index of the per-CLI skills.
+description: Cross-cutting reference for working on the three CLI integrations in agent-taskboard. Use this skill alongside the per-CLI skills (cli-claude / cli-codex / cli-gemini) whenever you touch backend/Services/Cli/*, backend/Services/Quota/*, the activity-log parser, or anything that consumes CLI output. Contains: the contract every driver must satisfy, where each piece of state lives on disk, the seven invariants we keep tripping over, and an index of the per-CLI skills.
 sentinel: TASKBOARD-CLI-SKILL-OVERVIEW-2026
 ---
 
@@ -8,7 +8,9 @@ sentinel: TASKBOARD-CLI-SKILL-OVERVIEW-2026
 
 # CLI integrations: cross-cutting reference
 
-This project drives **four** coding-agent CLIs from a single backend: Claude Code, OpenAI Codex, GitHub Copilot, and Google Gemini. They share a common contract but behave very differently in practice. This skill captures the cross-cutting things that are easy to get wrong; the per-CLI skills (`cli-claude`, `cli-codex`, `cli-copilot`, `cli-gemini`) carry the CLI-specific operational knowledge.
+This project drives **three** coding-agent CLIs from a single backend: Claude Code, OpenAI Codex, and Google Gemini. They share a common contract but behave very differently in practice. This skill captures the cross-cutting things that are easy to get wrong; the per-CLI skills (`cli-claude`, `cli-codex`, `cli-gemini`) carry the CLI-specific operational knowledge.
+
+> **GitHub Copilot was removed.** Its driver (`CopilotCliService`) predated the shared base class and couldn't share the hardened spawn/stream path cleanly. References below to slug session ids survive only as the reason `IsCompatibleSessionName` still rejects them.
 
 > **Authoritative contract:** [docs/cli/supported-clis.md](../supported-clis.md) is the formal "what every supported CLI must provide" document. It is updated in the same PR that touches a CLI integration. This skill complements it with operational/working knowledge.
 
@@ -18,11 +20,10 @@ This project drives **four** coding-agent CLIs from a single backend: Claude Cod
 |---|---|
 | `backend/Services/Cli/ClaudeCliService.cs`, Claude `stream-json` framing, Claude session capture, Claude rate-limit pill | `cli-claude` |
 | `backend/Services/Cli/CodexCliService.cs`, Codex `--json`, Codex session_meta, `codex exec` | `cli-codex` |
-| `backend/Services/CopilotCliService.cs` (legacy code path), `--allow-all`, `gh auth token` integration, named-slug sessions | `cli-copilot` |
 | `backend/Services/Cli/GeminiCliService.cs`, Gemini `init` frame, `--skip-trust` / `-y`, the buffered-stdout limitation | `cli-gemini` |
 | Adding a new CLI | This skill + [docs/cli/supported-clis.md](../supported-clis.md) §4 checklist |
 | Activity-log marker parser, conversation rendering | This skill (§ "Marker-line vocabulary") + the per-CLI `TransformReadLine` notes |
-| Resume / continuation logic across CLIs | This skill (§ "Session model invariants") + `cli-claude` (UUID), `cli-copilot` (slug) |
+| Resume / continuation logic across CLIs | This skill (§ "Session model invariants") + `cli-claude` (UUID) |
 
 ## Architecture at a glance
 
@@ -38,17 +39,17 @@ This project drives **four** coding-agent CLIs from a single backend: Claude Cod
                                             ▼
                                    CliRouter.Get(cliType)
                                             │
-        ┌─────────────────┬─────────────────┼─────────────────┬───────────────┐
-        ▼                 ▼                 ▼                 ▼               ▼
-ClaudeCliService    CodexCliService   GeminiCliService    CopilotCliService    (new CLI here)
-   (base class)       (base class)     (base class)      (legacy code path)
-        │                 │                 │                 │
-        └────┬────────────┴────────┬────────┘                 │
-             │                     │                          │
-             ▼                     ▼                          ▼
-   stream-json frames        plain text                   plain text
-        │                       │                            │
-        └───── TransformReadLine() → marker lines ───────────┘
+        ┌─────────────────┬─────────────────┼─────────────────┐
+        ▼                 ▼                 ▼                 ▼
+ClaudeCliService    CodexCliService   GeminiCliService    (new CLI here)
+   (base class)       (base class)     (base class)
+        │                 │                 │
+        └────┬────────────┴────────┬────────┘
+             │                     │
+             ▼                     ▼
+   stream-json frames        plain text
+        │                       │
+        └───── TransformReadLine() → marker lines ───┘
                                             │
                                             ▼
                                    logs/cli-output.log  (JSONL, source of truth)
@@ -63,20 +64,19 @@ ClaudeCliService    CodexCliService   GeminiCliService    CopilotCliService    (
                        Markdown rendered)         chronological)
 ```
 
-Three of the four drivers (`Claude`, `Codex`, `Gemini`) extend [`CliExecutionServiceBase`](../../../backend/Services/Cli/CliExecutionServiceBase.cs). The fourth, `CopilotCliService`, predates the base class and reimplements lifecycle; do not refactor it onto the base class as a side quest, but copy patterns *into* it when fixing bugs.
+All three drivers (`Claude`, `Codex`, `Gemini`) extend [`CliExecutionServiceBase`](../../../backend/Services/Cli/CliExecutionServiceBase.cs), which owns spawn, lifecycle, persistence, and orphan reaping. A new CLI plugs in the same way.
 
 ## Session model invariants
 
-Each CLI has its own session id format. The two big classes are **UUID** (Claude / Codex / Gemini) and **slug** (Copilot).
+Every current CLI uses a **UUID** session id (Claude / Codex / Gemini). The removed Copilot driver used a **slug** (`taskboard-<jobId>-YYYYMMDDHHmm`); the slug format is gone from the drivers but `IsCompatibleSessionName` still rejects it, so a stale slug from an old run can never be handed to a UUID CLI.
 
 | CLI | Format | How we capture it | Resume flag |
 |---|---|---|---|
 | Claude | `8-4-4-4-12` UUID | Parse first `system` `stream-json` frame in `OnOutputLine`; written to a marker line `● Session init <uuid>` then read back. | `-r <uuid>` |
 | Codex | UUID | Parse `thread_id` of the first `thread.started` JSON line (legacy `session_meta.payload.id` also accepted) in `MapLineToRunEvents` — the **raw**-line hook, because `TransformReadLine` now rewrites it to `● Session <id>`. | `exec resume <uuid> "<prompt>"` (positional, before `--json`) |
 | Gemini | UUID | The `init` stream-json frame is rendered to `● Session init <uuid> (<model>)` by `TransformReadLine`; `OnOutputLine` runs on the **transformed** line and reads the UUID back via regex. | `-r <uuid>` (also accepts numeric index or `latest`, but we persist UUIDs only) |
-| Copilot | Slug (`taskboard-<jobId>-YYYYMMDDHHmm`) | Pre-generated by `RunPlanner.BuildSessionName` before the run; passed via `--name=` on first run, `--resume=` thereafter. | `--resume="<slug>"` |
 
-**Hard invariant:** `IsCompatibleSessionName` must reject every other CLI's id. Accepting an alien id leads to silent hangs (Claude's `-r` waits forever on a slug, Codex's `exec resume` errors out, Copilot starts a fresh session and the resume is lost). The unit tests in `backend.Tests/TaskRunnerPlanTests.cs` lock this matrix; do not relax them without first reading the regression history they protect against.
+**Hard invariant:** `IsCompatibleSessionName` must reject every other CLI's id. Accepting an alien id leads to silent hangs (Claude's `-r` waits forever on a slug, Codex's `exec resume` errors out). The unit tests in `backend.Tests/TaskRunnerPlanTests.cs` lock this matrix; do not relax them without first reading the regression history they protect against.
 
 **Two capture strategies, both valid:** the base class invokes `OnOutputLine` *after* `TransformReadLine` but `MapLineToRunEvents` *before* it.
 - **Claude / Gemini** capture in `OnOutputLine` by reading the rendered `● Session init <uuid>` marker back via a narrow regex. This works because the renderer emits the UUID verbatim into the marker.
@@ -92,7 +92,7 @@ The [April 23, 2026 Anthropic Claude Code postmortem](https://www.anthropic.com/
 
 For this project, the invariant is: **a successful resume is not proof of a successful continuation.** A continuation is healthy only if the agent acts on the latest user follow-up, reconciles with the job folder, and produces useful new evidence or a clear blocker. Pin that behavior in `RunPlanner`, `RunOutcomePolicy`, and session-event tests before touching per-CLI drivers.
 
-Claude and Codex are the reference paths for stale-session work. Gemini and Copilot inherit the general recovery contract, but do not drive the next iteration until Claude and Codex are solid.
+Claude and Codex are the reference paths for stale-session work. Gemini inherits the general recovery contract, but do not drive the next iteration until Claude and Codex are solid.
 
 ## Marker-line vocabulary
 
@@ -169,9 +169,8 @@ of process orchestration. Shared logic is shared through the stateless
    marker out), plus encoding edge cases (umlauts/emoji, CR/LF, empty/long lines).
 
 > **Not yet migrated:** `GeminiCliService` still carries its own inline `TransformReadLine`
-> switch and `CopilotCliService` predates the base class. Both are out of this layer's
-> current scope; migrating them onto `ICliOutputRenderer` is a clean follow-up that does
-> not change their marker output.
+> switch — out of this layer's current scope. Migrating it onto `ICliOutputRenderer` is a
+> clean follow-up that does not change its marker output.
 
 ## Output stream conventions
 
@@ -184,14 +183,14 @@ of process orchestration. Shared logic is shared through the stateless
 
 `system` and `user` are runner-synthesized. Drivers must not produce them — `stdout`/`stderr` only. The base class strips ANSI escapes from persisted lines but does not strip them from the in-memory buffer; downstream consumers should handle either.
 
-## Lifecycle invariants (apply to all four)
+## Lifecycle invariants (apply to all three)
 
 1. **Spawn closes stdin immediately.** Claude's `-p` mode reads stdin even when a prompt is provided and emits a 3 s "no stdin received" warning before continuing. We close stdin right after `Process.Start()` to skip that. Other CLIs do not need this but tolerate it. **Do not remove the close.**
 2. **UTF-8 forced on redirected streams.** Default Windows code page (CP1252) corrupts non-ASCII bytes from Claude/Codex output and silently crashed runs that contained umlauts. The base class sets `StandardOutputEncoding = StandardErrorEncoding = UTF-8` plus `LC_ALL=C.UTF-8`, `LANG=C.UTF-8`, `PYTHONIOENCODING=utf-8`. Do not override per-CLI.
 3. **Persist before notify.** The runner writes each line to `logs/cli-output.log` (JSONL) *before* invoking subscriber callbacks. A subscriber that throws cannot lose a line. The on-disk log is the durability guarantee `GetOutput` falls back to after a backend restart.
 4. **Subscriber callbacks must not throw.** `OnOutput`/`OnFinished` exceptions used to crash the host. Both are wrapped in `try/catch` now; if you add a new subscriber, do the same.
 5. **Synthetic Started/Exited lines.** Drivers must not skip the `[taskboard] Started <cli> CLI ...` and `[taskboard] <cli> CLI exited: ...` lines. The Activity Log used to be blank for 30+ s of Claude's `-p` buffering; users assumed the job was stuck.
-6. **`ReapOrphans` on startup.** `CliExecutionServiceBase.ReattachOnStartup` kills any leftover CLI process from a previous backend run. PID-recycling is guarded by process name + start time. Copilot has its own version because it predates the base; keep both in sync if you change the contract.
+6. **`ReapOrphans` on startup.** `CliExecutionServiceBase.ReattachOnStartup` kills any leftover CLI process from a previous backend run. PID-recycling is guarded by process name + start time.
 7. **Output buffer cap = 5000 lines.** The in-memory `OutputBuffer` is trimmed to 5000 lines; longer history reads from `cli-output.log`. Don't grow this without thinking about RAM on long-running runs.
 
 ## Quota probes
@@ -221,7 +220,6 @@ Each CLI has a `QuotaProbeBase` subclass under `backend/Services/Quota/`. Probes
 - **Session indexes (each CLI's own store):**
   - Claude: `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl`
   - Codex: `~/.codex/session_index.jsonl` + `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`
-  - Copilot: `~/.copilot/history/<name>.jsonl` (when present)
   - Gemini: `~/.gemini/tmp/<project-slug>/chats/session-*.json` (slug map in `~/.gemini/projects.json`)
 - **Quota scratch:** `%TEMP%/agent-taskboard-quota/<cliType>/...` (PTY scratch dirs)
 

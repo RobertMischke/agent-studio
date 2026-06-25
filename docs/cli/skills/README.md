@@ -1,6 +1,6 @@
 # CLI skill files
 
-This folder holds the operational reference for each coding-agent CLI the task processor drives. They are **required reading** when touching a CLI driver, and they are **shared across CLIs**: any agent driving this repo (Claude Code, Codex, Copilot, Gemini) is expected to load the matching skill before changing CLI integration code.
+This folder holds the operational reference for each coding-agent CLI the task processor drives. They are **required reading** when touching a CLI driver, and they are **shared across CLIs**: any agent driving this repo (Claude Code, Codex, Gemini) is expected to load the matching skill before changing CLI integration code.
 
 These files are the current proto-skill set. The broader portable skill architecture is documented in [../skills-architecture.md](../../product/skills-architecture.md): long term, standard and project-specific skills should live in the task processor's central skill library, with watched projects exposing a README lookup section so direct CLI sessions can discover them too. Until that migration exists, `docs/cli/skills/` remains the active source for CLI-driver operational skills.
 
@@ -11,7 +11,6 @@ These files are the current proto-skill set. The broader portable skill architec
 | [cli-overview](./cli-overview.md) | Touching anything in `backend/Services/Cli/`, the activity-log parser, or anything that consumes CLI output. Read alongside the per-CLI skill below. |
 | [cli-claude](./cli-claude.md) | Touching `ClaudeCliService`, the stream-json parser, the rate-limit pill, `ClaudeQuotaProbe`. |
 | [cli-codex](./cli-codex.md) | Touching `CodexCliService`, the `--json` parser, `CodexModelDiscovery`, `CodexQuotaProbe`. |
-| [cli-copilot](./cli-copilot.md) | Touching `CopilotCliService` (legacy code path), `gh` token integration, `CopilotModelDiscovery`, `CopilotQuotaProbe`. |
 | [cli-gemini](./cli-gemini.md) | Touching `GeminiCliService`, the Gemini stream-json parser, the buffered-stdout limitation, `GeminiQuotaProbe`. |
 | [sandbox-and-yolo](./sandbox-and-yolo.md) | Touching the permission/sandbox flags any driver injects on spawn, the per-project CLI-mode surface, or the `effective-mode` probe. The mode → flags table and `source` semantics live here. |
 

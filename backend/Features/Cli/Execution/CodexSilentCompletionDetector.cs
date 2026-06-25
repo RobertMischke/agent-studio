@@ -46,9 +46,8 @@ namespace AgentStudio.Cli;
 /// The detector is intentionally Codex-only. Claude's stream-json mode emits
 /// a terminal <c>result</c> frame after the last sentinel and the
 /// <c>SentinelDetected</c> path already handles the lingering-process case;
-/// Gemini and Copilot have different completion contracts. Extending to
-/// another CLI means adding a parallel detector here, not generalising this
-/// one.
+/// Gemini has a different completion contract. Extending to another CLI means
+/// adding a parallel detector here, not generalising this one.
 /// </para>
 /// </summary>
 public static class CodexSilentCompletionDetector

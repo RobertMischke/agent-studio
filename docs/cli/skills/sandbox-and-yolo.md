@@ -41,18 +41,9 @@ The platform's mitigation: spawn every CLI in its **maximum-permission / no-prom
   - `sandbox_mode = "danger-full-access"` — no per-command sandbox refusal.
   - `approval_policy = "never"` — no interactive approval prompts.
 - **Platform default**: both set to the YOLO values above.
-- **Risk rating**: **Medium-High**. Codex's sandbox is the most actively-blocking of the four on Windows; turning it off removes a real safety net. The platform compensates with watchdog timeouts and post-run review.
+- **Risk rating**: **Medium-High**. Codex's sandbox is the most actively-blocking of the three on Windows; turning it off removes a real safety net. The platform compensates with watchdog timeouts and post-run review.
 - **How to verify**: `GET /api/cli/codex/effective-mode?project=<name>` (see [Effective-mode probe](#effective-mode-probe)), or `Get-Content ~/.codex/config.toml | Select-String 'sandbox_mode|approval_policy'`. Also visible in `codex exec --json` output: when sandbox is on, you see `command_execution` items with `exit_code=null, status=in_progress` followed by a sandbox-refusal error; when YOLO, the command runs. Codex is the **only** CLI whose `~/.codex/config.toml` is parsed as a `global`-source fallback when no project override is set.
 - **Quirk**: `[windows] sandbox` (`elevated`/`unelevated`) is a *separate axis* from `sandbox_mode`. We keep it on `unelevated` because `elevated` produces `CreateProcessAsUserW failed: 1312` on this machine (see comment in `~/.codex/config.toml`).
-
-### GitHub Copilot CLI (`gh-copilot` / `copilot`)
-
-- **Knob**: `--allow-all` flag (skip every per-action confirmation).
-- **What "YOLO" means**: skip every per-action confirmation.
-- **Platform default**: `--allow-all` on the spawn command.
-- **Risk rating**: **Medium**. Copilot's tool surface is smaller than Claude/Codex, so the blast radius per command is also smaller.
-- **Non-YOLO modes**: Copilot has no graduated permission flags, so Workspace-Write / Read-only / Custom all inject *nothing* — the CLI falls back to its own interactive defaults. Picking one of those for an unattended run risks a hang; YOLO is the only fully non-interactive mode.
-- **How to verify**: spawn command logged in `cli-output.log`, or `GET /api/cli/copilot/effective-mode?project=…`.
 
 ### Google Gemini CLI (`gemini`)
 
@@ -66,16 +57,15 @@ The platform's mitigation: spawn every CLI in its **maximum-permission / no-prom
 
 The pure mapper `CliPermissionFlags.For(cliType, mode)` in `AgentTaskboard.Shared` renders these exact args on every spawn. A null/unknown mode normalises to **YOLO**, preserving each driver's pre-feature behaviour byte-for-byte.
 
-| Mode | Claude | Codex | Gemini | Copilot |
-|---|---|---|---|---|
-| **YOLO** (default) | `--dangerously-skip-permissions` | `--sandbox danger-full-access` | `--skip-trust -y` | `--allow-all` |
-| **Workspace-Write** | `--permission-mode acceptEdits` | `--sandbox workspace-write` | `--skip-trust --approval-mode auto_edit` | *(none)* |
-| **Read-only** | `--permission-mode plan` | `--sandbox read-only` | `--skip-trust --approval-mode default` | *(none)* |
-| **Custom** | *(none)* | *(none)* | `--skip-trust` | *(none)* |
+| Mode | Claude | Codex | Gemini |
+|---|---|---|---|
+| **YOLO** (default) | `--dangerously-skip-permissions` | `--sandbox danger-full-access` | `--skip-trust -y` |
+| **Workspace-Write** | `--permission-mode acceptEdits` | `--sandbox workspace-write` | `--skip-trust --approval-mode auto_edit` |
+| **Read-only** | `--permission-mode plan` | `--sandbox read-only` | `--skip-trust --approval-mode default` |
+| **Custom** | *(none)* | *(none)* | `--skip-trust` |
 
 Notes:
 - **Gemini always keeps `--skip-trust`** in every mode — without it the CLI blocks on the workspace-trust modal, which no unattended runner can answer. "Custom" therefore still injects `--skip-trust` and nothing else.
-- **Copilot** has no graduated flags, so only YOLO is non-interactive (see its subsection above).
 
 ## Effective-mode probe
 
@@ -108,9 +98,6 @@ codex exec --json -- "node -e 'console.log(1+1)'"
 # Claude
 claude --dangerously-skip-permissions -p "Run `node -e 'console.log(1+1)'`"
 
-# Copilot
-gh copilot suggest --yolo "node -e 'console.log(1+1)'"
-
 # Gemini
 gemini --skip-trust -y -p "Run node -e 'console.log(1+1)'"
 ```
@@ -134,7 +121,7 @@ Inline-meta in the UI must reproduce:
 - **`clean`** (default for coding runs): the run sees only the prompt plus the **versioned repo files** (`AGENTS.md` / `CLAUDE.md`, committed and in the working tree). It does **not** inherit the operator's global CLI state — user memory, prior session transcripts, scratch config. Reproducible: same commit ⇒ same context.
 - **`shared`**: the run reuses the operator's global state (`~/.claude`, `~/.codex`, …). Choose it deliberately when a run is meant to lean on accumulated local context.
 
-`clean` is **not a flag** — each adapter relocates the CLI's config home to a fresh per-run temp dir (Claude via `CLAUDE_CONFIG_DIR`, Codex via `CODEX_HOME`), seeding **only auth + base config** so login still works while memory/history are left behind. Repo instruction files are untouched in either mode because they live in the working tree, not the config home. CLIs with no config-home override (**Copilot**, **Gemini/Antigravity**) are honestly **shared-only**: a `clean` request against them is stamped `shared` so the Execution Context panel shows the truth.
+`clean` is **not a flag** — each adapter relocates the CLI's config home to a fresh per-run temp dir (Claude via `CLAUDE_CONFIG_DIR`, Codex via `CODEX_HOME`), seeding **only auth + base config** so login still works while memory/history are left behind. Repo instruction files are untouched in either mode because they live in the working tree, not the config home. CLIs with no config-home override (**Gemini/Antigravity**) are honestly **shared-only**: a `clean` request against them is stamped `shared` so the Execution Context panel shows the truth.
 
 Resolution mirrors permission mode — **task override → project setting → `clean` default** — narrowed to `shared` for shared-only CLIs. The project-detail recommendation reads verbatim: *"Empfehlung: clean - der Run sieht nur Prompt + versionierte Repo-Dateien; reproduzierbar. shared nur bewusst waehlen."* Persisted in `project-settings.json` under the project's `CliContextModes` map; clearing the override reverts to the `clean` default. Canonical contract + per-CLI mechanics: [supported-clis.md §2.9](../supported-clis.md#29-context-mode--clean-vs-shared-per-run-isolation).
 
@@ -146,7 +133,7 @@ Per [design-principles.md §Inline meta](../../product/design-principles.md#inli
 
 - [docs/product/design-principles.md §Inline meta](../../product/design-principles.md#inline-meta-explain-decisions-next-to-the-lever) — the principle this doc is an example of.
 - `feature-projekt-cli-konfiguration-mit-yolo-default-fuer-claudecodexcopilotgemini-doku-test-pfad` — implementation ticket for the Project Settings surface + the `effective-mode` probe endpoint.
-- [docs/cli/skills/cli-claude.md](./cli-claude.md), [cli-codex.md](./cli-codex.md), [cli-copilot.md](./cli-copilot.md), [cli-gemini.md](./cli-gemini.md) — per-CLI operational reference.
+- [docs/cli/skills/cli-claude.md](./cli-claude.md), [cli-codex.md](./cli-codex.md), [cli-gemini.md](./cli-gemini.md) — per-CLI operational reference.
 - [docs/operations/git/commit-push-doctrine.md](../../operations/git/commit-push-doctrine.md) — the post-run safety net that makes YOLO defensible.
 
 ## Open follow-ups

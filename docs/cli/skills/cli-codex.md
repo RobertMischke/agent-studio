@@ -76,7 +76,7 @@ fix; reverting either half to positional-argv re-opens both:
 codex exec resume <uuid> --json [-m <model>] -   # prompt via stdin
 ```
 
-`resume` is a **subcommand of `exec`**, taking the UUID positionally. Don't pass it as `--resume=<uuid>` (that's Copilot's flag) and don't pass it as `-r <uuid>` (that's Claude/Gemini). Codex's `exec resume <uuid>` is positional. The prompt itself goes over stdin via the same `-` switch as fresh runs.
+`resume` is a **subcommand of `exec`**, taking the UUID positionally. Don't pass it as `--resume=<uuid>` and don't pass it as `-r <uuid>` (that's Claude/Gemini). Codex's `exec resume <uuid>` is positional. The prompt itself goes over stdin via the same `-` switch as fresh runs.
 
 ### Anti-patterns
 
@@ -261,9 +261,9 @@ likely finished but never said so".
 **Calibration knobs.** Override the silence threshold in tests via
 `CodexSilentCompletionDetector.Decide(inputs, silenceThresholdSeconds: ...)`.
 There is no per-project config knob today; if you need to widen / tighten
-the default, edit `DefaultSilenceSeconds`. Other CLIs (Claude, Gemini,
-Copilot) have different completion contracts and are deliberately excluded
-from this detector.
+the default, edit `DefaultSilenceSeconds`. Other CLIs (Claude, Gemini)
+have different completion contracts and are deliberately excluded from
+this detector.
 
 **Tests.** The pure detector + capture + analyzer + policy paths are
 locked by:
