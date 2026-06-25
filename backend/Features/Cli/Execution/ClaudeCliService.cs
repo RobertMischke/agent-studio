@@ -25,12 +25,14 @@ public record ClaudeRateLimitSnapshot(
 ///   <item>Resume:    <c>claude -r "session-name" -p "prompt"</c>.</item>
 ///   <item>Sessions live in <c>~/.claude/projects/&lt;cwd&gt;/&lt;uuid&gt;.jsonl</c>.</item>
 /// </list>
+/// Thin shim over <see cref="GenericCliExecutionService"/>: captures the
+/// Claude-specific DI dependencies, builds a <see cref="CliBehavior"/>, and keeps
+/// the public accessors / static helpers external code references.
 /// </summary>
-public sealed class ClaudeCliService : CliExecutionServiceBase
+public sealed class ClaudeCliService : GenericCliExecutionService
 {
     public const string DefaultOpusModel = ModelIds.ClaudeOpus48;
 
-    private string? _cliPathOverride;
     private readonly CliUsageParserRegistry? _usageParsers;
     private readonly ICliModelRegistry _modelRegistry;
     private readonly ClaudeModelDiscovery? _modelDiscovery;
@@ -45,27 +47,54 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         CliUsageParserRegistry? usageParsers = null,
         ICliModelRegistry? modelRegistry = null,
         ClaudeModelDiscovery? modelDiscovery = null)
-        : base(logger, configuration)
+        : base(BuildBehavior(usageParsers, modelRegistry ?? new CliModelRegistry(), modelDiscovery), logger, configuration)
     {
         _usageParsers = usageParsers;
         _modelRegistry = modelRegistry ?? new CliModelRegistry();
         _modelDiscovery = modelDiscovery;
     }
 
-    public override string CliType => CliTypes.Claude;
-
-    public override string GetCliPath()
-        => _cliPathOverride
-           ?? _configuration["ClaudeCli:Path"]
-           ?? "claude";
-
-    public void SetCliPath(string path)
+    private static CliBehavior BuildBehavior(
+        CliUsageParserRegistry? usageParsers,
+        ICliModelRegistry modelRegistry,
+        ClaudeModelDiscovery? modelDiscovery) => new CliBehavior
     {
-        _cliPathOverride = string.IsNullOrWhiteSpace(path) ? null : path.Trim();
-        _logger.LogInformation("Claude CLI path set to: {Path}", GetCliPath());
-    }
+        CliType = CliTypes.Claude,
+        EmitsSessionId = true,
+        NeedsPostHocUsageReconstruction = true,
+        SupportsCleanContext = true,
+        GetCliPath = ctx => ctx.CliPathOverride
+                            ?? ctx.Configuration["ClaudeCli:Path"]
+                            ?? "claude",
+        IsCompatibleSessionName = (ctx, sessionName)
+            => !string.IsNullOrWhiteSpace(sessionName) && UuidRegex.IsMatch(sessionName),
+        BuildStartInfo = (ctx, prompt, workingDirectory, sessionName, resumeSession, model, thinkingLevel, permissionMode)
+            => BuildStartInfo(ctx, prompt, workingDirectory, sessionName, resumeSession, model, thinkingLevel, permissionMode),
+        // ADR-0014: Claude does NOT pipe through stdin; the prompt is passed
+        // as the last positional argv. Returning null tells the engine not to
+        // redirect stdin at all — the documented Anthropic workaround for
+        // claude-code#771 (Claude reads stdin during init and blocks on a
+        // connected pipe).
+        GetPromptStdinPayload = (ctx, prompt, sessionName, resumeSession, model) => null,
+        EnsureCliHealthy = (ctx, ct) => EnsureCliHealthyAsync(ctx, ct),
+        MapLineToRunEvents = (ctx, jobKey, line) => MapLineToRunEvents(ctx, usageParsers, modelRegistry, jobKey, line),
+        StartSessionLiveness = (ctx, info, resumeSession, sessionName) =>
+        {
+            if (resumeSession && ctx.IsCompatibleSessionName(sessionName))
+                EnsureSessionLiveness(ctx, info, sessionName!);
+        },
+        DescribeContextSources = (ctx, jobKey) => DescribeContextSources(ctx, jobKey),
+        PrepareCleanContext = (ctx, workingDirectory)
+            => CleanContextPreparer.PrepareClaude(ResolveUserHome(), ctx.Logger),
+        SpawnChild = (ctx, psi, prompt, sessionName, resumeSession, model, ct)
+            => SpawnChildAsync(ctx, psi, prompt, sessionName, resumeSession, model, ct),
+        TransformReadLine = (ctx, raw) => _renderer.Render(raw),
+        OnOutputLine = (ctx, info, line) => OnOutputLine(ctx, info, line),
+        GetModelCatalog = (ctx, force, ct) => GetModelCatalog(ctx, modelDiscovery, force, ct),
+    };
 
-    protected override ProcessStartInfo BuildStartInfo(
+    private static ProcessStartInfo BuildStartInfo(
+        GenericCliExecutionService ctx,
         string prompt,
         string workingDirectory,
         string? sessionName,
@@ -94,7 +123,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // CLI buffers its entire reply until the model finishes - that's why
         // the Activity Log used to stay empty for the whole run. --verbose
         // is required by the CLI when stream-json is combined with -p.
-        // TransformReadLine() in this class normalises the frames into the
+        // TransformReadLine() normalises the frames into the
         // marker-line convention the frontend parser already understands.
 
         // Resolve the binary that will actually be executed. Default is to
@@ -105,7 +134,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // ADR-0014 follow-up moved the prompt to a positional argv (no
         // more stdin pipe at all), so the .CMD shim is safe to invoke
         // directly on the modern code path.
-        var fileName = ResolveClaudeBinary(GetCliPath());
+        var fileName = ResolveClaudeBinary(ctx, ctx.GetCliPath());
 
         var psi = new ProcessStartInfo
         {
@@ -123,7 +152,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // identified by the UUID the CLI itself generates and emits in the
         // first `system` stream-json frame. We only ever pass -r <uuid> to
         // resume an already-captured session - never a pre-generated slug.
-        if (resumeSession && !string.IsNullOrWhiteSpace(sessionName) && IsCompatibleSessionName(sessionName))
+        if (resumeSession && !string.IsNullOrWhiteSpace(sessionName) && ctx.IsCompatibleSessionName(sessionName))
         {
             psi.ArgumentList.Add("-r");
             psi.ArgumentList.Add(sessionName);
@@ -136,7 +165,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             psi.ArgumentList.Add(normalizedModel);
         }
 
-        foreach (var flag in CodingAgentRunner.Model.CliReasoningFlags.For(CliType, normalizedModel, thinkingLevel))
+        foreach (var flag in CodingAgentRunner.Model.CliReasoningFlags.For(CliTypes.Claude, normalizedModel, thinkingLevel))
             psi.ArgumentList.Add(flag);
 
         psi.ArgumentList.Add("--output-format");
@@ -147,14 +176,14 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // --dangerously-skip-permissions). See CliPermissionFlags / the
         // sandbox-and-yolo doc. A null mode normalizes to YOLO, preserving the
         // historic always-skip behaviour for callers that don't thread a mode.
-        foreach (var flag in CliPermissionFlags.For(CliType, permissionMode))
+        foreach (var flag in CliPermissionFlags.For(CliTypes.Claude, permissionMode))
             psi.ArgumentList.Add(flag);
 
         // Inject centrally-managed agent rules as a system-prompt overlay.
         // Using --append-system-prompt-file (vs. --append-system-prompt) keeps
         // the multi-line markdown out of the command-line argument string, and
         // lets the Anthropic CLI cache the system-prompt portion across runs.
-        var rulesPath = ResolveAgentRulesPath();
+        var rulesPath = ResolveAgentRulesPath(ctx);
         if (rulesPath != null)
         {
             psi.ArgumentList.Add("--append-system-prompt-file");
@@ -172,28 +201,6 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         return psi;
     }
 
-    /// <summary>
-    /// ADR-0014: Claude does NOT pipe through stdin; the prompt is passed
-    /// as the last positional argv (see <see cref="BuildStartInfo"/>).
-    /// Returning null tells the base class not to redirect stdin at all,
-    /// which is the documented Anthropic workaround for claude-code#771
-    /// (Claude reads stdin during init and blocks on a connected pipe).
-    ///
-    /// <para>
-    /// The previous behaviour - return <paramref name="prompt"/> so the
-    /// base class would pipe-then-close stdin - was the documented way
-    /// to bypass cmd.exe's argv truncation, but that mitigation became
-    /// unnecessary once ADR-0011 routed us through claude.exe directly
-    /// (no cmd.exe wrapping, so multi-line argv is fine).
-    /// </para>
-    /// </summary>
-    protected override string? GetPromptStdinPayload(
-        string prompt,
-        string? sessionName,
-        bool resumeSession,
-        string? model)
-        => null;
-
     internal ProcessStartInfo BuildStartInfoForTest(
         string prompt,
         string workingDirectory,
@@ -203,6 +210,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         string? thinkingLevel = null,
         string? permissionMode = null)
         => BuildStartInfo(
+            this,
             prompt,
             workingDirectory,
             sessionName,
@@ -221,18 +229,18 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     /// the spawn abort with a real error message instead of producing yet
     /// another silent 3a-failed-pickup entry.
     /// </summary>
-    protected override async Task<(bool Ok, string? Error)> EnsureCliHealthyAsync(CancellationToken ct)
+    private static async Task<(bool Ok, string? Error)> EnsureCliHealthyAsync(GenericCliExecutionService ctx, CancellationToken ct)
     {
-        var probe = TestCliPath();
+        var probe = ctx.TestCliPath();
         if (probe.Available) return (true, null);
 
-        _logger.LogWarning(
+        ctx.Logger.LogWarning(
             "claude --version failed pre-spawn at '{Path}'; running NpmShimHealer", probe.Path);
 
-        var outcome = await NpmShimHealer.TryHealClaudeAsync(_logger, ct);
+        var outcome = await NpmShimHealer.TryHealClaudeAsync(ctx.Logger, ct);
         if (outcome.Actions.Count > 0)
         {
-            _logger.LogInformation(
+            ctx.Logger.LogInformation(
                 "NpmShimHealer actions for claude: {Actions}", string.Join("; ", outcome.Actions));
         }
         if (!outcome.Available)
@@ -243,7 +251,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
 
         // Heal reported success; re-probe via the same code path the spawn will
         // use, so a stale resolver cache or PATH quirk surfaces here, not later.
-        var verify = TestCliPath();
+        var verify = ctx.TestCliPath();
         return verify.Available
             ? (true, null)
             : (false, $"claude --version still failing after heal at '{verify.Path}'");
@@ -251,11 +259,16 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
 
     /// <summary>
     /// Bridge to <see cref="ClaudeEventAdapter"/>. Each raw stdout line is
-    /// passed through and emitted on <see cref="CliExecutionServiceBase.OnRunEvent"/>
+    /// passed through and emitted on <see cref="GenericCliExecutionService.OnRunEvent"/>
     /// alongside the legacy marker stream. Stderr passes through unchanged
     /// (we do not parse provider stderr today).
     /// </summary>
-    protected override IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
+    private static IEnumerable<CliRunEvent> MapLineToRunEvents(
+        GenericCliExecutionService ctx,
+        CliUsageParserRegistry? usageParsers,
+        ICliModelRegistry modelRegistry,
+        string jobKey,
+        CliOutputLine line)
     {
         if (line.Stream != "stdout") return Array.Empty<CliRunEvent>();
 
@@ -264,32 +277,13 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // CodexCliService. The runner's TurnCompleted subscriber immediately
         // reads GetLastParsedTurnUsage to mirror the spend onto the agent
         // message bus, so the stash must land first or that mirror races empty.
-        if (_processes.TryGetValue(jobKey, out var info))
+        if (ctx.TryGetProc(jobKey, out var info))
         {
-            TryCaptureTurnUsage(info, line);
-            TryCaptureInitContext(info, line);
+            TryCaptureTurnUsage(ctx, usageParsers, modelRegistry, info, line);
+            TryCaptureInitContext(ctx, info, line);
         }
 
         return ClaudeEventAdapter.Map(line.Text, jobKey);
-    }
-
-    /// <summary>
-    /// ADR-0030 follow-up: arm the <see cref="ClaudeSessionHeartbeat"/> so a
-    /// run whose stdout pipe is block-buffered (the Node-on-Windows symptom)
-    /// but is still appending to its per-session JSONL is seen as alive
-    /// instead of being auto-cancelled for stdout silence. On a resume the
-    /// session UUID is known at spawn and the file already exists, so we can
-    /// watch it immediately - this is the case that matters most for
-    /// <see cref="RunPhase.SessionInitializing"/>, where Claude emits no
-    /// stdout for the whole (potentially multi-minute) resume window. For a
-    /// fresh run the UUID is not known until the first stdout frame; the
-    /// watcher is armed lazily from <see cref="OnOutputLine"/> once we capture
-    /// it (see <see cref="EnsureSessionLiveness"/>).
-    /// </summary>
-    protected override void StartSessionLiveness(string jobKey, ProcInfo info, bool resumeSession, string? sessionName)
-    {
-        if (resumeSession && IsCompatibleSessionName(sessionName))
-            EnsureSessionLiveness(info, sessionName!);
     }
 
     /// <summary>
@@ -300,7 +294,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     /// thread (resume) and the read-loop thread (fresh-session UUID capture):
     /// the first caller wins, later calls see a non-null watcher and return.
     /// </summary>
-    private void EnsureSessionLiveness(ProcInfo info, string sessionId)
+    private static void EnsureSessionLiveness(GenericCliExecutionService ctx, ProcInfo info, string sessionId)
     {
         if (string.IsNullOrWhiteSpace(sessionId)) return;
         lock (info)
@@ -315,11 +309,11 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             var heartbeat = new ClaudeSessionHeartbeat(
                 sessionId,
                 info.WorkingDirectory,
-                onActivity: () => RaiseRunEvent(jobKey, new CliRunEvent.Heartbeat { RunId = jobKey }),
-                logger: _logger,
+                onActivity: () => ctx.RaiseRunEvent(jobKey, new CliRunEvent.Heartbeat { RunId = jobKey }),
+                logger: ctx.Logger,
                 configDir: info.CleanContext?.TempHome);
             info.SessionLiveness = heartbeat;
-            _logger.LogInformation(
+            ctx.Logger.LogInformation(
                 "Claude session-liveness watcher armed for {JobKey} (session {Session}, watching {Path})",
                 jobKey, sessionId, heartbeat.WatchedPath ?? "<unresolved>");
         }
@@ -328,7 +322,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     /// <summary>
     /// Parse the cumulative <c>usage</c> block on the stream-json
     /// <c>result</c> frame via the shared <see cref="ClaudeUsageParser"/> and
-    /// stash it on <see cref="CliExecutionServiceBase.ProcInfo.LastParsedUsage"/>.
+    /// stash it on <see cref="ProcInfo.LastParsedUsage"/>.
     /// The runner consumes the stash when the matching <c>TurnCompleted</c>
     /// event arrives and mirrors it onto the agent message bus as
     /// <c>kind:token-usage</c>. Without this the CORE coding-agent run's own
@@ -339,7 +333,12 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     /// usage under <c>message</c>, so they are correctly ignored. Best-effort:
     /// a malformed frame or parser miss leaves the previous snapshot untouched.
     /// </summary>
-    private void TryCaptureTurnUsage(ProcInfo info, CliOutputLine line)
+    private static void TryCaptureTurnUsage(
+        GenericCliExecutionService ctx,
+        CliUsageParserRegistry? usageParsers,
+        ICliModelRegistry modelRegistry,
+        ProcInfo info,
+        CliOutputLine line)
     {
         var text = line.Text?.TrimStart();
         if (string.IsNullOrEmpty(text) || text![0] != '{') return;
@@ -348,37 +347,34 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // returns true for a frame with a top-level `usage` object.
         if (!text.Contains("result", StringComparison.Ordinal)) return;
 
-        var parser = _usageParsers?.Get(CliTypes.Claude);
+        var parser = usageParsers?.Get(CliTypes.Claude);
         if (parser == null) return;
 
         try
         {
             using var doc = JsonDocument.Parse(text);
             var modelHint = info.Execution.Model;
-            if (!parser.TryParse(doc.RootElement, modelHint, _modelRegistry, out var usage)) return;
+            if (!parser.TryParse(doc.RootElement, modelHint, modelRegistry, out var usage)) return;
 
             info.LastParsedUsage = usage;
             info.LastParsedUsageAt = line.Timestamp == default ? DateTime.UtcNow : line.Timestamp;
         }
         catch (JsonException __ex) { SilentCatch.Note(__ex, "ClaudeCliService: malformed frame; nothing to capture"); /* malformed frame; nothing to capture */ }
-        catch (Exception ex) { _logger.LogDebug(ex, "Claude turn-usage capture skipped"); }
+        catch (Exception ex) { ctx.Logger.LogDebug(ex, "Claude turn-usage capture skipped"); }
     }
 
-    /// <summary>Claude reconstructs usage post-hoc from its session JSONL when a run finished without a result-frame footer. (GetCapturedSessionId / GetLastParsedTurnUsage now live on the base.)</summary>
-    public override bool NeedsPostHocUsageReconstruction => true;
-
     /// <summary>
-    /// Stash the parsed init frame onto <see cref="CliExecutionServiceBase.ProcInfo"/>
+    /// Stash the parsed init frame onto <see cref="ProcInfo"/>
     /// the first time we see it. The frame Claude already emits carries the
     /// model, effective permission mode, cwd, and wired-in MCP servers - all of
     /// it discarded today except the session id. Capturing it here (next to
-    /// <see cref="TryCaptureTurnUsage"/>) lets <see cref="DescribeContextSources"/>
+    /// <see cref="TryCaptureTurnUsage"/>) lets <c>DescribeContextSources</c>
     /// report what the CLI itself said it loaded (ASS-1739 / T1a). Read-only:
     /// parsing the frame never changes what the run loads. Best-effort - a
     /// missing or malformed frame leaves the snapshot null and the surface falls
     /// back to convention.
     /// </summary>
-    private void TryCaptureInitContext(ProcInfo info, CliOutputLine line)
+    private static void TryCaptureInitContext(GenericCliExecutionService ctx, ProcInfo info, CliOutputLine line)
     {
         if (info.ClaudeInit != null) return; // first init frame wins
         var text = line.Text?.TrimStart();
@@ -386,24 +382,24 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         if (!text.Contains("\"init\"", StringComparison.Ordinal)) return;
         try
         {
-            if (ClaudeInitContextParser.TryParse(text, out var ctx) && ctx != null)
-                info.ClaudeInit = ctx;
+            if (ClaudeInitContextParser.TryParse(text, out var context) && context != null)
+                info.ClaudeInit = context;
         }
-        catch (Exception ex) { _logger.LogDebug(ex, "Claude init-context capture skipped"); }
+        catch (Exception ex) { ctx.Logger.LogDebug(ex, "Claude init-context capture skipped"); }
     }
 
     /// <summary>
     /// Claude execution context (ASS-1739 / T1a): prefer the CLI's own init
     /// frame for the scalar header (model / permission mode / cwd) and the MCP
     /// server list, then layer the convention sources (memory chain, session
-    /// store, global config) underneath. Falls back to the base
+    /// store, global config) underneath. Falls back to the engine
     /// convention-only context when no init frame was captured (e.g. the run
     /// died before the frame, or a non-stream-json invocation).
     /// </summary>
-    public override AgentStudio.Shared.CliExecutionContext? DescribeContextSources(string jobKey)
+    private static AgentStudio.Shared.CliExecutionContext? DescribeContextSources(GenericCliExecutionService ctx, string jobKey)
     {
-        if (!_processes.TryGetValue(jobKey, out var info)) return null;
-        var convention = BuildConventionContext(info);
+        if (!ctx.TryGetProc(jobKey, out var info)) return null;
+        var convention = ctx.BuildConventionContext(info);
         var init = info.ClaudeInit;
         if (init == null) return convention;
 
@@ -428,18 +424,6 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     }
 
     /// <summary>
-    /// T1b (ASS-1742): Claude isolates clean runs via <c>CLAUDE_CONFIG_DIR</c>,
-    /// which relocates the whole <c>~/.claude</c> home (credentials, settings,
-    /// session transcripts) to a per-run temp dir. <see cref="PrepareCleanContext"/>
-    /// seeds only the OAuth credentials + base settings so auth still works while
-    /// the run sees no leftover session history or user memory.
-    /// </summary>
-    public override bool SupportsCleanContext => true;
-
-    public override CleanContextPreparation? PrepareCleanContext(string workingDirectory)
-        => CleanContextPreparer.PrepareClaude(ResolveUserHome(), _logger);
-
-    /// <summary>
     /// ADR-0014 follow-up (Survey § R5): when the
     /// <c>ClaudeCli:UseHandleScrub</c> config flag is true, spawn via
     /// <see cref="Win.WindowsHandleScrubSpawner"/> on Windows. The
@@ -449,16 +433,17 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     /// INVALID_HANDLE_VALUE), and even after the NUL-handle fix the
     /// behaviour needs a deterministic regression test before it can
     /// ship to production. Until the flag flips on, ClaudeCliService
-    /// uses the base-class <see cref="Process.Start"/> path with the
+    /// uses the engine <see cref="Process.Start"/> path with the
     /// R1 (default-deny stdin) + R2 (env hardening) fixes from
     /// ADR-0014.
     ///
     /// <para>
     /// On non-Windows or when the flag is off, falls through to the
-    /// base class.
+    /// engine default spawn.
     /// </para>
     /// </summary>
-    protected override async Task<ChildHandle> SpawnChildAsync(
+    private static async Task<ChildHandle> SpawnChildAsync(
+        GenericCliExecutionService ctx,
         ProcessStartInfo psi,
         string prompt,
         string? sessionName,
@@ -467,11 +452,11 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         CancellationToken ct)
     {
         var useScrub = string.Equals(
-            _configuration["ClaudeCli:UseHandleScrub"], "true",
+            ctx.Configuration["ClaudeCli:UseHandleScrub"], "true",
             StringComparison.OrdinalIgnoreCase);
         if (!useScrub || !OperatingSystem.IsWindows())
         {
-            return await base.SpawnChildAsync(psi, prompt, sessionName, resumeSession, model, ct);
+            return await ctx.DefaultSpawnChildAsync(psi, prompt, sessionName, resumeSession, model, ct);
         }
 
         var argList = psi.ArgumentList.ToList();
@@ -495,9 +480,9 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
 
         Action<RunStopReason> kill = _ => result.KillTree();
 
-        _logger.LogInformation(
+        ctx.Logger.LogInformation(
             "[handle-scrub] Spawned {Cli} via STARTUPINFOEX (PID {Pid})",
-            CliType, result.Process.Id);
+            ctx.CliType, result.Process.Id);
 
         return new ChildHandle(
             Process: result.Process,
@@ -574,7 +559,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     /// kept working — exactly the symptom the user reported.
     /// </para>
     /// </summary>
-    internal string ResolveClaudeBinary(string nameOrPath)
+    internal static string ResolveClaudeBinary(GenericCliExecutionService ctx, string nameOrPath)
     {
         // 1. Shell PATH resolution (uses PATHEXT on Windows).
         var resolved = ResolveExecutable(nameOrPath);
@@ -595,21 +580,21 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         //    conversion is now the default. Opt OUT with UseNpmShimProbe=false
         //    only for unusual layouts where the bundled exe must not be used.
         var optOut = string.Equals(
-            _configuration["ClaudeCli:UseNpmShimProbe"], "false",
+            ctx.Configuration["ClaudeCli:UseNpmShimProbe"], "false",
             StringComparison.OrdinalIgnoreCase);
         if (!optOut)
         {
             var probed = ResolveCmdShimToExe(resolved);
             if (!string.Equals(probed, resolved, StringComparison.OrdinalIgnoreCase))
             {
-                _logger.LogInformation(
+                ctx.Logger.LogInformation(
                     "[claude-bin] Rewrote .cmd shim {Shell} -> bundled exe {Probed} (cmd.exe truncates multi-line -p prompts at the first newline)",
                     resolved, probed);
                 return probed;
             }
         }
 
-        _logger.LogInformation(
+        ctx.Logger.LogInformation(
             "[claude-bin] Using shell-resolved binary {Path} (input: {Input})",
             resolved, nameOrPath);
         return resolved;
@@ -621,9 +606,9 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     /// then walks up from <c>AppContext.BaseDirectory</c> looking for the file.
     /// Returns <c>null</c> if no candidate exists or the file is empty / oversized.
     /// </summary>
-    private string? ResolveAgentRulesPath()
+    private static string? ResolveAgentRulesPath(GenericCliExecutionService ctx)
     {
-        var configured = _configuration["AgentRules:CorePath"];
+        var configured = ctx.Configuration["AgentRules:CorePath"];
         if (string.IsNullOrWhiteSpace(configured)) return null;
 
         var candidates = new List<string>();
@@ -649,33 +634,13 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             if (size == 0) return null;
             if (size > 8 * 1024)
             {
-                _logger.LogWarning("Agent rules file {Path} is {Size} bytes (>8 KB), skipping injection", candidate, size);
+                ctx.Logger.LogWarning("Agent rules file {Path} is {Size} bytes (>8 KB), skipping injection", candidate, size);
                 return null;
             }
             return candidate;
         }
         return null;
     }
-
-    /// <summary>
-    /// Translates a single stream-json NDJSON frame from the Claude CLI into
-    /// one or more human-readable marker lines, e.g.
-    /// <c>● Read /path/to/file</c> or <c>● Edit src/foo.ts</c>. The format
-    /// matches what the frontend's <c>activity-log.parser</c> already knows
-    /// how to classify, so no per-CLI parser is needed.
-    ///
-    /// <para>
-    /// The frame-mapping logic itself lives in the pure, dependency-free
-    /// <see cref="ClaudeOutputRenderer"/> (ADR-0013 marker-line twin
-    /// of the <c>*EventAdapter</c> classes). This override is a thin delegate so
-    /// the renderer can be unit-tested with a plain <c>new()</c> - no process,
-    /// no constructor graph - and a new CLI plugs in by implementing
-    /// <see cref="ICliOutputRenderer"/>. Session-id capture stays in
-    /// <c>OnOutputLine</c> below; it reads the rendered <c>● Session</c> marker.
-    /// </para>
-    /// </summary>
-    public override IEnumerable<CliOutputLine> TransformReadLine(CliOutputLine raw)
-        => _renderer.Render(raw);
 
     private static readonly ClaudeOutputRenderer _renderer = new();
 
@@ -686,9 +651,6 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     private static readonly Regex UuidRegex =
         new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
             RegexOptions.Compiled);
-
-    public override bool IsCompatibleSessionName(string? sessionName)
-        => !string.IsNullOrWhiteSpace(sessionName) && UuidRegex.IsMatch(sessionName);
 
     // The first `system` frame is rendered by TransformReadLine into
     //   "● Session init <uuid>"  (or another subtype + uuid)
@@ -720,7 +682,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         @"usingOverage=(?<using>true|false)\]",
         RegexOptions.Compiled);
 
-    protected override void OnOutputLine(ProcInfo info, CliOutputLine line)
+    private static void OnOutputLine(GenericCliExecutionService ctx, ProcInfo info, CliOutputLine line)
     {
         if (line.Text == null) return;
 
@@ -744,13 +706,13 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             {
                 info.CapturedSessionId = uuid;
                 info.SessionName = uuid;
-                _logger.LogInformation("Captured Claude session id {Id} (marker={Marker})",
+                ctx.Logger.LogInformation("Captured Claude session id {Id} (marker={Marker})",
                     uuid, sessionMatch.Success);
                 // Fresh-run path: now that we know the CLI-assigned UUID, arm
                 // the side-channel liveness watcher so any later stdout
                 // buffering does not read as silence. No-op on resume - the
                 // watcher was already armed at spawn from the resume UUID.
-                EnsureSessionLiveness(info, uuid);
+                EnsureSessionLiveness(ctx, info, uuid);
             }
         }
 
@@ -774,11 +736,15 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         string.IsNullOrEmpty(v) || v == "?" || v == "-" ? null : v;
 
     public ClaudeRateLimitSnapshot? GetLastRateLimit(string jobKey)
-        => _processes.TryGetValue(jobKey, out var info) ? info.LastRateLimit : null;
+        => TryGetProc(jobKey, out var info) ? info.LastRateLimit : null;
 
-    public override Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
-        => _modelDiscovery != null
-            ? _modelDiscovery.GetAsync(GetCliPath(), forceRefresh, ct)
+    private static Task<CliModelCatalog> GetModelCatalog(
+        GenericCliExecutionService ctx,
+        ClaudeModelDiscovery? modelDiscovery,
+        bool forceRefresh,
+        CancellationToken ct)
+        => modelDiscovery != null
+            ? modelDiscovery.GetAsync(ctx.GetCliPath(), forceRefresh, ct)
             : Task.FromResult(ClaudeModelDiscovery.FallbackCatalog());
 
     /// <summary>

@@ -11,15 +11,17 @@ namespace AgentStudio.Cli;
 ///   <item>The session UUID is captured from the first <c>thread.started</c> JSON line
 ///         (codex-cli &gt;= 0.128) or the legacy <c>session_meta</c> frame.</item>
 /// </list>
+/// Thin shim over <see cref="GenericCliExecutionService"/>: captures the
+/// Codex-specific DI dependencies, builds a <see cref="CliBehavior"/>, and keeps
+/// the public accessors external code calls.
 /// </summary>
-public sealed class CodexCliService : CliExecutionServiceBase
+public sealed class CodexCliService : GenericCliExecutionService
 {
     internal const string FallbackModel = ModelIds.Gpt5Codex;
 
     private readonly CodexModelDiscovery _modelDiscovery;
     private readonly CliUsageParserRegistry _usageParsers;
     private readonly ICliModelRegistry _modelRegistry;
-    private string? _cliPathOverride;
 
     public CodexCliService(
         ILogger<CodexCliService> logger,
@@ -27,14 +29,38 @@ public sealed class CodexCliService : CliExecutionServiceBase
         CodexModelDiscovery modelDiscovery,
         CliUsageParserRegistry usageParsers,
         ICliModelRegistry modelRegistry)
-        : base(logger, configuration)
+        : base(BuildBehavior(modelDiscovery, usageParsers, modelRegistry), logger, configuration)
     {
         _modelDiscovery = modelDiscovery;
         _usageParsers = usageParsers;
         _modelRegistry = modelRegistry;
     }
 
-    public override string CliType => CliTypes.Codex;
+    private static CliBehavior BuildBehavior(
+        CodexModelDiscovery modelDiscovery,
+        CliUsageParserRegistry usageParsers,
+        ICliModelRegistry modelRegistry) => new CliBehavior
+    {
+        CliType = CliTypes.Codex,
+        IsCompatibleSessionName = (ctx, sessionName)
+            => !string.IsNullOrWhiteSpace(sessionName) && CodexUuidRegex.IsMatch(sessionName),
+        GetCliPath = ctx => ctx.CliPathOverride
+                            ?? ctx.Configuration["CodexCli:Path"]
+                            ?? "codex",
+        SupportsCleanContext = true,
+        PrepareCleanContext = (ctx, workingDirectory)
+            => CleanContextPreparer.PrepareCodex(ResolveUserHome(), ctx.Logger),
+        BuildStartInfo = (ctx, prompt, workingDirectory, sessionName, resumeSession, model, thinkingLevel, permissionMode)
+            => BuildStartInfo(ctx, prompt, workingDirectory, sessionName, resumeSession, model, thinkingLevel, permissionMode),
+        NormalizeModelForInvocation = (ctx, model) => ResolveInvocationModel(model, ctx.Configuration),
+        GetPromptStdinPayload = (ctx, prompt, sessionName, resumeSession, model)
+            => string.IsNullOrEmpty(prompt)
+                ? null
+                : BuildSystemPromptPrefix(OperatingSystem.IsWindows()) + prompt,
+        MapLineToRunEvents = (ctx, jobKey, line) => MapLineToRunEvents(ctx, usageParsers, modelRegistry, jobKey, line),
+        TransformReadLine = (ctx, raw) => _renderer.Render(raw),
+        GetModelCatalog = (ctx, force, ct) => modelDiscovery.GetAsync(ctx.GetCliPath(), force, ct),
+    };
 
     // Codex resumes by UUID captured from thread.started (or legacy session_meta).
     // A slug from any other CLI is invalid and would make
@@ -43,33 +69,8 @@ public sealed class CodexCliService : CliExecutionServiceBase
         new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
             System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    public override bool IsCompatibleSessionName(string? sessionName)
-        => !string.IsNullOrWhiteSpace(sessionName) && CodexUuidRegex.IsMatch(sessionName);
-
-    public override string GetCliPath()
-        => _cliPathOverride
-           ?? _configuration["CodexCli:Path"]
-           ?? "codex";
-
-    public void SetCliPath(string path)
-    {
-        _cliPathOverride = string.IsNullOrWhiteSpace(path) ? null : path.Trim();
-        _logger.LogInformation("Codex CLI path set to: {Path}", GetCliPath());
-    }
-
-    /// <summary>
-    /// T1b (ASS-1742): Codex isolates clean runs via <c>CODEX_HOME</c>, which
-    /// relocates the whole <c>~/.codex</c> home (auth, config, sessions,
-    /// history) to a per-run temp dir. <see cref="PrepareCleanContext"/> seeds
-    /// only the auth token + base config so auth still works while the run sees
-    /// no leftover session history.
-    /// </summary>
-    public override bool SupportsCleanContext => true;
-
-    public override CleanContextPreparation? PrepareCleanContext(string workingDirectory)
-        => CleanContextPreparer.PrepareCodex(ResolveUserHome(), _logger);
-
-    protected override ProcessStartInfo BuildStartInfo(
+    private static ProcessStartInfo BuildStartInfo(
+        GenericCliExecutionService ctx,
         string prompt,
         string workingDirectory,
         string? sessionName,
@@ -95,7 +96,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
         // simple tasks once the prompt has a few "Rules for this run" lines.
         var psi = new ProcessStartInfo
         {
-            FileName = ResolveExecutable(GetCliPath()),
+            FileName = ResolveExecutable(ctx.GetCliPath()),
             WorkingDirectory = workingDirectory
         };
         psi.ArgumentList.Add("exec");
@@ -121,7 +122,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
         // --sandbox danger-full-access). This replaces the global
         // ~/.codex/config.toml sandbox_mode stop-gap: a null mode normalizes to
         // YOLO so the danger-full-access default holds even without the file.
-        foreach (var flag in CliPermissionFlags.For(CliType, permissionMode))
+        foreach (var flag in CliPermissionFlags.For(CliTypes.Codex, permissionMode))
             psi.ArgumentList.Add(flag);
 
         if (!string.IsNullOrWhiteSpace(model))
@@ -130,7 +131,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
             psi.ArgumentList.Add(model);
         }
 
-        foreach (var flag in CodingAgentRunner.Model.CliReasoningFlags.For(CliType, model, thinkingLevel))
+        foreach (var flag in CodingAgentRunner.Model.CliReasoningFlags.For(CliTypes.Codex, model, thinkingLevel))
             psi.ArgumentList.Add(flag);
 
         // The `resume <session-id>` subcommand comes AFTER the exec options
@@ -144,7 +145,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
 
         // Use `-` to tell Codex to read the prompt from stdin instead of
         // taking it as a positional argv. The actual bytes are written by
-        // the base class via GetPromptStdinPayload below.
+        // the engine via GetPromptStdinPayload.
         if (!string.IsNullOrEmpty(prompt))
         {
             psi.ArgumentList.Add("-");
@@ -152,9 +153,6 @@ public sealed class CodexCliService : CliExecutionServiceBase
 
         return psi;
     }
-
-    protected override string? NormalizeModelForInvocation(string? model)
-        => ResolveInvocationModel(model, _configuration);
 
     internal static string ResolveInvocationModel(string? model, IConfiguration configuration)
     {
@@ -182,6 +180,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
         string? thinkingLevel = null,
         string? permissionMode = null)
         => BuildStartInfo(
+            this,
             prompt,
             workingDirectory,
             sessionName,
@@ -264,46 +263,33 @@ public sealed class CodexCliService : CliExecutionServiceBase
     }
 
     /// <summary>
-    /// Deliver the full prompt (system-prompt prefix + rendered template) to
-    /// Codex via stdin. <see cref="BuildStartInfo"/> passes <c>-</c> as the
-    /// positional, telling Codex to read instructions from stdin; the base
-    /// class then writes this payload and closes the pipe so Codex sees EOF
-    /// after the prompt and starts the turn. This is the only delivery path
-    /// that survived Codex 0.130's stricter positional-PROMPT semantics
-    /// without provoking <c>[[TASK_NOOP]]</c>.
-    /// </summary>
-    protected override string? GetPromptStdinPayload(
-        string prompt,
-        string? sessionName,
-        bool resumeSession,
-        string? model)
-        => string.IsNullOrEmpty(prompt)
-            ? null
-            : BuildSystemPromptPrefix(OperatingSystem.IsWindows()) + prompt;
-
-    /// <summary>
     /// Bridge to <see cref="CodexEventAdapter"/>. Each raw stdout line is
-    /// passed through and emitted on <see cref="CliExecutionServiceBase.OnRunEvent"/>.
+    /// passed through and emitted on <see cref="GenericCliExecutionService.OnRunEvent"/>.
     /// <para>
     /// We also opportunistically parse <c>turn.completed</c> frames here so
     /// the captured <see cref="ParsedTurnUsage"/> lands on <c>ProcInfo</c>
     /// <b>before</b> the typed <c>TurnCompleted</c> event is raised. Order
-    /// matters: <see cref="CliExecutionServiceBase"/> runs
-    /// <see cref="MapLineToRunEvents"/> first, raises the typed events, and
-    /// only then fires <see cref="OnOutputLine"/>. Doing the usage capture
-    /// inside <c>OnOutputLine</c> (or anywhere downstream of the event raise)
-    /// races the runner's subscriber, which immediately calls back into
-    /// <see cref="GetLastParsedTurnUsage"/> to mirror the spend onto the bus.
+    /// matters: <see cref="GenericCliExecutionService"/> runs
+    /// <c>MapLineToRunEvents</c> first, raises the typed events, and
+    /// only then fires <c>OnOutputLine</c>. Doing the usage capture
+    /// downstream of the event raise races the runner's subscriber, which
+    /// immediately calls back into <see cref="GetLastParsedTurnUsage"/> to
+    /// mirror the spend onto the bus.
     /// </para>
     /// </summary>
-    protected override IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
+    private static IEnumerable<CliRunEvent> MapLineToRunEvents(
+        GenericCliExecutionService ctx,
+        CliUsageParserRegistry usageParsers,
+        ICliModelRegistry modelRegistry,
+        string jobKey,
+        CliOutputLine line)
     {
         if (line.Stream != "stdout") return Array.Empty<CliRunEvent>();
 
-        if (_processes.TryGetValue(jobKey, out var info))
+        if (ctx.TryGetProc(jobKey, out var info))
         {
-            TryCaptureTurnUsage(info, line);
-            TryCaptureSessionId(info, line);
+            TryCaptureTurnUsage(ctx, usageParsers, modelRegistry, info, line);
+            TryCaptureSessionId(ctx, info, line);
             TryCaptureCommandExecution(info, line);
         }
 
@@ -315,11 +301,11 @@ public sealed class CodexCliService : CliExecutionServiceBase
     /// <c>null</c> when no <c>command_execution</c> <c>item.completed</c>
     /// has been observed yet for this run. Mirrors the
     /// <see cref="GetLastParsedTurnUsage"/> shape: pure read on top of the
-    /// per-CLI capture done inside <see cref="MapLineToRunEvents"/>.
+    /// per-CLI capture done inside <c>MapLineToRunEvents</c>.
     /// </summary>
     public CodexLastCommandSnapshot? GetLastCommandExecution(string jobKey)
     {
-        if (!_processes.TryGetValue(jobKey, out var info)) return null;
+        if (!TryGetProc(jobKey, out var info)) return null;
         if (info.LastCommandObservedAt is null) return null;
         return new CodexLastCommandSnapshot(
             ExitCode: info.LastCommandExitCode,
@@ -330,7 +316,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
 
     /// <summary>True once the per-tick silent-completion detector tripped for this run.</summary>
     public bool IsSilentCompletionTripped(string jobKey)
-        => _processes.TryGetValue(jobKey, out var info) && info.SilentCompletionTripped;
+        => TryGetProc(jobKey, out var info) && info.SilentCompletionTripped;
 
     /// <summary>
     /// Last <c>command_execution</c> <c>item.completed</c> frame the run
@@ -423,7 +409,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
     /// instead of <c>codex exec resume &lt;uuid&gt;</c>, throwing away Codex's
     /// own prompt-cache.
     /// <para>
-    /// This runs in <see cref="MapLineToRunEvents"/> on the RAW stdout line, not
+    /// This runs in <c>MapLineToRunEvents</c> on the RAW stdout line, not
     /// in <c>OnOutputLine</c>. <c>OnOutputLine</c> now receives the rendered
     /// <c>● Session &lt;id&gt;</c> marker (see <see cref="CodexOutputRenderer"/>),
     /// from which the original <c>thread_id</c> payload is no longer recoverable;
@@ -431,7 +417,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
     /// JSON frame.
     /// </para>
     /// </summary>
-    private void TryCaptureSessionId(ProcInfo info, CliOutputLine line)
+    private static void TryCaptureSessionId(GenericCliExecutionService ctx, ProcInfo info, CliOutputLine line)
     {
         if (info.CapturedSessionId != null) return;
 
@@ -440,54 +426,48 @@ public sealed class CodexCliService : CliExecutionServiceBase
 
         info.CapturedSessionId = id;
         info.SessionName ??= id;
-        _logger.LogInformation("Captured Codex session id {Id}", id);
+        ctx.Logger.LogInformation("Captured Codex session id {Id}", id);
     }
-
-    /// <summary>
-    /// Translate a single <c>codex exec --experimental-json</c> JSONL frame into the marker
-    /// vocabulary the frontend activity-log parser classifies, e.g.
-    /// <c>● Run &lt;cmd&gt;</c> or <c>● Edit &lt;path&gt;</c>. Delegates to the pure,
-    /// dependency-free <see cref="CodexOutputRenderer"/> (the
-    /// marker-line twin of <see cref="CodexEventAdapter"/>). Before this existed
-    /// Codex had no override and raw JSONL leaked into the Activity Log.
-    /// </summary>
-    public override IEnumerable<CliOutputLine> TransformReadLine(CliOutputLine raw)
-        => _renderer.Render(raw);
 
     private static readonly CodexOutputRenderer _renderer = new();
 
     /// <summary>
     /// Parse a <c>turn.completed</c> frame's <c>usage</c> block via the
     /// shared <see cref="CodexUsageParser"/> and stash the parsed snapshot on
-    /// <see cref="CliExecutionServiceBase.ProcInfo.LastParsedUsage"/>. The
-    /// runner consumes the stash when the matching <c>TurnCompleted</c> typed
-    /// event arrives and mirrors it onto the agent message bus as
-    /// <c>kind:token-usage</c>. Without this, the Codex coding-agent's own
-    /// per-turn spend is invisible to <c>BusAggregationCache</c>, the project
-    /// token summary, and the workspace quota strip. Best-effort: a malformed
-    /// frame or parser miss leaves the previous snapshot untouched.
+    /// <see cref="ProcInfo.LastParsedUsage"/>. The runner consumes the stash
+    /// when the matching <c>TurnCompleted</c> typed event arrives and mirrors
+    /// it onto the agent message bus as <c>kind:token-usage</c>. Without this,
+    /// the Codex coding-agent's own per-turn spend is invisible to
+    /// <c>BusAggregationCache</c>, the project token summary, and the workspace
+    /// quota strip. Best-effort: a malformed frame or parser miss leaves the
+    /// previous snapshot untouched.
     /// </summary>
-    private void TryCaptureTurnUsage(ProcInfo info, CliOutputLine line)
+    private static void TryCaptureTurnUsage(
+        GenericCliExecutionService ctx,
+        CliUsageParserRegistry usageParsers,
+        ICliModelRegistry modelRegistry,
+        ProcInfo info,
+        CliOutputLine line)
     {
         var text = line.Text?.TrimStart();
         if (string.IsNullOrEmpty(text) || text![0] != '{') return;
         // Fast prefilter: only attempt JSON parsing for frames we care about.
         if (!text.Contains("turn.completed", StringComparison.Ordinal)) return;
 
-        var parser = _usageParsers.Get(CliTypes.Codex);
+        var parser = usageParsers.Get(CliTypes.Codex);
         if (parser == null) return;
 
         try
         {
             using var doc = JsonDocument.Parse(text);
             var modelHint = info.Execution.Model;
-            if (!parser.TryParse(doc.RootElement, modelHint, _modelRegistry, out var usage)) return;
+            if (!parser.TryParse(doc.RootElement, modelHint, modelRegistry, out var usage)) return;
 
             info.LastParsedUsage = usage;
             info.LastParsedUsageAt = line.Timestamp == default ? DateTime.UtcNow : line.Timestamp;
         }
         catch (JsonException __ex) { SilentCatch.Note(__ex, "CodexCliService: malformed frame; nothing to capture"); /* malformed frame; nothing to capture */ }
-        catch (Exception ex) { _logger.LogDebug(ex, "Codex turn-usage capture skipped"); }
+        catch (Exception ex) { ctx.Logger.LogDebug(ex, "Codex turn-usage capture skipped"); }
     }
 
     /// <summary>
@@ -543,9 +523,6 @@ public sealed class CodexCliService : CliExecutionServiceBase
 
         return !string.IsNullOrWhiteSpace(id) && CodexUuidRegex.IsMatch(id) ? id : null;
     }
-
-    public override Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
-        => _modelDiscovery.GetAsync(GetCliPath(), forceRefresh, ct);
 
     private static string Quote(string s) => $"\"{s.Replace("\"", "\\\"")}\"";
 }

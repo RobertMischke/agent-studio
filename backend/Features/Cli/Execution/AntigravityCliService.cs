@@ -13,47 +13,53 @@ namespace AgentStudio.Cli;
 ///   <item>New conversation: <c>agentapi new-conversation [--model=flash|pro|flash_lite] "&lt;prompt&gt;"</c>.</item>
 ///   <item>Resume: <c>agentapi send-message &lt;conversation_id&gt; "&lt;prompt&gt;"</c>.</item>
 /// </list>
+/// Thin shim over <see cref="GenericCliExecutionService"/>: it captures no extra
+/// DI dependencies and supplies a <see cref="CliBehavior"/> built from the
+/// static helpers below.
 /// </summary>
-public sealed class AntigravityCliService : CliExecutionServiceBase
+public sealed class AntigravityCliService : GenericCliExecutionService
 {
-    private string? _cliPathOverride;
-
     public AntigravityCliService(ILogger<AntigravityCliService> logger, IConfiguration configuration)
-        : base(logger, configuration) { }
+        : base(BuildBehavior(), logger, configuration) { }
 
-    public override string CliType => CliTypes.Gemini;
-
-    public override string GetCliPath()
-        => _cliPathOverride
-           ?? _configuration["AntigravityCli:Path"]
-           ?? _configuration["GeminiCli:Path"]
-           ?? "agentapi";
-
-    public void SetCliPath(string path)
+    private static CliBehavior BuildBehavior() => new CliBehavior
     {
-        _cliPathOverride = string.IsNullOrWhiteSpace(path) ? null : path.Trim();
-        _logger.LogInformation("Antigravity CLI path set to: {Path}", GetCliPath());
-    }
+        CliType = CliTypes.Gemini,
+        GetCliPath = ctx => ctx.CliPathOverride
+                            ?? ctx.Configuration["AntigravityCli:Path"]
+                            ?? ctx.Configuration["GeminiCli:Path"]
+                            ?? "agentapi",
+        IsCompatibleSessionName = (ctx, sessionName)
+            => !string.IsNullOrWhiteSpace(sessionName) && UuidRegex.IsMatch(sessionName),
+        BuildStartInfo = (ctx, prompt, workingDirectory, sessionName, resumeSession, model, thinkingLevel, permissionMode)
+            => BuildStartInfo(ctx, prompt, workingDirectory, sessionName, resumeSession, model),
+        GetPromptStdinPayload = (ctx, prompt, sessionName, resumeSession, model) => null,
+        MapLineToRunEvents = (ctx, jobKey, line) =>
+        {
+            if (line.Stream != "stdout") return Array.Empty<CliRunEvent>();
+            return GeminiEventAdapter.Map(line.Text, jobKey);
+        },
+        OnOutputLine = (ctx, info, line) => CaptureSessionId(ctx, info, line),
+        TransformReadLine = (ctx, raw) => RenderLine(raw),
+        TestCliPath = (ctx, path) => ProbeCliPath(ctx, path),
+        GetModelCatalog = (ctx, force, ct) => GetModelCatalog(),
+    };
 
     private static readonly Regex UuidRegex =
         new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
             RegexOptions.Compiled);
 
-    public override bool IsCompatibleSessionName(string? sessionName)
-        => !string.IsNullOrWhiteSpace(sessionName) && UuidRegex.IsMatch(sessionName);
-
-    protected override ProcessStartInfo BuildStartInfo(
+    private static ProcessStartInfo BuildStartInfo(
+        GenericCliExecutionService ctx,
         string prompt,
         string workingDirectory,
         string? sessionName,
         bool resumeSession,
-        string? model,
-        string? thinkingLevel,
-        string? permissionMode)
+        string? model)
     {
         var psi = new ProcessStartInfo
         {
-            FileName = ResolveExecutable(GetCliPath()),
+            FileName = ResolveExecutable(ctx.GetCliPath()),
             WorkingDirectory = workingDirectory
         };
 
@@ -86,24 +92,11 @@ public sealed class AntigravityCliService : CliExecutionServiceBase
         return "flash";
     }
 
-    protected override string? GetPromptStdinPayload(
-        string prompt,
-        string? sessionName,
-        bool resumeSession,
-        string? model)
-        => null;
-
-    protected override IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
-    {
-        if (line.Stream != "stdout") return Array.Empty<CliRunEvent>();
-        return GeminiEventAdapter.Map(line.Text, jobKey);
-    }
-
     private static readonly Regex SessionInitRegex = new(
         @"●\s*Session init\s+(?<uuid>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
         RegexOptions.Compiled);
 
-    protected override void OnOutputLine(ProcInfo info, CliOutputLine line)
+    private static void CaptureSessionId(GenericCliExecutionService ctx, ProcInfo info, CliOutputLine line)
     {
         if (info.CapturedSessionId != null) return;
         if (line.Text == null) return;
@@ -112,10 +105,10 @@ public sealed class AntigravityCliService : CliExecutionServiceBase
 
         info.CapturedSessionId = m.Groups["uuid"].Value;
         info.SessionName ??= info.CapturedSessionId;
-        _logger.LogInformation("Captured Antigravity session id {Id}", info.CapturedSessionId);
+        ctx.Logger.LogInformation("Captured Antigravity session id {Id}", info.CapturedSessionId);
     }
 
-    public override IEnumerable<CliOutputLine> TransformReadLine(CliOutputLine raw)
+    private static IEnumerable<CliOutputLine> RenderLine(CliOutputLine raw)
     {
         if (raw.Stream != "stdout" || string.IsNullOrWhiteSpace(raw.Text) || raw.Text[0] != '{')
         {
@@ -257,9 +250,9 @@ public sealed class AntigravityCliService : CliExecutionServiceBase
     private static string TrimSingleLine(string s) =>
         s.Replace('\n', ' ').Replace('\r', ' ').Trim() is { } t && t.Length > 200 ? t[..200] + "…" : s.Trim();
 
-    public override (bool Available, string? Version, string Path) TestCliPath(string? path = null)
+    private static (bool Available, string? Version, string Path) ProbeCliPath(GenericCliExecutionService ctx, string? path)
     {
-        var testPath = ResolveExecutable(path?.Trim() ?? GetCliPath());
+        var testPath = ResolveExecutable(path?.Trim() ?? ctx.GetCliPath());
         try
         {
             using var proc = new Process();
@@ -277,20 +270,20 @@ public sealed class AntigravityCliService : CliExecutionServiceBase
             var rawError = proc.StandardError.ReadToEnd().Trim();
             proc.WaitForExit(5000);
 
-            var isAvailable = proc.ExitCode == 0 
-                || rawOutput.Contains("unknown command: --version") 
-                || rawError.Contains("unknown command: --version") 
+            var isAvailable = proc.ExitCode == 0
+                || rawOutput.Contains("unknown command: --version")
+                || rawError.Contains("unknown command: --version")
                 || rawOutput.Contains("Usage: agentapi");
             return (isAvailable, "1.0.0", testPath);
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Antigravity CLI not available at path '{Path}'", testPath);
+            ctx.Logger.LogDebug(ex, "Antigravity CLI not available at path '{Path}'", testPath);
             return (false, null, testPath);
         }
     }
 
-    public override Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
+    private static Task<CliModelCatalog> GetModelCatalog()
     {
         var models = new List<CliModelInfo>
         {

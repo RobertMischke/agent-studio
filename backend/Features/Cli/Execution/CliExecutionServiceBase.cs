@@ -6,18 +6,46 @@ using LibOutcome = CodingAgentRunner.Model.RunOutcome;
 namespace AgentStudio.Cli;
 
 /// <summary>
-/// Shared process-orchestration logic for the slim CLI backends
+/// The single concrete process-orchestration engine for the slim CLI backends
 /// (Claude Code, Codex, Gemini). Handles spawning, output streaming,
-/// persistence, and reattach. Subclasses provide the CLI-specific
-/// argument-building and session-name handling via <see cref="BuildStartInfo"/>.
+/// persistence, and reattach. Per-CLI behavior is supplied as a
+/// <see cref="CliBehavior"/> (delegates + data) rather than via subclass
+/// overrides; the thin per-CLI shims (<c>ClaudeCliService</c> /
+/// <c>CodexCliService</c> / <c>AntigravityCliService</c>) build a behavior and
+/// pass it to <c>base(...)</c>.
 /// </summary>
-public abstract class CliExecutionServiceBase : ICliExecutionService
+public class GenericCliExecutionService : ICliExecutionService
 {
     protected readonly ILogger _logger;
     protected readonly IConfiguration _configuration;
-    protected readonly ConcurrentDictionary<string, ProcInfo> _processes = new();
+    internal readonly ConcurrentDictionary<string, ProcInfo> _processes = new();
+    private readonly CliBehavior _behavior;
 
-    public abstract string CliType { get; }
+    /// <summary>
+    /// Mutable per-instance CLI path override (set via <see cref="SetCliPath"/>).
+    /// Generic to all CLIs, so it lives on the engine; behaviors read it through
+    /// <see cref="CliPathOverride"/>.
+    /// </summary>
+    private string? _cliPathOverride;
+
+    public string CliType => _behavior.CliTypeResolver?.Invoke(this) ?? _behavior.CliType;
+
+    // ── Engine-context accessors for behaviors (same assembly) ──────────
+    internal ILogger Logger => _logger;
+    internal IConfiguration Configuration => _configuration;
+    internal string? CliPathOverride => _cliPathOverride;
+    internal bool TryGetProc(string jobKey, out ProcInfo info) => _processes.TryGetValue(jobKey, out info!);
+
+    /// <summary>
+    /// Set the per-instance CLI path override (generic across all CLIs). The
+    /// per-CLI <see cref="CliBehavior.GetCliPath"/> reads
+    /// <see cref="CliPathOverride"/> first.
+    /// </summary>
+    public void SetCliPath(string path)
+    {
+        _cliPathOverride = string.IsNullOrWhiteSpace(path) ? null : path.Trim();
+        _logger.LogInformation("{Cli} CLI path set to: {Path}", CliType, GetCliPath());
+    }
 
     public event Action<string, CliOutputLine>? OnOutput;
     public event Action<string, CliExecution>? OnStarted;
@@ -33,33 +61,38 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     public event Action<string, CliRunEvent>? OnRunEvent;
 
     /// <summary>
-    /// Subclass entry point for emitting typed events. Wraps the public
+    /// Engine entry point for emitting typed events. Wraps the public
     /// invocation with a per-subscriber try/catch so a buggy listener
-    /// cannot crash the read loop.
+    /// cannot crash the read loop. Internal so behaviors can raise events.
     /// </summary>
-    protected void RaiseRunEvent(string jobKey, CliRunEvent evt)
+    internal void RaiseRunEvent(string jobKey, CliRunEvent evt)
     {
         try { OnRunEvent?.Invoke(jobKey, evt); }
         catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent subscriber threw for {JobId}", jobKey); }
     }
 
-    protected CliExecutionServiceBase(ILogger logger, IConfiguration configuration)
+    internal GenericCliExecutionService(CliBehavior behavior, ILogger logger, IConfiguration configuration)
     {
+        _behavior = behavior;
         _logger = logger;
         _configuration = configuration;
     }
 
-    public abstract string GetCliPath();
+    public string GetCliPath() => _behavior.GetCliPath(this);
 
     /// <summary>
-    /// Default: accept any non-empty session name. Subclasses with strict
-    /// session-id formats (Claude requires UUIDs) override to reject names
-    /// that came from a different CLI's session store.
+    /// Default: accept any non-empty session name. Behaviors with strict
+    /// session-id formats (Claude requires UUIDs) supply a delegate that
+    /// rejects names that came from a different CLI's session store.
     /// </summary>
-    public virtual bool IsCompatibleSessionName(string? sessionName)
-        => !string.IsNullOrWhiteSpace(sessionName);
+    public bool IsCompatibleSessionName(string? sessionName)
+        => _behavior.IsCompatibleSessionName?.Invoke(this, sessionName)
+           ?? !string.IsNullOrWhiteSpace(sessionName);
 
-    public virtual (bool Available, string? Version, string Path) TestCliPath(string? path = null)
+    public (bool Available, string? Version, string Path) TestCliPath(string? path = null)
+        => _behavior.TestCliPath?.Invoke(this, path) ?? DefaultTestCliPath(path);
+
+    internal (bool Available, string? Version, string Path) DefaultTestCliPath(string? path = null)
     {
         var testPath = ResolveExecutable(path?.Trim() ?? GetCliPath());
         try
@@ -148,7 +181,10 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// remains the safety net if heal itself is failing repeatedly.
     /// </para>
     /// </summary>
-    protected virtual Task<(bool Ok, string? Error)> EnsureCliHealthyAsync(CancellationToken ct)
+    public Task<(bool Ok, string? Error)> EnsureCliHealthyAsync(CancellationToken ct)
+        => _behavior.EnsureCliHealthy?.Invoke(this, ct) ?? DefaultEnsureCliHealthyAsync(ct);
+
+    internal Task<(bool Ok, string? Error)> DefaultEnsureCliHealthyAsync(CancellationToken ct)
     {
         var probe = TestCliPath();
         return Task.FromResult(probe.Available
@@ -157,76 +193,75 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     }
 
     /// <summary>
-    /// Subclass hook: build the actual command-line for this CLI.
+    /// Build the actual command-line for this CLI via the behavior.
     /// <paramref name="permissionMode"/> is the resolved per-project permission
-    /// mode (one of <see cref="CliPermissionModes"/>); subclasses render it to
+    /// mode (one of <see cref="CliPermissionModes"/>); behaviors render it to
     /// concrete flags via <see cref="CliPermissionFlags.For"/>. Null normalizes
     /// to <see cref="CliPermissionModes.Yolo"/> so a caller that does not thread
     /// a mode keeps the historic maximum-autonomy behaviour.
     /// </summary>
-    protected abstract ProcessStartInfo BuildStartInfo(
+    internal ProcessStartInfo BuildStartInfo(
         string prompt,
         string workingDirectory,
         string? sessionName,
         bool resumeSession,
         string? model,
         string? thinkingLevel,
-        string? permissionMode);
+        string? permissionMode)
+        => _behavior.BuildStartInfo(this, prompt, workingDirectory, sessionName, resumeSession, model, thinkingLevel, permissionMode);
 
     /// <summary>
-    /// Subclass hook: return the text the runner should write to the child's
-    /// stdin instead of (or after) closing it. Default null means "close
-    /// stdin immediately" - the legacy behavior. Claude overrides this so
-    /// the multi-KB rendered prompt gets piped through stdin instead of
-    /// embedded in argv, which on Windows is the difference between the
-    /// agent seeing the whole prompt and the agent seeing only the heading
-    /// (cmd.exe truncates long quoted args at the first newline / over the
-    /// length limit). When this returns non-null, BuildStartInfo MUST have
-    /// omitted the prompt from argv.
+    /// Return the text the runner should write to the child's stdin instead of
+    /// (or after) closing it. Default null means "close stdin immediately" -
+    /// the legacy behavior. Codex supplies a delegate so the multi-KB rendered
+    /// prompt gets piped through stdin instead of embedded in argv. When this
+    /// returns non-null, BuildStartInfo MUST have omitted the prompt from argv.
     /// </summary>
-    protected virtual string? GetPromptStdinPayload(
+    internal string? GetPromptStdinPayload(
         string prompt,
         string? sessionName,
         bool resumeSession,
-        string? model) => null;
+        string? model)
+        => _behavior.GetPromptStdinPayload?.Invoke(this, prompt, sessionName, resumeSession, model);
 
     /// <summary>
-    /// Subclass hook: normalize or replace a persisted job model before it
-    /// reaches argv, telemetry, or the synthetic started line. Most CLIs can
-    /// use the stored value verbatim; drivers with CLI-specific model
-    /// namespaces override this to prevent a stale model from another CLI
-    /// being passed through after the job's <c>cliType</c> changes.
+    /// Normalize or replace a persisted job model before it reaches argv,
+    /// telemetry, or the synthetic started line. Default: trim / null-if-blank.
+    /// Drivers with CLI-specific model namespaces supply a delegate to prevent a
+    /// stale model from another CLI being passed through after the job's
+    /// <c>cliType</c> changes.
     /// </summary>
-    protected virtual string? NormalizeModelForInvocation(string? model)
-        => string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+    public string? NormalizeModelForInvocation(string? model)
+        => _behavior.NormalizeModelForInvocation?.Invoke(this, model)
+           ?? (string.IsNullOrWhiteSpace(model) ? null : model.Trim());
 
-    /// <summary>Subclass hook: try to extract session metadata from a fresh output line.</summary>
-    protected virtual void OnOutputLine(ProcInfo info, CliOutputLine line) { }
+    /// <summary>Try to extract session metadata from a fresh output line (behavior hook; default no-op).</summary>
+    internal void OnOutputLine(ProcInfo info, CliOutputLine line)
+        => _behavior.OnOutputLine?.Invoke(this, info, line);
 
     /// <summary>
-    /// Subclass hook: map one raw stdout/stderr line to zero or more
-    /// <see cref="CliRunEvent"/> instances. Default: yield nothing (CLIs
-    /// without an adapter stay on the silence-only watchdog). Subclasses
-    /// with an adapter (Claude / Codex / Gemini) override and delegate
-    /// to the per-CLI mapping function.
+    /// Map one raw stdout/stderr line to zero or more <see cref="CliRunEvent"/>
+    /// instances. Default: yield nothing (CLIs without an adapter stay on the
+    /// silence-only watchdog). Behaviors with an adapter (Claude / Codex /
+    /// Gemini) supply a delegate to the per-CLI mapping function.
     ///
     /// <para>
-    /// The base class fires <see cref="OnRunEvent"/> for every event
-    /// returned here, in order, on the same read-loop thread. Adapters
-    /// must be pure functions and not throw - exceptions are swallowed
-    /// so a malformed frame cannot crash the read loop.
+    /// The engine fires <see cref="OnRunEvent"/> for every event returned here,
+    /// in order, on the same read-loop thread. Adapters must be pure functions
+    /// and not throw - exceptions are swallowed so a malformed frame cannot
+    /// crash the read loop.
     /// </para>
     /// </summary>
-    protected virtual IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
-        => Array.Empty<CliRunEvent>();
+    internal IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
+        => _behavior.MapLineToRunEvents?.Invoke(this, jobKey, line) ?? Array.Empty<CliRunEvent>();
 
     /// <summary>
-    /// Subclass hook: arm a side-channel liveness watcher for a freshly
-    /// spawned run. Default: no-op. Subclasses that have a stdout-independent
-    /// activity signal (Claude watches <c>~/.claude/projects/&lt;cwd&gt;/&lt;uuid&gt;.jsonl</c>
-    /// mtime) override this to construct a watcher and store it on
-    /// <see cref="ProcInfo.SessionLiveness"/>; the base class disposes it
-    /// in <see cref="MonitorProcessAsync"/> when the process exits.
+    /// Arm a side-channel liveness watcher for a freshly spawned run. Default:
+    /// no-op. Behaviors that have a stdout-independent activity signal (Claude
+    /// watches <c>~/.claude/projects/&lt;cwd&gt;/&lt;uuid&gt;.jsonl</c> mtime) supply a
+    /// delegate that constructs a watcher and stores it on
+    /// <see cref="ProcInfo.SessionLiveness"/>; the engine disposes it in
+    /// <see cref="MonitorProcessAsync"/> when the process exits.
     ///
     /// <para>
     /// The watcher should reset the watchdog silence clock by raising a
@@ -237,25 +272,27 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// <paramref name="sessionName"/>) the session id is available at spawn,
     /// so the watcher can arm immediately - the case that matters most for
     /// SessionInitializing, where there is no stdout for the whole window.
-    /// For a fresh run the subclass typically arms once it captures the
+    /// For a fresh run the behavior typically arms once it captures the
     /// CLI-assigned session id from the first stdout frame.
     /// </para>
     /// </summary>
-    protected virtual void StartSessionLiveness(string jobKey, ProcInfo info, bool resumeSession, string? sessionName) { }
+    internal void StartSessionLiveness(string jobKey, ProcInfo info, bool resumeSession, string? sessionName)
+        => _behavior.StartSessionLiveness?.Invoke(this, info, resumeSession, sessionName);
 
     /// <summary>
-    /// Subclass hook: translate a single raw line read from the CLI's stdout
-    /// or stderr into one or more user-visible buffer lines. Default: pass
-    /// through unchanged. Used by <see cref="ClaudeCliService"/> to expand
-    /// stream-json NDJSON frames into the marker-line convention the
-    /// frontend's activity log parser already understands.
+    /// Translate a single raw line read from the CLI's stdout or stderr into
+    /// one or more user-visible buffer lines. Default: pass through unchanged.
+    /// Used by Claude / Codex / Gemini behaviors to expand stream-json NDJSON
+    /// frames into the marker-line convention the frontend's activity log parser
+    /// already understands.
     /// </summary>
-    public virtual IEnumerable<CliOutputLine> TransformReadLine(CliOutputLine raw)
-    {
-        yield return raw;
-    }
+    public IEnumerable<CliOutputLine> TransformReadLine(CliOutputLine raw)
+        => _behavior.TransformReadLine?.Invoke(this, raw) ?? new[] { raw };
 
-    public virtual Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
+    public Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
+        => _behavior.GetModelCatalog?.Invoke(this, forceRefresh, ct) ?? DefaultModelCatalogAsync();
+
+    internal Task<CliModelCatalog> DefaultModelCatalogAsync()
     {
         return Task.FromResult(new CliModelCatalog
         {
@@ -559,13 +596,23 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
            + (resumeSession ? " (resume)" : "");
 
     /// <summary>
-    /// Subclass hook: spawn the child process. Default uses
+    /// Spawn the child process. Default uses
     /// <see cref="System.Diagnostics.Process"/> with redirected pipes.
     /// CLIs whose stdout block-buffers when piped (Node-based ones on Windows:
-    /// Claude / Codex / Gemini) override to spawn through a pseudo-terminal so
-    /// stream-json frames flush per newline.
+    /// Claude / Codex / Gemini) can supply a behavior delegate to spawn through
+    /// a pseudo-terminal so stream-json frames flush per newline.
     /// </summary>
-    protected virtual Task<ChildHandle> SpawnChildAsync(
+    internal Task<ChildHandle> SpawnChildAsync(
+        ProcessStartInfo psi,
+        string prompt,
+        string? sessionName,
+        bool resumeSession,
+        string? model,
+        CancellationToken ct)
+        => _behavior.SpawnChild?.Invoke(this, psi, prompt, sessionName, resumeSession, model, ct)
+           ?? DefaultSpawnChildAsync(psi, prompt, sessionName, resumeSession, model, ct);
+
+    internal Task<ChildHandle> DefaultSpawnChildAsync(
         ProcessStartInfo psi,
         string prompt,
         string? sessionName,
@@ -694,11 +741,11 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         return (info.LastParsedUsage, info.LastParsedUsageAt.Value, info.Execution.StartedAt);
     }
 
-    /// <summary>Real CLIs emit a session id on every run; a base-derived CLI that does not can override this to false.</summary>
-    public virtual bool EmitsSessionId => true;
+    /// <summary>Real CLIs emit a session id on every run; a behavior that does not sets this false.</summary>
+    public bool EmitsSessionId => _behavior.EmitsSessionId;
 
     /// <summary>Whether the runner should reconstruct usage post-hoc when a run finished without a usage footer (Claude reads its session JSONL). Default false.</summary>
-    public virtual bool NeedsPostHocUsageReconstruction => false;
+    public bool NeedsPostHocUsageReconstruction => _behavior.NeedsPostHocUsageReconstruction;
 
     public bool IsRunningForProject(string rootPath) =>
         _processes.Values.Any(p => p.WorkingDirectory == rootPath && !p.Process.HasExited);
@@ -725,27 +772,32 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// richer self-report (Claude's init frame) override this and merge.
     /// Returns null when the run is unknown.
     /// </summary>
-    public virtual AgentStudio.Shared.CliExecutionContext? DescribeContextSources(string jobKey)
+    public AgentStudio.Shared.CliExecutionContext? DescribeContextSources(string jobKey)
+        => _behavior.DescribeContextSources?.Invoke(this, jobKey) ?? DefaultDescribeContextSources(jobKey);
+
+    internal AgentStudio.Shared.CliExecutionContext? DefaultDescribeContextSources(string jobKey)
         => _processes.TryGetValue(jobKey, out var info) ? BuildConventionContext(info) : null;
 
     /// <summary>
-    /// T1b (ASS-1742): shared-only by default. Claude / Codex override this to
-    /// true and provide a real <see cref="PrepareCleanContext"/>. Re-declared
-    /// here (not just inherited as a default interface member) so the base
-    /// <c>StartAsync</c> can read it through <c>this</c>.
+    /// T1b (ASS-1742): shared-only by default. Claude / Codex behaviors set this
+    /// true and provide a real <see cref="CliBehavior.PrepareCleanContext"/>.
+    /// Re-declared here (not just inherited as a default interface member) so the
+    /// engine <c>StartAsync</c> can read it through <c>this</c>.
     /// </summary>
-    public virtual bool SupportsCleanContext => false;
+    public bool SupportsCleanContext => _behavior.SupportsCleanContext;
 
     /// <inheritdoc cref="ICliExecutionService.PrepareCleanContext" />
-    public virtual CleanContextPreparation? PrepareCleanContext(string workingDirectory) => null;
+    public CleanContextPreparation? PrepareCleanContext(string workingDirectory)
+        => _behavior.PrepareCleanContext?.Invoke(this, workingDirectory);
 
     /// <summary>
-    /// Build the convention-only context for a tracked run. Shared by the base
-    /// <see cref="DescribeContextSources"/> and the Claude override (which adds
-    /// init-frame data on top). The scalar permission mode is the
+    /// Build the convention-only context for a tracked run. Shared by the engine
+    /// <see cref="DefaultDescribeContextSources"/> and the Claude behavior (which
+    /// adds init-frame data on top). The scalar permission mode is the
     /// platform mode the runner resolved, surfaced via its display name.
+    /// Internal so behaviors can call it.
     /// </summary>
-    protected AgentStudio.Shared.CliExecutionContext BuildConventionContext(ProcInfo info)
+    internal AgentStudio.Shared.CliExecutionContext BuildConventionContext(ProcInfo info)
     {
         var clean = info.CleanContext;
         // Under clean the home-rooted convention probes (~/.claude, ~/.codex)
@@ -774,7 +826,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// session inspectors use so the probed paths line up with what the CLIs
     /// actually read.
     /// </summary>
-    protected static string? ResolveUserHome()
+    internal static string? ResolveUserHome()
         => Environment.GetEnvironmentVariable("USERPROFILE")
            ?? Environment.GetEnvironmentVariable("HOME");
 
@@ -860,7 +912,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// Subclasses that genuinely want re-attach semantics can override this.
     /// </para>
     /// </summary>
-    public virtual void ReattachOnStartup() => ReapOrphans();
+    public void ReattachOnStartup() => ReapOrphans();
 
     /// <summary>
     /// Runs the canonical <see cref="AgentEnvironmentDetector"/> against a
@@ -1618,8 +1670,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         }
     }
 
-    /// <summary>Per-process bookkeeping shared with subclasses.</summary>
-    protected sealed class ProcInfo
+    /// <summary>Per-process bookkeeping. Internal so behavior factories in the same assembly can read/write its fields.</summary>
+    internal sealed class ProcInfo
     {
         public Process Process { get; }
         public CliExecution Execution { get; set; }
