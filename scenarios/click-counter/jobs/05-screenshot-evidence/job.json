@@ -1,8 +1,0 @@
-{
-  "id": "05-screenshot-evidence",
-  "title": "Capture visual evidence under results/",
-  "order": 50,
-  "agent": "claude",
-  "cliType": "claude",
-  "model": "claude-haiku-4-5"
-}
