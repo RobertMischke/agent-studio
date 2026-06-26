@@ -175,6 +175,26 @@ describe('projectConversation', () => {
     expect(burst.commands[0].hits?.[0].line).toBe(12);
   });
 
+  it('strips a leading command echo from shell output so the command is shown exactly once', () => {
+    // Codex aggregated_output frequently repeats the command as its first line
+    // (with or without a shell prompt). The command already has its own input
+    // line, so the echo must be dropped from the rendered output.
+    const events = projectConversation({
+      source: SOURCE,
+      lines: [
+        line('{"type":"item.completed","item":{"id":"cmd_1","type":"command_execution","command":"npm run build","aggregated_output":"$ npm run build\\nBuild succeeded\\nDone in 4.2s","exit_code":0,"status":"completed"}}')
+      ]
+    });
+    const burst = probe(events.find((e) => e.kind === 'toolBurst'));
+    expect(burst.commands).toHaveLength(1);
+    expect(burst.commands[0].command).toBe('npm run build');
+    // The echoed command line is gone; only the real output remains.
+    expect(burst.commands[0].output).toBe('Build succeeded\nDone in 4.2s');
+    expect(burst.commands[0].output).not.toContain('$ npm run build');
+    const echoes = burst.commands[0].output.split('\n').filter((l) => l.includes('npm run build'));
+    expect(echoes).toHaveLength(0);
+  });
+
   it('turns Codex tool-router errors into typed parser warning rows', () => {
     const events = projectConversation({
       source: SOURCE,

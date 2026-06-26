@@ -11,7 +11,7 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE'
   });
 }
@@ -40,7 +40,7 @@ async function readColumnTitles(page: Page, heading: string): Promise<string[]> 
  * synthetic mouse path). We instead dispatch the dragstart/dragover/drop
  * events directly via the DOM, which is exactly what the production code
  * listens for. This validates the wire-up: drop-zone handler -> jobReorder
- * emit -> /api/jobs/reorder POST -> job.json `order` field rewrite.
+ * emit -> /api/tasks/reorder POST -> job.json `order` field rewrite.
  */
 async function dispatchDragReorder(
   page: Page,
@@ -77,8 +77,8 @@ async function dispatchDragReorder(
 test.describe('Lane drag-and-drop reorder', () => {
   test('drop updates the visible order optimistically, before the reorder POST returns', async ({ page }) => {
     // Regression for the "sorting is laggy" report. Previous behaviour:
-    // onCardDrop emitted jobReorder, which awaited POST /api/jobs/reorder
-    // and then a /api/jobs/grouped refresh round-trip before painting the
+    // onCardDrop emitted jobReorder, which awaited POST /api/tasks/reorder
+    // and then a /api/tasks/grouped refresh round-trip before painting the
     // new order. Users observed the card snap back into place for several
     // hundred ms (longer when the backend was busy rewriting many job.json
     // files) and a second consecutive drag would be partially clobbered by
@@ -103,7 +103,7 @@ test.describe('Lane drag-and-drop reorder', () => {
     const readyOthers = all
       .filter(j => j.state === '2-ready' && ![jobA.id, jobB.id, jobC.id].includes(j.id))
       .map(j => ({ jobId: j.id, watchPath: j.watchPath }));
-    await api('/api/jobs/reorder', {
+    await api('/api/tasks/reorder', {
       method: 'POST',
       body: JSON.stringify({
         jobs: [
@@ -121,7 +121,7 @@ test.describe('Lane drag-and-drop reorder', () => {
       // realistic wait and well above any animation/raf budget.
       const REORDER_DELAY_MS = 800;
       let resolvedReorders = 0;
-      await page.route('**/api/jobs/reorder', async route => {
+      await page.route('**/api/tasks/reorder', async route => {
         await new Promise(r => setTimeout(r, REORDER_DELAY_MS));
         resolvedReorders++;
         await route.continue();
@@ -146,7 +146,7 @@ test.describe('Lane drag-and-drop reorder', () => {
       // before the still-pending POST resolves, otherwise the user sees
       // the lag the bug report describes.
       const firstPostStarted = page.waitForRequest(
-        r => r.url().includes('/api/jobs/reorder') && r.method() === 'POST'
+        r => r.url().includes('/api/tasks/reorder') && r.method() === 'POST'
       );
       const tStart = Date.now();
       await dispatchDragReorder(page, 'Ready', titleA, dropZoneCount - 1);
@@ -165,14 +165,14 @@ test.describe('Lane drag-and-drop reorder', () => {
       // UI level, but the persistence assertion at the end of this test
       // requires deterministic POST ordering against the backend.
       await page.waitForResponse(
-        r => r.url().includes('/api/jobs/reorder') && r.request().method() === 'POST'
+        r => r.url().includes('/api/tasks/reorder') && r.request().method() === 'POST'
       );
 
       // Second drag while the route handler still adds an 800 ms latency.
       // Same optimistic-paint contract: the new visible order appears
       // before the second POST resolves.
       const secondPostStarted = page.waitForRequest(
-        r => r.url().includes('/api/jobs/reorder') && r.method() === 'POST'
+        r => r.url().includes('/api/tasks/reorder') && r.method() === 'POST'
       );
       const t2Start = Date.now();
       const resolvedAtT2 = resolvedReorders;
@@ -189,9 +189,9 @@ test.describe('Lane drag-and-drop reorder', () => {
 
       // Wait for the second POST to resolve, then drop the route handler.
       await page.waitForResponse(
-        r => r.url().includes('/api/jobs/reorder') && r.request().method() === 'POST'
+        r => r.url().includes('/api/tasks/reorder') && r.request().method() === 'POST'
       );
-      await page.unroute('**/api/jobs/reorder');
+      await page.unroute('**/api/tasks/reorder');
 
       // Verify the persisted order on the backend matches what the user sees.
       await expect.poll(async () => {
@@ -231,7 +231,7 @@ test.describe('Lane drag-and-drop reorder', () => {
     const readyOthers = all
       .filter(j => j.state === '2-ready' && ![jobA.id, jobB.id, jobC.id].includes(j.id))
       .map(j => ({ jobId: j.id, watchPath: j.watchPath }));
-    await api('/api/jobs/reorder', {
+    await api('/api/tasks/reorder', {
       method: 'POST',
       body: JSON.stringify({
         jobs: [
@@ -267,7 +267,7 @@ test.describe('Lane drag-and-drop reorder', () => {
       // Wait for the reorder POST to complete — the UI flips optimistically
       // (covered by the previous test) but persistence is what we assert here.
       const reorderResponse = page.waitForResponse(
-        r => r.url().includes('/api/jobs/reorder') && r.request().method() === 'POST'
+        r => r.url().includes('/api/tasks/reorder') && r.request().method() === 'POST'
       );
       await dispatchDragReorder(page, 'Ready', titleA, dropZoneCount - 1);
       await reorderResponse;

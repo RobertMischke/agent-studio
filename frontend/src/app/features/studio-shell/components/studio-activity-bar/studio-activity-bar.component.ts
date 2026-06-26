@@ -32,6 +32,8 @@ export class StudioActivityBarComponent {
   readonly epicsActive = input<boolean>(false);
   /** Whether any epics exist. The Epics button is hidden when false. */
   readonly hasEpics = input<boolean>(false);
+  /** True while the Workspace settings editor tab is active. */
+  readonly settingsActive = input<boolean>(false);
   readonly panelToggle = output<StudioActivityPanelKey | 'settings' | 'admin'>();
   /** Fires when the user clicks the always-visible Backlog button. */
   readonly openBacklogRequest = output<void>();

@@ -78,7 +78,7 @@ test.describe('Project identity & running prominence', () => {
       // running variant looks different.
       await card.screenshot({ path: 'test-results/project-identity-idle-card.png' });
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(idle.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(idle.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 });

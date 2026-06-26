@@ -136,8 +136,8 @@ async function stubBackgroundApis(page: Page) {
   const json = (body: unknown) => async (route: import('@playwright/test').Route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
-  await page.route(/\/api\/jobs(\?.*)?$/, json([]));
-  await page.route('**/api/jobs/grouped*', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
+  await page.route(/\/api\/tasks(\?.*)?$/, json([]));
+  await page.route('**/api/tasks/grouped*', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
   await page.route('**/api/watch-paths', json([
     { name: 'agent-taskboard', path: 'C:/Projects/agent-taskboard-workspace/projects/agent-taskboard' },
     { name: 'runbook', path: 'C:/Projects/Runbook' },

@@ -1,12 +1,5 @@
 <section class="proj-detail" [attr.data-testid]="'project-detail-' + view()">
   @if (view() === 'overview') {
-    <header class="proj-detail__head">
-      <h2 class="proj-detail__title">{{ projectName() }}</h2>
-      <button class="proj-detail__feed" (click)="openFeed.emit(projectName())" data-testid="project-detail-open-feed">
-        Open feed
-      </button>
-    </header>
-
     @if (paths(); as p) {
       <dl class="proj-detail__paths">
         <div><dt>Watch path</dt><dd>{{ p.path }}</dd></div>
@@ -15,67 +8,12 @@
       </dl>
     }
 
-    <section class="proj-detail__group">
-      <h3>Pipeline snapshot</h3>
-      <div class="proj-detail__status-grid">
-        <div class="proj-detail__status-cell">
-          <span class="proj-detail__status-label">Mode</span>
-          <strong>{{ effectiveMode() }}</strong>
-        </div>
-        <div class="proj-detail__status-cell">
-          <span class="proj-detail__status-label">Active task</span>
-          <strong>{{ activeRunner()?.activeJobId || 'none' }}</strong>
-          @if (activeLaneLabel(); as lane) {
-            <span class="proj-detail__status-note">{{ lane }}</span>
-          }
-        </div>
-        <div class="proj-detail__status-cell">
-          <span class="proj-detail__status-label">Queued</span>
-          <strong>{{ activeRunner()?.queuedJobIds?.length ?? 0 }}</strong>
-        </div>
-      </div>
-      <p class="proj-detail__hint">{{ modeHint() }}</p>
-    </section>
-
-    <section class="proj-detail__group">
-      <h3>Lane counts</h3>
-      <div class="proj-detail__counts">
-        @for (lane of laneCounts(); track lane.state) {
-          <div class="proj-detail__count">
-            <span class="proj-detail__count-num">{{ lane.count }}</span>
-            <span class="proj-detail__count-state">{{ lane.label }}</span>
-          </div>
-        }
-      </div>
-    </section>
-
-    <section class="proj-detail__group">
-      <h3>Queue health</h3>
-      @if (queueHealth(); as health) {
-        <div class="proj-detail__health" [class.proj-detail__health--critical]="health.severity === 'critical'">
-          <strong>{{ queueHealthLabel(health, 'Healthy', 'issue') }}</strong>
-          <span>{{ health.severity }}</span>
-        </div>
-        @if (health.missingJobJson.length > 0) {
-          <h4>Folders without job.json</h4>
-          <ul class="proj-detail__compact-list">
-            @for (item of health.missingJobJson.slice(0, 8); track item.path) {
-              <li><code>{{ item.lane }}</code> {{ item.id }}</li>
-            }
-          </ul>
-        }
-        @if (health.duplicates.length > 0) {
-          <h4>Duplicate slugs</h4>
-          <ul class="proj-detail__compact-list">
-            @for (dup of health.duplicates.slice(0, 8); track dup.id) {
-              <li><code>{{ dup.id }}</code> in {{ dup.locations.length }} lanes</li>
-            }
-          </ul>
-        }
-      } @else {
-        <p class="studio-empty">Queue health is loading.</p>
-      }
-    </section>
+    <app-project-cli-environment-section
+      [projectName]="projectName()"
+      [paths]="paths()"
+      [modeRows]="cliEnvironmentModeRows()"
+      [contextModeRows]="cliEnvironmentContextModeRows()"
+      presentation="onboarding" />
 
     <section class="proj-detail__group">
       <app-regression-radar scope="project" [projectName]="projectName()" />
@@ -164,6 +102,12 @@
   }
 
   @if (view() === 'settings') {
+    <app-project-cli-environment-section
+      [projectName]="projectName()"
+      [paths]="paths()"
+      [modeRows]="cliEnvironmentModeRows()"
+      [contextModeRows]="cliEnvironmentContextModeRows()" />
+
     <section class="proj-detail__group">
       <h3>Runner mode</h3>
       <div class="proj-detail__modes">
@@ -213,6 +157,21 @@
     </section>
 
     <section class="proj-detail__group">
+      <h3>Crash recovery</h3>
+      <label class="proj-detail__toggle"
+             [appTooltip]="'Crash recovery scans this project on backend startup. Orphan working-tree commits never happen automatically; the startup modal asks for confirmation before committing.'">
+        <input type="checkbox"
+               data-testid="project-detail-crash-recovery"
+               [(ngModel)]="crashRecoveryDraft"
+               (ngModelChange)="onCrashRecoveryChange()">
+        <span>Scan this project on startup recovery</span>
+      </label>
+      <p class="proj-detail__hint">
+        Enabled by default. When orphan changes are found, the app opens a confirmation dialog and commits only after approval.
+      </p>
+    </section>
+
+    <section class="proj-detail__group">
       <h3>Auto-push</h3>
       <div class="proj-detail__push-options" data-testid="project-detail-auto-push">
         @for (opt of autoPushOptions; track opt.id) {
@@ -238,146 +197,7 @@
   }
 
   @if (view() === 'workflow') {
-    <section class="proj-detail__group">
-      <h3>Sort order per lane</h3>
-      <div class="proj-detail__lane-sort" data-testid="project-detail-lane-sort">
-        @for (lane of sortableLanes; track lane.state) {
-          <div class="proj-detail__lane-sort-row"
-               [attr.data-testid]="'lane-sort-row-' + lane.state">
-            <span class="proj-detail__lane-sort-name">
-              <span class="proj-detail__lane-sort-icon" aria-hidden="true">{{ lane.icon }}</span>
-              {{ lane.label }}
-            </span>
-            <select class="proj-detail__lane-sort-select"
-                    [attr.data-testid]="'lane-sort-select-' + lane.state"
-                    [appTooltip]="laneSortMeta(laneSortDraft[lane.state]).hint"
-                    [(ngModel)]="laneSortDraft[lane.state]"
-                    (ngModelChange)="onLaneSortChange(lane.state)">
-              @for (opt of laneSortOptions; track opt.value) {
-                <option [value]="opt.value">{{ opt.icon }} {{ opt.label }}</option>
-              }
-            </select>
-          </div>
-        }
-      </div>
-      <p class="proj-detail__hint">
-        Controls the order cards appear in each board lane. <strong>Manual</strong> enables drag-and-drop reordering; the other strategies sort automatically and disable drag on that lane. The auto-pickup runner always uses its own priority order regardless of this setting.
-      </p>
-    </section>
-  }
-
-  @if (view() === 'pipeline') {
-    @if (pipelineRows().length > 0) {
-      <section class="proj-detail__group">
-        <h3>Pipeline steps</h3>
-        <div class="proj-detail__pipeline" data-testid="project-detail-pipeline">
-          @for (step of pipelineRows(); track step.id) {
-            <div class="proj-detail__pl-row"
-                 [class.proj-detail__pl-row--disabled]="!step.enabled"
-                 [attr.data-testid]="'pipeline-step-row-' + step.id">
-              <span class="proj-detail__pl-order">
-                <button type="button"
-                        class="proj-detail__pl-order-btn"
-                        [attr.aria-label]="'Move ' + step.displayName + ' up'"
-                        [attr.data-testid]="'pipeline-step-move-up-' + step.id"
-                        [appTooltip]="'Move this step earlier in this project pipeline.'"
-                        [disabled]="!step.canMoveUp || pipelineOrderBusy()"
-                        (click)="onStepMove(step.id, -1)">↑</button>
-                <button type="button"
-                        class="proj-detail__pl-order-btn"
-                        [attr.aria-label]="'Move ' + step.displayName + ' down'"
-                        [attr.data-testid]="'pipeline-step-move-down-' + step.id"
-                        [appTooltip]="'Move this step later in this project pipeline.'"
-                        [disabled]="!step.canMoveDown || pipelineOrderBusy()"
-                        (click)="onStepMove(step.id, 1)">↓</button>
-              </span>
-              <span class="proj-detail__pl-kind">{{ step.kind }}</span>
-              <span class="proj-detail__pl-name">{{ step.displayName }}</span>
-
-              @if (step.usesModel) {
-                <app-cli-model-selector
-                  [cliType]="asCliType(step.cliType)"
-                  [model]="step.model"
-                  [thinkingLevel]="step.thinkingLevel || null"
-                  [disabled]="!step.enabled || !!pipelineStepBusy[step.id]"
-                  [disabledReason]="!step.enabled ? 'Enable this step before changing its agent.' : 'Pipeline step update in progress.'"
-                  [tooltipOverride]="'CLI, model, and thinking level for this step LLM call. Empty model uses the project/runtime default.'"
-                  eyebrow="Pipeline step"
-                  [triggerTestid]="'pipeline-step-agent-' + step.id"
-                  [pickerTestidPrefix]="'pipeline-step-agent-picker-' + step.id"
-                  (commit)="onStepAgentCommit(step.id, $event)" />
-              }
-
-              @if (step.usesPrompt) {
-                <textarea class="proj-detail__pl-prompt"
-                          rows="2"
-                          [attr.data-testid]="'pipeline-step-prompt-' + step.id"
-                          [appTooltip]="'Prompt override for this LLM step. Empty uses the catalogue prompt template.'"
-                          [placeholder]="'Catalogue prompt'"
-                          [disabled]="!step.enabled || pipelineStepBusy[step.id]"
-                          [ngModel]="step.prompt"
-                          (change)="onStepPromptChange(step.id, $any($event.target).value)"></textarea>
-              }
-
-              @if (step.supportsMode) {
-                <select class="proj-detail__pl-mode"
-                        [attr.data-testid]="'pipeline-step-mode-' + step.id"
-                        [appTooltip]="'Gate mode: Off skips, Warn records but never blocks, Fail can block the transition.'"
-                        [disabled]="!step.enabled || pipelineStepBusy[step.id]"
-                        [ngModel]="step.mode"
-                        (ngModelChange)="onStepModeChange(step.id, $event)">
-                  @for (opt of pipelineGateModes; track opt.id) {
-                    <option [value]="opt.id">{{ opt.label }}</option>
-                  }
-                </select>
-              }
-
-              @if (step.supportsCondition) {
-                <select class="proj-detail__pl-condition"
-                        [attr.data-testid]="'pipeline-step-condition-' + step.id"
-                        [appTooltip]="'When this step runs. Always runs whenever enabled; the other options gate it on the run outcome (abort / non-zero exit / aspect fail) or the task type / tag.'"
-                        [disabled]="!step.enabled || pipelineStepBusy[step.id]"
-                        [ngModel]="step.condition"
-                        (ngModelChange)="onStepConditionChange(step.id, $event)">
-                  @for (opt of pipelineConditions; track opt.id) {
-                    <option [value]="opt.id">{{ opt.label }}</option>
-                  }
-                </select>
-                @if (step.conditionNeedsValue) {
-                  <input type="text"
-                         class="proj-detail__pl-condition-value"
-                         [attr.data-testid]="'pipeline-step-condition-value-' + step.id"
-                         [appTooltip]="'The ' + (step.condition === 'tag' ? 'tag' : 'task type') + ' this step is scoped to. Leave empty to clear the condition.'"
-                         [placeholder]="step.condition === 'tag' ? 'tag name' : 'bug / feature / chore'"
-                         [disabled]="!step.enabled || pipelineStepBusy[step.id]"
-                         [ngModel]="step.conditionValue"
-                         (ngModelChange)="onStepConditionValueInput(step.id, $event)"
-                         (change)="onStepConditionValueCommit(step.id)"
-                         (keyup.enter)="onStepConditionValueCommit(step.id)">
-                }
-              }
-
-              @if (step.canDisable) {
-                <label class="proj-detail__pl-toggle"
-                       [appTooltip]="step.enabled ? 'Step runs for this project. Click to skip it.' : 'Step is skipped for this project. Click to enable.'">
-                  <input type="checkbox"
-                         [attr.data-testid]="'pipeline-step-enabled-' + step.id"
-                         [disabled]="pipelineStepBusy[step.id]"
-                         [ngModel]="step.enabled"
-                         (ngModelChange)="onStepEnabledChange(step.id, $event)">
-                  <span>{{ step.enabled ? 'On' : 'Off' }}</span>
-                </label>
-              } @else {
-                <span class="proj-detail__pl-locked" [appTooltip]="'Core step; always runs on the task own CLI and model.'">always on</span>
-              }
-            </div>
-          }
-        </div>
-        <p class="proj-detail__hint">
-          Per-project pre/post step configuration. A cheap aspect can run on Haiku; a verification step can use a stronger model. Tokens and cost per step are shown on each task's Overview. Changes apply to the next task run.
-        </p>
-      </section>
-    }
+    <app-project-workflow-section [projectName]="projectName()" />
   }
 
   @if (view() === 'cli') {

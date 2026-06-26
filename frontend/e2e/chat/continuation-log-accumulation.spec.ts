@@ -27,7 +27,7 @@ async function findJobWithPersistedOutput(): Promise<{ id: string; watchPath: st
   for (const j of jobs) {
     try {
       const out = await api<CliOutputLine[]>(
-        `/api/jobs/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`
+        `/api/tasks/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`
       );
       if (Array.isArray(out) && out.length > bestCount) {
         bestCount = out.length;
@@ -47,7 +47,7 @@ test.describe('Continuation log accumulation', () => {
     }
 
     const output = await api<CliOutputLine[]>(
-      `/api/jobs/${encodeURIComponent(target.id)}/output?watchPath=${encodeURIComponent(target.watchPath)}`
+      `/api/tasks/${encodeURIComponent(target.id)}/output?watchPath=${encodeURIComponent(target.watchPath)}`
     );
     expect(Array.isArray(output)).toBe(true);
     expect(output.length).toBeGreaterThan(0);
@@ -100,7 +100,7 @@ test.describe('Continuation log accumulation', () => {
 
     // Fetch the authoritative line count from the API.
     const apiOutput = await api<CliOutputLine[]>(
-      `/api/jobs/${encodeURIComponent(target.id)}/output?watchPath=${encodeURIComponent(target.watchPath)}`
+      `/api/tasks/${encodeURIComponent(target.id)}/output?watchPath=${encodeURIComponent(target.watchPath)}`
     );
     const apiLineCount = apiOutput.length;
 

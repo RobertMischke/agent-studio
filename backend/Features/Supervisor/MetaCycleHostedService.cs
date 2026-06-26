@@ -781,7 +781,7 @@ public sealed class MetaCycleHostedService : BackgroundService
             var createResult = _taskAccess.MutateAsync(new TaskMutationRequest
             {
                 Kind = TaskMutationKind.Create,
-                CreateRequest = new CreateJobRequest
+                CreateRequest = new CreateTaskRequest
                 {
                     Id = slug,
                     Title = $"Meta-cycle: review {topic} ({report.CycleId})",

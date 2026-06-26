@@ -10,7 +10,7 @@ namespace AgentStudio.Runner;
 /// <summary>
 /// Cross-slug Pre-Guard for infra-shaped pickup failures
 /// (<c>pickup.cross-slug-infra-circuit-breaker</c> in
-/// <c>docs/loop-inventory.md</c>).
+/// <c>docs/contracts/loop-inventory.md</c>).
 ///
 /// <para>
 /// The per-slug breaker (<see cref="ProjectRunner.PickupFailureThreshold"/>)

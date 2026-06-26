@@ -6,6 +6,12 @@ public record ProjectSettings
     public bool AutoCommit { get; init; } = true;
 
     /// <summary>
+    /// When true, the boot-time crash recovery sweep runs for this project.
+    /// Orphan working-tree commits still require operator confirmation.
+    /// </summary>
+    public bool CrashRecoveryEnabled { get; init; } = true;
+
+    /// <summary>
     /// Controls when the platform pushes runner-owned commits. Default is
     /// <see cref="AutoPushStrategies.OnCompleted"/> so only commits that have
     /// passed human review and reached <c>6-completed</c> are pushed.
@@ -13,11 +19,27 @@ public record ProjectSettings
     public string AutoPushStrategy { get; init; } = AutoPushStrategies.OnCompleted;
 
     /// <summary>
-    /// Last runner mode chosen by the user for this project ("manual", "auto-single",
-    /// "auto-continuous", "paused"). Restored at backend startup so the auto-pickup
-    /// toggle survives self-rebuild / restart. Null means "use the default (manual)".
+    /// Last <i>live</i> runner mode for this project ("manual", "auto-single",
+    /// "auto-continuous", "paused"), updated on every mode change regardless of
+    /// who caused it (operator, circuit-breaker, supervisor, update-quiesce).
+    /// The supervisor meta-cycle reads this to detect runner-mode drift, so it
+    /// must keep mirroring the actual live mode. Null means "use the default
+    /// (manual)". Boot restore prefers <see cref="DesiredRunnerMode"/> over this
+    /// so a transient system flip does not become the restored mode (ASS-1753).
     /// </summary>
     public string? RunnerMode { get; init; }
+
+    /// <summary>
+    /// The operator's durable auto-pickup intent - the last mode set by a
+    /// <i>user</i>-sourced change (the API toggle), never overwritten by a
+    /// system-driven flip such as the update-service quiesce or a
+    /// circuit-breaker pause. This is what the backend restores at startup so
+    /// "auto-continuous" survives a self-rebuild / restart even when the runner
+    /// was sitting at a system-imposed manual when the process went down
+    /// (ASS-1753). Null falls back to <see cref="RunnerMode"/> for legacy
+    /// records written before this field existed.
+    /// </summary>
+    public string? DesiredRunnerMode { get; init; }
 
     /// <summary>
     /// Model the orchestrator uses when it makes decisions on behalf of the
@@ -39,7 +61,7 @@ public record ProjectSettings
     /// <c>disabled</c>, <c>fewHours</c>, <c>daily</c>, <c>manualOnly</c>.
     /// Default null = "disabled" for every topic; reports never auto-run
     /// without an explicit opt-in. The contract for execution is documented
-    /// in <c>docs/analysis-reports.md</c>; this struct stores the user's
+    /// in <c>docs/reports/analysis-reports.md</c>; this struct stores the user's
     /// cadence choice only.
     /// </summary>
     public Dictionary<string, string>? AnalysisSchedules { get; init; }

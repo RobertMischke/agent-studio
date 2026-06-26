@@ -156,7 +156,7 @@ test.describe('Orchestrator steering', () => {
 
     // The Need mentions "screenshot", so the upload affordance must be
     // present. Clicking it triggers the hidden file input the parent
-    // wires to /api/jobs/{id}/attachments. We assert the affordance
+    // wires to /api/tasks/{id}/attachments. We assert the affordance
     // exists and click it without supplying a file - we are testing the
     // wiring, not the upload pipe.
     const uploadBtn = page.getByTestId('orchestrator-steer-upload');
@@ -191,7 +191,7 @@ test.describe('Orchestrator steering', () => {
     // Cleanup: fixture jobs are filtered out of the default board, but we
     // still delete ours so repeated test runs don't leak fixture folders.
     try {
-      await api(`/api/jobs/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
     } catch {
       /* best-effort */
     }

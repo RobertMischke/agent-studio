@@ -9,7 +9,6 @@ namespace AgentStudio.Shared;
 public static class AgentTypes
 {
     public const string Human   = "human";
-    public const string Copilot = "copilot";
     public const string Claude  = "claude";
     public const string Codex   = "codex";
     public const string Gemini  = "gemini";
@@ -18,33 +17,7 @@ public static class AgentTypes
         !string.Equals(agent, Human, StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>
-/// Identifiers for the supported CLI backends. The string values are persisted
-/// to <c>job.json</c> and used as URL segments — keep them stable.
-/// </summary>
-public static class CliTypes
-{
-    public const string Copilot = "copilot";
-    public const string Claude  = "claude";
-    public const string Codex   = "codex";
-    public const string Gemini  = "gemini";
-
-    /// <summary>
-    /// Sentinel for "no automated CLI resolver" (e.g. a router fallback that needs
-    /// a human). Mirrors <see cref="AgentTypes.Human"/>. Deliberately NOT part of
-    /// <see cref="All"/>/<see cref="IsValid"/> — it is a comparison sentinel, not a
-    /// selectable backend.
-    /// </summary>
-    public const string Human   = "human";
-
-    public static readonly string[] All = [Copilot, Claude, Codex, Gemini];
-
-    public static bool IsValid(string? type) =>
-        !string.IsNullOrWhiteSpace(type) && All.Contains(type, StringComparer.OrdinalIgnoreCase);
-
-    public static string Normalize(string? type) =>
-        IsValid(type) ? type!.ToLowerInvariant() : Copilot;
-}
+// CliTypes now comes from the CodingAgentRunner package (aliased in the csproj).
 
 /// <summary>
 /// How a project's CLI sessions are managed when a job starts.
@@ -72,7 +45,7 @@ public static class SessionModes
 /// <summary>One known session belonging to a CLI for a given project (cwd).</summary>
 public record CliSessionInfo
 {
-    /// <summary>CLI-native session identifier (Copilot name, Claude UUID/name, Codex UUID).</summary>
+    /// <summary>CLI-native session identifier (Claude UUID/name, Codex UUID).</summary>
     public string Id { get; init; } = "";
     /// <summary>Display label — for Codex this is the auto-derived thread name.</summary>
     public string? Label { get; init; }
@@ -123,6 +96,8 @@ public record CliUsageSection
     public string CliType { get; init; } = "";
     public bool Available { get; init; }
     public string? Version { get; init; }
+    /// <summary>Resolved executable path used by the backend for this CLI.</summary>
+    public string? Path { get; init; }
     public string? Error { get; init; }
     /// <summary>Sessions grouped by project (cwd or project name).</summary>
     public List<CliUsageProjectGroup> Projects { get; init; } = [];

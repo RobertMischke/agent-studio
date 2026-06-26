@@ -79,7 +79,7 @@ export function formatDateTime(dateStr: string): string {
 }
 
 export function isCliErrorMessage(message: string | null | undefined): boolean {
-  return !!message && /cli|copilot|authenticat/i.test(message);
+  return !!message && /cli|authenticat/i.test(message);
 }
 
 /**

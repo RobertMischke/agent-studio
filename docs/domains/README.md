@@ -1,0 +1,13 @@
+# Domain Maps
+
+Current system-of-record maps for the major runtime domains.
+
+| File | Owns |
+|---|---|
+| [runner.md](runner.md) | Pickup, CLI run loop, outcome policy, supervisor loops, and recovery. |
+| [pipeline.md](pipeline.md) | Pre/core/post steps, pipeline history, step contracts, and cost. |
+| [tasks.md](tasks.md) | Job folders, lanes, API mutations, task access, review evidence, and attribution. |
+| [frontend.md](frontend.md) | Angular surfaces, design system, polling, optimistic mutation, and Playwright proof. |
+| [cli.md](cli.md) | CLI adapters, stream parsing, prompt handoff, quota probes, and models. |
+| [tokens.md](tokens.md) | Token aggregation domain contract and bus-backed shims. |
+| [token-pricing.md](token-pricing.md) | Single per-model price table and cost derivation. |

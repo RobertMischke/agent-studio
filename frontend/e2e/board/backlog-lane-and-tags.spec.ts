@@ -22,13 +22,13 @@ async function firstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE'
   });
 }
 
 async function cleanup(prefix: string, watchPath: string): Promise<void> {
-  const all = await api<Array<{ id: string; watchPath: string }>>('/api/jobs?includeFixtures=true');
+  const all = await api<Array<{ id: string; watchPath: string }>>('/api/tasks?includeFixtures=true');
   const stale = all.filter(j => j.watchPath === watchPath && j.id.startsWith(prefix));
   await Promise.all(stale.map(j => deleteJob(j.id, j.watchPath).catch(() => {})));
 }
@@ -74,7 +74,7 @@ test.describe('Backlog lane + task types + tags', () => {
     // without a targetState to assert the spec contract.
     await deleteJob(created.id, wp.path);
 
-    const res = await fetch(`${BACKEND}/api/jobs`, {
+    const res = await fetch(`${BACKEND}/api/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -110,7 +110,7 @@ test.describe('Backlog lane + task types + tags', () => {
   test('promote backlog job to preparation via /move endpoint', async () => {
     const wp = await firstWatchPath();
     const id = PREFIX + 'promote';
-    await fetch(`${BACKEND}/api/jobs`, {
+    await fetch(`${BACKEND}/api/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -130,7 +130,7 @@ test.describe('Backlog lane + task types + tags', () => {
   test('UI renders the backlog lane and task-type chip on a card', async ({ page }) => {
     const wp = await firstWatchPath();
     const id = PREFIX + 'visible';
-    await fetch(`${BACKEND}/api/jobs`, {
+    await fetch(`${BACKEND}/api/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -162,7 +162,7 @@ test.describe('Backlog lane + task types + tags', () => {
     const wp = await firstWatchPath();
     // Seed two jobs of different types so we can prove the filter narrows.
     for (const [slug, taskType] of [['bug-card', 'bug'], ['feature-card', 'feature']] as const) {
-      await fetch(`${BACKEND}/api/jobs`, {
+      await fetch(`${BACKEND}/api/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

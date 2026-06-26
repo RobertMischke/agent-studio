@@ -9,9 +9,8 @@ import { SecurityPanelComponent } from '../security-panel/security-panel.compone
 import { UxuiPanelComponent } from '../uxui-panel/uxui-panel.component';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { ProjectObservabilityPanelComponent } from '../project-observability/project-observability-panel.component';
-import { ProjectProductRuntimePanelComponent } from '../project-product-runtime/project-product-runtime-panel.component';
+import { ProjectPipelinePanelComponent } from '../project-pipeline-panel/project-pipeline-panel.component';
 import { ProjectSteeringDocsSectionComponent } from '../project-steering-docs-section/project-steering-docs-section';
-import { ProjectSkillReadinessSectionComponent } from '../project-skill-readiness-section/project-skill-readiness-section';
 import { ProjectWikiSectionComponent } from '../project-wiki-section/project-wiki-section';
 import { AnalysisReportDrilldownComponent } from '../analysis-report-drilldown/analysis-report-drilldown';
 import { ProjectRailKey } from '../project-shell/project-shell.config';
@@ -43,9 +42,8 @@ import { TooltipDirective } from '../../../../components/tooltip';
     UxuiPanelComponent,
     ProjectTokenUsagePanelComponent,
     ProjectObservabilityPanelComponent,
-    ProjectProductRuntimePanelComponent,
+    ProjectPipelinePanelComponent,
     ProjectSteeringDocsSectionComponent,
-    ProjectSkillReadinessSectionComponent,
     ProjectWikiSectionComponent,
     AnalysisReportDrilldownComponent,
     WorkspaceScreenshotsComponent,
@@ -73,7 +71,6 @@ export class ProjectOverlaysComponent {
 
   hasCustomPanel(rail: ProjectRailKey): boolean {
     return rail === 'overview'
-      || rail === 'jobs'
       || rail === 'security'
       || rail === 'visual-evidence'
       || rail === 'architecture'
@@ -81,7 +78,6 @@ export class ProjectOverlaysComponent {
       || rail === 'uxui'
       || rail === 'token-usage'
       || rail === 'observability'
-      || rail === 'product-runtime'
       || rail === 'steering'
       || rail === 'wiki'
       || rail === 'settings'
@@ -91,8 +87,7 @@ export class ProjectOverlaysComponent {
       || rail === 'pipeline'
       || rail === 'workflow'
       || rail === 'prompts'
-      || rail === 'orchestrator'
-      || rail === 'activity';
+      || rail === 'orchestrator';
   }
 
   setProjectShellRail(key: ProjectRailKey): void {

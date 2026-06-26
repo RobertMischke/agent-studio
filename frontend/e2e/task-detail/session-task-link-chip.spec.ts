@@ -40,6 +40,7 @@ function buildUsageReport(
         cliType: 'claude',
         available: true,
         version: 'stub-1.0',
+        path: '/usr/local/bin/claude',
         error: null,
         projects: [
           {
@@ -66,9 +67,9 @@ function buildUsageReport(
           }
         ]
       },
-      { cliType: 'copilot', available: true, version: null, error: null, projects: [] },
-      { cliType: 'codex',   available: true, version: null, error: null, projects: [] },
-      { cliType: 'gemini',  available: true, version: null, error: null, projects: [] }
+      { cliType: 'copilot', available: true, version: null, path: '/usr/local/bin/copilot', error: null, projects: [] },
+      { cliType: 'codex',   available: true, version: null, path: '/usr/local/bin/codex', error: null, projects: [] },
+      { cliType: 'gemini',  available: true, version: null, path: '/usr/local/bin/gemini', error: null, projects: [] }
     ]
   };
 }
@@ -139,7 +140,7 @@ test('session->task chip transitions active -> linked and routes click', async (
     // Cleanup: fixtures (fixture:true) are filtered out of the default
     // kanban response, but deleting keeps the watch-path tree tidy.
     await fetch(
-      `${devBackend.baseUrl}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(wp!.path)}`,
+      `${devBackend.baseUrl}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(wp!.path)}`,
       { method: 'DELETE', headers: { 'x-client-id': 'local-default' } }
     ).catch(() => {});
   }

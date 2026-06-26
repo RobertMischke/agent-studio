@@ -18,7 +18,6 @@ export interface ProjectChatTurn {
     | 'supervisor'
     | 'claude'
     | 'codex'
-    | 'copilot'
     | 'gemini';
   kind:
     | 'turn'

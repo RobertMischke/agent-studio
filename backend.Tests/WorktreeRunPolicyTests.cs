@@ -99,6 +99,67 @@ public sealed class WorktreeRunPolicyTests
         Assert.False(WorktreeRunPolicy.CanResumeSession(isWorktreeRun: true, worktreeReused: false));
     }
 
+    // --- CanResumeSession cwd-binding (S2 / AGT-1784) -----------------------
+
+    [Fact]
+    public void CanResumeSession_ReusedWorktree_CrossPathBirthCwd_False()
+    {
+        // The exact AGT-1776 bug: the task/<slug> branch still existed so
+        // worktreeReused==true, but the absolute worktree path moved (the project
+        // display name changed from Agent-Task-Processor to Agent-Software-Studio).
+        // Resuming a session born in the old path crashes the CLI -> must be FALSE.
+        Assert.False(WorktreeRunPolicy.CanResumeSession(
+            isWorktreeRun: true, worktreeReused: true,
+            runWorkingDir: Path.Combine(Path.GetTempPath(), "wts", "Agent-Software-Studio", "proj"),
+            sessionBirthCwd: Path.Combine(Path.GetTempPath(), "wts", "Agent-Task-Processor", "proj")));
+    }
+
+    [Fact]
+    public void CanResumeSession_ReusedWorktree_SameBirthCwd_True()
+    {
+        var p = Path.Combine(Path.GetTempPath(), "wts", "Studio", "proj");
+        Assert.True(WorktreeRunPolicy.CanResumeSession(
+            isWorktreeRun: true, worktreeReused: true, runWorkingDir: p, sessionBirthCwd: p));
+    }
+
+    [Fact]
+    public void CanResumeSession_ReusedWorktree_BirthCwdTrailingSeparator_StillTrue()
+    {
+        var p = Path.Combine(Path.GetTempPath(), "wts", "Studio", "proj");
+        Assert.True(WorktreeRunPolicy.CanResumeSession(
+            isWorktreeRun: true, worktreeReused: true,
+            runWorkingDir: p, sessionBirthCwd: p + Path.DirectorySeparatorChar));
+    }
+
+    [Fact]
+    public void CanResumeSession_ReusedWorktree_UnknownBirthCwd_FallsBackToReuse_True()
+    {
+        // Legacy rows recorded before Cwd was tracked: birth cwd null -> keep the
+        // old reuse behavior so normal same-path reissues never regress.
+        Assert.True(WorktreeRunPolicy.CanResumeSession(
+            isWorktreeRun: true, worktreeReused: true,
+            runWorkingDir: Path.Combine(Path.GetTempPath(), "wts", "Studio", "proj"),
+            sessionBirthCwd: null));
+    }
+
+    [Fact]
+    public void CanResumeSession_FreshCut_CrossPathIrrelevant_False()
+    {
+        // Fresh-cut still wins regardless of any recorded birth cwd.
+        Assert.False(WorktreeRunPolicy.CanResumeSession(
+            isWorktreeRun: true, worktreeReused: false,
+            runWorkingDir: "/a", sessionBirthCwd: "/a"));
+    }
+
+    [Fact]
+    public void CanResumeSession_TwoArgOverload_DelegatesUnchanged()
+    {
+        // The 2-arg overload must behave exactly as before (nulls -> reuse path).
+        Assert.True(WorktreeRunPolicy.CanResumeSession(true, true));
+        Assert.False(WorktreeRunPolicy.CanResumeSession(true, false));
+        Assert.True(WorktreeRunPolicy.CanResumeSession(false, false));
+    }
+
     // --- PathsEqual ---------------------------------------------------------
 
     [Fact]

@@ -15,7 +15,7 @@ under `frontend/`.
 - Future-only product direction: [ROADMAP.md](ROADMAP.md).
 - Documentation index: [docs/README.md](docs/README.md). Start there when you
   do not already know the right document.
-- Operator setup and troubleshooting: [docs/setup/](docs/setup/README.md).
+- Operator setup and troubleshooting: [docs/operations/setup/](./docs/operations/setup/README.md).
 - Familiar runtime, CLI, permission, filesystem, runner, or state-machine
   failure: search [docs/wiki/common-problems/](docs/wiki/common-problems/)
   before debugging from scratch.
@@ -33,12 +33,17 @@ under `frontend/`.
   skill first: [.agents/skills/job-api/SKILL.md](.agents/skills/job-api/SKILL.md).
 - Do not commit, push, amend, or mutate remotes unless this exact interactive
   task asks for it. Managed task runs leave git ownership to the platform; see
-  [docs/commit-push-doctrine.md](docs/commit-push-doctrine.md).
+  [docs/operations/git/commit-push-doctrine.md](./docs/operations/git/commit-push-doctrine.md).
 - Written repo artifacts are English. Do not introduce em dashes. User-facing UI
   strings, backend errors shown to the UI, prompts, comments, docs, commits, and
   PR text are English.
 - When adding a document under `docs/`, add one row to
   [docs/README.md](docs/README.md) in the same change.
+- CLI crashes, run-outcome classification, retries, or orchestrator
+  drive-to-conclusion: read
+  [docs/wiki/concepts/orchestrator-drive-to-conclusion.html](docs/wiki/concepts/orchestrator-drive-to-conclusion.html)
+  before changing that logic, and maintain it after. Append each incident to
+  its case log (date, slug, what crashed, which terminal it reached).
 - Agent shell policy: default to bash/sh, prefer existing `.sh` scripts, and
   avoid PowerShell-specific file creation.
 
@@ -46,12 +51,12 @@ under `frontend/`.
 
 | Area | Read first | Owns |
 |---|---|---|
-| Runner | [docs/runner-domain.md](docs/runner-domain.md) | Pickup, CLI run loop, outcome policy, supervisor loops. |
-| Pipeline | [docs/pipeline-domain.md](docs/pipeline-domain.md) | Pre/core/post steps, pipeline history, step contracts. |
-| Tasks | [docs/tasks-domain.md](docs/tasks-domain.md) | Job folders, lane states, API mutations, task access. |
-| Frontend | [docs/frontend-domain.md](docs/frontend-domain.md) | Angular surfaces, design system, Playwright proof. |
-| CLI | [docs/cli-domain.md](docs/cli-domain.md) | Claude, Codex, Copilot, Gemini drivers and quota probes. |
-| ADRs | [docs/architecture-decisions.md](docs/architecture-decisions.md) | Load-bearing decisions and deliberate non-goals. |
+| Runner | [docs/domains/runner.md](./docs/domains/runner.md) | Pickup, CLI run loop, outcome policy, supervisor loops. |
+| Pipeline | [docs/domains/pipeline.md](./docs/domains/pipeline.md) | Pre/core/post steps, pipeline history, step contracts. |
+| Tasks | [docs/domains/tasks.md](./docs/domains/tasks.md) | Job folders, lane states, API mutations, task access. |
+| Frontend | [docs/domains/frontend.md](./docs/domains/frontend.md) | Angular surfaces, design system, Playwright proof. |
+| CLI | [docs/domains/cli.md](./docs/domains/cli.md) | Claude, Codex, Copilot, Gemini drivers and quota probes. |
+| ADRs | [docs/architecture/decisions/adr-archive.md](./docs/architecture/decisions/adr-archive.md) | Load-bearing decisions and deliberate non-goals. |
 | Skills | [.agents/skills/README.md](.agents/skills/README.md) | Portable specialist workflows. |
 
 ## Product Boundaries

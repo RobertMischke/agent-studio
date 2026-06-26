@@ -1,4 +1,7 @@
 
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+
 using Xunit;
 
 namespace AgentStudio.Tests;
@@ -173,6 +176,7 @@ Options:
         // Lock the words "STEER", "Need:", and the preference rule so a
         // future edit does not silently drop the steering grammar.
         var prompt = AgentStudio.Runner.ProjectRunner.BuildOrchestratorPrompt(
+            Prompts(),
             FakeJob(),
             promptText: "do the work",
             lastAgentText: "should I ship A or B?",
@@ -186,7 +190,7 @@ Options:
         Assert.Contains("BLOCK", prompt);
 
         var resume = AgentStudio.Runner.ProjectRunner.BuildOrchestratorResumePrompt(
-            FakeJob(), lastAgentText: "should I ship A or B?", attachmentsList: "(none)");
+            Prompts(), FakeJob(), lastAgentText: "should I ship A or B?", attachmentsList: "(none)");
         Assert.Contains("STEER", resume);
         Assert.Contains("Need:", resume);
     }
@@ -200,4 +204,27 @@ Options:
         FolderPath = "C:/tmp/test-project/.orchestrator/jobs/test-job",
         State = "3-progress"
     };
+
+    private static RuntimePromptService Prompts()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["PromptTemplates:RuntimePath"] = FindPromptRoot()
+            })
+            .Build();
+        return new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+    }
+
+    private static string FindPromptRoot()
+    {
+        var dir = new System.IO.DirectoryInfo(System.AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = System.IO.Path.Combine(dir.FullName, "prompts", "runtime");
+            if (System.IO.Directory.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+        throw new System.IO.DirectoryNotFoundException("Could not locate prompts/runtime from test base directory.");
+    }
 }

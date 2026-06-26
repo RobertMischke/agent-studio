@@ -716,6 +716,32 @@ describe('ConversationViewComponent', () => {
     expect(dated).toMatch(/May/);
   });
 
+  it('gives every coalesced message item its own subtle hover timestamp (clock visible, full date on tooltip)', async () => {
+    // Each notification in a long bubble carries its own clock so an operator
+    // can tell WHEN a single item happened — not just the group's range. The
+    // visible label is clock-only; the full calendar date rides on the tooltip.
+    const events: ConversationEvent[] = [
+      agentMsg('a1', 1, 'first'),
+      agentMsg('a2', 5, 'second'),
+      agentMsg('a3', 9, 'third'),
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const itemTimes = el.querySelectorAll('[data-testid="conversation-message-item-time"]');
+    // One per rendered item, consistent across the bubble.
+    expect(itemTimes.length).toBe(3);
+    for (const time of Array.from(itemTimes)) {
+      // The visible per-item clock omits the calendar date (kept subtle).
+      expect(time.textContent ?? '').not.toMatch(/2026/);
+      // The machine-readable timestamp is exposed for assistive tech / tests.
+      expect(time.getAttribute('datetime')).toMatch(/2026-05-05T/);
+    }
+    // The tooltip binding (formatDateTime) discloses the full calendar date.
+    const dated = fixture.componentInstance.formatDateTime(events[0].timestamp);
+    expect(dated).toMatch(/2026/);
+    expect(dated).toMatch(/May/);
+  });
+
   it('formatDateTime returns a calendar+clock string and formatTime stays clock-only', async () => {
     const fixture = await makeFixture([agentMsg('a1', 1, 'x')]);
     const inst = fixture.componentInstance;

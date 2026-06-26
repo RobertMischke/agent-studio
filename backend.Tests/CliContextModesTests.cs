@@ -59,7 +59,6 @@ public sealed class CliContextModesTests : IDisposable
     {
         Assert.True(CliContextModes.SupportsClean(CliTypes.Claude));
         Assert.True(CliContextModes.SupportsClean(CliTypes.Codex));
-        Assert.False(CliContextModes.SupportsClean(CliTypes.Copilot));
         Assert.False(CliContextModes.SupportsClean(CliTypes.Gemini));
     }
 

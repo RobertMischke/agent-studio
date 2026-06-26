@@ -16,16 +16,18 @@
     <div class="step-result__popover" data-testid="pipeline-step-result-card" role="dialog" [attr.aria-label]="h.label + ' result'">
       <header class="step-result__header" [attr.data-status]="h.status">
         <span class="step-result__title">{{ h.label }}</span>
-        <span class="step-result__status" data-testid="pipeline-step-result-status">
-          <span aria-hidden="true">{{ h.statusIcon }}</span>
-          {{ h.statusLabel }}
+        <span class="step-result__outcome">
+          <span class="step-result__status" data-testid="pipeline-step-result-status">
+            <span aria-hidden="true">{{ h.statusIcon }}</span>
+            {{ h.statusLabel }}
+          </span>
+          @if (h.verdict) {
+            <span class="step-result__verdict"
+                  [attr.data-verdict]="h.verdict"
+                  data-testid="pipeline-step-result-verdict">{{ h.verdict }}</span>
+          }
         </span>
-        @if (h.verdict) {
-          <span class="step-result__verdict"
-                [attr.data-verdict]="h.verdict"
-                data-testid="pipeline-step-result-verdict">{{ h.verdict }}</span>
-        }
-        <span class="step-result__meta">
+        <span class="step-result__meta" aria-label="Step metadata">
           @if (h.model) {
             <span class="step-result__chip step-result__chip--model">{{ h.model }}</span>
           }

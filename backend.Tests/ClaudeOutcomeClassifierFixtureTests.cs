@@ -16,7 +16,7 @@ namespace AgentStudio.Tests;
 /// regression is <c>done-substantial-no-sentinel</c> / <c>substantial-neutral-no-verdict</c>:
 /// a claude run that did the work but never emitted a parseable <c>[[TASK_DONE]]</c>
 /// must classify as <see cref="AgentOutcomeKind.Done"/> (reviewable), never
-/// <see cref="AgentOutcomeKind.Unknown"/> with <see cref="RunIssueKind.ClassifierUnknown"/>,
+/// <see cref="AgentOutcomeKind.Unknown"/> with <see cref="RunIssueKind.OrchestratorInconclusive"/>,
 /// which is the loop that left work uncommitted in the worktree.
 /// </para>
 /// </summary>
@@ -77,18 +77,19 @@ public class ClaudeOutcomeClassifierFixtureTests
     }
 
     [Fact]
-    public void ClaudeDoneSubstantialWithoutSentinel_IsNeverClassifierUnknown()
+    public void ClaudeDoneSubstantialWithoutSentinel_IsNeverInconclusive()
     {
         // The exact 2026-06-08 broken-commit-pipeline shape: a substantial
         // claude completion reply with no parseable sentinel. It must flow to
-        // review as Done, not spin the classifier-unknown reissue loop that
+        // review as Done, not spin an inconclusive reissue loop that
         // strands the work uncommitted.
         foreach (var fixture in new[] { "done-substantial-no-sentinel.ndjson", "substantial-neutral-no-verdict.ndjson" })
         {
             var outcome = AgentOutcomeAnalyzer.Analyze(LoadFixture(fixture), "completed", 130.0);
             Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
             Assert.NotEqual(AgentOutcomeKind.Unknown, outcome.Kind);
-            Assert.NotEqual(RunIssueKind.ClassifierUnknown, outcome.IssueKind);
+            Assert.NotEqual(RunIssueKind.OrchestratorInconclusive, outcome.IssueKind);
+            Assert.NotEqual(RunIssueKind.InfraCrash, outcome.IssueKind);
         }
     }
 

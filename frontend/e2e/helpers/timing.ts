@@ -35,8 +35,8 @@ import type { Page, Locator } from '@playwright/test';
  * via `evaluate`).
  *
  * Example:
- *   const ms = await apiRoundtrip(page, '**\/api/jobs/grouped', () =>
- *     page.evaluate(() => fetch('http://localhost:5030/api/jobs/grouped').then(r => r.json()))
+ *   const ms = await apiRoundtrip(page, '**\/api/tasks/grouped', () =>
+ *     page.evaluate(() => fetch('http://localhost:5030/api/tasks/grouped').then(r => r.json()))
  *   );
  *   expect(ms).toBeLessThan(1000);
  */

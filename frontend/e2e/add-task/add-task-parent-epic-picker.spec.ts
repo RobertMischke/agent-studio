@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
  *
  * When creating a `kind=task`, an optional "Parent epic" dropdown lists the
  * epics of the currently selected project (GET /api/epics, filtered client-side
- * by watchPath). Choosing one sends it as CreateJobRequest.epicId. The picker is
+ * by watchPath). Choosing one sends it as CreateTaskRequest.epicId. The picker is
  * hidden for `kind=epic` (an epic has no parent epic) and when the project has
  * no epics.
  *

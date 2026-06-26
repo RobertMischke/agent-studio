@@ -8,10 +8,16 @@ import {
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
+import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
+import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
+import { TooltipDirective } from '../../../../components/tooltip';
+import { PromptNavSplitterDirective } from './prompt-nav-splitter.directive';
 import {
   PromptAdminService,
   PromptCatalogItem,
   PromptDetail,
+  PromptPreviewResult,
 } from '../../../../services/prompt-admin.service';
 
 interface PromptGroup {
@@ -36,7 +42,7 @@ interface PromptDiffLine {
 @Component({
   selector: 'app-prompt-admin-panel',
   standalone: true,
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, SectionHeaderComponent, StudioIconComponent, TreeRowComponent, TooltipDirective, PromptNavSplitterDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './prompt-admin-panel.component.html',
   styleUrl: './prompt-admin-panel.component.scss',
@@ -44,6 +50,7 @@ interface PromptDiffLine {
 export class PromptAdminPanelComponent implements OnInit {
   private readonly api = inject(PromptAdminService);
   readonly catalog = this.api.catalog;
+  readonly coverage = this.api.coverage;
   readonly loadError = this.api.loadError;
 
   readonly selectedName = signal<string | null>(null);
@@ -51,8 +58,14 @@ export class PromptAdminPanelComponent implements OnInit {
   readonly draft = signal<string>('');
   readonly busy = signal(false);
   readonly actionError = signal<string | null>(null);
+  readonly collapsedGroups = signal<ReadonlySet<string>>(new Set());
   /** Toggles the read-only "shipped default" comparison block. */
   readonly showDefault = signal(false);
+
+  /** Probelauf state: per-slot values keyed by slot name, and the last result. */
+  readonly slotValues = signal<Record<string, string>>({});
+  readonly previewResult = signal<PromptPreviewResult | null>(null);
+  readonly previewBusy = signal(false);
 
   readonly groups = computed<PromptGroup[]>(() => {
     const cat = this.catalog();
@@ -85,7 +98,7 @@ export class PromptAdminPanelComponent implements OnInit {
   }
 
   private async init(): Promise<void> {
-    await this.api.loadCatalog();
+    await Promise.all([this.api.loadCatalog(), this.api.loadCoverage()]);
     const first = this.catalog()?.items[0]?.name;
     if (first) await this.select(first);
   }
@@ -95,6 +108,8 @@ export class PromptAdminPanelComponent implements OnInit {
     this.busy.set(true);
     this.actionError.set(null);
     this.showDefault.set(false);
+    this.previewResult.set(null);
+    this.slotValues.set({});
     try {
       const detail = await this.api.getDetail(name);
       this.selectedName.set(name);
@@ -104,6 +119,41 @@ export class PromptAdminPanelComponent implements OnInit {
       this.actionError.set(this.describe(err, 'Failed to load prompt'));
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  isGroupCollapsed(name: string): boolean {
+    return this.collapsedGroups().has(name);
+  }
+
+  setGroupCollapsed(name: string, collapsed: boolean): void {
+    const next = new Set(this.collapsedGroups());
+    if (collapsed) next.add(name);
+    else next.delete(name);
+    this.collapsedGroups.set(next);
+  }
+
+  overrideTooltip(item: PromptCatalogItem): string {
+    return item.defaultChangedSinceOverride ? 'Local override active. The shipped default changed since this override was created.' : 'Local override active.';
+  }
+
+  setSlotValue(slot: string, value: string): void {
+    this.slotValues.update((v) => ({ ...v, [slot]: value }));
+  }
+
+  async runPreview(): Promise<void> {
+    const name = this.selectedName();
+    if (!name || this.previewBusy()) return;
+    this.previewBusy.set(true);
+    this.actionError.set(null);
+    try {
+      // Preview the current draft so unsaved edits are reflected in the Probelauf.
+      const result = await this.api.preview(name, this.slotValues(), this.draft());
+      this.previewResult.set(result);
+    } catch (err: unknown) {
+      this.actionError.set(this.describe(err, 'Probelauf failed'));
+    } finally {
+      this.previewBusy.set(false);
     }
   }
 

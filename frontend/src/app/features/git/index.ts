@@ -13,4 +13,5 @@ export type {
   TaskLandedLadder,
   TaskCommitMembership,
   TaskProvenanceView,
+  TaskProvenanceRecord,
 } from './models/git.model';

@@ -100,6 +100,55 @@ describe('ToolBurstChipComponent (smoke)', () => {
     expect(el.querySelector('[data-testid="tool-burst-output-toggle"]')?.textContent).toContain('show less');
   });
 
+  it('starts a long tool-use collapsed as a one-line preview and reveals full content on expand', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ToolBurstChipComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ToolBurstChipComponent);
+    const output = Array.from({ length: 40 }, (_, i) => `log line ${i}`).join('\n');
+    fixture.componentRef.setInput('event', {
+      id: 'burst-long',
+      kind: 'toolBurst',
+      timestamp: '2026-04-26T12:00:00.000Z',
+      rawRange: { source: 'cli-output.log', start: 1, end: 41 },
+      count: 1,
+      families: { command: 1 },
+      failures: 0,
+      durationMs: 4200,
+      collapsedByDefault: true,
+      commands: [
+        { command: 'npm run build', status: 'completed', exitCode: 0, output, outputLineCount: 40, outputTruncated: false }
+      ]
+    });
+    // No initialOpen: a long burst must stay collapsed by default.
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    // Collapsed: the heavy details panel is absent and only a one-line preview shows.
+    expect(el.querySelector('[data-testid="tool-burst-details"]')).toBeFalsy();
+    const preview = el.querySelector('[data-testid="tool-burst-preview"]');
+    expect(preview?.textContent).toContain('npm run build');
+
+    // Expand via the row toggle.
+    el.querySelector<HTMLButtonElement>('[data-testid="tool-burst-row"]')?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // Expanded: full command output is revealed and the collapsed preview is gone.
+    expect(el.querySelector('[data-testid="tool-burst-details"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="tool-burst-command-output"]')?.textContent).toContain('log line 0');
+    expect(el.querySelector('[data-testid="tool-burst-preview"]')).toBeFalsy();
+  });
+
   it('shows the generating model as a subtle chip on the collapsed burst row', async () => {
     await TestBed.configureTestingModule({
       imports: [ToolBurstChipComponent],
@@ -128,6 +177,79 @@ describe('ToolBurstChipComponent (smoke)', () => {
     const chip = el.querySelector('[data-testid="tool-burst-model"]');
     expect(chip).toBeTruthy();
     expect(chip?.textContent?.trim()).toBe('claude-opus-4-8');
+  });
+
+  it('exposes a glyph legend tooltip that covers every tool glyph and marks the active one', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ToolBurstChipComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ToolBurstChipComponent);
+    fixture.componentRef.setInput('event', {
+      id: 'burst-glyph',
+      kind: 'toolBurst',
+      timestamp: '2026-04-26T12:00:00.000Z',
+      rawRange: { source: 'cli-output.log', start: 1, end: 6 },
+      count: 3,
+      families: { read: 3 },
+      failures: 0,
+      collapsedByDefault: true,
+    });
+    fixture.detectChanges();
+
+    const tip = fixture.componentInstance.glyphTooltip();
+    // The active row is a Read burst, so the tooltip headline names it.
+    expect(tip.title).toContain('Read');
+    // The body is the full key: every glyph + its written-out meaning, so any
+    // row decodes the whole alphabet (R/S/$/E/A/D/T/!), not just its letter.
+    for (const name of ['Read', 'Search', 'Shell', 'Edit', 'Task', 'Todo', 'Tool', 'Fehler']) {
+      expect(tip.body).toContain(name);
+    }
+    for (const glyph of ['R', 'S', '$', 'E', 'A', 'D', 'T', '!']) {
+      expect(tip.body).toContain(`<code>${glyph}</code>`);
+    }
+    // The active glyph (R) is emphasized.
+    expect(tip.body).toContain('<strong><code>R</code>');
+
+    // The glyph carries the canonical instant-hover tooltip directive.
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="tool-burst-icon"]')).toBeTruthy();
+  });
+
+  it('shows the written-out glyph meaning in the expanded detail head', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ToolBurstChipComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ToolBurstChipComponent);
+    fixture.componentRef.setInput('event', {
+      id: 'burst-glyph-open',
+      kind: 'toolBurst',
+      timestamp: '2026-04-26T12:00:00.000Z',
+      rawRange: { source: 'cli-output.log', start: 1, end: 6 },
+      count: 2,
+      families: { command: 2 },
+      failures: 0,
+      collapsedByDefault: true,
+    });
+    fixture.componentRef.setInput('initialOpen', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const label = el.querySelector('[data-testid="tool-burst-glyph-label"]');
+    expect(label?.textContent).toContain('Shell');
   });
 
   it('omits the model chip when the burst has no attributable model', async () => {

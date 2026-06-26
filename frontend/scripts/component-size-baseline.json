@@ -7,10 +7,10 @@
   },
   "components": {
     "src/app/app.ts": {
-      "typeScript": 2403,
-      "template": 865,
-      "styles": 2132,
-      "total": 5400
+      "typeScript": 2567,
+      "template": 902,
+      "styles": 2008,
+      "total": 5477
     },
     "src/app/components/chat/chat/chat.component.ts": {
       "typeScript": 656,
@@ -91,10 +91,10 @@
       "total": 1060
     },
     "src/app/features/studio-shell/studio-shell.component.ts": {
-      "typeScript": 1214,
-      "template": 780,
-      "styles": 2123,
-      "total": 4117
+      "typeScript": 1333,
+      "template": 838,
+      "styles": 2156,
+      "total": 4327
     },
     "src/app/features/task-detail/components/activity-log-view/activity-log-view.ts": {
       "typeScript": 478,
@@ -121,10 +121,10 @@
       "total": 2812
     },
     "src/app/features/task-detail/task-detail.ts": {
-      "typeScript": 1500,
-      "template": 206,
+      "typeScript": 1510,
+      "template": 208,
       "styles": 1284,
-      "total": 2990
+      "total": 3002
     },
     "src/app/features/verbose-debug/components/verbose-debug-overlay/verbose-debug-overlay.component.ts": {
       "typeScript": 608,

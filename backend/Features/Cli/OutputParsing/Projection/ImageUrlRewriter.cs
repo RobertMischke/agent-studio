@@ -35,7 +35,7 @@ public static partial class ImageUrlRewriter
 
             // Path traversal: drop the image to its alt text. We must not let
             // a crafted markdown source pull from elsewhere on disk through
-            // the api/jobs/{id}/attachments handler.
+            // the api/tasks/{id}/attachments handler.
             if (ContainsTraversal(src))
             {
                 return string.IsNullOrEmpty(alt) ? string.Empty : alt;
@@ -63,7 +63,7 @@ public static partial class ImageUrlRewriter
     {
         if (src.Contains("..", StringComparison.Ordinal)) return true;
         // A leading slash for non-absolute URLs would also escape the job
-        // tree (it bypasses the api/jobs/{id}/... prefix); the api/ allow
+        // tree (it bypasses the api/tasks/{id}/... prefix); the api/ allow
         // list above already covers the legitimate absolute case.
         return false;
     }

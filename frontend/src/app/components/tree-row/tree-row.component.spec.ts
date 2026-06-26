@@ -43,4 +43,26 @@ describe('TreeRowComponent (smoke)', () => {
       expect(TreeRowComponent).toBeTruthy();
     }
   });
+
+  it('can reserve chevron and glyph columns for iconless rows', () => {
+    TestBed.configureTestingModule({
+      imports: [TreeRowComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const fixture = TestBed.createComponent(TreeRowComponent);
+    fixture.componentRef.setInput('label', 'Iconless');
+    fixture.componentRef.setInput('reserveChevron', true);
+    fixture.componentRef.setInput('reserveGlyph', true);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.tree-row__chev--placeholder')).toBeTruthy();
+    expect(host.querySelector('.tree-row__glyph-icon--placeholder')).toBeTruthy();
+    expect(host.textContent).toContain('Iconless');
+  });
 });

@@ -35,6 +35,7 @@
   --ov-pipeline-time-col: 96px;
   --ov-pipeline-tokens-col: 56px;
   --ov-pipeline-cost-col: 64px;
+  --ov-pipeline-step-indent: var(--studio-spacing-3);
 
   // Single source of truth for the per-step / header grid. Header and step
   // rows are separate grids; sharing this one template (not redefining tracks
@@ -67,6 +68,14 @@
   flex-direction: column;
   gap: 2px;
 
+  &__heading-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--studio-spacing-2);
+    border-bottom: 1px solid var(--studio-border);
+  }
+
   &__title {
     font-size: 11px;
     font-weight: 700;
@@ -76,6 +85,41 @@
     margin: 0;
     padding-bottom: 1px;
     border-bottom: 1px solid var(--studio-border);
+  }
+
+  &__heading-row > &__title {
+    border-bottom: 0;
+  }
+
+  &__icon-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--studio-spacing-5);
+    height: calc(var(--studio-spacing-5) - var(--studio-spacing-1));
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--studio-spacing-1);
+    background: transparent;
+    color: var(--studio-fg-muted);
+    font: inherit;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+
+    &:hover,
+    &:focus-visible,
+    &--active {
+      color: var(--studio-fg-strong);
+      background: var(--studio-bg-hover);
+      border-color: var(--studio-border);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--studio-accent-2);
+      outline-offset: 1px;
+    }
   }
 }
 
@@ -286,18 +330,6 @@
   }
 }
 
-.ov-agent-inline {
-  display: grid;
-  grid-template-columns: 1fr;
-  row-gap: 0;
-  min-width: 0;
-}
-
-.ov-agent-inline.studio-measure {
-  width: 100%;
-  max-width: none;
-}
-
 .ov-row {
   // Fixed two-column grid (label | value). The label track is a hard width,
   // so a long label (e.g. "Last Activity") can never grow and shove its value
@@ -321,6 +353,12 @@
     font-weight: 600;
     letter-spacing: 0.03em;
     text-transform: uppercase;
+  }
+}
+
+.ov-row--agent {
+  .ov-value {
+    align-items: center;
   }
 }
 
@@ -412,6 +450,23 @@
   gap: 4px;
   font-size: 12px;
   color: var(--studio-fg);
+}
+
+.ov-agent-combo {
+  flex-wrap: wrap;
+  row-gap: var(--studio-row-gap);
+
+  &__cli {
+    display: inline-flex;
+    align-items: center;
+    min-height: calc(var(--studio-row-min-h) + var(--studio-row-gap));
+    padding-left: var(--studio-spacing-2);
+    border-left: 1px solid var(--studio-border);
+    color: var(--studio-fg-dim);
+    font-size: 11.5px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
 }
 
 .ov-owner-chip {
@@ -549,7 +604,7 @@
   display: flex;
   align-items: center;
   gap: var(--studio-spacing-2);
-  min-height: var(--studio-row-min-h);
+  min-height: calc(var(--studio-row-min-h) + var(--studio-row-gap));
   margin-top: var(--studio-spacing-2);
   padding: var(--studio-row-pad-block) var(--studio-spacing-2);
   border-radius: 6px;
@@ -622,9 +677,11 @@
   grid-template-columns: var(--ov-pl-grid-cols);
   align-items: baseline;
   column-gap: var(--studio-spacing-1);
+  box-sizing: border-box;
+  width: calc(100% - var(--ov-pipeline-step-indent));
   padding-block: var(--studio-row-pad-block);
   padding-inline: var(--studio-spacing-2);
-  margin-inline: calc(-1 * var(--studio-spacing-2));
+  margin-left: var(--ov-pipeline-step-indent);
 
   &::before {
     content: '';
@@ -668,14 +725,15 @@
   grid-template-columns: var(--ov-pl-grid-cols);
   align-items: center;
   column-gap: var(--studio-spacing-1);
+  box-sizing: border-box;
+  width: calc(100% - var(--ov-pipeline-step-indent));
   min-height: var(--studio-row-min-h);
   padding-block: var(--studio-row-pad-block);
   padding-inline: var(--studio-spacing-2);
-  // Bleed the row symmetrically into the gutter (matches `.ov-pl-header`). Do
-  // NOT add `max-width: 100%`: it resolves to the content box and clips the
-  // right bleed short by one gutter, so the right-pinned metric block lands
-  // left of the header captions and the columns no longer line up.
-  margin-inline: calc(-1 * var(--studio-spacing-2));
+  // Steps sit one level under their phase header. Header and step rows share
+  // the same inset so the metric columns still line up, while the phase band
+  // remains the full-width parent in the hierarchy.
+  margin-left: var(--ov-pipeline-step-indent);
   border-radius: 6px;
   background: color-mix(in srgb, var(--ov-pl-phase-accent) 5%, transparent);
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--ov-pl-phase-accent) 38%, transparent);

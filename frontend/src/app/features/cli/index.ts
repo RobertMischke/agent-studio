@@ -2,15 +2,20 @@
 export { CliAdminPanelComponent } from './components/cli-admin-panel/cli-admin-panel';
 export { CliConsoleComponent } from './components/cli-console/cli-console';
 export { CliSessionsPanelComponent } from './components/cli-sessions-panel/cli-sessions-panel';
+export { CliModelsPanelComponent } from './components/cli-models-panel/cli-models-panel';
+export { CliContractsPanelComponent } from './components/cli-contracts-panel/cli-contracts-panel';
+export { CliWorkingMemoryPanelComponent } from './components/cli-working-memory-panel/cli-working-memory-panel';
 export type {
   CliModelInfo,
   CliModelCatalog,
-  CopilotModelInfo,
-  CopilotModelCatalog,
+  CliCompletionContract,
   CliSessionInfo,
   CliUsageProjectGroup,
   CliUsageSection,
   CliUsageReport,
   LinkedJobRef,
+  CliWorkingMemoryEntry,
+  CliWorkingMemoryReport,
+  CliWorkingMemoryDeleteResult,
 } from './models/cli.model';
 export { CLAUDE_FALLBACK_MODEL_ID, MODEL_IDS } from './models/model-ids';

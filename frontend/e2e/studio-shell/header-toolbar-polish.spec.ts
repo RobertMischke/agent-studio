@@ -59,7 +59,7 @@ async function pickWatchPath(): Promise<string> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await api(`/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await api(`/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE',
   });
 }

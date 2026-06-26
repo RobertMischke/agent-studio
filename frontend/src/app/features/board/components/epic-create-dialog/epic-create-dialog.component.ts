@@ -13,7 +13,7 @@ import { TaskState } from '../../../../models/task.model';
  * full create-task dialog, an epic only needs a title and an optional
  * description, so this surface stays intentionally small.
  *
- * The new epic is a {@link CreateJobRequest} with `kind=epic`, landed in
+ * The new epic is a {@link CreateTaskRequest} with `kind=epic`, landed in
  * `0-backlog` so its creation never trips the pickup gate into an
  * immediate decomposition run (an epic in `2-ready` is auto-picked as a
  * planning run; see {@link EpicRunPolicy}). The CLI/model carried over are

@@ -1,7 +1,7 @@
 ---
 concept: audits-and-checks
 title: Audits and Checks
-learnMore: docs/security/overview.md
+learnMore: docs/operations/security/overview.md
 learnMoreLabel: Security Overview
 ---
 

@@ -136,7 +136,7 @@ export class StatusBarComponent implements OnInit {
   private readDefaultCli(): CliType {
     const stored = localStorage.getItem(STORAGE_DEFAULT_CLI) as CliType | null;
     if (stored && (CLI_TYPES as string[]).includes(stored)) return stored;
-    return 'copilot';
+    return 'claude';
   }
 
   private readDefaultModel(cliType: CliType): string {

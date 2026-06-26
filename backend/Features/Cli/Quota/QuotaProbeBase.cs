@@ -7,7 +7,7 @@ namespace AgentStudio.Cli;
 /// <list type="bullet">
 ///   <item>Resolves the CLI binary (handles Windows .cmd shims).</item>
 ///   <item>Spawns it in a scratch directory so we never trigger workspace-trust prompts on the real repo.</item>
-///   <item>Marks the scratch dir trusted via <see cref="CopilotCliEnvironment"/> so Copilot doesn't block.</item>
+///   <item>Pre-seeds CLI environment trust via <see cref="CliEnvironment"/> (no-op today; each CLI confirms trust over its own PTY prompt).</item>
 ///   <item>Exposes <see cref="ProbeWithSnapshotAsync"/>: spawn, send keys, return ANSI-stripped snapshot, clean exit.</item>
 /// </list>
 /// </summary>
@@ -15,9 +15,9 @@ public abstract class QuotaProbeBase : IQuotaProbe
 {
     protected readonly ILogger _logger;
     protected readonly CliRouter _router;
-    protected readonly CopilotCliEnvironment _env;
+    protected readonly CliEnvironment _env;
 
-    protected QuotaProbeBase(ILogger logger, CliRouter router, CopilotCliEnvironment env)
+    protected QuotaProbeBase(ILogger logger, CliRouter router, CliEnvironment env)
     {
         _logger = logger;
         _router = router;

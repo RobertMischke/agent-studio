@@ -30,8 +30,8 @@ test.describe('Board — git pill on tile', () => {
       await expect(readyCard).toBeVisible();
       await expect(readyCard.getByTestId('job-card-git')).toHaveCount(0);
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(ready.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
-      await api(`/api/jobs/${encodeURIComponent(progress.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(ready.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(progress.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
     }
   });
 });
@@ -43,7 +43,7 @@ test.describe('Detail — Claude session telemetry', () => {
     const job = await createJob({ title: `tel-${Date.now()}`, watchPath: wp.path, cliType: 'claude', agent: 'claude', targetState: '2-ready' });
 
     try {
-      const url = `/api/jobs/${encodeURIComponent(job.id)}/claude/session-info?watchPath=${encodeURIComponent(wp.path)}`;
+      const url = `/api/tasks/${encodeURIComponent(job.id)}/claude/session-info?watchPath=${encodeURIComponent(wp.path)}`;
       const res = await api<{
         sessionInfo: { sessionId: string; error: string | null; turnCount: number };
         rateLimit: unknown | null;
@@ -57,7 +57,7 @@ test.describe('Detail — Claude session telemetry', () => {
       // rate_limit_event frame — for a brand-new untouched job it must be null.
       expect(res.rateLimit).toBeNull();
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
     }
   });
 });

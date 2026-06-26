@@ -47,7 +47,7 @@ test.describe('Detail — session events + recovery continue', () => {
     });
 
     try {
-      const url = `/api/jobs/${encodeURIComponent(job.id)}/session-events?watchPath=${encodeURIComponent(wp.path)}`;
+      const url = `/api/tasks/${encodeURIComponent(job.id)}/session-events?watchPath=${encodeURIComponent(wp.path)}`;
       const res = await api<SessionEventsResponse>(url);
 
       expect(res).toBeDefined();
@@ -57,7 +57,7 @@ test.describe('Detail — session events + recovery continue', () => {
       expect(res.sessionChain).toHaveLength(0);
       expect(res.currentSessionId).toBeNull();
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
     }
   });
 
@@ -78,7 +78,7 @@ test.describe('Detail — session events + recovery continue', () => {
       // once before continuing." After the recovery refactor it must accept
       // the call. The CLI itself may immediately fail (no API key, no quota)
       // — we only assert that the *taskboard* API stopped rejecting it.
-      const url = `/api/jobs/${encodeURIComponent(job.id)}/continue?watchPath=${encodeURIComponent(wp.path)}`;
+      const url = `/api/tasks/${encodeURIComponent(job.id)}/continue?watchPath=${encodeURIComponent(wp.path)}`;
       const res = await fetch(`http://127.0.0.1:5030${url}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -94,14 +94,14 @@ test.describe('Detail — session events + recovery continue', () => {
       // Stop whatever may have started so the test doesn't leave a CLI
       // running. Tolerant — if the CLI never started, /stop is a no-op.
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}/stop?watchPath=${encodeURIComponent(wp.path)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}/stop?watchPath=${encodeURIComponent(wp.path)}`,
         { method: 'POST' }
       ).catch(() => {});
 
       // The session-events log should now record the recovery attempt
       // (whether the CLI itself succeeded is irrelevant — the event row is
       // written before the CLI process spawns).
-      const eventsUrl = `/api/jobs/${encodeURIComponent(job.id)}/session-events?watchPath=${encodeURIComponent(wp.path)}`;
+      const eventsUrl = `/api/tasks/${encodeURIComponent(job.id)}/session-events?watchPath=${encodeURIComponent(wp.path)}`;
       // Give the backend a beat to flush the JSONL line.
       await new Promise(r => setTimeout(r, 500));
       const events = await api<SessionEventsResponse>(eventsUrl);
@@ -109,10 +109,10 @@ test.describe('Detail — session events + recovery continue', () => {
       expect(hasRecovery).toBe(true);
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}/stop?watchPath=${encodeURIComponent(wp.path)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}/stop?watchPath=${encodeURIComponent(wp.path)}`,
         { method: 'POST' }
       ).catch(() => {});
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
     }
   });
 
@@ -131,13 +131,13 @@ test.describe('Detail — session events + recovery continue', () => {
       // Trigger a recovery event without actually running the CLI to
       // completion: POST /continue on a session-less job, then immediately
       // stop. The event row is written synchronously before the CLI spawns.
-      await fetch(`http://127.0.0.1:5030/api/jobs/${encodeURIComponent(job.id)}/continue?watchPath=${encodeURIComponent(wp.path)}`, {
+      await fetch(`http://127.0.0.1:5030/api/tasks/${encodeURIComponent(job.id)}/continue?watchPath=${encodeURIComponent(wp.path)}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ prompt: 'noop' })
       });
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}/stop?watchPath=${encodeURIComponent(wp.path)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}/stop?watchPath=${encodeURIComponent(wp.path)}`,
         { method: 'POST' }
       ).catch(() => {});
 
@@ -153,10 +153,10 @@ test.describe('Detail — session events + recovery continue', () => {
       await expect(chip).toContainText(/session lost/i);
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}/stop?watchPath=${encodeURIComponent(wp.path)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}/stop?watchPath=${encodeURIComponent(wp.path)}`,
         { method: 'POST' }
       ).catch(() => {});
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
     }
   });
 });

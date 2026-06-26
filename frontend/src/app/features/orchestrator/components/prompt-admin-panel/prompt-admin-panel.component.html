@@ -6,34 +6,58 @@
   }
 
   <div class="prompts__layout">
-    <aside class="prompts__list" data-testid="prompt-admin-list" aria-label="Prompt templates">
-      @for (group of groups(); track group.name) {
-        <div class="prompts__group-head">{{ group.name }}</div>
-        @for (item of group.items; track item.name) {
-          <button
-            type="button"
-            class="prompts__item"
-            [class.prompts__item--active]="item.name === selectedName()"
-            [attr.data-testid]="'prompt-admin-item-' + item.name"
-            (click)="select(item.name)">
-            <span class="prompts__item-title">{{ item.title }}</span>
-            <span class="prompts__item-tags">
-              @if (item.hasOverride) {
-                <span class="prompts__pill prompts__pill--override">overridden</span>
-              } @else {
-                <span class="prompts__pill">default</span>
-              }
-              @if (item.defaultChangedSinceOverride) {
-                <span class="prompts__pill prompts__pill--warn"
-                      [attr.data-testid]="'prompt-admin-drift-' + item.name">default changed</span>
-              }
-            </span>
-          </button>
+    <aside class="prompts__list" id="prompt-admin-list" data-testid="prompt-admin-list" aria-label="Prompt templates">
+      @for (group of groups(); track group.name; let first = $first) {
+        <app-section-header [collapsible]="true"
+          [collapsed]="isGroupCollapsed(group.name)"
+          [title]="group.name"
+          [count]="group.items.length"
+          [divider]="!first"
+          [testid]="'prompt-admin-group-' + group.name"
+          (collapsedChange)="setGroupCollapsed(group.name, $event)" />
+        @if (!isGroupCollapsed(group.name)) {
+          @for (item of group.items; track item.name) {
+            <app-tree-row
+              level="root"
+              glyph="file"
+              [reserveChevron]="true"
+              [label]="item.title"
+              [active]="item.name === selectedName()"
+              [ariaCurrent]="item.name === selectedName() ? 'page' : null"
+              [ariaLabel]="item.title"
+              [testid]="'prompt-admin-item-' + item.name"
+              (selectRequest)="select(item.name)">
+              <span class="prompts__item-tags">
+                @if (item.hasOverride) {
+                  <span class="prompts__override-icon"
+                        aria-label="Local override active"
+                        [appTooltip]="overrideTooltip(item)"
+                        [attr.data-testid]="'prompt-admin-override-' + item.name">
+                    <app-studio-icon name="diff" [size]="12"></app-studio-icon>
+                  </span>
+                }
+              </span>
+            </app-tree-row>
+          }
         }
       }
     </aside>
 
-    <main class="prompts__detail">
+    <div class="prompts__splitter"
+         role="separator"
+         tabindex="0"
+         aria-controls="prompt-admin-list"
+         aria-orientation="vertical"
+         aria-label="Resize prompt navigation"
+         aria-valuemin="192"
+         aria-valuemax="544"
+         aria-valuenow="280"
+         data-testid="prompt-admin-splitter"
+         appPromptNavSplitter>
+      <span aria-hidden="true"></span>
+    </div>
+
+    <main class="prompts__detail" data-testid="prompt-admin-detail">
       @if (detail(); as d) {
         <header class="prompts__detail-head">
           <div>
@@ -47,21 +71,53 @@
           @if (d.hasOverride) {
             <span class="prompts__pill prompts__pill--override">overridden by you</span>
             <span class="prompts__muted">
-              based on default {{ shortSha(d.baseDefaultSha) }}
+              based on shipped {{ shortSha(d.baseDefaultSha) }}
               @if (d.overrideUpdatedAt) { · edited {{ d.overrideUpdatedAt | date:'short' }} }
             </span>
           } @else {
-            <span class="prompts__pill">shipped default</span>
-            <span class="prompts__muted">default {{ shortSha(d.defaultSha) }}</span>
+            <span class="prompts__pill">shipped</span>
+            <span class="prompts__muted">shipped {{ shortSha(d.defaultSha) }}</span>
           }
         </div>
+
+        <section class="prompts__meta" data-testid="prompt-admin-meta">
+          <div class="prompts__meta-col">
+            <div class="prompts__meta-head">Slots</div>
+            @if (d.slots.length) {
+              <div class="prompts__slots">
+                @for (slot of d.slots; track slot) {
+                  <code class="prompts__slot" [attr.data-testid]="'prompt-admin-slot-' + slot">{{ '{{' + slot + '}}' }}</code>
+                }
+              </div>
+            } @else {
+              <span class="prompts__muted">No named slots — static template.</span>
+            }
+          </div>
+          <div class="prompts__meta-col">
+            <div class="prompts__meta-head">Used by</div>
+            @if (d.usages.length) {
+              <table class="prompts__usage" data-testid="prompt-admin-usage">
+                <tbody>
+                  @for (use of d.usages; track use.component + use.member) {
+                    <tr>
+                      <td><code>{{ use.component }}.{{ use.member }}</code></td>
+                      <td class="prompts__muted">{{ use.purpose }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            } @else {
+              <span class="prompts__muted">No recorded usage in the registry.</span>
+            }
+          </div>
+        </section>
 
         @if (d.defaultChangedSinceOverride) {
           <div class="prompts__banner prompts__banner--warn" data-testid="prompt-admin-drift-banner">
             <div>
               <strong>The shipped default changed since you created this override.</strong>
               <span class="prompts__muted">
-                Your override was based on {{ shortSha(d.baseDefaultSha) }}; the current default is
+                Your override was based on {{ shortSha(d.baseDefaultSha) }}; the current shipped default is
                 {{ shortSha(d.defaultSha) }}. Compare below, then choose:
               </span>
             </div>
@@ -69,7 +125,7 @@
               <button type="button" class="prompts__btn" [disabled]="busy()"
                       data-testid="prompt-admin-keep-mine" (click)="keepMine()">Keep mine</button>
               <button type="button" class="prompts__btn" [disabled]="busy()"
-                      data-testid="prompt-admin-take-default" (click)="takeNewDefault()">Take new default</button>
+                      data-testid="prompt-admin-take-default" (click)="takeNewDefault()">Take shipped default</button>
               <button type="button" class="prompts__btn prompts__btn--primary" [disabled]="busy()"
                       data-testid="prompt-admin-merge" (click)="openMergeDraft()">Open merge draft</button>
             </div>
@@ -99,7 +155,7 @@
                   [disabled]="busy() || !dirty()" (click)="revertDraft()">Revert edits</button>
           <button type="button" class="prompts__btn prompts__btn--danger"
                   data-testid="prompt-admin-reset"
-                  [disabled]="busy() || !d.hasOverride" (click)="resetToDefault()">Reset to default</button>
+                  [disabled]="busy() || !d.hasOverride" (click)="resetToDefault()">Reset to shipped</button>
           @if (d.hasDefault) {
             <button type="button" class="prompts__btn prompts__btn--ghost"
                     data-testid="prompt-admin-toggle-default" (click)="toggleDefault()">
@@ -107,6 +163,43 @@
             </button>
           }
         </div>
+
+        <section class="prompts__probe" data-testid="prompt-admin-probe">
+          <div class="prompts__compare-head">Probelauf — render the current draft against slot values</div>
+          @if (d.slots.length) {
+            <div class="prompts__probe-slots">
+              @for (slot of d.slots; track slot) {
+                <label class="prompts__probe-field">
+                  <span class="prompts__probe-slot-name">{{ slot }}</span>
+                  <input
+                    type="text"
+                    class="prompts__probe-input"
+                    [attr.data-testid]="'prompt-admin-probe-input-' + slot"
+                    [value]="slotValues()[slot]"
+                    (input)="setSlotValue(slot, $any($event.target).value)"
+                    [placeholder]="'value for {{' + slot + '}}'" />
+                </label>
+              }
+            </div>
+          } @else {
+            <span class="prompts__muted">No slots — the Probelauf renders the template verbatim.</span>
+          }
+          <div class="prompts__actions">
+            <button type="button" class="prompts__btn"
+                    data-testid="prompt-admin-probe-run"
+                    [disabled]="previewBusy()" (click)="runPreview()">Run Probelauf</button>
+          </div>
+          @if (previewResult(); as p) {
+            <div class="prompts__probe-result" data-testid="prompt-admin-probe-result">
+              @if (p.missingSlots.length) {
+                <div class="prompts__muted" data-testid="prompt-admin-probe-missing">
+                  Unfilled slots: {{ p.missingSlots.join(', ') }}
+                </div>
+              }
+              <pre class="prompts__default">{{ p.rendered }}</pre>
+            </div>
+          }
+        </section>
 
         @if (d.defaultChangedSinceOverride && diffLines().length) {
           <div class="prompts__compare" data-testid="prompt-admin-diff-view">
@@ -133,6 +226,32 @@
         }
       } @else {
         <div class="prompts__empty">Select a prompt to view and edit it.</div>
+      }
+
+      @if (coverage(); as cov) {
+        <section class="prompts__coverage" data-testid="prompt-admin-coverage">
+          <div class="prompts__coverage-head">
+            <span>Inline-migration coverage</span>
+            <span class="prompts__muted" data-testid="prompt-admin-coverage-count">
+              {{ cov.coveredSites }} / {{ cov.totalSites }} prompt sites template-backed
+            </span>
+          </div>
+          <table class="prompts__usage">
+            <tbody>
+              @for (item of cov.items; track item.component) {
+                <tr [attr.data-testid]="'prompt-admin-coverage-row-' + item.status">
+                  <td>
+                    <span class="prompts__pill"
+                          [class.prompts__pill--ok]="item.status === 'covered'"
+                          [class.prompts__pill--warn]="item.status === 'pending'">{{ item.status }}</span>
+                  </td>
+                  <td><code>{{ item.component }}</code></td>
+                  <td class="prompts__muted">{{ item.detail }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </section>
       }
     </main>
   </div>

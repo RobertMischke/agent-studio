@@ -52,7 +52,7 @@ Sub-actions are **derived at read time** by walking `tool-calls.jsonl` between s
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/jobs/{jobId}/plan?watchPath=...` | Returns `{currentSnapshot, history, subActionsByItemId, source}`. |
+| GET | `/api/tasks/{jobId}/plan?watchPath=...` | Returns `{currentSnapshot, history, subActionsByItemId, source}`. |
 
 Live updates ride the existing SignalR hub: when a new line is appended to `plan-snapshots.jsonl`, the runtime publishes a `plan-updated` event so the frontend re-fetches.
 
@@ -89,7 +89,7 @@ If a future request would relax any of those, surface the conflict before implem
 
 1. Backend: `PlanSnapshotWriter` hooked off the existing `tool_use` parsing in `ClaudeCliService` and the equivalent in the Codex driver. Writes one line per `TodoWrite` / `update_plan`.
 2. Backend: `PlanReader` derives sub-action attribution by replaying `tool-calls.jsonl` against `plan-snapshots.jsonl`. Pure function, unit-tested.
-3. Backend: `GET /api/jobs/{id}/plan` endpoint + SignalR `plan-updated` event.
+3. Backend: `GET /api/tasks/{id}/plan` endpoint + SignalR `plan-updated` event.
 4. Frontend: `<plan-strip>` standalone component above the activity log. Reads from a new signal store fed by SignalR.
 5. Frontend Playwright: spec that loads a fixture `plan-snapshots.jsonl` + `tool-calls.jsonl`, asserts the four progress cues render, captures screenshots of pending / active / completed states.
 6. Copilot / Gemini fallback: heuristic numbered-list extractor. Behind a feature flag; ships only after the native paths are stable.

@@ -1,0 +1,9 @@
+# ASS-1754 author-attribution repro (real git)
+# Generated 2026-06-10T20:43:57Z
+# Mirrors GitService.WorktreeRunCommit (no --author) vs CrashRecoveryCommit (--author=Crash Recovery)
+
+sha | author | subject
+c793ac1 | Crash Recovery | chore(crash-recovery): rescue orphan changes for ASS-1799   <- genuine rescue (exception net, correctly marked)
+b62fd2a | Robert Mischke  | Nav-Umbau Schritt 3: Pipeline-Seite                          <- AFTER fix: WorktreeRunCommit, configured identity owns landing
+9a92d26 | Crash Recovery | Nav-Umbau Schritt 3: Pipeline-Seite                          <- BEFORE bug: regular landing mis-stamped Crash Recovery
+2da048c | Robert Mischke  | feat: baseline

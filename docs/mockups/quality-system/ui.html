@@ -386,11 +386,11 @@ const definitions = [
   { id:'SEC-OVERVIEW', kind:'audit', dimension:'security', scope:'project', severity:'high',
     title:'Security overview audit',
     description:'Re-checks the project security overview against the current code. Holistic, manual.',
-    instructions:'Compare docs/security/overview.md and docs/security/requirements.md against the current backend and frontend code. Flag drift, missing controls, undocumented attack surfaces.' },
+    instructions:'Compare docs/operations/security/overview.md and docs/operations/security/requirements.md against the current backend and frontend code. Flag drift, missing controls, undocumented attack surfaces.' },
   { id:'ARCH-DRIFT', kind:'audit', dimension:'architecture', scope:'project', severity:'warn',
     title:'Architecture drift',
     description:'Compares current architecture against the ADR archive. Flags decisions that have silently eroded.',
-    instructions:'Walk through every ADR in docs/architecture-decisions.md. For each, check if the codebase still matches its intent.' },
+    instructions:'Walk through every ADR in docs/architecture/decisions/adr-archive.md. For each, check if the codebase still matches its intent.' },
   { id:'TRACEABILITY-COVERAGE', kind:'audit', dimension:'traceability', scope:'project', severity:'warn',
     title:'Traceability coverage',
     description:'Verifies error and slow-op instrumentation across the whole codebase.',
@@ -449,15 +449,15 @@ const projects = [
       reviewer: 'claude',
       summary: 'Watch-path validation has been audited; SignalR hub surface is documented. No critical drift since the last review.',
       files: [
-        { path:'docs/security/overview.md', size:'4.2 KB' },
-        { path:'docs/security/requirements.md', size:'2.1 KB' },
-        { path:'docs/security/reviews/2026-04-15-baseline.md', size:'7.8 KB' },
-        { path:'docs/security/reviews/2026-03-02-initial.md', size:'5.4 KB' },
+        { path:'docs/operations/security/overview.md', size:'4.2 KB' },
+        { path:'docs/operations/security/requirements.md', size:'2.1 KB' },
+        { path:'docs/operations/security/reviews/2026-04-15-baseline.md', size:'7.8 KB' },
+        { path:'docs/operations/security/reviews/2026-03-02-initial.md', size:'5.4 KB' },
       ],
     },
     architecture: {
       files: [
-        { path:'docs/architecture-decisions.md', size:'18.7 KB' },
+        { path:'docs/architecture/decisions/adr-archive.md', size:'18.7 KB' },
       ],
       lastUpdate: '2026-04-28',
       adrCount: 8,
@@ -883,7 +883,7 @@ function renderProjSecurity(content, project) {
     featured.appendChild(el(`
       <div class="security-panel alert">
         <div class="head"><span class="icon">🔒</span><h3>Not yet reviewed</h3><span class="rating bad">⚠ baseline missing</span></div>
-        <p class="summary">This project has no security baseline yet. Running the Security Audit creates the initial overview, requirements, and findings under <code>docs/security/</code>.</p>
+        <p class="summary">This project has no security baseline yet. Running the Security Audit creates the initial overview, requirements, and findings under <code>docs/operations/security/</code>.</p>
         <div class="actions">
           <button class="btn warn" data-action="run-audit" data-id="SEC-OVERVIEW">Run first security audit</button>
           <button class="btn ghost" data-nav="#/quality/SEC-OVERVIEW">What does this audit do?</button>
@@ -906,7 +906,7 @@ function renderProjSecurity(content, project) {
   content.appendChild(featured);
 
   const p1 = panel('sec-files', 'Documents', { meta: sec.files.length + ' file(s)', actions: '<button class="btn" data-action="new-doc">+ New</button>' });
-  if (!sec.files.length) pBody(p1).appendChild(el(`<p class="note" style="padding:8px 4px">No documents yet. Files live under <code>docs/security/</code>.</p>`));
+  if (!sec.files.length) pBody(p1).appendChild(el(`<p class="note" style="padding:8px 4px">No documents yet. Files live under <code>docs/operations/security/</code>.</p>`));
   else pBody(p1).appendChild(el(`<ul class="file-list">${sec.files.map(f => `<li>📄 <code>${esc(f.path)}</code> <span class="note">${esc(f.size)}</span></li>`).join('')}</ul>`));
   content.appendChild(p1);
 
@@ -943,7 +943,7 @@ function renderProjArchitecture(content, project) {
 
   const p2 = panel('arch-drift', 'Drift status', { meta: 'never run' });
   pBody(p2).appendChild(el(`<div>
-    <p class="note" style="margin-bottom:10px">Compares the current codebase against decisions in <code>docs/architecture-decisions.md</code>.</p>
+    <p class="note" style="margin-bottom:10px">Compares the current codebase against decisions in <code>docs/architecture/decisions/adr-archive.md</code>.</p>
     <button class="btn" data-action="run-audit" data-id="ARCH-DRIFT">Check for drift</button>
   </div>`));
   content.appendChild(p2);
@@ -1646,9 +1646,9 @@ function renderAuditRun(app, id) {
     <p class="note">Run by claude &middot; 4m12s &middot; 6 findings</p>
     <div class="result-strip"><span class="result-chip fail"><span class="dot"></span>2 high</span><span class="result-chip warn"><span class="dot"></span>4 warn</span><span class="result-chip pass"><span class="dot"></span>0 info</span></div>
     <h2>Findings</h2>
-    <div class="finding high"><div class="head"><span class="tag sev-high">high</span><span class="file">backend/Endpoints/JobEndpoints.cs:312</span></div><p>POST /api/jobs accepts watchPath without normalisation; bypasses watch-path allowlist.</p><div class="actions row"><button class="btn primary" data-action="create-task">Create task</button><button class="btn ghost" data-action="ack">Acknowledge</button></div></div>
+    <div class="finding high"><div class="head"><span class="tag sev-high">high</span><span class="file">backend/Endpoints/JobEndpoints.cs:312</span></div><p>POST /api/tasks accepts watchPath without normalisation; bypasses watch-path allowlist.</p><div class="actions row"><button class="btn primary" data-action="create-task">Create task</button><button class="btn ghost" data-action="ack">Acknowledge</button></div></div>
     <div class="finding high"><div class="head"><span class="tag sev-high">high</span><span class="file">backend/Services/Cli/CliRouter.cs:74</span></div><p>CLI process arguments built via string concatenation; no shell-injection guard for jobId slug.</p><div class="actions row"><button class="btn primary" data-action="create-task">Create task</button><button class="btn ghost" data-action="ack">Acknowledge</button></div></div>
-    <div class="finding"><div class="head"><span class="tag sev-warn">warn</span><span class="file">docs/security/overview.md</span></div><p>Threat model section out of date: SignalR hub introduced after last review, not covered.</p><div class="actions row"><button class="btn primary" data-action="create-task">Create task</button><button class="btn ghost" data-action="ack">Acknowledge</button></div></div>
+    <div class="finding"><div class="head"><span class="tag sev-warn">warn</span><span class="file">docs/operations/security/overview.md</span></div><p>Threat model section out of date: SignalR hub introduced after last review, not covered.</p><div class="actions row"><button class="btn primary" data-action="create-task">Create task</button><button class="btn ghost" data-action="ack">Acknowledge</button></div></div>
     <p class="note">3 more findings collapsed.</p>
   </div>`));
 }

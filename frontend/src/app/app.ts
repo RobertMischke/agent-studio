@@ -45,6 +45,8 @@ import {
   LANE_LABELS,
   overflowActionsFor,
   primaryActionFor,
+  mergeAcceptViewFor,
+  type MergeAcceptView,
   type TriageButton,
 } from './features/task-detail';
 import {
@@ -62,11 +64,11 @@ import {
   StatusBarComponent,
   UiPreferencesService,
   WorkspaceBannerComponent,
-  WorkspaceCreateDialogComponent,
-  OnboardProjectDialogComponent,
+  WorkspaceCreateDialogComponent, OnboardProjectDialogComponent, CrashRecoveryPromptComponent,
   WorkspaceManagerService,
   WorkspaceOverlaysComponent,
   WorkspaceOverlaysService,
+  type WorkspaceSettingsSection,
 } from './features/shell';
 import { E2ECleanupDialogComponent, TagManagerDialogComponent } from './features/dev-tools';
 import {
@@ -108,6 +110,8 @@ import { UpdateClientService } from './services/update.service';
 import { UpdateNotificationBridge } from './services/update-notification-bridge.service';
 import { projectIdentity } from './services/project-identity.util';
 import { displayStateToLaneKey, allowsDragReorder } from './services/lane-sort.util';
+import { buildRunActivityBadge } from './services/run-activity.util';
+import { NowTickService } from './services/now-tick.service';
 import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { TaskCompletionSoundService } from './services/task-completion-sound.service';
@@ -163,8 +167,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     TagManagerDialogComponent,
     WorkspaceOverlaysComponent,
     WorkspaceBannerComponent,
-    WorkspaceCreateDialogComponent,
-    OnboardProjectDialogComponent,
+    WorkspaceCreateDialogComponent, OnboardProjectDialogComponent, CrashRecoveryPromptComponent,
     UpdateVersionBadgeComponent,
     UpdateCenterComponent,
     UpdateBlockModalComponent,
@@ -209,6 +212,7 @@ export class App implements OnInit, OnDestroy {
   private readonly _updateBridge = inject(UpdateNotificationBridge);
   readonly studioTabState = inject(StudioTabStateService);
   private readonly studioPanelState = inject(StudioPanelStateService);
+  private readonly nowTick = inject(NowTickService).now;
 
   /**
    * Cycle 9j: selection state (selected detail, triage toast, lane
@@ -223,6 +227,13 @@ export class App implements OnInit, OnDestroy {
   private readonly lanePager = inject(LanePagerService);
   readonly selectedJob = this.jobSelection.selected;
   readonly triageToast = this.jobSelection.triageToast;
+  // ASS-1751: run-activity pill for the slim studio tab-bar header. The
+  // studio shell hides <app-detail-header>, so the open task's run state is
+  // surfaced here (the kanban side-panel keeps its own header pill).
+  readonly studioRunActivityBadge = computed(() => {
+    const detail = this.selectedJob();
+    return detail ? buildRunActivityBadge(detail.info, this.nowTick()) : null;
+  });
   readonly epicTabTaskDetail = signal<TaskDetail | null>(null);
   readonly epicTabSubTaskPeers = computed<TaskInfo[]>(() => {
     const epic = this.selectedJob();
@@ -271,6 +282,14 @@ export class App implements OnInit, OnDestroy {
    * fetch yank the user back onto the task — the very F5 symptom, mid-session.
    */
   private studioActiveTabWasTask = false;
+  /**
+   * Set for one selection-change tick when the user steps through the lane
+   * via the pager / cursor keys (j/k/arrows/Prev/Next). The studio-shell
+   * mirror effect consumes it to RETARGET the active task tab in place
+   * rather than opening a fresh tab per step — so walking a lane reloads
+   * the one tab instead of leaving a trail of them.
+   */
+  private laneNavRetarget = false;
   private relatedOpenToken = 0;
   /**
    * Read-only "Verbose Debug" overlay state opened from the orchestrator
@@ -334,10 +353,12 @@ export class App implements OnInit, OnDestroy {
   readonly workspaceScreenshotsOpen = this.workspaceOverlays.screenshotsOpen;
   readonly workspaceSummaryOpen = this.workspaceOverlays.summaryOpen;
   readonly cliAdminOpen = this.workspaceOverlays.cliAdminOpen;
-  /** True while the global Workspace-settings home is open in any section.
-   *  Drives the status-bar Settings button's pressed/active state. */
-  readonly workspaceSettingsOpen = this.workspaceOverlays.anyOpen;
+  /** Drives the status-bar Settings button's pressed/active state. */
+  readonly workspaceSettingsOpen = computed(() => this.featureFlags.vsCodeLayout()
+    ? this.studioTabState.activeTab()?.kind === 'workspace-settings'
+    : this.workspaceOverlays.anyOpen());
   private hashListener: (() => void) | null = null;
+  private initialHashSyncComplete = false;
   private kanbanKeyListener: ((ev: KeyboardEvent) => void) | null = null;
   private boardShortcutListener: ((ev: KeyboardEvent) => void) | null = null;
   readonly watchPaths = signal<WatchPathEntry[]>([]);
@@ -681,9 +702,9 @@ export class App implements OnInit, OnDestroy {
       },
     ];
   });
-  readonly selectedJobUsesCopilot = computed(
-    () => (this.selectedJob()?.info.cliType ?? 'copilot') === 'copilot',
-  );
+  // Copilot removed: no CLI exposes the inline path/token config card, so the
+  // error-dialog "Open CLI config" affordance is permanently disabled.
+  readonly selectedJobUsesCopilot = computed(() => false);
 
   // Cycle 9j: triageLanePeers lives in TaskSelectionService.
   readonly triageLanePeers = this.jobSelection.triageLanePeers;
@@ -982,31 +1003,13 @@ export class App implements OnInit, OnDestroy {
     // path would set selectedJob() but the new shell would show no tab.
     effect(() => {
       const selected = this.selectedJob();
+      // Consume the pager/cursor retarget hint up-front (and unconditionally,
+      // so a no-op step never leaks the flag into a later genuine open).
+      const retargetNav = this.laneNavRetarget;
+      this.laneNavRetarget = false;
       if (!this.featureFlags.vsCodeLayout()) return;
       if (!selected) return;
-      if (selected.info.kind === 'epic') {
-        const key = `epic:${selected.info.taskKey}`;
-        const tabs = untracked(() => this.studioTabState.tabs());
-        const present = tabs.some((t) => t.kind === 'epic' && t.epicKey === selected.info.taskKey);
-        untracked(() => {
-          if (!present) {
-            this.studioTabState.open({ kind: 'epic', epicKey: selected.info.taskKey });
-          } else {
-            this.studioTabState.select(key);
-          }
-        });
-        return;
-      }
-      const key = `task:${selected.info.taskKey}`;
-      const tabs = untracked(() => this.studioTabState.tabs());
-      const present = tabs.some((t) => t.kind === 'task' && t.taskKey === selected.info.taskKey);
-      untracked(() => {
-        if (!present) {
-          this.studioTabState.open({ kind: 'task', taskKey: selected.info.taskKey });
-        } else {
-          this.studioTabState.select(key);
-        }
-      });
+      untracked(() => this.mirrorSelectionToStudioTab(selected, retargetNav));
     });
 
     // Studio-shell active-tab → selection sync (F5/reload fix). Makes the
@@ -1052,6 +1055,23 @@ export class App implements OnInit, OnDestroy {
           if (selected || cameFromTask) {
             this.jobSelection.clearSelectionForTabSwitch();
           }
+        }
+      });
+    });
+
+    // Studio Workspace Settings render as an editor tab. Keep the existing
+    // WorkspaceOverlaysService as the section/hash state holder, but close
+    // that state when the settings tab is no longer the active surface.
+    effect(() => {
+      if (!this.featureFlags.vsCodeLayout()) return;
+      const tab = this.studioTabState.activeTab();
+      const open = this.workspaceOverlays.settingsOpen();
+      untracked(() => {
+        if (tab?.kind === 'workspace-settings') {
+          this.studioPanelState.open('settings');
+          if (!open) this.workspaceOverlays.open(this.workspaceOverlays.section());
+        } else if (open) {
+          this.workspaceOverlays.close();
         }
       });
     });
@@ -1138,6 +1158,7 @@ export class App implements OnInit, OnDestroy {
       if (tab?.kind === 'backlog') {
         untracked(() => this.backlogTriage.scopedProject.set(tab.projectName));
       }
+      untracked(() => this.reconcileBacklogHashForActiveTab(tab));
     });
 
   }
@@ -1170,11 +1191,16 @@ export class App implements OnInit, OnDestroy {
     // editor-tab destinations.
     const applyHash = () => {
       this.workspaceOverlays.syncFromHash();
+      if (this.featureFlags.vsCodeLayout() && this.workspaceOverlays.settingsOpen()) {
+        this.openWorkspaceSettingsInStudio(this.workspaceOverlays.section());
+      }
       this.applyProjectShellHash();
       this.syncBacklogTabFromHash();
       this.syncEpicsTabFromHash();
     };
     applyHash();
+    this.initialHashSyncComplete = true;
+    this.reconcileBacklogHashForActiveTab(this.studioTabState.activeTab());
     this.hashListener = applyHash;
     window.addEventListener('hashchange', this.hashListener);
 
@@ -1305,6 +1331,26 @@ export class App implements OnInit, OnDestroy {
     const sel = this.selectedJob();
     return sel ? overflowActionsFor(sel.info.state) : [];
   });
+  /**
+   * State-dependent presentation for the studio Human Review acceptance primary
+   * (`mark-done`). Null for every other primary. When the work has already
+   * landed it carries the landed-status pill text and relabels "Merge into
+   * Develop" to "Accept"; the live `landedState` (graph-derived) upgrades the
+   * wording to "Released to main" when known, with the persisted merge fact as
+   * the synchronous fallback.
+   */
+  readonly studioMergeAcceptView = computed<MergeAcceptView | null>(() => {
+    const sel = this.selectedJob();
+    const p = this.studioTriagePrimary();
+    if (!sel || !p || p.id !== 'mark-done') return null;
+    return mergeAcceptViewFor(sel.info, this.jobDetailSig()?.landedState() ?? null);
+  });
+  /** Effective studio primary label (state-aware for the Human Review acceptance). */
+  readonly studioPrimaryLabel = computed(() => {
+    const p = this.studioTriagePrimary();
+    if (!p) return '';
+    return this.studioMergeAcceptView()?.acceptLabel ?? p.label;
+  });
   readonly studioTriageHasActions = computed(
     () => this.studioTriagePrimary() !== null || this.studioTriageOverflow().length > 0 || this.studioCommitActionsAvailable(),
   );
@@ -1423,10 +1469,12 @@ export class App implements OnInit, OnDestroy {
     this.triage.start(info, ev);
   }
   onTriageNext(info: TaskInfo) {
-    this.triage.next(info);
+    // Pager / cursor navigation reuses the current task tab (see the
+    // studio-shell mirror effect) instead of stacking a fresh tab per step.
+    if (this.triage.next(info)) this.laneNavRetarget = true;
   }
   onTriagePrev(info: TaskInfo) {
-    this.triage.prev(info);
+    if (this.triage.prev(info)) this.laneNavRetarget = true;
   }
 
   // Cycle 10b: board-mutation handlers delegate to BoardMutationsService.
@@ -1828,6 +1876,46 @@ export class App implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Map the current `selectedJob` onto a studio editor tab (vsCodeLayout):
+   * focus the existing tab when present, otherwise open a fresh one — except
+   * for a pager / cursor step (`retargetNav`), which reuses the active task
+   * tab in place so walking a lane reloads one tab instead of stacking a
+   * trail of them. Extracted from the mirror effect so the open-vs-retarget
+   * decision is unit-testable without driving the full app lifecycle.
+   */
+  private mirrorSelectionToStudioTab(selected: TaskDetail, retargetNav: boolean): void {
+    if (selected.info.kind === 'epic') {
+      const key = `epic:${selected.info.taskKey}`;
+      const present = this.studioTabState.tabs().some(
+        (t) => t.kind === 'epic' && t.epicKey === selected.info.taskKey,
+      );
+      if (!present) {
+        this.studioTabState.open({ kind: 'epic', epicKey: selected.info.taskKey });
+      } else {
+        this.studioTabState.select(key);
+      }
+      return;
+    }
+    const key = `task:${selected.info.taskKey}`;
+    const present = this.studioTabState.tabs().some(
+      (t) => t.kind === 'task' && t.taskKey === selected.info.taskKey,
+    );
+    if (present) {
+      // Already open elsewhere → just focus it (never duplicate).
+      this.studioTabState.select(key);
+      return;
+    }
+    const active = this.studioTabState.activeTab();
+    if (retargetNav && active?.kind === 'task') {
+      // Pager / cursor step from one task to the next: reuse the tab we
+      // navigated away from instead of opening a new one.
+      this.studioTabState.retarget(studioTabKey(active), { kind: 'task', taskKey: selected.info.taskKey });
+    } else {
+      this.studioTabState.open({ kind: 'task', taskKey: selected.info.taskKey });
+    }
+  }
+
   private openEpicDetailFromTaskAnchor(detail: TaskDetail, anchorTaskKey: string): void {
     this.epicTabTaskDetail.set(null);
     const target = { kind: 'epic' as const, epicKey: detail.info.taskKey, viewTaskKey: anchorTaskKey };
@@ -2029,6 +2117,22 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Keep the Backlog deep-link hash aligned with the active editor tab after
+   * startup hash routes have had their chance to open explicit deep links.
+   * Without this, a stale `#/backlog` segment survives a Board / Hub / task
+   * navigation and wins the next F5 before tab persistence can restore the
+   * active surface.
+   */
+  private reconcileBacklogHashForActiveTab(tab: StudioTab | null): void {
+    if (!this.initialHashSyncComplete) return;
+    if (tab?.kind === 'backlog') {
+      this.backlogTriage.openTriage(tab.projectName);
+      return;
+    }
+    this.backlogTriage.closeTriage();
+  }
+
   private syncEpicsTabFromHash(): void {
     const rawHash = window.location.hash || '';
     if (!rawHash.startsWith('#epics')) return;
@@ -2039,48 +2143,101 @@ export class App implements OnInit, OnDestroy {
     this.studioTabState.open({ kind: 'epics', projectName });
   }
 
-  // Cycle 9g: workspace overlay open/close + URL-hash sync delegated to
-  // WorkspaceOverlaysService. The shell keeps these thin pass-throughs
-  // because external call sites (status bar, usage hover panel, dev-tools
-  // menu, screenshot reel) and deep-link entry points still go through
-  // the shell.
+  private openWorkspaceSettingsInStudio(section: WorkspaceSettingsSection): void {
+    this.workspaceOverlays.open(section);
+    this.studioPanelState.open('settings');
+    this.studioTabState.open({ kind: 'workspace-settings' });
+  }
+
+  private toggleWorkspaceSettingsInStudio(section: WorkspaceSettingsSection): void {
+    const alreadyActive =
+      this.studioTabState.activeTab()?.kind === 'workspace-settings' &&
+      this.workspaceOverlays.section() === section &&
+      this.studioPanelState.active() === 'settings' &&
+      this.studioPanelState.visible();
+    if (alreadyActive) {
+      this.studioPanelState.setVisible(false);
+      return;
+    }
+    this.openWorkspaceSettingsInStudio(section);
+  }
+
+  // Cycle 9g: workspace settings open/close + URL-hash sync delegated to
+  // WorkspaceOverlaysService. In Studio layout the same state renders in a
+  // normal editor tab; legacy layout keeps the modal shell.
   openWorkspaceSettings(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.openWorkspaceSettingsInStudio('overview');
+      return;
+    }
     this.workspaceOverlays.openSettings();
   }
   toggleWorkspaceSettings(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.toggleWorkspaceSettingsInStudio('overview');
+      return;
+    }
     this.workspaceOverlays.toggleSettings();
   }
   openWorkspaceTokens(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.openWorkspaceSettingsInStudio('tokens');
+      return;
+    }
     this.workspaceOverlays.openTokens();
   }
   closeWorkspaceTokens(): void {
     this.workspaceOverlays.closeTokens();
   }
   openWorkspaceScreenshots(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.openWorkspaceSettingsInStudio('screenshots');
+      return;
+    }
     this.workspaceOverlays.openScreenshots();
   }
   closeWorkspaceScreenshots(): void {
     this.workspaceOverlays.closeScreenshots();
   }
   toggleWorkspaceScreenshots(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.toggleWorkspaceSettingsInStudio('screenshots');
+      return;
+    }
     this.workspaceOverlays.toggleScreenshots();
   }
   openWorkspaceSummary(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.openWorkspaceSettingsInStudio('summary');
+      return;
+    }
     this.workspaceOverlays.openSummary();
   }
   closeWorkspaceSummary(): void {
     this.workspaceOverlays.closeSummary();
   }
   toggleWorkspaceSummary(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.toggleWorkspaceSettingsInStudio('summary');
+      return;
+    }
     this.workspaceOverlays.toggleSummary();
   }
   openCliAdmin(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.openWorkspaceSettingsInStudio('caps');
+      return;
+    }
     this.workspaceOverlays.openCliAdmin();
   }
   closeCliAdmin(): void {
     this.workspaceOverlays.closeCliAdmin();
   }
   toggleCliAdmin(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.toggleWorkspaceSettingsInStudio('caps');
+      return;
+    }
     this.workspaceOverlays.toggleCliAdmin();
   }
 

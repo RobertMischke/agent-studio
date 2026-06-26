@@ -713,6 +713,23 @@ function parseOrchestratorStatus(text: string): ParsedStatus | null {
 }
 
 const COMMAND_SUMMARY_RE = /^\$\s+(?<command>.*?)\s*(?:\[(?<status>[^\]]+)\])?\s*(?:\[exit\s+(?<exit>-?\d+)\])?\s*$/i;
+const SHELL_PROMPT_RE = /^\s*(?:PS[^>]*>|[$>#%])\s+/;
+
+// The shell command is already shown as the dedicated input line. Many runners
+// (e.g. codex `aggregated_output`) repeat that exact command as the first line
+// of the captured output. Drop that leading echo so the command is presented
+// exactly once. Only a single leading echo is removed, and only when it matches
+// the command verbatim (optionally behind a shell prompt).
+function stripLeadingCommandEcho(lines: readonly string[], command: string): string[] {
+  const target = command.trim();
+  if (!target) return [...lines];
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === '') i++;
+  if (i >= lines.length) return [...lines];
+  const candidate = lines[i].replace(SHELL_PROMPT_RE, '').trim();
+  return candidate === target ? lines.slice(i + 1) : [...lines];
+}
+
 function commandExecutionFromGroup(group: ActivityLogGroup): ToolCommandExecution | null {
   const first = group.lines[0]?.text ?? '';
   const parsed = COMMAND_SUMMARY_RE.exec(first);
@@ -721,7 +738,10 @@ function commandExecutionFromGroup(group: ActivityLogGroup): ToolCommandExecutio
   const statusRaw = (parsed?.groups?.['status'] ?? '').toLowerCase();
   const exitRaw = parsed?.groups?.['exit'];
   const exitCode = exitRaw === undefined ? null : Number(exitRaw);
-  const outputLines = group.lines.slice(parsed ? 1 : 0).map((l) => l.text ?? '');
+  const outputLines = stripLeadingCommandEcho(
+    group.lines.slice(parsed ? 1 : 0).map((l) => l.text ?? ''),
+    command
+  );
   return {
     command,
     status: normalizeCommandStatus(statusRaw, group.status, Number.isFinite(exitCode) ? exitCode : null),

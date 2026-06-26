@@ -44,8 +44,8 @@ public record ClientIdentity
     public string? Notes { get; init; }
 
     /// <summary>
-    /// User's preferred CLI for new tasks ("claude", "codex", "copilot",
-    /// "gemini"). The orchestrator reads this on every chat turn so a
+    /// User's preferred CLI for new tasks ("claude", "codex", "gemini").
+    /// The orchestrator reads this on every chat turn so a
     /// "create me three tasks" request lands on the user's actual default
     /// instead of the hardcoded "claude" fallback. Null until first set.
     /// </summary>

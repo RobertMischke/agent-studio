@@ -191,7 +191,6 @@ public class RunOutcomePolicyTests
 
     [Theory]
     [InlineData(RunIssueKind.MissingTerminalSentinel)]
-    [InlineData(RunIssueKind.ClassifierUnknown)]
     public void SoftIntervention_DecidePrompt_ListsPriorCommits(RunIssueKind issueKind)
     {
         var action = RunOutcomePolicy.Decide(
@@ -367,11 +366,11 @@ public class RunOutcomePolicyTests
 
     /// <summary>
     /// A bare Unknown outcome with text but no typed issue kind (the residual
-    /// after the analyzer's typed routing) must accept silently. classifier-
-    /// unknown is never a terminal, user-visible FAILURE, so the policy does
-    /// not pile a "could not classify" dead-end onto an already-visible run.
-    /// The concrete <see cref="RunIssueKind.ClassifierUnknown"/> path (failed
-    /// run with real text) is covered by the re-issue tests below.
+    /// after the analyzer's typed routing, i.e. NOT a failed run) must accept
+    /// silently: the policy does not pile a "could not classify" dead-end onto
+    /// an already-visible run. The concrete failed-run-with-real-text path
+    /// (<see cref="RunIssueKind.OrchestratorInconclusive"/> /
+    /// <see cref="RunIssueKind.InfraCrash"/>) is covered by the stop tests below.
     /// </summary>
     [Fact]
     public void BareUnknownWithText_AcceptedSilently()
@@ -390,7 +389,7 @@ public class RunOutcomePolicyTests
     /// <summary>
     /// Case (a): a CLI launch / resume failure (codex rejected the resume
     /// target, exit 2, ~0s) is routed to Recovery, never a terminal
-    /// classifier-unknown FAILURE. The policy accepts the run quietly with a
+    /// inconclusive FAILURE. The policy accepts the run quietly with a
     /// typed CliLaunchFailed marker so the runner's existing recovery machinery
     /// rebuilds from disk on the next pickup. This is the core ASS-755 fix.
     /// </summary>
@@ -415,8 +414,9 @@ public class RunOutcomePolicyTests
         Assert.Equal(OrchestratorMessageKind.CliLaunchFailed, action.MessageKind);
         Assert.False(action.IsHeuristicFallback);
         Assert.Equal(diagnosis, action.MetaMessage);
-        // Must not masquerade as the old terminal classifier-unknown verdict.
-        Assert.NotEqual(OrchestratorMessageKind.ClassifierUnknown, action.MessageKind);
+        // Must not masquerade as an inconclusive / infra-crash verdict.
+        Assert.NotEqual(OrchestratorMessageKind.OrchestratorInconclusive, action.MessageKind);
+        Assert.NotEqual(OrchestratorMessageKind.InfraCrash, action.MessageKind);
     }
 
     [Fact]
@@ -442,163 +442,144 @@ public class RunOutcomePolicyTests
     }
 
     /// <summary>
-    /// Case (b): a failed run with a real (but unclassifiable) agent turn.
-    /// classifier-unknown is never terminal: the orchestrator re-issues once
-    /// with a structured close-out prompt, exactly like
-    /// missing-terminal-sentinel, rather than ending on "could not classify".
+    /// Case (b): a failed run with a real agent turn that maps to no terminal
+    /// verdict. Under drive-to-conclusion this is OrchestratorInconclusive and
+    /// it STOPS: NotifyUserAndStop, carrying the typed issue so the escalation
+    /// layer can route it to human review. It is never silently accepted - the
+    /// old classifier-unknown path returned NotifyUserAndAccept with a marker
+    /// that moved nothing and stranded the task in 3-progress.
     /// </summary>
     [Fact]
-    public void ClassifierUnknown_FirstOccurrence_ReissuesOnce()
+    public void OrchestratorInconclusive_Stops_HandsToUser()
     {
         var action = RunOutcomePolicy.Decide(
             RunIntent.UserContinue,
             ContinuePlan(),
             Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 90.0, agentChars: 500) with
             {
-                IssueKind = RunIssueKind.ClassifierUnknown,
+                IssueKind = RunIssueKind.OrchestratorInconclusive,
                 Summary = "Agent text did not match any known shape."
             },
             followupPrompt: null,
             reissueAttempt: 0);
 
-        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
-        Assert.Equal(1, action.RetryAttempt);
-        Assert.True(action.IsPreframedRetryPrompt);
-        Assert.Equal(RunIssueKind.ClassifierUnknown, action.IssueKind);
-        Assert.Equal(OrchestratorMessageKind.SoftIntervention, action.MessageKind);
-        Assert.Contains("[[TASK_DONE]]", action.FollowupRetryPrompt);
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.NotEqual(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
+        Assert.Equal(RunIssueKind.OrchestratorInconclusive, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.OrchestratorInconclusive, action.MessageKind);
+        Assert.False(action.IsHeuristicFallback);
+        Assert.Contains("could not be mapped to a terminal verdict", action.MetaMessage);
     }
 
     /// <summary>
-    /// Case (b) after the one intervention is spent: accept with a visible
-    /// classifier-unknown marker so the lane moves forward for review. Still
-    /// an Accept (not a NotifyUserAndStop) - never a terminal FAILURE.
+    /// Case (b'): a failed run whose CLI process died hard (exitCode &lt; 0)
+    /// before reaching a terminal verdict. This is InfraCrash and it likewise
+    /// STOPS with NotifyUserAndStop, but carries the InfraCrash marker so the
+    /// escalation layer can distinguish infrastructure death from an
+    /// inconclusive agent reply.
     /// </summary>
     [Fact]
-    public void ClassifierUnknown_AfterIntervention_AcceptsWithVisibleMarker_NotTerminal()
+    public void InfraCrash_Stops_HandsToUser()
     {
         var action = RunOutcomePolicy.Decide(
             RunIntent.UserContinue,
             ContinuePlan(),
             Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 90.0, agentChars: 500) with
             {
-                IssueKind = RunIssueKind.ClassifierUnknown,
-                Summary = "Agent text did not match any known shape."
+                IssueKind = RunIssueKind.InfraCrash,
+                Summary = "The agent CLI process died before producing a verdict."
             },
             followupPrompt: null,
-            reissueAttempt: RunOutcomePolicy.MaxSoftInterventionAttempts);
+            reissueAttempt: 0);
 
-        Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
-        Assert.NotEqual(OutcomeActionKind.NotifyUserAndStop, action.Kind);
-        Assert.Equal(RunIssueKind.ClassifierUnknown, action.IssueKind);
-        Assert.Equal(OrchestratorMessageKind.ClassifierUnknown, action.MessageKind);
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.NotEqual(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
+        Assert.Equal(RunIssueKind.InfraCrash, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.InfraCrash, action.MessageKind);
+        Assert.False(action.IsHeuristicFallback);
+        Assert.Contains("crashed", action.MetaMessage);
     }
 
     /// <summary>
-    /// The load-bearing invariant of this whole path: classifier-unknown is
-    /// NEVER a terminal, user-facing FAILURE. Sweep the entire reissue budget -
-    /// before it, exactly at the cap, and well past it - and assert the policy
-    /// never returns <see cref="OutcomeActionKind.NotifyUserAndStop"/>. Within
-    /// budget it spends one soft intervention; once the budget is gone it
-    /// accepts with a visible classifier-unknown marker so the lane keeps
-    /// moving. A future refactor that "tidies" the branch into a stop/escalate
-    /// would trip this.
+    /// The load-bearing invariant of the drive-to-conclusion path: a failed,
+    /// unclassified run NEVER returns NotifyUserAndAccept (the old stranding
+    /// bug). Sweep the entire reissue budget - before, at the cap, and well
+    /// past it - for both new kinds and assert the policy always STOPS and
+    /// hands the task to the user, carrying the typed issue. A future refactor
+    /// that "tidies" the branch back into an accept-with-marker would trip this.
     /// </summary>
     [Theory]
-    [InlineData(0, OutcomeActionKind.ReissueWithStrongerFraming, OrchestratorMessageKind.SoftIntervention)]
-    [InlineData(1, OutcomeActionKind.NotifyUserAndAccept, OrchestratorMessageKind.ClassifierUnknown)]
-    [InlineData(2, OutcomeActionKind.NotifyUserAndAccept, OrchestratorMessageKind.ClassifierUnknown)]
-    [InlineData(5, OutcomeActionKind.NotifyUserAndAccept, OrchestratorMessageKind.ClassifierUnknown)]
-    public void ClassifierUnknown_NeverStops_AcrossEntireReissueBudget(
-        int reissueAttempt,
-        OutcomeActionKind expectedKind,
-        OrchestratorMessageKind expectedMessageKind)
+    [InlineData(RunIssueKind.OrchestratorInconclusive, 0)]
+    [InlineData(RunIssueKind.OrchestratorInconclusive, 1)]
+    [InlineData(RunIssueKind.OrchestratorInconclusive, 5)]
+    [InlineData(RunIssueKind.InfraCrash, 0)]
+    [InlineData(RunIssueKind.InfraCrash, 1)]
+    [InlineData(RunIssueKind.InfraCrash, 5)]
+    public void FailedUnclassified_AlwaysStops_AcrossEntireReissueBudget(
+        RunIssueKind issueKind,
+        int reissueAttempt)
     {
         var action = RunOutcomePolicy.Decide(
             RunIntent.UserContinue,
             ContinuePlan(),
             Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 90.0, agentChars: 500) with
             {
-                IssueKind = RunIssueKind.ClassifierUnknown,
+                IssueKind = issueKind,
                 Summary = "Agent text did not match any known shape."
             },
             followupPrompt: null,
             reissueAttempt: reissueAttempt);
 
-        Assert.Equal(expectedKind, action.Kind);
-        Assert.Equal(expectedMessageKind, action.MessageKind);
-        Assert.Equal(RunIssueKind.ClassifierUnknown, action.IssueKind);
-        // The invariant, stated directly: never a terminal stop / human-review FAILURE.
-        Assert.NotEqual(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(issueKind, action.IssueKind);
+        // The invariant, stated directly: never silently accept a failed run.
+        Assert.NotEqual(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
     }
 
     /// <summary>
-    /// classifier-unknown must not be confused with the two structural
-    /// neighbours that share its surface shape (Unknown kind, no sentinel, real
-    /// agent text): a CLI launch/resume failure routes straight to Recovery
-    /// (NotifyUserAndAccept + CliLaunchFailed marker, NO reissue), while
-    /// classifier-unknown and missing-terminal-sentinel each spend one soft
-    /// intervention but stay tagged distinctly. Feed the identical outcome with
-    /// each issue kind and assert three separate routings - none terminal.
+    /// The two new failed-run kinds must not be confused with the structural
+    /// neighbours that share their surface shape (Unknown kind, no sentinel,
+    /// real agent text): a CLI launch/resume failure routes to Recovery
+    /// (NotifyUserAndAccept + CliLaunchFailed marker), while
+    /// missing-terminal-sentinel spends one soft intervention. The two
+    /// drive-to-conclusion kinds STOP. Feed the identical outcome with each
+    /// issue kind and assert four separate routings.
     /// </summary>
     [Fact]
-    public void ClassifierUnknown_NotConfusedWith_CliLaunchFailed_Or_MissingTerminalSentinel()
+    public void FailedUnclassified_NotConfusedWith_CliLaunchFailed_Or_MissingTerminalSentinel()
     {
         AgentOutcome Shape(RunIssueKind issue) =>
             Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 60.0, agentChars: 300)
                 with { IssueKind = issue, Summary = "same surface text" };
 
-        var classifierUnknown = RunOutcomePolicy.Decide(
-            RunIntent.UserContinue, ContinuePlan(), Shape(RunIssueKind.ClassifierUnknown), null, 0);
+        var inconclusive = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue, ContinuePlan(), Shape(RunIssueKind.OrchestratorInconclusive), null, 0);
+        var infraCrash = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue, ContinuePlan(), Shape(RunIssueKind.InfraCrash), null, 0);
         var cliLaunchFailed = RunOutcomePolicy.Decide(
             RunIntent.UserContinue, ContinuePlan(), Shape(RunIssueKind.CliLaunchFailed), null, 0);
         var missingSentinel = RunOutcomePolicy.Decide(
             RunIntent.UserContinue, ContinuePlan(), Shape(RunIssueKind.MissingTerminalSentinel), null, 0);
 
-        // CLI launch failure -> Recovery accept; NOT a soft reissue, NOT classifier-unknown.
+        // CLI launch failure -> Recovery accept; NOT a stop.
         Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, cliLaunchFailed.Kind);
         Assert.Equal(OrchestratorMessageKind.CliLaunchFailed, cliLaunchFailed.MessageKind);
 
-        // classifier-unknown -> one soft intervention, tagged as itself.
-        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, classifierUnknown.Kind);
-        Assert.Equal(RunIssueKind.ClassifierUnknown, classifierUnknown.IssueKind);
-
-        // missing-terminal-sentinel -> also a soft intervention, but tagged distinctly.
+        // missing-terminal-sentinel -> one soft intervention, tagged distinctly.
         Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, missingSentinel.Kind);
         Assert.Equal(RunIssueKind.MissingTerminalSentinel, missingSentinel.IssueKind);
 
-        // The three issue kinds stay separate, and none collapses to a terminal stop.
-        Assert.NotEqual(classifierUnknown.IssueKind, cliLaunchFailed.IssueKind);
-        Assert.NotEqual(classifierUnknown.IssueKind, missingSentinel.IssueKind);
-        foreach (var a in new[] { classifierUnknown, cliLaunchFailed, missingSentinel })
-            Assert.NotEqual(OutcomeActionKind.NotifyUserAndStop, a.Kind);
-    }
+        // The two drive-to-conclusion kinds STOP, tagged as themselves.
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, inconclusive.Kind);
+        Assert.Equal(RunIssueKind.OrchestratorInconclusive, inconclusive.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.OrchestratorInconclusive, inconclusive.MessageKind);
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, infraCrash.Kind);
+        Assert.Equal(RunIssueKind.InfraCrash, infraCrash.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.InfraCrash, infraCrash.MessageKind);
 
-    /// <summary>
-    /// The classifier-unknown soft intervention must ask the agent for a
-    /// structured close-out: both terminal sentinels offered, and led by the
-    /// shared diff-only steering rule so the reissue builds on existing commits
-    /// instead of restarting from scratch. Pins the prompt contract for this
-    /// branch so it cannot silently drift from the missing-sentinel framing.
-    /// </summary>
-    [Fact]
-    public void ClassifierUnknown_ReissuePrompt_AsksForStructuredCloseOut()
-    {
-        var action = RunOutcomePolicy.Decide(
-            RunIntent.UserContinue,
-            ContinuePlan(),
-            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 90.0, agentChars: 500) with
-            {
-                IssueKind = RunIssueKind.ClassifierUnknown,
-                Summary = "Agent text did not match any known shape."
-            },
-            followupPrompt: null,
-            reissueAttempt: 0);
-
-        Assert.True(action.IsPreframedRetryPrompt);
-        Assert.StartsWith(RunOutcomePolicy.DiffOnlySteeringRule, action.FollowupRetryPrompt);
-        Assert.Contains("[[TASK_DONE]]", action.FollowupRetryPrompt);
-        Assert.Contains("[[TASK_BLOCKED", action.FollowupRetryPrompt);
+        // All four issue kinds stay separate.
+        var kinds = new[] { inconclusive.IssueKind, infraCrash.IssueKind, cliLaunchFailed.IssueKind, missingSentinel.IssueKind };
+        Assert.Equal(4, kinds.Distinct().Count());
     }
 
     /// <summary>

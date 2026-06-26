@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin CLI Onboarding</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --ink: #1c2128;
+    --ink-soft: #57606a;
+    --line: #d8dee4;
+    --line-soft: #eaeef2;
+    --accent: #2563a8;
+    --code-bg: #eef1f5;
+    --code-ink: #243b53;
+    --ok-bg: #e3f3e8;
+    --ok-ink: #1a7340;
+    --warn-bg: #fcf2dd;
+    --warn-ink: #8a5a00;
+    --bad-bg: #fbe4e4;
+    --bad-ink: #a32020;
+    --neutral-bg: #eceff3;
+    --neutral-ink: #57606a;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.62;
+  }
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 40px 28px 96px;
+  }
+  header.page {
+    border-bottom: 2px solid var(--line);
+    padding-bottom: 22px;
+    margin-bottom: 30px;
+  }
+  header.page h1 {
+    margin: 0 0 6px;
+    font-size: 30px;
+    letter-spacing: -0.01em;
+  }
+  header.page .sub {
+    color: var(--ink-soft);
+    font-size: 15px;
+  }
+  header.page .meta {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  header.page .meta code { font-size: 12px; }
+  nav.toc {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 22px;
+    margin-bottom: 38px;
+  }
+  nav.toc h2 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+  }
+  nav.toc ol {
+    margin: 0;
+    padding-left: 20px;
+    columns: 2;
+    column-gap: 32px;
+  }
+  nav.toc li { margin: 4px 0; break-inside: avoid; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  section { margin-bottom: 48px; }
+  section > h2 {
+    font-size: 22px;
+    margin: 0 0 6px;
+    padding-top: 8px;
+    letter-spacing: -0.01em;
+  }
+  section > h2 .num {
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    margin-right: 8px;
+  }
+  h3 {
+    font-size: 16px;
+    margin: 26px 0 8px;
+  }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace;
+    font-size: 12.5px;
+    word-break: break-word;
+  }
+  a { color: var(--accent); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 22px;
+    margin: 16px 0;
+  }
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: #eef4fb;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 14px 18px;
+    margin: 18px 0;
+    font-size: 14.5px;
+  }
+  .callout.warn {
+    border-left-color: var(--warn-ink);
+    background: var(--warn-bg);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 13.5px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin: 16px 0;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-size: 13px;
+    color: var(--ink-soft);
+    padding: 0 0 8px;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+  thead th {
+    background: #f0f3f6;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td code { font-size: 11.5px; }
+  .chip {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    line-height: 1.7;
+  }
+  .chip.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .chip.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  .chip.bad { background: var(--bad-bg); color: var(--bad-ink); }
+  .chip.neutral { background: var(--neutral-bg); color: var(--neutral-ink); }
+  .yes { color: var(--ok-ink); font-weight: 600; }
+  .no { color: var(--bad-ink); font-weight: 600; }
+  .partial { color: var(--warn-ink); font-weight: 600; }
+  .btn {
+    display: inline-block;
+    background: #f0f3f6;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 2px 9px;
+    font-size: 11.5px;
+    color: var(--ink);
+    margin: 1px 2px 1px 0;
+    white-space: nowrap;
+  }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .flow {
+    counter-reset: step;
+    list-style: none;
+    padding-left: 0;
+  }
+  .flow > li {
+    position: relative;
+    padding: 4px 0 14px 44px;
+    border-left: 2px solid var(--line);
+    margin-left: 14px;
+  }
+  .flow > li:last-child { border-left-color: transparent; }
+  .flow > li::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: -15px;
+    top: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .flow > li strong { display: block; margin-bottom: 2px; }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin: 10px 0 4px;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .spine {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 14px 0;
+    font-size: 13px;
+  }
+  .spine .node {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-weight: 600;
+  }
+  .spine .arrow { color: var(--ink-soft); font-weight: 700; }
+  .src {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .src ul { padding-left: 20px; }
+  .src a { word-break: break-all; }
+  footer.page {
+    margin-top: 56px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .qa { margin: 14px 0; }
+  .qa .q { font-weight: 600; }
+  .qa .a { color: var(--ink-soft); margin-top: 2px; }
+  @media (max-width: 640px) {
+    nav.toc ol { columns: 1; }
+    .wrap { padding: 28px 16px 64px; }
+    table { font-size: 12.5px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page">
+    <h1>Admin CLI Onboarding</h1>
+    <div class="sub">A "Setup" surface that turns the four coding-agent CLIs into a visible, fixable, walkthrough-driven onboarding experience.</div>
+    <div class="meta">
+      Concept &middot; Agent Studio Admin area &middot; CLIs: <code>claude</code> / <code>codex</code> / <code>copilot</code> / <code>gemini</code> &middot; Audience: operators and engineers
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Table of contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#problem">Problem and motive</a></li>
+      <li><a href="#vscode">How VS Code extensions do it</a></li>
+      <li><a href="#current">Current state and gaps</a></li>
+      <li><a href="#surface">Proposed CLI Onboarding surface</a></li>
+      <li><a href="#errors">Error surfacing</a></li>
+      <li><a href="#plan">Build plan and open questions</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 -->
+  <section id="problem">
+    <h2><span class="num">1.</span>Problem and motive</h2>
+
+    <p>
+      The pipeline depends on four coding-agent CLIs being installed, on the right version, on <code>PATH</code> (or reachable through a correct npm shim), and signed in. Today none of that is visible until a job tries to spawn. When a dependency is missing or broken, the failure is discovered <em>at spawn time</em> and surfaces only as a paused lane with a terse mode-reason string.
+    </p>
+
+    <p>
+      The worst case is the npm-shim race on Windows. npm installs Node CLIs as a Bash shim plus a <code>.cmd</code> launcher using an atomic-rename pattern (write <code>.&lt;name&gt;-&lt;random&gt;</code>, then rename to <code>&lt;name&gt;</code>). On Windows that rename fails when the target is locked, leaving orphans like <code>.claude-2shlnT4k</code>. The <code>claude-code</code> postinstall additionally swaps a small stub for the real binary; an interrupt mid-postinstall, or a racing auto-updater, can put the install back into a broken shape <em>every few minutes</em>. As the in-repo note puts it: "a pickup that worked at boot can fail at minute twelve through no fault of the job." Source: <code>backend/Features/Cli/Execution/NpmShimHealer.cs</code> (class summary, lines 5-33).
+    </p>
+
+    <div class="callout warn">
+      <strong>The core pain:</strong> a missing or re-broken shim silently pauses the pipeline. The operator sees tasks stop, not <em>why</em>, and there is no in-app place to detect, install, sign in, or repair a CLI. The fix lives entirely in a terminal and in setup docs.
+    </div>
+
+    <p>
+      We already have strong machinery underneath: a <code>--version</code> probe with Windows PATHEXT and shim resolution, an automated self-heal for npm orphans (claude and gemini), per-CLI auth-file descriptors, and a per-CLI path override. What is missing is a <strong>surface</strong>: a place that makes each CLI's health visible and every non-green state one click away from its remedy. That is the entire scope of this concept. It introduces no new probing substrate; it aggregates and exposes what already exists.
+    </p>
+  </section>
+
+  <!-- 2 -->
+  <section id="vscode">
+    <h2><span class="num">2.</span>How VS Code extensions do it</h2>
+
+    <p>
+      VS Code extensions onboard external CLIs and binaries with a repeatable five-stage spine. We mirror it directly: each stage maps to a column or action in the proposed surface.
+    </p>
+
+    <div class="spine">
+      <span class="node">DETECT</span><span class="arrow">&rarr;</span>
+      <span class="node">INSTALL</span><span class="arrow">&rarr;</span>
+      <span class="node">AUTH</span><span class="arrow">&rarr;</span>
+      <span class="node">STATUS</span><span class="arrow">&rarr;</span>
+      <span class="node">FIX</span>
+    </div>
+
+    <table>
+      <caption>VS Code onboarding patterns and the reusable lesson for our Admin area.</caption>
+      <thead>
+        <tr>
+          <th style="width:14%">Stage</th>
+          <th style="width:43%">How VS Code extensions do it</th>
+          <th style="width:43%">Reusable lesson for the Admin surface</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Detection</strong></td>
+          <td>On <code>activate()</code> the extension resolves the binary from a stable source (PATH lookup, a known per-platform install dir, or VS Code's own <code>extensions.json</code>) and runs <code>--version</code> to gate on a minimum. Versioned folders get deleted and recreated on every update, so hardcoded paths silently break.</td>
+          <td>Never hardcode a versioned path. Resolve dynamically each probe (we already do, via <code>ResolveExecutable</code>), run <code>--version</code>, and gate on a per-CLI floor. Offer a "Set explicit path" escape so the operator can pin an absolute binary and stop depending on the fragile shim.</td>
+        </tr>
+        <tr>
+          <td><strong>Install</strong></td>
+          <td>Two models: bundle per-platform binaries in the VSIX (offline, deterministic), or download the matching binary from GitHub releases on first run after a <code>showInformationMessage("...", "Download")</code> consent prompt. rust-analyzer and the dbt extension both prompt-then-download, with a manual CLI command as fallback. A <code>contributes.walkthroughs</code> checklist drives the human through setup.</td>
+          <td>Prefer a guided, deterministic install over a silent server-side download. For npm CLIs, run the in-process self-heal; for a true missing install, show a copy-paste <code>npm install -g ...</code> command plus a docs link rather than auto-running a large download. All installs are explicit operator clicks.</td>
+        </tr>
+        <tr>
+          <td><strong>Auth</strong></td>
+          <td>Built-in providers via <code>vscode.authentication.getSession(providerId, scopes, {createIfNone:true})</code> show the consent dialog and an Accounts-menu badge, falling back to device-code in headless or remote contexts. Custom backends implement <code>AuthenticationProvider</code> and store the token in SecretStorage.</td>
+          <td>We cannot drive the interactive <code>claude</code>/<code>codex</code>/<code>gemini</code> logins headlessly, so we show an instruction card plus a "Re-check auth" button that re-probes the credentials file. Copilot offers an inline "Set GitHub token" field (a real provider-token path we already have).</td>
+        </tr>
+        <tr>
+          <td><strong>Status</strong></td>
+          <td>A persistent <code>StatusBarItem</code> whose text, icon, and tooltip reflect signed-in vs error, whose <code>command</code> is a click-to-fix action, and which uses <code>errorBackground</code>/<code>warningBackground</code> only as a last resort. A spinning icon signals in-progress.</td>
+          <td>A persistent header status chip ("CLIs: 3/4") is the always-on click-to-fix entry point. It deep-links into the Setup page, pre-expanded on the worst card. Reserve red and amber for genuine blocking and degraded states.</td>
+        </tr>
+        <tr>
+          <td><strong>Errors</strong></td>
+          <td>A notification carries the remedy as a button ("Install", "Update", "Sign in", "Open Settings"), not a dead-end string. The persistent chip turns to an error state with click-to-fix so recovery is reachable even after the transient toast is gone.</td>
+          <td>Every non-green row carries its exact remedy button inline (Install / Repair / Sign in / Set path) plus an expandable detail. The remedy lives in a persistent row, reachable any time, not only while a toast was live.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="src">
+      <strong>VS Code sources:</strong>
+      <ul>
+        <li><a href="https://code.visualstudio.com/api/references/activation-events">code.visualstudio.com/api/references/activation-events</a></li>
+        <li><a href="https://code.visualstudio.com/api/references/contribution-points">code.visualstudio.com/api/references/contribution-points</a> (contributes.walkthroughs)</li>
+        <li><a href="https://code.visualstudio.com/api/ux-guidelines/walkthroughs">code.visualstudio.com/api/ux-guidelines/walkthroughs</a></li>
+        <li><a href="https://code.visualstudio.com/api/references/vscode-api">code.visualstudio.com/api/references/vscode-api</a> (authentication, StatusBarItem, showInformationMessage)</li>
+        <li><a href="https://code.visualstudio.com/api/ux-guidelines/status-bar">code.visualstudio.com/api/ux-guidelines/status-bar</a></li>
+        <li><a href="https://rust-analyzer.github.io/book/vs_code.html">rust-analyzer.github.io/book/vs_code.html</a> and <a href="https://github.com/rust-lang/rust-analyzer/issues/10483">rust-lang/rust-analyzer#10483</a> (bundle vs download)</li>
+        <li><a href="https://docs.getdbt.com/docs/install-dbt-extension">docs.getdbt.com/docs/install-dbt-extension</a> (download-with-consent or manual fallback)</li>
+        <li><a href="https://github.com/anthropics/claude-code/issues/42818">anthropics/claude-code#42818</a> (resolve via extensions.json, never a versioned path)</li>
+        <li><a href="https://github.com/microsoft/vscode/issues/195485">microsoft/vscode#195485</a> (device-code fallback for headless/remote)</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="current">
+    <h2><span class="num">3.</span>Current Agent Studio state and gaps</h2>
+
+    <h3>What already exists (the substrate we reuse)</h3>
+    <ul>
+      <li><strong>Detection.</strong> <code>TestCliPath()</code> spawns a <code>--version</code> probe and returns <code>(Available, Version, Path)</code> with a 5-second timeout; <code>ResolveExecutable()</code> handles Windows PATHEXT and npm-shim <code>.cmd</code> resolution. Source: <code>backend/Features/Cli/Execution/CliExecutionServiceBase.cs:67-94</code> and <code>:104-137</code>.</li>
+      <li><strong>Self-heal.</strong> <code>NpmShimHealer</code> repairs atomic-rename orphans, platform-binary rename artifacts, and stub binaries, then smoke-tests <code>claude --version</code> after the pass. It is the in-process C# port of <code>tools/check-cli-shims.sh</code> and covers the npm-shim CLIs (claude and gemini). Source: <code>backend/Features/Cli/Execution/NpmShimHealer.cs</code>.</li>
+      <li><strong>Auth-file descriptors.</strong> <code>CliWorkingMemoryService</code> already enumerates per-CLI credential files: Claude <code>~/.claude/.credentials.json</code>, Codex <code>~/.codex/auth.json</code>, Copilot <code>~/.copilot/config.json</code> (plus GitHub token), Gemini <code>~/.gemini/settings.json</code>. Source: <code>backend/Features/Cli/Execution/CliWorkingMemoryService.cs:191-227</code>.</li>
+      <li><strong>Path override.</strong> Each service exposes <code>SetCliPath(path)</code> and a <code>&lt;Cli&gt;Cli:Path</code> appsettings fallback. Only Copilot's is wired to an endpoint today, via <code>/api/settings/cli</code> and <code>/api/settings/cli/token</code>. Source: <code>backend/Features/Cli/CliEndpoints.cs:20-44</code>.</li>
+      <li><strong>Routing and auto-pause.</strong> <code>CliRouter</code> dispatches all four services; the runner trips to manual mode with a <code>ModeReason</code> when a CLI cannot be started after N attempts. Source: <code>backend/Features/Cli/Execution/CliRouter.cs</code>, <code>backend/Features/Runner/ProjectRunner.cs</code>.</li>
+      <li><strong>Admin host.</strong> The CLI admin page already exists and renders model catalogs, quota caps, usage, and working-memory sections. Source: <code>frontend/src/app/features/cli/components/cli-admin-panel/cli-admin-panel.ts</code>.</li>
+    </ul>
+
+    <h3>The gaps</h3>
+    <table>
+      <caption>What is missing today and where it leaves the operator.</caption>
+      <thead>
+        <tr><th style="width:30%">Gap</th><th style="width:38%">Impact</th><th style="width:32%">Today's workaround</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>No install / detect UI surface</td><td>Operator cannot see which CLIs are missing or broken; <code>available</code> is returned by <code>/api/cli/usage</code> but never rendered as a setup state.</td><td>Read the <code>/api/cli/usage</code> endpoint by hand.</td></tr>
+        <tr><td>No auth or setup check at startup</td><td>A missing GitHub token or unsigned CLI is discovered only at spawn; Copilot can hang on an interactive prompt.</td><td>Pre-set the token env var; run each CLI once in a terminal.</td></tr>
+        <tr><td>npm-shim repair is reactive only</td><td><code>NpmShimHealer</code> runs at spawn time as a last-line defence; there is no on-demand "Repair" the operator can trigger from the UI.</td><td><code>tools/check-cli-shims.sh</code> at boot, externally.</td></tr>
+        <tr><td>No model-availability warning</td><td>Queuing a job for an unavailable model fails silently; the catalog returns a flag the UI does not surface as a warning.</td><td>Check <code>/api/cli/{type}/models</code> manually.</td></tr>
+        <tr><td>No health status in the main UI</td><td>The operator sees the lane pause reason, but no cross-project "which CLIs are healthy" view and no "re-test" button.</td><td>Read the runner status tooltip.</td></tr>
+        <tr><td>Path override is Copilot-only</td><td>Three of four services expose <code>SetCliPath()</code> with no endpoint, so only Copilot can be pinned to an absolute path from the API.</td><td>Edit appsettings and restart the backend.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 4 -->
+  <section id="surface">
+    <h2><span class="num">4.</span>Proposed Admin "CLI Onboarding" surface</h2>
+
+    <p>
+      A new <strong>Setup</strong> section pinned to the top of the existing CLI admin page (above the Model catalog, Quota caps, Usage, and Working-memory sections), fed by a single new aggregation endpoint <code>GET /api/cli/health</code>. It is the health-panel analog of a VS Code Get-Started page: one row per CLI, a rolled-up status chip, and an inline primary remedy.
+    </p>
+
+    <h3>Per-CLI status table</h3>
+    <p>Each row probes its fields independently so the UI can show a granular checklist and a single rolled-up chip. The mockup below shows the four CLIs in representative states.</p>
+
+    <div class="legend">
+      <span><span class="chip ok">Ready</span> healthy</span>
+      <span><span class="chip warn">Sign-in / Outdated</span> actionable-degraded</span>
+      <span><span class="chip bad">Not installed / Shim broken / Path error</span> blocking</span>
+      <span><span class="chip neutral">Detecting</span> in progress</span>
+    </div>
+
+    <table>
+      <caption>Admin &gt; CLI &gt; Setup &mdash; per-CLI health table (mockup). Fields map to the <code>/api/cli/health</code> record.</caption>
+      <thead>
+        <tr>
+          <th>CLI</th>
+          <th>Installed</th>
+          <th>Version</th>
+          <th>Path / shim</th>
+          <th>Auth</th>
+          <th>Health</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>claude</strong></td>
+          <td class="yes">yes</td>
+          <td>2.1.90</td>
+          <td><span class="chip ok">shim ok</span><br><code>...\npm\claude.cmd</code></td>
+          <td class="yes">authenticated<br><span class="src"><code>.credentials.json</code> present</span></td>
+          <td><span class="chip ok">Ready</span></td>
+          <td><span class="btn">Re-detect</span></td>
+        </tr>
+        <tr>
+          <td><strong>codex</strong></td>
+          <td class="yes">yes</td>
+          <td>1.4.0</td>
+          <td><span class="chip ok">on PATH</span></td>
+          <td class="no">unauthenticated<br><span class="src"><code>auth.json</code> missing</span></td>
+          <td><span class="chip warn">Sign-in needed</span></td>
+          <td><span class="btn primary">Sign in</span><span class="btn">Re-check auth</span></td>
+        </tr>
+        <tr>
+          <td><strong>copilot</strong></td>
+          <td class="yes">yes</td>
+          <td>0.3.2</td>
+          <td><span class="chip ok">on PATH</span></td>
+          <td class="partial">token unset<br><span class="src"><code>GITHUB_TOKEN</code> unset, gh not logged in</span></td>
+          <td><span class="chip warn">Sign-in needed</span></td>
+          <td><span class="btn primary">Set GitHub token</span><span class="btn">Re-detect</span></td>
+        </tr>
+        <tr>
+          <td><strong>gemini</strong></td>
+          <td class="no">no</td>
+          <td>&mdash;</td>
+          <td><span class="chip bad">shim broken</span><br><span class="src">orphan <code>.gemini-X8dH7l</code></span></td>
+          <td class="neutral">unknown</td>
+          <td><span class="chip bad">Shim broken</span></td>
+          <td><span class="btn primary">Repair</span><span class="btn">Set path</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card">
+      <strong>The <code>/api/cli/health</code> record (per CLI).</strong> Composed from existing pieces only:
+      <ul>
+        <li><code>installed</code>, <code>version</code>, <code>resolvedPath</code>, <code>onPathOrShim</code> &mdash; from <code>TestCliPath()</code> plus <code>ResolveExecutable()</code>. <code>shim-broken</code> is inferred when the path is unresolved on Windows and the <code>NpmShimHealer</code> read-only pre-scan finds orphans for that CLI.</li>
+        <li><code>auth</code>, <code>authDetail</code> &mdash; a file-presence probe reusing the <code>CliWorkingMemoryService</code> descriptor paths; absent file means <code>unauthenticated</code>, and <code>expired</code> is inferred only from a recent run's auth error (best-effort, no billable call).</li>
+        <li><code>versionOk</code> &mdash; compared against a per-CLI minimum floor, or <code>null</code> when no floor is defined yet (so working installs are never false-flagged).</li>
+        <li><code>healthy</code>, <code>state</code>, <code>nextSteps</code>, <code>actions</code> &mdash; derived; <code>state</code> is the precedence roll-up <em>not-installed &gt; shim-broken &gt; path-error &gt; sign-in-needed &gt; outdated &gt; ready</em> that drives the chip color and the primary action.</li>
+      </ul>
+    </div>
+
+    <h3>Action semantics (all explicit operator clicks, no silent installs)</h3>
+    <ul>
+      <li><strong>Detect / Re-detect</strong> &rarr; <code>GET /api/cli/health?refresh=true</code> (re-runs <code>TestCliPath</code> plus the auth and shim probes).</li>
+      <li><strong>Repair</strong> &rarr; <code>POST /api/cli/{cliType}/repair</code>; for npm CLIs (claude, gemini) invokes <code>NpmShimHealer</code> and returns the action log inline ("Restored claude.cmd from .claude-2shlnT4k; re-ran postinstall"). The chip flips to Ready after the healer's own post-repair <code>--version</code> smoke test.</li>
+      <li><strong>Install</strong> &rarr; a guided card with a copy-paste <code>npm install -g ...</code> command and a docs link, not an auto-run server-side download.</li>
+      <li><strong>Sign in</strong> &rarr; for Copilot an inline "Set GitHub token" field (the existing <code>PUT /api/settings/cli/token</code>); for Claude, Codex, and Gemini an instruction card to run the interactive login plus a "Re-check auth" button that re-probes the credentials file.</li>
+      <li><strong>Set path</strong> &rarr; <code>PUT /api/cli/{cliType}/path { path }</code>, generalizing the existing Copilot-only <code>SetCliPath()</code> endpoint to all four services. This is the escape hatch from the fragile shim: pin an absolute binary.</li>
+    </ul>
+
+    <div class="callout">
+      Graceful degradation: if <code>/api/cli/health</code> returns 503 for one CLI, that card shows "Unknown &mdash; re-detect" rather than blanking the page, mirroring the existing 503-not-500 convention used for the model catalog.
+    </div>
+
+    <h3>Fresh-system walkthrough flow</h3>
+    <p>
+      On app load the frontend calls <code>GET /api/cli/health</code>. If zero CLIs are <code>ready</code> (or a persisted "onboarding not completed" flag is set), it shows a one-time, dismissible "Set up your coding agents" wizard, re-openable from the Setup header. It is the analog of a VS Code <code>contributes.walkthroughs</code> checklist whose steps auto-check via completion conditions: the human does the fix, the UI reflects truth, never a fake progress bar.
+    </p>
+
+    <ol class="flow">
+      <li>
+        <strong>Choose</strong>
+        A checklist of the four CLIs ("Which agents do you want to use?"). Any already-<code>ready</code> CLI is pre-checked. Most operators pick one or two.
+      </li>
+      <li>
+        <strong>Install &rarr; Sign in &rarr; Verify (per chosen CLI)</strong>
+        Each sub-step auto-checks on the next health poll: install turns green when <code>installed &amp;&amp; versionOk</code>, auth turns green when <code>auth == "authenticated"</code>, verify turns green when <code>healthy</code>. Each item's call-to-action runs the real action (Install command card, Sign-in affordance, Re-detect).
+      </li>
+      <li>
+        <strong>Done</strong>
+        When every chosen CLI is green, a success state and a "You're ready to run tasks" call-to-action route back to the board, and the onboarding-completed flag is set.
+      </li>
+    </ol>
+  </section>
+
+  <!-- 5 -->
+  <section id="errors">
+    <h2><span class="num">5.</span>Error surfacing</h2>
+
+    <p>
+      Three coordinated surfaces, never a dead-end string. This mirrors the Copilot template of a visible chip plus hover detail plus one-click recovery, and ties into the AGT-1775 visual-error concept: the blocked or error visual on a card carries the remedy button, not just a red marker.
+    </p>
+
+    <ol>
+      <li>
+        <strong>Persistent header status chip</strong> (the VS Code <code>StatusBarItem</code> analog). A small "CLIs: 3/4" chip: neutral when all ready, amber when an actionable-degraded CLI exists, red when a CLI the runner needs is blocking. Hover gives a per-CLI roll-up tooltip ("Codex: sign-in needed"); click navigates straight to Admin &gt; CLI &gt; Setup, pre-expanded on the worst card. Reserve red and amber for genuine states per VS Code status-bar guidance.
+      </li>
+      <li>
+        <strong>Runner auto-pause lane pill</strong> (already exists, re-pointed). When a spawn fails repeatedly the runner flips to manual with a <code>ModeReason</code> like "auto-pickup paused: the {cli} CLI for '{slug}' could not be started after N attempts...". The concept <em>adds</em> a "Fix CLI" link in that tooltip that parses the <code>cliType</code> from the reason and deep-links to the offending card. This is the bridge from "my tasks stopped" to "here is exactly why and the fix." Source: <code>backend/Features/Runner/ProjectRunner.cs</code> (mode pause), surfaced via <code>ProjectRunnerStatus.ModeReason</code>.
+      </li>
+      <li>
+        <strong>Per-task spawn-failure diagnostic</strong> (already written to the job's cli-output log). Surface its first line as an actionable error row in the task's activity area with a "Fix the {cli} CLI" button to the Setup card. The same root cause is then reachable from the board, the task, and the header, and every entry point lands on the one card that hosts the remedy.
+      </li>
+    </ol>
+
+    <div class="callout">
+      Cross-reference: this section depends on and extends the <strong>AGT-1775</strong> visual-error concept. The Setup card's non-green visual is the remedy-carrying error surface that AGT-1775 describes; the deep-links above all terminate on it.
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="plan">
+    <h2><span class="num">6.</span>Build plan and open questions</h2>
+
+    <h3>Build plan</h3>
+    <table>
+      <caption>Sliced so the read-only detection slice (step 3) ships value on its own.</caption>
+      <thead>
+        <tr><th style="width:6%">#</th><th style="width:30%">Step</th><th style="width:64%">What</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>Backend: <code>/api/cli/health</code> read model</td><td>Add <code>GET /api/cli/health</code> (and <code>?refresh</code>) in <code>CliEndpoints.cs</code> returning the per-CLI record array. Compose from existing pieces only; cache the last probe in a <code>CliHealthService</code> singleton and warm it on startup so the first paint is instant.</td></tr>
+        <tr><td>2</td><td>Backend: repair and path actions</td><td>Add <code>POST /api/cli/{cliType}/repair</code> (invokes <code>NpmShimHealer</code> for claude/gemini, returns <code>{available, actions[], error}</code>) and <code>PUT /api/cli/{cliType}/path { path }</code> (calls the existing <code>SetCliPath()</code> on the routed service, then re-probes). Mutations require the <code>X-Client-Id</code> header per existing convention.</td></tr>
+        <tr><td>3</td><td>Frontend: Setup section (read-only first)</td><td>Add a <code>CliSetupPanel</code> child mounted at the top of <code>CliAdminPanelComponent</code>. Render per-CLI cards, status chip, and checklist from <code>/api/cli/health</code>, with a Re-detect-all button. Central semantic tokens for chip colors. No actions yet &mdash; just truthful detection. This slice alone replaces "check <code>/api/cli/usage</code> by hand."</td></tr>
+        <tr><td>4</td><td>Frontend: per-CLI actions</td><td>Wire Detect, Repair (shows action log), Set path (inline editor), Sign in (Copilot token field; instruction card plus Re-check auth for the others). Optimistic spinner states; re-poll health after each action.</td></tr>
+        <tr><td>5</td><td>Error surfacing wiring</td><td>Add the header status chip (click to Setup), the "Fix CLI" deep-link in the runner lane-pill tooltip and the per-task spawn-failure row, and a "Re-arm runner" button shown only when the mode source indicates a CLI-unavailable auto-pause.</td></tr>
+        <tr><td>6</td><td>Fresh-system walkthrough</td><td>Add the first-run wizard (Choose &rarr; per-CLI Install/Sign-in/Verify with auto-checking steps &rarr; Done). Persist onboarding-completed; re-openable from the header. Reuse the same health poll and action components from step 4.</td></tr>
+        <tr><td>7</td><td>Polish, version floors, tests</td><td>Define per-CLI minimum-version floors, add Playwright coverage for each card state, and document the surface in <code>docs/operations/setup/onboard-an-agent-cli.md</code> as the in-app equivalent of the manual checklist.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Open questions</h3>
+
+    <div class="qa">
+      <div class="q">Auth depth.</div>
+      <div class="a">We can cheaply detect credential-file presence (reusing the working-memory paths) but not true validity or expiry without a billable call or a PTY <code>/usage</code> probe. Is presence-based status (authenticated / unauthenticated / unknown, with "expired" inferred only from a recent run's auth error) good enough for v1, or do we need an explicit, costly "verify auth" button per CLI?</div>
+    </div>
+    <div class="qa">
+      <div class="q">Interactive login.</div>
+      <div class="a">Claude, Codex, and Gemini need a real terminal login the runner cannot drive headlessly. Is an instruction card plus "Re-check auth" acceptable, or do we want a PTY-backed interactive login pane inside the Admin area (a bigger build that reuses <code>PtySession</code>)?</div>
+    </div>
+    <div class="qa">
+      <div class="q">Install action policy.</div>
+      <div class="a">Auto-run <code>npm install -g ...</code> from the server (deterministic but heavy, needs npm and write permissions, can hit EACCES) versus a copy-paste command plus docs link only. The research favors the guided/manual fallback for determinism. Confirm we do <em>not</em> want silent server-side installs.</div>
+    </div>
+    <div class="qa">
+      <div class="q">Version floors.</div>
+      <div class="a">Do we have known minimum supported versions per CLI to gate <code>outdated</code>, or should <code>versionOk</code> stay <code>null</code> until a floor is set so we never false-flag a working install?</div>
+    </div>
+    <div class="qa">
+      <div class="q">Header chip placement.</div>
+      <div class="a">A brand-new global header element, or folded into the existing runner status pill cluster to avoid header crowding? Needs a design call against current header density.</div>
+    </div>
+    <div class="qa">
+      <div class="q">Per-machine vs per-project.</div>
+      <div class="a">CLI health is host-global, but runner auto-pause is per-project. Recommendation: a single global Setup surface with per-project pause-state shown as context, living under the existing Admin &gt; CLI tab (reuses the host).</div>
+    </div>
+    <div class="qa">
+      <div class="q">npm-shim auto-update race.</div>
+      <div class="a">The healer already fixes claude and gemini reactively at spawn. Should the Setup page also offer a "pin / disable auto-update" affordance to stop the re-break loop, or is that out of scope for an onboarding surface?</div>
+    </div>
+  </section>
+
+  <footer class="page">
+    Concept document &middot; Admin CLI Onboarding &middot; grounded in <code>backend/Features/Cli/</code> and <code>frontend/src/app/features/cli/</code>. All backend file references resolve under the active <code>agent-taskboard-dev</code> checkout. No new probing substrate; the surface aggregates and exposes existing detection, self-heal, auth-descriptor, and path-override machinery.
+  </footer>
+
+</div>
+</body>
+</html>

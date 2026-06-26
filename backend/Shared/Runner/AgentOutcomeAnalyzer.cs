@@ -38,7 +38,24 @@ public enum RunIssueKind
     WatchdogTimeout,
     MissingTerminalSentinel,
     HeuristicDone,
-    ClassifierUnknown,
+    /// <summary>
+    /// The agent CLI process died hard (a Windows <c>Process.Kill</c> hands
+    /// back <c>exitCode &lt; 0</c>) before it could reach a terminal sentinel,
+    /// and the run left no commits. This is an infra crash, not an agent
+    /// decision: the orchestrator must surface it for review/retry rather than
+    /// re-issuing from scratch. Replaces the old <c>ClassifierUnknown</c> for
+    /// the hard-process-death half of that bucket (drive-to-conclusion model).
+    /// </summary>
+    InfraCrash,
+    /// <summary>
+    /// The run failed with a real, substantial agent turn whose text the
+    /// deterministic contract could not map to a terminal verdict (no sentinel,
+    /// no commits, but not a hard process death either). The orchestrator can
+    /// draw no honest conclusion, so it stops and hands the task to the user
+    /// instead of accepting a meaningless marker. Replaces the old
+    /// <c>ClassifierUnknown</c> for the logical-failure half of that bucket.
+    /// </summary>
+    OrchestratorInconclusive,
     NoAgentOutput,
     /// <summary>
     /// The CLI process exited almost immediately with no agent turn. Unlike an
@@ -57,7 +74,7 @@ public enum RunIssueKind
     /// unclassifiable agent reply. The runner has already marked the
     /// session chain for Recovery, so the policy routes this to the
     /// rebuild-from-disk path instead of surfacing a terminal
-    /// <see cref="ClassifierUnknown"/> FAILURE.
+    /// <see cref="OrchestratorInconclusive"/> FAILURE.
     /// </summary>
     CliLaunchFailed,
     /// <summary>
@@ -144,7 +161,7 @@ public sealed record AgentOutcome(
 ///   (<c>[[TASK_DONE]]</c>, <c>[[TASK_BLOCKED:&lt;reason&gt;]]</c>,
 ///   <c>[[TASK_NEEDS_INPUT:&lt;reason&gt;]]</c>, <c>[[TASK_NOOP]]</c>).
 ///   These are authoritative. The agent contract is documented in
-///   <c>docs/agent-task-contract.md</c>.</item>
+///   <c>docs/contracts/agent-task.md</c>.</item>
 ///   <item>Empty fast exit: empty output buffer or no agent text plus a
 ///   sub-threshold duration. The CLI exited before an agent turn produced
 ///   reviewable output; this is a failed-start issue, not a no-op.</item>
@@ -355,7 +372,7 @@ public static class AgentOutcomeAnalyzer
         //    the frontend's classifier so the orchestrator and the UI agree
         //    on what "done" / "blocked" / "needs-input" mean today.
         var (heuristicKind, heuristicSummary) = HeuristicClassify(agentText);
-        var issue = ResolveIssueKind(heuristicKind, agentText.Length, failed);
+        var issue = ResolveIssueKind(heuristicKind, agentText.Length, failed, exitCode);
         return new AgentOutcome(
             Kind: heuristicKind,
             Summary: heuristicSummary,
@@ -380,7 +397,7 @@ public static class AgentOutcomeAnalyzer
     // (the continuous-decision scanner, post-run policy, supervisor parsing)
     // share one grammar. ADR-0002 anchors the deterministic-orchestration
     // philosophy on a single sentinel regex; this is the single source of truth
-    // referenced from AGENTS.md and docs/agent-task-contract.md.
+    // referenced from AGENTS.md and docs/contracts/agent-task.md.
     public static readonly Regex SentinelRegex = new(
         @"\[\[\s*TASK[\s_-]*(?<keyword>DONE|BLOCKED|NEEDS[\s_-]*INPUT|NOOP)\s*(?::\s*(?<reason>[^\]]*?))?\s*\]\]",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -487,18 +504,25 @@ public static class AgentOutcomeAnalyzer
         // misses for claude/other CLIs) has almost always done work. The safe,
         // CLI-agnostic default is to treat it as Done and let it flow to review
         // — where the now-non-optional commit step captures the work and a
-        // human/orchestrator has the final say — instead of spinning the
-        // classifier-unknown reissue loop that leaves the work uncommitted in
+        // human/orchestrator has the final say — instead of spinning an
+        // inconclusive reissue loop that leaves the work uncommitted in
         // the worktree. Only a short, contentless reply stays Unknown.
         if (agentText.Trim().Length >= 400)
             return (AgentOutcomeKind.Done, "Substantial reply without a parseable verdict; treating as done for review (heuristic).");
         return (AgentOutcomeKind.Unknown, "Agent text did not match any known shape.");
     }
 
-    private static RunIssueKind ResolveIssueKind(AgentOutcomeKind kind, int agentTextChars, bool failed)
+    private static RunIssueKind ResolveIssueKind(AgentOutcomeKind kind, int agentTextChars, bool failed, int? exitCode)
     {
         if (agentTextChars == 0) return failed ? RunIssueKind.NoAgentOutput : RunIssueKind.None;
-        if (failed) return RunIssueKind.ClassifierUnknown;
+        // A failed run with real agent text and no sentinel (sentinels return
+        // early in Analyze) splits two ways instead of the old blanket
+        // ClassifierUnknown: a hard process death (exitCode < 0, the Windows
+        // Process.Kill artifact) is an InfraCrash; anything else is an honest
+        // OrchestratorInconclusive logical failure. Both stop and surface for
+        // review; neither is ever silently accepted (drive-to-conclusion model).
+        if (failed)
+            return exitCode is < 0 ? RunIssueKind.InfraCrash : RunIssueKind.OrchestratorInconclusive;
         return kind switch
         {
             AgentOutcomeKind.Done    => RunIssueKind.MissingTerminalSentinel,
@@ -510,7 +534,7 @@ public static class AgentOutcomeAnalyzer
     /// <summary>
     /// Pull the diagnosis text out of the synthetic
     /// <c>[environment-blocker] &lt;diagnosis&gt;</c> system line written by
-    /// <c>CliExecutionServiceBase.CheckEnvironmentBlocker</c>. Returns null
+    /// <c>GenericCliExecutionService.CheckEnvironmentBlocker</c>. Returns null
     /// when the run did not trip the detector. The marker is the only
     /// signal the analyzer trusts here: the underlying needles (codex
     /// sandbox text, EPERM, etc.) can appear inside an agent's own prose

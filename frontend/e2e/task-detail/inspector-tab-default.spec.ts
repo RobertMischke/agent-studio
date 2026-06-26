@@ -47,7 +47,7 @@ test.describe('Detail inspector — default tab', () => {
       });
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' }
       );
     }
@@ -74,7 +74,7 @@ test.describe('Detail inspector — default tab', () => {
       await expect(activityTab).toHaveClass(/pane-tab--active/);
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' }
       );
     }
@@ -139,7 +139,7 @@ test.describe('Detail inspector — default tab', () => {
       });
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' }
       );
     }
@@ -192,7 +192,7 @@ test.describe('Detail inspector — default tab', () => {
       await expect(activityTab).not.toHaveClass(/pane-tab--active/);
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' }
       );
     }

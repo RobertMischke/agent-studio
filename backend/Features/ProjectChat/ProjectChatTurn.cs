@@ -29,12 +29,11 @@ public static class ProjectChatTurnAuthors
     public const string Supervisor = "supervisor";
     public const string Claude = "claude";
     public const string Codex = "codex";
-    public const string Copilot = "copilot";
     public const string Gemini = "gemini";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        User, Orchestrator, Agent, Supervisor, Claude, Codex, Copilot, Gemini
+        User, Orchestrator, Agent, Supervisor, Claude, Codex, Gemini
     };
 
     public static bool IsKnown(string? value) => value != null && All.Contains(value);

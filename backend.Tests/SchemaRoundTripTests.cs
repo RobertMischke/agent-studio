@@ -76,8 +76,8 @@ public class SchemaRoundTripTests
         var cliEnum = ReadStringArray(properties.GetProperty("cli"), "enum");
         Assert.Contains("claude", cliEnum);
         Assert.Contains("codex", cliEnum);
-        Assert.Contains("copilot", cliEnum);
         Assert.Contains("gemini", cliEnum);
+        Assert.DoesNotContain("copilot", cliEnum);   // Copilot driver removed — locked out of the schema
 
         var tokens = properties.GetProperty("tokens");
         var tokensRequired = ReadStringArray(tokens, "required");
@@ -328,11 +328,11 @@ public class SchemaRoundTripTests
                     SourceCoverage: 0.7,
                     Status: DriftFindingStatus.New,
                     Summary: "Two ADR assumptions are not reflected in the source layout.",
-                    EvidenceRefs: new[] { "docs/architecture-decisions.md", "backend/Services/Runner/" },
+                    EvidenceRefs: new[] { "docs/architecture/decisions/adr-archive.md", "backend/Services/Runner/" },
                     RecommendedActions: new[] { "Create architecture follow-up task" },
                     ScoreInputs: new DriftScoreInputs(
                         FindingsBySeverity: new DriftFindingSeverityCounts(Warn: 2),
-                        AffectedSurfaces: new[] { "docs/architecture-decisions.md", "backend/Services/Runner/" },
+                        AffectedSurfaces: new[] { "docs/architecture/decisions/adr-archive.md", "backend/Services/Runner/" },
                         RecurrenceCount: 1,
                         OldestFindingAgeDays: 14,
                         TrackedFindings: 0,
@@ -346,7 +346,7 @@ public class SchemaRoundTripTests
                             Status: DriftFindingStatus.New,
                             FirstSeenAt: new DateTime(2026, 4, 21, 0, 0, 0, DateTimeKind.Utc),
                             LastSeenAt: new DateTime(2026, 5, 5, 0, 0, 0, DateTimeKind.Utc),
-                            EvidenceRefs: new[] { "docs/architecture-decisions.md#adr-0017" }),
+                            EvidenceRefs: new[] { "docs/architecture/decisions/adr-archive.md#adr-0017" }),
                     }),
             },
             Summary: "Two ADR assumptions drifted; queue an architecture follow-up.",

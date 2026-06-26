@@ -99,6 +99,29 @@ export class DriftService {
     );
   }
 
+  /**
+   * Assemble the Software / Architecture Drift prompt without running an
+   * agent. The Wiki surface uses this as the document-scoped handoff text
+   * before the operator starts a CLI task.
+   */
+  getSoftwareArchitectureDriftPrompt(project: string): Observable<SoftwareArchitectureDriftPromptResponse> {
+    return this.http.get<SoftwareArchitectureDriftPromptResponse>(
+      `${this.baseUrl}/${encodeURIComponent(project)}/actions/software-architecture-drift/prompt`,
+    );
+  }
+
+  /**
+   * Record Software / Architecture Drift evidence. Empty `agentResponse`
+   * produces the prompt/evidence-only report; a later structured response can
+   * be posted through the same endpoint.
+   */
+  runSoftwareArchitectureDrift(project: string, agentResponse?: string | null): Observable<DriftReportDetailResponse> {
+    return this.http.post<DriftReportDetailResponse>(
+      `${this.baseUrl}/${encodeURIComponent(project)}/actions/software-architecture-drift`,
+      { agentResponse: agentResponse ?? null },
+    );
+  }
+
   setElementStatus(
     project: string,
     modelId: string,
@@ -170,4 +193,21 @@ export interface CodePatternRuleSummary {
   title: string;
   canonicalDescription: string;
   severity: string;
+}
+
+export interface SoftwareArchitectureDriftPromptResponse {
+  project: string;
+  capturedAt: string;
+  architectureModelFound: boolean;
+  architectureModelSourcePath: string | null;
+  architectureModelRejectionReason: string | null;
+  docs: string[];
+  sourceTree: string[];
+  moduleBoundaries: string[];
+  schemas: string[];
+  testDirs: string[];
+  recentTasks: string[];
+  recentDriftReports: string[];
+  recentAnalysisReports: string[];
+  prompt: string;
 }

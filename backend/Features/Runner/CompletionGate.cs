@@ -117,7 +117,7 @@ public static class CompletionGate
 
     // A non-actionable "the platform owns the commit/push" open item. In a
     // managed run the agent is contractually forbidden from committing or
-    // pushing (docs/commit-push-doctrine.md - the platform owns that boundary),
+    // pushing (docs/operations/git/commit-push-doctrine.md - the platform owns that boundary),
     // so an open item that merely defers the commit / push / merge of the
     // leftover working tree to the platform or managed run can NEVER be closed
     // by the agent. Treating it as unfinished work reissues the card forever on

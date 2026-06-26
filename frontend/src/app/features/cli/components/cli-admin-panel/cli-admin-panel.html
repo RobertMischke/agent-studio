@@ -22,6 +22,14 @@
     <div class="cli-admin__error" data-testid="cli-admin-error">{{ err }}</div>
   }
 
+  <section class="cli-admin__section" data-testid="cli-admin-models">
+    <header class="cli-admin__section-head">
+      <h3>CLI types &amp; models</h3>
+      <span class="cli-admin__hint">discovered catalog · default model &amp; thinking</span>
+    </header>
+    <app-cli-models-panel />
+  </section>
+
   <section class="cli-admin__section">
     <header class="cli-admin__section-head">
       <h3>Usage caps</h3>
@@ -104,12 +112,28 @@
       (openProjectSettings)="openProjectSettings.emit($event)" />
   </section>
 
+  <section class="cli-admin__section" data-testid="cli-admin-contracts">
+    <header class="cli-admin__section-head">
+      <h3>Completion contracts</h3>
+      <span class="cli-admin__hint">how each CLI signals turn completion</span>
+    </header>
+    <app-cli-contracts-panel />
+  </section>
+
   <section class="cli-admin__section" data-testid="cli-admin-sessions">
     <header class="cli-admin__section-head">
       <h3>CLI sessions</h3>
       <span class="cli-admin__hint">per-CLI per-project inventory</span>
     </header>
     <app-cli-sessions-panel (openJobDetail)="openJobDetail.emit($event)" />
+  </section>
+
+  <section class="cli-admin__section" data-testid="cli-admin-working-memory">
+    <header class="cli-admin__section-head">
+      <h3>Working memory</h3>
+      <span class="cli-admin__hint">per-CLI memory &amp; sessions · auth stays protected</span>
+    </header>
+    <app-cli-working-memory-panel />
   </section>
 </div>
   

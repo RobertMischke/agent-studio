@@ -72,7 +72,7 @@ public static class TaskReviewEvidenceEndpoints
 
             var prompt = BuildFollowupPrompt(jobId, info.Title, entry);
 
-            var req = new CreateJobRequest
+            var req = new CreateTaskRequest
             {
                 Title = title,
                 Agent = info.Agent,

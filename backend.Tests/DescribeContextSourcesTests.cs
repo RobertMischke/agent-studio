@@ -7,7 +7,7 @@ namespace AgentStudio.Tests;
 
 /// <summary>
 /// Explicit per-CLI evidence (ASS-1739 / T1a) that the adapter contract
-/// <see cref="CliExecutionServiceBase.DescribeContextSources"/> resolves the
+/// <see cref="GenericCliExecutionService.DescribeContextSources"/> resolves the
 /// convention-derived execution context for the CLIs that emit no init frame
 /// (Codex / Gemini), which inherit the base implementation verbatim. Claude's
 /// richer init-frame path is covered by <c>ClaudeInitContextParserTests</c>, and
@@ -98,25 +98,24 @@ public sealed class DescribeContextSourcesTests : IDisposable
     }
 
     /// <summary>
-    /// Minimal concrete <see cref="CliExecutionServiceBase"/> whose
-    /// <see cref="CliType"/> is parameterised, so the inherited base
+    /// Minimal concrete <see cref="GenericCliExecutionService"/> whose
+    /// <see cref="GenericCliExecutionService.CliType"/> is parameterised, so the engine's
     /// DescribeContextSources runs through the Codex / Gemini convention branch.
     /// Spawn hooks throw because this path never starts a process.
     /// </summary>
-    private sealed class StubCliService : CliExecutionServiceBase
+    private sealed class StubCliService : GenericCliExecutionService
     {
-        private readonly string _type;
+        public StubCliService(IConfiguration config, string type)
+            : base(BuildBehavior(type), NullLogger.Instance, config)
+        {
+        }
 
-        public StubCliService(IConfiguration config, string type) : base(NullLogger.Instance, config)
-            => _type = type;
-
-        public override string CliType => _type;
-        public override string GetCliPath() => _type;
-
-        protected override ProcessStartInfo BuildStartInfo(
-            string prompt, string workingDirectory, string? sessionName, bool resumeSession,
-            string? model, string? thinkingLevel, string? permissionMode)
-            => throw new NotSupportedException();
+        private static CliBehavior BuildBehavior(string type) => new()
+        {
+            CliType = type,
+            GetCliPath = _ => type,
+            BuildStartInfo = (_, _, _, _, _, _, _, _) => throw new NotSupportedException(),
+        };
 
         /// <summary>Seed the in-memory live-process map so the run is "tracked" for DescribeContextSources.</summary>
         public void Seed(string jobKey, Process proc, string cwd, string? model)

@@ -47,7 +47,7 @@ test.describe('Overview tab — tokens fallback + session row removed', () => {
       // Plant a sessionName + a lastUsage footer + a completed-state job.json
       // so we exercise the "agent ran, no orchestrator activity" path that
       // the original bug screenshot showed. The scanner may take a tick to
-      // see the new folder; waitForJob polls until /api/jobs/{id} resolves.
+      // see the new folder; waitForJob polls until /api/tasks/{id} resolves.
       const created = await waitForJob(job.id, watchPath, () => true, { timeoutMs: 15_000 });
       const jobJsonPath = join(created.folderPath, 'job.json');
       const raw = JSON.parse(await readFile(jobJsonPath, 'utf-8'));
@@ -60,7 +60,7 @@ test.describe('Overview tab — tokens fallback + session row removed', () => {
       };
       await writeFile(jobJsonPath, JSON.stringify(raw, null, 2));
 
-      // Wait until /api/jobs/{id} reflects the new lastUsage before the
+      // Wait until /api/tasks/{id} reflects the new lastUsage before the
       // UI loads — the scanner cache invalidates on the writeFile, and
       // until it repopulates the GET returns the pre-write snapshot.
       await waitForJob(
@@ -109,7 +109,7 @@ test.describe('Overview tab — tokens fallback + session row removed', () => {
       });
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' },
       );
     }
@@ -195,7 +195,7 @@ test.describe('Overview tab — tokens fallback + session row removed', () => {
       for (let i = 0; i < 10; i++) {
         try {
           summary = await api<Summary>(
-            `/api/jobs/${encodeURIComponent(job.id)}/agent-work-summary?watchPath=${encodeURIComponent(watchPath)}`,
+            `/api/tasks/${encodeURIComponent(job.id)}/agent-work-summary?watchPath=${encodeURIComponent(watchPath)}`,
           );
           break;
         } catch {
@@ -234,7 +234,7 @@ test.describe('Overview tab — tokens fallback + session row removed', () => {
       });
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' },
       );
     }
@@ -272,7 +272,7 @@ test.describe('Overview tab — tokens fallback + session row removed', () => {
       await expect(page.getByTestId('overview-tokens-empty')).toHaveCount(0);
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' },
       );
     }

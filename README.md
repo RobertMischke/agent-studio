@@ -2,11 +2,22 @@
 
 **Stop being the bottleneck.** A task workbench that feeds your coding-agent CLIs a continuous queue of work, using the subscriptions and execution environments you already trust.
 
-> **Naming note:** The product is **`agent-orchestrator`** (kebab-case, identical to the domain `agent-orchestrator.dev` — developer-tool convention like `fly.io`, `vercel`, `stripe`). The repository slug and several runtime strings still say "agent-orchestrator" as a follow-up cleanup; see [docs/architecture-decisions.md](docs/architecture-decisions.md) for the load-bearing rename note.
+![The board: every watched project and every task state in one place](./docs/assets/images/board-overview.png)
 
-![Board overview](docs/images/board-overview.png)
+*One board across every watched project. Tasks flow `ready → in progress → review`; the runner picks them up automatically, so your role shrinks to the part that needs you — review.*
 
 > .NET 10 backend + Angular 21 PWA. Task state lives in `.orchestrator/jobs/` folders on disk; the Task Access API fronts the filesystem so the runner, supervisor, frontend, remote clients, and scripts read and mutate through one boundary. Runs tasks through Claude Code, Codex, GitHub Copilot, or Gemini. Coding work is sequential by default and can opt into bounded, orchestrator-gated parallelism via `maxParallelism`.
+
+## What it does
+
+- **A queue, not a babysitting loop.** Tasks land in `2-ready`; the runner walks them `3-progress → 4-review` automatically, so your time goes to review — the one part that actually needs you.
+- **Your subscriptions, not API keys.** It drives *your* Claude Code, Codex, Copilot, and Gemini CLIs through the accounts you already pay for — no model API keys, no second billing layer.
+- **An assisted-coding harness, not a black box.** Every run has a pre/core/post shape: scope + context + branch setup → the provider CLI runs → output, diffs, a parsed protocol, and a review gate.
+- **Deterministic orchestration, not prompt-trust.** The orchestrator parses hard completion signals and re-issues the work itself when the agent's report contradicts the evidence — no edits, near-zero duration, or a post-recovery no-op.
+- **Evidence by default.** Each task keeps a parsed `status.md` protocol, a live git diff, a run timeline, token usage, and screenshots — so review is fast and security work is repeatable.
+- **One board, many projects.** It watches several repositories in parallel; coding is serial by default, with opt-in bounded parallelism isolated in git worktrees on short-lived `task/<id>` branches.
+
+> **Naming note:** The product is **`agent-orchestrator`** (kebab-case, identical to the domain `agent-orchestrator.dev` — developer-tool convention like `fly.io`, `vercel`, `stripe`). The repository slug and several runtime strings still say "agent-taskboard" as a follow-up cleanup; see [docs/architecture/decisions/adr-archive.md](./docs/architecture/decisions/adr-archive.md) for the load-bearing rename note.
 
 ---
 
@@ -42,7 +53,7 @@ The bottleneck isn't the model. It's the human babysitting it: paste a prompt, w
    utilization: ~10–20% of the hour          │
                                              ▼
                                           next task
-                                          
+
                                           utilization: ~95% of the hour
 ```
 
@@ -52,11 +63,11 @@ The board exists to make the queue the only thing you maintain. Tasks land in `2
 
 ## Principles
 
-**A layer on top of agents and software.** The product surfaces what the agents did and what changed in your software in one place. The top level is condensed (run summaries, commit counts, status badges); drill-down is always one click away (full activity log, diffs, tool calls). The full UX contract is in [docs/design-principles.md](docs/design-principles.md) and is the bar every protocol-layer change has to clear.
+**A layer on top of agents and software.** The product surfaces what the agents did and what changed in your software in one place. The top level is condensed (run summaries, commit counts, status badges); drill-down is always one click away (full activity log, diffs, tool calls). The full UX contract is in [docs/product/design-principles.md](./docs/product/design-principles.md) and is the bar every protocol-layer change has to clear.
 
-**Make the patterns visible — and explain the why next to the lever.** A major part of this product is *exposing* the patterns and best practices the platform has accumulated, instead of hiding them in code or a wiki nobody opens. Every controllable behavior — agent permissions, sandbox modes, auto-commit/push, review thresholds, drift rules, skill catalog — should show up in Project Settings and the agent configuration surfaces *with* an inline explanation: what it does, why we picked this default, what the risk is, what the alternative would cost. The user should never have to leave the screen to understand a setting. Standalone docs in `docs/` remain the source of truth; the UI embeds the relevant section in-line at the spot the decision is made. See [docs/design-principles.md §Inline meta](docs/design-principles.md#inline-meta-explain-decisions-next-to-the-lever).
+**Make the patterns visible — and explain the why next to the lever.** A major part of this product is *exposing* the patterns and best practices the platform has accumulated, instead of hiding them in code or a wiki nobody opens. Every controllable behavior — agent permissions, sandbox modes, auto-commit/push, review thresholds, drift rules, skill catalog — should show up in Project Settings and the agent configuration surfaces *with* an inline explanation: what it does, why we picked this default, what the risk is, what the alternative would cost. The user should never have to leave the screen to understand a setting. Standalone docs in `docs/` remain the source of truth; the UI embeds the relevant section in-line at the spot the decision is made. See [docs/product/design-principles.md §Inline meta](./docs/product/design-principles.md#inline-meta-explain-decisions-next-to-the-lever).
 
-**A living orchestrator, not a hidden daemon.** The orchestrator should be someone the user can talk to, not just code that moves folders. Each project has a canonical orchestrator session with inspectable memory: what it was booted with, which tasks and decisions it has seen, what the project does, what the roadmap says, and what should happen next. The long-term concept is documented in [docs/orchestrator-chat.md](docs/orchestrator-chat.md).
+**A living orchestrator, not a hidden daemon.** The orchestrator should be someone the user can talk to, not just code that moves folders. Each project has a canonical orchestrator session with inspectable memory: what it was booted with, which tasks and decisions it has seen, what the project does, what the roadmap says, and what should happen next. The long-term concept is documented in [docs/product/orchestrator-chat.md](./docs/product/orchestrator-chat.md).
 
 **Sequential by default, bounded parallelism when opted in.** A project starts with one coding task at a time (`maxParallelism = 1`). When a project deliberately opts in, the orchestrator may admit several safe tasks at once, each isolated in its own git worktree on a short-lived `task/<id>` branch. Parallelism is capped, explained, and rejected for exclusive or cross-cutting work.
 
@@ -92,13 +103,15 @@ What the application currently provides.
 
 ### Board: every watched project, every state
 
-![Board overview](docs/images/board-overview.png)
+![Board overview](./docs/assets/images/board-overview.png)
 
 The lanes (`0-backlog`, `1-preparation`, `1a-orchestrator-prep`, `2-ready`, `3-progress`, `4-auto-review` / `5-human-review`, `6-completed`, `7-archive`) are driven directly off the filesystem state. Each card carries up to thirteen chip types: task type, state, phase, execution, pending intent, auto-loop, review verdict, agent, model, token spend (with hover popover), git pill, last commit, last activity. The header strip shows free-text search, faceted filters across owner / project / type / tag with URL deep-links, lane collapse, and per-container focus mode. Drag-and-drop is optimistic with a snapshot-revert path.
 
 ### Detail panel: prompt + protocol + live git + triage
 
-![Detail view, task + protocol panes](docs/images/detail-protocol.png)
+![Task detail: the pre/core/post pipeline on the left, the parsed run protocol on the right](./docs/assets/images/detail-protocol.png)
+
+*The task detail. Left: the pre/core/post pipeline (loop check → agent execution → orchestrator review with per-aspect gates → merge). Right: the parsed `status.md` protocol with what the run did and what's still open.*
 
 Per-task side panel that hosts ten sub-panes you can show, hide, and maximize: prompt editor (rich markdown), protocol view (parsed `status.md` + activity log + telemetry chips), live git pane with `diff2html` rendering, hygiene strip (committed / clean / synced), triage panel with `j` / `k` peer navigation and lane-decision actions (move / move-to-top / delete / start), command deck for the chat-compose strip, run timeline (one card per CLI invocation between user inputs), screenshot strip from `results/`, log overlay for the raw CLI buffer, and a verbose-debug overlay for read-only deep inspection.
 
@@ -142,7 +155,9 @@ Out of scope on purpose: API-key billing, mandatory sandboxes, general workflow 
 
 ### Review handoff: what makes a task review-ready
 
-![Review protocol in protocol view](docs/images/detail-quality-gate.png)
+![A review-ready task: the work merged task branch → develop → main, with the per-file diff and evidence](./docs/assets/images/detail-git-focus.png)
+
+*A review-ready task. The git pane shows the work merged `task/… → develop → main` with the full per-file diff (added/modified, line counts) — the concrete change a reviewer signs off on, next to the run protocol and evidence.*
 
 When a CLI run completes successfully, the application captures the run log, moves the task to `4-review`, writes a concise English protocol into `status.md`, and preserves review evidence such as screenshots under the task's `results/` folder.
 
@@ -156,7 +171,7 @@ A second product principle, separate from the queue model: **the orchestrator is
 
 This matters because prompt-based steering ("treat this as a continuation", "don't say done unless you actually did the work") fails silently. An agent that no-ops a follow-up after a session loss and replies "task done" used to slip through. The fix is structural:
 
-1. **Hard signals from the agent.** Every prompt template asks the agent to end its run with one of `[[TASK_DONE]]`, `[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, or `[[TASK_NOOP]]`. These tokens are parsed from the output buffer and treated as authoritative. The full agent contract lives in [docs/agent-task-contract.md](docs/agent-task-contract.md).
+1. **Hard signals from the agent.** Every prompt template asks the agent to end its run with one of `[[TASK_DONE]]`, `[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, or `[[TASK_NOOP]]`. These tokens are parsed from the output buffer and treated as authoritative. The full agent contract lives in [docs/contracts/agent-task.md](./docs/contracts/agent-task.md).
 2. **Deterministic post-run policy.** When the agent's report contradicts structural evidence (no edits, near-zero duration, after a recovery with a user follow-up), the orchestrator re-issues the work itself with a sharper framing instead of accepting the inconsistency. The decision tree is in `backend/Services/Runner/RunOutcomePolicy.cs` and is unit-tested as a matrix.
 3. **An orchestrator voice in the chat.** The orchestrator is a first-class participant in the activity log (alongside `You` and the agent). When it re-issues a follow-up, accepts a heuristic verdict, or gives up after a retry, it says so in the chat so the user can see what the system decided and why. Heuristic fallback always surfaces a warning, so the user notices when the deterministic contract did not match.
 
@@ -164,7 +179,7 @@ The next chat surface extends this idea into a multi-actor conversation: user, t
 
 Prompt wording remains the easiest way to steer behavior, but it is not the load-bearing layer anymore. The product treats orchestrator-to-CLI communication as a core capability.
 
-The next layer of this thinking is *supervision*: a meta-loop that watches the orchestrator's own job-pickup loop in real time, asks "is the agent on track, is anything stuck, should we intervene?", and writes its own continuous protocol. Implementation lives under [backend/Services/Supervisor/](backend/Services/Supervisor/) with a dedicated UI panel on each project page; auto-intervention stays opt-in. The full conceptual analysis (loop-to-loop control, communication contract, traceability) is in [docs/research/orchestrator-meta-loop-analysis-2026-05-04.md](docs/research/orchestrator-meta-loop-analysis-2026-05-04.md); the load-bearing decision is recorded as [ADR-0017](docs/architecture-decisions.md). A lower-frequency meta-cycle above the runner can pause at batch boundaries, inspect the system, write a structured report, then resume or queue follow-up work. Its current spec is [docs/mockups/orchestrator-meta-cycle/](docs/mockups/orchestrator-meta-cycle/) and the decision is [ADR-0022](docs/architecture-decisions.md). A stand-alone external review monitor (Layer 3) for stable lives at [scripts/supervisor/](scripts/supervisor/).
+The next layer of this thinking is *supervision*: a meta-loop that watches the orchestrator's own job-pickup loop in real time, asks "is the agent on track, is anything stuck, should we intervene?", and writes its own continuous protocol. Implementation lives under [backend/Services/Supervisor/](backend/Services/Supervisor/) with a dedicated UI panel on each project page; auto-intervention stays opt-in. The full conceptual analysis (loop-to-loop control, communication contract, traceability) is in [docs/research/orchestrator-meta-loop-analysis-2026-05-04.md](docs/research/orchestrator-meta-loop-analysis-2026-05-04.md); the load-bearing decision is recorded as [ADR-0017](./docs/architecture/decisions/adr-archive.md). A lower-frequency meta-cycle above the runner can pause at batch boundaries, inspect the system, write a structured report, then resume or queue follow-up work. Its current spec is [docs/mockups/orchestrator-meta-cycle/](docs/mockups/orchestrator-meta-cycle/) and the decision is [ADR-0022](./docs/architecture/decisions/adr-archive.md). A stand-alone external review monitor (Layer 3) for stable lives at [scripts/supervisor/](scripts/supervisor/).
 
 ---
 
@@ -197,7 +212,7 @@ The skill model has two layers:
 
 During a managed taskboard run, the orchestrator can attach selected skills to the prompt stack explicitly. During direct CLI work, the project's README acts as the common lookup point. Native CLI skill exports may be added later, but the Markdown lookup contract is the agent-neutral base.
 
-The full concept lives in [docs/skills-architecture.md](docs/skills-architecture.md). The load-bearing decision is archived in [docs/architecture-decisions.md](docs/architecture-decisions.md).
+The full concept lives in [docs/product/skills-architecture.md](./docs/product/skills-architecture.md). The load-bearing decision is archived in [docs/architecture/decisions/adr-archive.md](./docs/architecture/decisions/adr-archive.md).
 
 ---
 
@@ -208,8 +223,8 @@ All task operations flow through the API. Direct filesystem mutation is reserved
 The system is layered:
 
 1. **Filesystem on disk.** The watched project's `.orchestrator/jobs/<lane>/<job>/` folders hold `job.json`, `prompt.md`, `status.md`, `logs/`, and `results/`. Disk stays the source of truth on cold start.
-2. **Task Access API.** A typed software layer in the backend owns reads, lists, mutations, and lane transitions. It boots once, indexes every watched project's lane folders, watches the filesystem for external changes, serves cheap reads off the index, and accepts narrowly typed mutations. See [ADR-0024](docs/architecture-decisions.md) for the layer design and the queued `task-access-api-layer-extraction` work for the migration phasing.
-3. **Services and clients consume the API.** The runner, the supervisor, the frontend PWA, the meta-cycle, and external scripts go through the API. They do not touch the lane folders directly. The same boundary mirrors mutations onto the [agent message bus](docs/agent-message-bus.md) so every cross-cutting structured signal lands in one observable timeline.
+2. **Task Access API.** A typed software layer in the backend owns reads, lists, mutations, and lane transitions. It boots once, indexes every watched project's lane folders, watches the filesystem for external changes, serves cheap reads off the index, and accepts narrowly typed mutations. See [ADR-0024](./docs/architecture/decisions/adr-archive.md) for the layer design and the queued `task-access-api-layer-extraction` work for the migration phasing.
+3. **Services and clients consume the API.** The runner, the supervisor, the frontend PWA, the meta-cycle, and external scripts go through the API. They do not touch the lane folders directly. The same boundary mirrors mutations onto the [agent message bus](./docs/architecture/bus/agent-message-bus.md) so every cross-cutting structured signal lands in one observable timeline.
 
 ```
 ┌─────────────────────────────┐     ┌──────────────────────────────────┐
@@ -247,19 +262,19 @@ Canonical endpoints:
 
 **Task lifecycle**
 
-- `POST /api/jobs` - create a task. `CreateJobRequest` accepts `targetState` to land directly in `1-preparation` or `2-ready`.
-- `POST /api/jobs/{id}/move?watchPath=...` - move a task to another lane.
-- `PUT /api/jobs/{id}/state` - drive a task through a typed state transition.
-- `POST /api/jobs/reorder` - reorder tasks within a lane.
-- `DELETE /api/jobs/{id}?watchPath=...` - delete a task.
+- `POST /api/tasks` - create a task. `CreateTaskRequest` accepts `targetState` to land directly in `1-preparation` or `2-ready`.
+- `POST /api/tasks/{id}/move?watchPath=...` - move a task to another lane.
+- `PUT /api/tasks/{id}/state` - drive a task through a typed state transition.
+- `POST /api/tasks/reorder` - reorder tasks within a lane.
+- `DELETE /api/tasks/{id}?watchPath=...` - delete a task.
 - `DELETE /api/tasks/orphan-folder` - delete a scanner-invisible terminal-lane residue folder with body `{"watchPath":"...","lane":"7-archive","folder":"..."}`. It refuses non-terminal lanes and folders that contain `job.json`, and logs `task-orphan-folder-deleted` / `task-orphan-folder-delete-failed`.
-- `GET /api/jobs`, `GET /api/jobs/grouped`, `GET /api/jobs/{id}` - list and read.
+- `GET /api/tasks`, `GET /api/tasks/grouped`, `GET /api/tasks/{id}` - list and read.
 
 **Task runner and content**
 
-- `POST /api/jobs/{id}/start`, `POST /api/jobs/{id}/stop`, `POST /api/jobs/{id}/continue` - process lifecycle.
-- `PUT /api/jobs/{id}/title`, `PUT /api/jobs/{id}/model`, `PUT /api/jobs/{id}/cli-type` - typed field updates.
-- Git, attachments, run history, and per-run diff endpoints under the same `/api/jobs/{id}` group.
+- `POST /api/tasks/{id}/start`, `POST /api/tasks/{id}/stop`, `POST /api/tasks/{id}/continue` - process lifecycle.
+- `PUT /api/tasks/{id}/title`, `PUT /api/tasks/{id}/model`, `PUT /api/tasks/{id}/cli-type` - typed field updates.
+- Git, attachments, run history, and per-run diff endpoints under the same `/api/tasks/{id}` group.
 
 **Clients**
 
@@ -272,7 +287,7 @@ Canonical endpoints:
 - `GET /api/supervisor/{project}/meta-cycle` - meta-cycle status and recent reports.
 - `GET /api/supervisor/{project}/observation`, `GET /api/supervisor/{project}/recent-events` - advisories, interventions, and recent activity for the project.
 
-The wire shape for find / mutate is fixed in [`docs/schemas/task-find-result.schema.json`](docs/schemas/task-find-result.schema.json) and [`docs/schemas/task-mutation-request.schema.json`](docs/schemas/task-mutation-request.schema.json). The architectural decision is recorded in [ADR-0024](docs/architecture-decisions.md); the migration of the remaining direct-filesystem call sites is tracked under the queued task `task-access-api-layer-extraction`. Mutations are mirrored onto the [agent message bus](docs/agent-message-bus.md) as events.
+The wire shape for find / mutate is fixed in [`docs/schemas/task-find-result.schema.json`](docs/schemas/task-find-result.schema.json) and [`docs/schemas/task-mutation-request.schema.json`](docs/schemas/task-mutation-request.schema.json). The architectural decision is recorded in [ADR-0024](./docs/architecture/decisions/adr-archive.md); the migration of the remaining direct-filesystem call sites is tracked under the queued task `task-access-api-layer-extraction`. Mutations are mirrored onto the [agent message bus](./docs/architecture/bus/agent-message-bus.md) as events.
 
 ---
 
@@ -280,7 +295,7 @@ The wire shape for find / mutate is fixed in [`docs/schemas/task-find-result.sch
 
 Tell your favorite coding agent to clone the repository and to get it done. All necessary information needed to start the application is inside [AGENTS.md](AGENTS.md), so don't worry. Let the coding agent do the work.
 
-If you want to install and configure manually, the technical walkthrough lives in [docs/getting-started.md](docs/getting-started.md).
+If you want to install and configure manually, the technical walkthrough lives in [docs/operations/setup/getting-started.md](./docs/operations/setup/getting-started.md).
 
 ---
 
@@ -294,9 +309,9 @@ If you want to install and configure manually, the technical walkthrough lives i
 
 The four most-asked-for individual documents (the index covers the full set):
 
-- [docs/supported-clis.md](docs/supported-clis.md) — CLI integration contract
-- [docs/filesystem-contract.md](docs/filesystem-contract.md) — task folder contract
-- [docs/agent-task-contract.md](docs/agent-task-contract.md) — application and agent ownership boundary
-- [docs/architecture-decisions.md](docs/architecture-decisions.md) — ADR archive with the load-bearing decisions
-- [docs/orchestrator-chat.md](docs/orchestrator-chat.md) — persistent orchestrator chat, memory, scope, and control surface
-- [docs/orchestrator-chat-redesign-handoff.md](docs/orchestrator-chat-redesign-handoff.md) — conversation-first chat redesign handoff
+- [docs/cli/supported-clis.md](./docs/cli/supported-clis.md) — CLI integration contract
+- [docs/contracts/filesystem.md](./docs/contracts/filesystem.md) — task folder contract
+- [docs/contracts/agent-task.md](./docs/contracts/agent-task.md) — application and agent ownership boundary
+- [docs/architecture/decisions/adr-archive.md](./docs/architecture/decisions/adr-archive.md) — ADR archive with the load-bearing decisions
+- [docs/product/orchestrator-chat.md](./docs/product/orchestrator-chat.md) — persistent orchestrator chat, memory, scope, and control surface
+- [docs/product/orchestrator-chat-redesign-handoff.md](./docs/product/orchestrator-chat-redesign-handoff.md) — conversation-first chat redesign handoff

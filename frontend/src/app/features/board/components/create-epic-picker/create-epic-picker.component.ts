@@ -7,7 +7,7 @@ import type { EpicRollup } from '../../../../models/task.model';
  * Assignment way 1 in the Create dialog: when creating a `kind=task`, an
  * optional "Parent epic" dropdown lets the user attach the new card to an
  * existing epic of the same project. The chosen id flows up via
- * `parentEpicId` and the dialog sends it as `CreateJobRequest.epicId`.
+ * `parentEpicId` and the dialog sends it as `CreateTaskRequest.epicId`.
  *
  * Extracted into its own component so the create-task-dialog stays inside
  * its size budget. Epics are fetched once (GET /api/epics returns every

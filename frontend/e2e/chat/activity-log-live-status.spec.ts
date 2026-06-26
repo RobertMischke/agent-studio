@@ -82,21 +82,21 @@ async function pickAnyJob(): Promise<{ id: string; watchPath: string } | null> {
 async function installRunningJobMocks(page: Page, target: { id: string; watchPath: string }, output: OutLine[]): Promise<void> {
   const detailBody = JSON.stringify(buildRunningJobDetail(target.id, target.watchPath));
 
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: detailBody });
   });
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/output?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/output?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(output) });
   });
   // Stub run timeline + session events so the activity tab does not throw
   // on missing endpoints under the mock.
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/runs?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/runs?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) });
   });
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/session-events?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/session-events?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [], sessionChain: [] }) });
   });
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/claude-session?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/claude-session?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(null) });
   });
 }
@@ -190,19 +190,19 @@ test.describe('Activity log - live status indicator', () => {
     detail.info.execution!.exitCode = 0;
     detail.info.execution!.durationSeconds = 12;
 
-    await page.route(`**/api/jobs/${encodeURIComponent(target.id)}?**`, async (route) => {
+    await page.route(`**/api/tasks/${encodeURIComponent(target.id)}?**`, async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) });
     });
-    await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/output?**`, async (route) => {
+    await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/output?**`, async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(buildOutputBuffer()) });
     });
-    await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/runs?**`, async (route) => {
+    await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/runs?**`, async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) });
     });
-    await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/session-events?**`, async (route) => {
+    await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/session-events?**`, async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [], sessionChain: [] }) });
     });
-    await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/claude-session?**`, async (route) => {
+    await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/claude-session?**`, async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(null) });
     });
 

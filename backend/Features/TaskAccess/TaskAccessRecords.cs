@@ -44,7 +44,7 @@ public record TaskMutationRequest
     /// layer can mint a new job folder without a bespoke method. Ignored
     /// for other kinds.
     /// </summary>
-    public CreateJobRequest? CreateRequest { get; init; }
+    public CreateTaskRequest? CreateRequest { get; init; }
 }
 
 public enum TaskMutationKind

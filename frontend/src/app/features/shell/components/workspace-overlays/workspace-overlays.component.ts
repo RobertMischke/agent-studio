@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, output } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, output } from '@angular/core';
 import { WorkspaceOverlaysService } from '../../state/workspace-overlays.service';
 import type { WorkspaceSettingsSection } from '../../state/workspace-overlays.service';
 import { WorkspaceTokenTimelineComponent } from '../../../tokens';
@@ -39,13 +40,15 @@ interface SettingsRailItem {
 @Component({
   selector: 'app-workspace-overlays',
   standalone: true,
-  imports: [WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceSummaryComponent, CliAdminPanelComponent, PromptAdminPanelComponent, TooltipDirective, OverlayPortalDirective],
+  imports: [NgTemplateOutlet, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceSummaryComponent, CliAdminPanelComponent, PromptAdminPanelComponent, TooltipDirective, OverlayPortalDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workspace-overlays.component.html',
   styleUrl: './workspace-overlays.component.scss',
 })
 export class WorkspaceOverlaysComponent {
   readonly overlays = inject(WorkspaceOverlaysService);
+  /** Render inside the Studio editor tab instead of as a modal dialog. */
+  readonly inline = input(false);
   readonly openTask = output<TaskScreenshot>();
   /** Project name whose Settings rail the shell should open (bubbled up from
    *  the usage-caps panel's per-project usage rows). Navigation is shell-
@@ -80,6 +83,11 @@ export class WorkspaceOverlaysComponent {
     // backdrop ordering behave like the other studio modals.
     effect(() => {
       const open = this.overlays.settingsOpen();
+      if (this.inline()) {
+        this.modalDisposer?.();
+        this.modalDisposer = null;
+        return;
+      }
       if (open && !this.modalDisposer) {
         this.modalDisposer = this.modalStack.push('workspace-settings', () => this.overlays.close());
       } else if (!open && this.modalDisposer) {

@@ -95,6 +95,11 @@ describe('ProjectTokenUsagePanelComponent (pipeline cost)', () => {
           ],
         },
       ],
+      steps: [
+        { stepId: 'core-agent-run', kind: 'core', totalTokens: 300_000, totalCostUsd: 0.75, anyModelUnknown: false },
+        { stepId: 'aspect-code-quality', kind: 'aspect', totalTokens: 80_000, totalCostUsd: 0.08, anyModelUnknown: false },
+        { stepId: 'post-drift-adr-code', kind: 'drift', totalTokens: 20_000, totalCostUsd: 0.04, anyModelUnknown: false },
+      ],
       totalTokens: 400_000,
       totalCostUsd: 0.87,
       anyModelUnknown: false,

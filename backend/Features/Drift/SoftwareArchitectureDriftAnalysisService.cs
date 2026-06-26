@@ -16,7 +16,7 @@ namespace AgentStudio.Drift;
 /// prompt -> parse -> report. Adds a small architecture-model frontmatter
 /// reader so the action is the first in-process consumer of
 /// <c>docs/schemas/architecture-model.schema.json</c> (per
-/// <c>docs/architecture-model.md</c> Section 8 "Implementation status and
+/// <c>docs/architecture/model.md</c> Section 8 "Implementation status and
 /// parser ownership"). The model file lives with project evidence; the
 /// reader looks under the watched project's
 /// <c>architecture/&lt;modelId&gt;.md</c> first, then under the workspace's
@@ -40,7 +40,7 @@ public sealed class SoftwareArchitectureDriftAnalysisService
     /// <summary>
     /// Hard ceiling on element count. Mirrors the schema's
     /// <c>maxItems: 10</c> and the prose contract in
-    /// <c>docs/architecture-model.md</c>. Models that exceed this are
+    /// <c>docs/architecture/model.md</c>. Models that exceed this are
     /// rejected and surface as Critical drift findings.
     /// </summary>
     public const int MaxArchitectureElements = 10;
@@ -638,11 +638,11 @@ public sealed class SoftwareArchitectureDriftAnalysisService
     {
         var summary = lookup.RejectionReason is { Length: > 0 } rj
             ? $"Architecture model rejected: {rj}. Marble surface will be empty until a valid model is committed under architecture/<modelId>.md."
-            : "Architecture model not yet defined for this project. Add architecture/<modelId>.md per docs/architecture-model.md so the marble surface can score elements.";
+            : "Architecture model not yet defined for this project. Add architecture/<modelId>.md per docs/architecture/model.md so the marble surface can score elements.";
 
         var refs = new List<string>();
         foreach (var p in lookup.AttemptedPaths) refs.Add(p);
-        if (refs.Count == 0) refs.Add("docs/architecture-model.md");
+        if (refs.Count == 0) refs.Add("docs/architecture/model.md");
 
         return new DriftDimension(
             Type: DriftDimensionType.Architecture,
@@ -655,7 +655,7 @@ public sealed class SoftwareArchitectureDriftAnalysisService
             EvidenceRefs: refs,
             RecommendedActions: new[]
             {
-                "Author an architecture/<modelId>.md per docs/architecture-model.md.",
+                "Author an architecture/<modelId>.md per docs/architecture/model.md.",
                 "Re-run Software / Architecture Drift after committing the model.",
             });
     }
@@ -667,15 +667,15 @@ public sealed class SoftwareArchitectureDriftAnalysisService
     private static IReadOnlyList<DriftRef> BuildDocList(string repoRoot)
     {
         var docs = new List<DriftRef>();
-        AddIfExists(docs, repoRoot, "docs/architecture-model.md", "Architecture model contract");
-        AddIfExists(docs, repoRoot, "docs/architecture-decisions.md", "Architecture decisions (ADR archive)");
-        AddIfExists(docs, repoRoot, "docs/design-principles.md", "Design principles");
+        AddIfExists(docs, repoRoot, "docs/architecture/model.md", "Architecture model contract");
+        AddIfExists(docs, repoRoot, "docs/architecture/decisions/adr-archive.md", "Architecture decisions (ADR archive)");
+        AddIfExists(docs, repoRoot, "docs/product/design-principles.md", "Design principles");
         AddIfExists(docs, repoRoot, "ROADMAP.md", "ROADMAP");
         AddIfExists(docs, repoRoot, "AGENTS.md", "AGENTS");
-        AddIfExists(docs, repoRoot, "docs/agent-task-contract.md", "Agent task contract");
-        AddIfExists(docs, repoRoot, "docs/protocol-style.md", "Protocol & image style");
-        AddIfExists(docs, repoRoot, "docs/filesystem-contract.md", "Filesystem contract");
-        AddIfExists(docs, repoRoot, "docs/drift-reports.md", "Drift reports contract");
+        AddIfExists(docs, repoRoot, "docs/contracts/agent-task.md", "Agent task contract");
+        AddIfExists(docs, repoRoot, "docs/contracts/protocol-style.md", "Protocol & image style");
+        AddIfExists(docs, repoRoot, "docs/contracts/filesystem.md", "Filesystem contract");
+        AddIfExists(docs, repoRoot, "docs/reports/drift-reports.md", "Drift reports contract");
         return docs;
     }
 

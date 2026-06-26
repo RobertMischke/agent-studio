@@ -1,179 +1,192 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { api } from '../helpers/api';
 
-/**
- * Project-level Steering Docs surface. Verifies the inventory list, the
- * human summary, the warnings strip, the raw-file drilldown, and the
- * action button row all render against the real backend, and captures
- * screenshots so the surface is reviewable from the report.
- */
+interface WatchPath { name: string; path: string; rootPath?: string }
 
-interface WatchPath { name: string; path: string }
-
-// Outside outputDir so Playwright doesn't wipe these between runs.
 const SCREENSHOTS = path.resolve(__dirname, '..', '..', 'playwright-screenshots', 'project-steering-docs');
 fs.mkdirSync(SCREENSHOTS, { recursive: true });
 
-test.describe('Project detail - Steering Docs section', () => {
+async function openSteeringRail(page: Page, projectName: string): Promise<void> {
+  await page.goto('/');
+  const projectRow = page.getByTestId(`studio-explorer-project-${projectName}`);
+  await expect(projectRow).toBeVisible({ timeout: 10_000 });
+
+  const hubRow = page.getByTestId(`studio-explorer-project-hub-${projectName}`);
+  if (!(await hubRow.isVisible().catch(() => false))) {
+    await projectRow.click();
+  }
+  await expect(hubRow).toBeVisible({ timeout: 10_000 });
+  await hubRow.click();
+
+  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+  const rail = page.getByTestId('project-shell-rail-steering');
+  if (!(await rail.isVisible().catch(() => false))) {
+    await page.getByTestId('project-shell-group-context').click();
+  }
+  await expect(rail).toBeVisible();
+  await rail.click();
+  await expect(rail).toHaveAttribute('aria-current', 'page');
+}
+
+async function mockSteeringApi(page: Page, projectName: string, watchPath: string): Promise<void> {
+  await page.route('**/api/watch-paths', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{ name: projectName, path: watchPath, rootPath: watchPath }]),
+  }));
+
+  const overview = {
+    projectName,
+    baseDir: 'C:/Projects/demo',
+    lastUpdated: '2026-06-23T10:00:00Z',
+    sources: [
+      {
+        id: 'agents-md',
+        label: 'AGENTS.md',
+        relPath: 'AGENTS.md',
+        kind: 'agentInstructions',
+        why: 'Project-level agent instructions loaded from the repository root.',
+        exists: true,
+        updatedAt: '2026-06-23T10:00:00Z',
+        size: 2400,
+        appliesToClis: ['codex', 'claude', 'copilot'],
+        children: null,
+      },
+      {
+        id: 'frontend-agents-md',
+        label: 'AGENTS.md',
+        relPath: 'frontend/AGENTS.md',
+        kind: 'agentInstructions',
+        why: 'Frontend-scoped agent instructions loaded for work below this folder.',
+        exists: true,
+        updatedAt: '2026-06-22T10:00:00Z',
+        size: 800,
+        appliesToClis: ['codex', 'claude', 'copilot'],
+        children: null,
+      },
+      {
+        id: 'github-copilot-instructions-md',
+        label: 'copilot-instructions.md',
+        relPath: '.github/copilot-instructions.md',
+        kind: 'agentCliShim',
+        why: 'GitHub Copilot coding-agent instruction file.',
+        exists: true,
+        updatedAt: '2026-06-21T10:00:00Z',
+        size: 220,
+        appliesToClis: ['copilot'],
+        children: null,
+      },
+    ],
+    warnings: [{
+      severity: 'warn',
+      kind: 'gatewayTooHeavy',
+      message: 'AGENTS.md carries 2,400 bytes of local instructions but links to only 0 wiki pages. Agent docs should stay gateway-style and route durable detail into the project wiki.',
+      sourceId: 'agents-md',
+      evidenceRefs: ['AGENTS.md', 'docs/wiki/'],
+    }],
+  };
+
+  await page.route('**/api/projects/*/steering', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(overview),
+  }));
+
+  await page.route('**/api/projects/*/steering/files/**', route => {
+    const marker = '/steering/files/';
+    const url = new URL(route.request().url());
+    const relPath = decodeURIComponent(url.pathname.slice(url.pathname.indexOf(marker) + marker.length));
+    const content = relPath === 'frontend/AGENTS.md'
+      ? '# Frontend agent rules\n\nFrontend rules route durable details into docs/wiki/.'
+      : '# Root agent rules\n\nUse AGENTS.md as a gateway to docs/wiki/ pages.';
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ relPath, content }),
+    });
+  });
+}
+
+test.describe('Project detail - Agent Docs section', () => {
   let projectName = '';
+  let watchPath = '';
 
   test.beforeAll(async () => {
     const paths = await api<WatchPath[]>('/api/watch-paths');
     expect(paths.length).toBeGreaterThan(0);
-    // Prefer the Agent Software Studio project: it has the canonical
-    // README, AGENTS, ROADMAP, ADR, runtime-prompts set.
-    const preferred = paths.find(p => /agent.?software/i.test(p.name)) ?? paths[0];
+    const preferred = paths.find(p => /agent.?software|agent.?task|runbook/i.test(p.name)) ?? paths[0];
     projectName = preferred.name;
+    watchPath = preferred.path;
   });
 
-  test('Inventory + summary + warnings render with raw file drilldown', async ({ page }) => {
-    await page.goto('/');
-    await page.getByTestId(`project-shell-open-${projectName}`).click();
-    await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });
-
-    const section = page.getByTestId('project-steering-docs-section');
-    await section.scrollIntoViewIfNeeded();
-    await expect(section).toBeVisible();
-
-    // Inventory list rendered with the canonical sources.
-    await expect(page.getByTestId('project-steering-docs-sources')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId('project-steering-docs-source-readme')).toBeVisible();
-    await expect(page.getByTestId('project-steering-docs-source-agents')).toBeVisible();
-    await expect(page.getByTestId('project-steering-docs-source-roadmap')).toBeVisible();
-    await expect(page.getByTestId('project-steering-docs-source-adr')).toBeVisible();
-    await expect(page.getByTestId('project-steering-docs-source-runtime-prompts')).toBeVisible();
-
-    // Human summary block exists and references the canonical files.
-    const summary = page.getByTestId('project-steering-docs-summary');
-    await expect(summary).toBeVisible();
-    await expect(summary).toContainText('canonical steering sources');
-
-    // Action buttons rendered for every named action.
-    const actions = page.getByTestId('project-steering-docs-actions');
-    await expect(actions).toBeVisible();
-    for (const slug of ['summarize', 'check-drift', 'analyze-failures', 'propose-readme', 'propose-agents', 'create-followup']) {
-      await expect(page.getByTestId(`project-steering-docs-action-${slug}`)).toBeVisible();
-    }
-
-    // Capture the inventory + summary + warnings strip in one shot.
-    await page.screenshot({
-      path: `${SCREENSHOTS}/01-inventory-and-summary.png`,
-      fullPage: true,
-    });
-
-    // Drill down into AGENTS.md to confirm raw content opens inline.
-    await page.getByTestId('project-steering-docs-source-agents').click();
-    const viewer = page.getByTestId('project-steering-docs-viewer');
-    await expect(viewer).toBeVisible();
-    const content = page.getByTestId('project-steering-docs-content');
-    await expect(content).toBeVisible({ timeout: 10_000 });
-    await expect(content.locator('h1, h2, h3').first()).toBeVisible();
-
-    await page.screenshot({
-      path: `${SCREENSHOTS}/02-raw-file-drilldown.png`,
-      fullPage: true,
-    });
-
-    // Drill into the runtime-prompts directory and pick a child file.
-    await page.getByTestId('project-steering-docs-source-runtime-prompts').click();
-    const childList = page.getByTestId('project-steering-docs-children');
-    await expect(childList).toBeVisible({ timeout: 5_000 });
-    const firstChild = childList.locator('button.psd__child-btn').first();
-    await firstChild.click();
-    await expect(page.getByTestId('project-steering-docs-child-content')).toBeVisible({ timeout: 10_000 });
-
-    await page.screenshot({
-      path: `${SCREENSHOTS}/03-runtime-prompt-children.png`,
-      fullPage: true,
-    });
+  test.beforeEach(async ({ page }) => {
+    await mockSteeringApi(page, projectName, watchPath);
   });
 
-  test('Action button queues a 1-preparation task without rewriting docs', async ({ page }) => {
-    await page.goto('/');
-    await page.getByTestId(`project-shell-open-${projectName}`).click();
-    await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });
-
-    const section = page.getByTestId('project-steering-docs-section');
-    await section.scrollIntoViewIfNeeded();
-    await expect(section).toBeVisible();
-
-    // Click the Summarize Steering Docs button; it should queue a
-    // 1-preparation task and surface the generated job id in the action message.
-    await page.getByTestId('project-steering-docs-action-summarize').click();
-    const msg = page.getByTestId('project-steering-docs-action-msg');
-    await expect(msg).toBeVisible({ timeout: 10_000 });
-    await expect(msg).toContainText(/1-preparation/i);
-    await expect(msg).toContainText(/^Queued steering-summarize-/);
-
-    // Capture the action-message state for the report.
-    await page.screenshot({
-      path: `${SCREENSHOTS}/04-action-followup-queued.png`,
-      fullPage: true,
-    });
-
-    // Clean up: the queued task is intentionally left in 1-preparation so
-    // the user reviews the prompt before promoting; we just verify the
-    // creation, then delete it through the API so re-runs stay deterministic.
-    const text = (await msg.textContent()) ?? '';
-    const match = text.match(/Queued (steering-summarize-\S+)/);
-    if (match) {
-      const created = match[1];
-      // Find the watchPath to scope the delete request.
-      const paths = await api<WatchPath[]>('/api/watch-paths');
-      const pref = paths.find(p => p.name === projectName) ?? paths[0];
-      try {
-        await api(`/api/jobs/${encodeURIComponent(created)}?watchPath=${encodeURIComponent(pref.path)}`, { method: 'DELETE' });
-      } catch { /* best-effort cleanup */ }
-    }
-  });
-
-  test('Empty / unknown project surfaces a helpful state without crashing', async ({ page }) => {
-    // Navigate to a non-existent project via the URL - the project shell
-    // should still render; the steering section should report the
-    // backend's 404 in its error pane, not blank-screen the user.
-    await page.goto('/?projectName=__steering-docs-no-such-project__');
-    // We don't depend on the URL to switch projects (the app's routing
-    // varies); just confirm the rest of the UI is alive.
-    await expect(page.locator('body')).toBeVisible();
-
-    // Direct API probe for evidence that the surface stays graceful.
-    const res = await page.request.get('/api/projects/__steering-docs-no-such-project__/steering');
-    expect(res.status()).toBe(404);
-  });
-
-  test('Project shell rail opens the Steering Docs panel', async ({ page }) => {
-    // The shell rail entry sits beside Observability / Token Usage /
-    // Security; selecting it must mount the steering section as the
-    // shell's custom panel and reach the same inventory + actions the
-    // long detail view exposes.
-    await page.goto('/');
-    await page.getByTestId(`project-shell-open-${projectName}`).click();
-    await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
-
-    const rail = page.getByTestId('project-shell-rail-steering');
-    await expect(rail).toBeVisible();
-    await rail.click();
-    await expect(rail).toHaveAttribute('aria-current', 'page');
-
+  test('tree shows existing agent docs, CLI scope, gateway warning, and tool-use mockup', async ({ page }) => {
+    await openSteeringRail(page, projectName);
     const panel = page.getByTestId('project-shell-panel-steering');
     await expect(panel).toBeVisible();
-    await expect(panel).toHaveAttribute('data-rail-key', 'steering');
-
-    // The custom-panel slot should host the real steering section, not
-    // the generic placeholder copy.
-    await expect(panel.getByTestId('project-shell-panel-empty')).toHaveCount(0);
 
     const section = panel.getByTestId('project-steering-docs-section');
     await expect(section).toBeVisible({ timeout: 10_000 });
-    await expect(panel.getByTestId('project-steering-docs-sources')).toBeVisible({ timeout: 10_000 });
-    await expect(panel.getByTestId('project-steering-docs-summary')).toBeVisible();
-    await expect(panel.getByTestId('project-steering-docs-actions')).toBeVisible();
+    await expect(panel.getByTestId('project-steering-docs-tree')).toBeVisible();
+    await expect(panel.getByTestId('project-steering-docs-tree')).toContainText('frontend');
+    await expect(panel.getByTestId('project-steering-docs-tree')).not.toContainText('README.md');
+    await expect(panel.getByTestId('project-skill-readiness-section')).toHaveCount(0);
+
+    await expect(panel.getByTestId('project-steering-docs-viewer-path')).toContainText('AGENTS.md');
+    await expect(panel.getByTestId('project-steering-docs-viewer-clis')).toContainText('Codex');
+    await expect(panel.getByTestId('project-steering-docs-viewer-clis')).toContainText('Claude Code');
+    await expect(panel.getByTestId('project-steering-docs-selected-warnings')).toContainText('gateway-style');
+    await expect(panel.getByTestId('project-steering-docs-content')).toContainText('Root agent rules');
+
+    await panel.getByTestId('project-steering-docs-file-frontend/AGENTS.md').click();
+    await expect(panel.getByTestId('project-steering-docs-viewer-path')).toContainText('frontend/AGENTS.md');
+    await expect(panel.getByTestId('project-steering-docs-content')).toContainText('Frontend agent rules');
+
+    await expect(panel.getByTestId('project-steering-docs-tool-use-mock')).toContainText('Mockup');
+    await expect(panel.getByTestId('project-steering-docs-action-plan-tool-use-analytics')).toBeVisible();
 
     await page.screenshot({
-      path: `${SCREENSHOTS}/05-shell-rail-steering.png`,
+      path: path.join(SCREENSHOTS, '01-inventory-and-summary.png'),
       fullPage: true,
     });
+  });
+
+  test('plan action queues the real tool-use analytics feature as a preparation task', async ({ page }) => {
+    let postedBody: Record<string, unknown> | null = null;
+    await page.route('**/api/tasks', async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      postedBody = route.request().postDataJSON() as Record<string, unknown>;
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: postedBody.id }),
+      });
+    });
+
+    await openSteeringRail(page, projectName);
+    await expect(page.getByTestId('project-steering-docs-section')).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId('project-steering-docs-action-plan-tool-use-analytics').click();
+
+    const msg = page.getByTestId('project-steering-docs-action-msg');
+    await expect(msg).toBeVisible({ timeout: 10_000 });
+    await expect(msg).toContainText(/^Queued steering-plan-tool-use-analytics-/);
+    expect(postedBody?.['targetState']).toBe('1-preparation');
+    expect(postedBody?.['promptMarkdown']).toContain('count which CLI tool-use reads');
+
+    await page.screenshot({
+      path: path.join(SCREENSHOTS, '04-action-followup-queued.png'),
+      fullPage: true,
+    });
+  });
+
+  test('unknown project API still returns a helpful 404', async ({ page }) => {
+    await page.unroute('**/api/projects/*/steering');
+    const res = await page.request.get('/api/projects/__steering-docs-no-such-project__/steering');
+    expect(res.status()).toBe(404);
   });
 });

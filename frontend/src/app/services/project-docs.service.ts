@@ -7,7 +7,9 @@ import {
   SecurityOverview,
   WikiFileContent,
   WikiFileHistory,
+  WikiFileSaveResult,
   WikiOverview,
+  WikiRecentEdits,
   WikiRevisionContent,
   WikiTree
 } from '../models/project-docs.model';
@@ -61,9 +63,23 @@ export class ProjectDocsService {
     );
   }
 
+  /** Recently-edited wiki pages (page / git author / when), newest first. */
+  getWikiRecentEdits(projectName: string, limit = 12) {
+    return this.http.get<WikiRecentEdits>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/recent?limit=${limit}`
+    );
+  }
+
   getWikiFile(projectName: string, relPath: string) {
     return this.http.get<WikiFileContent>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/files/${this.encodeRelPath(relPath)}`
+    );
+  }
+
+  putWikiFile(projectName: string, relPath: string, content: string) {
+    return this.http.put<WikiFileSaveResult>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/files/${this.encodeRelPath(relPath)}`,
+      { content }
     );
   }
 

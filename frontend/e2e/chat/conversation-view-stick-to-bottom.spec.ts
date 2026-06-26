@@ -61,11 +61,11 @@ async function pickJob(page: Page): Promise<{ id: string; watchPath: string } | 
 async function mountConversation(page: Page, job: { id: string; watchPath: string }): Promise<void> {
   const body = JSON.stringify(buildLargeBuffer());
   const esc = encodeURIComponent(job.id);
-  // Cover both the current (/api/tasks) and legacy (/api/jobs) output routes.
+  // Cover both the current (/api/tasks) and legacy (/api/tasks) output routes.
   await page.route(`**/api/tasks/${esc}/output?**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body })
   );
-  await page.route(`**/api/jobs/${esc}/output?**`, (route) =>
+  await page.route(`**/api/tasks/${esc}/output?**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body })
   );
   await page.addInitScript(() => localStorage.setItem('atp.flag.nextGenChat', '1'));

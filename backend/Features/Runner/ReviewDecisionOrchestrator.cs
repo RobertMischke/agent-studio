@@ -1140,20 +1140,17 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var adrTitles = LoadAdrTitles(entry.RootPath);
         var prevDecisions = LoadPreviousDecisionsSummary(workspace, entry.Name, pending.Job.Id);
 
-        return "You are the orchestrator reviewing a 4-auto-review task whose latest run ended without any terminal "
-             + "[[TASK_DONE]] / [[TASK_BLOCKED]] / [[TASK_NEEDS_INPUT]] / [[TASK_NOOP]] sentinel. Decide whether the visible evidence means the task should be reissued or escalated.\n"
-             + "Rules:\n"
-             + "- Use reissue when work appears incomplete, ambiguous, or the agent only needs to close out with a sentinel.\n"
-             + "- Use escalate when the evidence requires human judgment or repeated automation would be unsafe.\n"
-             + "- Do not use accept-as-done here; the missing terminal sentinel is a deterministic gate and the next run must close out explicitly.\n\n"
-             + $"Project: {entry.Name}\n"
-             + $"Job: {pending.Job.Id} - {pending.Job.Title}\n\n"
-             + $"Task body:\n{taskBody}\n\n"
-             + $"Recent log:\n{recentLog}\n\n"
-             + $"Roadmap excerpt:\n{roadmapExcerpt}\n\n"
-             + $"ADR titles:\n{adrTitles}\n\n"
-             + $"Previous decisions:\n{prevDecisions}\n\n"
-             + "Reply with exactly one [[ORCHESTRATOR_DECISION: action=<reissue|escalate>; reason=<short>]] sentinel then [[TASK_DONE]].";
+        return _prompts.Render("orchestrator-no-completion-signal.md", new Dictionary<string, string?>
+        {
+            ["project"] = entry.Name,
+            ["job_id"] = pending.Job.Id,
+            ["job_title"] = pending.Job.Title,
+            ["task_body"] = taskBody,
+            ["recent_log"] = recentLog,
+            ["roadmap_excerpt"] = roadmapExcerpt,
+            ["adr_titles"] = adrTitles,
+            ["previous_decisions"] = prevDecisions,
+        });
     }
 
     private async Task ReissueNoCompletionSignalAsync(
@@ -2729,15 +2726,38 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (!_configuration.GetValue("CodeReviewStep:AutoGrade", true)) return;
 
         var stepId = PipelineCatalogue.CodeReviewGradeStepId;
+        var projectSettings = _projectSettings?.Get(entry.Name);
+        var catalogueStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
+            string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase));
+        if (catalogueStep is not null
+            && !PipelineStepConfigResolver.ShouldRun(projectSettings, catalogueStep, new PipelineStepConditionContext
+            {
+                Aborted = false,
+                ExitCode = 0,
+                AnyAspectFailed = false,
+                TaskType = job.TaskType,
+                Tags = job.Tags,
+            }))
+        {
+            return;
+        }
+
         var startedAt = DateTime.UtcNow;
         try
         {
             // Quality over cost: the grade pass defaults to Opus 4.8 even though
             // the four cheap aspect reviews stay on Haiku. Configurable so a
             // deployment can dial the grade model without touching the aspects.
-            var (model, cli) = AgentStudio.Review.CodeReviewGradeModelSelector.Resolve(
+            var (defaultModel, defaultCli) = AgentStudio.Review.CodeReviewGradeModelSelector.Resolve(
                 _configuration["CodeReviewStep:DefaultModel"],
                 _configuration["CodeReviewStep:DefaultCli"]);
+            var model = catalogueStep is null
+                ? defaultModel
+                : PipelineStepConfigResolver.ResolveModel(projectSettings, catalogueStep, defaultModel);
+            var cli = PipelineStepConfigResolver.ResolveCliType(projectSettings, stepId) ?? defaultCli;
+            var thinkingLevel = catalogueStep is null
+                ? null
+                : PipelineStepConfigResolver.ResolveThinkingLevel(projectSettings, catalogueStep, cli, model);
 
             var (diff, commitLabel) = BuildGradeDiff(entry.Name, entry.Path, job);
 
@@ -2753,6 +2773,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             {
                 Mode = AgentStudio.Review.CodeReviewMode.Grade,
                 Commit = commitLabel,
+                ThinkingLevel = thinkingLevel,
             };
 
             var report = await _codeReviewStep.RunAsync(request, ct);
@@ -4366,18 +4387,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Falling back to inline review-decision prompt");
-            return InlineFallbackPrompt(values);
+            _logger.LogWarning(ex, "Falling back to the review-decision fallback template");
+            return _prompts.Render("orchestrator-review-decision-fallback.md", values);
         }
     }
-
-    private static string InlineFallbackPrompt(Dictionary<string, string?> v) =>
-        $"You are the orchestrator deciding on a 4-review task that ended in [[TASK_NEEDS_INPUT]].\n" +
-        $"Project: {v["project"]} / Job: {v["job_id"]} - {v["job_title"]}\n" +
-        $"NEEDS_INPUT reason: {v["needs_input_reason"]}\n\n" +
-        $"Task body:\n{v["task_body"]}\n\n" +
-        $"Recent log:\n{v["recent_log"]}\n\n" +
-        $"Reply with exactly one [[ORCHESTRATOR_DECISION: action=<reissue|escalate|accept-as-done>; reason=<short>]] sentinel then [[TASK_DONE]].";
 
     private void AppendReviewDecision(
         string workspace,
@@ -4422,7 +4435,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private static string LoadAdrTitles(string rootPath)
     {
         if (string.IsNullOrWhiteSpace(rootPath)) return string.Empty;
-        var path = Path.Combine(rootPath, "docs", "architecture-decisions.md");
+        var path = Path.Combine(rootPath, "docs", "architecture", "decisions", "adr-archive.md");
         if (!File.Exists(path)) return string.Empty;
         try
         {
@@ -4561,9 +4574,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
     }
 
-    private static string BuildReissueFollowUp(OrchestratorDecisionVerdict verdict) =>
-        $"The orchestrator answered your NEEDS_INPUT request. Decision: {verdict.Reason}. " +
-        "Apply this decision and continue the task. End with [[TASK_DONE]] when complete.";
+    private string BuildReissueFollowUp(OrchestratorDecisionVerdict verdict) =>
+        _prompts.Render("orchestrator-reissue-followup.md", new Dictionary<string, string?>
+        {
+            ["decision"] = verdict.Reason,
+        }).TrimEnd('\r', '\n');
 
     private static string TailLines(string text, int n)
     {
@@ -4643,6 +4658,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
         catch (OperationCanceledException)
         {
+            AgentStudio.Diagnostics.CliKillAudit.Trace(p, "ReviewDecisionOrchestrator:4661 (entireProcessTree)");
             try { p.Kill(true); } catch (Exception __ex) { SilentCatch.Note(__ex, "ReviewDecisionOrchestrator:4650"); }
             return string.Empty;
         }

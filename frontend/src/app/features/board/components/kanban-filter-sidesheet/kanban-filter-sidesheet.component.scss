@@ -2,7 +2,7 @@
  * Outer host owns the slide-in animation. The inner <app-sidesheet>
  * owns the chrome (background, border, header, body grid, theme
  * tokens). Header/title/close SCSS deleted in the migration to the
- * shared skeleton — see docs/frontend-scss-quality-eval-2026-05-17.md
+ * shared skeleton — see docs/frontend/audits/scss-quality-eval-2026-05-17.md
  * Tier 1.3a.
  */
 :host {

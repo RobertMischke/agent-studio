@@ -42,23 +42,23 @@ async function installCompletedJobMocks(
 ): Promise<void> {
   const detailBody = JSON.stringify(buildCompletedJobDetail(target.id, target.watchPath, statusMarkdown));
 
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: detailBody });
   });
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/output?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/output?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/runs?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/runs?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) });
   });
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/session-events?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/session-events?**`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ events: [], sessionChain: [] }),
     });
   });
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/claude-session?**`, async (route) => {
+  await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/claude-session?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(null) });
   });
 }
@@ -173,7 +173,7 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
 
     try {
       const res = await page.request.post(
-        `${BACKEND}/api/jobs/${encodeURIComponent(created.id)}/summary/interim?watchPath=${encodeURIComponent(watchPath)}`,
+        `${BACKEND}/api/tasks/${encodeURIComponent(created.id)}/summary/interim?watchPath=${encodeURIComponent(watchPath)}`,
         { headers: { 'x-client-id': 'local-default' } }
       );
       // The endpoint surfaces precondition errors as 400 with `{ error: "..." }`.
@@ -182,7 +182,7 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
       expect(body.error).toMatch(/CLI output|cli-output\.log/i);
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(created.id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' }
       ).catch(() => { /* best-effort cleanup */ });
     }

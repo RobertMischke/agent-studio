@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-taskboard.local/schemas/architecture-model.schema.json",
   "title": "ArchitectureModel",
-  "description": "Authoring contract for a project's compact high-level architecture map. Validates the YAML frontmatter of an architecture-model Markdown file. The map is intended to drive software-to-architecture drift analysis and the marble-style Drift surface; it is deliberately small and human-writable. Hard limit of ten elements per map. Storage lives with project evidence (watched project repository or workspace), never in the agent-taskboard source repo. See docs/architecture-model.md for the prose contract.",
+  "description": "Authoring contract for a project's compact high-level architecture map. Validates the YAML frontmatter of an architecture-model Markdown file. The map is intended to drive software-to-architecture drift analysis and the marble-style Drift surface; it is deliberately small and human-writable. Hard limit of ten elements per map. Storage lives with project evidence (watched project repository or workspace), never in the agent-taskboard source repo. See docs/architecture/model.md for the prose contract.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -96,7 +96,7 @@
           },
           "sourceRefs": {
             "type": "array",
-            "description": "Docs, ADRs, folders, or other authoritative source references for this element's expected role. Repository-relative paths or fragment links (for example 'docs/architecture-decisions.md#adr-0024').",
+            "description": "Docs, ADRs, folders, or other authoritative source references for this element's expected role. Repository-relative paths or fragment links (for example 'docs/architecture/decisions/adr-archive.md#adr-0024').",
             "items": { "type": "string", "minLength": 1 }
           },
           "relevantTests": {
@@ -111,7 +111,7 @@
           },
           "runtimeSignals": {
             "type": "array",
-            "description": "Stable runtime event names, log streams, metric names, or REST endpoints the analyzer can use to confirm the element's runtime behavior. Example: 'event:cycle-resume-failed', 'log:logs/meta/<project>/observations.jsonl', 'endpoint:/api/jobs/grouped'.",
+            "description": "Stable runtime event names, log streams, metric names, or REST endpoints the analyzer can use to confirm the element's runtime behavior. Example: 'event:cycle-resume-failed', 'log:logs/meta/<project>/observations.jsonl', 'endpoint:/api/tasks/grouped'.",
             "items": { "type": "string", "minLength": 1 }
           },
           "notes": {

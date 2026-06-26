@@ -1,6 +1,6 @@
 # Mockups: Task Processing Pipeline (CI/CD-style)
 
-Concept-stage UX mockups for [ADR-0051](../../adr/adr-0051-task-processing-pipeline.md). Two surfaces:
+Concept-stage UX mockups for [ADR-0051](../../architecture/decisions/proposed/adr-0051-task-processing-pipeline.md). Two surfaces:
 
 | File | Surface |
 |---|---|
@@ -19,4 +19,4 @@ These ASCII mockups exist to pin the *layout and information hierarchy* the slic
 - Step states use the existing lane-glyph vocabulary: pending (hollow), running (pulse), ok (check), failed (cross), warn (triangle), skipped (dash).
 - Menus are text-only ([AGENTS.md](../../../AGENTS.md) "Menu surfaces are text-only").
 - Per-step model picker is the shared `<app-cli-model-selector>` (ASS-544/562), not a new picker.
-- Editor mutations are optimistic ([ADR-0046](../../architecture-decisions.md#adr-0046)).
+- Editor mutations are optimistic ([ADR-0046](../../architecture/decisions/adr-archive.md#adr-0046)).

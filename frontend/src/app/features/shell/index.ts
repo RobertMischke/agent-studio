@@ -5,7 +5,9 @@ export { WorkspaceBannerComponent } from './components/workspace-banner/workspac
 export { WorkspaceOverlaysComponent } from './components/workspace-overlays/workspace-overlays.component';
 export { UiPreferencesService } from './state/ui-preferences.service';
 export { WorkspaceOverlaysService } from './state/workspace-overlays.service';
+export type { WorkspaceSettingsSection } from './state/workspace-overlays.service';
 export { WorkspaceManagerService } from './state/workspace-manager.service';
 export { ProjectDragDropService } from './state/project-drag-drop.service';
 export { WorkspaceCreateDialogComponent } from './components/workspace-create-dialog/workspace-create-dialog.component';
 export { OnboardProjectDialogComponent } from './components/onboard-project-dialog/onboard-project-dialog.component';
+export { CrashRecoveryPromptComponent } from './components/crash-recovery-prompt/crash-recovery-prompt.component';

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Runner Stability — Incident Log, Invariants &amp; Goal</title>
+<style>
+  :root{--fg:#1d2127;--muted:#5b626d;--line:#e3e6ea;--accent:#1f6feb;--bad:#b42318;--ok:#067647;--warn:#b54708;--bg:#fbfcfd;--code:#eff1f4;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 24px 80px;}
+  h1{font-size:26px;margin:0 0 4px;} h2{font-size:19px;margin:32px 0 10px;padding-top:10px;border-top:1px solid var(--line);}
+  .sub{color:var(--muted);margin:0 0 18px;}
+  code{background:var(--code);padding:1px 5px;border-radius:4px;font:13px/1.5 ui-monospace,Consolas,monospace;}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13.5px;} th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top;}
+  th{background:#f3f5f7;font-weight:600;}
+  .ok{color:var(--ok);font-weight:600;} .open{color:var(--bad);font-weight:600;} .part{color:var(--warn);font-weight:600;}
+  .box{background:#fff;border-left:3px solid var(--accent);padding:10px 16px;margin:14px 0;}
+  .toc{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:18px 0;font-size:13.5px;}
+  .toc a{color:var(--accent);text-decoration:none;}
+  ol li,ul li{margin:4px 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Runner Stability — Incident Log, Invariants &amp; Goal</h1>
+  <p class="sub">Status: maintained living page (seeded 2026-06-23). The single re-findable place where recurring runner-stability problems are collected, so we stop going in circles. Each incident becomes an <strong>invariant</strong>; each invariant gets a <strong>test</strong>; the pre-deploy <strong>gate</strong> enforces it. This page is the basis for regression safety. Intended to be auto-maintained by the AGENTS&harr;wiki sync step (AGT-1782).</p>
+
+  <div class="box">
+    <strong>Goal (Zielbild).</strong> A self-stabilizing pipeline: the orchestrator carries every task home. Problems must be <em>visible</em> in the protocol/feed, but <em>resolved</em> automatically where possible. Nothing silently strands; nothing silently pauses. The system can only get more stable, never quietly worse, because every past failure is locked in by a test + the gate.
+  </div>
+
+  <div class="toc">
+    <strong>Contents</strong><br/>
+    <a href="#how">1. How this page works (the discipline)</a> &middot;
+    <a href="#log">2. Incident log &amp; invariants</a> &middot;
+    <a href="#open">3. Open invariants without a test yet</a> &middot;
+    <a href="#related">4. Related concepts</a>
+  </div>
+
+  <h2 id="how">1. How this page works (the discipline)</h2>
+  <p>The cheap, durable loop (not an expensive safety net, just discipline):</p>
+  <ol>
+    <li><strong>Document</strong> the problem here (the basis). What broke, the symptom, the root cause.</li>
+    <li><strong>Derive the invariant</strong> — the rule that must always hold so this class of failure cannot recur.</li>
+    <li><strong>Write a test</strong> that goes red if the invariant is violated (see the 112 outcome-contract tests as the model).</li>
+    <li><strong>The gate enforces it</strong> — the pre-deploy <code>post-build-test-gate</code> blocks a deploy if any invariant test is red.</li>
+  </ol>
+  <p>Once an incident has a test behind the gate, that regression is <em>locked in</em>: it cannot silently come back.</p>
+
+  <h2 id="log">2. Incident log &amp; invariants</h2>
+  <table>
+    <thead><tr><th style="width:96px;">Date</th><th>Symptom</th><th>Root cause</th><th>Invariant</th><th style="width:120px;">Status</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>2026-06-23 (overnight)</td>
+        <td><strong>The real "backlog never drains" cause.</strong> Fresh claude/Opus runs do 1&ndash;5 min of real work, commit <em>nothing</em>, then die with <code>exit=-1</code> and escalate. No task completes.</td>
+        <td><strong>SOLVED &mdash; the orchestrator's live sentinel scanner false-fired on file content.</strong> (The earlier "claude self-crashes / external TerminateProcess / not an orchestrator bug" reading here was WRONG; a reproducible lab + kill-path instrumentation overturned it.) Stack trace caught the killer: <code>KillProcessTree &larr; Stop &larr; ProjectRunner.TryStopOnSentinel &larr; OnRunEventReceived &larr; ReadStreamAsync</code>. <code>TryStopOnSentinel</code> matched <code>[[TASK_DONE]]</code> on EVERY raw output line, including the file content the agent READS (tool results ride the <code>user</code> stream). The backend's own runner code, <code>AGENTS.md</code>, and <code>docs/contracts/agent-task.md</code> are full of sentinel literals &mdash; so any run that read such a file was killed mid-work as a false "completion" (<code>status=completed</code>, no commit). It mapped to <code>SentinelDetected</code> &rarr; status <em>completed</em>, but the work was never done. Both claude AND codex; standalone runs survived because nothing watches their output (which is why the elimination above kept exonerating the CLI). Looked like a regression because the recent tasks worked ON the runner code itself, so they read the sentinel literals.</td>
+        <td>The live sentinel scanner only stops a run on the AGENT's OWN standalone terminal sentinel line &mdash; never on a sentinel inside tool-result/file content or prose. Encoded + tested in <code>LiveSentinelScanner.HasStandaloneAgentSentinel</code> (drop system/user/orchestrator/stderr streams; token must be ~= the whole line). Missing a real sentinel is harmless (finalizes on CLI exit); a false positive kills live work.</td>
+        <td class="ok">FIXED &amp; TESTED (1128e856 + LiveSentinelScanner, 9 regression cases) &amp; deployed. Verified: a run reading sentinel code now does real work instead of false-stopping at ~14 s.</td>
+      </tr>
+      <tr>
+        <td>2026-06-23 (overnight)</td>
+        <td>Clean-context claude runs were killed mid-work by a <em>false</em> silence watchdog (suspected; turned out not to be the dominant cause, but a real bug).</td>
+        <td>Clean context (the DEFAULT) redirects claude's session JSONL to <code>CLAUDE_CONFIG_DIR</code>, but the liveness heartbeat hardcoded <code>~/.claude/projects/&hellip;</code> &mdash; it watched a file claude never writes, so the silence watchdog had no heartbeat to reset. (The dominant death cause turned out to be the self-crash above, but on a genuinely-silent run this path would still false-kill.)</td>
+        <td>The liveness watcher resolves the session file under the run's actual config dir (clean-context <code>CLAUDE_CONFIG_DIR</code> or default <code>~/.claude</code>).</td>
+        <td class="ok">FIXED &amp; tested (cf8a8644; ResolveSessionFile configDir + 2 tests)</td>
+      </tr>
+      <tr>
+        <td>2026-06-23 (overnight)</td>
+        <td>The <code>3-progress</code> lane "kaputt" again: tasks re-queued from escalated were picked, the claude CLI <em>resumed a stale session</em> and exited 1 in ~2&ndash;4 s with no output, and the card sat in <code>3-progress</code> forever.</td>
+        <td>A failed run with <em>zero agent text</em> classifies as <code>NoAgentOutput</code> &rarr; <code>RunOutcomePolicy</code> returns <code>Accept</code> (the "cause is already visible in chat, don't pile on a FAILURE" path) &rarr; it neither moved to review nor matched a typed human-review route &rarr; fell through to "leaving it in progress". Pickup only scans <code>2-ready</code>, so the card never came back: a permanent zombie. The earlier <code>ShouldRouteIssueToHumanReview</code> fix (d941d6e7) covered <code>InfraCrash</code>/<code>OrchestratorInconclusive</code> but not the no-output / launch-failure shapes.</td>
+        <td>Any genuinely FAILED run (status=failed, not a deliberate stop, not awaiting input) that no typed route claims is escalated to human review by a backstop &mdash; it can never be left in 3-progress.</td>
+        <td class="ok">FIXED &amp; tested (StrandedRunBackstop + ProjectRunner backstop; 13 new cases, full suite green); see <a href="process-termination-scenarios.html">scenario S2</a></td>
+      </tr>
+      <tr>
+        <td>2026-06-12 .. 06-22</td>
+        <td>Tasks stuck forever in <code>3-progress</code> ("classifier-unknown"); the lane fills, nothing advances (ASS-1757, wiki-dashboard).</td>
+        <td>A failed/unclassified run returned <code>NotifyUserAndStop</code> with <code>InfraCrash</code>/<code>OrchestratorInconclusive</code>, but those kinds were missing from <code>ProjectRunner.ShouldRouteIssueToHumanReview</code> &rarr; the stop never escalated.</td>
+        <td>No failed or unclassified run ever stays in <code>3-progress</code>; it always reaches a terminal lane (human review) with an honest reason.</td>
+        <td class="ok">FIXED &amp; deployed (d941d6e7); 112 tests green</td>
+      </tr>
+      <tr>
+        <td>2026-06-22 (&times;2)</td>
+        <td>Whole pipeline silently pauses; "claude CLI not available: shim missing".</td>
+        <td>The npm-global <code>claude.cmd</code> shim, then the win32 <code>claude.exe</code> binary itself, vanished. The runner depends on a fragile npm-global shim resolved via PATH.</td>
+        <td>A missing/unavailable CLI must HALT loudly (prominent modal + orchestrator escalation), never pause silently. The runner should resolve the CLI via a pinned absolute binary path, not a shim that can disappear.</td>
+        <td class="open">OPEN — AGT-1775 (visual error), admin-cli-onboarding; durable = configured absolute claude-bin</td>
+      </tr>
+      <tr>
+        <td>2026-06-23</td>
+        <td>Pipeline "full" but nothing runs; every pickup reverts with "run never started"; lane fills with picked-then-reverted tasks.</td>
+        <td>Orphaned worktree directories (~70) left under <code>Temp/ass-worktrees/...</code> from prior runs, plus stray <code>node.exe</code>/<code>esbuild.exe</code> build children still running and holding the dirs locked. <code>git worktree prepare</code> finds the dir "already exists" but "not a working tree" &rarr; refuses &rarr; revert loop.</td>
+        <td>(a) The runner self-heals an orphaned worktree path before a run: prune + force-recreate, never give up to a revert loop. (b) On run end OR failed start, the full child-process tree (node/esbuild/dev-server) is killed, so no build child outlives its run.</td>
+        <td class="open">OPEN — manual cleanup done today; needs runner fix (two invariants)</td>
+      </tr>
+      <tr>
+        <td>2026-06-08 .. ongoing</td>
+        <td>Good work shows "Needs rework"; grade-A tasks reissued.</td>
+        <td>The auto-review evidence gate maps any tests-and-evidence concern to a reissue, ignoring the grade and the artifacts on disk, judging off a truncated CLI log.</td>
+        <td>Grade-A/B work with evidence present on disk is not auto-reissued; the aspect reviewer judges a <em>results manifest</em> (real artifacts), not a truncated log; soft concerns become accept-with-concerns, not reissue. Visual-evidence requirement is per-project configurable.</td>
+        <td class="part">PLANNED — AGT-1774; see evidence-gate concept</td>
+      </tr>
+      <tr>
+        <td>2026-06-22/23</td>
+        <td>The hardening tasks themselves strand / quarantine / escalate on the unstable runner.</td>
+        <td>The unstable runner is both the patient and the surgeon: core-stability fixes thrown at the auto-runner fail at the very bug they fix.</td>
+        <td>Discipline (not code): core run-loop / outcome / worktree / CLI changes are implemented by hand, verified with the invariant tests, and shipped via the gated deploy. They are not delegated to the auto-runner until the runner is trusted.</td>
+        <td class="part">DISCIPLINE — applied today (d941d6e7 by hand)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="open">3. Open invariants that still need a test + a fix</h2>
+  <ul>
+    <li><strong>Self-healing worktrees.</strong> Test: given an orphaned dir at the target path, a pickup still succeeds (prune + recreate). Fix in <code>backend/Features/Runner/WorktreeTaskLifecycle.cs</code> prepare path.</li>
+    <li><strong>Child-process teardown.</strong> Test: after a run ends/fails, no <code>node</code>/<code>esbuild</code> process has a CWD under the run's worktree. Fix: kill the process tree (the Windows handle-scrub spawner already exists for the CLI; extend to build children).</li>
+    <li><strong>CLI availability is loud + pinned.</strong> Test: with the CLI missing, the runner emits a high-severity, operator-visible error (modal) and does NOT silently flip to manual. Fix: configured absolute claude-bin + the admin CLI-onboarding surface.</li>
+    <li><strong>Evidence-gate sanity.</strong> Test: a grade-A task with screenshots on disk is not reissued for "missing evidence".</li>
+  </ul>
+  <p>Each of these, once it has a red-on-violation test behind <code>post-build-test-gate</code>, is locked in. That is how "es wird nicht wieder schlechter" becomes structural rather than hopeful.</p>
+
+  <h2 id="related">4. Related concepts</h2>
+  <ul>
+    <li><a href="orchestrator-drive-to-conclusion.html">Orchestrator Drive-to-Conclusion &amp; CLI-Crash Resilience</a> — the stranding model + the deployed Slice 1.</li>
+    <li><a href="orchestrator-supervision-loop.html">Orchestrator Supervision Loop</a> — the active loop that should detect + recover these incidents (and surface a dead loop).</li>
+    <li><a href="auto-review-evidence-gate-analysis.html">Auto-Review Reissue &amp; the Evidence Gate</a>.</li>
+    <li><a href="admin-cli-onboarding.html">Admin CLI Onboarding</a> — pinned binary, detection, loud errors.</li>
+  </ul>
+</div>
+</body>
+</html>

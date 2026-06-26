@@ -4,7 +4,7 @@ import { createJob } from '../helpers/jobs';
 
 /**
  * Cross-surface parity for the unified `<app-cli-model-selector>` chip
- * (see `docs/cli-model-selector-audit.md`). The same control renders in
+ * (see `docs/frontend/audits/cli-model-selector-audit.md`). The same control renders in
  * the status bar (defaults), the create-task dialog (agent for new task),
  * the job-detail command-deck (agent for this job), the chat composer
  * and overview Agent row (configure agent), and the code-review panel
@@ -29,7 +29,7 @@ async function pickWatchPath(): Promise<string> {
 
 async function deleteJob(id: string, watchPath: string): Promise<void> {
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
       method: 'DELETE',
     });
   } catch { /* best-effort cleanup */ }

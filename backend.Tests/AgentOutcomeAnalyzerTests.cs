@@ -255,7 +255,8 @@ public class AgentOutcomeAnalyzerTests
         var lines = Lines("hestrator)");
         var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 0.0);
         Assert.Equal(RunIssueKind.CliLaunchFailed, outcome.IssueKind);
-        Assert.NotEqual(RunIssueKind.ClassifierUnknown, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.OrchestratorInconclusive, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.InfraCrash, outcome.IssueKind);
         Assert.False(outcome.MatchedSentinel);
     }
 
@@ -284,25 +285,42 @@ public class AgentOutcomeAnalyzerTests
 
     // ---- Case (b): failed run WITH a real agent turn ----------------------
     // A run that produced a genuine, substantial agent turn before failing is
-    // NOT a launch failure - it is an unclassifiable agent reply. It stays
-    // ClassifierUnknown so the policy re-issues with context (never a
-    // terminal FAILURE), but the analyzer must not swallow it into the
-    // launch-failure bucket.
+    // NOT a launch failure - it is an unclassifiable agent reply. With no hard
+    // process-death signal (exitCode not < 0) it is OrchestratorInconclusive,
+    // so the policy stops and hands the task to the user (never a CLI launch
+    // failure), and the analyzer must not swallow it into the launch bucket.
 
     [Fact]
-    public void FailedRun_WithRealAgentText_StaysClassifierUnknown_NotCliLaunchFailed()
+    public void FailedRun_WithRealAgentText_IsOrchestratorInconclusive_NotCliLaunchFailed()
     {
         var prose = new string('x', 400) + " I made several edits and ran a long investigation across the module.";
         var lines = Lines(prose);
         var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 120.0);
-        Assert.Equal(RunIssueKind.ClassifierUnknown, outcome.IssueKind);
+        Assert.Equal(RunIssueKind.OrchestratorInconclusive, outcome.IssueKind);
         Assert.NotEqual(RunIssueKind.CliLaunchFailed, outcome.IssueKind);
+    }
+
+    // ---- Case (b'): failed run WITH a real agent turn AND hard process death
+    // The same substantial agent turn, but the CLI process was killed
+    // (exitCode < 0, e.g. Windows Process.Kill returns -1) before reaching a
+    // terminal verdict. That is infrastructure death, not an inconclusive
+    // reply, so it discriminates to InfraCrash.
+
+    [Fact]
+    public void FailedRun_WithRealAgentText_AndNegativeExitCode_IsInfraCrash()
+    {
+        var prose = new string('x', 400) + " I made several edits and ran a long investigation across the module.";
+        var lines = Lines(prose);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 120.0, exitCode: -1);
+        Assert.Equal(RunIssueKind.InfraCrash, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.CliLaunchFailed, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.OrchestratorInconclusive, outcome.IssueKind);
     }
 
     // ---- Case (c): successful run, no sentinel, inconclusive text ---------
     // A clean exit whose text the heuristic cannot map to any shape stays
     // MissingTerminalSentinel so the orchestrator drives it to a structured
-    // close-out, never a terminal classifier-unknown FAILURE.
+    // close-out, never a terminal inconclusive FAILURE.
 
     [Fact]
     public void SuccessfulRun_InconclusiveText_IsMissingTerminalSentinel()
@@ -311,7 +329,7 @@ public class AgentOutcomeAnalyzerTests
         var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 18.0);
         Assert.Equal(AgentOutcomeKind.Unknown, outcome.Kind);
         Assert.Equal(RunIssueKind.MissingTerminalSentinel, outcome.IssueKind);
-        Assert.NotEqual(RunIssueKind.ClassifierUnknown, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.OrchestratorInconclusive, outcome.IssueKind);
     }
 
     // ---- Tolerant sentinel recognition (ASS-643) --------------------------

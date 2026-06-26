@@ -29,6 +29,36 @@
     <InternalsVisibleTo Include="OrchestratorApi.Tests" />
   </ItemGroup>
 
+  <!-- Block 6: deep-integrate the extracted public library. Project reference for
+       co-development during integration; can switch to a published package for release. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\coding-agent-runner\src\CodingAgentRunner\CodingAgentRunner.csproj" />
+  </ItemGroup>
+
+  <!-- Block 6: adopt the library's types by aliasing them to the names the app
+       already uses, so call-sites resolve to the library after the duplicated
+       app type is deleted. Each alias = one type now sourced from the package. -->
+  <ItemGroup>
+    <Using Include="CodingAgentRunner.Model.CliTypes" Alias="CliTypes" />
+    <Using Include="CodingAgentRunner.Model.CliPermissionModes" Alias="CliPermissionModes" />
+    <Using Include="CodingAgentRunner.Model.CliPermissionFlags" Alias="CliPermissionFlags" />
+    <Using Include="CodingAgentRunner.Model.CliContextModes" Alias="CliContextModes" />
+    <Using Include="CodingAgentRunner.Model.CliThinkingLevels" Alias="CliThinkingLevels" />
+    <Using Include="CodingAgentRunner.Model.CliOutputLine" Alias="CliOutputLine" />
+    <Using Include="CodingAgentRunner.Model.CliModelInfo" Alias="CliModelInfo" />
+    <Using Include="CodingAgentRunner.Model.CliModelCatalog" Alias="CliModelCatalog" />
+    <Using Include="CodingAgentRunner.Model.RunStopReason" Alias="RunStopReason" />
+    <Using Include="CodingAgentRunner.Events.CliRunEvent" Alias="CliRunEvent" />
+    <Using Include="CodingAgentRunner.Events.RunPhase" Alias="RunPhase" />
+    <Using Include="CodingAgentRunner.Events.RunPhaseTransitions" Alias="RunPhaseTransitions" />
+    <Using Include="CodingAgentRunner.Events.PlanFrameItem" Alias="PlanFrameItem" />
+    <Using Include="CodingAgentRunner.Events.PlanItemId" Alias="PlanItemId" />
+    <Using Include="CodingAgentRunner.Events.PlanItemStatus" Alias="PlanItemStatus" />
+    <Using Include="CodingAgentRunner.Adapters.ClaudeEventAdapter" Alias="ClaudeEventAdapter" />
+    <Using Include="CodingAgentRunner.Adapters.CodexEventAdapter" Alias="CodexEventAdapter" />
+    <Using Include="CodingAgentRunner.Adapters.GeminiEventAdapter" Alias="GeminiEventAdapter" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- Project-wide usings. Microsoft.Extensions.* were project-level usings of the
          dissolved AgentTaskboard.Runner; the AgentStudio.* set makes every feature

@@ -143,7 +143,7 @@ public record BatchMoveResponse
     public List<BatchMoveItemResult> Results { get; init; } = [];
 }
 
-public record CreateJobRequest
+public record CreateTaskRequest
 {
     public string Id { get; init; } = "";
     public string Title { get; init; } = "";
@@ -154,7 +154,7 @@ public record CreateJobRequest
     public string? Model { get; init; }
     public string? ThinkingLevel { get; init; }
     public string? TargetState { get; init; }
-    /// <summary>Optional CLI backend (claude|codex|copilot|gemini). Defaults to claude when omitted.</summary>
+    /// <summary>Optional CLI backend (claude|codex|gemini). Defaults to claude when omitted.</summary>
     public string? CliType { get; init; }
     /// <summary>Card kind: <c>task</c> (default) or <c>epic</c>. See <see cref="TaskKinds"/>.</summary>
     public string? Kind { get; init; }
@@ -518,6 +518,17 @@ public record SetJobEpicRequest
 public record SetRunnerModeRequest
 {
     public string Mode { get; init; } = "manual";
+
+    /// <summary>
+    /// Optional cause of the change, threaded into the runner's structured log
+    /// and <c>ClassifyModeSource</c>. The UI toggle omits it (defaults to the
+    /// operator "api:" reason → source <c>user</c>). The update-service sends
+    /// <c>update-quiesce</c> / <c>update-resume</c> so its transient flip to
+    /// manual classifies as <c>system</c> and does not overwrite the operator's
+    /// durable <see cref="AgentStudio.Shared.ProjectSettings.DesiredRunnerMode"/>
+    /// (ASS-1753).
+    /// </summary>
+    public string? Reason { get; init; }
 }
 
 public record SetCliPathRequest

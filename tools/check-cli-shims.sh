@@ -14,7 +14,7 @@
 # Exit 0 on success or no-op; exit 1 only when claude is still broken after the
 # repair pass.
 #
-# Registered in docs/loop-inventory.md as a self-heal command id and called
+# Registered in docs/contracts/loop-inventory.md as a self-heal command id and called
 # from agent-taskboard-devspace/start.sh before the backend boots, so a broken
 # CLI cannot drain the Ready lane through silent pickup failures.
 

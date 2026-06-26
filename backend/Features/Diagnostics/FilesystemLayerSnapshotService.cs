@@ -563,7 +563,7 @@ public class FilesystemLayerSnapshotService
            || path.StartsWith(".github/prompts/", StringComparison.OrdinalIgnoreCase)
            || path.StartsWith("prompts/", StringComparison.OrdinalIgnoreCase)
            || path.StartsWith("agent-rules/", StringComparison.OrdinalIgnoreCase)
-           || path.StartsWith("docs/cli-skills/", StringComparison.OrdinalIgnoreCase);
+           || path.StartsWith("docs/cli/skills/", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsTestFile(string path)
         => path.StartsWith("backend.Tests/", StringComparison.OrdinalIgnoreCase)

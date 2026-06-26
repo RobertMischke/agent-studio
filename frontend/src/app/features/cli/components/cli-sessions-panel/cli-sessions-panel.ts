@@ -143,8 +143,6 @@ export class CliSessionsPanelComponent implements OnInit {
 
   cliLabel(t: string): string {
     switch (t) {
-      case 'copilot':
-        return 'Copilot';
       case 'claude':
         return 'Claude Code';
       case 'codex':

@@ -117,7 +117,7 @@ The prep loop is **not** a new layer. It runs inside the orchestrator's existing
 
 - [taxonomy.md](taxonomy.md) - the configurable knobs, the clarity-score inputs, the per-level transition matrix, and the typed bounce reasons.
 - [ui.html](ui.html) - clickable dummy with two states: low-autonomy board (`1b-needs-human-review` visible, queue thin) and fully-auto board (`1b-needs-human-review` hidden, queue full, items flowing). Toggle via the slider in the header.
-- [`docs/architecture-decisions.md`](../../architecture-decisions.md) ADR-0026 - the ADR that adopts this mockup as the spec.
+- [`docs/architecture/decisions/adr-archive.md`](../../architecture/decisions/adr-archive.md) ADR-0026 - the ADR that adopts this mockup as the spec.
 
 ## First implementation slice
 
@@ -127,7 +127,7 @@ Mirrors the deliverables in the parent task prompt:
 2. ADR-0026 references this folder as the spec.
 3. State-machine change: two new lanes added, idempotent boot-time creation, no renames.
 4. Backend `OrchestratorPrepHostedService` behind `Orchestrator:PrepEnabled`, off by default. First slice uses the heuristic clarity score; a fast-model upgrade is a follow-up slice.
-5. API: `GET/PUT /api/projects/{name}/autonomy`, `POST /api/jobs/{id}/move` accepts the new lane names.
+5. API: `GET/PUT /api/projects/{name}/autonomy`, `POST /api/tasks/{id}/move` accepts the new lane names.
 6. Frontend: autonomy slider in the project header (5 stops, tooltip per stop), hide-when-empty for `1b-needs-human-review`, iteration counter and last-decision message rendered on cards in `1a-orchestrator-prep`.
 7. Tests: state machine creates the two new folders idempotently; per-level decision rules; API roundtrip on the autonomy endpoint.
 

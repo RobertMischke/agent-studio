@@ -130,14 +130,14 @@ test.describe('Git pane — large-diff gutter must not escape the scroll contain
           })
         });
       });
-      await page.route('**/api/jobs/*/git/status**', async (route) => {
+      await page.route('**/api/tasks/*/git/status**', async (route) => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify(STATUS_PAYLOAD)
         });
       });
-      await page.route('**/api/jobs/*/git/diff**', async (route) => {
+      await page.route('**/api/tasks/*/git/diff**', async (route) => {
         await route.fulfill({
           status: 200,
           contentType: 'text/plain',
@@ -246,7 +246,7 @@ test.describe('Git pane — large-diff gutter must not escape the scroll contain
         ).toBe(0);
       }
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 
@@ -279,7 +279,7 @@ test.describe('Git pane — large-diff gutter must not escape the scroll contain
           })
         });
       });
-      await page.route('**/api/jobs/*/git/status**', async (route) => {
+      await page.route('**/api/tasks/*/git/status**', async (route) => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -289,7 +289,7 @@ test.describe('Git pane — large-diff gutter must not escape the scroll contain
       // Per-path diff endpoint - returns a multi-file payload regardless of
       // which file the user clicked, so the renderer is exercised on the
       // exact shape the bug screenshot showed.
-      await page.route('**/api/jobs/*/git/diff**', async (route) => {
+      await page.route('**/api/tasks/*/git/diff**', async (route) => {
         await route.fulfill({
           status: 200,
           contentType: 'text/plain',
@@ -342,7 +342,7 @@ test.describe('Git pane — large-diff gutter must not escape the scroll contain
       await newFileHeader.scrollIntoViewIfNeeded();
       await page.screenshot({ path: 'test-results/git-diff-multi-file-evidence.png', fullPage: false });
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 });

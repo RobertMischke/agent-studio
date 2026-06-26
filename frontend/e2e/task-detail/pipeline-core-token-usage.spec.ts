@@ -223,7 +223,7 @@ async function saveShot(page: Page, name: string) {
 test('task detail pipeline shows CORE CLI-footer usage, SUM footer, and API-price disclaimer', async ({ page }) => {
   await page.addInitScript(() => {
     try {
-      localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: true, git: false }));
+      localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false }));
     } catch { /* ignore */ }
   });
   await installFixtureRoutes(page);

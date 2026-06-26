@@ -31,10 +31,14 @@ import { CountBadgeComponent } from '../count-badge/count-badge.component';
 export class TreeRowComponent {
   /** Visible chevron — pass `null` to suppress the chevron column. */
   readonly chevron = input<'collapsed' | 'expanded' | null>(null);
+  /** Keep the chevron column even when the row itself has no chevron. */
+  readonly reserveChevron = input(false);
   /** Optional SVG glyph; takes precedence over `glyphChar`. */
   readonly glyph = input<StudioIconName | null>(null);
   /** Optional initial letter (e.g. project avatar "A"). */
   readonly glyphChar = input<string | null>(null);
+  /** Keep the glyph column even when the row has no icon or initial. */
+  readonly reserveGlyph = input(false);
   /** Coloured square behind the glyph initial. */
   readonly glyphColor = input<string | null>(null);
   readonly label = input('');

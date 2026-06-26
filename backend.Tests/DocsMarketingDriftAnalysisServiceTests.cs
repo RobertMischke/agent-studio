@@ -53,8 +53,8 @@ public class DocsMarketingDriftAnalysisServiceTests : IDisposable
         File.WriteAllText(Path.Combine(_repoRoot, "README.md"), "# README\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "ROADMAP.md"), "# ROADMAP\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "AGENTS.md"), "# AGENTS\n", Encoding.UTF8);
-        File.WriteAllText(Path.Combine(_repoRoot, "docs", "architecture-decisions.md"), "# ADR\n", Encoding.UTF8);
-        File.WriteAllText(Path.Combine(_repoRoot, "docs", "design-principles.md"), "# DP\n", Encoding.UTF8);
+        WriteRepoFile("docs/architecture/decisions/adr-archive.md", "# ADR\n");
+        WriteRepoFile("docs/product/design-principles.md", "# DP\n");
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "mockups", "quality-system"));
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "mockups", "next-gen-chat"));
 
@@ -65,8 +65,8 @@ public class DocsMarketingDriftAnalysisServiceTests : IDisposable
         Assert.Contains("README.md", docPaths);
         Assert.Contains("ROADMAP.md", docPaths);
         Assert.Contains("AGENTS.md", docPaths);
-        Assert.Contains("docs/architecture-decisions.md", docPaths);
-        Assert.Contains("docs/design-principles.md", docPaths);
+        Assert.Contains("docs/architecture/decisions/adr-archive.md", docPaths);
+        Assert.Contains("docs/product/design-principles.md", docPaths);
 
         var mockupPaths = scope.MockupDocs.Select(d => d.Path.Replace('\\', '/')).ToArray();
         Assert.Contains("docs/mockups/quality-system/", mockupPaths);
@@ -603,6 +603,13 @@ public class DocsMarketingDriftAnalysisServiceTests : IDisposable
     // ------------------------------------------------------------------
     // helpers
     // ------------------------------------------------------------------
+
+    private void WriteRepoFile(string relPath, string content)
+    {
+        var full = Path.Combine(_repoRoot, relPath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllText(full, content, Encoding.UTF8);
+    }
 
     private void WriteJob(string lane, string jobId, string title)
     {

@@ -69,7 +69,7 @@ Post: aspect-* (parallel) -> git-commit-attribution (Stub)
       -> drift-* (opt-in, default-off)
 ```
 
-The class comment names the Pre section as the home for exactly this work: "Pre-steps are reserved slots (no runtime today; future tasks plug requirement-clarification / context-retrieval / skill-readiness here)" ([PipelineCatalogue.cs:6-12](../../backend/Services/Pipeline/PipelineCatalogue.cs)). A prep step is a "requirement-clarification" Pre step by another name; ADR-0045 reserved this slot for it.
+The class comment names the Pre section as the home for exactly this work: "Pre-steps are reserved slots (no runtime today; future tasks plug requirement-clarification / context-retrieval / wiki-guidance upkeep here)" ([PipelineCatalogue.cs:6-12](../../backend/Services/Pipeline/PipelineCatalogue.cs)). A prep step is a "requirement-clarification" Pre step by another name; ADR-0045 reserved this slot for it.
 
 ### 2.5 Pre-step recording precedent
 
@@ -205,7 +205,7 @@ Each slice ships with tests and a doc update. Worker CLIs do not commit; the pla
 - This belongs under the "Expanded Lifecycle Lanes" theme, as the pre-side sibling of the auto-review post-processing consolidation (ASS-176). References: ASS-176 (post-processing lane), the ASS-619 decoupling requirement (prep / review must not block runner throughput), ASS-624 (completion loop in the pipeline).
 - It supersedes the lane decision in ADR-0026 (orchestrator-prep lane + `1a` / `1b`) with "prep is an optional Pre pipeline step running on the decoupled pre-processing worker; the autonomy scale and clarity rules survive, the lane does not". The autonomy scale itself (levels 0-4) is not removed, only its lane embodiment.
 - It fills the Pre slot that ADR-0045 reserved.
-- New ADR numbering: the archive runs through ADR-0053 ([architecture-decisions.md:1049](../architecture-decisions.md)), so a new ADR for this work claims ADR-0054. Note the existing collision between the archive's ADR-0051 (eliminate failed-pickup lane) and the standalone proposed file `adr/adr-0051-task-processing-pipeline.md`; do not reuse 0051. When slice 4 lands, add ADR-0054 recording the supersede and the preserved invariant (one coding CLI per project) versus the relaxed one (prep is a phase + pipeline step, not a backlog lane).
+- New ADR numbering: the archive runs through ADR-0053 ([architecture-decisions.md:1049](../architecture/decisions/adr-archive.md)), so a new ADR for this work claims ADR-0054. Note the existing collision between the archive's ADR-0051 (eliminate failed-pickup lane) and the standalone proposed file `adr/adr-0051-task-processing-pipeline.md`; do not reuse 0051. When slice 4 lands, add ADR-0054 recording the supersede and the preserved invariant (one coding CLI per project) versus the relaxed one (prep is a phase + pipeline step, not a backlog lane).
 - The contract-bounded-agent rule (ADR-0032) is preserved: the model classifies clarity, the rule engine decides accept / bounce / iterate; the agent never moves a card itself.
 
 ## 11. Open questions

@@ -283,7 +283,7 @@ public class TaskReferencesTests : IDisposable
     };
 
     private string CreateJob(TaskMutationService mutations, string id) =>
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = id,
             Title = id,

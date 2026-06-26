@@ -13,7 +13,7 @@
     <p class="studio-empty">No data.</p>
   } @else if (!overview()!.exists) {
     <p class="studio-empty">
-      No <code>docs/architecture-decisions.md</code> found at
+      No <code>docs/architecture/decisions/adr-archive.md</code> found at
       <code>{{ overview()!.sourceFile }}</code>. Create one to start the archive.
     </p>
   } @else if (overview()!.decisions.length === 0) {
@@ -69,4 +69,4 @@
     </p>
   }
 </section>
-  
+

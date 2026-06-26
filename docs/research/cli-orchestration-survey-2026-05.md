@@ -24,7 +24,7 @@ Per-repo primary-source notes live next to each cloned repo at
 Each NOTES.md cross-links back into this index.
 
 Authoritative scope context lives in
-[`docs/architecture-decisions.md`](../architecture-decisions.md) ADR-0011
+[`docs/architecture/decisions/adr-archive.md`](../architecture/decisions/adr-archive.md) ADR-0011
 (unproven .CMD root-cause), ADR-0012 (existing agents are the engine),
 ADR-0013 (typed `CliRunEvent` + phase-aware watchdog), and ADR-0014
 (stale-session reliability is first-class). All recommendations below stay

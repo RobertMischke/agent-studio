@@ -31,11 +31,11 @@ const FILE_LIST_MAX = 12;
 
 export function buildTaskTypeChip(taskType: TaskInfo['taskType']): TaskTypeChip {
   const type = (taskType || 'chore').toLowerCase();
-  if (type === 'bug') return { kind: 'bug', label: 'Bug', icon: '🐞', tooltip: 'Task type: Bug' };
+  if (type === 'bug') return { kind: 'bug', label: 'Bug', icon: 'warn', tooltip: 'Task type: Bug' };
   if (type === 'feature' || type === 'user-story') {
-    return { kind: 'feature', label: 'Feature', icon: '✨', tooltip: 'Task type: Feature' };
+    return { kind: 'feature', label: 'Feature', icon: 'plus', tooltip: 'Task type: Feature' };
   }
-  return { kind: 'chore', label: 'Chore', icon: '·', tooltip: 'Task type: Chore (default)' };
+  return { kind: 'chore', label: 'Chore', icon: 'dot', tooltip: 'Task type: Chore (default)' };
 }
 
 export interface ModeBadge {
@@ -294,7 +294,7 @@ export interface EffectiveModelChip {
   tooltip: StructuredTooltip;
 }
 
-const CLI_TYPES_SET = new Set(['copilot', 'claude', 'codex', 'gemini']);
+const CLI_TYPES_SET = new Set(['claude', 'codex', 'gemini']);
 
 function isCliType(v: string | null | undefined): v is CliType {
   return !!v && CLI_TYPES_SET.has(v);
@@ -402,6 +402,7 @@ export interface TaskTagChip {
 
 const SUPPRESSED_CARD_TAG_TEXT = new Set([
   'ready',
+  'reviewed',
   'reviewready',
   'readytosignoff',
   'autoreview',
@@ -412,6 +413,9 @@ const SUPPRESSED_CARD_TAG_TEXT = new Set([
   'classifier',
   'classifierunknown',
   'classification',
+  'orchestratormove',
+  'orchestratormoved',
+  'movedbyorchestrator',
   'qas',
   'qandas',
   'questionsandanswers',
@@ -431,6 +435,8 @@ const LANE_MIRROR_CARD_TAG_TEXT: Record<string, readonly string[]> = {
   [TaskState.Completed]: ['completed', 'complete', 'done'],
   [TaskState.Archive]: ['archive', 'archived'],
 };
+
+const REISSUE_AUTO_REVIEW_TAG_ID = 'reissue:autoreview';
 
 function compactTagText(value: string): string {
   return value
@@ -468,6 +474,17 @@ export function buildTagChips(
   return list.flatMap((id) => {
     const entry = byId.get(id);
     if (isSuppressedCardTag(id, entry, state)) return [];
+    if (id.toLowerCase() === REISSUE_AUTO_REVIEW_TAG_ID) {
+      return {
+        id,
+        label: 'Reissue',
+        color: '#f59e0b',
+        ghost: false,
+        concern: false,
+        unparseable: false,
+        tooltip: 'Auto-review sent this task back for another attempt.'
+      };
+    }
     if (entry) {
       return {
         id,
@@ -555,58 +572,153 @@ export interface GitStateBadge {
   tooltip: string;
 }
 
-// Lane -> git-integration phase. Pure lane-derived (ASS-1665): NO key rename,
-// no new data source. The lane key is the single input, so this stays
-// "Risiko ~0" until the post-SSOT lane rename (concept doc section 4):
-//   pre-merge  -> work lives on the task branch, not yet in develop
-//   post-merge -> commits integrated into develop
-//   tagged     -> archived / final, out of the active git flow
-const GIT_STATE_BY_LANE: Readonly<Record<string, GitStateBadgeKind>> = {
-  [TaskState.Progress]: 'pre-merge',
-  [TaskState.CodeNotComplete]: 'pre-merge',
-  [TaskState.AutoReview]: 'pre-merge',
-  [TaskState.HumanReview]: 'pre-merge',
-  [TaskState.Escalated]: 'pre-merge',
-  [TaskState.Completed]: 'post-merge',
-  [TaskState.Archive]: 'tagged',
-};
+// Lane -> which cards may carry a git-state pill. Early lanes still stay quiet
+// unless a real branch/tip is recorded; this lets prepared/ready worktree tasks
+// show their branch before the first commit without inventing context for
+// ordinary backlog cards. The lane no longer decides the LABEL: that comes from
+// the provenance ground truth below. Completed/Archive still map straight
+// through because the lane itself is the terminal fact (accepted into develop /
+// archived).
+const GIT_STATE_LANES: ReadonlySet<string> = new Set<string>([
+  TaskState.Backlog,
+  TaskState.Preparation,
+  TaskState.OrchestratorPrep,
+  TaskState.Ready,
+  TaskState.Progress,
+  TaskState.CodeNotComplete,
+  TaskState.FailedPickup,
+  TaskState.AutoReview,
+  TaskState.HumanReview,
+  TaskState.Escalated,
+  TaskState.Completed,
+  TaskState.Archive,
+]);
+
+const EARLY_GIT_CONTEXT_LANES: ReadonlySet<string> = new Set<string>([
+  TaskState.Backlog,
+  TaskState.Preparation,
+  TaskState.OrchestratorPrep,
+  TaskState.Ready,
+  TaskState.FailedPickup,
+]);
+
+// Review lanes a PARALLEL run only reaches AFTER its task/<id> worktree was
+// auto-integrated into develop and torn down (ADR-0052 / ASS-1731-1732). A card
+// sitting here therefore has NO live worktree: its work already landed. A
+// SEQUENTIAL run reaches the same lanes with no task branch at all, so we still
+// gate the "landed" read on a branch having existed (a recorded branchTip).
+const POST_INTEGRATION_REVIEW_LANES: ReadonlySet<string> = new Set<string>([
+  TaskState.AutoReview,
+  TaskState.HumanReview,
+]);
+
+function shortSha(sha: string): string {
+  return sha.length > 7 ? sha.slice(0, 7) : sha;
+}
 
 /**
- * Git-integration-state badge (ASS-1665). Tells the operator at a glance where
- * a card's work sits in the branch/merge flow, derived purely from the existing
- * lane key — no `state` rename, no new backend field. Backlog / preparation /
- * ready / failed-pickup carry no useful git context, so they return null and
- * stay quiet. The pre-merge label names the task branch (`task/<key>`) so it
- * lines up with the worktree/branch model.
+ * The CURRENT attempt's `task/<id>` tip: the newest recorded transition that
+ * carries a non-null `branchTip`. Walking from the end makes a reissue point at
+ * the live worktree, not an earlier run's tip. Null when no transition ever saw
+ * a branch (a sequential run in the shared main checkout never cuts one).
+ */
+function currentBranchTip(prov: TaskInfo['provenance']): string | null {
+  const transitions = prov?.transitions;
+  if (!transitions?.length) return null;
+  for (let i = transitions.length - 1; i >= 0; i--) {
+    const tip = transitions[i]?.branchTip;
+    if (tip) return tip;
+  }
+  return null;
+}
+
+/** Ground-truth "folded into develop" merge SHA, or null when not recorded. */
+function recordedMergeSha(prov: TaskInfo['provenance']): string | null {
+  const sha = prov?.merge?.mergeCommit;
+  return sha && sha.trim().length > 0 ? sha : null;
+}
+
+/**
+ * Git-state badge (ASS-1665, reworked for ASS-1752). Shows the operator *where
+ * the work actually lives* from the provenance ground truth (ASS-1724), not a
+ * lane guess. The lane only decides whether a pill shows at all; the label is
+ * driven by three persisted facts on `job.provenance`:
+ *
+ *  1. Active worktree — a `task/<id>` branch exists (newest transition has a
+ *     `branchTip`) and is not yet integrated. Names the branch + current-attempt
+ *     tip, so a reissue tracks the live worktree.
+ *  2. Landed in develop — the recorded merge fact, the terminal Completed lane,
+ *     or a post-integration review lane whose parallel worktree was already torn
+ *     down. Shows `develop @sha`; never a dead worktree path.
+ *  3. Shared main checkout — a sequential run with no task branch at all. Says so
+ *     instead of inventing a `task/<id>` that was never cut.
+ *
+ * Archived cards collapse to a quiet `tagged` pill. The three kinds keep the
+ * existing pre-merge / post-merge / tagged styling.
  */
 export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
-  const kind = GIT_STATE_BY_LANE[job.state];
-  if (!kind) return null;
-  switch (kind) {
-    case 'pre-merge': {
-      const branch = `task/${job.key || job.id}`;
-      return {
-        kind,
-        label: branch,
-        glyph: '⎇',
-        tooltip: `Git state: pre-merge — this task's work lives on its task branch (${branch}) and is not yet integrated into develop.`,
-      };
-    }
-    case 'post-merge':
-      return {
-        kind,
-        label: 'develop',
-        glyph: '⬇',
-        tooltip: "Git state: post-merge — this task's commits are integrated into the develop branch.",
-      };
-    case 'tagged':
-      return {
-        kind,
-        label: 'tagged',
-        glyph: '🏷',
-        tooltip: "Git state: archived — this task is out of the active git flow; its work, if any, was integrated into develop before it was archived.",
-      };
+  if (!GIT_STATE_LANES.has(job.state)) return null;
+
+  if (job.state === TaskState.Archive) {
+    return {
+      kind: 'tagged',
+      label: 'tagged',
+      glyph: '🏷',
+      tooltip:
+        "Git state: archived — this task is out of the active git flow; its work, if any, was integrated into develop before it was archived.",
+    };
   }
+
+  const prov = job.provenance ?? null;
+  const branchName = prov?.branch || `task/${job.key || job.id}`;
+  const tip = currentBranchTip(prov);
+  const mergeSha = recordedMergeSha(prov);
+
+  if (EARLY_GIT_CONTEXT_LANES.has(job.state) && !tip && !mergeSha) {
+    return null;
+  }
+
+  // (2) Landed in develop. Ground-truth merge fact wins; otherwise the lane is
+  // terminal (Completed) or a post-integration review lane whose parallel
+  // worktree has already been torn down (a real branch was cut, so this is not a
+  // sequential run). In every case the worktree, if any, is gone — show develop.
+  const landed =
+    !!mergeSha ||
+    job.state === TaskState.Completed ||
+    (POST_INTEGRATION_REVIEW_LANES.has(job.state) && !!tip);
+  if (landed) {
+    const label = mergeSha ? `develop @${shortSha(mergeSha)}` : 'develop';
+    return {
+      kind: 'post-merge',
+      label,
+      glyph: '⬇',
+      tooltip: mergeSha
+        ? `Git state: merged into develop at ${shortSha(mergeSha)}. The task/<id> worktree has been integrated and torn down — its work now lives on develop.`
+        : "Git state: integrated — this task's commits live on the develop branch; its worktree, if any, has been torn down.",
+    };
+  }
+
+  // (1) Active worktree run. A real task/<id> branch exists and is not yet
+  // integrated. The tip is the CURRENT attempt's, so a reissue tracks the live
+  // worktree rather than an earlier run.
+  if (tip) {
+    return {
+      kind: 'pre-merge',
+      label: branchName,
+      glyph: '⎇',
+      tooltip: `Git state: pre-merge — this task's work lives in its own ${branchName} worktree (current run, tip ${shortSha(tip)}) and is not yet integrated into develop.`,
+    };
+  }
+
+  // (3) Sequential run in the shared main checkout: no task/<id> worktree was
+  // ever cut. Say so instead of showing a branch that does not exist.
+  return {
+    kind: 'pre-merge',
+    label: 'main checkout',
+    glyph: '✎',
+    tooltip:
+      "Git state: pre-merge — this is a sequential run working directly in the shared main checkout; no isolated task/<id> worktree was created. Its work is not yet integrated into develop.",
+  };
 }
 
 export type PipelineDotStatus = 'done' | 'active' | 'pending' | 'blocked';
@@ -630,9 +742,9 @@ function pipelineView(
 ): PipelineDotsView {
   const order: PipelineDot['id'][] = ['pre', 'run', 'post', 'review'];
   const labels: Record<PipelineDot['id'], string> = {
-    pre: 'Pre',
-    run: 'Run',
-    post: 'Post',
+    pre: 'Pre steps',
+    run: 'Core agent work',
+    post: 'Post steps',
     review: 'Review',
   };
   const doneIndex = doneThrough ? order.indexOf(doneThrough) : -1;
@@ -656,7 +768,7 @@ function pipelineView(
  * Tiny card-level pipeline indicator. The board payload intentionally does not
  * carry the full per-task pipeline execution; that lives behind the detail
  * endpoint. The card therefore maps the existing lane/phase/execution signals
- * to the four visible sections (Pre, Run, Post, Review) without inventing
+ * to the four visible sections (Pre steps, core agent work, post steps, review) without inventing
  * per-step results.
  */
 export function buildPipelineDots(job: TaskInfo): PipelineDotsView {
@@ -798,8 +910,7 @@ export function buildReviewBadge(summaryState: TaskInfo['summaryState']): Review
       return { label: 'summarizing', tone: 'generating',
                tooltip: 'Orchestrator is summarizing the run output (Haiku). The card will become quiet once status.md has been written.' };
     case 'ready':
-      return { label: 'Reviewed', tone: 'ready',
-               tooltip: summaryState.bytesWritten ? `Auto-review wrote ${summaryState.bytesWritten} bytes to status.md.` : 'Auto-review finished.' };
+      return null;
     case 'failed':
       return { label: 'review failed', tone: 'failed',
                tooltip: summaryState.errorMessage ?? 'Auto-review failed.' };
@@ -855,16 +966,15 @@ export function buildAutoReviewProcessBadge(job: TaskInfo, status: AutoReviewSta
 // auto-review process badge.
 const HUMAN_DECISION_LANES = new Set<string>([TaskState.HumanReview, TaskState.Escalated, '4-review']);
 
-export interface HumanReviewBadge { label: string; tone: 'attention' | 'accept'; tooltip: string; }
+export interface HumanReviewBadge { label: string; tone: 'attention'; tooltip: string; }
 
 /**
  * Human-decision badge. An escalated / reissue card parked in 5-human-review
  * used to render identically to a Completed card, hiding that a human still has
  * to act ("Failed-Cards sehen aus wie Done"). This pill makes the verdict
  * explicit: a loud red "Escalated" / "Needs rework" marker for action-required
- * verdicts, and a calm green "Reviewed" marker for an accepted card awaiting
- * confirmation. Returns null for plain human review (no verdict yet) so
- * undecided cards stay quiet.
+ * verdicts. Accepted cards stay quiet; the lane and commit context carry enough
+ * state without repeating "Reviewed" as another chip.
  */
 export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
   if (!HUMAN_DECISION_LANES.has(job.state)) return null;
@@ -882,11 +992,7 @@ export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
         tooltip: 'Auto-review asked for a reissue: the work needs changes before it can be accepted. Waiting on a human to act.'
       };
     case 'accept':
-      return {
-        label: 'Reviewed',
-        tone: 'accept',
-        tooltip: 'Auto-review accepted this task. A human just needs to confirm and move it to Completed.'
-      };
+      return null;
     default:
       return null;
   }

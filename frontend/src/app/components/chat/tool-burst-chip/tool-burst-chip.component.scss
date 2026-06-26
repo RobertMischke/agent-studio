@@ -1,17 +1,20 @@
 :host { display: block; }
 
+// Tool bursts are accompanying info, not the main voice: keep the container
+// quiet so the agent prose around it stays dominant. Weight only steps up
+// once the row is opened on purpose.
 .burst {
-  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, currentColor 4%, transparent);
+  background: color-mix(in srgb, currentColor 2.5%, transparent);
   font-family: var(--font-ui);
   font-size: 12.5px;
   line-height: 1.45;
   transition: border-color 120ms ease, background 120ms ease;
 }
 .burst--open {
-  border-color: color-mix(in srgb, currentColor 32%, transparent);
-  background: color-mix(in srgb, currentColor 6%, transparent);
+  border-color: color-mix(in srgb, currentColor 20%, transparent);
+  background: color-mix(in srgb, currentColor 4.5%, transparent);
 }
 .burst--error {
   border-color: rgba(239, 68, 68, 0.55);
@@ -41,50 +44,67 @@
   border-radius: 8px;
 }
 
-.burst__icon { font-size: 14px; line-height: 1; opacity: 0.9; }
+.burst__icon { font-size: 13px; line-height: 1; opacity: 0.7; cursor: help; }
 .burst__count { display: flex; gap: 8px; align-items: baseline; }
-.burst__count strong { font-weight: 700; letter-spacing: 0.01em; }
+.burst__count strong {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: color-mix(in srgb, currentColor 72%, transparent);
+}
 .burst__fail {
   font-style: normal;
   font-weight: 700;
   color: #f87171;
   font-size: 11.5px;
 }
+// Single-line summary strip: chips never wrap, so a long burst stays one row
+// while collapsed. Overflow is clipped and the preview ellipsizes.
 .burst__families {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 5px;
   align-items: center;
   min-width: 0;
+  overflow: hidden;
 }
+// All count chips share one quiet, theme-driven style. Family is already
+// conveyed by the leading glyph and the chip label, so the loud per-family
+// colors are dropped in favor of central currentColor tokens.
 .burst__chip {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 1px 8px;
+  padding: 1px 7px;
   border-radius: 999px;
-  background: color-mix(in srgb, currentColor 10%, transparent);
-  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  color: color-mix(in srgb, currentColor 72%, transparent);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  flex: 0 0 auto;
 }
-.burst__chip--time { background: color-mix(in srgb, currentColor 4%, transparent); }
+.burst__chip--time { background: color-mix(in srgb, currentColor 3%, transparent); }
 .burst__chip--model {
-  background: color-mix(in srgb, currentColor 5%, transparent);
-  border-color: color-mix(in srgb, currentColor 12%, transparent);
-  color: color-mix(in srgb, currentColor 55%, transparent);
+  background: color-mix(in srgb, currentColor 4%, transparent);
+  border-color: color-mix(in srgb, currentColor 10%, transparent);
+  color: color-mix(in srgb, currentColor 52%, transparent);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
   letter-spacing: 0.01em;
 }
-.burst__chip--art { background: rgba(56,189,248,0.14); border-color: rgba(125,211,252,0.45); }
-.burst__chip--file { background: rgba(167,139,250,0.14); border-color: rgba(196,181,253,0.45); }
-.burst__chip[data-family='read'] { background: rgba(94,234,212,0.14); border-color: rgba(45,212,191,0.45); }
-.burst__chip[data-family='search'] { background: rgba(250,204,21,0.14); border-color: rgba(234,179,8,0.45); }
-.burst__chip[data-family='edit'] { background: rgba(196,181,253,0.16); border-color: rgba(167,139,250,0.45); }
-.burst__chip[data-family='command'] { background: rgba(248,113,113,0.14); border-color: rgba(239,68,68,0.45); }
-.burst__chip[data-family='task'] { background: rgba(125,211,252,0.16); border-color: rgba(56,189,248,0.45); }
-.burst__chip[data-family='todo'] { background: rgba(186,230,253,0.16); border-color: rgba(56,189,248,0.45); }
+
+// One-line gist of the burst, shown only while collapsed. Takes the leftover
+// width and truncates so the row height never grows.
+.burst__preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 11px;
+  color: color-mix(in srgb, currentColor 50%, transparent);
+}
 
 .burst__caret {
   font-size: 11px;
@@ -113,6 +133,15 @@
   font-family: var(--font-mono);
   font-size: 11px;
   opacity: 0.7;
+}
+// Written-out meaning of the leading glyph: readable (not the uppercased,
+// faded treatment of the rest of the head) so the row is decodable when open.
+.burst__details-glyph {
+  margin-right: auto;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.85;
+  font-weight: 600;
 }
 
 .burst__rows {

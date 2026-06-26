@@ -58,6 +58,8 @@ export interface ExplorerWorkspaceGroup {
   projects: ExplorerProjectNode[];
 }
 
+export type ExplorerProjectSurface = 'board' | 'hub' | 'wiki' | 'backlog' | 'epics';
+
 function folderTail(path: string): string {
   const parts = path.split(/[\\/]+/).filter(Boolean);
   return parts.length ? parts[parts.length - 1] : path;
@@ -96,17 +98,22 @@ export class ExplorerWorkspaceTreeComponent {
   readonly projectStorageByName = input<ReadonlyMap<string, string>>(new Map());
   readonly expandedProjects = input<ReadonlySet<string>>(new Set());
   readonly showAllActive = input(false);
+  readonly activeProjectSurface = input<ExplorerProjectSurface | null>(null);
 
   readonly showAll = output<void>();
   readonly toggleExpanded = output<string>();
   readonly openBoardRequest = output<string>();
   readonly openHubRequest = output<string>();
+  /** Open the project's Project Hub deep-linked to its Wiki rail. */
+  readonly openWikiRequest = output<string>();
   /** Project-scoped backlog triage open for the named project (ASS-658). */
   readonly openBacklogRequest = output<string>();
   /** Project-scoped epic overview open for the named project (ASS-658). */
   readonly openEpicsRequest = output<string>();
   /** Open the project onboarding modal preselected to this workspace. */
   readonly onboardProjectRequest = output<string>();
+  /** Open the create-workspace dialog from the Workspaces section header. */
+  readonly onboardWorkspaceRequest = output<void>();
   /** Project row dropped onto a different real workspace; the shell PUTs
    *  /api/projects/{projectId} `{ workspaceId }` and reloads (no folder move). */
   readonly projectDrop = output<{ projectId: string; targetWorkspaceId: string }>();

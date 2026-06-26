@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { map } from 'rxjs';
 import type {
   ArchivedTasksResponse,
-  CreateJobRequest,
+  CreateTaskRequest,
   GroupedJobs,
   TaskArtifactsResponse,
   TaskFileHistoryEntry,
@@ -13,6 +13,8 @@ import type {
   FileGenerationMeta,
   WatchPathEntry,
   RegistryWorkspaceListItem,
+  CrashRecoveryActionResult,
+  CrashRecoveryPending,
   CliOutputLine,
   RunnerStatus,
   CliSettings,
@@ -28,7 +30,7 @@ import type {
 } from '../models/task.model';
 import { TaskState } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
-import type { CopilotModelCatalog, CliModelCatalog, CliUsageReport } from '../features/cli';
+import type { CliModelCatalog, CliCompletionContract, CliUsageReport, CliWorkingMemoryReport, CliWorkingMemoryDeleteResult } from '../features/cli';
 import type { GitFileChange, GitStatus, TaskCommitDetail, TaskProvenanceView } from '../features/git';
 import type {
   OrchestratorLogResponse,
@@ -604,7 +606,7 @@ export class TaskService {
     );
   }
 
-  createJob(req: CreateJobRequest) {
+  createJob(req: CreateTaskRequest) {
     return this.http.post<{ id: string }>(`${this.baseUrl}/tasks`, req);
   }
 
@@ -1262,6 +1264,26 @@ export class TaskService {
     return this.http.get<CliUsageReport>(`${this.baseUrl}/cli/usage`);
   }
 
+  /** Per-CLI completion contracts (how each backend signals turn completion). */
+  getCliCompletionContracts() {
+    return this.http.get<CliCompletionContract[]>(`${this.baseUrl}/cli/contracts`);
+  }
+
+  /** Per-CLI working-memory report: memory / session state plus protected auth / config (ASS-1748 / T1c). */
+  getCliWorkingMemory(cliType: CliType) {
+    return this.http.get<CliWorkingMemoryReport>(
+      `${this.baseUrl}/cli/${encodeURIComponent(cliType)}/working-memory`,
+    );
+  }
+
+  /** Delete one memory / session state by absolute path. The backend refuses auth / config paths. */
+  deleteCliWorkingMemory(cliType: CliType, path: string) {
+    return this.http.delete<CliWorkingMemoryDeleteResult>(
+      `${this.baseUrl}/cli/${encodeURIComponent(cliType)}/working-memory`,
+      { params: { path } },
+    );
+  }
+
   // Cycle 10d: quota / subscription rate-limit reporting moved to
   // QuotaApiService (`features/quota/services/`). Caller migration:
   // `inject(QuotaApiService)` instead of `inject(TaskService)` + the
@@ -1319,7 +1341,7 @@ export class TaskService {
   }
 
   getModelCatalog() {
-    return this.http.get<CopilotModelCatalog>(`${this.baseUrl}/settings/cli/models`);
+    return this.http.get<CliModelCatalog>(`${this.baseUrl}/settings/cli/models`);
   }
 
   getJobOutput(jobId: string, watchPath?: string) {
@@ -1424,6 +1446,26 @@ export class TaskService {
     );
   }
 
+  getPendingCrashRecoveries() {
+    return this.http.get<{ pending: CrashRecoveryPending[] }>(
+      `${this.baseUrl}/crash-recovery/pending`,
+    );
+  }
+
+  commitCrashRecovery(id: string) {
+    return this.http.post<CrashRecoveryActionResult>(
+      `${this.baseUrl}/crash-recovery/pending/${encodeURIComponent(id)}/commit`,
+      {},
+    );
+  }
+
+  dismissCrashRecovery(id: string) {
+    return this.http.post<CrashRecoveryActionResult>(
+      `${this.baseUrl}/crash-recovery/pending/${encodeURIComponent(id)}/dismiss`,
+      {},
+    );
+  }
+
   repairProjectQueueHealth(projectName: string) {
     return this.http.post<{
       project: string;
@@ -1440,6 +1482,7 @@ export class TaskService {
         string,
         {
           autoCommit: boolean;
+          crashRecoveryEnabled: boolean;
           autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
           runnerMode: string | null;
           orchestratorModel: string | null;
@@ -1539,8 +1582,12 @@ export class TaskService {
    * flags). The Settings panel renders one control row per step from this,
    * so the step list is never hardcoded on the frontend.
    */
-  getPipelineCatalogue() {
-    return this.http.get<PipelineCatalogue>(`${this.baseUrl}/projects/pipeline-catalogue`);
+  getPipelineCatalogue(projectName?: string | null) {
+    const params = projectName ? new HttpParams().set('projectName', projectName) : undefined;
+    return this.http.get<PipelineCatalogue>(
+      `${this.baseUrl}/projects/pipeline-catalogue`,
+      params ? { params } : {},
+    );
   }
 
   /**
@@ -1578,6 +1625,13 @@ export class TaskService {
   setProjectAutoCommit(projectName: string, enabled: boolean) {
     return this.http.put(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/auto-commit`,
+      { enabled },
+    );
+  }
+
+  setProjectCrashRecovery(projectName: string, enabled: boolean) {
+    return this.http.put(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/crash-recovery`,
       { enabled },
     );
   }

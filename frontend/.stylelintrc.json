@@ -109,7 +109,7 @@
         "column-gap": ["px"]
       },
       {
-        "message": "Use a --studio-spacing-* token instead of a hardcoded px value. See docs/style-guide/tokens.md.",
+        "message": "Use a --studio-spacing-* token instead of a hardcoded px value. See docs/frontend/style-guide/tokens.md.",
         "severity": "warning"
       }
     ]
@@ -150,7 +150,7 @@
       }
     },
     {
-      "comment": "Legacy SCSS files pending Tier-1/Tier-2 migration. Each removed entry below is a migration win. New SCSS files are NOT added here; they conform from day one. Track progress under `docs/frontend-scss-quality.md` Wave A.",
+      "comment": "Legacy SCSS files pending Tier-1/Tier-2 migration. Each removed entry below is a migration win. New SCSS files are NOT added here; they conform from day one. Track progress under `docs/frontend/audits/scss-quality.md` Wave A.",
       "files": [
         "src/styles.scss",
         "src/app/app.scss",

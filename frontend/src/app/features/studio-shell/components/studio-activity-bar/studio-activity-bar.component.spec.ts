@@ -95,4 +95,16 @@ describe('StudioActivityBarComponent admin destination', () => {
     const btn = host.querySelector<HTMLElement>('[data-testid="studio-ab-admin"]')!;
     expect(btn.classList.contains('studio-ab__btn--active')).toBe(true);
   });
+
+  it('keeps the Settings button active while the Workspace settings tab is active', () => {
+    const fixture = mount();
+    fixture.componentRef.setInput('activePanel', 'explorer');
+    fixture.componentRef.setInput('sidebarVisible', false);
+    fixture.componentRef.setInput('settingsActive', true);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const btn = host.querySelector<HTMLElement>('[data-testid="studio-ab-settings"]')!;
+    expect(btn.classList.contains('studio-ab__btn--active')).toBe(true);
+  });
 });

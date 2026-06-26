@@ -223,8 +223,6 @@ export class CliUsageDetailComponent {
         return m.includes('claude') || m.includes('haiku') || m.includes('sonnet') || m.includes('opus');
       case 'codex':
         return m.includes('codex') || m.startsWith('gpt') || /^o\d/.test(m);
-      case 'copilot':
-        return m.includes('copilot');
       case 'gemini':
         return m.includes('gemini');
       default:

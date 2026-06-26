@@ -77,7 +77,7 @@ test.describe('caret suppression on non-text-input elements', () => {
         clip: { x: 0, y: 0, width: 1280, height: 720 }
       });
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 });

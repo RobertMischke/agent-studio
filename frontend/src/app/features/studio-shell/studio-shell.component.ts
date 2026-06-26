@@ -17,6 +17,7 @@ import { FormsModule } from '@angular/forms';
 import type { TaskInfo, RegistryWorkspaceListItem, WatchPathEntry } from '../../models/task.model';
 import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
+import { StudioSidebarHeaderComponent } from '../../components/studio-sidebar-header/studio-sidebar-header.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
 import { StudioEmptyStateComponent } from './components/studio-empty-state/studio-empty-state.component';
 import { SectionHeaderComponent } from '../../components/section-header/section-header.component';
@@ -28,17 +29,24 @@ import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
 import { TaskSelectionService } from '../task-detail';
 import { ProjectDetailComponent } from '../project-detail';
+import {
+  PROJECT_RAIL_ITEMS,
+  DEFAULT_PROJECT_RAIL_KEY,
+  isProjectRailKey,
+  type ProjectRailItem,
+} from '../project-detail/components/project-shell/project-shell.config';
+import type { StudioIconName } from '../../components/studio-icon/studio-icon.component';
 import { UiPreferencesService } from '../shell';
 import { BoardFiltersService, BacklogTriageService, flattenGrouped } from '../board';
 import { UpdateClientService } from '../../services/update.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { NotificationService } from '../../services/notification.service';
 import { copyTextToClipboard } from '../../services/clipboard.util';
-import { WorkspaceManagerService, ProjectDragDropService } from '../shell';
+import { WorkspaceManagerService, ProjectDragDropService, WorkspaceOverlaysService } from '../shell';
 import { WorkspaceSettingsService } from '../shell/state/workspace-settings.service';
 import { ProjectLookupService } from '../../services/project-lookup.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
-import { ExplorerWorkspaceTreeComponent } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
+import { ExplorerWorkspaceTreeComponent, type ExplorerProjectSurface } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
 import { TooltipDirective } from '../../components/tooltip/tooltip.directive';
 import { TaskStatusPopoverDirective } from '../../components/task-status-card';
@@ -62,11 +70,12 @@ function cliColorFor(cli: string): string {
   switch (cli) {
     case 'claude':  return '#d97757';
     case 'codex':   return '#569cd6';
-    case 'copilot': return '#4ec9b0';
     case 'gemini':  return '#c586c0';
     default:        return '#6e6e6e';
   }
 }
+
+const SETTINGS_WORKSPACES_COLLAPSED_KEY = 'atp.studio.settingsWorkspacesCollapsed';
 
 /**
  * Top-level "Agent Software Studio" shell — the VS-Code-inspired chrome
@@ -83,7 +92,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, SegmentedControlComponent, ProjectDetailComponent],
+  imports: [FormsModule, StudioIconComponent, StudioSidebarHeaderComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, SegmentedControlComponent, ProjectDetailComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -127,6 +136,7 @@ export class StudioShellComponent {
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly notifications = inject(NotificationService);
   private readonly workspaceManager = inject(WorkspaceManagerService);
+  private readonly workspaceOverlays = inject(WorkspaceOverlaysService);
   private readonly projectLookup = inject(ProjectLookupService);
   readonly wsSettings = inject(WorkspaceSettingsService);
 
@@ -142,6 +152,7 @@ export class StudioShellComponent {
   readonly sidebarWidth = this.panelState.sidebarWidth;
   readonly activityBarSide = this.panelState.activityBarSide;
   readonly chatRailOpen = this.panelState.chatRailOpen;
+  readonly settingsWorkspacesCollapsed = signal(this.readSettingsWorkspacesCollapsed());
 
   /** Settings segmented-control option sets (label/value pairs). */
   readonly themeOptions: readonly SegmentedOption<'dark' | 'light'>[] = [
@@ -657,10 +668,32 @@ export class StudioShellComponent {
     return map;
   });
 
+  /** Project display name → registry shortCode (e.g. "Agent Software Studio"
+   *  → "ASS"), used to keep project-scoped tab titles short and scannable. */
+  readonly projectShortCodeByName = computed<ReadonlyMap<string, string>>(() => {
+    const map = new Map<string, string>();
+    for (const ws of this.registryWorkspaces()) {
+      for (const p of ws.projects) {
+        if (p.displayName && p.shortCode) map.set(p.displayName, p.shortCode);
+      }
+    }
+    return map;
+  });
+
   /** Project name driving the currently open Board tab (or null when none). */
   readonly activeBoardProject = computed<string | null>(() => {
     const tab = this.activeTab();
     if (tab?.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
+    return null;
+  });
+
+  readonly activeProjectSurface = computed<ExplorerProjectSurface | null>(() => {
+    const tab = this.activeTab();
+    if (!tab) return null;
+    if (tab.kind === 'board') return tab.projectName === '__all__' ? null : 'board';
+    if (tab.kind === 'hub') return tab.section === 'wiki' ? 'wiki' : 'hub';
+    if (tab.kind === 'backlog') return tab.projectName === null ? null : 'backlog';
+    if (tab.kind === 'epics') return tab.projectName === null ? null : 'epics';
     return null;
   });
 
@@ -757,6 +790,15 @@ export class StudioShellComponent {
   }
 
   /**
+   * Explorer "Wiki" link for a single project. Opens (or focuses) the
+   * project's Project Hub tab deep-linked to its Wiki rail, so the wiki is
+   * reachable as a top-level sidebar item under Project Hub.
+   */
+  openWiki(projectName: string): void {
+    this.tabState.open({ kind: 'hub', projectName, section: 'wiki' });
+  }
+
+  /**
    * Explorer "Backlog" link for a single project (ASS-658). Scopes the
    * board filter to that project so the triage list narrows to it, then
    * opens the project-scoped backlog tab.
@@ -782,12 +824,31 @@ export class StudioShellComponent {
   closeTab(key: string, event?: Event): void {
     event?.stopPropagation();
     this.tabState.close(key);
+    this.closeWorkspaceSettingsStateIfTabMissing();
   }
 
-  closeOthers(key: string): void { this.tabState.closeOthers(key); }
-  closeRight(key: string): void { this.tabState.closeRight(key); }
-  closeLeft(key: string): void { this.tabState.closeLeft(key); }
-  closeAll(): void { this.tabState.closeAll(); }
+  closeOthers(key: string): void {
+    this.tabState.closeOthers(key);
+    this.closeWorkspaceSettingsStateIfTabMissing();
+  }
+  closeRight(key: string): void {
+    this.tabState.closeRight(key);
+    this.closeWorkspaceSettingsStateIfTabMissing();
+  }
+  closeLeft(key: string): void {
+    this.tabState.closeLeft(key);
+    this.closeWorkspaceSettingsStateIfTabMissing();
+  }
+  closeAll(): void {
+    this.tabState.closeAll();
+    this.closeWorkspaceSettingsStateIfTabMissing();
+  }
+
+  private closeWorkspaceSettingsStateIfTabMissing(): void {
+    if (!this.tabs().some(tab => studioTabKey(tab) === 'workspace-settings')) {
+      this.workspaceOverlays.close();
+    }
+  }
 
   // ---- drag-reorder ---------------------------------------------------
   // Tracks which tab is currently being dragged and which tab the
@@ -1033,7 +1094,15 @@ export class StudioShellComponent {
   }
 
   togglePanel(panel: StudioActivityPanelKey | 'settings' | 'admin'): void {
-    this.panelState.toggle(panel);
+    const visible = this.panelState.toggle(panel);
+    if (panel === 'settings' && visible) {
+      this.openWorkspaceSettingsTab();
+    }
+  }
+
+  openWorkspaceSettingsTab(): void {
+    this.workspaceOverlays.open(this.workspaceOverlays.section());
+    this.tabState.open({ kind: 'workspace-settings' });
   }
 
   toggleTheme(): void {
@@ -1054,6 +1123,25 @@ export class StudioShellComponent {
 
   toggleCompactCards(): void {
     this.uiPrefs.toggleCompactCards();
+  }
+
+  setSettingsWorkspacesCollapsed(collapsed: boolean): void {
+    this.settingsWorkspacesCollapsed.set(collapsed);
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage?.setItem(SETTINGS_WORKSPACES_COLLAPSED_KEY, collapsed ? '1' : '0');
+    } catch {
+      /* storage may be full / blocked */
+    }
+  }
+
+  private readSettingsWorkspacesCollapsed(): boolean {
+    if (typeof window === 'undefined') return true;
+    try {
+      return window.localStorage?.getItem(SETTINGS_WORKSPACES_COLLAPSED_KEY) !== '0';
+    } catch {
+      return true;
+    }
   }
 
   clearAllFilters(): void {
@@ -1144,15 +1232,32 @@ export class StudioShellComponent {
     window.addEventListener('mouseup', onUp);
   }
 
+  /** Project's registry shortCode (e.g. "ASS") when known, else the full
+   *  display name. Keeps project-scoped tab titles short and scannable while
+   *  degrading cleanly for projects without a registry shortCode. */
+  private projectShortLabel(projectName: string): string {
+    return this.projectShortCodeByName().get(projectName) ?? projectName;
+  }
+
+  /** Resolve a hub tab's `section` to its rail item (label, icon). A missing
+   *  or unknown section falls back to the default rail (`overview`). */
+  private railItemForSection(section: string | undefined): ProjectRailItem {
+    const key = isProjectRailKey(section) ? section : DEFAULT_PROJECT_RAIL_KEY;
+    return (
+      PROJECT_RAIL_ITEMS.find(i => i.key === key) ??
+      PROJECT_RAIL_ITEMS.find(i => i.key === DEFAULT_PROJECT_RAIL_KEY)!
+    );
+  }
+
   /** Map a tab to its displayable label so the template stays terse. */
   tabLabel(tab: StudioTab): string {
     switch (tab.kind) {
       case 'board':
-        return tab.projectName === '__all__' ? 'All projects · Board' : `${tab.projectName} · Board`;
+        return tab.projectName === '__all__' ? 'All projects · Board' : `${this.projectShortLabel(tab.projectName)} · Board`;
       case 'backlog':
-        return tab.projectName === null ? 'All projects · Backlog' : `${tab.projectName} · Backlog`;
+        return tab.projectName === null ? 'All projects · Backlog' : `${this.projectShortLabel(tab.projectName)} · Backlog`;
       case 'epics':
-        return tab.projectName === null ? 'All projects · Epics' : `${tab.projectName} · Epics`;
+        return tab.projectName === null ? 'All projects · Epics' : `${this.projectShortLabel(tab.projectName)} · Epics`;
       case 'epic': {
         const labelKey = tab.viewTaskKey ?? tab.epicKey;
         const job = this.findJob(labelKey);
@@ -1163,13 +1268,15 @@ export class StudioShellComponent {
         return job?.title || job?.id || tab.taskKey;
       }
       case 'hub':
-        return `${tab.projectName} · Hub`;
+        return `${this.projectShortLabel(tab.projectName)} · ${this.railItemForSection(tab.section).label}`;
       case 'diff':
         return tab.commitSha;
       case 'activity': {
         const job = this.findJob(tab.taskKey);
         return `Activity · ${job?.title || tab.taskKey}`;
       }
+      case 'workspace-settings':
+        return 'Workspace settings';
       case 'welcome':
         return 'Welcome';
       default:
@@ -1187,6 +1294,16 @@ export class StudioShellComponent {
       const job = this.findJob(tab.taskKey);
       if (!job) return null;
       return job.key || `#${job.order ?? '?'}`;
+    }
+    return null;
+  }
+
+  /** Leading icon for the tab strip. Hub tabs show their active section's
+   *  rail icon (e.g. `book` for Wiki); other kinds render none here (the
+   *  epic tab keeps its own dedicated glyph in the template). */
+  tabIcon(tab: StudioTab): StudioIconName | null {
+    if (tab.kind === 'hub') {
+      return this.railItemForSection(tab.section).railIcon ?? null;
     }
     return null;
   }

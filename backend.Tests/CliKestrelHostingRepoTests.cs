@@ -22,7 +22,7 @@ namespace AgentStudio.Tests;
 /// stdin (or whatever non-terminal stdin Kestrel ships with). These
 /// hosting tests cover that gap. The class boots the real
 /// <c>OrchestratorApi</c> host in-process via the test factory, then
-/// resolves <see cref="ClaudeCliService"/> from DI and drives a real
+/// resolves the keyed Claude execution engine from DI and drives a real
 /// claude run through it. If the hang regresses (e.g. someone toggles
 /// <c>RedirectStandardInput</c> back to unconditional <c>true</c>), this
 /// test goes from green to a watchdog kill within 60 s.
@@ -76,7 +76,7 @@ public class CliKestrelHostingRepoTests : IClassFixture<WebApplicationFactory<Pr
         // CreateClient triggers host startup; we don't actually use the HTTP client.
         _ = factory.CreateClient();
 
-        var svc = factory.Services.GetRequiredService<ClaudeCliService>();
+        var svc = factory.Services.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Claude);
 
         var jobId = $"hosting-it-{Guid.NewGuid():N}";
         var jobKey = $"::{jobId}";
@@ -156,7 +156,7 @@ public class CliKestrelHostingRepoTests : IClassFixture<WebApplicationFactory<Pr
         });
         _ = factory.CreateClient();
 
-        var svc = factory.Services.GetRequiredService<ClaudeCliService>();
+        var svc = factory.Services.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Claude);
         var jobId = $"hosting-scrub-{Guid.NewGuid():N}";
         var jobKey = $"::{jobId}";
         var (exec, err) = await svc.StartAsync(

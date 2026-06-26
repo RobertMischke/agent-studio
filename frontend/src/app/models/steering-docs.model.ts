@@ -19,7 +19,8 @@ export type SteeringDocsWarningKind =
   | 'missingSource'
   | 'stale'
   | 'possibleConflict'
-  | 'recurringFailure';
+  | 'recurringFailure'
+  | 'gatewayTooHeavy';
 
 export interface SteeringDocsSourceChild {
   name: string;
@@ -37,6 +38,7 @@ export interface SteeringDocsSource {
   exists: boolean;
   updatedAt: string | null;
   size: number;
+  appliesToClis: string[];
   children: SteeringDocsSourceChild[] | null;
 }
 

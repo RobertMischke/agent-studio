@@ -14,7 +14,7 @@ import { mkdirSync } from 'node:fs';
  *     update) plus a "View workspace timeline" link.
  *
  * The card data is shaped via a `page.route` intercept on
- * `/api/jobs/grouped` so the spec doesn't depend on the watch path
+ * `/api/tasks/grouped` so the spec doesn't depend on the watch path
  * carrying real orchestrator activity.
  */
 

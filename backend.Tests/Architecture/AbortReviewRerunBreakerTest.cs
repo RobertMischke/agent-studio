@@ -35,7 +35,7 @@ public class AbortReviewRerunBreakerTest
     [Fact]
     public void DefaultRerunBudget_HasExpectedValue()
     {
-        // Pin the default documented in docs/loop-inventory.md
+        // Pin the default documented in docs/contracts/loop-inventory.md
         // (abort-review.rerun-per-job). Change both in the same commit when
         // tuning the budget.
         Assert.Equal(2, PostAbortReviewDecider.DefaultRerunBudget);

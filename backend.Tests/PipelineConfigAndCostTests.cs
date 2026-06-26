@@ -423,6 +423,80 @@ public class PipelineConfigAndCostTests
     }
 
     [Fact]
+    public void PipelineTimeline_AggregatesPerStep_OverWindow_MostExpensiveFirst()
+    {
+        var now = new DateTime(2026, 6, 2, 12, 0, 0, DateTimeKind.Utc);
+        var records = new[]
+        {
+            // yesterday: the core run on Opus + an aspect on Haiku
+            RunOn(now.AddDays(-1),
+                new PipelineStepExecution
+                {
+                    StepId = "core-agent-run", Kind = StepKind.Core,
+                    Model = "claude-opus-4-8", InputTokens = 100_000, OutputTokens = 10_000, // $0.75
+                },
+                new PipelineStepExecution
+                {
+                    StepId = "aspect-code-quality", Kind = StepKind.Aspect,
+                    Model = "claude-haiku-4-5", InputTokens = 1_000_000, OutputTokens = 200_000, // $2.00
+                }),
+            // today: the same aspect runs again -> its window sum doubles
+            RunOn(now,
+                new PipelineStepExecution
+                {
+                    StepId = "aspect-code-quality", Kind = StepKind.Aspect,
+                    Model = "claude-haiku-4-5", InputTokens = 1_000_000, OutputTokens = 200_000, // $2.00
+                }),
+        };
+
+        var timeline = ProjectPipelineCostService.BuildFromRecords("P", records, days: 90, nowUtc: now);
+
+        // Two distinct steps, summed across runs, most-expensive (by tokens) first.
+        Assert.Equal(2, timeline.Steps.Count);
+
+        var aspect = timeline.Steps[0];
+        Assert.Equal("aspect-code-quality", aspect.StepId);
+        Assert.Equal("aspect", aspect.Kind);
+        Assert.Equal(2_400_000, aspect.TotalTokens); // two 1.2M runs
+        Assert.Equal(4.00m, aspect.TotalCostUsd);
+        Assert.False(aspect.AnyModelUnknown);
+
+        var core = timeline.Steps[1];
+        Assert.Equal("core-agent-run", core.StepId);
+        Assert.Equal("core", core.Kind);
+        Assert.Equal(110_000, core.TotalTokens);
+        Assert.Equal(0.75m, core.TotalCostUsd);
+    }
+
+    [Fact]
+    public void PipelineTimeline_PerStep_FlagsUnknownModel_AndIgnoresZeroTokenSteps()
+    {
+        var now = new DateTime(2026, 6, 2, 12, 0, 0, DateTimeKind.Utc);
+        var records = new[]
+        {
+            RunOn(now,
+                new PipelineStepExecution
+                {
+                    StepId = "aspect-code-quality", Kind = StepKind.Aspect,
+                    Model = "unpriced-test-model", InputTokens = 500, OutputTokens = 200,
+                },
+                // Zero-token tool step: must not produce a per-step row.
+                new PipelineStepExecution
+                {
+                    StepId = "post-lint-scss", Kind = StepKind.Tool, Model = null,
+                }),
+        };
+
+        var timeline = ProjectPipelineCostService.BuildFromRecords("P", records, days: 90, nowUtc: now);
+
+        var step = Assert.Single(timeline.Steps);
+        Assert.Equal("aspect-code-quality", step.StepId);
+        Assert.Equal(700, step.TotalTokens);
+        Assert.Equal(0m, step.TotalCostUsd);
+        Assert.True(step.AnyModelUnknown);
+    }
+
+    [Fact]
     public void PipelineTimeline_DropsRunsOutsideWindow_AndFlagsUnknownModel()
     {
         var now = new DateTime(2026, 6, 2, 12, 0, 0, DateTimeKind.Utc);
@@ -458,6 +532,7 @@ public class PipelineConfigAndCostTests
         var timeline = ProjectPipelineCostService.BuildFromRecords("P", Array.Empty<PipelineExecutionRecord>(), days: 7);
         Assert.False(timeline.HasData);
         Assert.Empty(timeline.Kinds);
+        Assert.Empty(timeline.Steps);
         Assert.Equal(0, timeline.TaskCount);
         Assert.Equal(7, timeline.Days.Count); // axis still dense
     }

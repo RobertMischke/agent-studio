@@ -1,5 +1,5 @@
-export type CliType = 'copilot' | 'claude' | 'codex' | 'gemini';
-export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex', 'gemini'];
+export type CliType = 'claude' | 'codex' | 'gemini';
+export const CLI_TYPES: CliType[] = ['claude', 'codex', 'gemini'];
 
 /**
  * Single source of truth for lane / task-state keys. Mirrors backend
@@ -36,7 +36,7 @@ export const ALL_TASK_STATES: readonly TaskStateKey[] = Object.values(TaskState)
 // live under their own `features/X/models/` and are accessed via the
 // feature barrel. The two `import type` lines below let TaskInfo's
 // own field types reference feature-owned shapes without copying them.
-import type { TaskCommitInfo } from '../features/git';
+import type { TaskCommitInfo, TaskProvenanceRecord } from '../features/git';
 import type { TaskTokenSummary } from '../features/tokens';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orchestrator';
 
@@ -245,6 +245,22 @@ export interface TaskInfo {
    * detail-view reference section and the card `waiting on KEY` badge.
    */
   references?: TaskReferences;
+  /**
+   * Append-only commit-provenance record (ASS-1724). Mirrors backend
+   * `TaskInfo.Provenance` and ships on every board card so the git-state pill
+   * can show *where the work actually lives* (active `task/<id>` worktree vs
+   * landed in develop vs sequential main-checkout) from ground truth instead of
+   * guessing from the lane. Null on legacy `task.json` that predate the field.
+   */
+  provenance?: TaskProvenanceRecord | null;
+
+  /**
+   * ASS-1751: read-time run-activity classification for `3-progress` cards,
+   * distinguishing a live run, a failed run waiting out the rapid-crash
+   * backoff, and an orphan killed by a backend restart. Present only on
+   * Progress-lane tasks; null/absent on every other lane. Pure visibility.
+   */
+  runActivity?: TaskRunActivity | null;
 }
 
 export interface TaskOutcomeIssue {
@@ -474,7 +490,7 @@ export interface TaskDetail {
    * audits, code-review passes, task checks, or human notes. Empty when
    * the file is absent. Findings are evidence for review, not blockers:
    * the lane transitions never gate on them. See
-   * `docs/filesystem-contract.md` "results/review-evidence.jsonl".
+   * `docs/contracts/filesystem.md` "results/review-evidence.jsonl".
    */
   reviewEvidence: ReviewEvidenceEntry[];
 }
@@ -664,7 +680,7 @@ export interface ArchivedTasksResponse {
   limit: number;
 }
 
-export interface CreateJobRequest {
+export interface CreateTaskRequest {
   id?: string;
   title: string;
   order?: number;
@@ -833,6 +849,37 @@ export interface CliExecution {
   runOutcome?: string | null;
 }
 
+/**
+ * ASS-1751: the four ways a `3-progress` card can look "untouched", as
+ * classified by the backend at read time:
+ * - `active` — a run process is alive and occupies a parallelism slot.
+ * - `failed-backoff` — the last run failed and a rapid-crash backoff is still
+ *   in effect; the task is waiting for re-pickup (carries `backoffUntil`).
+ * - `failed-idle` — the last run failed (or a fail-without-progress streak is
+ *   recorded) but no backoff is active and nothing is running.
+ * - `no-active-run` — no live run, no backoff, no recorded failure; e.g. an
+ *   orphan after a backend restart awaiting re-pickup.
+ */
+export type TaskRunActivityKind = 'active' | 'failed-backoff' | 'failed-idle' | 'no-active-run';
+
+/**
+ * Read-time visibility projection for a `3-progress` task (ASS-1751). Purely
+ * informational — it carries no behavior; the kanban card and the task-detail
+ * header render a small, quiet status pill from it. Present only on
+ * Progress-lane tasks; absent (null/undefined) on every other lane.
+ */
+export interface TaskRunActivity {
+  kind: TaskRunActivityKind;
+  /** OS process id of the live run; set only when `kind === 'active'`. */
+  processId?: number | null;
+  /** UTC ISO instant the rapid-crash backoff expires; set only when `kind === 'failed-backoff'`. */
+  backoffUntil?: string | null;
+  /** Consecutive fail-without-progress attempts recorded for this task (0 when none). */
+  attempt: number;
+  /** One-line last-error summary mirrored from the outcome issue; null when unknown. */
+  lastError?: string | null;
+}
+
 export interface CliOutputLine {
   timestamp: string;
   stream: string;
@@ -928,6 +975,7 @@ export interface ProjectSnapshot {
   };
   settings: {
     autoCommit: boolean;
+    crashRecoveryEnabled: boolean;
     autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
     runnerMode: string | null;
     orchestratorModel: string | null;
@@ -940,6 +988,24 @@ export interface ProjectSnapshot {
   reviewDecisionsPending: { jobId: string; title: string; reason: string | null }[];
   runnerPendingDecisions: { jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }[];
   queueHealth: ProjectQueueHealth;
+}
+
+export interface CrashRecoveryPending {
+  id: string;
+  createdAt: string;
+  projectName: string;
+  jobId: string | null;
+  repoRoot: string;
+  files: string[];
+  message: string;
+  reason: string;
+}
+
+export interface CrashRecoveryActionResult {
+  status: 'committed' | 'dismissed' | 'failed' | 'not-found' | 'nothing-to-commit' | string;
+  pending: CrashRecoveryPending | null;
+  commitSha: string | null;
+  error: string | null;
 }
 
 export interface ProjectQueueHealthLocation {

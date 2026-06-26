@@ -135,6 +135,71 @@ public sealed class TaskProvenanceService
     }
 
     /// <summary>
+    /// Records the develop-merge fact (ASS-1721 / ASS-1752): writes the
+    /// <see cref="TaskProvenanceMerge"/> block onto the task's provenance the first
+    /// time the <c>task/&lt;id&gt;</c> branch is folded into the integration branch.
+    /// This is the one persisted "landed" signal the board card can read without a
+    /// per-card graph query, so it must be written from a caller that already holds
+    /// a FRESH <see cref="TaskInfo"/> (the on-disk write is replace-all, so a stale
+    /// <see cref="TaskInfo.Provenance"/> would drop earlier transitions). Write-once
+    /// like <see cref="TaskProvenance.Base"/>: an already-recorded merge is never
+    /// overwritten. Best-effort and fully guarded - a failure here can never undo
+    /// the merge that already landed.
+    /// </summary>
+    public void RecordMerge(TaskInfo info, string? mergeSha, string? beforeSha = null)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(mergeSha)) return;
+            if (info.Provenance?.Merge?.MergeCommit is { Length: > 0 }) return; // write-once
+
+            var merge = new TaskProvenanceMerge
+            {
+                MergeCommit = mergeSha,
+                WorkBranchHeadBefore = beforeSha,
+                WorkBranchHeadAfter = mergeSha,
+                AtUtc = DateTime.UtcNow,
+            };
+
+            var merged = WithMerge(info.Provenance, WorktreeTaskLifecycle.BranchFor(info.Id), merge);
+            _mutations.SetProvenanceOnFolder(info.FolderPath, merged);
+
+            _logger.LogInformation(
+                "provenance-merge-recorded job={JobId} mergeCommit={Merge} before={Before}",
+                info.Id, Short(mergeSha), beforeSha == null ? "(none)" : Short(beforeSha));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "provenance-merge-record failed for {JobId}", info.Id);
+        }
+    }
+
+    /// <summary>
+    /// Pure write-once merge anchor: returns a new <see cref="TaskProvenance"/> with
+    /// <paramref name="merge"/> set, carrying the branch, base, and transitions
+    /// through untouched. An existing <see cref="TaskProvenance.Merge"/> is never
+    /// overwritten (append-only fact). Side-effect-free so it is trivially
+    /// unit-testable, matching <see cref="AppendTransition"/>.
+    /// </summary>
+    public static TaskProvenance WithMerge(
+        TaskProvenance? existing,
+        string branch,
+        TaskProvenanceMerge merge)
+    {
+        var transitions = existing?.Transitions is { Count: > 0 }
+            ? new List<TaskProvenanceTransition>(existing.Transitions)
+            : new List<TaskProvenanceTransition>();
+
+        return new TaskProvenance
+        {
+            Branch = string.IsNullOrWhiteSpace(existing?.Branch) ? branch : existing!.Branch,
+            Base = existing?.Base,
+            Transitions = transitions,
+            Merge = existing?.Merge ?? merge,
+        };
+    }
+
+    /// <summary>
     /// Graph-based landed-state for an anchor SHA. Returns
     /// <see cref="LandedStates.ReleasedToMain"/> when the anchor is an ancestor of
     /// the release branch, <see cref="LandedStates.MergedToDevelop"/> when it is an

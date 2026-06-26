@@ -104,7 +104,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   readonly report = signal<QuotaReport | null>(null);
   /** Re-evaluated every second so the freshness label ticks live. */
   readonly nowTick = signal(Date.now());
-  readonly displayedCliTypes: CliType[] = ['copilot', 'claude', 'codex'];
+  readonly displayedCliTypes: CliType[] = ['claude', 'codex'];
 
   /** Emitted when a card is clicked: the host opens that CLI's modal. */
   readonly cliSelected = output<CliType>();
@@ -390,7 +390,6 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     switch (cli) {
       case 'claude': return 'Claude';
       case 'codex': return 'Codex';
-      case 'copilot': return 'Copilot';
       case 'gemini': return 'Gemini';
       default: return cli;
     }

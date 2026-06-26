@@ -14,7 +14,7 @@ import { api, BACKEND } from '../helpers/api';
  * 3. Unstructured-report warning - a sidecar-less report renders with the
  *    explicit "unstructured" badge in the list and a banner in the
  *    drill-down. The Markdown body stays visible (the load-bearing rule
- *    of docs/analysis-reports.md - parse failures never hide the body).
+ *    of docs/reports/analysis-reports.md - parse failures never hide the body).
  * 4. Manual-trigger flow - clicking a topic button writes a report and the
  *    list refreshes to include it.
  */

@@ -4,7 +4,7 @@ import { api } from '../helpers/api';
 interface WatchPath { name: string; path: string; rootPath: string; }
 
 // Task create/move are kept local on `/api/tasks` on purpose: the shared
-// helpers in e2e/helpers/jobs.ts still target the renamed `/api/jobs`
+// helpers in e2e/helpers/jobs.ts still target the renamed `/api/tasks`
 // prefix, whose migration is tracked separately as repo-wide route rot
 // (see commit 20ce863). This spec drives the live backend, so it hits the
 // real route directly - matching the local `deleteJob` below.
@@ -100,7 +100,7 @@ async function clickCardAndWaitForDetail(page: Page, jobId: string): Promise<voi
 /**
  * Ensure every job in `ids` is rendered as a card on the kanban before the
  * test proceeds. The pager snapshot is captured at the moment of click, so
- * if even one fixture has not landed in `/api/jobs/grouped` yet the
+ * if even one fixture has not landed in `/api/tasks/grouped` yet the
  * iteration starts short and the rest of the test asserts against stale
  * state.
  */
@@ -431,7 +431,7 @@ test.describe('Detail view - lane pager', () => {
     }
 
     try {
-      // Hit the board first so the fixture cards land in /api/jobs/grouped;
+      // Hit the board first so the fixture cards land in /api/tasks/grouped;
       // then wipe sessionStorage so the next navigation has no stored
       // pager snapshot to restore.
       await page.goto('/');

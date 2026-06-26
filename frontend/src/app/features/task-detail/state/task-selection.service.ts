@@ -131,6 +131,17 @@ export class TaskSelectionService {
   readonly selected = signal<TaskDetail | null>(null);
 
   /**
+   * True while a navigation fetch (pager step, board click, post-mutation
+   * advance) is in flight WITHOUT a prefetched detail to paint instantly.
+   * The detail header surfaces it as a small loading indicator so stepping
+   * to a not-yet-warmed task gives feedback that the reload is happening.
+   * Stays false on the cache-hit fast path — there is nothing to wait for.
+   * Always toggled under the `openDetailToken` guard so a stale reply for a
+   * superseded navigation never clears the spinner of the current one.
+   */
+  readonly detailLoading = signal(false);
+
+  /**
    * Transient banner shown by the triage panel auto-advance flow.
    * Kept as a signal so the existing template binding in the detail
    * pane (`@if (triageToast(); as toast) { … }`) keeps working; the
@@ -238,14 +249,18 @@ export class TaskSelectionService {
     // re-fetch a stale detail could linger past its TTL.
     const cached = this.prefetch.take(job.id, job.watchPath);
     if (cached) {
+      this.detailLoading.set(false);
       this.selected.set(cached);
       this.markNextTaskRendered();
       perfMark('job-select-rendered');
       perfMeasure('job-select-to-rendered', 'job-select-click', 'job-select-rendered');
+    } else {
+      this.detailLoading.set(true);
     }
     this.jobService.getDetail(job.id, job.watchPath).subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
+        this.detailLoading.set(false);
         this.selected.set(detail);
         if (!cached) {
           this.markNextTaskRendered();
@@ -255,6 +270,7 @@ export class TaskSelectionService {
       },
       error: (err) => {
         if (token !== this.openDetailToken) return;
+        this.detailLoading.set(false);
         // Don't surface an error after we already painted from cache -
         // the panel is already showing the cached detail and a transient
         // network blip should not pop a modal.
@@ -307,13 +323,17 @@ export class TaskSelectionService {
     const token = ++this.openDetailToken;
     const cached = this.prefetch.take(entry.id, entry.watchPath);
     if (cached) {
+      this.detailLoading.set(false);
       this.triageLaneState = this.pager.snapshot()?.lane ?? cached.info.state;
       this.selected.set(cached);
       this.markNextTaskRendered();
+    } else {
+      this.detailLoading.set(true);
     }
     this.jobService.getDetail(entry.id, entry.watchPath).subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
+        this.detailLoading.set(false);
         // Re-anchor the triage lane to the snapshot's lane so the
         // external-advance effect in the shell doesn't fire on the
         // brand-new selection (the new job's state matches the lane
@@ -325,6 +345,7 @@ export class TaskSelectionService {
       },
       error: (err) => {
         if (token !== this.openDetailToken) return;
+        this.detailLoading.set(false);
         if (cached) return;
         this.errorDialog.show(err, {
           title: 'Failed to load task details',
@@ -341,6 +362,7 @@ export class TaskSelectionService {
     // pressed `j` then immediately Esc) drops its `selected.set` and
     // the panel does not pop back open after we close it.
     this.openDetailToken++;
+    this.detailLoading.set(false);
     this.selected.set(null);
     this.triageLaneState = null;
     this.pager.clear();
@@ -388,6 +410,7 @@ export class TaskSelectionService {
    */
   clearSelectionForTabSwitch(): void {
     this.openDetailToken++;
+    this.detailLoading.set(false);
     this.selected.set(null);
     this.triageLaneState = null;
     this.pager.clear();
@@ -497,17 +520,22 @@ export class TaskSelectionService {
     // (status/log tail) and is the source of truth on a cache miss.
     const cached = this.prefetch.take(entry.id, entry.watchPath);
     if (cached) {
+      this.detailLoading.set(false);
       this.selected.set(cached);
       this.markNextTaskRendered();
+    } else {
+      this.detailLoading.set(true);
     }
     this.jobService.getDetail(entry.id, entry.watchPath).subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
+        this.detailLoading.set(false);
         this.selected.set(detail);
         if (!cached) this.markNextTaskRendered();
       },
       error: (err) => {
         if (token !== this.openDetailToken) return;
+        this.detailLoading.set(false);
         if (cached) return;
         this.errorDialog.show(err, {
           title: 'Failed to load task details',

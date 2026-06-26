@@ -1250,7 +1250,7 @@ public class TaskScannerService : ITaskScanner
     /// Read-only counterpart to <see cref="ResolveAttachment"/> for the
     /// <c>results/</c> folder where agents drop screenshots they want to keep
     /// in the protocol. Same path-traversal guards, same image content-type
-    /// mapping. See <c>docs/protocol-style.md</c> for the folder contract.
+    /// mapping. See <c>docs/contracts/protocol-style.md</c> for the folder contract.
     /// </summary>
     public (string? Path, string? ContentType) ResolveResult(string jobId, string fileName, string? watchPath = null)
         => ResolveJobBinaryFile(jobId, "results", fileName, watchPath);

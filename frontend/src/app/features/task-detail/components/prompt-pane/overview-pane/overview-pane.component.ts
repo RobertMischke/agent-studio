@@ -28,7 +28,6 @@ import type {
   PipelineStepCost,
   PipelineStep,
   PipelineStepStatus,
-  PipelineModelUsageSummary,
   StepKind,
   StepRunMode,
 } from '../../../../task-pipeline';
@@ -41,7 +40,6 @@ import {
   PipelineStepResultComponent,
   type PipelineStepResultHeader,
 } from '../pipeline-step-result/pipeline-step-result.component';
-import { PipelineTokenUsageComponent } from '../pipeline-token-usage/pipeline-token-usage.component';
 import { ReferencesSectionComponent } from '../../references-section/references-section.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
 import type { StructuredTooltip, TooltipSeverity } from '../../../../../components/tooltip';
@@ -52,7 +50,6 @@ import {
   type SteeringInfo,
 } from '../../../../../components/steering-detail';
 import {
-  cliTypeIcon,
   cliTypeLabel,
   formatTokens,
 } from '../../../../../services/format.util';
@@ -388,13 +385,13 @@ const FINAL_VERDICT_STEP_ID = 'post-orchestrator-decision';
 const PIPELINE_PHASES: Record<PipelinePhaseKey, PipelinePhaseVm> = {
   pre: {
     key: 'pre',
-    label: 'PRE',
+    label: 'PRE STEPS',
     description: 'Preparation checks before the agent gets the task.',
   },
   core: {
     key: 'core',
-    label: 'CORE',
-    description: 'The coding agent run.',
+    label: 'CORE AGENT WORK',
+    description: 'The coding agent work.',
   },
   aspect: {
     key: 'aspect',
@@ -448,7 +445,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineStepResultComponent, PipelineTokenUsageComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineStepResultComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -897,6 +894,23 @@ export class OverviewPaneComponent {
   });
 
   readonly hasPipeline = computed(() => this.pipelineRows().length > 0);
+  readonly hideDisabledPipelineSteps = signal(false);
+  readonly disabledPipelineStepCount = computed(() =>
+    this.pipelineRows().filter(row => row.status === 'disabled').length,
+  );
+  readonly visiblePipelineRows = computed<PipelineRowVm[]>(() => {
+    const rows = this.hideDisabledPipelineSteps()
+      ? this.pipelineRows().filter(row => row.status !== 'disabled')
+      : this.pipelineRows();
+    return rows.map((row, index) => ({
+      ...row,
+      startsPhase: index === 0 || row.phaseKey !== rows[index - 1].phaseKey,
+    }));
+  });
+
+  toggleDisabledPipelineSteps(): void {
+    this.hideDisabledPipelineSteps.update(value => !value);
+  }
 
   /**
    * Latest raw step-call prompt per pipeline step, keyed by lowercased step id.
@@ -1200,15 +1214,6 @@ export class OverviewPaneComponent {
   readonly hasPipelineExecution = computed(() => this.pipelinePoll.hasExecution());
 
   /**
-   * Per-model token usage for every run of this task (per-run breakdown plus
-   * a lifetime grand total), straight off the pipeline endpoint. Null until
-   * the first poll resolves; the child renders nothing when there are no runs.
-   */
-  readonly pipelineTokenUsage = computed<PipelineModelUsageSummary | null>(
-    () => this.pipelinePoll.pipeline()?.tokensByModel ?? null,
-  );
-
-  /**
    * Tooltip for a step's model chip. Before a run, names the resolved effective
    * model and where in the hierarchy it came from (step / project / global /
    * catalogue default); after a run, states the model the execution used.
@@ -1295,7 +1300,7 @@ export class OverviewPaneComponent {
   }
 
   asCliType(value: string | null | undefined): CliType | null {
-    return value && (['copilot', 'claude', 'codex', 'gemini'] as readonly string[]).includes(value)
+    return value && (['claude', 'codex', 'gemini'] as readonly string[]).includes(value)
       ? value as CliType
       : null;
   }
@@ -1669,8 +1674,8 @@ export class OverviewPaneComponent {
 
   stepKindLabel(kind: StepKind): string {
     switch (kind) {
-      case 'module':       return 'Pre';
-      case 'core':         return 'Core';
+      case 'module':       return 'Pre steps';
+      case 'core':         return 'Core agent work';
       case 'aspect':       return 'Aspect';
       case 'orchestrator': return 'Decision';
       case 'tool':         return 'Tool';
@@ -1799,10 +1804,6 @@ export class OverviewPaneComponent {
 
   cliTypeLabel(t: CliType): string {
     return cliTypeLabel(t);
-  }
-
-  cliTypeIcon(t: CliType): string {
-    return cliTypeIcon(t);
   }
 
   phaseLabel(phase: string | null | undefined): string | null {

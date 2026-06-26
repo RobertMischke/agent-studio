@@ -7,7 +7,7 @@ namespace AgentStudio.Tests;
 
 /// <summary>
 /// Pins the contract for the skill readiness check + fix-task wiring
-/// (docs/skills-architecture.md "First Product Step"). The check is
+/// (docs/product/skills-architecture.md "First Product Step"). The check is
 /// naive in v1: stable heading detection + required phrases. These
 /// tests are the regression boundary so a future tightening of the
 /// parser cannot silently change pass / warn / fail verdicts that the

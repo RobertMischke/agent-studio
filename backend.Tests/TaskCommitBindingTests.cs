@@ -144,6 +144,67 @@ public class TaskCommitBindingTests : IDisposable
         Assert.False(mutations.AppendJobCommitOnFolder(nonexistent, commit));
     }
 
+    [Fact]
+    public void SetCommitAttribution_EmptyOverNonEmptyPersisted_RefusesWipe()
+    {
+        // A run that crashes seconds into a resume can drive the attribution
+        // post-step with an empty result; the replace-all write must NOT erase
+        // the task's already-landed commit metadata.
+        var (scanner, mutations) = Build();
+        var jobDir = SeedJobFolder("epsilon", "3-progress", legacyCommit: null);
+
+        var landed = MakeCommit("aaaaaaa", "feat: landed", filesChanged: 2, atIso: "2026-05-09T10:00:00Z");
+        Assert.True(mutations.AppendJobCommitOnFolder(jobDir, landed));
+
+        Assert.False(mutations.SetCommitAttributionOnFolder(jobDir, new List<TaskCommitInfo>()));
+
+        var info = scanner.FindJob("epsilon", _watchPath);
+        Assert.NotNull(info);
+        Assert.Single(info!.Commits);
+        Assert.Equal("aaaaaaa", info.Commits[0].ShortSha);
+        Assert.NotNull(info.Commit);
+        Assert.Equal("aaaaaaa", info.Commit!.ShortSha);
+    }
+
+    [Fact]
+    public void SetCommitAttribution_NonEmpty_ReplacesChain()
+    {
+        // The guard only blocks the empty-over-non-empty wipe; a real
+        // attribution result still rewrites the chain.
+        var (scanner, mutations) = Build();
+        var jobDir = SeedJobFolder("zeta", "3-progress", legacyCommit: null);
+
+        var seed = MakeCommit("aaaaaaa", "feat: seed", filesChanged: 1, atIso: "2026-05-09T10:00:00Z");
+        Assert.True(mutations.AppendJobCommitOnFolder(jobDir, seed));
+
+        var attributed = new List<TaskCommitInfo>
+        {
+            MakeCommit("aaaaaaa", "feat: seed",  filesChanged: 1, atIso: "2026-05-09T10:00:00Z"),
+            MakeCommit("bbbbbbb", "fix: second", filesChanged: 2, atIso: "2026-05-09T10:30:00Z"),
+        };
+        Assert.True(mutations.SetCommitAttributionOnFolder(jobDir, attributed));
+
+        var info = scanner.FindJob("zeta", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal(2, info!.Commits.Count);
+        Assert.Equal("bbbbbbb", info.Commit!.ShortSha);
+    }
+
+    [Fact]
+    public void SetCommitAttribution_EmptyOverEmptyPersisted_FailsOpen()
+    {
+        // Nothing to protect: an empty write over an empty chain is a no-op
+        // that must not be mistaken for a refused wipe.
+        var (scanner, mutations) = Build();
+        var jobDir = SeedJobFolder("eta", "3-progress", legacyCommit: null);
+
+        Assert.True(mutations.SetCommitAttributionOnFolder(jobDir, new List<TaskCommitInfo>()));
+
+        var info = scanner.FindJob("eta", _watchPath);
+        Assert.NotNull(info);
+        Assert.Empty(info!.Commits);
+    }
+
     private string SeedJobFolder(string id, string lane, TaskCommitInfo? legacyCommit)
     {
         var laneDir = Path.Combine(_watchPath, lane);

@@ -14,7 +14,7 @@ namespace AgentStudio.Cli;
 /// equivalent: a pure, dependency-free transform that the driver delegates to
 /// from <c>TransformReadLine</c>. Keeping it out of the driver means a renderer
 /// can be unit-tested per frame with a plain <c>new XxxOutputRenderer()</c> -
-/// no <see cref="CodexCliService"/>-style constructor graph, no process, no
+/// no per-CLI-behavior constructor graph, no process, no
 /// configuration - and a new CLI plugs in by implementing this one method.
 /// </para>
 ///

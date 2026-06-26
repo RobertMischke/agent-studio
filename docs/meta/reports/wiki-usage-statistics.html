@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wiki Usage Statistics Concept</title>
+  <style>
+    :root { color-scheme: light; --ink: #172033; --muted: #667085; --line: #d9e2ef; --soft: #f6f8fb; --paper: #fff; --accent: #2563eb; --used: #0f766e; --changed: #7c3aed; --visited: #475467; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: var(--ink); font: 14px/1.55 Inter, "Segoe UI", Arial, sans-serif; }
+    main { max-width: 1240px; margin: 0 auto; padding: 28px; }
+    header { display: grid; gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 1.65rem; line-height: 1.18; }
+    h2 { font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; color: #475467; }
+    h3 { font-size: .95rem; }
+    code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; color: #344054; }
+    .muted { color: var(--muted); }
+    .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .metric { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); }
+    .metric strong { display: block; font-size: 1.25rem; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .46fr); gap: 16px; margin-top: 18px; }
+    section { border: 1px solid var(--line); border-radius: 12px; background: var(--paper); overflow: hidden; }
+    section > h2 { padding: 12px 14px; border-bottom: 1px solid var(--line); background: #f8fafc; }
+    .body { padding: 14px; display: grid; gap: 12px; }
+    .flow { display: grid; gap: 10px; counter-reset: flow; }
+    .flow div { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; }
+    .flow div::before { counter-increment: flow; content: counter(flow); width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: #e8f0ff; color: var(--accent); font-weight: 750; font-size: .75rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: #475467; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; background: #f8fafc; }
+    tr:last-child td { border-bottom: 0; }
+    .state { display: inline-flex; align-items: center; gap: 6px; padding: 3px 7px; border-radius: 999px; border: 1px solid var(--line); font-size: .75rem; font-weight: 650; }
+    .state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .visited { color: var(--visited); }
+    .used { color: var(--used); }
+    .changed { color: var(--changed); }
+    .callout { padding: 12px; border-left: 3px solid var(--accent); border-radius: 8px; background: #f6f9ff; }
+    .split { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .mini { padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
+    footer { margin-top: 18px; color: var(--muted); font-size: .78rem; }
+    @media (max-width: 980px) { main { padding: 18px; } .grid, .cards, .split { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Wiki Usage Statistics</h1>
+    <p class="muted">Post-step concept for making agent document usage visible in both directions: from Wiki document to task runs, and from task run to Wiki documents.</p>
+    <div class="cards" aria-label="Example aggregate statistics">
+      <div class="metric"><strong>38</strong><span class="muted">document tool uses</span></div>
+      <div class="metric"><strong>17</strong><span class="muted">visited documents</span></div>
+      <div class="metric"><strong>8</strong><span class="muted">used in outputs</span></div>
+      <div class="metric"><strong>3</strong><span class="muted">changed documents</span></div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section>
+      <h2>Post-step pipeline</h2>
+      <div class="body">
+        <div class="flow">
+          <div><p>After an agent run completes, a post-step reads the run transcript, tool-use events, file patches, and final response metadata.</p></div>
+          <div><p>Every document path is normalized to a docs-root-relative path, for example <code>architecture/bus/agent-message-bus.md</code>.</p></div>
+          <div><p>The post-step classifies each document as <strong>visited</strong>, <strong>used</strong>, or <strong>changed</strong>.</p></div>
+          <div><p>It writes a task-local <code>task-wiki-usage.json</code> and updates a project aggregate <code>wiki-usage-index.json</code>.</p></div>
+          <div><p>The Wiki right panel can show usage by document. The task processing view can show the inverse list of documents used by that run.</p></div>
+        </div>
+        <div class="callout">
+          <h3>Important distinction</h3>
+          <p>A search hit is only <strong>visited</strong>. A document becomes <strong>used</strong> when the run output, patch, report, or decision clearly relies on it. This avoids inflated statistics from broad searches.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Classification rules</h2>
+      <div class="body split">
+        <div class="mini">
+          <h3><span class="state visited">visited</span></h3>
+          <p>Read, opened, searched, previewed, or matched by a tool. Useful for heatmaps and stale-doc discovery.</p>
+        </div>
+        <div class="mini">
+          <h3><span class="state used">used</span></h3>
+          <p>Quoted, summarized, referenced in a report, or used as rationale for a code/task decision.</p>
+        </div>
+        <div class="mini">
+          <h3><span class="state changed">changed</span></h3>
+          <p>Edited, created, moved, deleted, or generated by the run. This is the strongest signal.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Document view</h2>
+      <div class="body">
+        <table>
+          <thead><tr><th>Document</th><th>State</th><th>Tool uses</th><th>Last task</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>architecture/backend-structure/structure-target.md</code></td>
+              <td><span class="state used">used</span></td>
+              <td>4</td>
+              <td>ASS-1842</td>
+              <td>Explained why the page is future/planned.</td>
+            </tr>
+            <tr>
+              <td><code>architecture/decisions/proposed/adr-0051-task-processing-pipeline.md</code></td>
+              <td><span class="state used">used</span></td>
+              <td>3</td>
+              <td>ASS-1842</td>
+              <td>Provided pipeline duplicate reasoning.</td>
+            </tr>
+            <tr>
+              <td><code>domains/pipeline.md</code></td>
+              <td><span class="state visited">visited</span></td>
+              <td>1</td>
+              <td>ASS-1842</td>
+              <td>Found as duplicate candidate through search.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Task processing view</h2>
+      <div class="body">
+        <table>
+          <thead><tr><th>Task run</th><th>Docs visited</th><th>Docs used</th><th>Docs changed</th><th>Top tools</th></tr></thead>
+          <tbody>
+            <tr><td>ASS-1842</td><td>17</td><td>8</td><td>3</td><td>read-file, search, patch</td></tr>
+            <tr><td>ASS-1839</td><td>9</td><td>4</td><td>0</td><td>search, read-file</td></tr>
+            <tr><td>ASS-1817</td><td>22</td><td>6</td><td>2</td><td>read-file, patch, test</td></tr>
+          </tbody>
+        </table>
+        <p class="muted">The task view should answer: which documents influenced this run, which were only inspected, and which were actually changed.</p>
+      </div>
+    </section>
+  </div>
+
+  <footer>Related files: <code>docs/meta/usage/wiki-usage-events.schema.json</code> and <code>docs/meta/usage/sample-task-wiki-usage.json</code>.</footer>
+</main>
+</body>
+</html>

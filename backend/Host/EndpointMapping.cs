@@ -27,15 +27,6 @@ public static class EndpointMapping
         tasks.MapTaskPipelineEndpoints();
         tasks.MapTaskMergeEndpoints();
 
-        // Compatibility route for operator scripts and docs that still use
-        // "jobs" terminology. Keep this mapped to the same handlers so
-        // /api/jobs/batch-move and the consolidation/audit routes cannot
-        // drift from /api/tasks.
-        var jobs = app.MapGroup("/api/jobs")
-            .AddEndpointFilter<TaskOperationTimingFilter>();
-        jobs.MapTaskCrudEndpoints();
-        jobs.MapTaskMergeEndpoints();
-
         app.MapEpicEndpoints();
         app.MapCompletedLaneAuditEndpoints();
         app.MapRunnerEndpoints();
@@ -45,6 +36,7 @@ public static class EndpointMapping
         app.MapRegistryEndpoints();
         app.MapWorkspaceEndpoints();
         app.MapProjectSettingsEndpoints();
+        app.MapCrashRecoveryEndpoints();
         app.MapProjectRegressionRadarEndpoints();
         app.MapProjectDocsEndpoints();
         app.MapProjectSteeringDocsEndpoints();

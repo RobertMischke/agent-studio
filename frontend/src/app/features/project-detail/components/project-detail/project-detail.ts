@@ -2,25 +2,13 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
-import type { GroupedJobs, ProjectQueueHealth, RunnerStatus } from '../../../../models/task.model';
-import { CLI_TYPES, TaskState, type CliType } from '../../../../models/task.model';
+import type { ProjectQueueHealth, RunnerStatus } from '../../../../models/task.model';
+import { CLI_TYPES, type CliType } from '../../../../models/task.model';
 import { cliTypeLabel, cliTypeIcon } from '../../../../services/format.util';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
-import {
-  PipelineStep_GateModes,
-  PipelineStep_Conditions,
-  PipelineStep_ConditionValueTokens,
-} from './project-detail.models';
 import { CliCatalogStore } from '../../../../services/cli-catalog.store';
-import type {
-  PipelineCatalogueStep,
-  PipelineStepSetting,
-  PipelineStepCondition,
-  PipelineStepConditionToken,
-} from '../../../../features/task-pipeline';
 import { TokenSummaryBlockComponent } from '../../../../features/tokens';
 import { GlobalOrchestratorCardComponent } from '../../../../features/orchestrator';
-import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { ProjectArchitectureSectionComponent } from '../project-architecture-section/project-architecture-section';
 import { ProjectDriftSectionComponent } from '../project-drift-section/project-drift-section';
 import { ProjectDriftOverviewSectionComponent } from '../project-drift-overview-section/project-drift-overview-section';
@@ -32,60 +20,26 @@ import { ProjectWorkspaceSectionComponent } from '../project-workspace-section/p
 import { AutonomySliderComponent } from '../autonomy-slider/autonomy-slider';
 import { AnalysisReport } from '../../../../models/analysis-report.model';
 import { TooltipDirective } from '../../../../components/tooltip';
-import {
-  SORTABLE_LANES,
-  USER_VISIBLE_LANE_SORT_STRATEGIES,
-  laneSortStrategyMeta,
-} from '../../../../services/lane-sort.util';
+import { ProjectWorkflowSectionComponent } from '../project-workflow-section/project-workflow-section';
+import { ProjectCliEnvironmentSectionComponent } from '../project-cli-environment-section/project-cli-environment-section';
 interface ProjectSettingsRow {
   autoCommit: boolean;
+  crashRecoveryEnabled: boolean;
   autoPushStrategy: AutoPushStrategy;
   runnerMode: string | null;
   orchestratorModel: string | null;
-  laneSortStrategies: Record<string, string>;
 }
 
 type AutoPushStrategy = 'never' | 'on-completed' | 'always-immediate';
-
-interface PipelineAdminRow {
-  id: string;
-  displayName: string;
-  kind: string;
-  usesModel: boolean;
-  usesPrompt: boolean;
-  supportsMode: boolean;
-  canDisable: boolean;
-  supportsCondition: boolean;
-  phase: string;
-  enabled: boolean;
-  cliType: string;
-  model: string;
-  thinkingLevel: string;
-  prompt: string;
-  mode: string;
-  condition: string;
-  conditionValue: string;
-  conditionNeedsValue: boolean;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
-}
-
-interface PipelineGroup {
-  phase: string;
-  label: string;
-  rows: PipelineAdminRow[];
-}
 
 export type ProjectDetailView =
   | 'overview'
   | 'jobs'
   | 'settings'
-  // Nav-rebuild step 2 (T5b): three sections that used to live inside the
-  // 'settings' view now render under their own view so the project-shell rails
-  // (Pipeline / Workflow) and the workspace Admin → CLI & Modelle surface can
-  // mount them unchanged. Same controls, same backend writes — only the mount
-  // location moved (Funktions-Diff = 0).
-  | 'pipeline'
+  // Nav-rebuild step 2 (T5b): sections that used to live inside the 'settings'
+  // view now render under their own view so the project-shell rails (Workflow)
+  // and the workspace Admin → CLI & Modelle surface can mount them unchanged.
+  // Same controls, same backend writes — only the mount location moved.
   | 'workflow'
   | 'cli'
   | 'orchestrator'
@@ -96,9 +50,9 @@ export type ProjectDetailView =
 
 /**
  * Project detail panel: name + paths, runner mode toggle, orchestrator
- * model selector, auto-commit toggle, job-state counts, the most recent
- * orchestrator entries with token totals, and a button to open the full
- * feed. Mounted as an overlay panel from the project-tabs ⚙ button.
+ * model selector, auto-commit toggle, job-state counts, and the most recent
+ * orchestrator entries with token totals. Mounted as an overlay panel from
+ * the project-tabs settings button.
  *
  * Read-mostly: only the three setting controls write back. Everything
  * else is polled (5s interval) so a backend change made elsewhere is
@@ -109,7 +63,6 @@ export type ProjectDetailView =
   standalone: true,
   imports: [
     FormsModule,
-    CliModelSelectorComponent,
     TokenSummaryBlockComponent,
     GlobalOrchestratorCardComponent,
     ProjectArchitectureSectionComponent,
@@ -120,6 +73,8 @@ export type ProjectDetailView =
     ProjectMetaCycleSectionComponent,
     ProjectAnalysisReportsSectionComponent,
     ProjectWorkspaceSectionComponent,
+    ProjectWorkflowSectionComponent,
+    ProjectCliEnvironmentSectionComponent,
     AutonomySliderComponent,
     TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -137,7 +92,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   readonly settings = signal<ProjectSettingsRow | null>(null);
   readonly runnerStatus = signal<RunnerStatus | null>(null);
-  readonly grouped = signal<GroupedJobs | null>(null);
   readonly recentEntries = signal<OrchestratorLogEntry[]>([]);
   readonly orchSession = signal<OrchestratorSession | null>(null);
   readonly projectPaths = signal<{ path: string; rootPath: string | null; repositoryPath: string | null } | null>(null);
@@ -152,16 +106,9 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly liveReplyErrors: Record<string, string | null> = {};
 
   autoCommitDraft = false;
+  crashRecoveryDraft = true;
   autoPushStrategyDraft: AutoPushStrategy = 'on-completed';
   orchModelDraft = '';
-
-  /** F35: per-lane sort-strategy selection, keyed by lane state. */
-  readonly laneSortDraft: Record<string, string> = {};
-  readonly sortableLanes = SORTABLE_LANES;
-  readonly laneSortOptions = USER_VISIBLE_LANE_SORT_STRATEGIES;
-  laneSortMeta(strategy: string | null | undefined) {
-    return laneSortStrategyMeta(strategy);
-  }
 
   // Per-CLI permission/sandbox mode (YOLO default). One row per CLI shows the
   // effective mode + where it came from (project override / global config /
@@ -182,9 +129,9 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     'custom': { label: 'Custom', hint: 'Inject no permission flags — the CLI obeys whatever its own config files dictate.' },
   };
   readonly cliSourceMeta: Record<string, { label: string; hint: string }> = {
-    'project': { label: 'project', hint: 'Set explicitly for this project — overrides global config and the platform default.' },
-    'global': { label: 'global', hint: 'Inherited from the CLI’s own global config file (e.g. ~/.codex/config.toml).' },
-    'default': { label: 'default', hint: 'Platform default (YOLO) — no project override and no global config detected.' },
+    'project': { label: 'project override', hint: 'Set explicitly for this project — overrides global config and the platform default.' },
+    'global': { label: 'global config', hint: 'Inherited from the CLI’s own global config file (e.g. ~/.codex/config.toml).' },
+    'default': { label: 'platform default', hint: 'Platform default (YOLO) — no project override and no global config detected.' },
   };
 
   cliModeLabel(mode: string | null | undefined) { return this.cliModeMeta[mode ?? '']?.label ?? mode ?? ''; }
@@ -208,6 +155,12 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     });
   });
 
+  readonly cliEnvironmentModeRows = computed(() => this.cliModeRows().map(row => ({
+    cliType: row.cliType,
+    mode: row.mode,
+    source: this.cliSourceLabel(row.source),
+  })));
+
   // T1b / ASS-1742: per-project CLI context mode (clean isolated home vs the
   // operator's shared global state). Default CLEAN for reproducible coding
   // runs. Shared-only CLIs (Copilot, Gemini) render the dropdown disabled and
@@ -224,8 +177,8 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     'shared': { label: 'Shared', hint: 'Der globale CLI-Zustand des Operators (Session-Historie, Memory, Settings). Nur bewusst waehlen.' },
   };
   readonly cliContextSourceMeta: Record<string, { label: string; hint: string }> = {
-    'project': { label: 'project', hint: 'Explizit fuer dieses Projekt gesetzt — ueberschreibt den Plattform-Default.' },
-    'default': { label: 'default', hint: 'Plattform-Default (clean) — kein Projekt-Override gesetzt.' },
+    'project': { label: 'project override', hint: 'Explizit fuer dieses Projekt gesetzt — ueberschreibt den Plattform-Default.' },
+    'default': { label: 'platform default', hint: 'Plattform-Default (clean) — kein Projekt-Override gesetzt.' },
   };
 
   cliContextModeLabel(mode: string | null | undefined) { return this.cliContextModeMeta[mode ?? '']?.label ?? mode ?? ''; }
@@ -249,84 +202,12 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     });
   });
 
-  // Pre/post pipeline-step config. The catalogue (which steps exist + what
-  // each accepts) is project-independent and fetched once; the per-project
-  // overrides come from the settings projection. Both feed pipelineRows().
-  readonly pipelineCatalogue = signal<readonly PipelineCatalogueStep[]>([]);
-  readonly pipelineOverrides = signal<Record<string, PipelineStepSetting>>({});
-  readonly pipelineOrder = signal<readonly string[]>([]);
-  readonly pipelineCliTypes = CLI_TYPES;
-  readonly pipelineGateModes = PipelineStep_GateModes;
-  readonly pipelineConditions = PipelineStep_Conditions;
-  /** Per-step write in flight; disables that row's controls until the PUT resolves. */
-  readonly pipelineStepBusy: Record<string, boolean> = {};
-  readonly pipelineOrderBusy = signal(false);
-
-  /**
-   * One row per configurable step: the catalogue metadata joined with the
-   * project's current override. With no override (or a null `enabled`) the row
-   * falls back to the step's `defaultEnabled` - on for most steps, off for the
-   * opt-in drift post-steps. `model` / `mode` empty string = inherit.
-   */
-  readonly pipelineRows = computed<PipelineAdminRow[]>(() => {
-    const overrides = this.pipelineOverrides();
-    const drafts = this.pipelineConditionDraft();
-    const catalogue = this.orderedPipelineCatalogue();
-    return catalogue.map((step, index) => {
-      const ov = overrides[step.id];
-      // A draft (an in-progress condition edit not yet persisted - e.g. a
-      // value-bearing token whose value the user is still typing) shadows the
-      // persisted condition so the value input can appear before there is
-      // anything to save.
-      const draft = drafts[step.id];
-      const conditionWhen = draft?.when ?? ov?.condition?.when ?? '';
-      const conditionValue = draft?.value ?? ov?.condition?.value ?? '';
-      return {
-        id: step.id,
-        displayName: step.displayName,
-        kind: step.kind,
-        usesModel: step.usesModel,
-        usesPrompt: step.usesPrompt,
-        supportsMode: step.supportsMode,
-        canDisable: step.canDisable,
-        supportsCondition: step.supportsCondition,
-        phase: step.phase ?? this.phaseForStep(step),
-        enabled: ov?.enabled ?? step.defaultEnabled,
-        cliType: ov?.cliType ?? step.cliType ?? '',
-        model: ov?.model ?? '',
-        thinkingLevel: ov?.thinkingLevel ?? '',
-        prompt: ov?.prompt ?? '',
-        mode: ov?.mode ?? '',
-        condition: conditionWhen,
-        conditionValue,
-        conditionNeedsValue: PipelineStep_ConditionValueTokens.includes(conditionWhen),
-        canMoveUp: this.canMovePipelineStep(catalogue, index, -1),
-        canMoveDown: this.canMovePipelineStep(catalogue, index, 1),
-      };
-    });
-  });
-
-  readonly pipelineGroups = computed(() => {
-    const groups: PipelineGroup[] = [];
-    for (const row of this.pipelineRows()) {
-      const phase = row.phase || 'post';
-      let group = groups.find(g => g.phase === phase);
-      if (!group) {
-        group = { phase, label: this.pipelinePhaseLabel(phase), rows: [] };
-        groups.push(group);
-      }
-      group.rows.push(row);
-    }
-    return groups;
-  });
-
-  /**
-   * In-progress condition edits, keyed by step id. Shadows the persisted
-   * condition in `pipelineRows` so a value-bearing token (task-type / tag)
-   * can show its value input before a value has been entered and persisted.
-   * Cleared once a write resolves so the row falls back to persisted truth.
-   */
-  readonly pipelineConditionDraft = signal<Record<string, { when: string; value: string }>>({});
+  readonly cliEnvironmentContextModeRows = computed(() => this.cliContextModeRows().map(row => ({
+    cliType: row.cliType,
+    mode: row.mode,
+    source: this.cliContextSourceLabel(row.source),
+    supported: row.supported,
+  })));
 
   /**
    * Mode buttons. The four runner modes are: manual (off), auto-single
@@ -393,44 +274,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     };
   });
 
-  readonly laneCounts = computed(() => {
-    const grouped = this.grouped();
-    if (!grouped) return [] as readonly { state: string; label: string; count: number }[];
-    const proj = this.projectName();
-    const c = (jobs: readonly { projectName: string }[]) => jobs.filter(j => j.projectName === proj).length;
-    return [
-      { state: TaskState.Backlog,     label: 'Backlog',     count: c(grouped.backlog ?? []) },
-      { state: TaskState.Preparation, label: 'Preparation', count: c(grouped.preparation) },
-      { state: TaskState.Ready,       label: 'Ready',       count: c(grouped.ready) },
-      { state: TaskState.Progress,    label: 'Progress',    count: c(grouped.progress) },
-      { state: TaskState.AutoReview, label: 'Post Processing', count: c(grouped.autoReview ?? grouped.review) },
-      { state: TaskState.HumanReview, label: 'Review',      count: c(grouped.humanReview ?? []) },
-      { state: TaskState.Escalated,   label: 'Escalated',  count: c(grouped.escalated ?? []) },
-      { state: TaskState.Completed,   label: 'Delivered',   count: c(grouped.completed) },
-      { state: TaskState.Archive,     label: 'Archive',     count: c(grouped.archive) }
-    ];
-  });
-
   readonly activeRunner = computed(() => this.runnerStatus()?.projects?.[this.projectName()] ?? null);
-
-  readonly activeLaneLabel = computed(() => {
-    const activeId = this.activeRunner()?.activeJobId;
-    if (!activeId) return null;
-    const grouped = this.grouped();
-    if (!grouped) return null;
-    const lanes: readonly [string, readonly { id: string }[]][] = [
-      ['Backlog', grouped.backlog ?? []],
-      ['Preparation', grouped.preparation ?? []],
-      ['Ready', grouped.ready ?? []],
-      ['Progress', grouped.progress ?? []],
-      ['Post Processing', grouped.autoReview ?? grouped.review],
-      ['Review', grouped.humanReview ?? []],
-      ['Escalated', grouped.escalated ?? []],
-      ['Delivered', grouped.completed],
-      ['Archive', grouped.archive],
-    ];
-    return lanes.find(([, jobs]) => jobs.some(j => j.id === activeId))?.[0] ?? null;
-  });
 
   queueHealthLabel(health: ProjectQueueHealth, emptyLabel: string, noun: string): string {
     if (health.issueCount === 0) return emptyLabel;
@@ -455,7 +299,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.cliCatalog.ensure('claude').subscribe({ error: () => void 0 });
     this.refreshAll();
-    this.loadPipelineConfig();
     this.refreshCliModes();
     this.refreshCliContextModes();
     // Cycle 3: skip the 6-endpoint refreshAll fan-out when the panel is in
@@ -463,31 +306,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     // 10 s window from the project-detail panel alone (see logs/perf
     // baseline); this drops to zero when the tab is hidden.
     this.pollTimer = setVisibleInterval(() => this.refreshAll(true), 5_000);
-  }
-
-  /**
-   * Load the step catalogue (once) and this project's current per-step
-   * overrides. The overrides ride on the settings projection rather than
-   * the per-project snapshot, so this is a separate read; it is cheap and
-   * runs on panel open plus after each write.
-   */
-  private loadPipelineConfig(): void {
-    this.jobService.getPipelineCatalogue().subscribe({
-      next: (cat) => this.pipelineCatalogue.set(cat.steps ?? []),
-      error: () => { /* leave catalogue empty; the section just hides */ }
-    });
-    this.refreshPipelineOverrides();
-  }
-
-  private refreshPipelineOverrides(): void {
-    const project = this.projectName();
-    this.jobService.getAllProjectSettings().subscribe({
-      next: (all) => {
-        this.pipelineOverrides.set(all[project]?.pipelineSteps ?? {});
-        this.pipelineOrder.set(all[project]?.pipelineStepOrder ?? []);
-      },
-      error: () => { /* keep last known overrides */ }
-    });
   }
 
   ngOnDestroy(): void {
@@ -506,20 +324,17 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       next: (snap) => {
         const row = {
           autoCommit: snap.settings.autoCommit,
+          crashRecoveryEnabled: snap.settings.crashRecoveryEnabled,
           autoPushStrategy: snap.settings.autoPushStrategy,
           runnerMode: snap.settings.runnerMode,
           orchestratorModel: snap.settings.orchestratorModel,
-          laneSortStrategies: snap.settings.laneSortStrategies ?? {}
         };
         this.settings.set(row);
         if (this.autoCommitDraft !== row.autoCommit) this.autoCommitDraft = row.autoCommit;
+        if (this.crashRecoveryDraft !== row.crashRecoveryEnabled) this.crashRecoveryDraft = row.crashRecoveryEnabled;
         if (this.autoPushStrategyDraft !== row.autoPushStrategy) this.autoPushStrategyDraft = row.autoPushStrategy;
         const wantedModel = row.orchestratorModel ?? '';
         if (this.orchModelDraft !== wantedModel) this.orchModelDraft = wantedModel;
-        for (const lane of this.sortableLanes) {
-          const resolved = row.laneSortStrategies[lane.state] ?? 'manual';
-          if (this.laneSortDraft[lane.state] !== resolved) this.laneSortDraft[lane.state] = resolved;
-        }
 
         // RunnerStatus signal expects the full RunnerStatus shape; the
         // snapshot only ships this project's slot, so wrap it. Other
@@ -538,10 +353,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       },
       error: () => { /* silent; keep last snapshot */ }
     });
-    // Board feed stays separate (it covers all projects, not just this
-    // one) and is owned by TaskService's own 2 s poll. We just nudge it.
-    this.jobService.refresh(true);
-    setTimeout(() => this.grouped.set(this.jobService.grouped()), 50);
   }
 
   /**
@@ -582,6 +393,13 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   onAutoCommitChange(): void {
     this.jobService.setProjectAutoCommit(this.projectName(), this.autoCommitDraft).subscribe({
+      next: () => this.refreshAll(true),
+      error: () => this.refreshAll(true)
+    });
+  }
+
+  onCrashRecoveryChange(): void {
+    this.jobService.setProjectCrashRecovery(this.projectName(), this.crashRecoveryDraft).subscribe({
       next: () => this.refreshAll(true),
       error: () => this.refreshAll(true)
     });
@@ -685,281 +503,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       next: () => { this.cliContextModeBusy[cli] = false; this.refreshCliContextModes(); },
       error: () => { this.cliContextModeBusy[cli] = false; this.refreshCliContextModes(); }
     });
-  }
-
-  /** F35: persist one lane's sort strategy, then refresh the resolved map. */
-  onLaneSortChange(lane: string): void {
-    const strategy = this.laneSortDraft[lane] ?? 'manual';
-    this.jobService.setLaneSortStrategy(this.projectName(), lane, strategy).subscribe({
-      next: () => this.refreshAll(true),
-      error: () => this.refreshAll(true)
-    });
-  }
-
-  onStepEnabledChange(stepId: string, enabled: boolean): void {
-    this.writeStep(stepId, { enabled });
-  }
-
-  onStepMove(stepId: string, direction: -1 | 1): void {
-    if (this.pipelineOrderBusy()) return;
-    const rows = this.orderedPipelineCatalogue();
-    const index = rows.findIndex(step => step.id === stepId);
-    if (index < 0) return;
-
-    const section = this.pipelineOrderSection(rows[index]);
-    if (section === 'core') return;
-
-    let target = index + direction;
-    while (target >= 0 && target < rows.length && this.pipelineOrderSection(rows[target]) !== section) {
-      target += direction;
-    }
-    if (target < 0 || target >= rows.length) return;
-
-    const next = [...rows];
-    [next[index], next[target]] = [next[target], next[index]];
-    const stepIds = next
-      .filter(step => this.pipelineOrderSection(step) !== 'core')
-      .map(step => step.id);
-
-    this.pipelineOrderBusy.set(true);
-    this.pipelineOrder.set(stepIds);
-    this.jobService.setProjectPipelineStepOrder(this.projectName(), stepIds).subscribe({
-      next: (res) => {
-        this.pipelineOrderBusy.set(false);
-        this.pipelineOrder.set(res.pipelineStepOrder ?? stepIds);
-      },
-      error: () => {
-        this.pipelineOrderBusy.set(false);
-        this.refreshPipelineOverrides();
-      },
-    });
-  }
-
-  onStepModeChange(stepId: string, mode: string): void {
-    this.writeStep(stepId, { mode });
-  }
-
-  onStepPromptChange(stepId: string, prompt: string): void {
-    this.writeStep(stepId, { prompt });
-  }
-
-  resetStepAgent(stepId: string): void {
-    this.writeStep(stepId, {
-      cliType: '',
-      model: '',
-      thinkingLevel: null,
-    });
-  }
-
-  onStepAgentCommit(stepId: string, selection: { cliType: CliType; model: string; thinkingLevel: string | null }): void {
-    this.writeStep(stepId, {
-      cliType: selection.cliType,
-      model: selection.model,
-      thinkingLevel: selection.thinkingLevel,
-    });
-  }
-
-  /**
-   * The condition <select> changed. A non-value token (always / never /
-   * on-abort / ...) persists immediately. A value-bearing token (task-type /
-   * tag) only persists once a value exists - until then we keep a draft so the
-   * value input appears. Picking the empty option clears the condition.
-   */
-  onStepConditionChange(stepId: string, when: string): void {
-    const existingValue = this.pipelineConditionDraft()[stepId]?.value
-      ?? this.pipelineOverrides()[stepId]?.condition?.value ?? '';
-
-    if (!when) {
-      this.setConditionDraft(stepId, { when: '', value: existingValue });
-      this.writeStep(stepId, { condition: null });
-      return;
-    }
-
-    if (PipelineStep_ConditionValueTokens.includes(when)) {
-      this.setConditionDraft(stepId, { when, value: existingValue });
-      if (existingValue.trim()) {
-        this.writeStep(stepId, { condition: { when: when as PipelineStepConditionToken, value: existingValue.trim() } });
-      }
-      return;
-    }
-
-    this.setConditionDraft(stepId, { when, value: '' });
-    this.writeStep(stepId, { condition: { when: when as PipelineStepConditionToken } });
-  }
-
-  /**
-   * The condition value input is being typed (task-type / tag). Updates the
-   * draft only so the field stays responsive; the write happens on commit
-   * (blur / Enter) to avoid a PUT per keystroke.
-   */
-  onStepConditionValueInput(stepId: string, value: string): void {
-    const when = this.pipelineConditionDraft()[stepId]?.when
-      ?? this.pipelineOverrides()[stepId]?.condition?.when ?? '';
-    this.setConditionDraft(stepId, { when, value });
-  }
-
-  /**
-   * Commit the typed condition value (blur / Enter). Persists the token +
-   * value; an empty value collapses the condition to null on the backend.
-   */
-  onStepConditionValueCommit(stepId: string): void {
-    const draft = this.pipelineConditionDraft()[stepId];
-    const ov = this.pipelineOverrides()[stepId];
-    const when = draft?.when ?? ov?.condition?.when ?? '';
-    const value = (draft?.value ?? ov?.condition?.value ?? '').trim();
-    if (!when || !PipelineStep_ConditionValueTokens.includes(when)) return;
-    this.writeStep(stepId, {
-      condition: value ? { when: when as PipelineStepConditionToken, value } : null,
-    });
-  }
-
-  private setConditionDraft(stepId: string, draft: { when: string; value: string }): void {
-    this.pipelineConditionDraft.update(m => ({ ...m, [stepId]: draft }));
-  }
-
-  private clearConditionDraft(stepId: string): void {
-    this.pipelineConditionDraft.update(m => {
-      if (!(stepId in m)) return m;
-      const next = { ...m };
-      delete next[stepId];
-      return next;
-    });
-  }
-
-  /**
-   * Merge one changed facet onto the step's current override and PUT the
-   * whole step (the backend replaces the entry, so unchanged facets must
-   * be resent). `enabled` is sent as null when the step is on so an
-   * all-default step clears its entry instead of leaving a dead one.
-   * Empty model/mode normalise to null = inherit the built-in default. A
-   * `condition` of null clears it; undefined leaves the stored one untouched.
-   */
-  private writeStep(
-    stepId: string,
-    patch: {
-      enabled?: boolean;
-      cliType?: string;
-      model?: string;
-      thinkingLevel?: string | null;
-      prompt?: string | null;
-      mode?: string;
-      condition?: PipelineStepCondition | null;
-    },
-  ): void {
-    const cur = this.pipelineOverrides()[stepId] ?? {};
-    const defaultEnabled = this.pipelineCatalogue().find(s => s.id === stepId)?.defaultEnabled ?? true;
-    const enabled = patch.enabled ?? (cur.enabled ?? defaultEnabled);
-    const model = (patch.model ?? cur.model ?? '').trim();
-    const cliType = (patch.cliType ?? cur.cliType ?? '').trim();
-    const thinkingLevel = (patch.thinkingLevel !== undefined ? patch.thinkingLevel : (cur.thinkingLevel ?? ''))?.trim() ?? '';
-    const prompt = (patch.prompt !== undefined ? patch.prompt : (cur.prompt ?? ''))?.trim() ?? '';
-    const mode = (patch.mode ?? cur.mode ?? '').trim();
-    const condition = patch.condition !== undefined ? patch.condition : (cur.condition ?? null);
-
-    this.pipelineStepBusy[stepId] = true;
-    this.jobService.setProjectPipelineStep(this.projectName(), {
-      stepId,
-      // Only persist `enabled` when it differs from the step's built-in
-      // default; otherwise send null so an at-default step does not leave a
-      // dead override. This matters for opt-in steps (abort-review, drift)
-      // whose default is off: enabling them must store true, not clear it.
-      enabled: enabled === defaultEnabled ? null : enabled,
-      cliType: cliType || null,
-      model: model || null,
-      thinkingLevel: thinkingLevel || null,
-      prompt: prompt || null,
-      mode: mode || null,
-      condition: condition ?? null,
-    }).subscribe({
-      next: (res) => {
-        this.pipelineStepBusy[stepId] = false;
-        this.pipelineOverrides.set(res.pipelineSteps ?? {});
-        this.clearConditionDraft(stepId);
-      },
-      error: () => {
-        this.pipelineStepBusy[stepId] = false;
-        // Re-read so the controls snap back to the persisted truth.
-        this.refreshPipelineOverrides();
-        this.clearConditionDraft(stepId);
-      }
-    });
-  }
-
-  asCliType(value: string | null | undefined): CliType | null {
-    return value && (CLI_TYPES as readonly string[]).includes(value) ? value as CliType : null;
-  }
-
-  private phaseForStep(step: PipelineCatalogueStep): string {
-    if (step.kind === 'aspect') return 'aspect';
-    if (step.kind === 'tool') return 'tool';
-    if (step.kind === 'drift') return 'drift';
-    if (step.kind === 'core') return 'core';
-    if (step.id.startsWith('pre-')) return 'pre';
-    if (step.id.includes('decision')) return 'decision';
-    if (step.id.includes('abort')) return 'abort';
-    return 'post';
-  }
-
-  private orderedPipelineCatalogue(): readonly PipelineCatalogueStep[] {
-    const steps = this.pipelineCatalogue();
-    const pre = this.sortPipelineOrderSection(steps.filter(step => this.pipelineOrderSection(step) === 'pre'));
-    const core = steps.filter(step => this.pipelineOrderSection(step) === 'core');
-    const post = this.sortPipelineOrderSection(steps.filter(step => this.pipelineOrderSection(step) === 'post'));
-    return [...pre, ...core, ...post];
-  }
-
-  private sortPipelineOrderSection(steps: readonly PipelineCatalogueStep[]): readonly PipelineCatalogueStep[] {
-    const order = this.pipelineOrder();
-    if (order.length === 0 || steps.length <= 1) return steps;
-
-    const rank = new Map<string, number>();
-    for (const id of order) {
-      const key = id.trim().toLowerCase();
-      if (key && !rank.has(key)) rank.set(key, rank.size);
-    }
-    if (rank.size === 0) return steps;
-
-    return steps
-      .map((step, index) => ({ step, index, rank: rank.get(step.id.toLowerCase()) ?? Number.MAX_SAFE_INTEGER }))
-      .sort((a, b) => a.rank - b.rank || a.index - b.index)
-      .map(x => x.step);
-  }
-
-  private pipelineOrderSection(step: PipelineCatalogueStep): 'pre' | 'core' | 'post' {
-    if (step.kind === 'core') return 'core';
-    if ((step.phase ?? this.phaseForStep(step)) === 'pre') return 'pre';
-    return 'post';
-  }
-
-  private canMovePipelineStep(
-    steps: readonly PipelineCatalogueStep[],
-    index: number,
-    direction: -1 | 1,
-  ): boolean {
-    const step = steps[index];
-    if (!step) return false;
-    const section = this.pipelineOrderSection(step);
-    if (section === 'core') return false;
-
-    let target = index + direction;
-    while (target >= 0 && target < steps.length) {
-      if (this.pipelineOrderSection(steps[target]) === section) return true;
-      target += direction;
-    }
-    return false;
-  }
-
-  private pipelinePhaseLabel(phase: string): string {
-    switch (phase) {
-      case 'pre': return 'Pre';
-      case 'core': return 'Core';
-      case 'aspect': return 'Aspect reviews';
-      case 'tool': return 'Tool steps';
-      case 'decision': return 'Decision';
-      case 'drift': return 'Drift';
-      case 'abort': return 'Abort-only';
-      default: return 'Post';
-    }
   }
 
   repairQueueHealth(): void {

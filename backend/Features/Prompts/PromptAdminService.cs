@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AgentStudio.Drift;
 
 namespace AgentStudio.Prompts;
 
@@ -36,6 +37,7 @@ public sealed class PromptAdminService
             var meta = PromptDescriptionCatalog.Describe(name);
             var hasOverride = _prompts.HasOverride(name);
             var defaultContent = _prompts.TryReadDefault(name);
+            var effective = _prompts.TryReadOverride(name) ?? defaultContent;
             items.Add(new PromptCatalogItem
             {
                 Name = name,
@@ -45,6 +47,8 @@ public sealed class PromptAdminService
                 HasOverride = hasOverride,
                 HasDefault = defaultContent != null,
                 DefaultChangedSinceOverride = hasOverride && DefaultChanged(name, defaultContent),
+                Slots = RuntimePromptService.ExtractSlots(effective).ToList(),
+                UsageCount = PromptUsageCatalog.For(name).Count,
             });
         }
         return new PromptCatalogResponse
@@ -69,6 +73,7 @@ public sealed class PromptAdminService
         var sidecar = ReadSidecar(name);
         var defaultSha = defaultContent == null ? null : Sha(defaultContent);
 
+        var effective = overrideContent ?? defaultContent ?? string.Empty;
         return new PromptDetail
         {
             Name = name,
@@ -80,14 +85,111 @@ public sealed class PromptAdminService
             DefaultContent = defaultContent,
             OverrideContent = overrideContent,
             BaseDefaultContent = hasOverride ? sidecar?.BaseDefaultContent : null,
-            EffectiveContent = overrideContent ?? defaultContent ?? string.Empty,
+            EffectiveContent = effective,
             DefaultSha = defaultSha,
             BaseDefaultSha = hasOverride ? sidecar?.BaseDefaultSha : null,
             DefaultChangedSinceOverride =
                 hasOverride && sidecar?.BaseDefaultSha != null && defaultSha != null
                 && !string.Equals(sidecar.BaseDefaultSha, defaultSha, StringComparison.OrdinalIgnoreCase),
             OverrideUpdatedAt = hasOverride ? sidecar?.UpdatedAt : null,
+            Slots = RuntimePromptService.ExtractSlots(effective).ToList(),
+            Usages = PromptUsageCatalog.For(name).ToList(),
         };
+    }
+
+    /// <summary>
+    /// Renders the effective template (override -&gt; default), or an explicit
+    /// draft when <paramref name="content"/> is supplied, against the given slot
+    /// values. This is the registry's "Probelauf": it shows exactly what the
+    /// renderer would emit, including which declared slots were filled vs left
+    /// empty, without persisting anything. Null when the name is unknown and no
+    /// draft content was supplied.
+    /// </summary>
+    public PromptPreviewResult? Preview(string name, IReadOnlyDictionary<string, string?>? values, string? content = null)
+    {
+        string? template = content;
+        if (template == null)
+        {
+            if (!IsKnown(name)) return null;
+            template = _prompts.TryReadOverride(name) ?? _prompts.TryReadDefault(name);
+        }
+        if (template == null) return null;
+
+        var slots = RuntimePromptService.ExtractSlots(template);
+        var supplied = values ?? new Dictionary<string, string?>();
+        bool Filled(string slot) => supplied.TryGetValue(slot, out var v) && !string.IsNullOrEmpty(v);
+
+        return new PromptPreviewResult
+        {
+            Name = name,
+            Rendered = RuntimePromptService.RenderContent(template, supplied),
+            Slots = slots.ToList(),
+            FilledSlots = slots.Where(Filled).ToList(),
+            MissingSlots = slots.Where(s => !Filled(s)).ToList(),
+        };
+    }
+
+    /// <summary>
+    /// The coverage surface: which prompt-source sites are template-backed
+    /// (covered) versus still assembling an inline instruction block (pending).
+    /// The "covered" rows document the core runner/review/drift files the
+    /// inline-migration (T3a) cleared - positive evidence a literal scan can't
+    /// reproduce. The "pending" rows are produced live by the prompt-coverage
+    /// guard (<see cref="PromptCoverageScanner"/>, T3b): every multi-line
+    /// instruction block still pasted into a <c>.cs</c> file shows up here, the
+    /// same findings that break the build. On the post-T3a tree this list is
+    /// empty, so the section reads as fully covered.
+    /// </summary>
+    public PromptCoverageResponse GetCoverage()
+    {
+        var items = new List<PromptCoverageItem>
+        {
+            new() { Component = "backend/Features/Runner/ProjectRunner.cs", Status = "covered",
+                Detail = "Conflict-resolution, project-boot and orchestrator-decision prompts moved to runtime templates." },
+            new() { Component = "backend/Features/Runner/ReviewDecisionOrchestrator.cs", Status = "covered",
+                Detail = "Review-decision, no-completion-signal, fallback and reissue-follow-up prompts are template-backed." },
+            new() { Component = "backend/Features/Runner/GlobalOrchestratorBootstrap.cs", Status = "covered",
+                Detail = "Global boot prompt, self-modification note and task-snapshot block moved to runtime templates." },
+            new() { Component = "backend/Features/Drift/CodePatternDriftAnalysisService.cs", Status = "covered",
+                Detail = "Code-pattern drift review prompt and canonical-sites block moved to runtime templates." },
+        };
+
+        foreach (var finding in ScanInlineFindings())
+        {
+            items.Add(new PromptCoverageItem
+            {
+                Component = $"{finding.File}:{finding.Line}",
+                Status = "pending",
+                Detail = $"Inline instruction block ('{finding.Signal}' …) not template-backed - move it to a runtime template: {finding.Snippet}",
+            });
+        }
+
+        return new PromptCoverageResponse
+        {
+            Items = items,
+            TotalSites = items.Count,
+            CoveredSites = items.Count(i => string.Equals(i.Status, "covered", StringComparison.OrdinalIgnoreCase)),
+            PendingSites = items.Count(i => string.Equals(i.Status, "pending", StringComparison.OrdinalIgnoreCase)),
+        };
+    }
+
+    /// <summary>
+    /// Runs the build-breaking inline-prompt guard over the product source tree
+    /// so the coverage section shows the same findings the arch-test fails on.
+    /// Degrades to an empty result (no pending rows) when the source tree is not
+    /// reachable, e.g. a bin-only deployment.
+    /// </summary>
+    private IReadOnlyList<InlinePromptFinding> ScanInlineFindings()
+    {
+        try
+        {
+            return PromptCoverageScanner.ScanProductSource(DriftRepoRootLocator.Resolve());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "prompt-coverage-scan-failed");
+            return Array.Empty<InlinePromptFinding>();
+        }
     }
 
     /// <summary>Creates / replaces the override and records the default SHA it was based on.</summary>
@@ -206,6 +308,8 @@ public sealed class PromptCatalogItem
     public bool HasDefault { get; set; }
     public bool HasOverride { get; set; }
     public bool DefaultChangedSinceOverride { get; set; }
+    public List<string> Slots { get; set; } = new();
+    public int UsageCount { get; set; }
 }
 
 public sealed class PromptDetail
@@ -224,6 +328,40 @@ public sealed class PromptDetail
     public string? BaseDefaultSha { get; set; }
     public bool DefaultChangedSinceOverride { get; set; }
     public DateTimeOffset? OverrideUpdatedAt { get; set; }
+    public List<string> Slots { get; set; } = new();
+    public List<PromptUsageRef> Usages { get; set; } = new();
+}
+
+/// <summary>
+/// Result of a non-persisting "Probelauf" render: the rendered output plus
+/// which declared slots were filled vs left empty for the supplied values.
+/// </summary>
+public sealed class PromptPreviewResult
+{
+    public string Name { get; set; } = "";
+    public string Rendered { get; set; } = "";
+    public List<string> Slots { get; set; } = new();
+    public List<string> FilledSlots { get; set; } = new();
+    public List<string> MissingSlots { get; set; } = new();
+}
+
+/// <summary>
+/// Coverage roll-up: which prompt-source sites are template-backed (covered)
+/// vs still assembling instruction text inline (pending), with totals.
+/// </summary>
+public sealed class PromptCoverageResponse
+{
+    public List<PromptCoverageItem> Items { get; set; } = new();
+    public int TotalSites { get; set; }
+    public int CoveredSites { get; set; }
+    public int PendingSites { get; set; }
+}
+
+public sealed class PromptCoverageItem
+{
+    public string Component { get; set; } = "";
+    public string Status { get; set; } = "";
+    public string Detail { get; set; } = "";
 }
 
 internal sealed class PromptOverrideSidecar

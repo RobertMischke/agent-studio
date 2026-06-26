@@ -122,7 +122,6 @@ export function formatMultiplier(mult: number | null): string {
 
 export function cliTypeLabel(t: CliType): string {
   switch (t) {
-    case 'copilot': return 'Copilot';
     case 'claude':  return 'Claude Code';
     case 'codex':   return 'Codex';
     case 'gemini':  return 'Gemini';
@@ -131,11 +130,10 @@ export function cliTypeLabel(t: CliType): string {
 
 // Distinct glyph per CLI so the cost overview, job preview cards, and
 // command-deck picker can be told apart at a glance. Choices echo each
-// vendor's mark: Anthropic burst (Claude), OpenAI knot (Codex), GitHub
-// Octocat (Copilot), Gemini zodiac (Gemini).
+// vendor's mark: Anthropic burst (Claude), OpenAI knot (Codex),
+// Gemini zodiac (Gemini).
 export function cliTypeIcon(t: CliType): string {
   switch (t) {
-    case 'copilot': return '🐙';
     case 'claude':  return '✴️';
     case 'codex':   return '🌀';
     case 'gemini':  return '♊';

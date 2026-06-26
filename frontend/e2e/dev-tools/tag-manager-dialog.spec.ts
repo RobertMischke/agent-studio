@@ -51,7 +51,7 @@ async function firstWatchPath(baseUrl: string): Promise<{ path: string }> {
 async function deleteJobViaApi(baseUrl: string, id: string, watchPath: string): Promise<void> {
   await apiRequest(
     baseUrl,
-    `/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`,
+    `/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`,
     { method: 'DELETE' },
   );
 }
@@ -159,7 +159,7 @@ test.describe('Tag manager dialog', () => {
       body: JSON.stringify({ id: TEST_TAG_ID, label: TEST_TAG_LABEL, color: '#aaaaaa', description: '' }),
     });
     const wp = await firstWatchPath(devBackend.baseUrl);
-    await apiRequest(devBackend.baseUrl, '/api/jobs', {
+    await apiRequest(devBackend.baseUrl, '/api/tasks', {
       method: 'POST',
       body: JSON.stringify({
         id: TEST_JOB_ID,

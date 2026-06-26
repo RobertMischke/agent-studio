@@ -263,25 +263,27 @@ export class TriageController {
    * Falls back to the live lane peers when no snapshot is available
    * (e.g. detail opened from a URL with no prior iteration).
    */
-  next(info: TaskInfo): void {
-    if (this.jobSelection.pagerStep(1)) return;
+  next(info: TaskInfo): boolean {
+    if (this.jobSelection.pagerStep(1)) return true;
     const peers = this.jobSelection.triageLanePeers();
-    if (peers.length === 0) return;
+    if (peers.length === 0) return false;
     const idx = peers.findIndex((p) => p.taskKey === info.taskKey);
     const nextIdx = idx < 0 ? 0 : Math.min(peers.length - 1, idx + 1);
-    if (nextIdx === idx) return;
+    if (nextIdx === idx) return false;
     this.jobSelection.openDetail(peers[nextIdx]);
+    return true;
   }
 
   /** k / ↑ / ← / pager-prev: see `next` - same snapshot semantics. */
-  prev(info: TaskInfo): void {
-    if (this.jobSelection.pagerStep(-1)) return;
+  prev(info: TaskInfo): boolean {
+    if (this.jobSelection.pagerStep(-1)) return true;
     const peers = this.jobSelection.triageLanePeers();
-    if (peers.length === 0) return;
+    if (peers.length === 0) return false;
     const idx = peers.findIndex((p) => p.taskKey === info.taskKey);
     const prevIdx = idx < 0 ? 0 : Math.max(0, idx - 1);
-    if (prevIdx === idx) return;
+    if (prevIdx === idx) return false;
     this.jobSelection.openDetail(peers[prevIdx]);
+    return true;
   }
 
   // ---------- auto-advance after mutation / external move ----------

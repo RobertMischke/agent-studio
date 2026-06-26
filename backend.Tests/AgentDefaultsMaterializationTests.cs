@@ -36,7 +36,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     {
         var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "task-1",
             Title = "Test",
@@ -57,7 +57,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     {
         var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7", defaultThinkingLevel: "xhigh");
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "task-thinking",
             Title = "Test thinking",
@@ -75,7 +75,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     {
         var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-sonnet-4-6", defaultThinkingLevel: "max");
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "task-sonnet",
             Title = "Test sonnet",
@@ -93,7 +93,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     {
         var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "task-2",
             Title = "Test",
@@ -111,11 +111,56 @@ public class AgentDefaultsMaterializationTests : IDisposable
     }
 
     [Fact]
+    public void CreateJob_ExplicitCliTypeWithoutModel_UsesThatCliDefault()
+    {
+        var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-8");
+
+        mutations.CreateJob(new CreateTaskRequest
+        {
+            Id = "task-codex-default",
+            Title = "Codex default",
+            WatchPath = _watchPath,
+            Agent = "codex",
+            CliType = "codex",
+            TargetState = TaskStates.Ready
+        });
+
+        var info = scanner.FindJob("task-codex-default", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("codex", info!.Agent);
+        Assert.Equal("codex", info.CliType);
+        Assert.Equal(ModelIds.Gpt5Codex, info.Model);
+        Assert.Equal("medium", info.ThinkingLevel);
+    }
+
+    [Fact]
+    public void CreateJob_ExplicitCliTypeWithForeignModel_RemapsToCliDefault()
+    {
+        var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-8");
+
+        mutations.CreateJob(new CreateTaskRequest
+        {
+            Id = "task-codex-foreign",
+            Title = "Codex foreign",
+            WatchPath = _watchPath,
+            CliType = "codex",
+            Model = "claude-opus-4-8",
+            TargetState = TaskStates.Ready
+        });
+
+        var info = scanner.FindJob("task-codex-foreign", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("codex", info!.Agent);
+        Assert.Equal("codex", info.CliType);
+        Assert.Equal(ModelIds.Gpt5Codex, info.Model);
+    }
+
+    [Fact]
     public void CreateJob_PreservesAgentHuman_AsDeliberateManualTask()
     {
         var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "manual-task",
             Title = "Manual",
@@ -134,7 +179,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     {
         var (_, scanner, mutations) = Build(defaultCliType: null, defaultModel: null);
 
-        mutations.CreateJob(new CreateJobRequest
+        mutations.CreateJob(new CreateTaskRequest
         {
             Id = "no-defaults",
             Title = "No defaults",
@@ -237,7 +282,6 @@ public class AgentDefaultsMaterializationTests : IDisposable
         Assert.False(AgentTypes.IsAutoPickupEligible("HUMAN"));
         Assert.True(AgentTypes.IsAutoPickupEligible("claude"));
         Assert.True(AgentTypes.IsAutoPickupEligible("codex"));
-        Assert.True(AgentTypes.IsAutoPickupEligible("copilot"));
         Assert.True(AgentTypes.IsAutoPickupEligible("gemini"));
         Assert.True(AgentTypes.IsAutoPickupEligible(null));
         Assert.True(AgentTypes.IsAutoPickupEligible(""));

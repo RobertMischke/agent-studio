@@ -26,7 +26,7 @@ test.beforeEach(async ({ page }) => {
  *   space is reclaimed.
  * - The status bar must be present at the bottom and host the quick toggles
  *   (Usage / Orchestrator / Feed) and the unified default-CLI + default-model
- *   chip (see docs/cli-model-selector-audit.md).
+ *   chip (see docs/frontend/audits/cli-model-selector-audit.md).
  * - The defaults popover should open above the bar (VS Code style) and
  *   persist the user's choice in localStorage.
  */

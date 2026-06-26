@@ -1,7 +1,7 @@
 ---
 concept: skills
 title: Skills
-learnMore: docs/skills-architecture.md
+learnMore: docs/product/skills-architecture.md
 learnMoreLabel: Portable Skills Architecture
 ---
 

@@ -99,6 +99,18 @@ public class ProjectRunner
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
+
+    // Runtime prompt-registry template names. Every instruction/role prose
+    // string ProjectRunner emits lives in one of these files under
+    // prompts/runtime so the text is inspectable and project-overridable;
+    // code only fills the named slots.
+    public const string ConflictResolutionTemplate = "orchestrator-conflict-resolution.md";
+    public const string ProjectBootTemplate = "orchestrator-project-boot.md";
+    public const string DecisionResumeTemplate = "orchestrator-decision-resume.md";
+    public const string DecisionAttachmentsResumeTemplate = "orchestrator-decision-attachments-resume.md";
+    public const string DecisionOneshotTemplate = "orchestrator-decision-oneshot.md";
+    public const string DecisionAttachmentsOneshotTemplate = "orchestrator-decision-attachments-oneshot.md";
+
     private readonly TaskTransitionService _transitions;
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
@@ -201,6 +213,13 @@ public class ProjectRunner
     private RunPlan? _activePlan => _activeRuns.Single?.Plan;
     private int _activeReissueAttempt => _activeRuns.Single?.ReissueAttempt ?? 0;
     private bool _processing;
+    // ASS-1753: latches the one-shot post-restart slot reconcile. A backend
+    // restart clears _activeRuns, but the CLI router can still own live runs
+    // for this project (a CLI that reattaches on startup, or a process that
+    // outlived the restart and is still tracked). The first tick re-books those
+    // into the registry so occupied slots == genuinely-tracked live runs; after
+    // that the normal claim/release path keeps the count accurate.
+    private bool _recoveredRunsReconciled;
     // ADR-0052 slice 2: worktree-isolated parallel execution. Lazily built from
     // the injected GitService. _integrateLock is the per-project merge-queue:
     // it serializes integrations into the work branch so concurrent slot merges
@@ -314,11 +333,16 @@ public class ProjectRunner
     public event Action<ProjectRunnerStatus>? OnStatusChanged;
     /// <summary>
     /// Raised whenever the mode changes through any path (explicit
-    /// <see cref="SetMode"/> or implicit auto-single → manual revert).
-    /// Wired by <see cref="TaskRunnerService"/> to persist the new mode.
-    /// Restoration via <see cref="RestoreMode"/> does NOT fire this event.
+    /// <see cref="SetMode"/> or implicit auto-single → manual revert). The
+    /// arguments are the new mode and its <see cref="ClassifyModeSource"/>
+    /// classification (<c>user</c> / <c>circuit-breaker</c> / <c>supervisor</c>
+    /// / <c>system</c>). The source lets the persistence layer tell an operator
+    /// toggle apart from a system-driven flip (update-quiesce, circuit-breaker)
+    /// so the latter does not clobber the operator's durable mode intent
+    /// (ASS-1753). Wired by <see cref="TaskRunnerService"/> to persist the new
+    /// mode. Restoration via <see cref="RestoreMode"/> does NOT fire this event.
     /// </summary>
-    public event Action<string>? OnModePersist;
+    public event Action<string, string>? OnModePersist;
 
     public ProjectRunner(
         string projectName,
@@ -436,7 +460,8 @@ public class ProjectRunner
         var effectiveReason = string.IsNullOrWhiteSpace(reason) ? "api-toggle" : reason!;
         _modeReason = effectiveReason;
         _modeChangedAt = DateTime.UtcNow;
-        _modeSource = ClassifyModeSource(effectiveReason);
+        var modeSource = ClassifyModeSource(effectiveReason);
+        _modeSource = modeSource;
         // A direct, fully-applied SetMode supersedes any deferred change still
         // waiting on the active job. Clear the pending slot so the status DTO
         // does not advertise a "MANUAL (after current)" pill that will never
@@ -447,7 +472,7 @@ public class ProjectRunner
         _logger.LogInformation(
             "Runner '{Project}' mode '{From}' -> '{To}' because '{Reason}' (source={Source})",
             ProjectName, fromMode, mode, effectiveReason, _modeSource);
-        try { OnModePersist?.Invoke(mode); }
+        try { OnModePersist?.Invoke(mode, modeSource); }
         catch (Exception ex) { _logger.LogWarning(ex, "OnModePersist subscriber threw for {Project}", ProjectName); }
         NotifyStatus();
     }
@@ -534,6 +559,14 @@ public class ProjectRunner
             return "circuit-breaker";
         if (reason.StartsWith("supervisor", StringComparison.OrdinalIgnoreCase))
             return "supervisor";
+        // The update-service quiesces runners to manual before an update and
+        // restores them afterwards (reason "update-quiesce" / "update-resume").
+        // That transient flip is NOT operator intent, so it must classify as
+        // system - otherwise the persistence layer would record manual as the
+        // operator's durable mode and a failed/early-returning update would
+        // leave auto-continuous clobbered across the restart (ASS-1753).
+        if (reason.StartsWith("update-", StringComparison.OrdinalIgnoreCase))
+            return "system";
         if (reason.StartsWith("api", StringComparison.OrdinalIgnoreCase))
             return "user";
         return "system";
@@ -657,6 +690,14 @@ public class ProjectRunner
         // wedged. Covers external-script moves and the boot-time stuck-folder
         // sweep where no API event fired to clear us synchronously.
         ReconcileActiveJobAgainstDisk();
+
+        // ASS-1753: one-shot post-restart slot reconcile. A restart cleared the
+        // in-memory slot registry; re-book any run the CLI router still tracks
+        // as live so occupied slots reflect the genuinely-running runs again.
+        // Runs before the role gate so a test-subject backend's reattached runs
+        // are still accounted for, and before the pickup gate so a recovered run
+        // both blocks a duplicate pick and surfaces "Run aktiv" on the board.
+        ReconcileRecoveredRunsIntoSlots();
 
         // Role gate (ADR-0044 / AGENTS.md "Dev backend lifecycle: Playwright-
         // only"). A test-subject backend never auto-picks: watchdog,
@@ -889,7 +930,7 @@ public class ProjectRunner
             //    on the task branch before the merge reads them - in a managed run
             //    the agent itself does not commit, so without this the branch tip
             //    stays at develop and Integrate would merge nothing.
-            var commit = _git.CrashRecoveryCommit(ProjectName, run.WorktreePath!,
+            var commit = _git.WorktreeRunCommit(ProjectName, run.WorktreePath!,
                 $"{info.Title}\n\n{GitService.WorktreeRunCommitTrailer(run.JobId)}");
             if (commit.Success)
                 _logger.LogInformation("[taskboard] parallel run {Job} committed agent edits on {Branch} at {Sha}",
@@ -1392,7 +1433,7 @@ public class ProjectRunner
                 return lost;
             }
 
-            var commit = _git.CrashRecoveryCommit(ProjectName, run.WorktreePath!,
+            var commit = _git.WorktreeRunCommit(ProjectName, run.WorktreePath!,
                 $"{info.Title}\n\n[conflict-resolution; jobId={run.JobId}]");
             if (commit.Success)
                 _logger.LogInformation("[taskboard] conflict resolver committed changes for {Job} at {Sha}",
@@ -1434,7 +1475,7 @@ public class ProjectRunner
         }
     }
 
-    private static string BuildConflictResolutionPrompt(
+    private string BuildConflictResolutionPrompt(
         TaskInfo info,
         ActiveRun run,
         string workBranch,
@@ -1443,20 +1484,15 @@ public class ProjectRunner
         var files = conflict.ConflictedFiles is { Count: > 0 }
             ? string.Join(Environment.NewLine, conflict.ConflictedFiles.Select(f => $"- {f}"))
             : "- none reported; run git diff --name-only --diff-filter=U";
-        return
-            "You are the orchestrator-owned merge conflict resolver for a parallel task branch.\n" +
-            $"Task: {info.Id} - {info.Title}\n" +
-            $"Task branch: {run.Branch}\n" +
-            $"Integration branch: {workBranch}\n" +
-            $"Worktree: {run.WorktreePath}\n\n" +
-            "Resolve the rebase/merge conflict from outside the core task agent. Work only in this worktree. " +
-            "A rebase is expected to be paused here already; resolve the conflict files, stage the resolutions, " +
-            "and run `git rebase --continue`. If no rebase is active, rebase the task branch onto the integration branch yourself. " +
-            "Run focused verification if practical, and leave the task branch clean and ready for a fast-forward merge into the integration branch. " +
-            "Do not force-push, do not force-merge, and do not edit the shared main checkout.\n\n" +
-            "Conflicted files from the failed integration attempt:\n" +
-            files + "\n\n" +
-            "End with a concise summary. The pipeline harness will perform the final fast-forward merge.";
+        return _prompts.Render(ConflictResolutionTemplate, new Dictionary<string, string?>
+        {
+            ["job_id"] = info.Id,
+            ["job_title"] = info.Title,
+            ["task_branch"] = run.Branch,
+            ["integration_branch"] = workBranch,
+            ["worktree"] = run.WorktreePath,
+            ["conflicted_files"] = files,
+        }).TrimEnd('\r', '\n');
     }
 
     private static string IntegrationSummary(
@@ -1955,7 +1991,7 @@ public class ProjectRunner
             // endpoint uses ("commits made during this run" = git rev-list
             // HeadShaBefore..HeadShaAfter). Best-effort: a missing repo or
             // a git failure leaves the SHAs null and we fall back to the
-            // wall-clock window. See docs/design-principles.md for why we
+            // wall-clock window. See docs/product/design-principles.md for why we
             // treat the software-side change set as a first-class signal.
             var headShaBefore = SafeGetHeadSha(jobId);
 
@@ -1973,6 +2009,10 @@ public class ProjectRunner
                 Cli = cli.CliType,
                 InputSessionId = plan.EventInputSessionId,
                 CapturedSessionId = null,
+                // S2 (AGT-1784): record the cwd this session is born in (the
+                // worktree path) so a later reissue can detect a cross-path
+                // resume target and start fresh instead of crashing.
+                Cwd = runWorkingDir,
                 Resumed = plan.ResumeFlag,
                 Reason = plan.EventReason,
                 HeadShaBefore = headShaBefore,
@@ -2051,13 +2091,40 @@ public class ProjectRunner
             //    context from the task spec + the code in the worktree.
             var activeRunForSpawn = _activeRuns.Get(jobId);
             var isWorktreeRun = activeRunForSpawn?.IsWorktreeRun == true;
+            // S2 (AGT-1784): resolve where the session we're about to resume was
+            // BORN. A reissue/resume of a session whose birth cwd differs from
+            // this run's cwd (e.g. the worktree path moved because the project
+            // display name changed) must start fresh — the CLI keys --resume by
+            // cwd and would otherwise mint a dead session and crash (observed:
+            // claude exited -1 after 164s → infra-crash).
+            string? sessionBirthCwd = null;
+            if (!string.IsNullOrWhiteSpace(plan.SessionToResume))
+            {
+                try
+                {
+                    sessionBirthCwd = _sessions.ReadSessionEvents(jobId, Entry.Path)
+                        .LastOrDefault(e =>
+                            string.Equals(e.CapturedSessionId, plan.SessionToResume, StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(e.InputSessionId, plan.SessionToResume, StringComparison.OrdinalIgnoreCase))
+                        ?.Cwd;
+                }
+                catch (Exception ex) { _logger.LogDebug(ex, "[taskboard] {Job}: could not resolve session birth cwd; treating as unknown", jobId); }
+            }
             var canResumeSession = WorktreeRunPolicy.CanResumeSession(
-                isWorktreeRun, activeRunForSpawn?.WorktreeReused == true);
+                isWorktreeRun, activeRunForSpawn?.WorktreeReused == true, runWorkingDir, sessionBirthCwd);
             var effSessionToResume = canResumeSession ? plan.SessionToResume : null;
             var effResumeFlag = canResumeSession && plan.ResumeFlag;
             if (isWorktreeRun && !canResumeSession && plan.ResumeFlag)
-                _logger.LogInformation(
-                    "[taskboard] {Job}: starting FRESH session in freshly-cut worktree (prior session cwd was not this worktree)", jobId);
+            {
+                var why = !string.IsNullOrWhiteSpace(sessionBirthCwd)
+                    ? $"prior session born in {sessionBirthCwd} != this run cwd {runWorkingDir}"
+                    : "prior session cwd was not this worktree";
+                _logger.LogInformation("[taskboard] {Job}: starting FRESH session ({Why})", jobId, why);
+                // Keep session-events.jsonl truthful — the start event was written
+                // with Resumed=plan.ResumeFlag before this guard ran.
+                try { _sessions.BackfillLatestSessionEventResumed(jobId, false, why, Entry.Path); }
+                catch (Exception ex) { _logger.LogDebug(ex, "[taskboard] {Job}: resumed-backfill best-effort", jobId); }
+            }
             var (execution, cliError) = await cli.StartAsync(
                 jobId, GetJobKey(jobId), prompt, runWorkingDir,
                 effSessionToResume, effResumeFlag, runModel, runThinkingLevel, info.FolderPath, permissionMode, contextMode, ct);
@@ -2413,7 +2480,7 @@ public class ProjectRunner
 
         // Clean up on terminal events so a later run with the same key
         // does not inherit stale phase state.
-        if (evt is CliRunEvent.ProcessExited or CliRunEvent.Killed)
+        if (evt is CliRunEvent.RunEnded)
         {
             _phaseByJob.TryRemove(jobKey, out _);
             _sentinelStopRequested.TryRemove(jobKey, out _);
@@ -2444,16 +2511,14 @@ public class ProjectRunner
 
         // Use the same regex the analyzer uses, so detection here matches
         // the post-run path exactly. SentinelRegex is the published surface.
-        var found = false;
-        for (var i = snapshot.Count - 1; i >= 0; i--)
-        {
-            if (AgentOutcomeAnalyzer.SentinelRegex.IsMatch(snapshot[i].Text ?? string.Empty))
-            {
-                found = true;
-                break;
-            }
-        }
-        if (!found) return;
+        // ROOT CAUSE FIX (2026-06-23): the live-stream sentinel scanner used to
+        // match SentinelRegex on EVERY raw output line, so a run that merely READ
+        // a file containing a [[TASK_DONE]] literal (the backend's own runner
+        // code, AGENTS.md, and docs/contracts/agent-task.md are full of them - the
+        // file content rides the "user"/tool-result stream) was killed mid-work as
+        // a false "completion". The decision now lives in the tested pure helper
+        // LiveSentinelScanner: agent-stream only + standalone sentinel line.
+        if (!LiveSentinelScanner.HasStandaloneAgentSentinel(snapshot)) return;
 
         _logger.LogInformation(
             "TurnCompleted with sentinel for {TaskKey}; killing lingering {Cli} process so OnCliFinished can run.",
@@ -2492,12 +2557,7 @@ public class ProjectRunner
         // CORE agent run is usually claude, so omitting it here was the
         // "no token activity recorded" symptom. Any other CLI stays a clean
         // no-op until its adapter moves onto the shared parser.
-        var snapshot = cli switch
-        {
-            CodexCliService codex   => codex.GetLastParsedTurnUsage(jobKey),
-            ClaudeCliService claude => claude.GetLastParsedTurnUsage(jobKey),
-            _ => null,
-        };
+        var snapshot = cli.GetLastParsedTurnUsage(jobKey);
         if (snapshot is null) return;
         var (usage, observedAt, startedAt) = snapshot.Value;
 
@@ -2676,6 +2736,113 @@ public class ProjectRunner
     public StuckLoopState? GetStuckLoopState(string jobId) =>
         _stuckLoops.TryGetValue(jobId, out var s) ? s : null;
 
+    /// <summary>
+    /// In-memory run facts for one task (ASS-1751): whether it occupies a live
+    /// slot, the rapid-crash backoff deadline (if armed), and the
+    /// fail-without-progress streak. Read-only snapshot of the same dictionaries
+    /// the pickup loop consults; all are cleared on a backend restart, so an
+    /// orphaned task naturally reports no slot / no backoff / zero failures. The
+    /// endpoint overlay maps these onto a <see cref="TaskRunActivity"/> via
+    /// <see cref="TaskRunActivityClassifier"/>.
+    /// </summary>
+    public RunActivityFacts GetRunActivity(string jobId)
+    {
+        var slotActive = _activeRuns.Contains(jobId);
+        DateTime? backoffUntil = _rapidCrashBackoffUntil.TryGetValue(jobId, out var until) ? until : null;
+        var failures = _consecutiveFailNoProgress.TryGetValue(jobId, out var n) ? n : 0;
+        return new RunActivityFacts(slotActive, backoffUntil, failures);
+    }
+
+    /// <summary>
+    /// ASS-1753: re-book a CLI-tracked live run into the in-memory slot registry
+    /// after a backend restart cleared it. Idempotent - a no-op when the job
+    /// already holds a slot (e.g. it was re-picked or resumed in the meantime),
+    /// so a per-tick / per-boot caller can run it freely. Additive only: this
+    /// claims a slot but NEVER releases one (release stays owned by the
+    /// run-finish path), so it cannot race the spawn-time claim. Returns true
+    /// only when this call booked a fresh slot.
+    /// </summary>
+    internal bool RegisterRecoveredRun(string jobId, string? cliType)
+    {
+        if (string.IsNullOrWhiteSpace(jobId)) return false;
+        if (_activeRuns.Contains(jobId)) return false;
+
+        var claimed = _activeRuns.TryClaim(new ActiveRun
+        {
+            JobId = jobId,
+            CliType = cliType,
+            Intent = RunIntent.AutoPickup,
+        });
+        if (!claimed) return false;
+
+        var slotMax = ParallelSlotPolicy.ClampMax(_projectSettings.Get(ProjectName).MaxParallelism);
+        _logger.LogInformation(
+            "[taskboard] recovered live run re-booked into slot for {JobId} on {Project} (cli={Cli}); occupancy {Occupied}/{Max}",
+            jobId, ProjectName, cliType ?? "unknown", _activeRuns.Count, slotMax);
+
+        TaskInfo? info = null;
+        try { info = _scanner.FindJob(jobId, Entry.Path); }
+        catch (Exception ex) { _logger.LogDebug(ex, "RegisterRecoveredRun: FindJob threw for {JobId}", jobId); }
+        if (info != null && !string.IsNullOrWhiteSpace(info.FolderPath))
+        {
+            _timeline?.Append(
+                info.FolderPath,
+                TimelineEventKinds.RunnerSlotAdmission,
+                TimelineActors.System,
+                summary: $"Slot {_activeRuns.Count}/{slotMax} recovered after restart: re-booked live {cliType ?? "cli"} run",
+                details: new()
+                {
+                    ["recovered"] = "true",
+                    ["cli"] = cliType ?? string.Empty,
+                    ["occupied"] = _activeRuns.Count.ToString(),
+                    ["maxParallelism"] = slotMax.ToString(),
+                });
+        }
+
+        NotifyStatus();
+        return true;
+    }
+
+    /// <summary>
+    /// One-shot post-restart slot reconcile (ASS-1753). A restart clears the
+    /// in-memory slot registry, but the CLI router can still own live runs for
+    /// this project's tasks - a CLI that reattaches on startup, or a
+    /// run whose OS process outlived the restart and is still tracked. Re-book
+    /// those into the registry so occupied slots == genuinely-tracked live runs.
+    /// Without this the pickup gate under-counts occupancy and, at
+    /// MaxParallelism &gt; 1 (where the sequential <c>IsRunningForProject</c>
+    /// guard is bypassed), could admit a duplicate run against a still-live
+    /// task; the 3-progress badge also mis-renders a running task as "no active
+    /// run". Runs once per process; the normal claim/release path keeps the
+    /// registry accurate from then on.
+    /// </summary>
+    private void ReconcileRecoveredRunsIntoSlots()
+    {
+        if (_recoveredRunsReconciled) return;
+        _recoveredRunsReconciled = true;
+
+        // jobKey == "<watchPath>::<jobId>"; build the project-scoped prefix once
+        // so only this project's tracked live runs are considered.
+        var prefix = TaskIdentity.CreateKey(Entry.Path, string.Empty);
+        foreach (var cli in _router.All)
+        {
+            IReadOnlyList<(string JobKey, CliExecution Execution)> running;
+            try { running = cli.RunningExecutions(); }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "ReconcileRecoveredRunsIntoSlots: RunningExecutions threw for {Cli}", cli.CliType);
+                continue;
+            }
+
+            foreach (var (jobKey, _) in running)
+            {
+                if (!jobKey.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                var jobId = jobKey.Substring(prefix.Length);
+                RegisterRecoveredRun(jobId, cli.CliType);
+            }
+        }
+    }
+
     private static bool IsAutoMode(string mode)
         => string.Equals(mode, "auto-continuous", StringComparison.OrdinalIgnoreCase)
         || string.Equals(mode, "auto-single", StringComparison.OrdinalIgnoreCase);
@@ -2779,40 +2946,35 @@ public class ProjectRunner
     /// </summary>
     private string BuildOrchestratorBootPrompt()
     {
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"You are the orchestrator for the project \"{ProjectName}\" running in Agent Software Studio.");
-        sb.AppendLine();
-        sb.AppendLine("Project context:");
-        sb.AppendLine($"- Watch path: {Entry.Path}");
-        sb.AppendLine($"- Working directory: {Entry.RootPath}");
+        var context = new System.Text.StringBuilder();
+        context.Append($"- Watch path: {Entry.Path}");
+        context.Append($"\n- Working directory: {Entry.RootPath}");
         if (!string.IsNullOrWhiteSpace(Entry.RepositoryPath))
-            sb.AppendLine($"- Git repository: {Entry.RepositoryPath}");
-        sb.AppendLine();
+            context.Append($"\n- Git repository: {Entry.RepositoryPath}");
 
-        AppendDocSnippet(sb, "AGENTS.md", Entry.RootPath, 2_000);
-        AppendDocSnippet(sb, "README.md", Entry.RootPath, 2_000);
-        AppendDocSnippet(sb, "ROADMAP.md", Entry.RootPath, 1_500);
+        var docs = new System.Text.StringBuilder();
+        AppendDocSnippet(docs, "AGENTS.md", Entry.RootPath, 2_000);
+        AppendDocSnippet(docs, "README.md", Entry.RootPath, 2_000);
+        AppendDocSnippet(docs, "ROADMAP.md", Entry.RootPath, 1_500);
 
         // Recent orchestrator activity, last 10 entries newest-first.
+        var activity = new System.Text.StringBuilder();
         var entries = _orchestratorLog.Read(Entry.Path);
         if (entries.Count > 0)
         {
-            sb.AppendLine("Recent orchestrator activity (newest first, latest 10):");
+            activity.AppendLine("Recent orchestrator activity (newest first, latest 10):");
             foreach (var e in entries.AsEnumerable().Reverse().Take(10))
-                sb.AppendLine($"- [{e.Kind}/{e.Topic}] {e.Summary}");
-            sb.AppendLine();
+                activity.AppendLine($"- [{e.Kind}/{e.Topic}] {e.Summary}");
+            activity.AppendLine();
         }
 
-        sb.AppendLine("Your role:");
-        sb.AppendLine("- When the runner sends you a NEEDS_INPUT decision request, you have three reply shapes:");
-        sb.AppendLine("  1) REPLY: plain text, the user-style follow-up to send back to the agent (default).");
-        sb.AppendLine("  2) STEER: when you cannot decide alone but a small piece of evidence (a screenshot, a choice between options, a link to a doc) would unblock the user. Format: a leading STEER line, then Need: <one sentence>, Why: <one sentence>, optional Options: list with A) / B) bullets. Prefer STEER over BLOCK whenever a concrete unblocking ask exists.");
-        sb.AppendLine("  3) BLOCK: last resort, when you cannot even formulate a steering message. Reply exactly: BLOCK");
-        sb.AppendLine("- When the runner sends you a status query, summarize concisely.");
-        sb.AppendLine("- The conversation history accumulated in this session is your memory across decisions; you do not need to be re-briefed each turn.");
-        sb.AppendLine();
-        sb.AppendLine("Acknowledge readiness with a single short sentence describing which docs you saw on boot. The first real decision request will follow.");
-        return sb.ToString();
+        return _prompts.Render(ProjectBootTemplate, new Dictionary<string, string?>
+        {
+            ["project_name"] = ProjectName,
+            ["project_context"] = context.ToString(),
+            ["doc_snippets"] = docs.ToString(),
+            ["activity_block"] = activity.ToString(),
+        });
     }
 
     private static void AppendDocSnippet(System.Text.StringBuilder sb, string fileName, string root, int maxChars)
@@ -2903,7 +3065,7 @@ public class ProjectRunner
             var lastAgentText = outcome.Summary ?? "(no agent summary captured)";
             var attachmentsList = BuildAttachmentsList(info.FolderPath);
 
-            var orchestratorPrompt = BuildOrchestratorPrompt(info, promptText, lastAgentText, attachmentsList);
+            var orchestratorPrompt = BuildOrchestratorPrompt(_prompts, info, promptText, lastAgentText, attachmentsList);
             var modelOverride = _projectSettings.Get(info.ProjectName).OrchestratorModel;
 
             // Resume the long-lived session if one is on disk; the
@@ -2920,10 +3082,10 @@ public class ProjectRunner
             OrchestratorDecisionResult result;
             if (session != null && !string.IsNullOrWhiteSpace(session.SessionId))
             {
-                var resumePrompt = BuildOrchestratorResumePrompt(info, lastAgentText, attachmentsList);
+                var resumePrompt = BuildOrchestratorResumePrompt(_prompts, info, lastAgentText, attachmentsList);
                 // Rejection-recovery lives on the runner (ResumeWithFallbackAsync)
                 // so the per-job and global-chat orchestrator paths cannot drift
-                // apart again - see docs/code-patterns.md "orchestrator-resume-with-fallback".
+                // apart again - see docs/contracts/code-patterns.md "orchestrator-resume-with-fallback".
                 var resumeRejected = false;
                 result = await _orchestratorRunner.ResumeWithFallbackAsync(
                     session.SessionId,
@@ -3154,36 +3316,28 @@ public class ProjectRunner
     /// context lives in an image.
     /// </para>
     /// </summary>
-    internal static string BuildOrchestratorResumePrompt(TaskInfo info, string lastAgentText, string attachmentsList)
+    internal static string BuildOrchestratorResumePrompt(RuntimePromptService prompts, TaskInfo info, string lastAgentText, string attachmentsList)
     {
         var attachmentsBlock = AttachmentsHasFiles(attachmentsList)
-            ? $"\n\nAttachments on this task (read with your Read tool if relevant - the agent's question often hinges on these):\n{attachmentsList}"
+            ? "\n\n" + prompts.Render(DecisionAttachmentsResumeTemplate, new Dictionary<string, string?>
+              { ["attachments_list"] = attachmentsList }).TrimEnd('\r', '\n')
             : string.Empty;
-        return
-            $"NEEDS_INPUT decision request for task \"{info.Title}\" (id: {info.Id})." +
-            attachmentsBlock +
-            "\n\nThe agent's last message you need to answer:\n" +
-            lastAgentText +
-            "\n\nYou have three reply shapes:\n" +
-            "1) REPLY (default): plain text, the user-style follow-up to send back to the agent.\n" +
-            "2) STEER: when you cannot decide alone but a small piece of evidence (a screenshot, a choice between options, a link to a doc) would unblock. Use this format exactly:\n" +
-            "STEER\n" +
-            "Need: <one-sentence specific ask>\n" +
-            "Why: <one-sentence reasoning>\n" +
-            "Options: (optional)\n" +
-            "  A) ...\n" +
-            "  B) ...\n" +
-            "Prefer STEER over BLOCK whenever a screenshot or a choice would unblock the run.\n" +
-            "3) BLOCK (last resort): reply with exactly BLOCK only when you have no idea what is going on and cannot even formulate a steering message.\n\n" +
-            "Reply now. No markdown headings other than the STEER block above.";
+        return prompts.Render(DecisionResumeTemplate, new Dictionary<string, string?>
+        {
+            ["task_title"] = info.Title,
+            ["task_id"] = info.Id,
+            ["attachments_block"] = attachmentsBlock,
+            ["last_agent_text"] = lastAgentText,
+        }).TrimEnd('\r', '\n');
     }
 
     /// <summary>
-    /// Build the prompt the orchestrator's one-shot Claude call sees. Kept
-    /// here instead of in a runtime template file because the framing is
-    /// load-bearing for the decision contract: the orchestrator must know
-    /// it can return BLOCK to defer, and must reply in the user's voice
-    /// not the orchestrator's.
+    /// Build the prompt the orchestrator's one-shot Claude call sees. The
+    /// framing is load-bearing for the decision contract: the orchestrator
+    /// must know it can return BLOCK to defer, and must reply in the user's
+    /// voice not the orchestrator's. The text lives in the runtime prompt
+    /// registry (orchestrator-decision-oneshot.md) so it can be inspected and
+    /// overridden per project; code only fills the named slots.
     /// <para>
     /// Attachments: when the user attached files to the task (typically a
     /// screenshot that the agent's question hinges on), we list the
@@ -3192,40 +3346,20 @@ public class ProjectRunner
     /// context lives in an image.
     /// </para>
     /// </summary>
-    internal static string BuildOrchestratorPrompt(TaskInfo info, string promptText, string lastAgentText, string attachmentsList)
+    internal static string BuildOrchestratorPrompt(RuntimePromptService prompts, TaskInfo info, string promptText, string lastAgentText, string attachmentsList)
     {
         var attachmentsBlock = AttachmentsHasFiles(attachmentsList)
-            ? $"\n\nAttachments on this task (read with your Read tool if the agent's question hinges on them - e.g. a screenshot the agent referenced):\n{attachmentsList}"
+            ? "\n\n" + prompts.Render(DecisionAttachmentsOneshotTemplate, new Dictionary<string, string?>
+              { ["attachments_list"] = attachmentsList }).TrimEnd('\r', '\n')
             : string.Empty;
-        return
-            "You are the project orchestrator for Agent Software Studio. " +
-            "The user has set this project to auto mode and stepped away. " +
-            "The active task agent just asked for input and is waiting. " +
-            "Your job: decide what the user would have replied, in one short paragraph, in the user's voice. " +
-            "The reply will be sent back to the agent as a Continue follow-up.\n\n" +
-            $"Project: {info.ProjectName}\n" +
-            $"Task: {info.Title}\n\n" +
-            "Original task description:\n" +
-            (string.IsNullOrWhiteSpace(promptText) ? "(empty)" : promptText) +
-            attachmentsBlock +
-            "\n\nThe agent's last message you need to answer:\n" +
-            lastAgentText +
-            "\n\nReasoning style:\n" +
-            "- If the agent's question has an obvious right answer in context, give it directly (REPLY).\n" +
-            "- If the question is ambiguous and multiple paths are reasonable, pick the simpler path and say why in one short sentence (REPLY).\n" +
-            "- Before deferring, check whether reading an attached file (e.g. a screenshot) would resolve the ambiguity; if yes, read it and decide.\n" +
-            "- When you cannot decide alone but a small piece of evidence would unblock the user, prefer STEER over BLOCK. STEER is a productive escalation: a one-sentence ask, a one-sentence reason, optionally a small set of labelled options.\n" +
-            "- BLOCK is the last resort, only when you cannot even formulate a steering message.\n\n" +
-            "Reply shapes:\n" +
-            "1) REPLY (default): plain text, the user-style follow-up directly. Do not preface with \"I would say\" or similar. No markdown headings.\n" +
-            "2) STEER: use exactly this format:\n" +
-            "STEER\n" +
-            "Need: <one-sentence specific ask, e.g. \"screenshot of the affected column\" or \"pick option A vs B\">\n" +
-            "Why: <one-sentence reasoning>\n" +
-            "Options: (optional)\n" +
-            "  A) ...\n" +
-            "  B) ...\n" +
-            "3) BLOCK: reply with exactly the single word BLOCK on its own.";
+        return prompts.Render(DecisionOneshotTemplate, new Dictionary<string, string?>
+        {
+            ["project_name"] = info.ProjectName,
+            ["task_title"] = info.Title,
+            ["task_description"] = string.IsNullOrWhiteSpace(promptText) ? "(empty)" : promptText,
+            ["attachments_block"] = attachmentsBlock,
+            ["last_agent_text"] = lastAgentText,
+        }).TrimEnd('\r', '\n');
     }
 
     private static bool AttachmentsHasFiles(string attachmentsList)
@@ -3732,12 +3866,7 @@ public class ProjectRunner
         string jobKey,
         SessionUsage? footerUsage)
     {
-        var parsed = cli switch
-        {
-            CodexCliService codex   => codex.GetLastParsedTurnUsage(jobKey),
-            ClaudeCliService claude => claude.GetLastParsedTurnUsage(jobKey),
-            _ => null,
-        };
+        var parsed = cli.GetLastParsedTurnUsage(jobKey);
         if (parsed is { } snapshot)
         {
             var u = snapshot.Usage;
@@ -3768,7 +3897,7 @@ public class ProjectRunner
 
         if (input + output + cacheRead + cacheCreation == 0)
         {
-            // Copilot footer example:
+            // Arrow-compact footer example:
             // "↑ 38.6k • ↓ 514 • 34.7k (cached)".
             input = TryReadArrowCompact(value, '↑') ?? 0;
             output = TryReadArrowCompact(value, '↓') ?? 0;
@@ -3848,8 +3977,12 @@ public class ProjectRunner
             if (_activeRuns.Get(jobId) is not { } run) return;
             if (run.CliType != null && !string.Equals(cliType, run.CliType, StringComparison.OrdinalIgnoreCase)) return;
 
-            _logger.LogInformation("Job {JobId} finished in project '{Project}' on {Cli} with status {Status}",
-                jobId, ProjectName, cliType, execution.Status);
+            // no-silent-death: every run's exit is logged with code + status +
+            // duration on entry to finalization, so even if a downstream step
+            // below throws (see the catch) the run's exit context is on record.
+            _logger.LogInformation(
+                "Job {JobId} finished in project '{Project}' on {Cli}: status={Status}, exitCode={ExitCode}, duration={Duration:F1}s",
+                jobId, ProjectName, cliType, execution.Status, execution.ExitCode, execution.DurationSeconds ?? 0.0);
 
             WorktreeCommitRange? worktreeCommitRange = null;
             // ADR-0052 slice 2: a parallel (worktree) run commits its edits on the
@@ -3921,13 +4054,7 @@ public class ProjectRunner
             // surface it in their JSON output; we capture it during streaming
             // and write it back here. Without this, Continue always loses
             // context because info.SessionName never advances past the slug.
-            var capturedSessionId = cli switch
-            {
-                ClaudeCliService claude => claude.GetCapturedSessionId(jobKey),
-                CodexCliService codex   => codex.GetCapturedSessionId(jobKey),
-                AntigravityCliService gemini => gemini.GetCapturedSessionId(jobKey),
-                _ => null
-            };
+            var capturedSessionId = cli.GetCapturedSessionId(jobKey);
 
             // ASS-1739 / T1a: snapshot the read-only execution context (memory /
             // session paths, instruction-file chain, global config, MCP servers,
@@ -3965,14 +4092,14 @@ public class ProjectRunner
             }
             catch (Exception ex) { _logger.LogDebug(ex, "Execution-context capture failed for {JobId}", jobId); }
             // Post-hoc token reconstruction (ASS-626 / ASS-665): the Claude
-            // CLI never reports a terminal usage footer the way Copilot does,
+            // CLI never reports a terminal usage footer,
             // so `usage` above is always null for Claude - and a killed run
             // loses even its final result frame. Read the per-turn usage
             // straight from the session transcript and aggregate it into
             // lastUsage so the Overview tab shows the real token spend instead
             // of nothing, even when the run was aborted. Guarded on the footer
             // being absent so we never clobber a real CLI-reported footer.
-            if (usage == null && cli is ClaudeCliService)
+            if (usage == null && cli.NeedsPostHocUsageReconstruction)
             {
                 coreUsage ??= TryRecordPostHocClaudeUsage(jobId, capturedSessionId, planSnapshot, finishedInfo);
             }
@@ -4028,9 +4155,7 @@ public class ProjectRunner
                     _consecutiveCaptureFailJobId = null;
                 }
             }
-            else if (cli is ClaudeCliService
-                  || cli is CodexCliService
-                  || cli is AntigravityCliService)
+            else if (cli.EmitsSessionId)
             {
                 // The CLI normally emits a session UUID on every run; missing
                 // it means the next follow-up will fall back to Recovery. Tell
@@ -4584,6 +4709,52 @@ public class ProjectRunner
                         jobId, moveOutcome.Status, moveOutcome.Message);
                 }
             }
+            else if (activeInfo != null
+                && StrandedRunBackstop.MustEscalateStrandedRun(execution.Status, outcome.Kind))
+            {
+                // Drive-to-conclusion backstop (invariant: no FAILED run ever
+                // stays in 3-progress). Some failure shapes reach here without
+                // being routed, retried, or moved to review: a failed run with
+                // no agent text (NoAgentOutput -> Accept) or a CLI launch/resume
+                // failure (CliLaunchFailed -> NotifyUserAndAccept). Left as-is
+                // they sit in 3-progress forever - pickup only scans 2-ready -
+                // a permanent zombie (the recurring "in-progress lane kaputt"
+                // incident: a rapid stale-session resume crash, exit=1, 0 output,
+                // that the typed routes above never claimed). A deliberate stop
+                // (status=stopped) and a manual-mode NeedsInput legitimately stay
+                // in progress and are excluded by the guard. See
+                // docs/wiki/concepts/runner-stability-incidents.html.
+                var backstopIssueKind = action?.IssueKind is RunIssueKind k and not RunIssueKind.None
+                    ? k
+                    : RunIssueKind.OrchestratorInconclusive;
+                var backstopTopic = ToIssueTopic(backstopIssueKind);
+                var backstopReason = !string.IsNullOrWhiteSpace(action?.MetaMessage)
+                    ? action!.MetaMessage!
+                    : $"Run failed ({backstopTopic}) and reached no terminal verdict; routed to human review so it cannot strand in 3-progress.";
+                _orchestratorLog.Append(activeInfo.WatchPath, new OrchestratorLogEntry
+                {
+                    Kind = OrchestratorLogKinds.Intervention,
+                    Topic = backstopTopic,
+                    JobId = jobId,
+                    Summary = $"Routed \"{activeInfo.Title}\" to human review: a failed run that no terminal route claimed ({backstopTopic}) would otherwise strand in 3-progress.",
+                    Reasoning = backstopReason
+                });
+                _completionRetriggerUsed.TryRemove(jobId, out _);
+                _consecutiveFailNoProgress.TryRemove(jobId, out _);
+                _rapidCrashBackoffUntil.TryRemove(jobId, out _);
+                TeardownWorktreeForJob(jobId);
+                var backstopMove = await _humanReviewEscalation.EscalateAsync(
+                    jobId, activeInfo.WatchPath, ProjectName,
+                    ToEscalationCategory(backstopIssueKind),
+                    backstopReason,
+                    CancellationToken.None);
+                if (backstopMove.Status != MoveJobStatus.Success)
+                {
+                    _logger.LogWarning(
+                        "Drive-to-conclusion backstop human-review routing failed for {JobId}: {Status} {Message}",
+                        jobId, backstopMove.Status, backstopMove.Message);
+                }
+            }
             else
             {
                 _logger.LogInformation(
@@ -4659,7 +4830,13 @@ public class ProjectRunner
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Runner finalization crashed for {JobId}", jobId);
+            // no-silent-death: a throw here abandons the run's outcome processing
+            // (completion, lane move, re-issue). Log the full exit context with
+            // the cause so the abandoned run is never silent - the orphan changes
+            // it leaves are exactly what the boot-time crash-recovery net rescues.
+            _logger.LogError(ex,
+                "Runner finalization crashed for {JobId} on {Cli}: status={Status}, exitCode={ExitCode}, duration={Duration:F1}s; run outcome abandoned (reason={Reason})",
+                jobId, cliType, execution.Status, execution.ExitCode, execution.DurationSeconds ?? 0.0, ex.Message);
         }
         finally
         {
@@ -4762,7 +4939,15 @@ public class ProjectRunner
                      or RunIssueKind.EmptyFastExit
                      or RunIssueKind.ContextOverflow
                      or RunIssueKind.Quarantined
-                     or RunIssueKind.AgentGitViolation;
+                     or RunIssueKind.AgentGitViolation
+                     // Drive-to-conclusion: a failed run the deterministic
+                     // contract could not close out (a hard CLI crash, or real
+                     // text that maps to no terminal verdict) returns
+                     // NotifyUserAndStop and MUST reach human review. Without
+                     // these two it stayed in 3-progress forever (the old
+                     // classifier-unknown stranding: ASS-1757, AGT dashboard).
+                     or RunIssueKind.InfraCrash
+                     or RunIssueKind.OrchestratorInconclusive;
 
     /// <summary>Remaining completion-loop re-trigger budget for a job
     /// (loop id completion.retrigger-transient-abort-per-job). Counts down
@@ -4795,7 +4980,8 @@ public class ProjectRunner
         RunIssueKind.WatchdogTimeout          => "watchdog-timeout",
         RunIssueKind.MissingTerminalSentinel  => "missing-terminal-sentinel",
         RunIssueKind.HeuristicDone             => "heuristic-done",
-        RunIssueKind.ClassifierUnknown        => "classifier-unknown",
+        RunIssueKind.InfraCrash               => "infra-crash",
+        RunIssueKind.OrchestratorInconclusive => "orchestrator-inconclusive",
         RunIssueKind.CliLaunchFailed          => "cli-launch-failed",
         RunIssueKind.EmptyFastExit            => "empty-fast-exit",
         RunIssueKind.NoAgentOutput            => "no-agent-output",
@@ -4819,6 +5005,8 @@ public class ProjectRunner
         RunIssueKind.ContextOverflow    => HumanReviewEscalationCategories.ContextOverflow,
         RunIssueKind.Quarantined        => HumanReviewEscalationCategories.Quarantined,
         RunIssueKind.AgentGitViolation  => HumanReviewEscalationCategories.AgentGitViolation,
+        RunIssueKind.InfraCrash         => HumanReviewEscalationCategories.InfraCrash,
+        RunIssueKind.OrchestratorInconclusive => HumanReviewEscalationCategories.OrchestratorInconclusive,
         _                               => HumanReviewEscalationCategories.AutoFailurePark
     };
 

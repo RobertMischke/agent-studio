@@ -22,6 +22,12 @@
         <span class="strip__caption">
           <span class="strip__caption-spec">{{ s.caption }}</span>
           <span class="strip__caption-ts">{{ formatTimestamp(s.timestampUtc) }}</span>
+          @if (sourceLabel(s); as src) {
+            <span class="strip__caption-source"
+                  [attr.data-source]="s.source"
+                  [attr.data-testid]="'screenshot-source'"
+                  [appTooltip]="sourceTooltip(s)">{{ src }}</span>
+          }
           @if (variant() === 'reel' && s.projectName) {
             <span class="strip__caption-project">{{ s.projectName }}</span>
           }
@@ -57,6 +63,12 @@
             @if (c.status) {
               <span class="lightbox__status"
                     [attr.data-status]="c.status">{{ statusLabel(c.status) }}</span>
+            }
+            @if (sourceLabel(c); as src) {
+              <span class="lightbox__source"
+                    [attr.data-source]="c.source"
+                    data-testid="screenshot-lightbox-source"
+                    [appTooltip]="sourceTooltip(c)">{{ src }}</span>
             }
             <span class="lightbox__index" data-testid="screenshot-lightbox-index">
               {{ activeIndex() + 1 }} / {{ screenshots().length }}

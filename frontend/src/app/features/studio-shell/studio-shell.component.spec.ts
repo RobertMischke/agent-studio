@@ -440,3 +440,98 @@ describe('StudioShellComponent epic tabs', () => {
     expect(epicTab?.textContent).toContain('Epic One');
   });
 });
+
+describe('StudioShellComponent hub tab label + icon', () => {
+  function project(over: Partial<RegistryProjectSummary>): RegistryProjectSummary {
+    return {
+      id: 'proj-ass',
+      displayName: 'Agent Software Studio',
+      shortCode: 'ASS',
+      workspaceId: 'ws-1',
+      color: null,
+      cliDefault: null,
+      modelDefault: null,
+      sortOrder: 0,
+      storageLocation: 'C:/proj/ass',
+      archived: false,
+      createdAt: '2026-01-01T00:00:00Z',
+      ...over,
+    };
+  }
+
+  function workspace(over: Partial<RegistryWorkspaceListItem>): RegistryWorkspaceListItem {
+    return {
+      id: 'ws-1',
+      displayName: 'Workspace One',
+      sortOrder: 0,
+      isDefault: false,
+      color: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      projects: [],
+      ...over,
+    };
+  }
+
+  function makeComponent(): StudioShellComponent {
+    localStorage.removeItem('atp.studio.tabs.v1');
+    TestBed.configureTestingModule({
+      imports: [StudioShellComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const component = TestBed.createComponent(StudioShellComponent).componentInstance;
+    component.registryWorkspaces.set([workspace({ projects: [project({})] })]);
+    return component;
+  }
+
+  it('shows shortCode + section name for a hub tab (e.g. "ASS · Wiki")', () => {
+    const component = makeComponent();
+    expect(component.tabLabel({ kind: 'hub', projectName: 'Agent Software Studio', section: 'wiki' }))
+      .toBe('ASS · Wiki');
+    expect(component.tabLabel({ kind: 'hub', projectName: 'Agent Software Studio', section: 'drift' }))
+      .toBe('ASS · Drift');
+    expect(component.tabLabel({ kind: 'hub', projectName: 'Agent Software Studio', section: 'settings' }))
+      .toBe('ASS · Settings');
+  });
+
+  it('falls back to the Overview rail when section is missing or unknown', () => {
+    const component = makeComponent();
+    expect(component.tabLabel({ kind: 'hub', projectName: 'Agent Software Studio' }))
+      .toBe('ASS · Overview');
+    expect(component.tabLabel({ kind: 'hub', projectName: 'Agent Software Studio', section: 'nonsense' }))
+      .toBe('ASS · Overview');
+  });
+
+  it('falls back to the full project name when no shortCode is registered', () => {
+    const component = makeComponent();
+    expect(component.tabLabel({ kind: 'hub', projectName: 'Unknown Project', section: 'wiki' }))
+      .toBe('Unknown Project · Wiki');
+  });
+
+  it('applies the shortCode to other project-scoped tabs for consistency', () => {
+    const component = makeComponent();
+    expect(component.tabLabel({ kind: 'board', projectName: 'Agent Software Studio' }))
+      .toBe('ASS · Board');
+    expect(component.tabLabel({ kind: 'backlog', projectName: 'Agent Software Studio' }))
+      .toBe('ASS · Backlog');
+    expect(component.tabLabel({ kind: 'epics', projectName: 'Agent Software Studio' }))
+      .toBe('ASS · Epics');
+  });
+
+  it('returns the section rail icon for a hub tab and null for other kinds', () => {
+    const component = makeComponent();
+    expect(component.tabIcon({ kind: 'hub', projectName: 'Agent Software Studio', section: 'wiki' }))
+      .toBe('book');
+    expect(component.tabIcon({ kind: 'hub', projectName: 'Agent Software Studio', section: 'drift' }))
+      .toBe('diff');
+    // Missing section → default overview rail icon.
+    expect(component.tabIcon({ kind: 'hub', projectName: 'Agent Software Studio' }))
+      .toBe('layout');
+    expect(component.tabIcon({ kind: 'board', projectName: 'Agent Software Studio' }))
+      .toBeNull();
+  });
+});

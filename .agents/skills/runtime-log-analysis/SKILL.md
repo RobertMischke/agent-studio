@@ -14,9 +14,9 @@ sentinel: TASKBOARD-SKILL-RUNTIME-LOG-ANALYSIS
 Turn the **product runtime observability** stream into a reviewable narrative
 about how the *built software* actually behaved during a run. This skill is
 the analysis side of the contract documented in
-[`docs/product-runtime-observability.md`](../../../docs/product-runtime-observability.md)
+[`docs/operations/runtime/observability.md`](../../../docs/operations/runtime/observability.md)
 and the capture layout in
-[`docs/product-runtime-log-capture.md`](../../../docs/product-runtime-log-capture.md).
+[`docs/operations/runtime/log-capture.md`](../../../docs/operations/runtime/log-capture.md).
 
 ## When to invoke
 
@@ -90,7 +90,7 @@ findings from prose.
 ## Findings
 
 The skill produces typed findings against the canonical
-[`AnalysisReport`](../../../docs/analysis-reports.md) shape with
+[`AnalysisReport`](../../../docs/reports/analysis-reports.md) shape with
 `topic = "runtime-observability"`. Six finding categories are required;
 report only the ones that have evidence in the input. If a category has zero
 evidence, omit it; do not pad.
@@ -117,7 +117,7 @@ Storage matches the shared analysis-report contract.
 - **Markdown** (durable human artifact): `<workspace>/logs/analysis/<project>/<reportId>.md`.
 - **JSON sidecar** (additive app contract): `<workspace>/logs/analysis/<project>/<reportId>.json`.
 - For workspace-scoped runs, the project key is `_workspace` per
-  [`docs/analysis-reports.md` §7](../../../docs/analysis-reports.md#71-locations).
+  [`docs/reports/analysis-reports.md` §7](../../../docs/reports/analysis-reports.md#71-locations).
 
 The JSON sidecar validates against
 [`docs/schemas/analysis-report.schema.json`](../../../docs/schemas/analysis-report.schema.json)

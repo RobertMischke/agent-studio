@@ -100,7 +100,6 @@ public sealed class AgentMessageBusBridge
             new AgentParticipant { Id = ParticipantOrchestrator, Kind = "Orchestrator", DisplayName = "Orchestrator" },
             new AgentParticipant { Id = "agent:claude", Kind = "CodingAgent", DisplayName = "Claude", Cli = "claude" },
             new AgentParticipant { Id = "agent:codex", Kind = "CodingAgent", DisplayName = "Codex", Cli = "codex" },
-            new AgentParticipant { Id = "agent:copilot", Kind = "CodingAgent", DisplayName = "Copilot", Cli = "copilot" },
             new AgentParticipant { Id = "agent:gemini", Kind = "CodingAgent", DisplayName = "Gemini", Cli = "gemini" },
             // support:adhoc covers one-shot Haiku calls (TitleGen, SummaryGen,
             // PromptEnhance, CommitMessage, ReviewDecision, SoftReasoning).
@@ -129,6 +128,7 @@ public sealed class AgentMessageBusBridge
             OrchestratorMessageKind.PermissionBlocked => "High",
             OrchestratorMessageKind.WatchdogTimeout   => "High",
             OrchestratorMessageKind.EmptyFastExit     => "High",
+            OrchestratorMessageKind.InfraCrash        => "High",
             OrchestratorMessageKind.IntegrationConflict => "High",
             OrchestratorMessageKind.IntegrationError  => "High",
             OrchestratorMessageKind.Reissue           => "Warn",
@@ -136,7 +136,7 @@ public sealed class AgentMessageBusBridge
             OrchestratorMessageKind.SoftIntervention  => "Warn",
             OrchestratorMessageKind.MissingTerminalSentinel => "Warn",
             OrchestratorMessageKind.HeuristicDone     => "Warn",
-            OrchestratorMessageKind.ClassifierUnknown => "Warn",
+            OrchestratorMessageKind.OrchestratorInconclusive => "Warn",
             OrchestratorMessageKind.CliLaunchFailed   => "Warn",
             OrchestratorMessageKind.Steer             => "Warn",
             OrchestratorMessageKind.TaskBranchUnpushed => "Warn",
@@ -620,8 +620,8 @@ public sealed class AgentMessageBusBridge
     // <c>logs/analysis/&lt;project&gt;/&lt;reportId&gt;.{md,json}</c>. The bus
     // never edits source code; supporting agents are observability + decision
     // records, not coding-agent extensions. See
-    // <c>docs/agent-message-bus.md</c> section "Supporting agents" and
-    // <c>docs/analysis-reports.md</c> section 11.
+    // <c>docs/architecture/bus/agent-message-bus.md</c> section "Supporting agents" and
+    // <c>docs/reports/analysis-reports.md</c> section 11.
     // ---------------------------------------------------------------------
 
     /// <summary>
@@ -697,7 +697,7 @@ public sealed class AgentMessageBusBridge
     /// <param name="jobId">Optional job slug when the report scope is
     /// <c>Task</c> or <c>Run</c>.</param>
     /// <param name="cli">Optional CLI driver that produced the agent reply
-    /// (claude / codex / copilot / gemini). Recorded on the participant
+    /// (claude / codex / gemini). Recorded on the participant
     /// registry, surfaced as a tag (<c>cli-&lt;name&gt;</c>) on the message.</param>
     /// <param name="skill">Optional skill or workflow id; surfaced as a tag
     /// (<c>skill-&lt;name&gt;</c>) so the UI can filter by reusable workflow.</param>

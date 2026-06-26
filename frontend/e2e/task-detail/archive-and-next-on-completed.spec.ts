@@ -16,7 +16,7 @@ import { api } from '../helpers/api';
  *      is exercised by the accept-to-next sweep specs.
  *
  * This spec talks to `/api/tasks` directly rather than the `helpers/jobs`
- * client: those helpers still call the pre-rename `/api/jobs` group, which
+ * client: those helpers still call the pre-rename `/api/tasks` group, which
  * 404s on the current backend. The DTO shapes are identical, so the inline
  * helpers below mirror them against the live route.
  */

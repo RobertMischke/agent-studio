@@ -1,0 +1,114 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "ADR-0051 task processing pipeline metadata",
+  "source": {
+    "path": "docs/architecture/decisions/proposed/adr-0051-task-processing-pipeline.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "2c2545cb673332d2a0220e0d2f56c5a732958273fb9050db3bfcce0f94808f1c",
+      "sizeBytes": 26872,
+      "lineCount": 284,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    }
+  },
+  "report": {
+    "path": "docs/architecture/decisions/proposed/adr-0051-task-processing-pipeline.md.report.html",
+    "generatedAt": "2026-06-12T08:30:00Z",
+    "generator": "scripts/wiki/generate-companion-metadata.mjs",
+    "template": "wiki-document-companion-report/v1"
+  },
+  "classification": {
+    "owner": "architecture",
+    "documentMode": "vision",
+    "temporalState": "future",
+    "implementationState": "planned"
+  },
+  "review": {
+    "date": "2026-06-11",
+    "method": "first-ten metadata scoring pass",
+    "model": "codex",
+    "sourceFingerprint": {
+      "algorithm": "sha256",
+      "hash": "2c2545cb673332d2a0220e0d2f56c5a732958273fb9050db3bfcce0f94808f1c",
+      "sizeBytes": 26872,
+      "lineCount": 284,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    },
+    "sourceChangedSinceReview": false
+  },
+  "drift": {
+    "grade": "C",
+    "hasDrift": true,
+    "score": 0.43,
+    "summary": "The ADR is still valuable, but proposed pipeline concepts must be compared with the current pre/core/post implementation language.",
+    "rationale": [
+      "The ADR is explicitly proposed, not an accepted source of implemented truth.",
+      "Recent UI work changed pipeline display language.",
+      "It should be reconciled before being promoted."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "medium",
+    "implementationAlignment": "low",
+    "freshness": "medium",
+    "operatorUsefulness": "medium"
+  },
+  "duplicates": {
+    "suspected": true,
+    "groupSize": 2,
+    "similarTo": [
+      "docs/domains/pipeline.md"
+    ]
+  },
+  "findings": [
+    {
+      "id": "drift-summary",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The ADR is still valuable, but proposed pipeline concepts must be compared with the current pre/core/post implementation language.",
+      "rationale": [
+        "The ADR is explicitly proposed, not an accepted source of implemented truth.",
+        "Recent UI work changed pipeline display language.",
+        "It should be reconciled before being promoted."
+      ],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-1",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "The ADR is explicitly proposed, not an accepted source of implemented truth.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-2",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "Recent UI work changed pipeline display language.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-3",
+      "severity": "warn",
+      "axis": "drift",
+      "summary": "It should be reconciled before being promoted.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "duplicate-candidate",
+      "severity": "warn",
+      "axis": "duplicate",
+      "summary": "This document has possible duplicate ownership candidates.",
+      "rationale": [
+        "docs/domains/pipeline.md"
+      ],
+      "evidence": []
+    }
+  ],
+  "nextAction": "Compare against the current pipeline domain doc before accepting or superseding."
+}

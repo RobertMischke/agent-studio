@@ -150,7 +150,7 @@ test.describe('F52: prompt-pane sub-header padding, title wrap, meta-row polish'
       });
       copyToResults('f52-prompt-pane-header-polish.png');
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 });

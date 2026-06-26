@@ -124,11 +124,26 @@ export interface PipelineKindSeries {
   cells: PipelineKindDayCell[];
 }
 
+/**
+ * One pipeline step's token + cost rollup over the whole window, folded
+ * across every task run in the project. Keyed by `stepId` so the Pipeline
+ * configuration page can show, per step, how many tokens it spent. Mirrors
+ * backend `PipelineStepCostSeries`.
+ */
+export interface PipelineStepCostSeries {
+  stepId: string;
+  kind: PipelineStepKindKey;
+  totalTokens: number;
+  totalCostUsd: number;
+  anyModelUnknown: boolean;
+}
+
 export interface ProjectPipelineCostTimeline {
   project: string;
   days: string[];
   windowDays: number;
   kinds: PipelineKindSeries[];
+  steps: PipelineStepCostSeries[];
   totalTokens: number;
   totalCostUsd: number;
   anyModelUnknown: boolean;

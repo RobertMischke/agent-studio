@@ -6,7 +6,7 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// Locks the Phase A bridge contract (docs/agent-message-bus.md section 9):
+/// Locks the Phase A bridge contract (docs/architecture/bus/agent-message-bus.md section 9):
 /// every existing structured signal we elected to project onto the bus produces
 /// a typed <see cref="AgentMessage"/> with the right kind, severity, and
 /// participant. The legacy raw streams (cli-output.log, observations.jsonl,
@@ -76,7 +76,8 @@ public sealed class AgentMessageBusBridgeTests : IDisposable
     [InlineData(OrchestratorMessageKind.WatchdogTimeout, "High", "watchdog-timeout")]
     [InlineData(OrchestratorMessageKind.EmptyFastExit, "High", "empty-fast-exit")]
     [InlineData(OrchestratorMessageKind.MissingTerminalSentinel, "Warn", "missing-terminal-sentinel")]
-    [InlineData(OrchestratorMessageKind.ClassifierUnknown, "Warn", "classifier-unknown")]
+    [InlineData(OrchestratorMessageKind.InfraCrash, "High", "infra-crash")]
+    [InlineData(OrchestratorMessageKind.OrchestratorInconclusive, "Warn", "orchestrator-inconclusive")]
     [InlineData(OrchestratorMessageKind.CliLaunchFailed, "Warn", "cli-launch-failed")]
     [InlineData(OrchestratorMessageKind.GiveUp, "High", "giveup")]
     [InlineData(OrchestratorMessageKind.IntegrationConflict, "High", "integration-conflict")]

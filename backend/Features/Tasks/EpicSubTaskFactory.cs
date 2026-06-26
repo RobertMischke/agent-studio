@@ -32,7 +32,7 @@ public static class EpicSubTaskFactory
         foreach (var spec in specs)
         {
             if (string.IsNullOrWhiteSpace(spec.Title)) continue;
-            var id = mutations.CreateJob(new CreateJobRequest
+            var id = mutations.CreateJob(new CreateTaskRequest
             {
                 Title = spec.Title,
                 WatchPath = epic.WatchPath,

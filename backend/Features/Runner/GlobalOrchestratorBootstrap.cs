@@ -1,4 +1,4 @@
-
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentStudio.Runner;
 
@@ -13,12 +13,22 @@ namespace AgentStudio.Runner;
 /// </summary>
 public sealed class GlobalOrchestratorBootstrap
 {
+    /// <summary>Runtime prompt template for the singleton boot prompt.</summary>
+    public const string BootTemplate = "global-orchestrator-boot.md";
+
+    /// <summary>Conditional note appended to a watched project that is the tool itself.</summary>
+    public const string SelfModNoteTemplate = "global-orchestrator-self-mod-note.md";
+
+    /// <summary>Sub-block summarising the current task counts per project.</summary>
+    public const string TaskSnapshotTemplate = "global-orchestrator-task-snapshot.md";
+
     private readonly ILogger<GlobalOrchestratorBootstrap> _logger;
     private readonly GlobalOrchestratorSessionStore _store;
     private readonly OrchestratorRunner _runner;
     private readonly TaskScannerService _scanner;
     private readonly IConfiguration _config;
     private readonly ClientIdentityStore? _identityStore;
+    private readonly RuntimePromptService _prompts;
 
     public GlobalOrchestratorBootstrap(
         ILogger<GlobalOrchestratorBootstrap> logger,
@@ -26,7 +36,8 @@ public sealed class GlobalOrchestratorBootstrap
         OrchestratorRunner runner,
         TaskScannerService scanner,
         IConfiguration config,
-        ClientIdentityStore? identityStore = null)
+        ClientIdentityStore? identityStore = null,
+        RuntimePromptService? prompts = null)
     {
         _logger = logger;
         _store = store;
@@ -34,6 +45,7 @@ public sealed class GlobalOrchestratorBootstrap
         _scanner = scanner;
         _config = config;
         _identityStore = identityStore;
+        _prompts = prompts ?? new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
     }
 
     public async Task BootAsync(CancellationToken ct)
@@ -88,18 +100,28 @@ public sealed class GlobalOrchestratorBootstrap
     /// </summary>
     public string BuildBootPrompt()
     {
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine("You are the GLOBAL orchestrator for Agent Software Studio.");
-        sb.AppendLine();
-        sb.AppendLine("Scope. There is one of you for the whole app, sitting above the per-project orchestrators.");
-        sb.AppendLine("Per-project orchestrators answer single-task questions on behalf of the user when an");
-        sb.AppendLine("agent emits NEEDS_INPUT in auto mode. Your role is cross-project: priorities, idle vs.");
-        sb.AppendLine("starving projects, suggesting which project to look at first, summarising what is");
-        sb.AppendLine("happening across the board.");
-        sb.AppendLine();
-
         var entries = _scanner.GetWatchPaths();
-        sb.AppendLine($"Watched projects ({entries.Count}):");
+        var (cli, model) = ResolveBootDefaults(_identityStore);
+
+        return _prompts.Render(BootTemplate, new Dictionary<string, string?>
+        {
+            ["watched_count"] = entries.Count.ToString(),
+            ["watched_projects"] = BuildWatchedProjectsBlock(entries),
+            ["default_cli"] = cli,
+            ["default_model"] = model,
+            ["task_snapshot"] = BuildTaskSnapshotBlock(),
+        });
+    }
+
+    /// <summary>
+    /// Assemble the data-only watched-projects list (names, paths, and the
+    /// conditional self-modification note). Pure slot-fill; no instruction
+    /// prose lives here - the note text comes from
+    /// <see cref="SelfModNoteTemplate"/>.
+    /// </summary>
+    private string BuildWatchedProjectsBlock(IEnumerable<WatchPathEntry> entries)
+    {
+        var sb = new System.Text.StringBuilder();
         foreach (var e in entries)
         {
             sb.AppendLine($"- {e.Name}");
@@ -107,52 +129,45 @@ public sealed class GlobalOrchestratorBootstrap
             if (!string.IsNullOrWhiteSpace(e.RepositoryPath)) sb.AppendLine($"    git repository:    {e.RepositoryPath}");
             sb.AppendLine($"    task folder:       {e.Path}");
             if (IsSelfModificationTarget(e))
-            {
-                sb.AppendLine("    NOTE: this project is the tool itself - any change here affects your own runtime.");
-                sb.AppendLine("          Prefer splitting risky changes into smaller tasks; flag self-mod scope explicitly.");
-            }
+                sb.AppendLine(_prompts.Render(SelfModNoteTemplate, EmptyValues).TrimEnd('\r', '\n'));
         }
-        sb.AppendLine();
+        return sb.ToString().TrimEnd('\r', '\n');
+    }
 
-        // User preferences (bootstrap-time defaults). The per-turn prompt
-        // re-emits a fresher block based on the chatting client's identity,
-        // so this acts as the "no client context yet" fallback.
-        AppendBootUserPreferences(sb);
-
-        // Inline tool inventory so the orchestrator does not assume it
-        // lacks API access. Without this, a "create me three tasks" request
-        // gets refused with "you have to do it yourself in the UI" because
-        // the model has no representation of the local HTTP surface.
-        AppendToolInventory(sb);
-
-        // Light project-state snapshot so the orchestrator is grounded in
-        // current reality rather than a one-time enumeration. Cap to a few
-        // jobs per state to keep the boot cheap.
+    /// <summary>
+    /// Render the light project-state snapshot so the orchestrator is
+    /// grounded in current reality. Best-effort: a scan failure yields an
+    /// empty block so the boot prompt still renders. The trailing blank
+    /// line separates the snapshot from the following section.
+    /// </summary>
+    private string BuildTaskSnapshotBlock()
+    {
         try
         {
             var jobs = _scanner.ScanAllJobs();
-            sb.AppendLine($"Current tasks across all projects ({jobs.Count} total):");
-            sb.AppendLine("(These items are called \"tasks\" in user-facing vocabulary; never use \"jobs\".)");
+            var byProject = new System.Text.StringBuilder();
             foreach (var grp in jobs.GroupBy(j => j.ProjectName))
             {
-                sb.AppendLine($"  {grp.Key}:");
+                byProject.AppendLine($"  {grp.Key}:");
                 foreach (var sg in grp.GroupBy(j => j.State).OrderBy(g => g.Key))
-                    sb.AppendLine($"    {sg.Key}: {sg.Count()}");
+                    byProject.AppendLine($"    {sg.Key}: {sg.Count()}");
             }
-            sb.AppendLine();
+            var rendered = _prompts.Render(TaskSnapshotTemplate, new Dictionary<string, string?>
+            {
+                ["total"] = jobs.Count.ToString(),
+                ["by_project"] = byProject.ToString().TrimEnd('\r', '\n'),
+            });
+            return rendered.TrimEnd('\r', '\n') + "\n\n";
         }
-        catch (Exception __ex) { SilentCatch.Note(__ex, "GlobalOrchestratorBootstrap: boot is best-effort; missing snapshot is fine"); /* boot is best-effort; missing snapshot is fine */ }
-
-        sb.AppendLine("Your job:");
-        sb.AppendLine("- When asked which project needs attention, weigh queue depth and last activity.");
-        sb.AppendLine("- When asked for a board summary, keep it short and concrete (a few sentences).");
-        sb.AppendLine("- Defer to the per-project orchestrator on per-task decisions; you should not");
-        sb.AppendLine("  reach into a single task's NEEDS_INPUT - that is the per-project orchestrator's role.");
-        sb.AppendLine("- If a question requires user knowledge you do not have, reply with exactly: BLOCK");
-        sb.AppendLine();
-        sb.AppendLine("Acknowledge readiness with one short sentence naming how many projects you saw.");
-        return sb.ToString();
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "GlobalOrchestratorBootstrap: boot is best-effort; missing snapshot is fine");
+            return string.Empty;
+        }
     }
+
+    private static readonly IReadOnlyDictionary<string, string?> EmptyValues =
+        new Dictionary<string, string?>();
 
     /// <summary>
     /// Resolve the "boot-time" user defaults from the bootstrap identity
@@ -166,44 +181,6 @@ public sealed class GlobalOrchestratorBootstrap
         var cli = !string.IsNullOrWhiteSpace(rec?.DefaultCliType) ? rec!.DefaultCliType! : "claude";
         var model = !string.IsNullOrWhiteSpace(rec?.DefaultModel) ? rec!.DefaultModel! : OrchestratorRunner.DefaultModel;
         return (cli, model);
-    }
-
-    private void AppendBootUserPreferences(System.Text.StringBuilder sb)
-    {
-        var (cli, model) = ResolveBootDefaults(_identityStore);
-        AppendUserPreferencesBlock(sb, header: "=== USER PREFERENCES ===", cli, model);
-    }
-
-    /// <summary>
-    /// Shared renderer for the user-preferences block. Used at boot with the
-    /// bootstrap identity, and re-emitted on every chat turn with the live
-    /// values for the active client. Kept in one place so the two emissions
-    /// can't drift on wording.
-    /// </summary>
-    internal static void AppendUserPreferencesBlock(System.Text.StringBuilder sb, string header, string cli, string model)
-    {
-        sb.AppendLine(header);
-        sb.AppendLine($"Default CLI: {cli}");
-        sb.AppendLine($"Default model: {model}");
-        sb.AppendLine("If the user asks you to create a task without naming a CLI or model, use these defaults.");
-        sb.AppendLine("Do not invent other models; if the user wants a different one they will say so.");
-        sb.AppendLine();
-    }
-
-    private static void AppendToolInventory(System.Text.StringBuilder sb)
-    {
-        sb.AppendLine("=== AVAILABLE TOOLS ===");
-        sb.AppendLine("You have:");
-        sb.AppendLine("- Read, Edit, Write, Bash, Glob, Grep (standard Claude tools).");
-        sb.AppendLine("- HTTP via Bash: you can POST/PUT/GET against http://127.0.0.1:5030/api/* with header X-Client-Id: <the user's id> (the user's identity is forwarded).");
-        sb.AppendLine("- To create a task: POST /api/tasks with JSON body { id, title, watchPath, agent, cliType, model, targetState, promptMarkdown }. Pick cliType/model from the USER PREFERENCES block above unless the user names a different one.");
-        sb.AppendLine("- To move a task between lanes: POST /api/tasks/{id}/move?watchPath=... with { targetState }.");
-        sb.AppendLine("- To set a task's model: PUT /api/tasks/{id}/model?watchPath=... with { model }.");
-        sb.AppendLine("- To change a runner's mode: PUT /api/runner/{projectName}/mode with { mode: \"auto-continuous\" | \"auto-single\" | \"manual\" | \"paused\" }.");
-        sb.AppendLine();
-        sb.AppendLine("If the user asks you to create N tasks, do it yourself via the API (one POST per task) and report what you did.");
-        sb.AppendLine("Do NOT tell them they have to do it manually in the UI - that is wrong, you have the API.");
-        sb.AppendLine();
     }
 
     /// <summary>

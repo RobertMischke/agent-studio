@@ -153,7 +153,7 @@ for (const metricName of allMetricKeys) {
 
 html += `<h2>Method</h2>
 <table><tbody>
-<tr><th>Stress fixture</th><td><code>frontend/e2e/perf-stress.spec.ts</code> intercepts <code>/api/jobs</code> + <code>/api/jobs/grouped</code> via <code>page.route()</code>; other endpoints fall through to dev backend.</td></tr>
+<tr><th>Stress fixture</th><td><code>frontend/e2e/perf-stress.spec.ts</code> intercepts <code>/api/tasks</code> + <code>/api/tasks/grouped</code> via <code>page.route()</code>; other endpoints fall through to dev backend.</td></tr>
 <tr><th>Distribution</th><td>Bulk in 6-completed (uses full job-card template); a few in 5-human-review / 4-auto-review / 2-ready / 3-progress / 7-archive.</td></tr>
 <tr><th>Initial render</th><td>Wall time from <code>page.goto('/')</code> to first <code>[data-testid="job-card"]</code> visible.</td></tr>
 <tr><th>DOM count</th><td><code>document.querySelectorAll('*').length</code> after 1 s settle.</td></tr>

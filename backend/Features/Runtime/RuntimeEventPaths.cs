@@ -3,7 +3,7 @@ namespace AgentStudio.Runtime;
 /// <summary>
 /// Canonical layout for Product Runtime Observability JSONL files. Mirrors the
 /// description in <c>docs/schemas/product-runtime-event.schema.json</c> and the
-/// retention rules in <c>docs/product-runtime-log-capture.md</c>.
+/// retention rules in <c>docs/operations/runtime/log-capture.md</c>.
 /// </summary>
 /// <remarks>
 /// <para>Two scopes:</para>

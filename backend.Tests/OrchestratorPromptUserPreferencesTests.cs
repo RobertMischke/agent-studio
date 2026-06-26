@@ -53,11 +53,24 @@ public class OrchestratorPromptUserPreferencesTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["TaskRepository"] = _root,
+                ["PromptTemplates:RuntimePath"] = FindPromptRoot(),
                 ["WatchPaths:0:Name"] = "agent-taskboard",
                 ["WatchPaths:0:Path"] = _watchPath,
                 ["WatchPaths:0:RootPath"] = _watchPath
             })
             .Build();
+    }
+
+    private static string FindPromptRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, "prompts", "runtime");
+            if (Directory.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+        throw new DirectoryNotFoundException("Could not locate prompts/runtime from test base directory.");
     }
 
     private (ClientIdentityStore store, TaskScannerService scanner, IConfiguration config) BuildEnv()

@@ -25,6 +25,17 @@
   overflow: hidden;
 }
 
+.ws-settings--inline {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--studio-bg-editor);
+}
+
 .ws-settings__head {
   padding: var(--studio-spacing-3) var(--studio-spacing-5);
   border-bottom: 1px solid var(--studio-border-strong);
@@ -183,6 +194,55 @@
   grid-column: 2;
   color: var(--studio-fg-dim);
   font-size: 0.8rem;
+}
+
+.ws-settings--inline .ws-settings__head {
+  background: var(--studio-bg-editor);
+  border-bottom-color: var(--studio-border);
+  padding: var(--studio-spacing-3) var(--studio-spacing-5);
+}
+
+.ws-settings--inline .ws-settings__body {
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+}
+
+.ws-settings--inline .ws-settings__rail {
+  align-self: stretch;
+  min-height: 0;
+  overflow: auto;
+  border: 0;
+  border-right: 1px solid var(--studio-border);
+  border-radius: 0;
+  background: var(--studio-bg-sidebar);
+  padding: var(--studio-spacing-1) 0;
+}
+
+.ws-settings--inline .ws-settings__rail-group {
+  margin: var(--studio-spacing-2) var(--studio-spacing-3);
+}
+
+.ws-settings--inline .ws-settings__rail-item {
+  border-radius: 0;
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+}
+
+.ws-settings--inline .ws-settings__rail-item--active {
+  background: color-mix(in srgb, var(--studio-accent) 12%, var(--studio-bg-selected));
+  color: var(--studio-accent-strong);
+}
+
+.ws-settings--inline .ws-settings__panel {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--studio-bg-editor);
+  padding: var(--studio-spacing-5) var(--studio-spacing-6);
+}
+
+.ws-settings--inline .ws-settings__panel--wide {
+  padding: var(--studio-spacing-4) var(--studio-spacing-5);
 }
 
 @media (max-width: 760px) {

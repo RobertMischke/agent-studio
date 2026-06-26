@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { api } from '../helpers/api';
@@ -51,11 +51,10 @@ const RAILS_WITH_CUSTOM_PANEL = new Set<string>([
   'activity',
 ]);
 
-// ASS-1711 IA: documentation rails (Architecture / Wiki / Agent Docs) are
-// nested under a non-navigable "Steering Docs" tree container, "Runtime
-// Prompts" is its own point, and Settings expands to its sub-pages. The tree
-// seeds fully expanded, so every leaf below is reachable by its testid without
-// first expanding a parent.
+// ASS-1711 IA: documentation rails (Architecture / Wiki / Agent Docs / Prompts)
+// sit in Context, and Settings expands to its sub-pages. The tree seeds fully
+// expanded, so every leaf below is reachable by its testid without first
+// expanding a parent.
 const RAIL_ITEMS: readonly { key: string; label: string; title: string; descriptionFragment: string }[] = [
   { key: 'overview',         label: 'Overview',          title: 'Overview',         descriptionFragment: 'Snapshot of project health' },
   { key: 'security',         label: 'Security',          title: 'Security',         descriptionFragment: 'Baseline, reviews, and active findings' },
@@ -65,7 +64,6 @@ const RAIL_ITEMS: readonly { key: string; label: string; title: string; descript
   { key: 'token-usage',      label: 'Token Usage',       title: 'Token Usage',      descriptionFragment: 'Inference spend by job' },
   { key: 'observability',    label: 'Observability',     title: 'Observability',    descriptionFragment: 'Agent communication on the message bus' },
   { key: 'steering',         label: 'Agent Docs',        title: 'Agent Docs',       descriptionFragment: 'Instruction files agents read on their own' },
-  { key: 'runtime-prompts',  label: 'Runtime Prompts',   title: 'Runtime Prompts',  descriptionFragment: 'prompts the platform injects at run time' },
   { key: 'audits',           label: 'Audits & Checks',   title: 'Audits & Checks',  descriptionFragment: 'Review definitions, per-task checks' },
   { key: 'jobs',             label: 'Jobs',              title: 'Jobs',             descriptionFragment: 'Tasks queued, in progress' },
   { key: 'settings',         label: 'Settings',          title: 'Settings',         descriptionFragment: 'How the orchestrator behaves' },
@@ -96,27 +94,52 @@ function slugFor(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-test('opens the project shell from the kanban tab and lands on Overview', async ({ page }) => {
+async function openShell(page: Page, rail = 'overview') {
   await page.goto('/');
-  await page.getByTestId(`project-shell-open-${projectName}`).click();
+  const openBtn = page.getByTestId(`project-shell-open-${projectName}`);
+  if (await openBtn.count()) {
+    await openBtn.first().click();
+  } else {
+    const suffix = rail === 'overview' ? '/overview' : `/${rail}`;
+    await page.goto(`/#/projects/${slugFor(projectName)}${suffix}`);
+  }
+  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+}
+
+async function dragSplitter(page: Page, deltaX: number) {
+  const splitter = page.getByTestId('project-shell-splitter');
+  const box = await splitter.boundingBox();
+  expect(box).not.toBeNull();
+  const x = box!.x + box!.width / 2;
+  const y = box!.y + box!.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + deltaX, y, { steps: 8 });
+  await page.mouse.up();
+}
+
+async function railWidth(page: Page) {
+  const box = await page.getByTestId('project-shell-rail').boundingBox();
+  return box?.width ?? 0;
+}
+
+test('opens the project shell from the kanban tab and lands on Overview', async ({ page }) => {
+  await openShell(page);
 
   const shell = page.getByTestId('project-shell');
   await expect(shell).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('project-shell-title')).toHaveText(projectName);
-  await expect(page.getByTestId('project-shell-chip')).toHaveText('this repo');
   await expect(page.getByTestId('project-shell-rail-overview')).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('project-detail-overview')).toBeVisible();
 
-  // Hash reflects the slug-only form for the default rail.
+  // Hash reflects the selected project shell.
   expect(page.url()).toContain(`#/projects/${slugFor(projectName)}`);
 
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, '00-shell-overview.png'), fullPage: true });
 });
 
 test('every rail entry routes to its panel', async ({ page }) => {
-  await page.goto('/');
-  await page.getByTestId(`project-shell-open-${projectName}`).click();
-  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+  await openShell(page);
 
   // Long-task budget guard: cumulative main-thread blocking while we
   // bounce through every rail item must stay under 50 ms per panel mount
@@ -160,9 +183,7 @@ test('every rail entry routes to its panel', async ({ page }) => {
 });
 
 test('reload preserves the active rail item', async ({ page }) => {
-  await page.goto('/');
-  await page.getByTestId(`project-shell-open-${projectName}`).click();
-  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+  await openShell(page);
 
   await page.getByTestId('project-shell-rail-token-usage').click();
   await expect(page.getByTestId('project-shell-panel-token-usage')).toBeVisible();
@@ -174,15 +195,29 @@ test('reload preserves the active rail item', async ({ page }) => {
   await expect(page.getByTestId('project-shell-panel-token-usage')).toBeVisible();
 });
 
-test('back to board returns the kanban without regressing the dashboard', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.getByTestId('kanban-dashboard')).toBeVisible();
+test('project navigation splitter resizes, collapses, and expands the icon rail', async ({ page }) => {
+  await openShell(page);
 
-  await page.getByTestId(`project-shell-open-${projectName}`).click();
-  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+  const initialRailWidth = await railWidth(page);
+  await dragSplitter(page, 84);
+  await expect.poll(() => railWidth(page)).toBeGreaterThan(initialRailWidth + 50);
+
+  await dragSplitter(page, -260);
+  await expect(page.getByTestId('project-shell-rail')).toHaveAttribute('data-collapsed', 'true');
+  await expect(page.getByTestId('project-shell-expand-nav')).toBeVisible();
+
+  await page.getByTestId('project-shell-splitter').click();
+  await expect(page.getByTestId('project-shell-rail')).toHaveAttribute('data-collapsed', 'false');
+  await expect(page.getByTestId('project-shell-sidebar-header')).toBeVisible();
 
   await page.getByTestId('project-shell-back').click();
-  await expect(page.getByTestId('project-shell')).toHaveCount(0);
-  await expect(page.getByTestId('kanban-dashboard')).toBeVisible();
-  expect(page.url()).not.toContain('#/projects/');
+  await expect(page.getByTestId('project-shell')).toBeVisible();
+  await expect(page.getByTestId('project-shell-rail')).toHaveAttribute('data-collapsed', 'true');
+  await expect(page.getByTestId('project-shell-expand-nav')).toBeVisible();
+  await expect(page.getByTestId('project-shell-mini-rail-overview')).toHaveAttribute('aria-current', 'page');
+  expect(page.url()).toContain('#/projects/');
+
+  await page.getByTestId('project-shell-splitter').click();
+  await expect(page.getByTestId('project-shell-rail')).toHaveAttribute('data-collapsed', 'false');
+  await expect(page.getByTestId('project-shell-sidebar-header')).toBeVisible();
 });

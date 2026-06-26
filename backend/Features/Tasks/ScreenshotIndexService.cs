@@ -8,7 +8,7 @@ namespace AgentStudio.Tasks;
 /// workspace-wide visual evidence reel without inventing a new
 /// retention policy: the files are exactly the ones the runner and
 /// the Playwright artifact harvester already drop on disk per
-/// <c>docs/protocol-style.md</c>.
+/// <c>docs/contracts/protocol-style.md</c>.
 ///
 /// Two top-level shapes:
 ///
@@ -59,17 +59,21 @@ public class ScreenshotIndexService
             var rel = Path.GetRelativePath(resultsDir, path).Replace('\\', '/');
             var ts = SafeLastWriteUtc(path);
             var (caption, status) = DescribeEntry(rel, passFailIndex);
+            var fileName = Path.GetFileName(path);
+            var source = ScreenshotSourceParser.Parse(fileName);
             entries.Add(new TaskScreenshot
             {
                 JobId = info.Id,
                 JobTitle = info.Title,
                 ProjectName = info.ProjectName,
                 WatchPath = info.WatchPath,
-                FileName = Path.GetFileName(path),
+                FileName = fileName,
                 RelativePath = $"results/{rel}",
                 Url = BuildServeUrl(info.Id, rel, info.WatchPath),
                 Caption = caption,
                 Status = status,
+                Source = source.Source,
+                CompositeParts = source.Parts.ToList(),
                 LocalPath = path,
                 TimestampUtc = ts
             });
@@ -117,17 +121,21 @@ public class ScreenshotIndexService
 
                 var rel = Path.GetRelativePath(resultsDir, path).Replace('\\', '/');
                 var (caption, status) = DescribeEntry(rel, passFailIndex);
+                var fileName = Path.GetFileName(path);
+                var source = ScreenshotSourceParser.Parse(fileName);
                 collected.Add(new TaskScreenshot
                 {
                     JobId = job.Id,
                     JobTitle = job.Title,
                     ProjectName = job.ProjectName,
                     WatchPath = job.WatchPath,
-                    FileName = Path.GetFileName(path),
+                    FileName = fileName,
                     RelativePath = $"results/{rel}",
                     Url = BuildServeUrl(job.Id, rel, job.WatchPath),
                     Caption = caption,
                     Status = status,
+                    Source = source.Source,
+                    CompositeParts = source.Parts.ToList(),
                     LocalPath = path,
                     TimestampUtc = ts
                 });

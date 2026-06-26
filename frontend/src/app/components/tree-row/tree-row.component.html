@@ -16,6 +16,8 @@
           (click)="onChevronClick($event)" tabindex="0" (keydown.enter)="onChevronClick($event)" (keydown.space)="onChevronClick($event); $event.preventDefault()">
       <app-studio-icon [name]="c === 'expanded' ? 'chevronDown' : 'chevronRight'" [size]="10"></app-studio-icon>
     </span>
+  } @else if (reserveChevron()) {
+    <span class="tree-row__chev tree-row__chev--placeholder" aria-hidden="true"></span>
   }
   @if (glyph(); as g) {
     <span class="tree-row__glyph-icon" aria-hidden="true">
@@ -25,6 +27,8 @@
     <span class="tree-row__glyph"
           [style.background]="glyphColor()"
           aria-hidden="true">{{ gc }}</span>
+  } @else if (reserveGlyph()) {
+    <span class="tree-row__glyph-icon tree-row__glyph-icon--placeholder" aria-hidden="true"></span>
   }
   <span class="tree-row__name">{{ label() }}</span>
   <ng-content></ng-content>

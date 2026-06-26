@@ -19,7 +19,6 @@ public class TaskRunnerService : BackgroundService
     private readonly TaskStateMachine _states;
     private readonly TaskMutationService _mutations;
     private readonly TaskSessionLog _sessions;
-    private readonly CopilotCliService _cli;
     private readonly CliRouter _router;
     private readonly ContextUsageParser _contextUsageParser;
     private readonly SummaryGenerationService _summaryService;
@@ -84,7 +83,6 @@ public class TaskRunnerService : BackgroundService
         TaskStateMachine states,
         TaskMutationService mutations,
         TaskSessionLog sessions,
-        CopilotCliService cli,
         CliRouter router,
         ContextUsageParser contextUsageParser,
         SummaryGenerationService summaryService,
@@ -118,7 +116,6 @@ public class TaskRunnerService : BackgroundService
         _states = states;
         _mutations = mutations;
         _sessions = sessions;
-        _cli = cli;
         _router = router;
         _contextUsageParser = contextUsageParser;
         _summaryService = summaryService;
@@ -268,13 +265,24 @@ public class TaskRunnerService : BackgroundService
             };
             // Persist every mode change so the auto-pickup toggle survives
             // backend restarts. Includes implicit transitions like "auto-single
-            // → manual" after a job completes.
-            runner.OnModePersist += mode => _projectSettings.SetRunnerMode(entry.Name, mode);
+            // → manual" after a job completes. The source is threaded so a
+            // system-driven flip (update-quiesce, circuit-breaker) updates the
+            // live RunnerMode mirror without clobbering the operator's durable
+            // DesiredRunnerMode intent (ASS-1753).
+            runner.OnModePersist += (mode, source) => _projectSettings.SetRunnerMode(entry.Name, mode, source);
             _runners[entry.Name] = runner;
 
             // Restore last saved mode (if any) after wiring the persist hook so
-            // the restore itself is idempotent and doesn't double-write.
-            var savedMode = _projectSettings.Get(entry.Name).RunnerMode;
+            // the restore itself is idempotent and doesn't double-write. Prefer
+            // the operator's durable DesiredRunnerMode over the live RunnerMode
+            // mirror so a restart that happened while a transient system-manual
+            // was in effect (e.g. mid-update) still comes back up in the mode the
+            // operator actually asked for (ASS-1753). Legacy records that predate
+            // DesiredRunnerMode fall back to RunnerMode.
+            var savedSettings = _projectSettings.Get(entry.Name);
+            var savedMode = string.IsNullOrWhiteSpace(savedSettings.DesiredRunnerMode)
+                ? savedSettings.RunnerMode
+                : savedSettings.DesiredRunnerMode;
             if (!string.IsNullOrWhiteSpace(savedMode) && savedMode != "manual")
             {
                 runner.RestoreMode(savedMode!);
@@ -283,10 +291,10 @@ public class TaskRunnerService : BackgroundService
             _logger.LogInformation("Initialized runner for project '{Name}' (Root: {RootPath})", entry.Name, entry.RootPath);
         }
 
-        // Check CLI availability
-        if (!_cli.IsAvailable())
+        // Check CLI availability (default backend = Claude)
+        if (!_router.Get(CliTypes.Claude).IsAvailable())
         {
-            _logger.LogWarning("Copilot CLI not available - runners will be in manual/board-only mode");
+            _logger.LogWarning("Claude CLI not available - runners will be in manual/board-only mode");
         }
 
         // Boot the orchestrator's long-lived Claude session per project so
@@ -708,6 +716,22 @@ public class TaskRunnerService : BackgroundService
             : null;
     }
 
+    /// <summary>
+    /// In-memory run facts for one Progress-lane task (ASS-1751), resolved O(1)
+    /// via the project name exactly like <see cref="GetStuckLoopStateForJob"/>.
+    /// Returns default facts (no slot / no backoff / zero failures) when the
+    /// project has no live runner - which is also the orphan case after a
+    /// backend restart. The endpoint overlay classifies these into a
+    /// <see cref="TaskRunActivity"/>.
+    /// </summary>
+    public RunActivityFacts GetRunActivityForJob(string jobId, string projectName)
+    {
+        if (string.IsNullOrEmpty(projectName)) return default;
+        return _runners.TryGetValue(projectName, out var runner)
+            ? runner.GetRunActivity(jobId)
+            : default;
+    }
+
     private static WatchdogConfig LoadWatchdogConfig(IConfiguration cfg)
     {
         var section = cfg.GetSection("Watchdog");
@@ -823,40 +847,15 @@ public class TaskRunnerService : BackgroundService
     public CliExecution? GetExecutionForJob(TaskInfo info)
         => _router.Get(info.CliType).GetExecution(info.TaskKey);
 
-    public async Task<(ContextUsageSnapshot? Snapshot, string? Error)> RefreshContextUsageAsync(string jobId, string? watchPath = null, CancellationToken ct = default)
+    public Task<(ContextUsageSnapshot? Snapshot, string? Error)> RefreshContextUsageAsync(string jobId, string? watchPath = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);
-        if (info == null) return (null, "Job not found");
-        // /context usage is Copilot-specific; if the job runs another CLI, no-op.
-        if (CliTypes.Normalize(info.CliType) != CliTypes.Copilot)
-            return (null, $"{CliTypes.Normalize(info.CliType)} CLI does not support /context usage refresh.");
-        if (!_cli.IsAvailable()) return (null, "Copilot CLI is not installed or not on PATH");
-
-        var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
-        if (runner == null) return (null, $"No runner configured for project '{info.ProjectName}'");
-
-        var execution = _cli.GetExecution(info.TaskKey);
-        var canResumeSession = !string.IsNullOrWhiteSpace(info.SessionName) && execution?.Status != "running";
-        var promptResult = await _cli.RunPromptOnceAsync(
-            "/context usage",
-            runner.Entry.RootPath,
-            canResumeSession ? info.SessionName : null,
-            resumeSession: canResumeSession,
-            ct: ct);
-
-        var snapshot = _contextUsageParser.Parse(promptResult.Stdout, promptResult.Stderr, promptResult.ExitCode);
-        if (promptResult.TimedOut)
-        {
-            snapshot = snapshot with
-            {
-                Status = "error",
-                Error = "The /context usage command timed out.",
-                Notes = [.. snapshot.Notes, "The context usage query exceeded the time limit."]
-            };
-        }
-
-        _mutations.UpdateContextUsage(jobId, snapshot, watchPath);
-        return (snapshot, null);
+        if (info == null) return Task.FromResult<(ContextUsageSnapshot?, string?)>((null, "Job not found"));
+        // The interactive /context usage refresh was a Copilot-only feature; the
+        // Copilot CLI backend has been removed. No remaining CLI exposes an
+        // on-demand context-usage probe, so this is always a no-op now.
+        return Task.FromResult<(ContextUsageSnapshot?, string?)>(
+            (null, $"{CliTypes.Normalize(info.CliType)} CLI does not support /context usage refresh."));
     }
 
     /// <summary>

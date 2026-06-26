@@ -88,7 +88,7 @@ Deferred change pending: mode will flip to "manual" when the active job (running
     </div>
     <div class="tooltip role" data-testid="mode-pill-tooltip">Auto-pickup: when the active task finishes, the runner will start the next item in 2-ready automatically.
 
-This backend is the test-subject seat (ADR-0044). The auto-pickup loop is structurally disabled regardless of mode; only explicit /api/jobs/{id}/start calls (Playwright fixtures, manual debugging) reach the CLI.</div>
+This backend is the test-subject seat (ADR-0044). The auto-pickup loop is structurally disabled regardless of mode; only explicit /api/tasks/{id}/start calls (Playwright fixtures, manual debugging) reach the CLI.</div>
   </section>
   `
 }

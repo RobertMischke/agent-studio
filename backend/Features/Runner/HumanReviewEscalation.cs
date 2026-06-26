@@ -17,6 +17,16 @@ public static class HumanReviewEscalationCategories
     public const string PickupZombie = "pickup-zombie";
     public const string EmptyFastExit = "empty-fast-exit";
 
+    /// <summary>The agent CLI process died hard (exitCode &lt; 0) before it could
+    /// reach a terminal verdict. An infra fault, not a logical failure; routed to
+    /// human review rather than left stranded in 3-progress.</summary>
+    public const string InfraCrash = "infra-crash";
+
+    /// <summary>The run failed and produced real text that maps to no terminal
+    /// verdict. The orchestrator could not conclude it, so it stops and hands the
+    /// task to a human (replaces the old classifier-unknown stranding).</summary>
+    public const string OrchestratorInconclusive = "orchestrator-inconclusive";
+
     /// <summary>The run exceeded the model's input window (prompt too long /
     /// context length). Non-retryable, so it is routed straight to human review
     /// instead of being re-issued into the same overflow.</summary>

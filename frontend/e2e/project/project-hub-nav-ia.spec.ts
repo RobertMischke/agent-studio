@@ -12,11 +12,10 @@ import { api } from '../helpers/api';
  *
  *   1. Default rail renders the four collapsible segments fully expanded.
  *   2. A main segment header collapses (its items leave the DOM) and re-expands.
- *   3. The non-navigable "Steering Docs" container toggles its children
- *      (Architecture / Wiki / Agent Docs) without becoming the active panel.
+ *   3. Context contains Architecture / Wiki / Agent Docs / Prompts and folds
+ *      as a normal segment.
  *   4. The navigable "Settings" parent's twisty folds its sub-pages.
- *   5. The renamed "Agent Docs" leaf and the standalone "Runtime Prompts"
- *      point are present in Config.
+ *   5. The renamed "Agent Docs" leaf and Prompts point are present in Context.
  *
  * Screenshots land in NAV_IA_RESULTS_DIR (the orchestrator job folder's
  * results/ when set) so the visual evidence sits next to the protocol; a
@@ -66,25 +65,19 @@ test.beforeAll(async () => {
   projectName = preferred.name;
 });
 
-test('default rail shows four collapsible segments, the Steering Docs tree, Agent Docs + Runtime Prompts', async ({ page }) => {
+test('default rail shows four collapsible segments with Agent Docs + Prompts in Context', async ({ page }) => {
   await openHub(page);
 
-  for (const id of ['insight', 'quality', 'operations', 'config']) {
+  for (const id of ['insight', 'quality', 'context', 'config']) {
     await expect(group(page, id), `segment ${id}`).toBeVisible();
     await expect(group(page, id)).toHaveAttribute('aria-expanded', 'true');
   }
 
-  // Steering Docs is a non-navigable tree container with a twisty; its three
-  // documentation children render expanded by default.
-  await expect(rail(page, 'steering-docs')).toContainText('Steering Docs');
-  await expect(twisty(page, 'steering-docs')).toBeVisible();
   await expect(rail(page, 'architecture')).toBeVisible();
   await expect(rail(page, 'wiki')).toBeVisible();
   await expect(rail(page, 'steering')).toContainText('Agent Docs');
-
-  // Runtime Prompts is its OWN top-level Config point (no twisty, not nested).
-  await expect(rail(page, 'runtime-prompts')).toContainText('Runtime Prompts');
-  await expect(twisty(page, 'runtime-prompts')).toHaveCount(0);
+  await expect(rail(page, 'prompts')).toContainText('Prompts');
+  await expect(rail(page, 'runtime-prompts')).toHaveCount(0);
 
   // Settings is a navigable parent with a twisty + two sub-pages.
   await expect(twisty(page, 'settings')).toBeVisible();
@@ -97,38 +90,38 @@ test('default rail shows four collapsible segments, the Steering Docs tree, Agen
 test('collapsing a main segment hides its items and re-expanding restores them', async ({ page }) => {
   await openHub(page);
 
-  await expect(rail(page, 'overview')).toBeVisible();
-  await group(page, 'insight').click();
-  await expect(group(page, 'insight')).toHaveAttribute('aria-expanded', 'false');
-  await expect(rail(page, 'overview')).toHaveCount(0);
-  await expect(rail(page, 'observability')).toHaveCount(0);
-  await shot(page, '01-segment-insight-collapsed.png');
+  await expect(rail(page, 'security')).toBeVisible();
+  await group(page, 'quality').click();
+  await expect(group(page, 'quality')).toHaveAttribute('aria-expanded', 'false');
+  await expect(rail(page, 'security')).toHaveCount(0);
+  await expect(rail(page, 'test-quality')).toHaveCount(0);
+  await shot(page, '01-segment-quality-collapsed.png');
 
-  await group(page, 'insight').click();
-  await expect(group(page, 'insight')).toHaveAttribute('aria-expanded', 'true');
-  await expect(rail(page, 'overview')).toBeVisible();
-  await shot(page, '02-segment-insight-reexpanded.png');
+  await group(page, 'quality').click();
+  await expect(group(page, 'quality')).toHaveAttribute('aria-expanded', 'true');
+  await expect(rail(page, 'security')).toBeVisible();
+  await shot(page, '02-segment-quality-reexpanded.png');
 });
 
-test('the non-navigable Steering Docs container toggles its children without routing', async ({ page }) => {
+test('the Context segment folds and unfolds its documentation rows', async ({ page }) => {
   await openHub(page);
 
-  // Baseline: not on a doc panel; children visible.
   await expect(rail(page, 'architecture')).toBeVisible();
+  await expect(rail(page, 'prompts')).toBeVisible();
 
-  // Clicking the container row collapses the children but keeps the container.
-  await rail(page, 'steering-docs').click();
+  await group(page, 'context').click();
+  await expect(group(page, 'context')).toHaveAttribute('aria-expanded', 'false');
   await expect(rail(page, 'architecture')).toHaveCount(0);
   await expect(rail(page, 'wiki')).toHaveCount(0);
   await expect(rail(page, 'steering')).toHaveCount(0);
-  await expect(rail(page, 'steering-docs')).toBeVisible();
-  // It never became the active panel (container is navigable:false).
-  await expect(rail(page, 'steering-docs')).not.toHaveAttribute('aria-current', 'page');
-  await shot(page, '03-steering-docs-collapsed.png');
+  await expect(rail(page, 'prompts')).toHaveCount(0);
+  await shot(page, '03-context-collapsed.png');
 
-  await twisty(page, 'steering-docs').click();
+  await group(page, 'context').click();
+  await expect(group(page, 'context')).toHaveAttribute('aria-expanded', 'true');
   await expect(rail(page, 'architecture')).toBeVisible();
-  await shot(page, '04-steering-docs-reexpanded.png');
+  await expect(rail(page, 'prompts')).toBeVisible();
+  await shot(page, '04-context-reexpanded.png');
 });
 
 test('the Settings twisty folds and unfolds its grouped sub-pages', async ({ page }) => {

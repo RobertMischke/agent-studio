@@ -1,0 +1,46 @@
+<div class="gallery" data-testid="run-activity-gallery">
+  <header class="gallery__head">
+    <h1>Run-activity pill — 3-progress wird selbsterklärend (ASS-1751)</h1>
+    <p class="gallery__sub">
+      Ein in-3-progress-Task kann auf drei Arten "unbearbeitet" aussehen. Das Badge
+      unterscheidet sie: <b>Run aktiv</b> · <b>failed/Backoff</b> · <b>kein aktiver Run</b>.
+      Produktion-Markup + SCSS, getrieben vom echten <code>buildRunActivityBadge</code>.
+    </p>
+  </header>
+
+  @for (s of scenarios; track s.id) {
+    <section class="gallery__row" [attr.data-scenario]="s.id">
+      <div class="gallery__meta">
+        <div class="gallery__title">{{ s.title }}</div>
+        <div class="gallery__truth">{{ s.truth }}</div>
+      </div>
+
+      <div class="gallery__cell">
+        <div class="gallery__cell-label">Badge (Karte / Detail-Header)</div>
+        <div class="card-surface" [attr.data-testid]="'pill-' + s.id">
+          @if (badge(s.job); as ra) {
+            <span class="task-card__run-activity-pill"
+                  [class]="'task-card__run-activity-pill--' + ra.tone"
+                  data-testid="task-card-run-activity"
+                  [attr.data-run-activity-kind]="ra.kind">
+              <span class="task-card__run-activity-dot"></span>
+              {{ ra.label }}
+            </span>
+          } @else {
+            <span class="gallery__none">— kein Badge —</span>
+          }
+        </div>
+      </div>
+
+      <div class="gallery__cell gallery__cell--tooltip">
+        <div class="gallery__cell-label">Tooltip (Details)</div>
+        @if (badge(s.job); as ra) {
+          <div class="tooltip-preview" [attr.data-testid]="'tooltip-' + s.id">
+            <div class="tooltip-preview__title">{{ ra.tooltip.title }}</div>
+            <div class="tooltip-preview__body" [innerHTML]="ra.tooltip.body"></div>
+          </div>
+        }
+      </div>
+    </section>
+  }
+</div>

@@ -173,6 +173,119 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(tipFor('studio-explorer-project-board-count-human-review-Alpha')).toMatchObject({ title: 'Human Review' });
   });
 
+  it('renders create workspace as a compact Workspaces header action', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    cmp.setCollapsed('workspace', false);
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+    const emitted: void[] = [];
+    cmp.onboardWorkspaceRequest.subscribe(v => emitted.push(v));
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const add = root.querySelector<HTMLButtonElement>('[data-testid="studio-explorer-add-workspace"]');
+    expect(add?.classList.contains('studio-sidebar-header__action')).toBe(true);
+    expect(add?.querySelector('app-studio-icon')).toBeTruthy();
+
+    add?.click();
+
+    expect(emitted).toHaveLength(1);
+    expect(cmp.isCollapsed('workspace')).toBe(false);
+  });
+
+  it('renders create project as a compact workspace-row icon action', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    cmp.setCollapsed('workspace', false);
+    cmp.setCollapsed('ws:ws-default', false);
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+    const emitted: string[] = [];
+    cmp.onboardProjectRequest.subscribe(v => emitted.push(v));
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const add = root.querySelector<HTMLButtonElement>('[data-testid="studio-workspace-ws-default-add-project"]');
+    expect(add?.tagName.toLowerCase()).toBe('button');
+    expect(add?.classList.contains('tree-row')).toBe(false);
+    expect(add?.querySelector('app-studio-icon')).toBeTruthy();
+    expect(root.textContent).not.toContain('New project');
+
+    add?.click();
+
+    expect(emitted).toEqual(['ws-default']);
+    expect(cmp.isCollapsed('ws:ws-default')).toBe(false);
+  });
+
+  it('highlights the active project subnavigation row', () => {
+    const fixture = mount();
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha', { isActive: true })]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.componentRef.setInput('activeProjectSurface', 'hub');
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const board = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-board-Alpha"]');
+    const hub = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-hub-Alpha"]');
+
+    expect(board?.classList.contains('tree-row--active')).toBe(false);
+    expect(board?.getAttribute('aria-current')).toBeNull();
+    expect(hub?.classList.contains('tree-row--active')).toBe(true);
+    expect(hub?.getAttribute('aria-current')).toBe('page');
+  });
+
+  it('renders a Wiki row under Project Hub that emits openWikiRequest', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha', { isActive: true })]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.detectChanges();
+
+    const emitted: string[] = [];
+    cmp.openWikiRequest.subscribe(name => emitted.push(name));
+
+    const root: HTMLElement = fixture.nativeElement;
+    const rows = Array.from(
+      root.querySelectorAll<HTMLElement>('.studio-tree-children .tree-row[data-testid^="studio-explorer-project-"]'),
+    ).map(el => el.getAttribute('data-testid'));
+    // Wiki sits directly after Project Hub in the per-project child list.
+    expect(rows).toEqual([
+      'studio-explorer-project-board-Alpha',
+      'studio-explorer-project-hub-Alpha',
+      'studio-explorer-project-wiki-Alpha',
+      'studio-explorer-project-backlog-Alpha',
+      'studio-explorer-project-epics-Alpha',
+    ]);
+
+    const wiki = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-wiki-Alpha"]');
+    wiki?.click();
+    expect(emitted).toEqual(['Alpha']);
+  });
+
+  it('highlights only the Wiki row when the active surface is the wiki rail', () => {
+    const fixture = mount();
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha', { isActive: true })]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.componentRef.setInput('activeProjectSurface', 'wiki');
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const hub = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-hub-Alpha"]');
+    const wiki = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-wiki-Alpha"]');
+
+    expect(hub?.classList.contains('tree-row--active')).toBe(false);
+    expect(wiki?.classList.contains('tree-row--active')).toBe(true);
+    expect(wiki?.getAttribute('aria-current')).toBe('page');
+  });
+
   it('right-click opens a text-only Rename menu that starts the inline rename', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;

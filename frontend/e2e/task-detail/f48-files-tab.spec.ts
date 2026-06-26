@@ -44,7 +44,7 @@ async function pickWatchPath(): Promise<string> {
 
 async function deleteJob(id: string, watchPath: string): Promise<void> {
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
       method: 'DELETE'
     });
   } catch { /* best-effort cleanup */ }
@@ -60,7 +60,7 @@ async function setTheme(page: import('@playwright/test').Page, theme: 'light' | 
 
 /**
  * If the auto-update-service banner ("Update failed: verification failed …")
- * is up — which happens whenever a dev backend's own /api/jobs/grouped
+ * is up — which happens whenever a dev backend's own /api/tasks/grouped
  * verification check ran slow on a previous boot — dismiss it so the rest
  * of the detail view is interactable. The banner is harmless to F48 but it
  * paints over the corner of the layout and would skew screenshots.

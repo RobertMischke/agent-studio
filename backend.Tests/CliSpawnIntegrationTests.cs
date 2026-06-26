@@ -30,7 +30,7 @@ namespace AgentStudio.Tests;
 /// </para>
 /// <para>
 /// <b>Per-CLI matrix (planned).</b> Claude is implemented first because it
-/// surfaced the hang. Codex / Copilot / Gemini get parallel test cases as
+/// surfaced the hang. Codex / Gemini get parallel test cases as
 /// the test infrastructure stabilises - the hang root cause (Node stdout
 /// block-buffering on a redirected pipe) is shared by Claude/Codex/Gemini
 /// (all Node-based) and the same fix should hold for all three.
@@ -99,7 +99,7 @@ public class CliSpawnIntegrationTests
         {
             var fromEnv = Environment.GetEnvironmentVariable("AGENTAPI_CMD") ?? Environment.GetEnvironmentVariable("ANTIGRAVITY_CMD");
             if (!string.IsNullOrWhiteSpace(fromEnv) && File.Exists(fromEnv)) return fromEnv;
-            var resolved = AgentStudio.Cli.AntigravityCliService.ResolveExecutable("agentapi");
+            var resolved = AgentStudio.Cli.GenericCliExecutionService.ResolveExecutable("agentapi");
             if (resolved != "agentapi" && File.Exists(resolved)) return resolved;
             var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             var candidate = Path.Combine(appData, "npm", "agentapi.cmd");
@@ -232,7 +232,7 @@ public class CliSpawnIntegrationTests
     /// <see cref="GetFrameSetWithinTimeoutAsync"/> to time out with at most
     /// the init frame visible. If a future Windows / .NET / npm change
     /// fixes the underlying inheritance, this test will start failing -
-    /// and we will know the <see cref="ClaudeCliService.ResolveCmdShimToExe"/>
+    /// and we will know the <c>BuiltInCliBehaviors.ResolveCmdShimToExe</c>
     /// workaround can be retired.
     /// </para>
     /// </summary>
@@ -294,7 +294,7 @@ public class CliSpawnIntegrationTests
 
     /// <summary>
     /// Probe 4: production code path with a fat prompt to mirror live
-    /// runner conditions. Pins that <see cref="ClaudeCliService.ResolveCmdShimToExe"/>
+    /// runner conditions. Pins that <c>BuiltInCliBehaviors.ResolveCmdShimToExe</c>
     /// continues to produce streaming frames at realistic prompt sizes.
     /// </summary>
     [SkippableFact]
@@ -316,8 +316,8 @@ public class CliSpawnIntegrationTests
             })
             .Build();
 
-        var svc = new AgentStudio.Cli.ClaudeCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.ClaudeCliService>.Instance,
+        var svc = AgentStudio.Cli.GenericCliExecutionService.ForClaude(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.GenericCliExecutionService>.Instance,
             cfg);
 
         var jobId = $"it-{Guid.NewGuid():N}";
@@ -349,7 +349,7 @@ public class CliSpawnIntegrationTests
     }
 
     /// <summary>
-    /// Probe 3: drive <see cref="ClaudeCliService"/> end-to-end (the
+    /// Probe 3: drive the Claude execution engine end-to-end (the
     /// production code path) with a tiny prompt. This is the test the
     /// actual fix needs to make green: the runner writes prompt to stdin,
     /// reads stream-json frames via the base class's
@@ -371,11 +371,11 @@ public class CliSpawnIntegrationTests
             })
             .Build();
 
-        var svc = new AgentStudio.Cli.ClaudeCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.ClaudeCliService>.Instance,
+        var svc = AgentStudio.Cli.GenericCliExecutionService.ForClaude(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.GenericCliExecutionService>.Instance,
             cfg);
 
-        var lines = new List<AgentStudio.Shared.CliOutputLine>();
+        var lines = new List<CliOutputLine>();
         svc.OnOutput += (_, line) => { lock (lines) lines.Add(line); };
 
         var jobId = $"it-{Guid.NewGuid():N}";
@@ -408,7 +408,7 @@ public class CliSpawnIntegrationTests
     }
 
     /// <summary>
-    /// Probe 5: stress test. Three sequential <see cref="ClaudeCliService.StartAsync"/>
+    /// Probe 5: stress test. Three sequential <c>GenericCliExecutionService.StartAsync</c>
     /// calls in a row, each killed mid-run via <see cref="Stop"/>. The live
     /// runner produced this exact pattern when the watchdog cut the agent off
     /// after silence; subsequent runs went silent themselves. If accumulated
@@ -430,8 +430,8 @@ public class CliSpawnIntegrationTests
                 ["TaskRepository"] = Path.Combine(Path.GetTempPath(), $"cli-it-{Guid.NewGuid():N}")
             })
             .Build();
-        var svc = new AgentStudio.Cli.ClaudeCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.ClaudeCliService>.Instance,
+        var svc = AgentStudio.Cli.GenericCliExecutionService.ForClaude(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.GenericCliExecutionService>.Instance,
             cfg);
 
         var streamingObserved = new List<int>();
@@ -488,7 +488,7 @@ public class CliSpawnIntegrationTests
     }
 
     /// <summary>
-    /// Codex parity probe: drives <see cref="AgentStudio.Cli.CodexCliService.StartAsync"/>
+    /// Codex parity probe: drives <c>GenericCliExecutionService.StartAsync</c> for Codex
     /// against the live <c>codex exec --json</c> CLI with a tiny prompt. Codex
     /// has no bundled .exe (it ships as <c>node.exe + codex.js</c> via the
     /// <c>codex.cmd</c> npm shim), so unlike Claude there is no underlying
@@ -511,8 +511,8 @@ public class CliSpawnIntegrationTests
             })
             .Build();
 
-        var svc = new AgentStudio.Cli.CodexCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.CodexCliService>.Instance,
+        var svc = AgentStudio.Cli.GenericCliExecutionService.ForCodex(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.GenericCliExecutionService>.Instance,
             cfg,
             new AgentStudio.Cli.CodexModelDiscovery(
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.CodexModelDiscovery>.Instance,
@@ -560,7 +560,7 @@ public class CliSpawnIntegrationTests
     }
 
     /// <summary>
-    /// Antigravity parity probe: drives <see cref="AgentStudio.Cli.AntigravityCliService.StartAsync"/>
+    /// Antigravity parity probe: drives <c>GenericCliExecutionService.StartAsync</c> for Antigravity
     /// against the live <c>agentapi</c> CLI.
     /// </summary>
     [SkippableFact]
@@ -578,8 +578,8 @@ public class CliSpawnIntegrationTests
             })
             .Build();
 
-        var svc = new AgentStudio.Cli.AntigravityCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.AntigravityCliService>.Instance,
+        var svc = AgentStudio.Cli.GenericCliExecutionService.ForAntigravity(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentStudio.Cli.GenericCliExecutionService>.Instance,
             cfg);
 
         var jobId = $"it-{Guid.NewGuid():N}";
@@ -609,41 +609,6 @@ public class CliSpawnIntegrationTests
             stdoutLines.Count >= 1,
             $"Expected at least one stdout frame from antigravity. Got:\n" +
             string.Join("\n", final.Select(l => $"  [{l.Stream}] {l.Text[..Math.Min(l.Text.Length, 200)]}")));
-    }
-
-    /// <summary>
-    /// Copilot smoke probe: Copilot is the odd CLI out - it is TUI-based
-    /// and the production driver spawns it via PtySession (NOT the pipe-
-    /// redirected CliExecutionServiceBase path that Claude / Codex /
-    /// Gemini share). The full StartAsync flow needs a valid GitHub token
-    /// and an interactive auth dance - too invasive for a default
-    /// integration probe. We instead verify the binary is invokable with
-    /// --version via plain Process redirection.
-    /// </summary>
-    [SkippableFact]
-    public void CopilotCli_VersionProbe_Succeeds()
-    {
-        Skip.IfNot(IntegrationEnabled, SkipReason);
-        var fromEnv = Environment.GetEnvironmentVariable("COPILOT_CMD");
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var candidate = !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : Path.Combine(appData, "npm", "copilot.cmd");
-        Skip.IfNot(File.Exists(candidate), $"copilot.cmd not at {candidate}");
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = candidate,
-            Arguments = "--version",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        using var p = new Process { StartInfo = psi };
-        p.Start();
-        var stdout = p.StandardOutput.ReadToEnd();
-        Assert.True(p.WaitForExit(15_000), "copilot --version did not exit within 15s");
-        Assert.Equal(0, p.ExitCode);
-        Assert.False(string.IsNullOrWhiteSpace(stdout), "copilot --version produced empty stdout");
     }
 
     /// <summary>

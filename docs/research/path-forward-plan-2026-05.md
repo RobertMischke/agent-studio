@@ -478,7 +478,7 @@ These are forever-tasks; they don't have an "ours" or "theirs":
   `c:/Projects/agent-taskboard-devspace/cli-source-references/*/NOTES.md`.
 - ADR-0011 (CLI-process spawn boundary), ADR-0012 (existing engines),
   ADR-0013 (typed events), ADR-0014 (stale-session reliability) in
-  [`docs/architecture-decisions.md`](../architecture-decisions.md).
+  [`docs/architecture/decisions/adr-archive.md`](../architecture/decisions/adr-archive.md).
 - [`backend/Services/Cli/CliExecutionServiceBase.cs`](../../backend/Services/Cli/CliExecutionServiceBase.cs)
   — the file most of these moves touch.
 

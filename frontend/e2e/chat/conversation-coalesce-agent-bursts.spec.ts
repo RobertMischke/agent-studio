@@ -78,7 +78,7 @@ async function installOutputMock(page: Page, jobId: string): Promise<void> {
   const escId = encodeURIComponent(jobId);
   // Only route the output endpoint — the job detail / runs / status etc.
   // come from the real backend so the protocol pane mounts normally.
-  await page.route(`**/api/jobs/${escId}/output?**`, async (route) => {
+  await page.route(`**/api/tasks/${escId}/output?**`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: outputBody });
   });
 }

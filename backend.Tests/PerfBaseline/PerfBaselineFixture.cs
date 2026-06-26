@@ -77,18 +77,13 @@ internal sealed class PerfBaselineFixture : IDisposable
         var sessions = new TaskSessionLog(Scanner, NullLogger<TaskSessionLog>.Instance);
         var mutations = new TaskMutationService(Scanner, new ClientIdentityStore(Config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(Config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
 
-        var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
-        var copilot = new CopilotCliService(
-            NullLogger<CopilotCliService>.Instance, Config,
-            new CopilotModelDiscovery(NullLogger<CopilotModelDiscovery>.Instance, cliEnv, Config),
-            cliEnv);
         var codexDiscovery = new CodexModelDiscovery(NullLogger<CodexModelDiscovery>.Instance, Config);
-        var claude = new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, Config);
-        var codex = new CodexCliService(NullLogger<CodexCliService>.Instance, Config, codexDiscovery,
+        var claude = GenericCliExecutionService.ForClaude(NullLogger<GenericCliExecutionService>.Instance, Config);
+        var codex = GenericCliExecutionService.ForCodex(NullLogger<GenericCliExecutionService>.Instance, Config, codexDiscovery,
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
-        var gemini = new AntigravityCliService(NullLogger<AntigravityCliService>.Instance, Config);
-        Router = new CliRouter(copilot, claude, codex, gemini);
+        var gemini = GenericCliExecutionService.ForAntigravity(NullLogger<GenericCliExecutionService>.Instance, Config);
+        Router = new CliRouter(claude, codex, gemini);
 
         var contextUsageParser = new ContextUsageParser();
         var prompts = new RuntimePromptService(Config, NullLogger<RuntimePromptService>.Instance);
@@ -116,7 +111,7 @@ internal sealed class PerfBaselineFixture : IDisposable
 
         Runners = new TaskRunnerService(
             Config, NullLogger<TaskRunnerService>.Instance, Scanner, States, mutations, sessions,
-            copilot, Router, contextUsageParser, Summary, prompts, transitions, projectSettings,
+            Router, contextUsageParser, Summary, prompts, transitions, projectSettings,
             quotaService, quotaCaps,
             chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickupFailures, infraBreaker, taskAccess);
 

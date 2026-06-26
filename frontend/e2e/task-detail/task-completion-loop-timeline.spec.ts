@@ -99,7 +99,7 @@ test.describe('Task completion loop — Overview indicator + Timeline tab', () =
       await page.screenshot({ path: 'test-results/completion-loop-timeline-escalated.png', fullPage: false });
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' },
       );
     }
@@ -203,7 +203,7 @@ test.describe('Task completion loop — Overview indicator + Timeline tab', () =
       await page.screenshot({ path: 'test-results/completion-loop-timeline-accepted.png', fullPage: false });
     } finally {
       await api(
-        `/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        `/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`,
         { method: 'DELETE' },
       );
     }

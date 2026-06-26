@@ -10,6 +10,7 @@
     [pagerTotal]="pagerTotal()"
     [pagerCanPrev]="pagerCanPrev()"
     [pagerCanNext]="pagerCanNext()"
+    [loading]="detailLoading()"
     [pagerLaneLabel]="pagerLaneLabel()"
     [pagerLaneState]="pagerLaneState()"
     [laneIndex]="laneIndex()"
@@ -20,6 +21,7 @@
     [commitMessageDraft]="commitMessage()"
     [generatingCommitMessage]="generatingMsg()"
     [committing]="committing()"
+    [landedState]="landedState()"
     (back)="back.emit()"
     (titleDraftChange)="titleDraft.set($event)"
     (startTitleEdit)="startTitleEdit()"
@@ -62,22 +64,6 @@
     (stopRequest)="stopJob()"
     (toggleCollapsed)="toggleSetupCollapsed()" />
 
-
-  @if (showCliConfig() && cliTypeDraft() === 'copilot') {
-    <app-cli-config-card
-      [status]="cliStatus()"
-      [testResult]="cliTestResult()"
-      [pathDraft]="cliPathDraft()"
-      [tokenDraft]="tokenDraft()"
-      [testing]="cliTesting()"
-      [tokenSaving]="tokenSaving()"
-      (closeRequest)="showCliConfig.set(false)"
-      (pathDraftChange)="cliPathDraft.set($event)"
-      (tokenDraftChange)="tokenDraft.set($event)"
-      (testPath)="testCliPath()"
-      (savePath)="saveCliPath()"
-      (saveToken)="saveToken()" />
-  }
 
   <app-pane-toggle-bar
     [panesVisible]="panesVisible()"

@@ -112,10 +112,10 @@ describe('CliCatalogStore', () => {
     };
     const store = configure(stub);
     store.hydrateAll();
-    // 4 CLI types in CLI_TYPES: copilot, claude, codex, gemini.
-    expect(stub.getCliModelCatalog).toHaveBeenCalledTimes(4);
+    // 3 CLI types in CLI_TYPES: claude, codex, gemini.
+    expect(stub.getCliModelCatalog).toHaveBeenCalledTimes(3);
     store.hydrateAll();
-    expect(stub.getCliModelCatalog).toHaveBeenCalledTimes(4);
+    expect(stub.getCliModelCatalog).toHaveBeenCalledTimes(3);
   });
 
   it('invalidate drops the cached entry so the next ensure refetches', () => {
@@ -151,7 +151,7 @@ describe('CliCatalogStore', () => {
   });
 
   it('hydrateAll swallows per-CLI errors so one broken CLI does not block the others', () => {
-    const broken: CliType = 'copilot';
+    const broken: CliType = 'gemini';
     const stub: JobsStub = {
       getCliModelCatalog: vi.fn((t: CliType) => {
         if (t === broken) return throwError(() => new Error('not installed'));
@@ -161,6 +161,6 @@ describe('CliCatalogStore', () => {
     const store = configure(stub);
     expect(() => store.hydrateAll()).not.toThrow();
     expect(store.hasFresh('claude')).toBe(true);
-    expect(store.hasFresh('copilot')).toBe(false);
+    expect(store.hasFresh('gemini')).toBe(false);
   });
 });

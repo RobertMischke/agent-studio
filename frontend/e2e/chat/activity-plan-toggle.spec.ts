@@ -139,11 +139,11 @@ async function installRoutes(page: Page, planPresent: boolean): Promise<void> {
     }));
   await page.route(`**/api/tasks/${esc}/output**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: output }));
-  await page.route(`**/api/jobs/${esc}/output**`, (route) =>
+  await page.route(`**/api/tasks/${esc}/output**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: output }));
   await page.route(`**/api/tasks/${esc}/plan**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: plan }));
-  await page.route(`**/api/jobs/${esc}/plan**`, (route) =>
+  await page.route(`**/api/tasks/${esc}/plan**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: plan }));
   await page.route(`**/api/tasks/${esc}/runs**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) }));

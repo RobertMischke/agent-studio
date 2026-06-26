@@ -10,11 +10,20 @@ export interface PromptCatalogItem {
   hasDefault: boolean;
   hasOverride: boolean;
   defaultChangedSinceOverride: boolean;
+  slots: string[];
+  usageCount: number;
 }
 
 export interface PromptCatalogResponse {
   items: PromptCatalogItem[];
   overrideDirectory: string;
+}
+
+/** One recorded consumer of a template: the class + member that renders it. */
+export interface PromptUsageRef {
+  component: string;
+  member: string;
+  purpose: string;
 }
 
 export interface PromptDetail {
@@ -32,6 +41,30 @@ export interface PromptDetail {
   baseDefaultSha: string | null;
   defaultChangedSinceOverride: boolean;
   overrideUpdatedAt: string | null;
+  slots: string[];
+  usages: PromptUsageRef[];
+}
+
+/** Result of a non-persisting "Probelauf" render against supplied slot values. */
+export interface PromptPreviewResult {
+  name: string;
+  rendered: string;
+  slots: string[];
+  filledSlots: string[];
+  missingSlots: string[];
+}
+
+export interface PromptCoverageItem {
+  component: string;
+  status: string;
+  detail: string;
+}
+
+export interface PromptCoverageResponse {
+  items: PromptCoverageItem[];
+  totalSites: number;
+  coveredSites: number;
+  pendingSites: number;
 }
 
 /**
@@ -44,6 +77,7 @@ export class PromptAdminService {
   private readonly http = inject(HttpClient);
 
   readonly catalog = signal<PromptCatalogResponse | null>(null);
+  readonly coverage = signal<PromptCoverageResponse | null>(null);
   readonly loadError = signal<string | null>(null);
 
   async loadCatalog(): Promise<void> {
@@ -58,9 +92,34 @@ export class PromptAdminService {
     }
   }
 
+  async loadCoverage(): Promise<void> {
+    try {
+      const resp = await firstValueFrom(
+        this.http.get<PromptCoverageResponse>('/api/admin/prompts/coverage')
+      );
+      this.coverage.set(resp);
+    } catch {
+      // Coverage is a secondary read; leave the prior value and let the
+      // primary catalog error surface the connectivity problem.
+    }
+  }
+
   getDetail(name: string): Promise<PromptDetail> {
     return firstValueFrom(
       this.http.get<PromptDetail>(`/api/admin/prompts/${encodeURIComponent(name)}`)
+    );
+  }
+
+  preview(
+    name: string,
+    values: Record<string, string>,
+    content?: string
+  ): Promise<PromptPreviewResult> {
+    return firstValueFrom(
+      this.http.post<PromptPreviewResult>(
+        `/api/admin/prompts/${encodeURIComponent(name)}/preview`,
+        { values, content: content ?? null }
+      )
     );
   }
 

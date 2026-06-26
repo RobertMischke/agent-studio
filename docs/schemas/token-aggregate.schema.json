@@ -24,7 +24,7 @@
     },
     "cli": {
       "type": "string",
-      "enum": ["claude", "codex", "copilot", "gemini"],
+      "enum": ["claude", "codex", "gemini"],
       "description": "Which CLI produced the tokens. Aggregates are kept per CLI because pricing and budget windows differ."
     },
     "model": {

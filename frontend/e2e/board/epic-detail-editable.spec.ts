@@ -16,7 +16,7 @@
  * inline title affordance, routing through the shared setJobTitle PUT.)
  *
  * Routes are `/api/tasks*`; this spec inlines the task API calls it needs so it
- * does not depend on the still-`/api/jobs` shared helpers/jobs.ts.
+ * does not depend on the still-`/api/tasks` shared helpers/jobs.ts.
  */
 import { test, expect } from '@playwright/test';
 import { api, BACKEND } from '../helpers/api';

@@ -344,7 +344,7 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
   });
 
   cliIconFor(cli: string): string {
-    if (cli === 'copilot' || cli === 'claude' || cli === 'codex' || cli === 'gemini') {
+    if (cli === 'claude' || cli === 'codex' || cli === 'gemini') {
       return cliTypeIcon(cli);
     }
     return '🤖';
@@ -392,7 +392,7 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
 
   /**
    * Every lane carries an info trigger: each one maps to a committed
-   * concept doc under <c>docs/concept-docs/lane-*.md</c>, served by
+   * concept doc under <c>docs/in-app-help/lane-guides/lane-*.md</c>, served by
    * <c>GET /api/concept-docs/{topic}</c> and shown in the lane-info
    * modal. Virtual sub-lanes (e.g. <c>2-ready-intake</c>, <c>4-review</c>)
    * collapse to their parent's doc. Returns <c>null</c> only for a state

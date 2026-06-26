@@ -64,7 +64,7 @@ public sealed class CompanionCommandDispatcher
         if (p is null || string.IsNullOrWhiteSpace(p.WatchPath) || string.IsNullOrWhiteSpace(p.Title))
             return DispatchResult.Reject("new-task requires watchPath and title");
 
-        var req = new CreateJobRequest
+        var req = new CreateTaskRequest
         {
             Id = SlugFromTitle(p.Title),
             Title = p.Title,

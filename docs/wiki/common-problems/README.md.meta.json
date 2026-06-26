@@ -1,0 +1,102 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "Common problems wiki metadata",
+  "source": {
+    "path": "docs/wiki/common-problems/README.md",
+    "type": "markdown",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "33326e6e04653751c3c83a3469d57e6fb884ae732d3c45f33be35115accc7b71",
+      "sizeBytes": 4414,
+      "lineCount": 45,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    }
+  },
+  "report": {
+    "path": "docs/wiki/common-problems/README.md.report.html",
+    "generatedAt": "2026-06-12T08:30:00Z",
+    "generator": "scripts/wiki/generate-companion-metadata.mjs",
+    "template": "wiki-document-companion-report/v1"
+  },
+  "classification": {
+    "owner": "knowledge",
+    "documentMode": "documentation",
+    "temporalState": "present",
+    "implementationState": "implemented"
+  },
+  "review": {
+    "date": "2026-06-11",
+    "method": "sample metadata pass",
+    "model": "codex",
+    "sourceFingerprint": {
+      "algorithm": "sha256",
+      "hash": "33326e6e04653751c3c83a3469d57e6fb884ae732d3c45f33be35115accc7b71",
+      "sizeBytes": 4414,
+      "lineCount": 45,
+      "capturedAt": "2026-06-12T08:30:00Z"
+    },
+    "sourceChangedSinceReview": false
+  },
+  "drift": {
+    "grade": "A",
+    "hasDrift": false,
+    "score": 0.12,
+    "summary": "The common-problems area still matches the recurring-issue workflow and remains a practical operator memory.",
+    "rationale": [
+      "The folder is real and visible in the Wiki tree.",
+      "The maintenance scripts and generated index convention are still represented.",
+      "The only risk is keeping new recurring issues consistently added."
+    ]
+  },
+  "axes": {
+    "architectureAlignment": "high",
+    "implementationAlignment": "high",
+    "freshness": "high",
+    "operatorUsefulness": "high"
+  },
+  "duplicates": {
+    "suspected": false,
+    "groupSize": 1,
+    "similarTo": []
+  },
+  "findings": [
+    {
+      "id": "drift-summary",
+      "severity": "info",
+      "axis": "drift",
+      "summary": "The common-problems area still matches the recurring-issue workflow and remains a practical operator memory.",
+      "rationale": [
+        "The folder is real and visible in the Wiki tree.",
+        "The maintenance scripts and generated index convention are still represented.",
+        "The only risk is keeping new recurring issues consistently added."
+      ],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-1",
+      "severity": "info",
+      "axis": "drift",
+      "summary": "The folder is real and visible in the Wiki tree.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-2",
+      "severity": "info",
+      "axis": "drift",
+      "summary": "The maintenance scripts and generated index convention are still represented.",
+      "rationale": [],
+      "evidence": []
+    },
+    {
+      "id": "drift-rationale-3",
+      "severity": "info",
+      "axis": "drift",
+      "summary": "The only risk is keeping new recurring issues consistently added.",
+      "rationale": [],
+      "evidence": []
+    }
+  ],
+  "nextAction": "Continue adding post-run findings through the wiki maintenance flow."
+}

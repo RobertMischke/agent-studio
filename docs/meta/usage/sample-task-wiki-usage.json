@@ -1,0 +1,39 @@
+{
+  "taskId": "ASS-1842",
+  "runId": "2026-06-11T14-25-33Z-codex",
+  "project": "Agent Software Studio",
+  "agent": "codex",
+  "model": "gpt-5-codex",
+  "capturedAt": "2026-06-11T14:39:10Z",
+  "documents": [
+    {
+      "path": "architecture/backend-structure/structure-target.md",
+      "state": "used",
+      "toolUseCount": 4,
+      "tools": ["read-file", "search", "wiki-report"],
+      "evidence": [
+        { "kind": "read", "summary": "Opened during metadata scoring." },
+        { "kind": "report-reference", "summary": "Used to explain future/planned state." }
+      ]
+    },
+    {
+      "path": "architecture/decisions/proposed/adr-0051-task-processing-pipeline.md",
+      "state": "used",
+      "toolUseCount": 3,
+      "tools": ["read-file", "search"],
+      "evidence": [
+        { "kind": "search-hit", "summary": "Matched pipeline terminology." },
+        { "kind": "report-reference", "summary": "Used to explain duplicate candidate against domains/pipeline.md." }
+      ]
+    },
+    {
+      "path": "domains/pipeline.md",
+      "state": "visited",
+      "toolUseCount": 1,
+      "tools": ["search"],
+      "evidence": [
+        { "kind": "search-hit", "summary": "Found as duplicate candidate, not changed." }
+      ]
+    }
+  ]
+}

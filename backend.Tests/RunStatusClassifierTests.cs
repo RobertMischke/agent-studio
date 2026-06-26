@@ -74,14 +74,15 @@ public class RunStatusClassifierTests
     [InlineData(RunStopReason.FollowupPause)]
     [InlineData(RunStopReason.Watchdog)]
     [InlineData(RunStopReason.Cancelled)]
-    public void DeliberateStop_IsStopped_NeverTheFailedPreconditionForClassifierUnknown(RunStopReason reason)
+    public void DeliberateStop_IsStopped_NeverTheFailedPreconditionForInfraCrash(RunStopReason reason)
     {
-        // ClassifierUnknown is only reachable when the run status is "failed"
-        // (AgentOutcomeAnalyzer.ResolveIssueKind returns ClassifierUnknown only
-        // on a failed run with real agent text). A deliberately stopped run -
-        // user pause, Pause & Send, watchdog kill, or cancellation - must
-        // resolve to "stopped", never "failed", so it can never be mistaken for
-        // the classifier-unknown path even though Windows reports exitCode = -1.
+        // InfraCrash / OrchestratorInconclusive are only reachable when the run
+        // status is "failed" (AgentOutcomeAnalyzer.ResolveIssueKind returns them
+        // only on a failed run with real agent text). InfraCrash in particular
+        // keys off exitCode < 0. A deliberately stopped run - user pause,
+        // Pause & Send, watchdog kill, or cancellation - must resolve to
+        // "stopped", never "failed", so its Windows exitCode = -1 can never be
+        // mistaken for an infrastructure crash.
         var status = RunStatusClassifier.Classify(-1, reason);
         Assert.Equal(RunStatuses.Stopped, status);
         Assert.NotEqual(RunStatuses.Failed, status);

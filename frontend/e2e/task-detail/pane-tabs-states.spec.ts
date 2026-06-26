@@ -43,7 +43,7 @@ test.describe('F38: pane-tab indicator states', () => {
       await expect(protocol).toBeVisible({ timeout: 15_000 });
       await expect(protocol).toBeDisabled();
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 
@@ -70,7 +70,7 @@ test.describe('F38: pane-tab indicator states', () => {
       await expect(activity).toHaveClass(/(^|\s)pane-tab(\s|$)/);
       await expect(activity).toHaveClass(/pane-tab--active/);
     } finally {
-      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+      await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
   });
 });

@@ -6,9 +6,9 @@ import { api } from '../helpers/api';
 // data from the configured product workspace and writes output paths relative
 // to the frontend/ working dir.
 
-const OUT = '../docs/images/';
+const OUT = '../docs/assets/images/';
 const TASK_CARD = '[data-testid="task-card"], [data-testid="job-card"]';
-const PRIMARY_TASK_LABELS = ['ASS-847', 'ASS-850', 'ASS-856', 'ASS-1529'];
+const PRIMARY_TASK_LABELS = ['ASS-1740', 'ASS-847', 'ASS-850', 'ASS-856', 'ASS-1529'];
 
 async function applyVisualCaptureMode(page: Page): Promise<void> {
   if ((process.env.PW_VISUAL_CAPTURE ?? 'marketing') !== 'marketing') return;
@@ -58,6 +58,25 @@ async function clickVisibleTestId(page: Page, testIds: readonly string[]): Promi
   await page.getByTestId(testIds[0]).first().click({ force: true });
 }
 
+async function dismissBlockingOverlays(page: Page): Promise<void> {
+  // The dev backend can surface a "crash recovery" overlay at startup when it
+  // finds uncommitted working-tree changes. It intercepts pointer events and
+  // ruins the board shot. Dismiss it non-destructively — "Leave uncommitted"
+  // (data-testid="crash-recovery-dismiss") leaves the changes alone.
+  for (let i = 0; i < 12; i++) {
+    const dismiss = page.getByTestId('crash-recovery-dismiss').first();
+    if (!(await dismiss.isVisible().catch(() => false))) break;
+    await dismiss.click({ force: true }).catch(() => {});
+    await page.waitForTimeout(400);
+  }
+  // Belt and braces: close any leftover modal overlay so clicks land on the board.
+  const overlay = page.getByTestId('studio-overlay-root').first();
+  if (await overlay.isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(300);
+  }
+}
+
 test.describe.configure({ mode: 'serial' });
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -68,6 +87,7 @@ test('readme screenshots — board and task detail states', async ({ page, devBa
 
   await page.goto('/');
   await applyVisualCaptureMode(page);
+  await dismissBlockingOverlays(page);
   await expect(page.getByTestId('dev-banner')).toBeHidden({ timeout: 5_000 });
   await expect(page.locator(TASK_CARD).first()).toBeVisible({ timeout: 15_000 });
   await capture(page, 'board-overview.png');

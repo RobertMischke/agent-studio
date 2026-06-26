@@ -190,7 +190,7 @@ builder.Services.AddSingleton<ScreenshotIndexService>();
 // F21: per-project write mutex for the lane tree. Must be registered
 // before TaskStateMachine / TaskMutationService / TaskAccessService so
 // every lane-mutating service can take it as a dependency. See
-// docs/architecture-3-progress-lane-writers.md.
+// docs/architecture/runner-lanes/progress-lane-writers.md.
 builder.Services.AddSingleton<LaneMutexRegistry>();
 // SignalR fanout for fine-grained job mutation events (jobCreated /
 // jobUpdated / jobMoved / jobDeleted / jobsReordered). Registered before
@@ -227,7 +227,12 @@ builder.Services.AddSingleton<OrchestratorChatService>();
 builder.Services.AddSingleton<ProjectChatStore>();
 builder.Services.AddSingleton<ProjectChatIndex>();
 builder.Services.AddSingleton<ProjectChatMigration>();
-builder.Services.AddSingleton<OrchestratorRunner>();
+builder.Services.AddSingleton<OrchestratorRunner>(sp => new OrchestratorRunner(
+    sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Claude),
+    sp.GetRequiredService<ILogger<OrchestratorRunner>>(),
+    sp.GetService<CliUsageParserRegistry>(),
+    sp.GetService<ICliModelRegistry>(),
+    sp.GetService<CliOneShotRegistry>()));
 builder.Services.AddSingleton<OrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorBootstrap>();
@@ -258,16 +263,38 @@ builder.Services.AddSingleton<AgentStudio.TaskAccess.ITaskAccess>(sp =>
     sp.GetRequiredService<AgentStudio.TaskAccess.TaskAccessService>());
 builder.Services.AddSingleton<AgentStudio.TaskAccess.ITaskAccessHost>(sp =>
     sp.GetRequiredService<AgentStudio.TaskAccess.TaskAccessService>());
-builder.Services.AddSingleton<CopilotCliEnvironment>();
-builder.Services.AddSingleton<CopilotModelDiscovery>();
+builder.Services.AddSingleton<CliEnvironment>();
 builder.Services.AddSingleton<CodexModelDiscovery>();
 builder.Services.AddSingleton<ClaudeModelDiscovery>();
-builder.Services.AddSingleton<CopilotCliService>();
-builder.Services.AddSingleton<ClaudeCliService>();
-builder.Services.AddSingleton<CodexCliService>();
-builder.Services.AddSingleton<AntigravityCliService>();
+// The per-CLI execution engines: one concrete GenericCliExecutionService per
+// CLI, parameterized by a CliBehavior from BuiltInCliBehaviors. Keyed by CLI
+// type so the router + the Claude-specific consumers (orchestrator runner,
+// session-info endpoint) resolve the exact engine. The log category is kept
+// stable (per-CLI) via a named logger so existing log filters still match.
+builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Claude, (sp, _) =>
+    GenericCliExecutionService.ForClaude(
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Cli.ClaudeCliService"),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetService<CliUsageParserRegistry>(),
+        sp.GetService<ICliModelRegistry>(),
+        sp.GetService<ClaudeModelDiscovery>()));
+builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Codex, (sp, _) =>
+    GenericCliExecutionService.ForCodex(
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Cli.CodexCliService"),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<CodexModelDiscovery>(),
+        sp.GetRequiredService<CliUsageParserRegistry>(),
+        sp.GetRequiredService<ICliModelRegistry>()));
+builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Gemini, (sp, _) =>
+    GenericCliExecutionService.ForAntigravity(
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Cli.AntigravityCliService"),
+        sp.GetRequiredService<IConfiguration>()));
 builder.Services.AddSingleton<ClaudeSessionInspector>();
-builder.Services.AddSingleton<CliRouter>();
+builder.Services.AddSingleton<CliWorkingMemoryService>();
+builder.Services.AddSingleton<CliRouter>(sp => new CliRouter(
+    sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Claude),
+    sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Codex),
+    sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Gemini)));
 builder.Services.AddSingleton<SessionToTaskIndex>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
@@ -404,7 +431,6 @@ builder.Services.AddSingleton<ConceptDocsService>();
 builder.Services.AddSingleton<SecurityReviewService>();
 builder.Services.AddSingleton<AgentStudio.Design.DesignEvidenceService>();
 // Quota probes: each CLI gets its own probe instance, all surfaced through QuotaService.
-builder.Services.AddSingleton<IQuotaProbe, CopilotQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, ClaudeQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, CodexQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, AntigravityQuotaProbe>();
@@ -552,10 +578,9 @@ catch (Exception ex)
 
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any
 // surviving completion-marker.json finishes its 3-progress -> 4-review move
-// here, and any orphan working-tree changes get committed under a
-// crash-recovery author tag so a second crash mid-recovery is itself
-// recoverable on the next boot. Sync wait is intentional: we want the
-// runner to see the recovered state on its first scan.
+// here, and any orphan working-tree changes are queued for operator
+// confirmation before a crash-recovery commit is created. Sync wait is
+// intentional: we want the runner to see the recovered state on its first scan.
 //
 // F21 boot order: CrashRecoveryService runs before StaleProgressArchiver
 // because crash-recovery may complete a half-finished transition
@@ -595,7 +620,7 @@ catch (Exception ex)
 }
 
 // Seed the Agent Message Bus participant registry. Workspace-scoped, idempotent
-// across boots; safe to fire-and-forget. See docs/agent-message-bus.md section 2.
+// across boots; safe to fire-and-forget. See docs/architecture/bus/agent-message-bus.md section 2.
 try
 {
     var bus = app.Services.GetRequiredService<AgentMessageBusBridge>();
@@ -687,11 +712,11 @@ _ = app.Services.GetRequiredService<AgentStudio.TaskAccess.ITaskAccessHost>()
 // BEFORE the HTTP listener starts. The grouped-jobs endpoint folds in
 // per-project token totals (BuildTokenLookup -> SummarizePerJob ->
 // BusTokenEntryConverter.LoadOrchestratorEntries -> Store.Query ->
-// GetOrLoad), so a cold projection forces the first /api/jobs/grouped
+// GetOrLoad), so a cold projection forces the first /api/tasks/grouped
 // caller to wait for tens of seconds while a multi-megabyte JSONL tree
 // is parsed. On real workspaces (Runbook ~ 100MB / >100k lines) that
 // lazy-load wedges the post-restart UpdateVerifier window — the verifier
-// sees /healthz=200 but /api/jobs/grouped never drains. Paying the
+// sees /healthz=200 but /api/tasks/grouped never drains. Paying the
 // parse cost here moves the cost out of the first request. Per-project
 // warmups run in parallel so total boot time is bounded by the slowest
 // project rather than the sum.
@@ -778,13 +803,12 @@ cliRouter.OnFinished += (cliType, jobId, exec) =>
 // the same job identifier as cliOutput so the frontend correlates identically.
 cliRouter.OnRunEvent += (cliType, jobId, evt) =>
 {
-    if (evt is AgentStudio.Cli.CliRunEvent.PlanUpdated)
+    if (evt is CliRunEvent.PlanUpdated)
         hubContext.Clients.All.SendAsync("planUpdated", jobId, cliType);
 };
 
-// Per-CLI startup hook. Copilot re-attaches to surviving processes (its own
-// implementation); Claude / Codex / Gemini reap orphans - see
-// CliExecutionServiceBase.ReattachOnStartup. Must run before any new CLI run
+// Per-CLI startup hook. Claude / Codex / Gemini reap orphans - see
+// GenericCliExecutionService.ReattachOnStartup. Must run before any new CLI run
 // is started so we never have two processes editing the same repo.
 cliRouter.ReattachAll();
 

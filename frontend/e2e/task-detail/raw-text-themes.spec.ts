@@ -38,7 +38,7 @@ interface CreateTaskInput {
   targetState?: string;
 }
 
-// The shared helpers/jobs.ts createJob still POSTs the renamed `/api/jobs`
+// The shared helpers/jobs.ts createJob still POSTs the renamed `/api/tasks`
 // route (404 on the current backend); this spec talks to `/api/tasks`
 // directly so the regression guard stays green independent of that
 // repo-wide route migration.

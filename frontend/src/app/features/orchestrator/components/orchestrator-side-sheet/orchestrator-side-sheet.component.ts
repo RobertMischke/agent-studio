@@ -892,7 +892,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.jobService
       .createJob({
         title,
-        agent: 'copilot',
+        agent: 'claude',
         watchPath,
         promptMarkdown,
         targetState: TaskState.Backlog,

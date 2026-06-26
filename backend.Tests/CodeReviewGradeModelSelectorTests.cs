@@ -19,7 +19,7 @@ public class CodeReviewGradeModelSelectorTests
     {
         var (model, cli) = CodeReviewGradeModelSelector.Resolve(null, null);
 
-        Assert.Equal(ClaudeCliService.DefaultOpusModel, model);
+        Assert.Equal(GenericCliExecutionService.DefaultOpusModel, model);
         Assert.Equal("claude-opus-4-8", model);
         Assert.Equal("claude", cli);
     }

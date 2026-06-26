@@ -65,7 +65,7 @@ describe('resolveRole — deterministic mapping', () => {
   });
 
   it('CLI-typed agents default to Task Executor', () => {
-    for (const author of ['agent', 'claude', 'codex', 'copilot', 'gemini']) {
+    for (const author of ['agent', 'claude', 'codex', 'gemini']) {
       expect(resolveRole({ author, kind: 'turn' }).id, author).toBe('task-executor');
     }
   });

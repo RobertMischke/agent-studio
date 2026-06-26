@@ -224,7 +224,7 @@ public static class RunOutcomePolicy
             // The agent CLI failed to launch or its --resume target was
             // rejected before any agent turn happened (exit != 0, ~0s, only a
             // CLI error fragment). This is a recoverable host/CLI condition,
-            // NOT an agent decision and NEVER a terminal classifier-unknown
+            // NOT an agent decision and NEVER a terminal inconclusive
             // FAILURE. The runner has already cleared the dead session id and
             // marked the session chain for Recovery, so the next pickup
             // rebuilds from disk. We accept the run quietly with a typed
@@ -338,39 +338,30 @@ public static class RunOutcomePolicy
             };
         }
 
-        if (outcome.IssueKind == RunIssueKind.ClassifierUnknown)
+        if (outcome.IssueKind is RunIssueKind.InfraCrash or RunIssueKind.OrchestratorInconclusive)
         {
-            // The run failed with real agent text that the deterministic
-            // classifier could not map to a known shape. classifier-unknown
-            // is NEVER a terminal, user-visible FAILURE: like
-            // missing-terminal-sentinel, the orchestrator drives the task to
-            // a clear conclusion. One soft intervention asks the agent to
-            // continue or close out with a structured sentinel; if that is
-            // exhausted we accept the run with a visible marker so the lane
-            // can move to review rather than dead-ending on "could not
-            // classify".
-            if (reissueAttempt < MaxSoftInterventionAttempts)
-            {
-                return new OutcomeAction(
-                    Kind: OutcomeActionKind.ReissueWithStrongerFraming,
-                    MetaMessage: "The previous run failed before its reply could be classified. The orchestrator is re-issuing once with a sharper framing so the task drives to a clear conclusion.",
-                    IsHeuristicFallback: false,
-                    FollowupRetryPrompt: BuildMissingSentinelInterventionPrompt(outcome, priorCommits),
-                    RetryAttempt: reissueAttempt + 1)
-                {
-                    IssueKind = RunIssueKind.ClassifierUnknown,
-                    MessageKind = OrchestratorMessageKind.SoftIntervention,
-                    IsPreframedRetryPrompt = true
-                };
-            }
-
+            // A failed run the deterministic contract could not close out
+            // cleanly: either the CLI process died hard (InfraCrash) or it
+            // produced real text that maps to no terminal verdict
+            // (OrchestratorInconclusive). Neither is ever silently accepted -
+            // the old classifier-unknown path returned NotifyUserAndAccept with
+            // a marker that moved nothing and stranded the task in 3-progress.
+            // The drive-to-conclusion invariant is that no failed/unclassified
+            // run returns NotifyUserAndAccept: it stops and hands the task to
+            // the user, carrying the typed issue so the escalation layer can
+            // route it to human review.
+            var isInfraCrash = outcome.IssueKind == RunIssueKind.InfraCrash;
             return new OutcomeAction(
-                Kind: OutcomeActionKind.NotifyUserAndAccept,
-                MetaMessage: "The run could not be classified after one orchestrator intervention. Continuing with a visible classifier-unknown marker so the lane can move forward for review.",
+                Kind: OutcomeActionKind.NotifyUserAndStop,
+                MetaMessage: isInfraCrash
+                    ? "The agent CLI crashed before it could reach a terminal verdict. Stopping and handing the task to the user for review."
+                    : "The run failed and its reply could not be mapped to a terminal verdict. Stopping and handing the task to the user for review.",
                 IsHeuristicFallback: false)
             {
-                IssueKind = RunIssueKind.ClassifierUnknown,
-                MessageKind = OrchestratorMessageKind.ClassifierUnknown
+                IssueKind = outcome.IssueKind,
+                MessageKind = isInfraCrash
+                    ? OrchestratorMessageKind.InfraCrash
+                    : OrchestratorMessageKind.OrchestratorInconclusive
             };
         }
 
@@ -439,14 +430,14 @@ public static class RunOutcomePolicy
         {
             // Any Unknown that needs the user's attention has already been
             // routed by a typed issue kind above (CliLaunchFailed for a CLI
-            // launch/resume failure, ClassifierUnknown for a failed run with
-            // real text, MissingTerminalSentinel for a successful run with
-            // inconclusive text). What reaches here is the residual: no agent
-            // text to classify (NoAgentOutput) or a long-but-silent run. The
-            // cause is already visible in the chat (system-error block,
-            // [capture-fail] decision, protocol-pane banner), so piling a
-            // terminal "could not classify" FAILURE on top is just noise.
-            // classifier-unknown is never a terminal, user-visible FAILURE.
+            // launch/resume failure, InfraCrash / OrchestratorInconclusive for
+            // a failed run with real text, MissingTerminalSentinel for a
+            // successful run with inconclusive text). What reaches here is the
+            // residual: no agent text to classify (NoAgentOutput) or a
+            // long-but-silent run. The cause is already visible in the chat
+            // (system-error block, [capture-fail] decision, protocol-pane
+            // banner), so piling a terminal "could not classify" FAILURE on top
+            // is just noise.
             return new OutcomeAction(
                 Kind: OutcomeActionKind.Accept,
                 MetaMessage: string.Empty,

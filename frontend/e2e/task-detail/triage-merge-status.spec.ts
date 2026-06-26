@@ -1,0 +1,191 @@
+import { test, expect, type Page, type Route } from '@playwright/test';
+
+/**
+ * Branch task: make the Human Review primary ("Merge into Develop")
+ * state-dependent. When the task's work has already landed (a recorded
+ * merge fact, or a live `landedState` of merged/released) the cluster shows a
+ * truthful landed-status pill (`studio-triage-merge-status`) and relabels the
+ * primary to "Accept" instead of promising a merge that already happened.
+ *
+ * Fully mocked (no backend): the studio resolves `selectedJob().info` from the
+ * `GET /api/tasks/{id}` detail endpoint, so the persisted provenance/merge fact
+ * rides on `detail.info.provenance`. The live `GET /api/tasks/{id}/provenance`
+ * view drives the "Released to main" upgrade. See file-source-history.spec.ts
+ * for the same mock harness.
+ */
+
+const PROJECT = 'fixture';
+const WATCH_PATH = 'C:/fixtures/triage-merge-status';
+const JOB_ID = 'triage-merge-status-test';
+const MERGE_SHA = 'ddddddd9abc1234ef5678901234567890abcdef0';
+
+function json(route: Route, body: unknown): Promise<void> {
+  return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+}
+
+interface MergeFact { mergeCommit: string | null }
+
+function detail(merge: MergeFact | null) {
+  return {
+    info: {
+      id: JOB_ID,
+      taskKey: `${WATCH_PATH}::${JOB_ID}`,
+      title: 'Triage merge-status fixture',
+      state: '5-human-review',
+      agent: 'claude',
+      cliType: 'claude',
+      model: 'claude-haiku-4-5',
+      watchPath: WATCH_PATH,
+      projectName: PROJECT,
+      folderPath: `${WATCH_PATH}/.orchestrator/jobs/5-human-review/${JOB_ID}`,
+      sessionName: null,
+      lastUsage: null,
+      execution: null,
+      order: 1,
+      commit: null,
+      commits: [],
+      ownerClientId: 'local-default',
+      createdAt: '2026-06-09T12:00:00Z',
+      sessionChain: [],
+      provenance: {
+        branch: `task/${JOB_ID}`,
+        base: 'base0000',
+        transitions: [],
+        merge: merge
+          ? {
+              mergeCommit: merge.mergeCommit,
+              workBranchHeadBefore: 'dev00000',
+              workBranchHeadAfter: merge.mergeCommit,
+              atUtc: '2026-06-09T12:30:00Z',
+            }
+          : null,
+      },
+    },
+    promptMarkdown: '# Current prompt\n\nThe current task prompt.',
+    statusMarkdown: '',
+    log: [],
+    promptHistory: [],
+    titleHistory: [],
+    reviewEvidence: [],
+    summaryState: { status: 'none', startedAt: null, finishedAt: null, errorMessage: null },
+  };
+}
+
+function provenanceView(landedState: 'on-branch-only' | 'merged-to-develop' | 'released-to-main', merge: MergeFact | null) {
+  return {
+    branch: `task/${JOB_ID}`,
+    base: 'base0000',
+    transitions: [],
+    merge: merge
+      ? { mergeCommit: merge.mergeCommit, workBranchHeadBefore: 'dev00000', workBranchHeadAfter: merge.mergeCommit, atUtc: '2026-06-09T12:30:00Z' }
+      : null,
+    landedState,
+    ladder: {
+      branch: `task/${JOB_ID}`,
+      branchTip: 'tip00000',
+      integrationBranch: 'develop',
+      integrationHead: 'devhead0',
+      mergedToIntegration: landedState !== 'on-branch-only',
+      releaseBranch: 'main',
+      releaseHead: 'mainhead',
+      releasedToRelease: landedState === 'released-to-main',
+    },
+    commits: [],
+  };
+}
+
+async function installBaseRoutes(page: Page): Promise<void> {
+  await page.route('**/api/**', (route) => json(route, []));
+  await page.route('**/api/tasks', (route) => json(route, []));
+  await page.route('**/api/tasks/grouped**', (route) => json(route, {
+    backlog: [], preparation: [], orchestratorPrep: [], ready: [], progress: [],
+    failedPickup: [], codeNotComplete: [], autoReview: [], humanReview: [],
+    escalated: [], completed: [], archive: [],
+  }));
+  await page.route('**/api/watch-paths**', (route) => json(route, [
+    { name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH, repositoryPath: WATCH_PATH },
+  ]));
+  await page.route('**/api/environment**', (route) => json(route, {
+    isDev: false,
+    devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false },
+  }));
+  await page.route('**/api/clients', (route) => json(route, []));
+  await page.route('**/api/agent-rules**', (route) => json(route, []));
+  await page.route('**/api/cli/usage**', (route) => json(route, { items: [] }));
+  await page.route('**/api/cli/quota**', (route) => json(route, { at: '2026-06-09T00:00:00Z', snapshots: [] }));
+  await page.route(/\/api\/runner\/status(\?|$)/, (route) => json(route, {
+    projects: { [PROJECT]: { projectName: PROJECT, mode: 'manual', activeJobId: null, activeExecution: null, queuedJobIds: [] } },
+  }));
+}
+
+/**
+ * Install the detail + provenance routes for one landed-state scenario. Added
+ * after the base routes so the job-specific handlers win (Playwright matches
+ * the most recently registered route first).
+ */
+async function installJobRoutes(
+  page: Page,
+  opts: { detailMerge: MergeFact | null; landedState: 'on-branch-only' | 'merged-to-develop' | 'released-to-main'; viewMerge?: MergeFact | null },
+): Promise<void> {
+  const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await page.route(new RegExp(`/api/tasks/${idEsc}/provenance(\\?|$)`), (route) =>
+    json(route, provenanceView(opts.landedState, opts.viewMerge ?? opts.detailMerge)));
+  await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) => json(route, detail(opts.detailMerge)));
+}
+
+async function openJob(page: Page): Promise<void> {
+  await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+  await expect(page.getByTestId('studio-triage-panel')).toBeVisible({ timeout: 10_000 });
+}
+
+test.describe('Human Review acceptance primary is landed-state aware', () => {
+  test('not landed: keeps the "Merge into Develop" offer and hides the status pill', async ({ page }) => {
+    await installBaseRoutes(page);
+    await installJobRoutes(page, { detailMerge: null, landedState: 'on-branch-only' });
+    await openJob(page);
+
+    const primary = page.getByTestId('studio-triage-action-mark-done');
+    await expect(primary).toBeVisible();
+    await expect(primary).toHaveText(/Merge into Develop/);
+    await expect(page.getByTestId('studio-triage-merge-status')).toBeHidden();
+  });
+
+  test('merged to develop: relabels the primary to "Accept" and shows the merged pill', async ({ page }) => {
+    await installBaseRoutes(page);
+    await installJobRoutes(page, { detailMerge: { mergeCommit: MERGE_SHA }, landedState: 'merged-to-develop' });
+    await openJob(page);
+
+    const primary = page.getByTestId('studio-triage-action-mark-done');
+    await expect(primary).toBeVisible();
+    await expect(primary).toHaveText(/Accept/);
+
+    const pill = page.getByTestId('studio-triage-merge-status');
+    await expect(pill).toBeVisible();
+    await expect(pill).toHaveAttribute('data-landed-state', 'merged-to-develop');
+    await expect(pill).toContainText('Merged to develop');
+    await expect(pill).toContainText(MERGE_SHA.slice(0, 7));
+  });
+
+  test('released to main: live landed-state upgrades the pill wording to "Released to main"', async ({ page }) => {
+    await installBaseRoutes(page);
+    await installJobRoutes(page, { detailMerge: { mergeCommit: MERGE_SHA }, landedState: 'released-to-main' });
+    await openJob(page);
+
+    await expect(page.getByTestId('studio-triage-action-mark-done')).toHaveText(/Accept/);
+    const pill = page.getByTestId('studio-triage-merge-status');
+    await expect(pill).toBeVisible();
+    await expect(pill).toHaveAttribute('data-landed-state', 'released-to-main');
+    await expect(pill).toContainText('Released to main');
+  });
+
+  test('landed-state evidence — merged vs not-landed primary', async ({ page }) => {
+    await installBaseRoutes(page);
+    await installJobRoutes(page, { detailMerge: { mergeCommit: MERGE_SHA }, landedState: 'merged-to-develop' });
+    await openJob(page);
+    await expect(page.getByTestId('studio-triage-action-mark-done')).toHaveText(/Accept/);
+    await test.info().attach('human-review-merged--mocked', {
+      body: await page.getByTestId('studio-triage-panel').screenshot(),
+      contentType: 'image/png',
+    });
+  });
+});

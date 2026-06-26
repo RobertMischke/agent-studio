@@ -6,8 +6,6 @@ namespace AgentStudio.Cli;
 /// Reads each CLI's native on-disk session store and presents a unified view
 /// for the right-hand usage side-sheet.
 /// <list type="bullet">
-///   <item>Copilot: tracked via <c>~/.copilot/history/&lt;name&gt;.jsonl</c> when present, plus the
-///     job-table's persisted <c>SessionName</c> field. Falls back to the per-job <c>LastUsage</c>.</item>
 ///   <item>Claude: <c>~/.claude/projects/&lt;encoded-cwd&gt;/&lt;uuid&gt;.jsonl</c>.</item>
 ///   <item>Codex: <c>~/.codex/session_index.jsonl</c> + per-session
 ///     <c>~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl</c>.</item>
@@ -122,19 +120,19 @@ public sealed class SessionRegistry
 
     private CliUsageSection BuildSection(ICliExecutionService cli)
     {
-        var (available, version, _) = cli.TestCliPath();
+        var (available, version, path) = cli.TestCliPath();
         var section = new CliUsageSection
         {
             CliType = cli.CliType,
             Available = available,
-            Version = version
+            Version = version,
+            Path = path
         };
 
         try
         {
             section = section with { Projects = cli.CliType switch
             {
-                CliTypes.Copilot => BuildCopilotProjects(),
                 CliTypes.Claude  => BuildClaudeProjects(),
                 CliTypes.Codex   => BuildCodexProjects(),
                 CliTypes.Gemini  => BuildGeminiProjects(),
@@ -147,42 +145,6 @@ public sealed class SessionRegistry
             section = section with { Error = ex.Message };
         }
         return section;
-    }
-
-    // ── Copilot ─────────────────────────────────────────────────────────
-    // We don't (yet) read the Copilot CLI's own history files; the persisted
-    // SessionName + LastUsage on the job objects is enough for the side-sheet.
-
-    private List<CliUsageProjectGroup> BuildCopilotProjects()
-    {
-        var byProject = _scanner.ScanAllJobs()
-            .Where(j => CliTypes.Normalize(j.CliType) == CliTypes.Copilot
-                        && !string.IsNullOrWhiteSpace(j.SessionName))
-            .GroupBy(j => (j.ProjectName, j.WatchPath));
-
-        var groups = new List<CliUsageProjectGroup>();
-        foreach (var grp in byProject)
-        {
-            var sessions = grp
-                .OrderByDescending(j => j.LastActivity)
-                .Select(j => new CliSessionInfo
-                {
-                    Id = j.SessionName!,
-                    Label = j.Title,
-                    UpdatedAt = j.LastActivity,
-                    Cwd = j.WatchPath,
-                    LastUsage = j.LastUsage
-                })
-                .ToList();
-
-            groups.Add(new CliUsageProjectGroup
-            {
-                ProjectName = grp.Key.ProjectName,
-                RootPath = grp.Key.WatchPath,
-                Sessions = sessions
-            });
-        }
-        return groups;
     }
 
     // ── Claude Code ─────────────────────────────────────────────────────

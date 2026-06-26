@@ -8,7 +8,7 @@ async function deleteJob(jobId: string, watchPath: string): Promise<void> {
   // Use the api helper so the X-Client-Id header is attached; raw fetch
   // would 4xx out under the post-multi-client backend contract.
   await api(
-    `/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`,
+    `/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`,
     { method: 'DELETE' },
   ).catch(() => {});
 }
@@ -57,7 +57,7 @@ test.describe('Board search (header icon)', () => {
       agent: 'claude',
       promptMarkdown: 'placeholder',
       targetState: '1-preparation',
-      // fixture jobs are hidden from /api/jobs/grouped so they would not
+      // fixture jobs are hidden from /api/tasks/grouped so they would not
       // render on the kanban; we need a real card for this spec.
       fixture: false,
     });

@@ -38,7 +38,7 @@ public class CompletionRetriggerBreakerTest
     [Fact]
     public void DefaultBudget_HasExpectedValue()
     {
-        // Pin the default documented in docs/loop-inventory.md
+        // Pin the default documented in docs/contracts/loop-inventory.md
         // (completion.retrigger-transient-abort-per-job). Change both in the
         // same commit when tuning the budget.
         Assert.Equal(2, CompletionRetriggerDecider.DefaultBudget);

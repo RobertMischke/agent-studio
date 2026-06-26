@@ -8,7 +8,7 @@ Imports via `from './features/claude'`. See [`index.ts`](./index.ts).
 
 - `ClaudeSessionInfo` — per-session token totals + last-update timestamp.
 - `ClaudeRateLimitSnapshot` — last `rate_limit_event` frame from the live process (per-turn quota window).
-- `ClaudeSessionResponse` — merged shape returned by `/api/jobs/{id}/claude-session`.
+- `ClaudeSessionResponse` — merged shape returned by `/api/tasks/{id}/claude-session`.
 
 ## Where the live polling lives
 

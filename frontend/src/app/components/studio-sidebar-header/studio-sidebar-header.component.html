@@ -1,0 +1,10 @@
+<div class="studio-sidebar-header" [attr.data-testid]="testid()">
+  <span class="studio-sidebar-header__title">{{ title() }}</span>
+  @if (subtitle(); as s) {
+    <span class="studio-sidebar-header__subtitle"
+          [attr.data-testid]="subtitleTestid()"
+          [appTooltip]="s">{{ s }}</span>
+  }
+  <span class="studio-sidebar-header__spacer"></span>
+  <ng-content></ng-content>
+</div>

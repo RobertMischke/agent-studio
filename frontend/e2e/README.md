@@ -108,7 +108,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
   import { test, expect } from './fixtures/dev-backend';
 
   test('something against dev', async ({ devBackend }) => {
-    const res = await fetch(`${devBackend.baseUrl}/api/jobs`);
+    const res = await fetch(`${devBackend.baseUrl}/api/tasks`);
     // ...
   });
   ```

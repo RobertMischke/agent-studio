@@ -282,6 +282,35 @@
   border-top: 1px solid color-mix(in srgb, currentColor 8%, transparent);
 }
 
+/* Per-message timestamp: dezent, revealed on hover only. Each coalesced item
+ * carries its own clock so an operator can tell WHEN a single notification in
+ * a long bubble happened — not just the group's first–last range in the head.
+ * Absolutely placed (the item is position: relative) so it never reflows the
+ * body; a faint surface backing keeps it legible when it overlaps text, and
+ * the full calendar date sits on its tooltip. */
+.msg__item-time {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  z-index: 1;
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  background: var(--studio-bg-surface);
+  box-shadow: 0 1px 4px color-mix(in srgb, black 24%, transparent);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, currentColor 58%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.msg__item:hover .msg__item-time,
+.msg__item:focus-within .msg__item-time {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .msg__body {
   font-size: 12.5px;
   word-break: break-word;

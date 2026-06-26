@@ -23,9 +23,9 @@ describe('markdownToHtml', () => {
   it('expands attachment refs through resolveImageSrc', () => {
     const html = markdownToHtml('![shot](attachments/abc.png)', {
       resolveImageSrc: (src) =>
-        src.startsWith('attachments/') ? `/api/jobs/x/${src}` : src
+        src.startsWith('attachments/') ? `/api/tasks/x/${src}` : src
     });
-    expect(html).toBe('<img src="/api/jobs/x/attachments/abc.png" alt="shot">');
+    expect(html).toBe('<img src="/api/tasks/x/attachments/abc.png" alt="shot">');
   });
 
   it('renders ordered lists as <ol>', () => {

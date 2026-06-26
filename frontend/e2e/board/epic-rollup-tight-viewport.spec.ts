@@ -18,7 +18,7 @@
  *   3. scrolling to the bottom brings the Archive lane into the host viewport.
  *
  * Routes are `/api/tasks*`; the task API calls are inlined so this does not
- * depend on the still-`/api/jobs` shared helpers/jobs.ts.
+ * depend on the still-`/api/tasks` shared helpers/jobs.ts.
  */
 import { test, expect, Page } from '@playwright/test';
 import { api, BACKEND } from '../helpers/api';

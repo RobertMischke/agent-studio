@@ -11,7 +11,7 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE'
   });
 }
@@ -30,7 +30,7 @@ async function plantHumanReviewJobs(wp: WatchPath, count: number): Promise<{ id:
   for (let i = 0; i < count; i++) {
     const requestedId = uid(`accept-${i}`);
     const title = `accept fixture ${i} ${requestedId}`;
-    // fixture: false so the cards show up in `/api/jobs/grouped` and the
+    // fixture: false so the cards show up in `/api/tasks/grouped` and the
     // lane-pager snapshot effect can capture peers (the prefetch hangs
     // off that snapshot). The runner does not auto-start tasks parked
     // in 5-human-review, so the lane stays stable for the test.
@@ -115,7 +115,7 @@ test.describe('Accept-to-next-task is instant', () => {
       await openJobInDetail(page, jobs[0].id, wp.path);
 
       // Wait for the studio slim pager to anchor on the open job. The
-      // ensure-snapshot effect captures peers off `/api/jobs/grouped`
+      // ensure-snapshot effect captures peers off `/api/tasks/grouped`
       // which polls every ~2-5 s; on a fresh fixture plant the first
       // poll may still be carrying the pre-plant snapshot and the
       // open job's index will read `0 / N`. Once the position is
@@ -133,7 +133,7 @@ test.describe('Accept-to-next-task is instant', () => {
 
       // Watch the move POST so the test proves it actually goes out.
       const movePromise = page.waitForResponse(
-        r => r.url().includes(`/api/jobs/${encodeURIComponent(jobs[0].id)}/move`),
+        r => r.url().includes(`/api/tasks/${encodeURIComponent(jobs[0].id)}/move`),
         { timeout: 10_000 },
       );
 
@@ -255,12 +255,12 @@ test.describe('Accept-to-next-task is instant', () => {
       const detailGets = new Set<string>();
       page.on('response', resp => {
         const url = resp.url();
-        const match = url.match(/\/api\/jobs\/([^/?]+)(\?|$)/);
+        const match = url.match(/\/api\/tasks\/([^/?]+)(\?|$)/);
         if (!match) return;
         if (resp.request().method() !== 'GET') return;
-        // Filter out subresource endpoints like /api/jobs/{id}/output.
+        // Filter out subresource endpoints like /api/tasks/{id}/output.
         if (url.includes('/output') || url.includes('/runs') || url.includes('/screenshots')) return;
-        if (url.includes('/api/jobs/grouped')) return;
+        if (url.includes('/api/tasks/grouped')) return;
         detailGets.add(decodeURIComponent(match[1]));
       });
 
@@ -270,7 +270,7 @@ test.describe('Accept-to-next-task is instant', () => {
       // the live grouped lane includes the fresh fixture, the
       // ensure-snapshot effect has nothing to capture and the
       // prefetch effect cannot fire. On a freshly planted set the
-      // first /api/jobs/grouped response after page boot may still be
+      // first /api/tasks/grouped response after page boot may still be
       // pre-plant.
       const slimPagerPos = page.getByTestId('studio-task-pager-position');
       await expect(slimPagerPos).toBeVisible({ timeout: 30_000 });

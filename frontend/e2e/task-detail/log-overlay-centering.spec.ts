@@ -24,7 +24,7 @@ async function findJobWithOutput(): Promise<{ id: string; watchPath: string } | 
   const jobs = await listJobs();
   for (const j of jobs) {
     try {
-      const out = await api<unknown[]>(`/api/jobs/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`);
+      const out = await api<unknown[]>(`/api/tasks/${encodeURIComponent(j.id)}/output?watchPath=${encodeURIComponent(j.watchPath)}`);
       if (Array.isArray(out) && out.length > 0) return { id: j.id, watchPath: j.watchPath };
     } catch { /* ignore */ }
   }

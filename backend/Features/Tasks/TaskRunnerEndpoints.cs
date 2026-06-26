@@ -46,9 +46,9 @@ public static class TaskRunnerEndpoints
             // fall back to UserStop rather than rejecting the request.
             var parsed = (reason ?? "user").Trim().ToLowerInvariant() switch
             {
-                "followup" or "followup-pause" => AgentStudio.Shared.RunStopReason.FollowupPause,
-                "watchdog" => AgentStudio.Shared.RunStopReason.Watchdog,
-                _ => AgentStudio.Shared.RunStopReason.UserStop
+                "followup" or "followup-pause" => RunStopReason.FollowupPause,
+                "watchdog" => RunStopReason.Watchdog,
+                _ => RunStopReason.UserStop
             };
             var success = runner.StopJob(jobId, watchPath, parsed);
             return success ? Results.Ok() : Results.NotFound();
@@ -141,7 +141,7 @@ public static class TaskRunnerEndpoints
         // The condensed run timeline that drives the protocol-pane redesign.
         // One record per CLI invocation between user inputs, paired with the
         // [taskboard] Started/exited markers in cli-output.log so the frontend
-        // can render line-spans for drill-down. See docs/design-principles.md
+        // can render line-spans for drill-down. See docs/product/design-principles.md
         // for the contract this surface has to honour: top-level summary +
         // always-available drill-down.
         group.MapGet("/{jobId}/runs", (string jobId, string? watchPath, TaskReader reader) =>

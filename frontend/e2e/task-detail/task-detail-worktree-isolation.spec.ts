@@ -138,9 +138,9 @@ async function installCommonRoutes(page: Page, opts: { activeJobId: string | nul
   await page.route('**/api/**', (route) => {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
   });
-  await page.route('**/api/jobs', (route) =>
+  await page.route('**/api/tasks', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
-  await page.route('**/api/jobs/grouped**', (route) =>
+  await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({
@@ -187,17 +187,17 @@ async function installCommonRoutes(page: Page, opts: { activeJobId: string | nul
 
 async function installJobRoutes(page: Page, jobId: string, detail: ReturnType<typeof makeJobDetail>, hygiene: HygieneShape, gitFiles: { path: string; status: string; added: number; removed: number }[]) {
   const idEsc = jobId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  await page.route(new RegExp(`/api/jobs/${idEsc}/output(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/output(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
-  await page.route(new RegExp(`/api/jobs/${idEsc}/runs(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/runs(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) }));
-  await page.route(new RegExp(`/api/jobs/${idEsc}/session-events(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/session-events(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [], sessionChain: [] }) }));
-  await page.route(new RegExp(`/api/jobs/${idEsc}/claude-session(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/claude-session(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }));
-  await page.route(new RegExp(`/api/jobs/${idEsc}/git/hygiene(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/git/hygiene(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(hygiene) }));
-  await page.route(new RegExp(`/api/jobs/${idEsc}/git/status(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/git/status(\\?|$)`), (route) =>
     route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({
@@ -210,7 +210,7 @@ async function installJobRoutes(page: Page, jobId: string, detail: ReturnType<ty
         error: null
       })
     }));
-  await page.route(new RegExp(`/api/jobs/${idEsc}/commit(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/commit(\\?|$)`), (route) =>
     route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({
@@ -218,7 +218,7 @@ async function installJobRoutes(page: Page, jobId: string, detail: ReturnType<ty
         files: detail.info.commit ? detail.info.commit.files.map(p => ({ status: 'M', path: p, added: 1, removed: 0 })) : []
       })
     }));
-  await page.route(new RegExp(`/api/jobs/${idEsc}(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) }));
 }
 

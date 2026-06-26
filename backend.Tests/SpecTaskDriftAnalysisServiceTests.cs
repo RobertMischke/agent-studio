@@ -49,7 +49,7 @@ public class SpecTaskDriftAnalysisServiceTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs"));
         File.WriteAllText(Path.Combine(_repoRoot, "ROADMAP.md"), "# ROADMAP\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "AGENTS.md"), "# AGENTS\n", Encoding.UTF8);
-        File.WriteAllText(Path.Combine(_repoRoot, "docs", "design-principles.md"), "# DP\n", Encoding.UTF8);
+        WriteRepoFile("docs/product/design-principles.md", "# DP\n");
         // README intentionally absent so we prove missing files are skipped.
 
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "mockups", "drift-control"));
@@ -61,7 +61,7 @@ public class SpecTaskDriftAnalysisServiceTests : IDisposable
         var paths = scope.SpecDocs.Select(d => d.Path.Replace('\\', '/')).ToArray();
         Assert.Contains("ROADMAP.md", paths);
         Assert.Contains("AGENTS.md", paths);
-        Assert.Contains("docs/design-principles.md", paths);
+        Assert.Contains("docs/product/design-principles.md", paths);
         Assert.DoesNotContain(paths, p => p.EndsWith("README.md", StringComparison.Ordinal));
         // Mockup folders surface as separate spec entries.
         Assert.Contains("docs/mockups/drift-control/", paths);
@@ -468,6 +468,13 @@ public class SpecTaskDriftAnalysisServiceTests : IDisposable
     // ------------------------------------------------------------------
     // helpers
     // ------------------------------------------------------------------
+
+    private void WriteRepoFile(string relPath, string content)
+    {
+        var full = Path.Combine(_repoRoot, relPath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllText(full, content, Encoding.UTF8);
+    }
 
     private void WriteJob(
         string lane,

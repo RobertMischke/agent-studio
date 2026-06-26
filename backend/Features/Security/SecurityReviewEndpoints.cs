@@ -101,7 +101,7 @@ public static class SecurityReviewEndpoints
             var stamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm");
             var slug = $"security-audit-{DateTime.UtcNow:yyyyMMdd-HHmmss}";
             var ownerHeader = ctx.Request.Headers["X-Client-Id"].FirstOrDefault();
-            var req = new CreateJobRequest
+            var req = new CreateTaskRequest
             {
                 Id = slug,
                 Title = $"{AuditJobTitlePrefix} {stamp}",

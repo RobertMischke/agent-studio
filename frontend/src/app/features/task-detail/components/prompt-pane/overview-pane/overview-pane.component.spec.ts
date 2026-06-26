@@ -173,6 +173,22 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens"]')).toBeNull();
   });
 
+  it('status block: combines model selector and CLI into one Agent row', async () => {
+    const fixture = await build(baseJob({
+      cliType: 'claude',
+      model: 'claude-opus-4-8',
+    }));
+    const host = fixture.nativeElement as HTMLElement;
+    const labels = Array.from(host.querySelectorAll<HTMLElement>('[data-testid="overview-status"] .ov-label'))
+      .map(el => el.textContent?.trim());
+
+    expect(labels).toContain('Agent');
+    expect(labels).toContain('Owner');
+    expect(labels).not.toContain('Model');
+    expect(labels).not.toContain('CLI');
+    expect(host.querySelector('[data-testid="overview-agent-cli"]')?.textContent).toContain('Claude Code');
+  });
+
   it('runs section: a recorded run renders count + total duration (folded out of Tokens), Tokens stays hidden', async () => {
     const fixture = await build(baseJob({ state: '6-completed' }));
     TestBed.inject(RunTimelinePollService).timeline.set(
@@ -335,11 +351,29 @@ describe('OverviewPaneComponent (smoke)', () => {
     const tests = rows.find(r => r.id === 'aspect-tests-and-evidence')!;
     expect(tests.status).toBe('disabled');
     expect(tests.enabled).toBe(false);
+    expect(c.disabledPipelineStepCount()).toBe(1);
+    expect(c.visiblePipelineRows().map(r => r.id))
+      .toEqual(['core-agent-run', 'aspect-code-quality', 'aspect-tests-and-evidence']);
 
     expect(c.hasPipeline()).toBe(true);
     expect(c.pipelineTotal()).toEqual(expect.objectContaining({ totalTokens: 1200, totalCostUsd: 0.002, anyModelUnknown: false }));
     expect(c.formatCost(0.002)).toBe('$0.0020');
     expect(c.formatCost(1.5)).toBe('$1.50');
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="overview-pipeline-toggle-disabled"]')).not.toBeNull();
+    const stepUsage = host.querySelector('[data-step-id="aspect-code-quality"] [data-testid="overview-pipeline-step-tokens"]');
+    const stepCostCell = host.querySelector('[data-step-id="aspect-code-quality"] [data-testid="overview-pipeline-step-cost"]');
+    expect(stepUsage?.textContent?.trim()).toBe('1.2k');
+    expect(stepCostCell?.textContent?.trim()).toBe('$0.0020');
+    expect(host.querySelector('[data-testid="overview-pipeline-tokens-by-model"]')).toBeNull();
+
+    c.toggleDisabledPipelineSteps();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    expect(c.hideDisabledPipelineSteps()).toBe(true);
+    expect(c.visiblePipelineRows().map(r => r.id)).toEqual(['core-agent-run', 'aspect-code-quality']);
+    expect(c.visiblePipelineRows().find(r => r.id === 'aspect-code-quality')?.startsPhase).toBe(true);
+    expect(host.querySelector('[data-step-id="aspect-tests-and-evidence"]')).toBeNull();
   });
 
   it('pipeline block: step rows surface a per-step prompt trigger fed from the step-prompts read-model', async () => {
@@ -1047,9 +1081,9 @@ describe('OverviewPaneComponent (smoke)', () => {
 
     const c = fixture.componentInstance;
     const rows = c.pipelineRows();
-    // The loop guard is the first row (Pre), so a detected loop is visible early.
+    // The loop guard is the first row (pre steps), so a detected loop is visible early.
     expect(rows[0].id).toBe('pre-loop-guard');
-    expect(c.stepKindLabel(rows[0].kind)).toBe('Pre');
+    expect(c.stepKindLabel(rows[0].kind)).toBe('Pre steps');
 
     const guard = rows.find(r => r.id === 'pre-loop-guard')!;
     expect(guard.status).toBe('failed');
@@ -1336,15 +1370,15 @@ describe('OverviewPaneComponent (smoke)', () => {
       fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-phase"]'),
     ) as HTMLElement[];
     expect(groups.map(g => g.querySelector('.ov-pl-phase__label')?.textContent?.trim())).toEqual([
-      'PRE', 'CORE', 'ASPECT', 'TOOL', 'DECISION', 'DRIFT',
+      'PRE STEPS', 'CORE AGENT WORK', 'ASPECT', 'TOOL', 'DECISION', 'DRIFT',
     ]);
     expect(groups.map(g => g.querySelector('.ov-pl-phase__info')?.textContent?.trim())).toEqual([
       'i', 'i', 'i', 'i', 'i', 'i',
     ]);
     expect(groups.some(g => g.querySelector('.ov-pl-phase__description'))).toBe(false);
     expect(groups.map(g => g.getAttribute('aria-label'))).toEqual([
-      'PRE pipeline phase: Preparation checks before the agent gets the task.',
-      'CORE pipeline phase: The coding agent run.',
+      'PRE STEPS pipeline phase: Preparation checks before the agent gets the task.',
+      'CORE AGENT WORK pipeline phase: The coding agent work.',
       'ASPECT pipeline phase: Parallel review passes over the finished work.',
       'TOOL pipeline phase: Deterministic post-run tooling and evidence steps.',
       'DECISION pipeline phase: The orchestrator ruling that accepts, reissues, or escalates.',
@@ -1655,7 +1689,8 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(title?.classList.contains('studio-measure')).toBe(true);
     expect(title?.classList.contains('studio-measure--prose')).toBe(true);
     expect(status?.classList.contains('studio-measure--tabular')).toBe(true);
-    expect(agent?.classList.contains('studio-measure--tabular')).toBe(true);
+    expect(agent?.closest('[data-testid="overview-status"]')).toBe(status);
+    expect(agent?.classList.contains('studio-measure--tabular')).toBe(false);
     expect(pipeline?.classList.contains('studio-measure--tabular-compact')).toBe(true);
   });
 });

@@ -22,11 +22,13 @@ import { test, expect, type Page } from '@playwright/test';
  */
 
 const STICKY_TAB_KEY = 'board:__all__';
+const BACKLOG_TAB_KEY = 'backlog:__all__';
 
 // taskKey === `${watchPath}::${id}` (see TaskService). The studio task tab
 // is keyed `task:<taskKey>`.
 const TASK_ID = 'reload-fix-task';
 const WATCH_PATH = 'demo-project';
+const PROJECT_HUB_TAB_KEY = `hub:${WATCH_PATH}`;
 const TASK_KEY = `${WATCH_PATH}::${TASK_ID}`;
 const TASK_TAB_KEY = `task:${TASK_KEY}`;
 
@@ -105,7 +107,9 @@ async function stubApi(page: Page, opts: { resolveDetail?: boolean } = {}): Prom
     if (url.includes('/api/tasks/grouped')) return json(EMPTY_GROUPED);
     if (url.includes('/api/runner/status')) return json({ projects: {} });
     if (/\/api\/tasks(\?|$)/.test(url)) return json([]);
-    if (url.includes('/api/watch-paths')) return json([]);
+    if (url.includes('/api/watch-paths')) {
+      return json([{ name: WATCH_PATH, path: WATCH_PATH }]);
+    }
     // Everything else (the detail pane's sub-resource GETs, quota, clients, …)
     // is left to the live backend / inline non-blocking handling, exactly like
     // `navigation-no-deadend.spec.ts`. The fake task's sub-resources 404 and
@@ -131,17 +135,22 @@ const BOOT_TIMEOUT = 60_000;
 
 /** Seed the persisted studio tab state, then reload so the service restores it. */
 async function seedTabsAndReload(page: Page, activeKey: string): Promise<void> {
-  await page.evaluate((active) => {
-    const payload = {
-      v: 1,
-      tabs: [
-        { kind: 'board', projectName: '__all__', sticky: true },
-        { kind: 'task', taskKey: 'demo-project::reload-fix-task' },
-      ],
-      activeKey: active,
-    };
+  await seedStudioTabsAndReload(page, [
+    { kind: 'board', projectName: '__all__' },
+    { kind: 'task', taskKey: TASK_KEY },
+  ], activeKey);
+}
+
+async function seedStudioTabsAndReload(
+  page: Page,
+  tabs: Array<Record<string, unknown>>,
+  activeKey: string,
+  hash = '',
+): Promise<void> {
+  await page.evaluate(({ payload, nextHash }) => {
     localStorage.setItem('atp.studio.tabs.v1', JSON.stringify(payload));
-  }, activeKey);
+    history.replaceState(null, '', nextHash ? `/${nextHash}` : '/');
+  }, { payload: { v: 1, tabs, activeKey }, nextHash: hash });
   await page.reload();
   await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
 }
@@ -194,5 +203,62 @@ test.describe('studio-shell · reload restores the current view (F5 bug)', () =>
 
     await expect(tabBy(page, TASK_TAB_KEY)).toBeVisible();
     await expect(tabBy(page, TASK_TAB_KEY)).toHaveClass(/studio-tab--active/);
+  });
+
+  test('leaving Backlog for All-projects Board strips #/backlog so reload stays on the board', async ({ page }) => {
+    await stubApi(page, { resolveDetail: false });
+    await page.goto('/');
+    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
+
+    await seedStudioTabsAndReload(page, [
+      { kind: 'board', projectName: '__all__' },
+      { kind: 'backlog', projectName: null },
+    ], BACKLOG_TAB_KEY, '#/backlog');
+    await expect(tabBy(page, BACKLOG_TAB_KEY)).toHaveClass(/studio-tab--active/);
+
+    await tabBy(page, STICKY_TAB_KEY).click();
+    await expect(tabBy(page, STICKY_TAB_KEY)).toHaveClass(/studio-tab--active/);
+    await expect.poll(() => new URL(page.url()).hash.includes('/backlog')).toBe(false);
+
+    await page.reload();
+    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
+    await expect(tabBy(page, STICKY_TAB_KEY)).toHaveClass(/studio-tab--active/);
+    await expect(tabBy(page, BACKLOG_TAB_KEY)).not.toHaveClass(/studio-tab--active/);
+  });
+
+  test('reload on Backlog Triage restores Backlog Triage', async ({ page }) => {
+    await stubApi(page, { resolveDetail: false });
+    await page.goto('/');
+    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
+
+    await seedStudioTabsAndReload(page, [
+      { kind: 'board', projectName: '__all__' },
+      { kind: 'backlog', projectName: null },
+    ], BACKLOG_TAB_KEY, '#/backlog');
+
+    await expect(tabBy(page, BACKLOG_TAB_KEY)).toHaveClass(/studio-tab--active/);
+    await expect.poll(() => new URL(page.url()).hash).toBe('#/backlog');
+  });
+
+  test('leaving Backlog for Project Hub strips #/backlog so reload stays on the hub', async ({ page }) => {
+    await stubApi(page, { resolveDetail: false });
+    await page.goto('/');
+    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
+
+    await seedStudioTabsAndReload(page, [
+      { kind: 'board', projectName: '__all__' },
+      { kind: 'backlog', projectName: null },
+      { kind: 'hub', projectName: WATCH_PATH },
+    ], BACKLOG_TAB_KEY, '#/backlog');
+    await expect(tabBy(page, BACKLOG_TAB_KEY)).toHaveClass(/studio-tab--active/);
+
+    await tabBy(page, PROJECT_HUB_TAB_KEY).click();
+    await expect(tabBy(page, PROJECT_HUB_TAB_KEY)).toHaveClass(/studio-tab--active/);
+    await expect.poll(() => new URL(page.url()).hash.includes('/backlog')).toBe(false);
+
+    await page.reload();
+    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
+    await expect(tabBy(page, PROJECT_HUB_TAB_KEY)).toHaveClass(/studio-tab--active/);
+    await expect(tabBy(page, BACKLOG_TAB_KEY)).not.toHaveClass(/studio-tab--active/);
   });
 });

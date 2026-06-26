@@ -1,7 +1,7 @@
 {
-  "name": "Agent Software Studio",
-  "short_name": "Software Studio",
-  "description": "Agent Software Studio – drag & drop jobs across states",
+  "name": "Agent Studio",
+  "short_name": "Agent Studio",
+  "description": "Agent Studio – drag & drop jobs across states",
   "display": "standalone",
   "background_color": "#0f0f1a",
   "theme_color": "#181825",
