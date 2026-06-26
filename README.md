@@ -1,6 +1,6 @@
 # agent-orchestrator
 
-**Stop being the bottleneck.** A task workbench that feeds your coding-agent CLIs a continuous queue of work, using the subscriptions and execution environments you already trust.
+**A control plane for your coding-agent CLIs.** Drive your Claude Code, Codex, Copilot, and Gemini CLIs through a managed **pre/core/post pipeline** — with a **deterministic orchestrator** that owns the queue, **project context** the agents can rely on, and **per-step token spend** you can see. It runs on the subscriptions and execution environments you already trust.
 
 ![The board: every watched project and every task state in one place](./docs/assets/images/board-overview.png)
 
@@ -8,14 +8,31 @@
 
 > .NET 10 backend + Angular 21 PWA. Task state lives in `.orchestrator/jobs/` folders on disk; the Task Access API fronts the filesystem so the runner, supervisor, frontend, remote clients, and scripts read and mutate through one boundary. Runs tasks through Claude Code, Codex, GitHub Copilot, or Gemini. Coding work is sequential by default and can opt into bounded, orchestrator-gated parallelism via `maxParallelism`.
 
-## What it does
+## Highlights
 
-- **A queue, not a babysitting loop.** Tasks land in `2-ready`; the runner walks them `3-progress → 4-review` automatically, so your time goes to review — the one part that actually needs you.
-- **Your subscriptions, not API keys.** It drives *your* Claude Code, Codex, Copilot, and Gemini CLIs through the accounts you already pay for — no model API keys, no second billing layer.
-- **An assisted-coding harness, not a black box.** Every run has a pre/core/post shape: scope + context + branch setup → the provider CLI runs → output, diffs, a parsed protocol, and a review gate.
-- **Deterministic orchestration, not prompt-trust.** The orchestrator parses hard completion signals and re-issues the work itself when the agent's report contradicts the evidence — no edits, near-zero duration, or a post-recovery no-op.
-- **Evidence by default.** Each task keeps a parsed `status.md` protocol, a live git diff, a run timeline, token usage, and screenshots — so review is fast and security work is repeatable.
-- **One board, many projects.** It watches several repositories in parallel; coding is serial by default, with opt-in bounded parallelism isolated in git worktrees on short-lived `task/<id>` branches.
+### Pre & post step management
+
+![The pipeline catalogue: pre-steps, the core agent run, post-steps and tool steps, each with its own model, prompt, gate and token spend](./docs/assets/images/pipeline-page.png)
+
+Every run is a configurable **pre / core / post** pipeline, not a single shot. Pre-steps prepare the work (loop check, orchestrator prep, reissue-open-items check); the **core** step is the provider CLI doing the actual coding; post-steps close it out (orchestrator review, conflict resolution, a code-review quality grade, build/test gate, worktree containment, merge to develop). Each step is independently toggled and bound to its own model, prompt, and gate, and shows its token spend over the last 90 days — so the managed work *around* the agent is explicit and tunable per project, not hidden in code.
+
+### Agent orchestration
+
+![The per-project orchestrator: a live session that watches every project, summarises the queue, and is addressable from the CLI](./docs/assets/images/orchestrator-rail.png)
+
+A per-project **orchestrator** owns queue movement — and it is a participant you can talk to, not a hidden daemon. It carries a long-lived session with inspectable memory (what it was booted with, which tasks and decisions it has seen), summarises the queue ("25 tasks: 6 in backlog, 1 in progress, 16 in human review, 2 escalated"), and is **deterministic, not prompt-trust**: when an agent's report contradicts the structural evidence — no edits, near-zero duration, a post-recovery no-op — the orchestrator re-issues the work itself instead of accepting the inconsistency. A supervisor layer above it watches health and budget every tick.
+
+### Context management — the project Wiki
+
+![The project Wiki: a 338-page knowledge base built from the repository's docs tree, with categories, rendered Markdown and git history](./docs/assets/images/wiki-context.png)
+
+An agent is only as good as the context it starts from. Each project's `docs/` tree becomes a browsable **knowledge base** — here, 338 pages grouped by category (architecture, contracts, domains, ADRs, skills, research), rendered from the real folder structure with page history and drift signals. The same steering documents the agents rely on (README, AGENTS, task contracts, skills lookup) are inspectable surfaces, so what the agents are told stays visible and reviewable rather than buried.
+
+### Token economy & pricing
+
+![The token-usage panel: total / job / supporting / orchestrator spend, pipeline cost by step in dollars, a per-task heatmap and the most expensive tasks](./docs/assets/images/token-economy.png)
+
+Inference spend is a first-class signal on every surface that touches a model. Per-job, per-step, per-model token aggregates are tracked and **priced**: a pipeline cost-by-step-kind breakdown in dollars (core run vs. aspects vs. tools), a recent-activity timeline, a top-tasks-by-day heatmap, and a most-expensive-tasks list with per-run drill-down. Cost is theoretical against a per-model price table — your CLI subscriptions make the real bill flat — but it shows exactly where the budget goes.
 
 > **Naming note:** The product is **`agent-orchestrator`** (kebab-case, identical to the domain `agent-orchestrator.dev` — developer-tool convention like `fly.io`, `vercel`, `stripe`). The repository slug and several runtime strings still say "agent-taskboard" as a follow-up cleanup; see [docs/architecture/decisions/adr-archive.md](./docs/architecture/decisions/adr-archive.md) for the load-bearing rename note.
 
@@ -35,11 +52,9 @@ Source: [UK AISI evaluation of OpenAI GPT-5.5 cyber capabilities](https://www.ai
 
 ---
 
-## The bottleneck is you
+## Keep the agents busy
 
-Modern coding agents can run for hours. They don't get tired. They don't context-switch. They just need a steady queue of work.
-
-The bottleneck isn't the model. It's the human babysitting it: paste a prompt, watch it run, review, paste the next one. Every minute spent on that loop is a minute your subscription's token bucket sits idle.
+Modern coding agents can run for hours. They don't get tired, they don't context-switch — they just need a steady queue of work. Hand-feeding them one prompt at a time leaves the subscription you already pay for mostly idle; a queue the runner picks up automatically keeps the token bucket working, and shrinks your part to review.
 
 ```
   WITHOUT a queue                          WITH agent-orchestrator
@@ -102,8 +117,6 @@ The product is small on purpose. Parallel coding is a controlled mode, not a bla
 What the application currently provides.
 
 ### Board: every watched project, every state
-
-![Board overview](./docs/assets/images/board-overview.png)
 
 The lanes (`0-backlog`, `1-preparation`, `1a-orchestrator-prep`, `2-ready`, `3-progress`, `4-auto-review` / `5-human-review`, `6-completed`, `7-archive`) are driven directly off the filesystem state. Each card carries up to thirteen chip types: task type, state, phase, execution, pending intent, auto-loop, review verdict, agent, model, token spend (with hover popover), git pill, last commit, last activity. The header strip shows free-text search, faceted filters across owner / project / type / tag with URL deep-links, lane collapse, and per-container focus mode. Drag-and-drop is optimistic with a snapshot-revert path.
 
