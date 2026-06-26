@@ -50,7 +50,7 @@ Inline curl with a Windows path like `C:\Projects\...` in the body breaks
 shell quoting. Two attempts in the 2026-05-11 session both produced unparseable
 JSON.
 
-Fix: use the Node template in `../scripts/create-job.js`. Backslashes in JS
+Fix: use the Node template in `../scripts/create-task.js`. Backslashes in JS
 string literals are escaped at compile time (`\\`); the resulting JSON has
 proper `\\` escapes and the server parses it cleanly.
 

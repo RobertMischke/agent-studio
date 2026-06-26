@@ -28,7 +28,7 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
 `agent-taskboard-workspace/.metadata/**`.
 
 - Required skill for scripted board mutation:
-  [.agents/skills/job-api/SKILL.md](../../.agents/skills/job-api/SKILL.md).
+  [.agents/skills/task-api/SKILL.md](../../.agents/skills/task-api/SKILL.md).
 - The skill covers `watchPath`, `X-Client-Id`, lane names, creation, move,
   reorder, archive, and triage templates.
 - The route is `/api/tasks` (the former `/api/jobs` alias was removed, ADR-0057).

@@ -2,7 +2,7 @@
 //
 // Usage:
 //   1. Adjust PORT / TARGET_PROJECT below, or pass env vars:
-//        TASKBOARD_PORT=5031 TASKBOARD_PROJECT="Agent Task Processor" node create-job.js
+//        TASKBOARD_PORT=5031 TASKBOARD_PROJECT="Agent Task Processor" node create-task.js
 //   2. Fill `id`, `title`, `targetState`, `taskType`, and `promptMarkdown`.
 //   3. Keep `agent` and `cliType` on the same real CLI value.
 //

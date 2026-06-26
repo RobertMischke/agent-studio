@@ -50,12 +50,12 @@ Tasks that look small but make the loop tell you nothing:
 
 ## Creating tasks programmatically
 
-When you need to script task creation (bulk seed, follow-up batches, triage scripts), use the Task API rather than the create dialog. The full contract, the `watchPath` quirk, the `X-Client-Id` header, and ready-to-use Node templates live in [../../.agents/skills/job-api/SKILL.md](../../../.agents/skills/job-api/SKILL.md).
+When you need to script task creation (bulk seed, follow-up batches, triage scripts), use the Task API rather than the create dialog. The full contract, the `watchPath` quirk, the `X-Client-Id` header, and ready-to-use Node templates live in [../../.agents/skills/task-api/SKILL.md](../../../.agents/skills/task-api/SKILL.md).
 
 A minimal create looks like:
 
 ```js
-// scripts ship in .agents/skills/job-api/scripts/
+// scripts ship in .agents/skills/task-api/scripts/
 const watchPaths = await fetch('http://127.0.0.1:5030/api/watch-paths').then(r => r.json());
 const target = watchPaths.find(w => w.name === 'Lotta Dashboard');
 

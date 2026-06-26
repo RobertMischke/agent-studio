@@ -62,7 +62,7 @@ Git status, diff, commits, and the VS Code handoff use `RepositoryPath`; `RootPa
 ./api.sh restart
 ```
 
-Tracked for a durable fix as `fix-runner-mode-rejects-newly-added-projects` (see [../../.agents/skills/job-api/references/known-pitfalls.md](../../../.agents/skills/job-api/references/known-pitfalls.md) §4). Once that lands you can skip this step.
+Tracked for a durable fix as `fix-runner-mode-rejects-newly-added-projects` (see [../../.agents/skills/task-api/references/known-pitfalls.md](../../../.agents/skills/task-api/references/known-pitfalls.md) §4). Once that lands you can skip this step.
 
 ## Step 3 - Pick the project in the UI
 
@@ -81,7 +81,7 @@ Per-project preferences are persisted in `<TaskRepository>/project-settings.json
 
 `DefaultAgent` is **not** persisted per project today; the agent / CLI / model is chosen per job at create time. If you find yourself setting the same `cliType` on every task for a given project, raise that as a feature request rather than working around it in scripts.
 
-For the first task, follow [your-first-task.md](./your-first-task.md). The Job API skill ([../../.agents/skills/job-api/SKILL.md](../../../.agents/skills/job-api/SKILL.md)) is the right path when you script the creation rather than clicking through the dialog.
+For the first task, follow [your-first-task.md](./your-first-task.md). The Task API skill ([../../.agents/skills/task-api/SKILL.md](../../../.agents/skills/task-api/SKILL.md)) is the right path when you script the creation rather than clicking through the dialog.
 
 ## What to expect after pickup
 

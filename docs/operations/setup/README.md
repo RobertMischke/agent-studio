@@ -17,6 +17,6 @@ This folder is the **operator-facing setup guide**: how to attach a new project 
 
 - [../getting-started.md](./getting-started.md) - manual install and configuration of the backend + frontend.
 - [../skills-architecture.md](../../product/skills-architecture.md) - portable-skills doctrine (the `.agents/skills/` library).
-- [../../.agents/skills/job-api/SKILL.md](../../../.agents/skills/job-api/SKILL.md) - programmatic job creation / move via the HTTP API.
+- [../../.agents/skills/task-api/SKILL.md](../../../.agents/skills/task-api/SKILL.md) - programmatic task creation / move via the HTTP API.
 - [../cli-skills/README.md](../../cli/skills/README.md) - per-CLI deep references (frame model, session model, known incidents).
 - [../agent-task-contract.md](../../contracts/agent-task.md) - the app-owned task lifecycle every watched project inherits.

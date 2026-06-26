@@ -2,14 +2,14 @@
 //
 // The server does not have a search/filter endpoint today; instead it
 // returns the full set and the client filters. The full payload is small
-// (~1-2 MB for hundreds of jobs) so client-side filter is fast enough.
+// (~1-2 MB for hundreds of tasks) so client-side filter is fast enough.
 //
 // Usage:
-//   node find-jobs.js                          # list every task, grouped by lane
-//   node find-jobs.js --lane 2-ready           # one lane only
-//   node find-jobs.js --grep "codex"           # case-insensitive id/title match
-//   node find-jobs.js --project "Lotta"        # project name contains
-//   node find-jobs.js --lane 4-auto-review --grep "session"
+//   node find-tasks.js                          # list every task, grouped by lane
+//   node find-tasks.js --lane 2-ready           # one lane only
+//   node find-tasks.js --grep "codex"           # case-insensitive id/title match
+//   node find-tasks.js --project "Lotta"        # project name contains
+//   node find-tasks.js --lane 4-auto-review --grep "session"
 //
 // Output is one line per match: <lane>  <project>  <slug>  -  <title>
 

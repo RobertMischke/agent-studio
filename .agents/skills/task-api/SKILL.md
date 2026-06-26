@@ -1,15 +1,15 @@
 ---
-name: job-api
+name: task-api
 description: Programmatic interaction with the agent-taskboard task API over HTTP - create, move, triage, reissue, and reorder tasks when clicking through the board UI would be too slow.
 trigger: user
 mutates_code: false
 mutates_queue: true
-sentinel: TASKBOARD-SKILL-JOB-API
+sentinel: TASKBOARD-SKILL-TASK-API
 ---
 
-# Skill: Job-API
+# Skill: Task-API
 
-> Sentinel: `TASKBOARD-SKILL-JOB-API`. Echo this string in your first reply when the orchestrator probes whether the skill loaded.
+> Sentinel: `TASKBOARD-SKILL-TASK-API`. Echo this string in your first reply when the orchestrator probes whether the skill loaded.
 
 Programmatic interaction with the agent-taskboard task API. Read this before
 creating or moving tasks via HTTP, especially when the task you are doing
@@ -26,8 +26,8 @@ need a reliable scripted path because:
 
 ## When to invoke
 
-- The user asks for "lege einen Job an" / "create a task" / "queue a follow-up".
-- A triage step needs to move many jobs between lanes.
+- The user asks for "lege eine Aufgabe an" / "create a task" / "queue a follow-up".
+- A triage step needs to move many tasks between lanes.
 - You want to surface a finding as a new ticket the orchestrator will pick up.
 - You need to promote a hot bug to the top of the queue.
 
@@ -50,7 +50,7 @@ The raw `watchPath` key and the path-versus-shortCode direction are explained in
 ## Common pitfall: the watchPath quirk
 
 Every mutation that targets a specific task needs a `watchPath` query parameter.
-This is **not** the project's source-tree path; it is the resolved job-folder
+This is **not** the project's source-tree path; it is the resolved task-folder
 root that `GET /api/watch-paths` returns under the `path` field.
 
 For the agent-taskboard project the call is `GET /api/watch-paths`:
@@ -103,18 +103,18 @@ For self-contained projects (no `.orchestrator.yml` pointer) the `path` is
    park visible non-running work by choosing an appropriate lane such as
    `0-backlog` or `5-human-review`.
 
-## Process: finding existing jobs
+## Process: finding existing tasks
 
 Before creating a new task, check whether one already exists. The server has
 no `?q=`-search endpoint today; it returns the full set and you filter
-client-side. The full payload is small (~1-2 MB for hundreds of jobs).
+client-side. The full payload is small (~1-2 MB for hundreds of tasks).
 
 ```bash
-node scripts/find-jobs.js                       # every job, grouped by lane
-node scripts/find-jobs.js --lane 2-ready        # one lane only
-node scripts/find-jobs.js --grep "codex"        # id+title contains
-node scripts/find-jobs.js --project "Lotta"     # project name contains
-node scripts/find-jobs.js --lane 4-auto-review --grep "session"
+node scripts/find-tasks.js                       # every task, grouped by lane
+node scripts/find-tasks.js --lane 2-ready        # one lane only
+node scripts/find-tasks.js --grep "codex"        # id+title contains
+node scripts/find-tasks.js --project "Lotta"     # project name contains
+node scripts/find-tasks.js --lane 4-auto-review --grep "session"
 ```
 
 Output: `<lane>\t<project>\t<slug>  -  <title>`, one line per match. Pipe to
@@ -125,14 +125,14 @@ Underlying call: `GET /api/tasks/grouped`. Returns
 an array of `JobInfo`-shaped objects with `id`, `title`, `projectName`,
 `state`, `cliType`, etc.
 
-## Process: creating one job
+## Process: creating one task
 
 ```js
 const http = require('http');
 
 const watchPath = 'C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard';
 
-const job = {
+const task = {
   id: 'my-stable-slug',
   title: 'Human-readable title (shown on the card)',
   targetState: '2-ready',     // initial lane
@@ -148,7 +148,7 @@ const job = {
   ].join('\n'),
 };
 
-const body = JSON.stringify(job);
+const body = JSON.stringify(task);
 const req = http.request({
   hostname: '127.0.0.1', port: 5031, path: '/api/tasks/', method: 'POST',
   headers: {
@@ -169,7 +169,7 @@ A 200 with `{"id":"..."}` means success. A 409 with `"Job already exists or
 invalid input"` is the most common failure; nine times out of ten the cause is
 the `watchPath` not matching `/api/watch-paths`.
 
-The full template is in [`scripts/create-job.js`](scripts/create-job.js).
+The full template is in [`scripts/create-task.js`](scripts/create-task.js).
 
 ## Process: moving a task between lanes
 
@@ -195,7 +195,7 @@ The full template is in [`scripts/move-state.js`](scripts/move-state.js).
 `POST /api/tasks/{jobId}/move-to-top?watchPath=...` with no body.
 
 Use this when a hot bug needs to be picked up before the existing queue, but
-the job is already in `2-ready` or `0-backlog`. The state machine handles the
+the task is already in `2-ready` or `0-backlog`. The state machine handles the
 atomic reorder on disk.
 
 Reference: [`scripts/move-to-top.js`](scripts/move-to-top.js).
@@ -240,9 +240,9 @@ For larger triage operations, also produce a one-line summary per bucket
 
 ## Reference
 
-- [`scripts/find-jobs.js`](scripts/find-jobs.js) - list / filter / search across all projects
-- [`scripts/create-job.js`](scripts/create-job.js) - create one job (template)
-- [`scripts/move-state.js`](scripts/move-state.js) - move job to another lane
+- [`scripts/find-tasks.js`](scripts/find-tasks.js) - list / filter / search across all projects
+- [`scripts/create-task.js`](scripts/create-task.js) - create one task (template)
+- [`scripts/move-state.js`](scripts/move-state.js) - move task to another lane
 - [`scripts/move-to-top.js`](scripts/move-to-top.js) - promote to head of `2-ready`
 - [`scripts/triage-lane.js`](scripts/triage-lane.js) - bulk-classify + move
 - [`references/states.md`](references/states.md) - full lane vocabulary

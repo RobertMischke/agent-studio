@@ -5,7 +5,7 @@ FAQ-style: known failure modes you may hit while operating agent-orchestrator, w
 For deeper context, the structural references are:
 
 - [../filesystem-contract.md](../../contracts/filesystem.md) - lane catalog, on-disk shape.
-- [../../.agents/skills/job-api/references/known-pitfalls.md](../../../.agents/skills/job-api/references/known-pitfalls.md) - operator-side pitfalls when scripting via the API.
+- [../../.agents/skills/task-api/references/known-pitfalls.md](../../../.agents/skills/task-api/references/known-pitfalls.md) - operator-side pitfalls when scripting via the API.
 - [../cli-skills/](../../cli/skills) - per-CLI quirks and known incidents.
 
 ## "The agent only emits sandbox errors"
@@ -47,7 +47,7 @@ Workaround: refresh the page; the counts recompute from `/api/tasks/grouped` on 
 
 Symptom: the lane that is supposed to hold one job at a time briefly (or persistently) shows two cards.
 
-Cause: the auto-review reissue race documented in [../../.agents/skills/job-api/references/known-pitfalls.md](../../../.agents/skills/job-api/references/known-pitfalls.md) §5. When the runner moved a job to `4-auto-review` and the orchestrator decided "reissue" while a fresh job was being picked up, both ended up in `3-progress`.
+Cause: the auto-review reissue race documented in [../../.agents/skills/task-api/references/known-pitfalls.md](../../../.agents/skills/task-api/references/known-pitfalls.md) §5. When the runner moved a job to `4-auto-review` and the orchestrator decided "reissue" while a fresh job was being picked up, both ended up in `3-progress`.
 
 Status: fixed by `fix-auto-review-reissue-must-go-to-ready-not-progress` (2026-05-11). Reissues now land in `2-ready order=0` instead of `3-progress`. If you still see two cards in `3-progress` after that date, inspect each job's `cli-output.log` for `Decision: reissue` to confirm whether the fix regressed or you are hitting a different race.
 
@@ -86,7 +86,7 @@ cannot see the shell folder, stop and ask for an explicit operator decision
 before any filesystem cleanup; do not hide direct deletion inside an automated
 triage script.
 
-See [../../.agents/skills/job-api/references/known-pitfalls.md](../../../.agents/skills/job-api/references/known-pitfalls.md) §7.
+See [../../.agents/skills/task-api/references/known-pitfalls.md](../../../.agents/skills/task-api/references/known-pitfalls.md) §7.
 
 ## "Crash recovery committed my uncommitted edits"
 
@@ -102,4 +102,4 @@ Symptom: `POST /api/tasks/<id>/move` returns `409 Job already exists or invalid 
 
 Cause: you passed `rootPath` as `watchPath`. The server resolves jobs against the *resolved job-folder root* under the workspace, not the project's source tree.
 
-Fix: use the `path` field returned by `GET /api/watch-paths`, not `rootPath`. The full pitfall and ready-to-use Node templates live in [../../.agents/skills/job-api/SKILL.md](../../../.agents/skills/job-api/SKILL.md).
+Fix: use the `path` field returned by `GET /api/watch-paths`, not `rootPath`. The full pitfall and ready-to-use Node templates live in [../../.agents/skills/task-api/SKILL.md](../../../.agents/skills/task-api/SKILL.md).

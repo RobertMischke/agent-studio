@@ -18,5 +18,5 @@ related-adrs: []
 
 **What.** An agent directly creates, edits, moves, or deletes task folders under the workspace instead of using the task API.
 **Why.** Direct filesystem edits bypass the scanner, transition service, cache invalidation, and event broadcasts.
-**Workaround.** Stop and replace the action with the API route from `.agents/skills/job-api/SKILL.md`.
+**Workaround.** Stop and replace the action with the API route from `.agents/skills/task-api/SKILL.md`.
 **Long-term.** Keep the AGENTS rule prominent and add task-access guardrails where possible.
