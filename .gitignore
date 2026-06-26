@@ -110,3 +110,18 @@ frontend/evidence-out/
 frontend/capture-evidence.mjs
 frontend/debug-styles.mjs
 frontend/proxy.stable.json
+
+# ── Repo-root cleanup: artifacts/logs/strays that must never be committed ──
+node_modules/
+.test-out/
+*.out.log
+*.err.log
+.api-direct.*
+frontend-server.*
+frontend/.frontend-dev.log
+*.zip
+/jobs-dump.json
+/mini-test-screenshot.png
+/presentation/
+/scenarios/
+/results/

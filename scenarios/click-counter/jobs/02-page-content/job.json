@@ -1,8 +1,0 @@
-{
-  "id": "02-page-content",
-  "title": "Add the visible page content",
-  "order": 20,
-  "agent": "claude",
-  "cliType": "claude",
-  "model": "claude-haiku-4-5"
-}
