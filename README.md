@@ -2,11 +2,22 @@
 
 **Stop being the bottleneck.** A task workbench that feeds your coding-agent CLIs a continuous queue of work, using the subscriptions and execution environments you already trust.
 
-> **Naming note:** The product is **`agent-orchestrator`** (kebab-case, identical to the domain `agent-orchestrator.dev` — developer-tool convention like `fly.io`, `vercel`, `stripe`). The repository slug and several runtime strings still say "agent-orchestrator" as a follow-up cleanup; see [docs/architecture/decisions/adr-archive.md](./docs/architecture/decisions/adr-archive.md) for the load-bearing rename note.
+![The board: every watched project and every task state in one place](./docs/assets/images/board-overview.png)
 
-![Board overview](./docs/assets/images/board-overview.png)
+*One board across every watched project. Tasks flow `ready → in progress → review`; the runner picks them up automatically, so your role shrinks to the part that needs you — review.*
 
 > .NET 10 backend + Angular 21 PWA. Task state lives in `.orchestrator/jobs/` folders on disk; the Task Access API fronts the filesystem so the runner, supervisor, frontend, remote clients, and scripts read and mutate through one boundary. Runs tasks through Claude Code, Codex, GitHub Copilot, or Gemini. Coding work is sequential by default and can opt into bounded, orchestrator-gated parallelism via `maxParallelism`.
+
+## What it does
+
+- **A queue, not a babysitting loop.** Tasks land in `2-ready`; the runner walks them `3-progress → 4-review` automatically, so your time goes to review — the one part that actually needs you.
+- **Your subscriptions, not API keys.** It drives *your* Claude Code, Codex, Copilot, and Gemini CLIs through the accounts you already pay for — no model API keys, no second billing layer.
+- **An assisted-coding harness, not a black box.** Every run has a pre/core/post shape: scope + context + branch setup → the provider CLI runs → output, diffs, a parsed protocol, and a review gate.
+- **Deterministic orchestration, not prompt-trust.** The orchestrator parses hard completion signals and re-issues the work itself when the agent's report contradicts the evidence — no edits, near-zero duration, or a post-recovery no-op.
+- **Evidence by default.** Each task keeps a parsed `status.md` protocol, a live git diff, a run timeline, token usage, and screenshots — so review is fast and security work is repeatable.
+- **One board, many projects.** It watches several repositories in parallel; coding is serial by default, with opt-in bounded parallelism isolated in git worktrees on short-lived `task/<id>` branches.
+
+> **Naming note:** The product is **`agent-orchestrator`** (kebab-case, identical to the domain `agent-orchestrator.dev` — developer-tool convention like `fly.io`, `vercel`, `stripe`). The repository slug and several runtime strings still say "agent-taskboard" as a follow-up cleanup; see [docs/architecture/decisions/adr-archive.md](./docs/architecture/decisions/adr-archive.md) for the load-bearing rename note.
 
 ---
 
@@ -98,7 +109,9 @@ The lanes (`0-backlog`, `1-preparation`, `1a-orchestrator-prep`, `2-ready`, `3-p
 
 ### Detail panel: prompt + protocol + live git + triage
 
-![Detail view, task + protocol panes](./docs/assets/images/detail-protocol.png)
+![Task detail: the pre/core/post pipeline on the left, the parsed run protocol on the right](./docs/assets/images/detail-protocol.png)
+
+*The task detail. Left: the pre/core/post pipeline (loop check → agent execution → orchestrator review with per-aspect gates → merge). Right: the parsed `status.md` protocol with what the run did and what's still open.*
 
 Per-task side panel that hosts ten sub-panes you can show, hide, and maximize: prompt editor (rich markdown), protocol view (parsed `status.md` + activity log + telemetry chips), live git pane with `diff2html` rendering, hygiene strip (committed / clean / synced), triage panel with `j` / `k` peer navigation and lane-decision actions (move / move-to-top / delete / start), command deck for the chat-compose strip, run timeline (one card per CLI invocation between user inputs), screenshot strip from `results/`, log overlay for the raw CLI buffer, and a verbose-debug overlay for read-only deep inspection.
 
@@ -142,7 +155,9 @@ Out of scope on purpose: API-key billing, mandatory sandboxes, general workflow 
 
 ### Review handoff: what makes a task review-ready
 
-![Review protocol in protocol view](./docs/assets/images/detail-quality-gate.png)
+![A review-ready task: the work merged task branch → develop → main, with the per-file diff and evidence](./docs/assets/images/detail-git-focus.png)
+
+*A review-ready task. The git pane shows the work merged `task/… → develop → main` with the full per-file diff (added/modified, line counts) — the concrete change a reviewer signs off on, next to the run protocol and evidence.*
 
 When a CLI run completes successfully, the application captures the run log, moves the task to `4-review`, writes a concise English protocol into `status.md`, and preserves review evidence such as screenshots under the task's `results/` folder.
 
