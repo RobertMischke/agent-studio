@@ -53,7 +53,6 @@ import { EpicMembershipBannerComponent } from './components/epic-membership-bann
 import { LogOverlayComponent } from './components/log-overlay/log-overlay.component';
 import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane/protocol-pane.component';
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
-import { CliConfigCardComponent } from './components/cli-config-card/cli-config-card.component';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
 import { TriageActionPayload, laneLabelFor } from './state/triage-actions.model';
 import { UndoController } from '../../services/undo.service';
@@ -77,7 +76,6 @@ import { TooltipDirective } from '../../components/tooltip';
     LogOverlayComponent,
     ProtocolPaneComponent,
     DetailHeaderComponent,
-    CliConfigCardComponent,
     PaneToggleBarComponent,
     TooltipDirective,
   ],
