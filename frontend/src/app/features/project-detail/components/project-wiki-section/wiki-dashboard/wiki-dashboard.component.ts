@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { StudioIconComponent } from '../../../../../components/studio-icon/studio-icon.component';
-import { TooltipDirective } from '../../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { WikiNodeType } from '../../../../../models/project-docs.model';
 
 /** A recently-edited page row (page / git author / when) for the dashboard. */

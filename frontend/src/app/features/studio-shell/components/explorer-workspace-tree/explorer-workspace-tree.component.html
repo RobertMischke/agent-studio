@@ -13,7 +13,7 @@
             type="button"
             class="studio-sidebar-header__action studio-sidebar-header__action--inline"
             data-testid="studio-explorer-add-workspace"
-            appTooltip="Create workspace"
+            cacTooltip="Create workspace"
             aria-label="Create workspace"
             (click)="onboardWorkspaceRequest.emit(); $event.stopPropagation()">
       <app-studio-icon name="plus" [size]="11"></app-studio-icon>
@@ -23,7 +23,7 @@
             class="studio-sidebar-header__action studio-sidebar-header__action--inline"
             [class.studio-sidebar-header__action--active]="showAllActive()"
             data-testid="studio-explorer-show-all-projects"
-            appTooltip="Show all projects (open the cross-project board)"
+            cacTooltip="Show all projects (open the cross-project board)"
             aria-label="Show all projects"
             (click)="showAll.emit(); $event.stopPropagation()">
       <app-studio-icon name="grid" [size]="11"></app-studio-icon>
@@ -72,7 +72,7 @@
             [label]="g.displayName"
             [count]="g.projects.length"
             [testid]="'studio-explorer-ws-group-' + g.id"
-            appTooltip="Double-click or right-click to rename this workspace"
+            cacTooltip="Double-click or right-click to rename this workspace"
             (chevronClick)="onWsHeaderToggle(g)"
             (selectRequest)="onWsHeaderToggle(g)"
             (secondary)="startRenameWorkspace(g)"
@@ -81,7 +81,7 @@
             <button type="button"
                     class="studio-explorer-tree__row-action"
                     [attr.data-testid]="'studio-workspace-' + g.id + '-add-project'"
-                    appTooltip="Create project in this workspace"
+                    cacTooltip="Create project in this workspace"
                     [attr.aria-label]="'Create project in ' + g.displayName"
                     (click)="onboardProjectRequest.emit(g.id); $event.stopPropagation()">
               <app-studio-icon name="plus" [size]="11"></app-studio-icon>
@@ -98,7 +98,7 @@
                [class.studio-tree-project--moving]="!!p.projectId && projectDrag.movingProjectId() === p.projectId"
                [attr.data-project-name]="p.name"
                [attr.data-testid]="'studio-explorer-project-row-' + p.name"
-               [appTooltip]="rowTitle(p)"
+               [cacTooltip]="rowTitle(p)"
                (contextmenu)="onProjectContextMenu($event, p)"
                (dragstart)="onDragStart($event, p)"
                (dragend)="onDragEnd()">
@@ -134,7 +134,7 @@
                             (secondary)="openBoardRequest.emit(p.name)">
                 <button type="button"
                         class="studio-tree-row__hub-link"
-                        appTooltip="Open Project Hub"
+                        cacTooltip="Open Project Hub"
                         aria-label="Open Project Hub"
                         (click)="openHubRequest.emit(p.name); $event.stopPropagation()">
                   <app-studio-icon name="grid" [size]="10"></app-studio-icon>
@@ -158,15 +158,15 @@
                         [attr.data-testid]="'studio-explorer-project-board-counts-' + p.name"
                         [attr.aria-label]="boardLaneCountsLabel(p)">
                     <span class="studio-board-lane-count studio-board-lane-count--ready"
-                          [appTooltip]="laneCountTooltips.ready"
+                          [cacTooltip]="laneCountTooltips.ready"
                           [attr.data-testid]="'studio-explorer-project-board-count-ready-' + p.name"
                           aria-hidden="true">{{ laneCountsFor(p).ready }}</span>
                     <span class="studio-board-lane-count studio-board-lane-count--progress"
-                          [appTooltip]="laneCountTooltips.progress"
+                          [cacTooltip]="laneCountTooltips.progress"
                           [attr.data-testid]="'studio-explorer-project-board-count-progress-' + p.name"
                           aria-hidden="true">{{ laneCountsFor(p).progress }}</span>
                     <span class="studio-board-lane-count studio-board-lane-count--human-review"
-                          [appTooltip]="laneCountTooltips.humanReview"
+                          [cacTooltip]="laneCountTooltips.humanReview"
                           [attr.data-testid]="'studio-explorer-project-board-count-human-review-' + p.name"
                           aria-hidden="true">{{ laneCountsFor(p).humanReview }}</span>
                   </span>

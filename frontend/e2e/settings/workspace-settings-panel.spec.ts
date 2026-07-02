@@ -109,9 +109,9 @@ test.describe('Settings panel — Workspaces section (F47)', () => {
     // (the tooltip host is the enabled wrapper around the button).
     const popWrap = page.locator('[data-workspace-id="ws-pop"] .studio-settings-workspace-action-wrap');
     await popWrap.hover();
-    const tip = page.getByTestId('app-tooltip');
+    const tip = page.getByTestId('cac-tooltip');
     await expect(tip).toBeVisible({ timeout: 5_000 });
-    await expect(tip.locator('.app-tooltip__body'))
+    await expect(tip.locator('.cac-tooltip__body'))
       .toHaveText('Move all 2 projects out of this workspace before it can be deleted.');
 
     // Clip the screenshot around the Workspaces section (plus headroom for the

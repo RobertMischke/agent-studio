@@ -57,7 +57,7 @@
           @for (b of timelineBuckets(); track b.day) {
             <div class="tup__timeline-bar" role="listitem"
                  [attr.data-day]="b.day"
-                 [appTooltip]="timelineTooltip(b)"
+                 [cacTooltip]="timelineTooltip(b)"
                  [style.height.%]="b.heightPct">
               <span class="tup__timeline-bar-day">{{ b.shortDay }}</span>
             </div>
@@ -69,7 +69,7 @@
     <section class="tup__pipeline" data-testid="token-usage-pipeline-cost"
              aria-label="Pipeline cost by step kind over time">
       <h3 class="tup__section-title"
-          [appTooltip]="'Per-step-kind token + cost trend, folded from every task pipeline run over the window. Cost is theoretical (per-model price table); CLI subscriptions make the real bill zero.'">
+          [cacTooltip]="'Per-step-kind token + cost trend, folded from every task pipeline run over the window. Cost is theoretical (per-model price table); CLI subscriptions make the real bill zero.'">
         Pipeline cost by step kind
       </h3>
       @if (!pipelineCost()?.hasData) {
@@ -86,7 +86,7 @@
               <span class="tup__pl-legend-label">{{ row.label }}</span>
               <span class="tup__pl-legend-cost">{{ formatCost(row.cost) }}@if (row.anyUnknown) {<span
                     class="tup__pl-star"
-                    [appTooltip]="'Some steps used a model with no price on file; cost is a lower bound.'">*</span>}</span>
+                    [cacTooltip]="'Some steps used a model with no price on file; cost is a lower bound.'">*</span>}</span>
               <span class="tup__pl-legend-tokens">{{ formatTokens(row.tokens) }}</span>
             </span>
           }
@@ -101,7 +101,7 @@
           @for (col of pipelineStackColumns(); track col.day) {
             <div class="tup__pl-col" role="listitem"
                  [attr.data-day]="col.day"
-                 [appTooltip]="pipelineColumnTooltip(col)">
+                 [cacTooltip]="pipelineColumnTooltip(col)">
               <div class="tup__pl-stack" [style.height.%]="col.heightPct">
                 @for (seg of col.segments; track seg.kind) {
                   <span class="tup__pl-seg" [class]="'tup__pl-seg--' + seg.kind"
@@ -153,7 +153,7 @@
                         [attr.data-day]="cell.day"
                         [attr.data-total]="cell.total"
                         [class]="'tup__heatmap-cell--' + heatLevel(cell.total)"
-                        [appTooltip]="row.title + ' · ' + cell.day + ': ' + formatTokens(cell.total) + ' tokens'"
+                        [cacTooltip]="row.title + ' · ' + cell.day + ': ' + formatTokens(cell.total) + ' tokens'"
                         (click)="onSelectJob(row.jobId)"></td>
                   }
                 </tr>

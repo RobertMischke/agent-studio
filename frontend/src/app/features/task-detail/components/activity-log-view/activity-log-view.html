@@ -19,7 +19,7 @@
                   aria-label="More activity actions"
                   aria-haspopup="menu"
                   [attr.aria-expanded]="toolbarMenuOpen()"
-                  [appTooltip]="'More activity actions'"
+                  [cacTooltip]="'More activity actions'"
                   (click)="openToolbarMenu($event)">⋯</button>
           <app-menu
             [items]="toolbarMenuItems()"
@@ -85,7 +85,7 @@
                       <span class="convo-turn__role">Agent</span>
                       <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
                     </header>
-                    <app-markdown class="convo-turn__body convo-turn__body--agent"
+                    <cac-markdown class="convo-turn__body convo-turn__body--agent"
                                   [source]="item.turn.text"
                                   [dense]="true" />
                   }
@@ -171,7 +171,7 @@
                       @if (item.toolDuration) {
                         <span class="convo-tools__duration"
                               data-testid="convo-tools-duration"
-                              [appTooltip]="'Tool activity took ' + item.toolDuration">{{ item.toolDuration }}</span>
+                              [cacTooltip]="'Tool activity took ' + item.toolDuration">{{ item.toolDuration }}</span>
                       }
                       <span class="convo-tools__time">{{ formatTime(item.turn.timestamp) }}</span>
                     </button>
@@ -259,7 +259,7 @@
             @if (formatSince(ls.sinceMs); as since) {
               <span class="live-status__since"
                     data-testid="activity-log-live-since"
-                    [appTooltip]="'Time since the last activity-log line'">{{ since }}</span>
+                    [cacTooltip]="'Time since the last activity-log line'">{{ since }}</span>
             }
           </div>
         }

@@ -33,7 +33,7 @@
               {{ severityLabel(e.severity) }}
             </span>
             <span class="evidence-row__source">{{ sourceLabel(e.source) }}</span>
-            <span class="evidence-row__ts" [appTooltip]="e.createdAt">{{ formatTime(e.createdAt) }}</span>
+            <span class="evidence-row__ts" [cacTooltip]="e.createdAt">{{ formatTime(e.createdAt) }}</span>
             @if (e.runIndex !== null) {
               <span class="evidence-row__run">run #{{ e.runIndex }}</span>
             }
@@ -43,7 +43,7 @@
             @if (e.followupJobId) {
               <span class="evidence-row__followup"
                     [attr.data-testid]="'review-evidence-followup-' + e.id"
-                    [appTooltip]="'Follow-up task created from this finding.'">
+                    [cacTooltip]="'Follow-up task created from this finding.'">
                 follow-up: {{ e.followupJobId }}
               </span>
             }

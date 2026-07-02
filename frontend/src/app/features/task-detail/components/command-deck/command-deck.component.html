@@ -33,7 +33,7 @@
       <span class="commandbar__label commandbar__label--sr" aria-hidden="false">Project</span>
       <select class="commandbar__select commandbar__select--chip"
               aria-label="Project"
-              [appTooltip]="'Project'"
+              [cacTooltip]="'Project'"
               data-testid="commandbar-project"
               [ngModel]="currentWatchPath()"
               (ngModelChange)="projectChange.emit($event)">
@@ -73,7 +73,7 @@
               data-testid="command-deck-start"
               (click)="startRequest.emit()"
               [disabled]="starting() || !!startDisabledReason()"
-              [appTooltip]="startDisabledReason()">
+              [cacTooltip]="startDisabledReason()">
         {{ starting() ? '⏳' : '▶ Start' }}
       </button>
       @if (startDisabledReason()) {

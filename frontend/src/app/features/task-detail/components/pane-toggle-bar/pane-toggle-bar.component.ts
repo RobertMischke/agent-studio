@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { PaneName, PanesVisible } from '../../services/layout-panes.service';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 /**
  * Strip of icon-only toggle buttons for the prompt / protocol / git
  * panes plus the "Open in VS Code" launch shortcut. The label sits on

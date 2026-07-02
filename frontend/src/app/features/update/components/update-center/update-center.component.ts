@@ -13,7 +13,7 @@ import { ErrorDialogService } from '../../../../services/error-dialog.service';
 import { UpdateHistoryEntry } from '../../../../models/update-service.model';
 
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 /**
  * Drawer-style overlay opened from the version badge. Three sections:
  *

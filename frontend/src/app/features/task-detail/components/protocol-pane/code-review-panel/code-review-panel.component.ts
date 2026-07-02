@@ -15,7 +15,7 @@ import { CodeReviewActivityStore } from '../../../../../services/code-review-act
 
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
-import { TooltipDirective } from '../../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { cleanStepResultMarkdown } from '../../prompt-pane/pipeline-step-result/pipeline-step-result.util';
 import { CLAUDE_FALLBACK_MODEL_ID } from '../../../../cli';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';

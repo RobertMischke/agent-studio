@@ -9,7 +9,7 @@ import {
   ExplorerWorkspaceTreeComponent,
   type ExplorerProjectRow,
 } from './explorer-workspace-tree.component';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import type { RegistryWorkspaceListItem, RegistryProjectSummary } from '../../../../models/task.model';
 
 function project(displayName: string, workspaceId: string, storage: string): RegistryProjectSummary {
@@ -152,7 +152,7 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(review?.textContent?.trim()).toBe('5');
   });
 
-  it('attaches a lane-explaining appTooltip to each Board lane counter', () => {
+  it('attaches a lane-explaining cacTooltip to each Board lane counter', () => {
     const fixture = mount();
     fixture.componentRef.setInput('registryWorkspaces', []);
     fixture.componentRef.setInput('projectRows', [

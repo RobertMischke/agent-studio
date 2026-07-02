@@ -208,7 +208,7 @@ test('each lane counter explains its lane via the canonical appTooltip', async (
 
   await expect(page.getByTestId(`studio-explorer-project-board-counts-${PROJECT}`)).toBeVisible();
 
-  const tip = page.getByTestId('app-tooltip');
+  const tip = page.getByTestId('cac-tooltip');
 
   // Grey counter = Ready (2-ready).
   await page.getByTestId(`studio-explorer-project-board-count-ready-${PROJECT}`).hover();

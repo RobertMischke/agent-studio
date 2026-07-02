@@ -11,7 +11,7 @@
             class="create-dialog__close"
             data-testid="create-dialog-close"
             aria-label="Close"
-            [appTooltip]="'Close'"
+            [cacTooltip]="'Close'"
             (click)="cancelRequest.emit()">×</button>
     <h2 class="create-dialog__title" data-testid="create-dialog-header">{{ header() }}</h2>
     <div class="field">
@@ -26,7 +26,7 @@
                 data-testid="create-generate-title"
                 [disabled]="!canGenerateTitle()"
                 (click)="generateTitle()"
-                [appTooltip]="'Generate a title from the prompt below (Haiku)'">
+                [cacTooltip]="'Generate a title from the prompt below (Haiku)'">
           @if (titleGenerating()) {
             <span class="create-dialog__generate-spinner" aria-hidden="true"></span>
             <span>Generating…</span>
@@ -115,7 +115,7 @@
                 class="create-type-picker__btn"
                 [class.create-type-picker__btn--active]="isEpic()"
                 data-testid="create-kind-epic"
-                [appTooltip]="'An epic is a container for sub-tasks. The prompt is the overarching goal.'"
+                [cacTooltip]="'An epic is a container for sub-tasks. The prompt is the overarching goal.'"
                 (click)="setKind('epic')">Epic</button>
       </div>
     </div>
@@ -136,7 +136,7 @@
                     [class.create-tag-picker__chip--active]="newTags().includes(t.id)"
                     [attr.data-testid]="'create-tag-' + t.id"
                     [style.--tag-color]="t.color"
-                    [appTooltip]="t.description ? t.label + ': ' + t.description : t.label"
+                    [cacTooltip]="t.description ? t.label + ': ' + t.description : t.label"
                     (click)="toggleTag(t.id)">{{ t.label }}</button>
           }
         </div>
@@ -152,7 +152,7 @@
                   data-testid="create-enhance-prompt"
                   [disabled]="!canEnhance()"
                   (click)="enhancePrompt()"
-                  [appTooltip]="'Refine the prompt, auto-generate the title, and pre-fill tags + lane (Haiku)'">
+                  [cacTooltip]="'Refine the prompt, auto-generate the title, and pre-fill tags + lane (Haiku)'">
             @if (enhancing()) {
               <span class="create-dialog__generate-spinner" aria-hidden="true"></span>
               <span>Enhancing…</span>
@@ -165,7 +165,7 @@
                   class="create-dialog__attach-btn"
                   data-testid="create-attach-image"
                   (click)="triggerFilePicker()"
-                  [appTooltip]="'Attach image (paste or drop also works)'">📎 Image</button>
+                  [cacTooltip]="'Attach image (paste or drop also works)'">📎 Image</button>
         </div>
       </div>
       <textarea #promptArea
@@ -230,7 +230,7 @@
               <button type="button"
                       class="create-dialog__attachment-remove"
                       (click)="removeAttachment(att.id)"
-                      [appTooltip]="'Remove attachment'">×</button>
+                      [cacTooltip]="'Remove attachment'">×</button>
             </div>
           }
         </div>

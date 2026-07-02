@@ -13,7 +13,7 @@
          (ngModelChange)="onChange($event)" />
   <div class="autonomy__stops">
     @for (s of stops; track s.level) {
-      <span [class.autonomy__stop--active]="s.level === level()" [appTooltip]="s.desc">{{ s.name }}</span>
+      <span [class.autonomy__stop--active]="s.level === level()" [cacTooltip]="s.desc">{{ s.name }}</span>
     }
   </div>
   <p class="autonomy__desc">{{ currentStop().desc }}</p>

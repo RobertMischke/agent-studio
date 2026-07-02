@@ -6,15 +6,15 @@
   <header class="pane__header">
     <h3 class="pane__title">{{ paneTitle() }}</h3>
     @if (git.viewMode() === 'worktree' && isActiveJob()) {
-      <button class="btn-sm" (click)="git.refresh()" [disabled]="git.loading()" [appTooltip]="'Refresh git status'">↻</button>
+      <button class="btn-sm" (click)="git.refresh()" [disabled]="git.loading()" [cacTooltip]="'Refresh git status'">↻</button>
     }
     <button class="pane__maximize"
             data-testid="pane-maximize-git"
             (click)="maximizeToggle.emit()"
-            [appTooltip]="maximized() ? 'Restore layout' : 'Maximize'">
+            [cacTooltip]="maximized() ? 'Restore layout' : 'Maximize'">
       {{ maximized() ? '⤡' : '⤢' }}
     </button>
-    <button class="pane__hide" (click)="hide.emit()" [appTooltip]="'Hide panel'">×</button>
+    <button class="pane__hide" (click)="hide.emit()" [cacTooltip]="'Hide panel'">×</button>
   </header>
   <div class="pane__body git-view"
        [class.git-view--split]="maximized()"
@@ -26,7 +26,7 @@
             <span class="git-view__landed-state"
                   data-testid="git-landed-state"
                   [attr.data-state]="prov.landedState"
-                  [appTooltip]="landedStateTooltip(prov)">{{ landedStateLabel(prov.landedState) }}</span>
+                  [cacTooltip]="landedStateTooltip(prov)">{{ landedStateLabel(prov.landedState) }}</span>
           </div>
           <ol class="git-view__ladder" role="list" aria-label="Landed ladder (task branch to develop to main)">
             <li class="git-view__ladder-rung git-view__ladder-rung--reached"
@@ -37,7 +37,7 @@
             <li class="git-view__ladder-rung"
                 [class.git-view__ladder-rung--reached]="prov.ladder.mergedToIntegration"
                 data-testid="git-ladder-integration"
-                [appTooltip]="prov.ladder.mergedToIntegration
+                [cacTooltip]="prov.ladder.mergedToIntegration
                   ? 'Merged into ' + prov.ladder.integrationBranch + ' (HEAD now ' + short(prov.ladder.integrationHead) + ')'
                   : 'Not yet merged into ' + prov.ladder.integrationBranch + ' (HEAD now ' + short(prov.ladder.integrationHead) + ')'">
               <span class="git-view__ladder-arrow">→</span>
@@ -48,7 +48,7 @@
             <li class="git-view__ladder-rung"
                 [class.git-view__ladder-rung--reached]="prov.ladder.releasedToRelease"
                 data-testid="git-ladder-release"
-                [appTooltip]="prov.ladder.releasedToRelease
+                [cacTooltip]="prov.ladder.releasedToRelease
                   ? 'Released into ' + prov.ladder.releaseBranch + ' (HEAD now ' + short(prov.ladder.releaseHead) + ')'
                   : 'Not yet released into ' + prov.ladder.releaseBranch + ' (HEAD now ' + short(prov.ladder.releaseHead) + ')'">
               <span class="git-view__ladder-arrow">→</span>
@@ -67,7 +67,7 @@
                     [attr.data-sha]="m.sha"
                     [attr.data-membership]="membershipLabel(m)">
                   <span class="git-view__membership-sha"
-                        [appTooltip]="membershipTooltip(m, prov)">{{ m.shortSha }}</span>
+                        [cacTooltip]="membershipTooltip(m, prov)">{{ m.shortSha }}</span>
                   <span class="git-view__membership-where"
                         [attr.data-membership]="membershipLabel(m)">{{ membershipLabel(m) }}</span>
                   <span class="git-view__membership-subject">{{ m.message.split('\n')[0] }}</span>
@@ -85,7 +85,7 @@
                   class="git-view__commit-group-toggle"
                   data-testid="git-commit-group-toggle"
                   [attr.aria-expanded]="!commitGroupCollapsed()"
-                  [appTooltip]="commitGroupCollapsed() ? 'Show task commits' : 'Hide task commits'"
+                  [cacTooltip]="commitGroupCollapsed() ? 'Show task commits' : 'Hide task commits'"
                   (click)="toggleCommitGroupCollapsed()">
             <span class="git-view__commit-group-caret">{{ commitGroupCollapsed() ? '▾' : '▴' }}</span>
             <span class="git-view__commit-group-title">{{ git.commitChain().length }} task commits</span>
@@ -102,7 +102,7 @@
                 <button type="button"
                         class="git-view__commit-chain-button"
                         [attr.aria-pressed]="git.selectedCommitSha() === null"
-                        [appTooltip]="'Combined diff across all ' + git.commitChain().length + ' task commits'"
+                        [cacTooltip]="'Combined diff across all ' + git.commitChain().length + ' task commits'"
                         (click)="git.selectAllCommits()">
                   <span class="git-view__commit-chain-step">∑</span>
                   <span class="git-view__commit-chain-subject">All {{ git.commitChain().length }} commits</span>
@@ -116,7 +116,7 @@
                   <button type="button"
                           class="git-view__commit-chain-button"
                           [attr.aria-pressed]="git.selectedCommitSha() === entry.sha"
-                          [appTooltip]="commitChainTooltip(entry, i)"
+                          [cacTooltip]="commitChainTooltip(entry, i)"
                           (click)="git.selectChainCommit(entry.sha)">
                     <span class="git-view__commit-chain-step">#{{ i + 1 }}</span>
                     <span class="git-view__commit-chain-sha">{{ entry.shortSha }}</span>
@@ -124,7 +124,7 @@
                     @if (confidencePercent(entry); as pct) {
                       <span class="git-view__commit-confidence"
                             data-testid="git-commit-confidence"
-                            [appTooltip]="attributionTooltip(entry)">{{ pct }}</span>
+                            [cacTooltip]="attributionTooltip(entry)">{{ pct }}</span>
                     }
                     <span class="git-view__commit-chain-meta"
                           data-testid="git-commit-chain-meta">{{ entry.filesChanged }}f · {{ commitChainTimestamp(entry) }}</span>
@@ -151,14 +151,14 @@
             @if (confidencePercent(c); as pct) {
               <span class="git-view__commit-confidence"
                     data-testid="git-commit-header-confidence"
-                    [appTooltip]="attributionTooltip(c)">{{ pct }}</span>
+                    [cacTooltip]="attributionTooltip(c)">{{ pct }}</span>
             }
             <button type="button"
                     class="git-view__commit-collapse"
                     data-testid="git-commit-collapse-toggle"
                     [attr.aria-expanded]="!commitHeaderCollapsed()"
                     [attr.aria-label]="commitHeaderCollapsed() ? 'Expand commit message' : 'Collapse commit message'"
-                    [appTooltip]="commitHeaderCollapsed() ? 'Expand commit message' : 'Collapse commit message'"
+                    [cacTooltip]="commitHeaderCollapsed() ? 'Expand commit message' : 'Collapse commit message'"
                     (click)="toggleCommitHeaderCollapsed()">
               {{ commitHeaderCollapsed() ? '▾' : '▴' }}
             </button>
@@ -192,7 +192,7 @@
                       <button class="pane__maximize"
                               data-testid="git-diff-maximize"
                               (click)="toggleDiffMaximize()"
-                              [appTooltip]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
+                              [cacTooltip]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
                         {{ diffMaximized() ? '⤡' : '⤢' }}
                       </button>
                     }
@@ -250,7 +250,7 @@
           <span class="git-view__location"
                 data-testid="git-run-location"
                 [class.git-view__location--worktree]="g.isWorktree"
-                [appTooltip]="g.isWorktree
+                [cacTooltip]="g.isWorktree
                   ? 'Live changes read from the task worktree.'
                   : 'Live changes read from the main checkout.'">
             {{ g.isWorktree ? '(Worktree)' : '(Haupt-Checkout)' }}
@@ -283,7 +283,7 @@
                       <button class="pane__maximize"
                               data-testid="git-diff-maximize"
                               (click)="toggleDiffMaximize()"
-                              [appTooltip]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
+                              [cacTooltip]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
                         {{ diffMaximized() ? '⤡' : '⤢' }}
                       </button>
                     }

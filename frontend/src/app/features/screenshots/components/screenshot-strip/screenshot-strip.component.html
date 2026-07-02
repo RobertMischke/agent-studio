@@ -9,7 +9,7 @@
               [attr.data-testid]="'screenshot-thumb'"
               [attr.data-index]="i"
               [attr.data-status]="s.status ?? 'none'"
-              [appTooltip]="thumbTitle(s)"
+              [cacTooltip]="thumbTitle(s)"
               (click)="openLightbox(i)">
         <img class="strip__img" [src]="s.url" [alt]="s.caption" loading="lazy" />
         @if (s.status === 'passed') {
@@ -26,7 +26,7 @@
             <span class="strip__caption-source"
                   [attr.data-source]="s.source"
                   [attr.data-testid]="'screenshot-source'"
-                  [appTooltip]="sourceTooltip(s)">{{ src }}</span>
+                  [cacTooltip]="sourceTooltip(s)">{{ src }}</span>
           }
           @if (variant() === 'reel' && s.projectName) {
             <span class="strip__caption-project">{{ s.projectName }}</span>
@@ -68,7 +68,7 @@
               <span class="lightbox__source"
                     [attr.data-source]="c.source"
                     data-testid="screenshot-lightbox-source"
-                    [appTooltip]="sourceTooltip(c)">{{ src }}</span>
+                    [cacTooltip]="sourceTooltip(c)">{{ src }}</span>
             }
             <span class="lightbox__index" data-testid="screenshot-lightbox-index">
               {{ activeIndex() + 1 }} / {{ screenshots().length }}
@@ -93,7 +93,7 @@
             <button type="button" class="lightbox__path-btn"
                     data-testid="screenshot-lightbox-open-explorer"
                     (click)="copyLocalPath(c); $event.stopPropagation()"
-                    [appTooltip]="c.localPath">
+                    [cacTooltip]="c.localPath">
               {{ pathButtonLabel() }}
             </button>
           </div>

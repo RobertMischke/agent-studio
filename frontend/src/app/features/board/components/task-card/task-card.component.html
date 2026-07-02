@@ -16,14 +16,14 @@
      [attr.data-compact]="compact() ? 'true' : null"
      (contextmenu)="openCardContextMenu($event)">
   <div class="task-card__header">
-    <span class="task-card__key-chip" data-testid="task-card-key" [appTooltip]="'Task key: ' + issueLabel()">
+    <span class="task-card__key-chip" data-testid="task-card-key" [cacTooltip]="'Task key: ' + issueLabel()">
       {{ issueLabel() }}
     </span>
     <span class="task-card__header-signals">
       @if (codeReviewGradeBadge(); as grade) {
         <span class="task-card__grade-pill"
               [class]="'task-card__grade-pill--' + grade.tone"
-              [appTooltip]="grade.tooltip"
+              [cacTooltip]="grade.tooltip"
               data-testid="task-card-grade"
               [attr.data-grade]="grade.grade">
           <span class="task-card__grade-letter" aria-hidden="true">{{ grade.grade }}</span>
@@ -36,7 +36,7 @@
               [style.background]="oc.background"
               [style.borderColor]="oc.border"
               [style.color]="oc.foreground"
-              [appTooltip]="oc.tooltip">
+              [cacTooltip]="oc.tooltip">
           <span class="task-card__owner-icon" aria-hidden="true">👤</span>
           <span class="task-card__owner-name">{{ oc.initials }}</span>
         </span>
@@ -45,7 +45,7 @@
         <button type="button"
                 class="task-card__pick-next"
                 data-testid="task-card-pick-next"
-                [appTooltip]="'Pick next — bump to the front of the runner queue'"
+                [cacTooltip]="'Pick next — bump to the front of the runner queue'"
                 aria-label="Pick next"
                 (click)="onPickNextClick($event)">
           <span class="task-card__pick-next-glyph" aria-hidden="true">⤴</span>
@@ -57,7 +57,7 @@
   <button type="button"
           class="task-card__delete"
           data-testid="task-card-delete"
-          [appTooltip]="'Delete task'"
+          [cacTooltip]="'Delete task'"
           aria-label="Delete task"
           (click)="onDeleteClick($event)">🗑</button>
   <h3 class="task-card__title"
@@ -70,7 +70,7 @@
               [class.task-card__epic-toggle--open]="epicExpanded()"
               [attr.aria-expanded]="epicExpanded()"
               [disabled]="!hasInlineEpicSubTasks()"
-              [appTooltip]="hasInlineEpicSubTasks() ? (epicExpanded() ? 'Hide sub-tasks' : 'Show sub-tasks') : 'No sub-tasks yet'"
+              [cacTooltip]="hasInlineEpicSubTasks() ? (epicExpanded() ? 'Hide sub-tasks' : 'Show sub-tasks') : 'No sub-tasks yet'"
               [attr.aria-label]="hasInlineEpicSubTasks() ? (epicExpanded() ? 'Hide sub-tasks' : 'Show sub-tasks') : 'No sub-tasks yet'"
               (click)="toggleEpicExpanded($event)">
         <span aria-hidden="true">›</span>
@@ -85,15 +85,15 @@
     @if (isEpic()) {
       <span class="task-card__epic-badge"
             data-testid="task-card-epic-badge"
-            [appTooltip]="'Epic — a container for sub-tasks. Open it to see sub-task progress.'">EPIC</span>
+            [cacTooltip]="'Epic — a container for sub-tasks. Open it to see sub-task progress.'">EPIC</span>
     } @else if (subTaskEpicId(); as epicId) {
       <span class="task-card__subtask-chip"
             data-testid="task-card-subtask-chip"
-            [appTooltip]="'Sub-task of epic: ' + epicId">↳ epic</span>
+            [cacTooltip]="'Sub-task of epic: ' + epicId">↳ epic</span>
     }
     <span class="task-card__title-text" data-truncatable>{{ job().title || job().id }}</span>
     @if (compact()) {
-      <span class="task-card__compact-time" [appTooltip]="'Last activity: ' + relativeActivity()">
+      <span class="task-card__compact-time" [cacTooltip]="'Last activity: ' + relativeActivity()">
         {{ relativeActivity() }}
       </span>
     }
@@ -104,13 +104,13 @@
             [class]="'task-card__mode-pill--' + mb.mode"
             data-testid="task-card-mode"
             [attr.data-mode]="mb.mode"
-            [appTooltip]="mb.tooltip">
+            [cacTooltip]="mb.tooltip">
         <span class="task-card__mode-glyph" aria-hidden="true">{{ mb.icon }}</span> {{ mb.label }}
       </span>
     }
     @if (waitingOnLabel(); as wol) {
       <span class="task-card__waiting-pill"
-            [appTooltip]="waitingOnTooltip()"
+            [cacTooltip]="waitingOnTooltip()"
             data-testid="task-card-waiting-on">
         ⏳ waiting on {{ wol }}
       </span>
@@ -118,7 +118,7 @@
     @if (humanReviewBadge(); as hrb) {
       <span class="task-card__human-review-pill"
             [class]="'task-card__human-review-pill--' + hrb.tone"
-            [appTooltip]="hrb.tooltip"
+            [cacTooltip]="hrb.tooltip"
             data-testid="task-card-human-review">
         @if (hrb.tone === 'attention') {
           <span class="task-card__human-review-glyph" aria-hidden="true">⚠</span>
@@ -129,7 +129,7 @@
     @if (phaseBadge(); as pb) {
       <span class="task-card__phase-pill"
             [class]="'task-card__phase-pill--' + pb.tone"
-            [appTooltip]="pb.tooltip"
+            [cacTooltip]="pb.tooltip"
             data-testid="task-card-phase">
         {{ pb.label }}
       </span>
@@ -144,7 +144,7 @@
     }
     @if (job().pendingIntent; as pi) {
       <span class="task-card__pending-pill"
-            [appTooltip]="pendingTooltip(pi)"
+            [cacTooltip]="pendingTooltip(pi)"
             data-testid="task-card-pending">
         ⏳ {{ pi.mode }}
       </span>
@@ -152,7 +152,7 @@
     @if (job().autoLoop; as al) {
       <span class="task-card__loop-pill"
             [class.task-card__loop-pill--hot]="loopHot()"
-            [appTooltip]="loopTooltip(al)"
+            [cacTooltip]="loopTooltip(al)"
             data-testid="task-card-autoloop">
         ↻ auto-loop {{ al.iteration }}/{{ al.maxIterations }}
       </span>
@@ -160,7 +160,7 @@
     @if (reviewBadge(); as rb) {
       <span class="task-card__review-pill"
             [class]="'task-card__review-pill--' + rb.tone"
-            [appTooltip]="rb.tooltip"
+            [cacTooltip]="rb.tooltip"
             data-testid="task-card-review">
         <span class="task-card__review-dot"></span>
         {{ rb.label }}
@@ -169,7 +169,7 @@
     @if (autoReviewProcessBadge(); as arb) {
       <span class="task-card__auto-review-pill"
             [class]="'task-card__auto-review-pill--' + arb.tone"
-            [appTooltip]="arb.tooltip"
+            [cacTooltip]="arb.tooltip"
             data-testid="task-card-auto-review-status">
         <span class="task-card__auto-review-dot"></span>
         {{ arb.label }}
@@ -178,7 +178,7 @@
     @if (outcomeIssueBadge(); as oib) {
       <span class="task-card__issue-pill"
             [class]="'task-card__issue-pill--' + oib.tone"
-            [appTooltip]="oib.tooltip"
+            [cacTooltip]="oib.tooltip"
             data-testid="task-card-outcome-issue">
         {{ oib.label }}
       </span>
@@ -186,7 +186,7 @@
     @if (codeReviewRunning()) {
       <span class="task-card__code-review-pill"
             data-testid="task-card-code-review-running"
-            [appTooltip]="'A user-triggered code review is running against this task\'s latest commit.'">
+            [cacTooltip]="'A user-triggered code review is running against this task\'s latest commit.'">
         <span class="task-card__code-review-dot"></span>
         code review…
       </span>
@@ -199,7 +199,7 @@
               [class]="'task-card__type-icon--' + tt.kind"
               data-testid="job-task-type"
               [attr.data-task-type]="tt.kind"
-              [appTooltip]="tt.tooltip"
+              [cacTooltip]="tt.tooltip"
               role="img"
               [attr.aria-label]="tt.label">
           <app-studio-icon [name]="taskTypeIconName(tt.kind)" [size]="11" [strokeWidth]="2"></app-studio-icon>
@@ -207,7 +207,7 @@
       }
       <span class="task-card__effective-model"
             [class.task-card__effective-model--default]="effectiveModelChip().isDefault"
-            [appTooltip]="effectiveModelChip().tooltip"
+            [cacTooltip]="effectiveModelChip().tooltip"
             data-testid="task-card-effective-model"
             [attr.data-model-source]="effectiveModelChip().source">
         <span class="task-card__effective-model-icon" aria-hidden="true">{{ effectiveModelChip().icon }}</span>
@@ -280,14 +280,14 @@
   @if (pipelineDots(); as pipe) {
     <div class="task-card__pipeline"
          data-testid="task-card-pipeline"
-         [appTooltip]="pipe.tooltip">
+         [cacTooltip]="pipe.tooltip">
       <span class="task-card__pipeline-dots">
         @for (dot of pipe.dots; track dot.id) {
           <span class="task-card__pipeline-dot"
                 [class]="'task-card__pipeline-dot--' + dot.status"
                 [attr.data-step]="dot.id"
                 [attr.data-status]="dot.status"
-                [appTooltip]="dot.label + ': ' + dot.status"></span>
+                [cacTooltip]="dot.label + ': ' + dot.status"></span>
         }
       </span>
       @if (pipe.currentLabel) {
@@ -305,7 +305,7 @@
               [attr.data-tag-id]="tg.id"
               [attr.data-testid]="tg.concern ? 'task-card-concern-chip' : (tg.unparseable ? 'task-card-unparseable-chip' : null)"
               [style.--tag-color]="tg.color"
-              [appTooltip]="tg.tooltip">@if (tg.concern) { <span class="task-card__tag-chip-warn" aria-hidden="true">⚠</span> } @else if (tg.unparseable) { <span class="task-card__tag-chip-unparseable-glyph" aria-hidden="true">📝</span> }{{ tg.label }}</span>
+              [cacTooltip]="tg.tooltip">@if (tg.concern) { <span class="task-card__tag-chip-warn" aria-hidden="true">⚠</span> } @else if (tg.unparseable) { <span class="task-card__tag-chip-unparseable-glyph" aria-hidden="true">📝</span> }{{ tg.label }}</span>
       }
     </div>
   }
@@ -319,7 +319,7 @@
                       class="task-card__epic-subtask-btn"
                       data-testid="task-card-epic-subtask"
                       [attr.data-sub-id]="sub.id"
-                      [appTooltip]="'Open sub-task'"
+                      [cacTooltip]="'Open sub-task'"
                       (click)="onInlineSubTaskClick($event, sub)">
                 <span class="task-card__epic-subtask-title">{{ sub.title || sub.id }}</span>
                 <span class="task-card__epic-subtask-meta">
@@ -343,7 +343,7 @@
   @if (changeContext(); as ch) {
     <div class="task-card__change-context"
          [attr.data-change-kind]="ch.kind"
-         [appTooltip]="ch.tooltip"
+         [cacTooltip]="ch.tooltip"
          data-testid="task-card-change-context">
       <div class="task-card__change-head">
         <span class="task-card__change-ref"
@@ -370,7 +370,7 @@
              [attr.data-has-files]="cc.anyFiles ? 'true' : null">
           @for (row of cc.rows; track row.shortSha) {
             <div class="task-card__commit-row"
-                 [appTooltip]="row.tooltip"
+                 [cacTooltip]="row.tooltip"
                  data-testid="task-card-commit-row"
                  [attr.data-has-files]="row.hasFiles ? 'true' : null">
               <span class="task-card__commit-sha">@if (cc.variant === 'full') {⏺ }{{ row.shortSha }}</span>
@@ -380,7 +380,7 @@
           }
           @if (cc.moreCount > 0) {
             <div class="task-card__commit-more"
-                 [appTooltip]="cc.moreTooltip"
+                 [cacTooltip]="cc.moreTooltip"
                  data-testid="task-card-commit-more">
               +{{ cc.moreCount }} more {{ cc.moreCount === 1 ? 'commit' : 'commits' }}
             </div>
@@ -389,7 +389,7 @@
       } @else if (commitEmptyBadge(); as nb) {
         <div class="task-card__no-commits"
              [class]="'task-card__no-commits--' + nb.tone"
-             [appTooltip]="nb.tooltip"
+             [cacTooltip]="nb.tooltip"
              data-testid="task-card-no-commits"
              [attr.data-tone]="nb.tone">
           @if (nb.tone === 'discovery') {

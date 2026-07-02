@@ -74,7 +74,7 @@
             class="cum__button"
             data-testid="cli-usage-modal-manage-caps"
             (click)="manageCaps.emit()"
-            [appTooltip]="'Open the CLI-Management panel to edit usage caps'">
+            [cacTooltip]="'Open the CLI-Management panel to edit usage caps'">
       Manage usage caps
     </button>
     <button type="button"
@@ -82,7 +82,7 @@
             data-testid="cli-usage-modal-refresh"
             [disabled]="refreshing()"
             (click)="refresh.emit()"
-            [appTooltip]="'Re-probe ' + title() + ' now'">
+            [cacTooltip]="'Re-probe ' + title() + ' now'">
       {{ refreshing() ? 'Refreshing…' : 'Refresh' }}
     </button>
   </div>

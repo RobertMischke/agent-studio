@@ -359,7 +359,7 @@
   border: 1px solid var(--md-border-soft);
 }
 
-/* Images decorated by `appMarkdownLightbox` become clickable to open
+/* Images decorated by `cacMarkdownLightbox` become clickable to open
  * the shared media lightbox. The directive adds `tabindex="0"` and
  * `role="button"`; these rules make the affordance visible. */
 .markdown-body img.md-image-zoomable {

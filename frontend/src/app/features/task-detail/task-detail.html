@@ -123,7 +123,7 @@
            [class.pane__splitter--dragging]="paneSplitterDragging()"
            role="separator" aria-orientation="vertical"
            data-testid="pane-splitter"
-           [appTooltip]="'Resize'" (pointerdown)="startPaneResize($event, 'prompt', firstVisibleAfter('prompt'))"><span></span></div>
+           [cacTooltip]="'Resize'" (pointerdown)="startPaneResize($event, 'prompt', firstVisibleAfter('prompt'))"><span></span></div>
     }
 
     @if (isPaneRendered('protocol')) {
@@ -163,7 +163,7 @@
            [class.pane__splitter--dragging]="paneSplitterDragging()"
            role="separator" aria-orientation="vertical"
            data-testid="pane-splitter"
-           [appTooltip]="'Resize'" (pointerdown)="startPaneResize($event, 'protocol', 'git')"><span></span></div>
+           [cacTooltip]="'Resize'" (pointerdown)="startPaneResize($event, 'protocol', 'git')"><span></span></div>
     }
 
     @if (isPaneRendered('git')) {

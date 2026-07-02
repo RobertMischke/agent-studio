@@ -29,7 +29,7 @@ test('orchestrator chat renders no inline phase/super-phase dividers', async ({ 
 
   // The legacy master-strip should no longer be present inside the
   // orchestrator's chat surface.
-  const legacyStripInOrch = rail.locator('app-phase-summary-list');
+  const legacyStripInOrch = rail.locator('app-phase-summary-list, cac-phase-summary-list');
   await expect(legacyStripInOrch).toHaveCount(0);
 
   // The chat body should be present and scrollable.

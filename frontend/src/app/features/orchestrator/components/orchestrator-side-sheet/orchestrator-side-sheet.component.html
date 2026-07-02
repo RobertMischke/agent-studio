@@ -58,18 +58,18 @@
         <button class="sheet__btn"
                 type="button"
                 (click)="onOpenVerboseDebug()"
-                [appTooltip]="'Open the read-only Verbose Debug view for ' + (activeJobTitle() ?? 'the active task')"
+                [cacTooltip]="'Open the read-only Verbose Debug view for ' + (activeJobTitle() ?? 'the active task')"
                 data-testid="orch-side-sheet-verbose-debug">Debug</button>
       }
       <button class="sheet__btn"
               type="button"
               (click)="onOpenSettings()"
-              [appTooltip]="'Open orchestrator settings'"
+              [cacTooltip]="'Open orchestrator settings'"
               data-testid="orch-side-sheet-settings">⚙</button>
       <button class="sheet__btn"
               (click)="refresh()"
               [disabled]="loading()"
-              [appTooltip]="'Reload active project chat'"
+              [cacTooltip]="'Reload active project chat'"
               data-testid="orch-side-sheet-refresh">
         {{ loading() ? '...' : 'Refresh' }}
       </button>
@@ -105,10 +105,10 @@
     @if (activeProject()) {
       <section class="sheet__chat">
         @if (virtualChatEnabled()) {
-          <app-project-chat-list
+          <cac-project-chat-list
             #projectChatList
             [project]="activeProject()" />
-          <app-chat
+          <cac-chat
             variant="embedded"
             [messages]="[]"
             [events]="[]"
@@ -119,11 +119,11 @@
             [bodyMaxHeight]="'0px'"
             (submitMessage)="onSubmit($event)" />
         } @else {
-          <!-- Single <app-chat> renders the orchestrator chat. Always
+          <!-- Single <cac-chat> renders the orchestrator chat. Always
                on virtualised mode so the chat scales to thousands of
                turns without DOM blow-up; small-N projects pay nothing
                because the spacer divs collapse to 0px. -->
-          <app-chat
+          <cac-chat
             variant="embedded"
             [virtualised]="true"
             [messages]="messages()"
@@ -151,12 +151,12 @@
                 <button type="button"
                         class="sheet__context-chip-close"
                         (click)="dismissContextChip()"
-                        [appTooltip]="'Hide the context block for the next send'"
+                        [cacTooltip]="'Hide the context block for the next send'"
                         aria-label="Hide context"
                         data-testid="orch-side-sheet-context-chip-close">×</button>
               </div>
             }
-          </app-chat>
+          </cac-chat>
         }
 
         <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">
@@ -164,7 +164,7 @@
                   type="button"
                   (click)="onCreateTaskFromYourMessage()"
                   [disabled]="!canCreateTaskFromUserMessage()"
-                  [appTooltip]="'Open Add Task pre-filled with the text you typed'"
+                  [cacTooltip]="'Open Add Task pre-filled with the text you typed'"
                   data-testid="orch-side-sheet-make-task-from-yours">
             Make a task from your message
           </button>
@@ -172,7 +172,7 @@
                   type="button"
                   (click)="onCreateTaskFromLastReply()"
                   [disabled]="!canCreateTaskFromReply()"
-                  [appTooltip]="'Open Add Task pre-filled with the last orchestrator reply'"
+                  [cacTooltip]="'Open Add Task pre-filled with the last orchestrator reply'"
                   data-testid="orch-side-sheet-make-task">
             Make a task from this reply
           </button>

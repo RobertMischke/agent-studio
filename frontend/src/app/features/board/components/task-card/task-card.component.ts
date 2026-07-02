@@ -41,7 +41,7 @@ import {
   type CommitEmptyBadge,
 } from './task-card-view-model';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { TaskStatusPopoverDirective } from '../../../../components/task-status-card';
 import { MenuComponent, MenuItemClickEvent } from '../../../../components/menu';
 import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';

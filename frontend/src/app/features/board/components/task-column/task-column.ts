@@ -22,7 +22,7 @@ import { TaskService } from '../../../../services/task.service';
 import { TaskCardComponent } from '../task-card/task-card.component';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { cliTypeIcon } from '../../../../services/format.util';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { groupReviewJobs } from '../review-grouping.util';
 import { InfoButtonComponent } from '../../../../components/info-button/info-button.component';
 import { laneDocTopic } from '../../../../components/info-button/lane-doc-topic';

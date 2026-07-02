@@ -27,7 +27,7 @@
               [class.studio-pill--active]="true"
               [style.--studio-pill-color]="activeProjectColor()"
               data-testid="studio-project-picker-trigger"
-              [appTooltip]="activeProjectPickerLabel() + ' — click to switch project'"
+              [cacTooltip]="activeProjectPickerLabel() + ' — click to switch project'"
               (click)="togglePickerMenu($event)">
         @if (activeProjectName(); as name) {
           <span class="studio-pill__glyph"
@@ -45,7 +45,7 @@
                 tabindex="0"
                 [class.studio-auto-toggle--on]="autoModeFor(name) !== 'manual' && autoModeFor(name) !== 'paused'"
                 data-testid="studio-titlebar-auto-toggle"
-                [appTooltip]="autoToggleTooltip(name)"
+                [cacTooltip]="autoToggleTooltip(name)"
                 (click)="toggleAuto.emit(name); $event.stopPropagation()"
                 (keydown.enter)="toggleAuto.emit(name); $event.stopPropagation()"
                 (keydown.space)="toggleAuto.emit(name); $event.stopPropagation()">
@@ -77,7 +77,7 @@
     <span class="studio-titlebar__spacer"></span>
 
     <button type="button" class="studio-titlebar__search" disabled
-            appTooltip="Search tasks, commits, files (coming soon)">
+            cacTooltip="Search tasks, commits, files (coming soon)">
       <app-studio-icon name="search" [size]="13"></app-studio-icon>
       <span class="studio-titlebar__search-label">Search tasks, commits, files…</span>
       <span class="studio-titlebar__kbd">⌘P</span>
@@ -87,18 +87,18 @@
       <button type="button"
               class="studio-titlebar__chatbtn"
               data-testid="studio-titlebar-chat"
-              appTooltip="Open project chat (orchestrator side sheet)"
+              cacTooltip="Open project chat (orchestrator side sheet)"
               (click)="chatToggle.emit()">
         <app-studio-icon name="bot" [size]="14"></app-studio-icon>
         <span>Project Chat</span>
       </button>
       <button type="button"
               class="studio-titlebar__iconbtn"
-              [appTooltip]="theme() === 'light' ? 'Switch to dark theme' : 'Switch to light theme'"
+              [cacTooltip]="theme() === 'light' ? 'Switch to dark theme' : 'Switch to light theme'"
               (click)="toggleTheme()">
         <app-studio-icon [name]="theme() === 'light' ? 'moon' : 'sun'" [size]="14"></app-studio-icon>
       </button>
-      <button type="button" class="studio-titlebar__iconbtn" appTooltip="Notifications">
+      <button type="button" class="studio-titlebar__iconbtn" cacTooltip="Notifications">
         <app-studio-icon name="bell" [size]="14"></app-studio-icon>
       </button>
     </div>
@@ -157,7 +157,7 @@
                     type="button"
                     class="studio-sidebar-header__action"
                     data-testid="studio-sidebar-add-workspace"
-                    appTooltip="Create workspace"
+                    cacTooltip="Create workspace"
                     aria-label="Create workspace"
                     (click)="onAddWorkspace()">
               <app-studio-icon name="plus" [size]="14"></app-studio-icon>
@@ -166,7 +166,7 @@
                     type="button"
                     class="studio-sidebar-header__action"
                     data-testid="studio-sidebar-refresh"
-                    appTooltip="Refresh project list"
+                    cacTooltip="Refresh project list"
                     aria-label="Refresh project list"
                     (click)="onRefreshWorkspace()">
               <app-studio-icon name="refresh" [size]="14"></app-studio-icon>
@@ -175,7 +175,7 @@
                     type="button"
                     class="studio-sidebar-header__action"
                     data-testid="studio-sidebar-collapse-all"
-                    appTooltip="Collapse all projects"
+                    cacTooltip="Collapse all projects"
                     aria-label="Collapse all projects"
                     (click)="onCollapseAllProjects()">
               <app-studio-icon name="collapse" [size]="14"></app-studio-icon>
@@ -186,7 +186,7 @@
                     type="button"
                     class="studio-sidebar-header__action studio-sidebar-header__action--text"
                     data-testid="studio-sidebar-filter-clear-all"
-                    appTooltip="Clear all active filters"
+                    cacTooltip="Clear all active filters"
                     aria-label="Clear all filters"
                     (click)="boardFilters.clearSearchAndFilters()">Clear all</button>
           }
@@ -529,7 +529,7 @@
                             <button type="button"
                                     class="studio-settings-workspace-name studio-settings-workspace-name--btn"
                                     data-testid="settings-workspace-rename"
-                                    [appTooltip]="'Click to rename'"
+                                    [cacTooltip]="'Click to rename'"
                                     (click)="renameRegistryWorkspace(ws)">{{ ws.displayName }}</button>
                           }
                           <span class="studio-settings-workspace-id mono">{{ ws.id }}</span>
@@ -540,23 +540,23 @@
                             <button type="button"
                                     class="studio-settings-workspace-action"
                                     data-testid="settings-workspace-edit-color"
-                                    [appTooltip]="'Set color'"
+                                    [cacTooltip]="'Set color'"
                                     [disabled]="registryWorkspaceBusyId() === ws.id"
                                     (click)="editRegistryWorkspaceColor(ws)">🎨</button>
                             <button type="button"
                                     class="studio-settings-workspace-action"
                                     data-testid="settings-workspace-move-up"
-                                    [appTooltip]="'Move up'"
+                                    [cacTooltip]="'Move up'"
                                     [disabled]="!canMoveWorkspaceUp(ws) || registryWorkspaceBusyId() === ws.id"
                                     (click)="moveRegistryWorkspace(ws, -1)">▲</button>
                             <button type="button"
                                     class="studio-settings-workspace-action"
                                     data-testid="settings-workspace-move-down"
-                                    [appTooltip]="'Move down'"
+                                    [cacTooltip]="'Move down'"
                                     [disabled]="!canMoveWorkspaceDown(ws) || registryWorkspaceBusyId() === ws.id"
                                     (click)="moveRegistryWorkspace(ws, 1)">▼</button>
                             <span class="studio-settings-workspace-action-wrap"
-                                  [appTooltip]="workspaceDeleteTooltip(ws)">
+                                  [cacTooltip]="workspaceDeleteTooltip(ws)">
                               <button type="button"
                                       class="studio-settings-workspace-action studio-settings-workspace-action--danger"
                                       data-testid="settings-workspace-delete"
@@ -590,31 +590,31 @@
                                     <button type="button"
                                             class="studio-settings-workspace-action"
                                             data-testid="settings-project-rename"
-                                            [appTooltip]="'Rename project'"
+                                            [cacTooltip]="'Rename project'"
                                             [disabled]="registryProjectBusyId() === p.id"
                                             (click)="renameRegistryProject(p.id, p.displayName)">✎</button>
                                     <button type="button"
                                             class="studio-settings-workspace-action"
                                             data-testid="settings-project-short-code"
-                                            [appTooltip]="'Edit short code'"
+                                            [cacTooltip]="'Edit short code'"
                                             [disabled]="registryProjectBusyId() === p.id"
                                             (click)="editRegistryProjectShortCode(p.id, p.shortCode)">#</button>
                                     <button type="button"
                                             class="studio-settings-workspace-action"
                                             data-testid="settings-project-color"
-                                            [appTooltip]="'Set project color'"
+                                            [cacTooltip]="'Set project color'"
                                             [disabled]="registryProjectBusyId() === p.id"
                                             (click)="editRegistryProjectColor(p.id, p.color)">🎨</button>
                                     <button type="button"
                                             class="studio-settings-workspace-action"
                                             data-testid="settings-project-workspace"
-                                            [appTooltip]="'Change workspace'"
+                                            [cacTooltip]="'Change workspace'"
                                             [disabled]="registryProjectBusyId() === p.id"
                                             (click)="changeRegistryProjectWorkspace(p.id, p.workspaceId)">⇄</button>
                                     <button type="button"
                                             class="studio-settings-workspace-action studio-settings-workspace-action--danger"
                                             data-testid="settings-project-archive"
-                                            [appTooltip]="p.archived ? 'Un-archive' : 'Archive'"
+                                            [cacTooltip]="p.archived ? 'Un-archive' : 'Archive'"
                                             [disabled]="registryProjectBusyId() === p.id"
                                             (click)="toggleRegistryProjectArchived(p.id, p.archived)">
                                       {{ p.archived ? '↺' : '🗄' }}

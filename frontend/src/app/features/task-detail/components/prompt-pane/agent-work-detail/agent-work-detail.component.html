@@ -38,7 +38,7 @@
                 @for (call of group.calls; track $index) {
                   <li class="awd-call"
                       [class.awd-call--error]="call.isError"
-                      [appTooltip]="callTooltip(call)"
+                      [cacTooltip]="callTooltip(call)"
                       tooltipPosition="top"
                       data-testid="agent-work-detail-call">
                     <span class="awd-call__status"

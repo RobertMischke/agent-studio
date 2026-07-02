@@ -199,7 +199,7 @@ test.describe('Conversation view collapses meta + progressively discloses items'
     // id and the rate-limit telemetry. The tooltip lives at the page level,
     // not inside the bubble, so we query the document root.
     await head.hover();
-    const tooltip = page.locator('.app-tooltip[data-placement]');
+    const tooltip = page.locator('.cac-tooltip[data-placement]');
     await expect(tooltip).toBeVisible({ timeout: 5_000 });
     const tooltipText = await tooltip.innerText();
     expect(tooltipText).toContain(SESSION_ID);

@@ -17,7 +17,7 @@ import {
   parseActivityLog,
   parseOrchestratorSteer
 } from '../activity-log.parser';
-import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
+import { MarkdownViewComponent } from '@coding-agent/chat/markdown';
 import {
   RenderedTurn,
   buildToolChips,
@@ -26,7 +26,7 @@ import {
   roleHeading,
 } from './activity-log-view-model';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../components/menu';
 type ViewMode = 'conversation' | 'trace';
 
@@ -443,7 +443,7 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
         };
       }
     }
-    // Agent turns delegate markdown rendering to <app-markdown> in the
+    // Agent turns delegate markdown rendering to <cac-markdown> in the
     // template, so bodyHtml stays null for that branch. User/system/
     // orchestrator-non-steer turns remain plain escaped text via the
     // inline [innerHTML] binding.

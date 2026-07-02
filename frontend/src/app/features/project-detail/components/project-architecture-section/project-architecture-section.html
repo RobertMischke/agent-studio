@@ -50,7 +50,7 @@
           </button>
           @if (openedId() === d.id) {
             <div class="parch__viewer" data-testid="project-architecture-viewer">
-              <app-markdown class="parch__body" [source]="d.body" />
+              <cac-markdown class="parch__body" [source]="d.body" />
               <details class="parch__notes">
                 <summary>Add a note (local, prototype)</summary>
                 <textarea rows="3"

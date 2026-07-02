@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 
 import { UpdateClientService } from '../../../../services/update.service';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 /**
  * Tiny header chip:  v0.1.0  bd05f36   plus an orange dot when origin/main
  * has moved past stable. Click opens the Update Center drawer. Designed

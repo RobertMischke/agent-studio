@@ -1,7 +1,7 @@
 @if (overlays.orchFeedProject(); as proj) {
   <div class="overlay" appOverlayPortal="modal" (click)="overlays.closeOrchFeed()" tabindex="0" (keydown.enter)="overlays.closeOrchFeed()" (keydown.space)="overlays.closeOrchFeed(); $event.preventDefault()">
     <div class="overlay__panel overlay__panel--orch-feed" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
-      <button class="overlay__close" (click)="overlays.closeOrchFeed()" [appTooltip]="'Close'">×</button>
+      <button class="overlay__close" (click)="overlays.closeOrchFeed()" [cacTooltip]="'Close'">×</button>
       <app-orchestrator-feed [projectName]="proj" />
     </div>
   </div>
@@ -135,7 +135,7 @@
 @if (overlays.analysisReportFocus(); as f) {
   <div class="overlay" appOverlayPortal="modal" data-testid="analysis-report-overlay" (click)="overlays.closeAnalysisReport()" tabindex="0" (keydown.enter)="overlays.closeAnalysisReport()" (keydown.space)="overlays.closeAnalysisReport(); $event.preventDefault()">
     <div class="overlay__panel" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
-      <button class="overlay__close" (click)="overlays.closeAnalysisReport()" [appTooltip]="'Close'">×</button>
+      <button class="overlay__close" (click)="overlays.closeAnalysisReport()" [cacTooltip]="'Close'">×</button>
       <app-analysis-report-drilldown
         [projectName]="f.project"
         [reportId]="f.reportId"

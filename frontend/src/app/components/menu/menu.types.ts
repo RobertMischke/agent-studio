@@ -15,7 +15,7 @@
  *
  *   - `leadingGlyph` — coloured circular initial (project picker chip).
  *   - `trailingBadge` — count chip on the right (project picker job count).
- *   - `tooltip` — passed to the existing [appTooltip] directive.
+ *   - `tooltip` — passed to the existing [cacTooltip] directive.
  */
 export type MenuItem =
   | MenuRow

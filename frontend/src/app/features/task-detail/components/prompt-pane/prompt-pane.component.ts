@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
-import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
+import { MarkdownViewComponent } from '@coding-agent/chat/markdown';
 import { TaskArtifact, TaskInfo, TaskPromptHistoryEntry, TaskTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource, TaskState } from '../../../../models/task.model';
 import type { CliType } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../cli';
@@ -200,7 +200,7 @@ export class PromptPaneComponent {
   }
 
   /** Resolver factory for prompt-history image refs (`attachments/foo.png` ->
-   *  job-folder API URL). Stable identity per render so `<app-markdown>`'s
+   *  job-folder API URL). Stable identity per render so `<cac-markdown>`'s
    *  signal doesn't churn unnecessarily. */
   readonly imageResolver = computed<(src: string) => string>(() => {
     const jobId = this.jobId();

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import { TooltipDirective } from '../../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { formatTokens } from '../../../../../services/format.util';
 import type {
   PipelineModelTokenUsage,

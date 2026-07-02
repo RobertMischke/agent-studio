@@ -7,7 +7,7 @@
         [attr.aria-label]="ariaLabel()"
         [attr.aria-haspopup]="'dialog'"
         [attr.aria-expanded]="pickerOpen()"
-        [appTooltip]="tooltip()"
+        [cacTooltip]="tooltip()"
         [disabled]="effectiveDisabledReason() !== null"
         (click)="openPicker($event)"
         (contextmenu)="openPicker($event)">

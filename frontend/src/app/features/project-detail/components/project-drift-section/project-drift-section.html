@@ -63,7 +63,7 @@
           <footer>
             <span class="pdrift__sev pdrift__sev--{{ band(row.element.severity) }}"
                   [attr.data-testid]="'project-drift-severity-' + row.element.elementId">{{ titleCase(row.element.severity) }}</span>
-            <span class="pdrift__cov" [appTooltip]="'Source coverage (fraction of expected sources actually inspected)'">
+            <span class="pdrift__cov" [cacTooltip]="'Source coverage (fraction of expected sources actually inspected)'">
               cov {{ formatCoverage(row.element.sourceCoverage) }}
             </span>
             <span class="pdrift__status pdrift__status--{{ row.effectiveStatus.toLowerCase() }}"
@@ -90,7 +90,7 @@
           <button class="pdrift__close"
                   data-testid="project-drift-drilldown-close"
                   (click)="close()"
-                  [appTooltip]="'Close'">×</button>
+                  [cacTooltip]="'Close'">×</button>
         </header>
 
         <dl class="pdrift__panel-meta">

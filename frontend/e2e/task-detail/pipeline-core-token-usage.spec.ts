@@ -242,7 +242,7 @@ test('task detail pipeline shows CORE CLI-footer usage, SUM footer, and API-pric
   await pipelineBlock.screenshot({ path: RESULTS_DIR ? join(RESULTS_DIR, 'pipeline-core-token-usage.png') : 'test-results/pipeline-core-token-usage.png' });
 
   await page.getByTestId('overview-pipeline-step-tokens').hover();
-  const tooltip = page.getByTestId('app-tooltip');
+  const tooltip = page.getByTestId('cac-tooltip');
   await expect(tooltip).toContainText('Source: AGENT (CLI FOOTER) / reported');
   await expect(tooltip).toContainText('Input: 2.5k');
   await expect(tooltip).toContainText('Output: 195.6k');

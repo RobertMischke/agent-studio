@@ -14,7 +14,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { renderResultsHtml, type SentinelBanner } from './beautiful-results.renderer';
 import { applyHighlighting } from './beautiful-results.highlight';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
-import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
+import { MarkdownImageLightboxDirective } from '@coding-agent/chat/shared';
 import { perfMark, perfMeasure } from '../../../../utils/perf-tracker';
 
 interface SentinelMeta {
@@ -94,7 +94,7 @@ export class BeautifulResultsComponent {
    * code blocks. We use event delegation on the body container so we
    * don't have to thread Angular bindings into the sanitized HTML.
    *
-   * The image lightbox path is owned by `appMarkdownLightbox` on the body
+   * The image lightbox path is owned by `cacMarkdownLightbox` on the body
    * container - it recognises the `data-results-lightbox` markers the
    * renderer still emits and forwards them to the shared
    * `MediaLightboxService`.

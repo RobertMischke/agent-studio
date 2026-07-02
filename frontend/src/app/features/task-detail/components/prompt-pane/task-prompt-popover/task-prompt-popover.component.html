@@ -7,7 +7,7 @@
       [attr.data-testid]="triggerTestid()"
       [attr.aria-expanded]="open()"
       [attr.aria-label]="'Show ' + title()"
-      [appTooltip]="triggerTooltip()"
+      [cacTooltip]="triggerTooltip()"
       (click)="toggle($event)">
       <span class="prompt-pop__trigger-icon" aria-hidden="true">¶</span>
       {{ triggerLabel() }}
@@ -42,7 +42,7 @@
               (click)="close()">&times;</button>
           </header>
           <div class="prompt-pop__body" data-testid="overview-prompt-popover-body">
-            <app-markdown
+            <cac-markdown
               [source]="markdown()"
               [dense]="true"
               [resolveImageSrc]="imageResolver()" />

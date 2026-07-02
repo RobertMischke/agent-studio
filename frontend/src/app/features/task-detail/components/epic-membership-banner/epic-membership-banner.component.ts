@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal } from '@angular/core';
 import type { EpicRollup } from '../../../../models/task.model';
 import { TaskService } from '../../../../services/task.service';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 
 /**
  * Epic-membership banner: shown in the task-detail view when the open card is a

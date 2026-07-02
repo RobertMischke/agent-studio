@@ -15,7 +15,7 @@ import { ClientSummary, TagRegistryEntry } from '../../../../models/task.model';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { TypeFilterOption } from '../filters-dropdown/filters-dropdown.component';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
 /**
  * VS Code-style right-edge sidesheet that hosts the board's search box and

@@ -20,7 +20,7 @@
           <span>Sort</span>
           <select class="wf__lane-sort-select"
                   [attr.data-testid]="'lane-sort-select-' + lane.state"
-                  [appTooltip]="laneSortMeta(laneSortDraft[lane.state]).hint"
+                  [cacTooltip]="laneSortMeta(laneSortDraft[lane.state]).hint"
                   [(ngModel)]="laneSortDraft[lane.state]"
                   (ngModelChange)="onLaneSortChange(lane.state)">
             @for (opt of laneSortOptions; track opt.value) {

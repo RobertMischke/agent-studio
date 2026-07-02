@@ -8,7 +8,7 @@ import {
 } from '../../../../models/analysis-report.model';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 /**
  * Project-level Analysis Reports surface (ROADMAP "Analysis Reports and
  * Meta-Actions"). Three things in one section:

@@ -101,7 +101,7 @@
                       [class.studio-tab-action--active]="groupByEpic()"
                       [attr.aria-pressed]="groupByEpic()"
                       data-testid="studio-board-epic-toggle"
-                      [appTooltip]="groupByEpic() ? 'Show lane columns' : 'Group tasks by epic'"
+                      [cacTooltip]="groupByEpic() ? 'Show lane columns' : 'Group tasks by epic'"
                       (click)="toggleGroupByEpic()">
                 <app-studio-icon [name]="groupByEpic() ? 'epic' : 'grid'" [size]="14"></app-studio-icon>
                 <span>{{ groupByEpic() ? 'Epics' : 'Lanes' }}</span>
@@ -111,7 +111,7 @@
                       [class.studio-tab-action--active]="effectiveCompactCards()"
                       [attr.aria-pressed]="effectiveCompactCards()"
                       data-testid="studio-board-compact-toggle"
-                      [appTooltip]="compactToggleTooltip()"
+                      [cacTooltip]="compactToggleTooltip()"
                       (click)="toggleCompactCards()">
                 <span aria-hidden="true">{{ effectiveCompactCards() ? '▤' : '▥' }}</span>
                 <span>{{ effectiveCompactCards() ? 'Compact' : 'Full' }}</span>
@@ -132,7 +132,7 @@
             @if (studioRunActivityBadge(); as ra) {
               <span class="studio-tab-action__run-activity"
                     [class]="'studio-tab-action__run-activity studio-tab-action__run-activity--' + ra.tone"
-                    [appTooltip]="ra.tooltip"
+                    [cacTooltip]="ra.tooltip"
                     data-testid="studio-run-activity"
                     [attr.data-run-activity-kind]="ra.kind">
                 <span class="studio-tab-action__run-activity-dot"></span>
@@ -150,7 +150,7 @@
                       [attr.aria-pressed]="shellPanesVisible().prompt"
                       aria-label="Toggle Description panel"
                       data-testid="studio-pane-toggle-prompt"
-                      [appTooltip]="'Description'"
+                      [cacTooltip]="'Description'"
                       (click)="onShellTogglePane('prompt')">
                 <app-studio-icon name="book" [size]="14"></app-studio-icon>
               </button>
@@ -160,7 +160,7 @@
                       [attr.aria-pressed]="shellPanesVisible().protocol"
                       aria-label="Toggle Protocol panel"
                       data-testid="studio-pane-toggle-protocol"
-                      [appTooltip]="'Protocol &amp; chat'"
+                      [cacTooltip]="'Protocol &amp; chat'"
                       (click)="onShellTogglePane('protocol')">
                 <app-studio-icon name="bot" [size]="14"></app-studio-icon>
               </button>
@@ -170,7 +170,7 @@
                       [attr.aria-pressed]="shellPanesVisible().git"
                       aria-label="Toggle Git panel"
                       data-testid="studio-pane-toggle-git"
-                      [appTooltip]="'Git diff &amp; file tree'"
+                      [cacTooltip]="'Git diff &amp; file tree'"
                       (click)="onShellTogglePane('git')">
                 <app-studio-icon name="diff" [size]="14"></app-studio-icon>
                 @if (gitCommitCount > 0) {
@@ -184,7 +184,7 @@
             <button type="button"
                     class="studio-tab-action studio-tab-action--icon"
                     data-testid="studio-task-prev"
-                    [appTooltip]="'Previous task in lane'"
+                    [cacTooltip]="'Previous task in lane'"
                     (click)="onTriagePrev(detail.info)">‹</button>
             @if (slimPagerTotal() > 0) {
               <span class="studio-tab-action studio-tab-action--counter"
@@ -194,7 +194,7 @@
             <button type="button"
                     class="studio-tab-action studio-tab-action--icon"
                     data-testid="studio-task-next"
-                    [appTooltip]="'Next task in lane'"
+                    [cacTooltip]="'Next task in lane'"
                     (click)="onTriageNext(detail.info)">›</button>
             <span class="studio-tab-actions-sep" aria-hidden="true"></span>
             <select class="studio-tab-action studio-tab-action--lane-select"
@@ -202,7 +202,7 @@
                     [value]="studioPagerLaneState()"
                     data-testid="studio-lane-select"
                     aria-label="Page through lane"
-                    [appTooltip]="'Select which lane to page through'"
+                    [cacTooltip]="'Select which lane to page through'"
                     (change)="onStudioLaneChange(detail.info, $event)">
               @for (lane of studioLaneOptions; track lane.state) {
                 <option [value]="lane.state" [selected]="lane.state === studioPagerLaneState()">{{ lane.label }}</option>
@@ -219,7 +219,7 @@
                         [class.studio-tab-action__merge-status--released]="studioMergeAcceptView()?.landedState === 'released-to-main'"
                         data-testid="studio-triage-merge-status"
                         [attr.data-landed-state]="studioMergeAcceptView()?.landedState"
-                        [appTooltip]="studioMergeAcceptView()?.statusTooltip || ''">
+                        [cacTooltip]="studioMergeAcceptView()?.statusTooltip || ''">
                     <span class="studio-tab-action__merge-status-glyph" aria-hidden="true">⬇</span>
                     {{ mergeStatus }}
                   </span>
@@ -230,7 +230,7 @@
                           [attr.data-testid]="'studio-triage-action-' + primary.id"
                           [attr.data-action-id]="primary.id"
                           [disabled]="updateClient.mutationsBlocked()"
-                          [appTooltip]="(studioMergeAcceptView()?.statusTooltip || studioPrimaryLabel()) + ' (Enter)'"
+                          [cacTooltip]="(studioMergeAcceptView()?.statusTooltip || studioPrimaryLabel()) + ' (Enter)'"
                           (click)="onStudioTriagePrimary()">{{ studioPrimaryLabel() }}</button>
                 }
                 <button type="button"
@@ -239,7 +239,7 @@
                         aria-haspopup="menu"
                         [attr.aria-expanded]="studioTriageOverflowOpen()"
                         [disabled]="updateClient.mutationsBlocked()"
-                        [appTooltip]="'More task actions'"
+                        [cacTooltip]="'More task actions'"
                         (click)="toggleStudioTriageOverflow($event)">⋯</button>
                 <app-menu
                   [items]="studioTriageMenuItems()"
@@ -591,7 +591,7 @@
                   data-testid="compact-cards-toggle"
                   [class.btn--compact-toggle--active]="effectiveCompactCards()"
                   [attr.aria-pressed]="effectiveCompactCards()"
-                  [appTooltip]="compactToggleTooltip()"
+                  [cacTooltip]="compactToggleTooltip()"
                   (click)="toggleCompactCards()">
             <span aria-hidden="true">{{ effectiveCompactCards() ? '▤' : '▥' }}</span>
             <span class="btn--compact-toggle__label">{{ effectiveCompactCards() ? 'Compact' : 'Full' }}</span>
@@ -603,7 +603,7 @@
             <button #devtoolsTrigger
                     class="devtools-menu__trigger"
                     data-testid="devtools-menu-trigger"
-                    [appTooltip]="'Dev tools'"
+                    [cacTooltip]="'Dev tools'"
                     [class.devtools-menu__trigger--open]="devToolsMenuOpen()"
                     (click)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()" tabindex="0" (keydown.enter)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()" (keydown.space)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation(); $event.preventDefault()">⋮</button>
             <app-menu
@@ -636,11 +636,11 @@
               <aside class="task-nav task-nav--collapsed" data-testid="task-nav-collapsed">
                 <button class="task-nav__expand"
                         data-testid="task-nav-expand"
-                        [appTooltip]="'Expand task list'"
+                        [cacTooltip]="'Expand task list'"
                         (click)="setTaskNavCollapsed(false)">›</button>
                 <button class="task-nav__expand task-nav__expand--board"
                         data-testid="back-to-board"
-                        [appTooltip]="'Back to board'"
+                        [cacTooltip]="'Back to board'"
                         (click)="closeDetail()">←</button>
               </aside>
             } @else {
@@ -650,7 +650,7 @@
                   <button class="btn btn--ghost" data-testid="back-to-board" (click)="closeDetail()">← Board</button>
                   <button class="task-nav__collapse"
                           data-testid="task-nav-collapse"
-                          [appTooltip]="'Collapse task list'"
+                          [cacTooltip]="'Collapse task list'"
                           (click)="setTaskNavCollapsed(true)" tabindex="0" (keydown.enter)="setTaskNavCollapsed(true)" (keydown.space)="setTaskNavCollapsed(true); $event.preventDefault()">‹</button>
                 </div>
                 <div>

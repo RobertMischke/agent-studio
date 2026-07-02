@@ -4,7 +4,7 @@ import type { CliType, WatchPathEntry } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../../features/cli';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 /**
  * Top toolbar of the job-detail view: project picker, unified CLI+model
  * selector chip, and the live elapsed-time / start / stop controls.

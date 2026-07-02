@@ -7,7 +7,7 @@ import {
 } from '@angular/core';
 import { OrchestratorLogicPanelComponent } from '../orchestrator-logic-panel/orchestrator-logic-panel.component';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 
 type SettingsRailKey = 'orchestrator' | 'general';
 

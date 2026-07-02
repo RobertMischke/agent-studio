@@ -199,7 +199,7 @@ async function seedBoardTab(page: Page) {
 
 async function readTooltipForLocator(page: Page, locator: ReturnType<Page['locator']>): Promise<string> {
   await locator.hover();
-  const root = page.getByTestId('app-tooltip').first();
+  const root = page.getByTestId('cac-tooltip').first();
   await root.waitFor({ state: 'attached', timeout: 4000 });
   return ((await root.textContent()) ?? '').trim();
 }

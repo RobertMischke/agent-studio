@@ -39,7 +39,7 @@
                   [class.plan-item__heartbeat--dim]="hb === 'dim'"
                   data-testid="plan-item-heartbeat"
                   [attr.data-state]="hb"
-                  [appTooltip]="
+                  [cacTooltip]="
                     hb === 'pulsing' ? 'Actively working' : 'Quiet for a while - thinking or stuck'
                   "
                   aria-hidden="true"
@@ -53,7 +53,7 @@
                 type="button"
                 class="plan-item__expand"
                 data-testid="plan-item-expand"
-                [appTooltip]="isExpanded(item.id) ? 'Hide sub-actions' : 'Show sub-actions'"
+                [cacTooltip]="isExpanded(item.id) ? 'Hide sub-actions' : 'Show sub-actions'"
                 (click)="toggle(item.id)"
               >
                 {{ item.subActionCount }} {{ item.subActionCount === 1 ? 'action' : 'actions' }}
@@ -83,7 +83,7 @@
                 <span
                   class="plan-item__band"
                   data-testid="plan-item-band"
-                  [appTooltip]="
+                  [cacTooltip]="
                     'Typical for this plan: ~' + softEstimate() + ' actions (median of finished items)'
                   "
                   >~{{ softEstimate() }}</span
@@ -104,7 +104,7 @@
           @if (item.status === 'done' && isExpanded(item.id)) {
             <ul class="plan-item__subs" data-testid="plan-item-subs">
               @for (sub of item.subActions; track $index) {
-                <li class="plan-sub" [appTooltip]="subActionTooltip(sub)">
+                <li class="plan-sub" [cacTooltip]="subActionTooltip(sub)">
                   <span class="plan-sub__tool">{{ sub.tool }}</span>
                   <code class="plan-sub__label">{{ sub.label ?? sub.tool }}</code>
                 </li>
@@ -130,7 +130,7 @@
         @if (isExpanded('::before-plan')) {
           <ul class="plan-item__subs">
             @for (sub of unassigned(); track $index) {
-              <li class="plan-sub" [appTooltip]="subActionTooltip(sub)">
+              <li class="plan-sub" [cacTooltip]="subActionTooltip(sub)">
                 <span class="plan-sub__tool">{{ sub.tool }}</span>
                 <code class="plan-sub__label">{{ sub.label ?? sub.tool }}</code>
               </li>

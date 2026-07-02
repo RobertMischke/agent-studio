@@ -1,6 +1,6 @@
 import type { GroupedJobs, TaskInfo } from '../../models/task.model';
 import { projectIdentity } from '../../services/project-identity.util';
-import type { StructuredTooltip } from '../../components/tooltip';
+import type { StructuredTooltip } from '@coding-agent/chat/shared';
 
 export interface ExplorerLaneCounts {
   ready: number;
@@ -11,7 +11,7 @@ export interface ExplorerLaneCounts {
 /**
  * Hover help for the three Explorer board lane counters (grey Ready /
  * orange In Progress / green Human Review). Each entry feeds the canonical
- * `[appTooltip]` directive as a {@link StructuredTooltip} so the number says
+ * `[cacTooltip]` directive as a {@link StructuredTooltip} so the number says
  * which lane it counts and what that lane means. Prose mirrors the lane
  * concept docs (`docs/in-app-help/lane-guides/lane-{2-ready,3-progress,5-human-review}.md`).
  */

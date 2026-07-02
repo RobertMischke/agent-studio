@@ -6,7 +6,7 @@ import {
   ReviewEvidenceSeverity,
 } from '../../../../../models/task.model';
 
-import { TooltipDirective } from '../../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { formatDateTimeUtc } from '../../../../../services/format.util';
 /**
  * Renders the per-task **review evidence** panel: findings from security

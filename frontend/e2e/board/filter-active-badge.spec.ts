@@ -92,7 +92,7 @@ test.describe('Filter-active badge (F59)', () => {
     await expect(badge).toBeVisible();
 
     await badge.hover();
-    const tooltip = page.getByTestId('app-tooltip');
+    const tooltip = page.getByTestId('cac-tooltip');
     await expect(tooltip).toBeVisible({ timeout: 3000 });
     await expect(tooltip).toContainText('filter');
     await expect(tooltip).toContainText('active');

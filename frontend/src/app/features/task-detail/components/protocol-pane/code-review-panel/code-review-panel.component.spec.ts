@@ -291,7 +291,7 @@ describe('CodeReviewPanelComponent', () => {
     expect(body?.querySelector('.cr-body-chip--concerns')?.textContent?.trim()).toBe('concerns');
     // No raw <pre> dark blob; the canonical markdown surface rendered structure.
     expect(body?.querySelector('pre')).toBeNull();
-    expect(body?.querySelector('app-markdown')).toBeTruthy();
+    expect(body?.querySelector('cac-markdown')).toBeTruthy();
     expect(body?.querySelector('h1')?.textContent).toMatch(/Code Review Step/);
     expect(body?.querySelector('h3')?.textContent).toMatch(/Findings/);
     expect(body?.querySelectorAll('li').length).toBe(2);
@@ -343,13 +343,13 @@ describe('CodeReviewPanelComponent', () => {
     const gated = root.querySelector('[data-testid="code-review-body-gated"]');
     expect(gated?.textContent).toContain('code-review-large.md');
     expect(gated?.textContent).toContain('Show review body');
-    expect(root.querySelector('app-markdown')).toBeNull();
+    expect(root.querySelector('cac-markdown')).toBeNull();
 
     root.querySelector<HTMLButtonElement>('[data-testid="code-review-body-show"]')?.click();
     fixture.detectChanges();
 
     expect(root.querySelector('[data-testid="code-review-body-gated"]')).toBeNull();
-    expect(root.querySelector('app-markdown')).toBeTruthy();
+    expect(root.querySelector('cac-markdown')).toBeTruthy();
     httpCtrl.verify();
   });
 

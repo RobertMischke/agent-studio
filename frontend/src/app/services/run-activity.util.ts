@@ -1,6 +1,6 @@
 import { TaskState } from '../models/task.model';
 import type { TaskInfo, TaskRunActivityKind } from '../models/task.model';
-import type { StructuredTooltip } from '../components/tooltip';
+import type { StructuredTooltip } from '@coding-agent/chat/shared';
 
 export type RunActivityTone = 'active' | 'failed' | 'idle';
 

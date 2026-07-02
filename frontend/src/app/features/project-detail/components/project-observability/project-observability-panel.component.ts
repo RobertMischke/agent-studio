@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AgentBusService, AgentBusFixture } from '../../../../services/agent-bus.service';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import {
   AGENT_MESSAGE_KINDS,
   AGENT_MESSAGE_SEVERITIES,

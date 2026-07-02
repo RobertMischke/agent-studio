@@ -128,7 +128,7 @@ test('hovering a project usage row shows the compact peek without navigating', a
   await row.hover();
 
   // The instant HTML tooltip is the compact peek.
-  const tip = page.getByTestId('app-tooltip');
+  const tip = page.getByTestId('cac-tooltip');
   await expect(tip).toBeVisible();
   await expect(tip).toContainText(projectName);
 

@@ -25,7 +25,7 @@
                   <button
                     type="button"
                     class="refs__chip-link"
-                    [appTooltip]="chipTooltip(key)"
+                    [cacTooltip]="chipTooltip(key)"
                     (click)="navigate(key)">
                     {{ chipLabel(key) }}
                   </button>
@@ -33,7 +33,7 @@
                     <button
                       type="button"
                       class="refs__chip-remove"
-                      [appTooltip]="'Remove ' + key"
+                      [cacTooltip]="'Remove ' + key"
                       [disabled]="busyKind() !== null"
                       [attr.data-testid]="'reference-remove-' + key"
                       (click)="remove(kind, key)">×</button>

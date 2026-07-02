@@ -3,7 +3,7 @@ import type { TaskInfo } from '../../../../models/task.model';
 import { stateLabel } from '../../../../services/format.util';
 import { buildEpicGroups, EpicGroupView } from '../epic-grouping.util';
 import { TaskCardComponent } from '../task-card/task-card.component';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { StudioIconComponent, StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 
 /**

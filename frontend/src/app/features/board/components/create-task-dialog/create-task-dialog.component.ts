@@ -9,7 +9,7 @@ import type { CliModelInfo } from '../../../../features/cli';
 import { TaskService } from '../../../../services/task.service';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { CreateEpicPickerComponent } from '../create-epic-picker/create-epic-picker.component';
 import { CreateModePickerComponent } from '../create-mode-picker/create-mode-picker.component';

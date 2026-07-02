@@ -43,7 +43,7 @@ import type {
   ProjectChatSearchResponse,
   ProjectChatTurnResponse,
   ProjectChatStatsResponse,
-} from '../features/project-chat';
+} from '@coding-agent/chat/history';
 import type {
   ProjectTokenUsageSummary,
   ProjectTokenHeatmap,

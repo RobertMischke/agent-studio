@@ -101,7 +101,7 @@
           </div>
         </header>
         @if (!editing()) {
-          <app-markdown class="psec__viewer-body" [source]="openedContent()" />
+          <cac-markdown class="psec__viewer-body" [source]="openedContent()" />
         } @else {
           <textarea class="psec__viewer-editor"
                     rows="18"

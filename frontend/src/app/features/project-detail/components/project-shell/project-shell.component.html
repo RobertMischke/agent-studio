@@ -15,7 +15,7 @@
                   class="proj-shell__mini-action"
                   data-testid="project-shell-expand-nav"
                   aria-label="Expand project navigation"
-                  appTooltip="Expand project navigation"
+                  cacTooltip="Expand project navigation"
                   (click)="setRailCollapsed(false)">
             <app-studio-icon name="chevronRight" [size]="14"></app-studio-icon>
           </button>
@@ -23,7 +23,7 @@
                   class="proj-shell__mini-action"
                   data-testid="project-shell-mini-feed"
                   aria-label="Open project activity feed"
-                  appTooltip="Open the orchestrator activity feed for this project"
+                  cacTooltip="Open the orchestrator activity feed for this project"
                   (click)="openFeed.emit()">
             <app-studio-icon name="activity" [size]="14"></app-studio-icon>
           </button>
@@ -35,7 +35,7 @@
                       [attr.aria-current]="item.key === activeRail() ? 'page' : null"
                       [attr.aria-label]="item.label"
                       [attr.data-testid]="'project-shell-mini-rail-' + item.key"
-                      [appTooltip]="item.label"
+                      [cacTooltip]="item.label"
                       (click)="onRailClick(item)">
                 <app-studio-icon [name]="item.railIcon" [size]="14"></app-studio-icon>
               </button>
@@ -53,7 +53,7 @@
                   type="button"
                   data-testid="project-shell-back"
                   aria-label="Collapse project navigation"
-                  appTooltip="Collapse project navigation"
+                  cacTooltip="Collapse project navigation"
                   (click)="setRailCollapsed(true)">
             <app-studio-icon name="chevronLeft" [size]="14"></app-studio-icon>
           </button>
@@ -62,7 +62,7 @@
                   type="button"
                   data-testid="project-shell-open-feed"
                   aria-label="Open project activity feed"
-                  appTooltip="Open the orchestrator activity feed for this project"
+                  cacTooltip="Open the orchestrator activity feed for this project"
                   (click)="openFeed.emit()">
             <app-studio-icon name="activity" [size]="14"></app-studio-icon>
           </button>
@@ -125,7 +125,7 @@
          [attr.aria-valuemin]="collapsedRailWidth"
          [attr.aria-valuemax]="maxRailWidth"
          [attr.aria-valuenow]="splitterValue()"
-         [appTooltip]="railCollapsed() ? 'Drag or click to expand project navigation' : 'Drag to resize project navigation. Click to collapse.'"
+         [cacTooltip]="railCollapsed() ? 'Drag or click to expand project navigation' : 'Drag to resize project navigation. Click to collapse.'"
          (pointerdown)="startRailResize($event)"
          (pointermove)="resizeRail($event)"
          (pointerup)="finishRailResize($event)"

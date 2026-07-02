@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../../services/task.service';
 import { TaskState } from '../../../../models/task.model';
 import type { PipelineCatalogueStep, PipelineStepSetting } from '../../../../features/task-pipeline';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import {
   SORTABLE_LANES,
   USER_VISIBLE_LANE_SORT_STRATEGIES,

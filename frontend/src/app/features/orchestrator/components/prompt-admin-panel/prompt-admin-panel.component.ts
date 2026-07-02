@@ -11,7 +11,7 @@ import { FormsModule } from '@angular/forms';
 import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { PromptNavSplitterDirective } from './prompt-nav-splitter.directive';
 import {
   PromptAdminService,

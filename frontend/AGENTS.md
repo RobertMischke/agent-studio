@@ -152,43 +152,42 @@ The same guard requires external `templateUrl` files and rejects inline `templat
 
 CSS linting runs with `npm run lint:css` (Stylelint, configured in `.stylelintrc.json`). CSS, component-size, and structure checks all run as part of `npm run lint`.
 
-## Chat surfaces (`<app-chat>` is canonical)
+## Chat surfaces (`@coding-agent/chat` — `<cac-chat>` is canonical)
 
-**`<app-chat>`** (`components/chat/chat/`) is **the** chat component. The metaphor: any coding-agent / model interaction is a chat. A single generic, agent-and-model-agnostic surface should render all of it — messages, inline event cards, composer with pluggable toolbar — so the orchestrator side sheet, the per-task chat, and any future "talk to model X" surface all look and behave the same. The component is intentionally free of orchestrator-specific or task-board-specific imports so it can be **extracted as a standalone "talk to models" library** down the line.
+The chat stack lives in the standalone **`@coding-agent/chat`** Angular library (source: `C:\Projects\coding-agent-chat`, built to `dist/coding-agent-chat`). The app is a **host**: it consumes the library and owns only the app-specific wiring. The former in-app copies (`components/chat/**`, `components/chat-row/`, `components/markdown-view/`, `components/markdown-utils.ts`, `components/tooltip/`, `directives/markdown-image-lightbox.directive.ts`, `features/project-chat/`, `features/workforce/`, the `parseActivityLog`/`buildConversationTurns` halves of `activity-log.parser.ts`) were deleted when the host adoption landed — do not re-create them; change the library instead.
 
-Inputs/outputs (informally):
-- `messages: ChatMessage[]` — turns, with optional `attachments`, `pending`, `error`.
-- `events: ChatEvent[]` — inline state cards interleaved by timestamp (`tool-call`, `watchdog`, `rate-limit`, `decision`, `update`, `task`, `session-recovered`, `memory-refreshed`). New kinds are added to the `ChatEventKind` union, not to per-host components.
-- `toolbarStart` / `toolbarEnd` (`ChatToolbarItem[]`) + `routingLabel` — composer toolbar plugin slots; the host emits whatever affordances it needs. Clicks come back via `toolbarAction({id})`.
-- `compactPhaseSummary` (default `true`) — collapse the phase-summary list above the chat into a single "▸ N earlier phases" strip until the user reveals it.
+Dependency: `"@coding-agent/chat": "file:../../../coding-agent-chat/dist/coding-agent-chat"`. The registry version replaces the `file:` path after the library's first npm publish. `.npmrc` sets `install-links=true` so the `file:` dep is installed as a physical copy (a symlink would make the bundler/vitest resolve a second `@angular/core` from the library workspace). After rebuilding the library dist, re-run `npm install` here to pick up changes.
 
-Supporting bits in the same area:
-- `<app-chat-row>` (`components/chat-row/`) — single-row presentation primitive. Currently used by `<app-project-chat-list>` only; `<app-chat>` keeps its richer per-message rendering (collapse-on-overflow, pending pulse, error footer) until the row supports those variants. See migration plan below.
-- `<app-project-chat-list>` (`features/project-chat/components/project-chat-list/`) — **legacy** virtualised, read-only view over the per-month markdown corpus. Co-mounted opt-in (`?virtualChat=1`) in the orchestrator side sheet. The direction is to fold virtualisation into `<app-chat>` and drop this component.
+Entry points and what the app uses from them:
+- `@coding-agent/chat/composer` — `<cac-chat>` (`ChatComponent`), `RoleBadgeComponent` (`<cac-role-badge>`), workforce-role catalogue + `resolveRole`, `groupIntoPhases`/`groupIntoSuperPhases` (`ChatPhase`).
+- `@coding-agent/chat/conversation` — `<cac-conversation-view>`, `<cac-conversation-session-card>`, `<cac-tool-burst-chip>`.
+- `@coding-agent/chat/core` — pure kernel: `ChatMessage`/`ChatEvent` types, `ConversationEvent` wire contract, `projectConversation(...)` (note: its context field is `task:`, not `job:`), `parseActivityLog`, `buildConversationTurns`, `mergeByTimestamp`, session/rate-limit meta parsing.
+- `@coding-agent/chat/markdown` — `<cac-markdown>` (`MarkdownViewComponent`, the canonical markdown surface), `markdownToHtml`/`htmlToMarkdown`/`sanitizeHtml`, `MarkdownTaskReference`.
+- `@coding-agent/chat/history` — `<cac-chat-row>`, `<cac-project-chat-list>` (virtualised history), `<cac-project-chat-rail>`, `<cac-phase-summary-list>`, the `PROJECT_CHAT_DATA_SOURCE` + `CHAT_HISTORY_CONFIRM` seams, `ProjectChatTurn` + scroll/search/stats/turn response types.
+- `@coding-agent/chat/shared` — `[cacTooltip]` (`TooltipDirective`), `[cacStickToBottom]`, `[cacMarkdownLightbox]`, `CHAT_MEDIA_LIGHTBOX`.
 
-Migration plan (multi-session, in order):
+Host wiring (all in `src/app/app.config.ts`):
+- `provideCodingAgentChat({ taskReferences: TaskReferenceNavigationService, mediaLightbox: MediaLightboxService })` — markdown task-key auto-linking + click-to-enlarge images.
+- `PROJECT_CHAT_DATA_SOURCE` → `ProjectChatDataSourceAdapter` (`services/project-chat-data-source.adapter.ts`) over `TaskService`'s `/api/projects/{p}/chat/*` endpoints.
+- `CHAT_HISTORY_CONFIRM` → `ConfirmDialogService` (structural match).
 
-1. Extend `<app-chat-row>` with `<app-chat>`'s richer per-message variants (collapse-with-show-more, pending pulse, error footer, attachments).
-2. Migrate `<app-chat>`'s per-message rendering to `<app-chat-row>`. Keep the composer and the events/messages merge logic in `<app-chat>`.
-3. Add an optional virtualisation mode to `<app-chat>` (windowed render + spacer rows) so it can stand in for `<app-project-chat-list>` when chat history is large.
-4. Delete `<app-project-chat-list>` once `<app-chat>` covers the virtualised + read-only path; flip the `?virtualChat=1` callsite to a no-op.
-5. Move `<app-chat>` (and its types, `<app-chat-row>`, role-badge / phase-summary helpers) into a self-contained area with no app-specific imports so it can be lifted out as a package.
+Live turns still flow through the host: the orchestrator side sheet holds a `viewChild` of `<cac-project-chat-list>` and calls `resetAndLoad()` / `appendLive(turn)` when SignalR delivers new turns.
 
-New ChatEvent kinds belong in `chat-types.ts` and get icon + label entries in `chat.component.ts` (`eventIcon` / `eventLabel`). Severity-style tints (warn / error / `session-recovered` / `memory-refreshed`) go in `chat.component.scss` as `.chat__event--<kind>` modifiers.
+New `ChatEvent` kinds, renderer changes, selector changes: **make them in the library repo** (`C:\Projects\coding-agent-chat`), rebuild its dist, `npm install` here. App-only helpers that intentionally stayed behind: `features/task-detail/components/activity-log.parser.ts` (filters, `buildChatMessages`, live-status derivation, tool-burst rollups, `[steer]` parsing).
 
-## Conversation view (`<app-conversation-view>` — next-gen chat projection)
+## Conversation view (`<cac-conversation-view>` — next-gen chat projection)
 
-`<app-conversation-view>` (`components/chat/conversation-view/`) renders the **next-gen single-pane transcript** from a parsed event model. It never pattern-matches raw CLI lines in the template; the renderer only consumes `ConversationEvent[]` produced by `projectConversation(...)` (`components/chat/conversation-projection.ts`). Keep that split: parsing/classification lives in the projection (pure, unit-tested against fixtures), presentation lives in the component.
+`<cac-conversation-view>` (library entry `@coding-agent/chat/conversation`) renders the **next-gen single-pane transcript** from a parsed event model. It never pattern-matches raw CLI lines in the template; the renderer only consumes `ConversationEvent[]` produced by `projectConversation(...)` (`@coding-agent/chat/core`). Keep that split: parsing/classification lives in the projection (pure, unit-tested against fixtures), presentation lives in the component.
 
 **Single-pane grouping, one actor header per turn.** Consecutive same-actor agent outputs coalesce into one `messageGroup` row (`<ol class="conv__feed">` → one `<li>` per group, an inner `<ol class="msg__items">` per turn). The actor header (`conversation-message-head`) renders **once** at the head of a run; continued groups carry `data-show-header="false"` and emit no header element. A tool burst between two agent turns preserves role continuity (the second agent group stays header-less); a `USER` turn, a non-tool reset event, or a mid-task **model switch** breaks the run into a new header. Do not reintroduce a per-message "Agent" label.
 
-**Timestamps are clock-only with the date on hover.** The visible `<time>` shows the clock; the calendar date is disclosed via the `[appTooltip]` binding (`groupTimeTooltip` / `formatDateTime`). `formatTime` must stay date-free; reach for `formatDateTime` when you need the full calendar+clock string.
+**Timestamps are clock-only with the date on hover.** The visible `<time>` shows the clock; the calendar date is disclosed via the `[cacTooltip]` binding (`groupTimeTooltip` / `formatDateTime`). `formatTime` must stay date-free; reach for `formatDateTime` when you need the full calendar+clock string.
 
 **Markers are parsed, never shown raw.** Terminal sentinels (`[[TASK_DONE]]`, `[[TASK_BLOCKED:…]]`, `[[TASK_NOOP]]`, `[[TASK_NEEDS_INPUT:…]]`) and bracketed runtime markers (`[worktree-containment]`, `[environment-blocker]`, `[capture-fail]`, `[schema-drift]`, `[watchdog…]`, `[heuristic]`, …) are classified by the projection into semantic events (`system.status` result chips, `agent.needsInput`, `supervisor.wait`, `system.captureFail`, `system.schemaDrift`, `system.parserWarning`) and rendered as chips/rows. Any human prose sharing a line with a sentinel is preserved as a normal agent message with the token stripped. New marker shapes get a classifier branch in `projectGroup` (or `parseOrchestratorStatus`) plus a `@case` in the template — not a raw passthrough.
 
-**Session info is subtle.** A run's captured session id rides on the agent bubble as `data-session-id` and renders as a truncated `session <8-char>` chip (`conversation-message-session`); the full id and init/rate-limit metadata live behind the header `[appTooltip]` (`metaTooltip`) and the `<app-conversation-session-card>` sidecar row. Never put a full session id inline in the message flow.
+**Session info is subtle.** A run's captured session id rides on the agent bubble as `data-session-id` and renders as a truncated `session <8-char>` chip (`conversation-message-session`); the full id and init/rate-limit metadata live behind the header `[cacTooltip]` (`metaTooltip`) and the `<cac-conversation-session-card>` sidecar row. Never put a full session id inline in the message flow.
 
-**Tool runs are CLI-agnostic and unified.** Tool activity from **both** CLIs folds into the same `toolBurst` event rendered by `<app-tool-burst-chip>`:
+**Tool runs are CLI-agnostic and unified.** Tool activity from **both** CLIs folds into the same `toolBurst` event rendered by `<cac-tool-burst-chip>`:
 - **codex** emits JSONL frames — `parseCodexJsonlFrame` maps `item.{started,completed}` of `command_execution` (with `command` / `aggregated_output` / exit code) into an activity-log group of kind `command`;
 - **claude** emits action-line text — `parseActionLine` → `classifyAction` maps `Read(...)` / `Edit(...)` / `Run …(shell)` / `Search …` into `read` / `edit` / `command` / `search` groups.
 
@@ -196,7 +195,7 @@ The projection's `classifyToolGroup` then collapses any contiguous run of those 
 
 **Orchestrator decisions are elevated.** `decision.orchestrator` events render with their own prominent treatment — an accent rail (`.decision__rail`) and a structured body (`.decision__body`), distinct from a plain agent bubble — carrying `data-decision-type` and `data-severity` so the accent can shift (info / warn / error / accept). The raw kebab/snake kind never reaches the UI: `decisionTypeLabel` maps known kinds (`auto-review` → "Auto-Review", `reissue-open-items` → "Reissue · Open items", `worktree-containment`, `escalate`, `accept`, …) to presentable labels and title-cases unknown kinds so a new decision reads cleanly without code changes.
 
-Regression coverage is acceptance-level (DOM render via `TestBed`) in `conversation-view.component.spec.ts` (grouping, header-once continuation, dated-time hover, decision elevation+label, subtle session chip, parsed status/needs-input rows) and projection-level in `conversation-projection.spec.ts` (sentinel/marker parsing, codex+claude tool unification). Extend both when you change event classification or rendering.
+Regression coverage is acceptance-level (DOM render via `TestBed`) in the library's `conversation-view.component.spec.ts` (grouping, header-once continuation, dated-time hover, decision elevation+label, subtle session chip, parsed status/needs-input rows) and projection-level in the library's `conversation-projection.spec.ts` (sentinel/marker parsing, codex+claude tool unification). Extend both (in the library repo) when you change event classification or rendering.
 
 ## Tests
 
