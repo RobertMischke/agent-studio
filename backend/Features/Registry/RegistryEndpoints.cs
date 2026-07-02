@@ -198,6 +198,8 @@ public static class RegistryEndpoints
                 if (body.Color != null || body.ClearColor == true)
                     result = projects.SetColor(projId, body.ClearColor == true ? null : body.Color);
                 if (body.WorkspaceId != null) result = projects.SetWorkspace(projId, body.WorkspaceId, workspaces);
+                if (body.RepositoryPath != null || body.ClearRepositoryPath == true)
+                    result = projects.SetRepositoryPath(projId, body.ClearRepositoryPath == true ? null : body.RepositoryPath);
                 if (body.Archived.HasValue) result = projects.SetArchived(projId, body.Archived.Value);
                 if (result == null) result = projects.FindById(projId);
                 return result == null
@@ -299,6 +301,9 @@ public sealed record UpdateProjectRequest
     public string? Color { get; init; }
     public bool? ClearColor { get; init; }
     public string? WorkspaceId { get; init; }
+    /// <summary>Absolute repo checkout path; see <see cref="ProjectRecord.RepositoryPath"/>.</summary>
+    public string? RepositoryPath { get; init; }
+    public bool? ClearRepositoryPath { get; init; }
     public bool? Archived { get; init; }
 }
 

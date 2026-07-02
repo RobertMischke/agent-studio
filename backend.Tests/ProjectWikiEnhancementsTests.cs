@@ -484,7 +484,9 @@ public class ProjectWikiEnhancementsTests : IDisposable
     // ---- helpers ----
 
     private ProjectDocsService BuildDocsService(params (string Name, string RootPath)[] entries)
-        => new(BuildScanner(entries), NullLogger<ProjectDocsService>.Instance);
+        => new(BuildScanner(entries),
+               new ProjectRegistry(BuildConfig(entries), NullLogger<ProjectRegistry>.Instance),
+               NullLogger<ProjectDocsService>.Instance);
 
     private GitService BuildGitService(params (string Name, string RootPath)[] entries)
         => new(NullLogger<GitService>.Instance, BuildScanner(entries), BuildConfig(entries));

@@ -15,6 +15,7 @@ namespace AgentStudio.Docs;
 public class ProjectDocsService
 {
     private readonly TaskScannerService _scanner;
+    private readonly ProjectRegistry _registry;
     private readonly ILogger<ProjectDocsService> _logger;
 
     private const string SecurityRel = "docs/operations/security";
@@ -53,26 +54,21 @@ public class ProjectDocsService
         [".ico"] = "image/x-icon",
     };
 
-    public ProjectDocsService(TaskScannerService scanner, ILogger<ProjectDocsService> logger)
+    public ProjectDocsService(TaskScannerService scanner, ProjectRegistry registry, ILogger<ProjectDocsService> logger)
     {
         _scanner = scanner;
+        _registry = registry;
         _logger = logger;
     }
 
-    private WatchPathEntry? FindProject(string projectName) =>
-        _scanner.GetWatchPaths().FirstOrDefault(e =>
-            string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
-
     /// <summary>
-    /// Repository checkout root. Falls back to the configured RootPath
-    /// when no explicit RepositoryPath is set, so projects without a
-    /// separate task repo still work.
+    /// Repository checkout root for a project: registry record first, legacy
+    /// WatchPaths config second, storage-layout derivation last (see
+    /// <see cref="ProjectRepoResolver"/>). Null when the project is unknown
+    /// in both sources or has no repository.
     /// </summary>
-    private static string? ResolveBaseDir(WatchPathEntry entry)
-    {
-        var b = !string.IsNullOrWhiteSpace(entry.RepositoryPath) ? entry.RepositoryPath : entry.RootPath;
-        return string.IsNullOrWhiteSpace(b) ? null : b;
-    }
+    private string? ResolveBaseDir(string projectName)
+        => ProjectRepoResolver.ResolveForProject(projectName, _scanner, _registry);
 
     private static bool IsSafeRelPath(string relPath)
     {
@@ -88,9 +84,7 @@ public class ProjectDocsService
 
     public SecurityOverview? GetSecurityOverview(string projectName)
     {
-        var entry = FindProject(projectName);
-        if (entry == null) return null;
-        var baseDir = ResolveBaseDir(entry);
+        var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return null;
 
         var secDir = Path.Combine(baseDir, SecurityRel);
@@ -108,9 +102,7 @@ public class ProjectDocsService
     public string? ReadSecurityFile(string projectName, string relPath)
     {
         if (!IsSafeRelPath(relPath)) return null;
-        var entry = FindProject(projectName);
-        if (entry == null) return null;
-        var baseDir = ResolveBaseDir(entry);
+        var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return null;
         var full = Path.GetFullPath(Path.Combine(baseDir, SecurityRel, relPath));
         var root = Path.GetFullPath(Path.Combine(baseDir, SecurityRel));
@@ -122,9 +114,7 @@ public class ProjectDocsService
     public bool WriteSecurityFile(string projectName, string relPath, string content)
     {
         if (!IsSafeRelPath(relPath)) return false;
-        var entry = FindProject(projectName);
-        if (entry == null) return false;
-        var baseDir = ResolveBaseDir(entry);
+        var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return false;
         var full = Path.GetFullPath(Path.Combine(baseDir, SecurityRel, relPath));
         var root = Path.GetFullPath(Path.Combine(baseDir, SecurityRel));
@@ -137,9 +127,7 @@ public class ProjectDocsService
 
     public bool WriteSecurityMeta(string projectName, SecurityMeta meta)
     {
-        var entry = FindProject(projectName);
-        if (entry == null) return false;
-        var baseDir = ResolveBaseDir(entry);
+        var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return false;
         var secDir = Path.Combine(baseDir, SecurityRel);
         Directory.CreateDirectory(secDir);
@@ -192,9 +180,7 @@ public class ProjectDocsService
     /// </summary>
     public WikiOverview? GetWikiOverview(string projectName)
     {
-        var entry = FindProject(projectName);
-        if (entry == null) return null;
-        var baseDir = ResolveBaseDir(entry);
+        var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return null;
 
         var wikiDir = Path.Combine(baseDir, WikiRel);
@@ -254,9 +240,7 @@ public class ProjectDocsService
         if (requireDoc && !WikiDocExtensions.Contains(Path.GetExtension(relPath)))
             return null;
 
-        var entry = FindProject(projectName);
-        if (entry == null) return null;
-        var baseDir = ResolveBaseDir(entry);
+        var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return null;
 
         var root = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
@@ -286,9 +270,7 @@ public class ProjectDocsService
     /// </summary>
     public WikiTree? GetWikiTree(string projectName)
     {
-        var entry = FindProject(projectName);
-        if (entry == null) return null;
-        var baseDir = ResolveBaseDir(entry);
+        var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return null;
 
         var wikiDir = Path.Combine(baseDir, WikiRel);
@@ -314,9 +296,7 @@ public class ProjectDocsService
     /// </summary>
     public WikiRecentEdits? GetWikiRecentEdits(string projectName, GitService git, int limit = 12)
     {
-        var entry = FindProject(projectName);
-        if (entry == null) return null;
-        var baseDir = ResolveBaseDir(entry);
+        var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return null;
         if (limit <= 0) limit = 12;
 
@@ -834,9 +814,7 @@ public class ProjectDocsService
 
     public ArchitectureOverview? GetArchitectureOverview(string projectName)
     {
-        var entry = FindProject(projectName);
-        if (entry == null) return null;
-        var baseDir = ResolveBaseDir(entry);
+        var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return null;
 
         var adrPath = Path.Combine(baseDir, AdrRel);
