@@ -29,10 +29,12 @@
     <InternalsVisibleTo Include="OrchestratorApi.Tests" />
   </ItemGroup>
 
-  <!-- Block 6: deep-integrate the extracted public library. Project reference for
-       co-development during integration; can switch to a published package for release. -->
+  <!-- Block 6: the extracted public library, consumed as the published NuGet
+       package. For co-development against a local checkout, temporarily swap
+       back to the ProjectReference:
+       ..\..\..\coding-agent-runner\src\CodingAgentRunner\CodingAgentRunner.csproj -->
   <ItemGroup>
-    <ProjectReference Include="..\..\..\coding-agent-runner\src\CodingAgentRunner\CodingAgentRunner.csproj" />
+    <PackageReference Include="CodingAgentRunner" Version="0.1.0" />
   </ItemGroup>
 
   <!-- Block 6: adopt the library's types by aliasing them to the names the app
