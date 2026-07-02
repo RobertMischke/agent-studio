@@ -59,6 +59,15 @@ public record ProjectRecord
     /// <c>&lt;TaskRepository&gt;/projects/&lt;Id&gt;/</c>.
     /// </summary>
     public string StorageLocation { get; init; } = "";
+    /// <summary>
+    /// Absolute path of the project's repository checkout, when the project
+    /// has one. Durable registry data (API-mutable), NOT an appsettings
+    /// override: the docs/wiki surface derives its root from
+    /// <c>&lt;RepositoryPath&gt;/docs</c> by convention. Null for task-only
+    /// projects and for repos where the path is derivable from the storage
+    /// layout (<c>&lt;repo&gt;/.orchestrator/jobs</c>).
+    /// </summary>
+    public string? RepositoryPath { get; init; }
     public bool Archived { get; init; }
     public DateTime CreatedAt { get; init; }
 }

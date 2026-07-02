@@ -193,19 +193,22 @@ public class GitService
     private readonly IConfiguration _config;
     private readonly RuntimePromptService _prompts;
     private readonly AdHocUsageRecorder? _usage;
+    private readonly ProjectRegistry _registry;
 
     public GitService(
         ILogger<GitService> logger,
         TaskScannerService scanner,
         IConfiguration config,
         RuntimePromptService? prompts = null,
-        AdHocUsageRecorder? usage = null)
+        AdHocUsageRecorder? usage = null,
+        ProjectRegistry? registry = null)
     {
         _logger = logger;
         _scanner = scanner;
         _config = config;
         _prompts = prompts ?? new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         _usage = usage;
+        _registry = registry ?? new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
     }
 
     private readonly object _summaryLock = new();
@@ -585,11 +588,11 @@ public class GitService
     /// </summary>
     public string? ResolveRepoRootForProject(string projectName)
     {
-        var entry = _scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
-        if (entry == null) return null;
-        var configured = ResolveConfiguredRepositoryPath(entry);
-        if (string.IsNullOrWhiteSpace(configured)) return null;
-        return ResolveGitToplevel(configured) ?? configured;
+        // Same resolution chain as the docs surface (ProjectDocsService), so
+        // the file-write target and the git commit root can never diverge.
+        var repo = ProjectRepoResolver.ResolveForProject(projectName, _scanner, _registry);
+        if (string.IsNullOrWhiteSpace(repo)) return null;
+        return ResolveGitToplevel(repo) ?? repo;
     }
 
     public string? ResolveRepoRootForWatchPath(string? watchPath)

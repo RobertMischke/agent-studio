@@ -297,6 +297,44 @@ public sealed class ProjectRegistry
         => MutateLocked(id, p => p with { Archived = archived }, archived ? "archived" : "unarchived");
 
     /// <summary>
+    /// Set (or clear, with null) the project's repository checkout path.
+    /// Lives on the registry record so the project↔repo association survives
+    /// configuration loss; the docs/wiki root is always
+    /// <c>&lt;RepositoryPath&gt;/docs</c> by convention, never configured
+    /// separately.
+    /// </summary>
+    public ProjectRecord SetRepositoryPath(string id, string? repositoryPath)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(repositoryPath) ? null : repositoryPath.Trim();
+        if (trimmed != null)
+        {
+            // Containment: the value becomes the authoritative base dir for
+            // docs/wiki reads AND writes, so reject anything that is not a
+            // local, existing git checkout. The UNC check runs before any
+            // filesystem probe so validation itself cannot be used to drive
+            // SMB connections to attacker-chosen hosts.
+            if (trimmed.StartsWith(@"\\", StringComparison.Ordinal) || trimmed.StartsWith("//", StringComparison.Ordinal))
+                throw new ArgumentException(
+                    "repositoryPath must be a local path, not a UNC share", nameof(repositoryPath));
+            if (!Path.IsPathRooted(trimmed))
+                throw new ArgumentException(
+                    "repositoryPath must be an absolute path", nameof(repositoryPath));
+            trimmed = Path.TrimEndingDirectorySeparator(Path.GetFullPath(trimmed));
+            if (string.Equals(trimmed, Path.GetPathRoot(trimmed), StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException(
+                    "repositoryPath must not be a filesystem root", nameof(repositoryPath));
+            if (!Directory.Exists(trimmed))
+                throw new ArgumentException(
+                    $"repositoryPath does not exist: {trimmed}", nameof(repositoryPath));
+            if (!Directory.Exists(Path.Combine(trimmed, ".git")) && !File.Exists(Path.Combine(trimmed, ".git")))
+                throw new ArgumentException(
+                    "repositoryPath must point at a git checkout (no .git found)", nameof(repositoryPath));
+        }
+        return MutateLocked(id, p => p with { RepositoryPath = trimmed },
+            trimmed == null ? "repository-path-cleared" : "repository-path-set");
+    }
+
+    /// <summary>
     /// F46 — permanently remove a project record from the registry and
     /// return the removed record so the caller can act on its
     /// <see cref="ProjectRecord.StorageLocation"/>. Throws
