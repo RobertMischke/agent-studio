@@ -3,7 +3,7 @@ import { api } from '../helpers/api';
 import { createJob } from '../helpers/jobs';
 
 /**
- * F31: <app-markdown> is the canonical surface for client-side markdown
+ * F31: <cac-markdown> is the canonical surface for client-side markdown
  * rendering. This spec verifies that the wrapper renders into a single
  * `.markdown-body` container across the surfaces the migration touched
  * (task description history, activity log agent turns, project Architecture
@@ -29,7 +29,7 @@ async function pickWatchPath(): Promise<string> {
 async function plantJobWithHistory(): Promise<{ id: string; watchPath: string }> {
   const watchPath = await pickWatchPath();
   const created = await createJob({
-    title: `e2e-app-markdown-${Date.now()}`,
+    title: `e2e-cac-markdown-${Date.now()}`,
     watchPath,
     cliType: 'claude',
     agent: 'claude',
@@ -37,7 +37,7 @@ async function plantJobWithHistory(): Promise<{ id: string; watchPath: string }>
     targetState: '2-ready',
   });
   // Append an extension so the prompt-history surface renders an
-  // <app-markdown> instance.
+  // <cac-markdown> instance.
   await api(
     `/api/tasks/${encodeURIComponent(created.id)}/prompt-history?watchPath=${encodeURIComponent(watchPath)}`,
     {
@@ -62,7 +62,7 @@ async function openDetail(page: Page, id: string, watchPath: string): Promise<vo
   await page.goto(`/?job=${encodeURIComponent(id)}&watchPath=${encodeURIComponent(watchPath)}`);
 }
 
-test.describe('<app-markdown> central component', () => {
+test.describe('<cac-markdown> central component', () => {
   // The "agent turn in activity-log" test below opens the LEGACY
   // activity-log-view's conversation mode. With Frontend:NextGenChat
   // default-ON the Activity tab would mount the next-gen conversation view,
@@ -71,7 +71,7 @@ test.describe('<app-markdown> central component', () => {
     await page.addInitScript(() => localStorage.setItem('atp.flag.nextGenChat', '0'));
   });
 
-  test('prompt-history entry renders into a .markdown-body div via <app-markdown>', async ({ page }) => {
+  test('prompt-history entry renders into a .markdown-body div via <cac-markdown>', async ({ page }) => {
     const target = await plantJobWithHistory();
     try {
       await openDetail(page, target.id, target.watchPath);
@@ -80,9 +80,9 @@ test.describe('<app-markdown> central component', () => {
         test.skip(true, 'No prompt-history extension entries available in this dev workspace');
         return;
       }
-      // The entry should host an <app-markdown> element. Its inner div
+      // The entry should host a <cac-markdown> element. Its inner div
       // carries .markdown-body so the global typography rules apply.
-      const md = entry.locator('app-markdown');
+      const md = entry.locator('cac-markdown');
       await expect(md).toBeVisible();
       const inner = md.locator('.markdown-body').first();
       await expect(inner).toBeVisible();
@@ -95,7 +95,7 @@ test.describe('<app-markdown> central component', () => {
     }
   });
 
-  test('agent turn in activity-log uses <app-markdown>', async ({ page }) => {
+  test('agent turn in activity-log uses <cac-markdown>', async ({ page }) => {
     // Find any job whose logs already exist so we can open Conversation
     // mode without having to start a run.
     const jobs = await api<Array<{ id: string; watchPath: string }>>('/api/tasks');
@@ -120,7 +120,7 @@ test.describe('<app-markdown> central component', () => {
     await page.getByTestId('activity-log-mode-conversation').click({ force: true });
     const convo = page.getByTestId('activity-log-conversation');
     await expect(convo).toBeVisible({ timeout: 5_000 });
-    const agentMd = convo.locator('.convo-turn--agent app-markdown .markdown-body').first();
+    const agentMd = convo.locator('.convo-turn--agent cac-markdown .markdown-body').first();
     // Some jobs have no agent text (only tool / system) — skip in that case.
     if (!(await agentMd.isVisible({ timeout: 3_000 }).catch(() => false))) {
       test.skip(true, 'No agent turn with markdown body available');

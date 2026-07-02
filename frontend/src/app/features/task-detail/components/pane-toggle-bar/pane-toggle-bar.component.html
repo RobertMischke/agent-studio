@@ -4,19 +4,19 @@
           (click)="toggleRequest.emit('prompt')"
           data-testid="pane-toggle-prompt"
           aria-label="Toggle Task pane"
-          [appTooltip]="'Task description'">📝</button>
+          [cacTooltip]="'Task description'">📝</button>
   <button class="pane-toggle"
           [class.pane-toggle--active]="panesVisible().protocol"
           (click)="toggleRequest.emit('protocol')"
           data-testid="pane-toggle-protocol"
           aria-label="Toggle Protocol pane"
-          [appTooltip]="'Protocol &amp; chat'">🤖</button>
+          [cacTooltip]="'Protocol &amp; chat'">🤖</button>
   <button class="pane-toggle pane-toggle--has-badge"
           [class.pane-toggle--active]="panesVisible().git"
           (click)="toggleRequest.emit('git')"
           data-testid="pane-toggle-git"
           aria-label="Toggle Git pane"
-          [appTooltip]="gitTooltipText()">
+          [cacTooltip]="gitTooltipText()">
     <span class="pane-toggle__icon" aria-hidden="true">🌿</span>
     @if (commitCount() > 0) {
       <span class="pane-toggle__badge"
@@ -29,5 +29,5 @@
           (click)="openInVsCode.emit()"
           data-testid="open-in-vscode"
           aria-label="Open project in VS Code"
-          [appTooltip]="'Open the project root in VS Code (-r reuses an existing window).'">🪟</button>
+          [cacTooltip]="'Open the project root in VS Code (-r reuses an existing window).'">🪟</button>
 </div>

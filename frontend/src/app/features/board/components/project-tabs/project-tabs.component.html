@@ -19,7 +19,7 @@
             <span class="filter-chip__tokens"
                   [attr.data-testid]="'project-tokens-' + name"
                   [attr.data-token-total]="tk.totalTokens"
-                  [appTooltip]="tk.tooltip">
+                  [cacTooltip]="tk.tooltip">
               <span class="filter-chip__tokens-icon" aria-hidden="true">◇</span>{{ tk.label }}
             </span>
           }
@@ -30,7 +30,7 @@
                 [attr.data-testid]="'auto-toggle-' + name"
                 [class.auto-toggle--on]="info.state === 'on'"
                 [class.auto-toggle--stopping]="info.state === 'stopping'"
-                [appTooltip]="info.tooltip"
+                [cacTooltip]="info.tooltip"
                 (click)="toggleAuto.emit(name)">
           <span class="auto-toggle__icon">{{ info.icon }}</span>
           <span class="auto-toggle__label">{{ info.label }}</span>
@@ -41,7 +41,7 @@
       }
       <button class="header-btn header-btn--icon project-tab__shell"
               [attr.data-testid]="'project-shell-open-' + name"
-              [appTooltip]="'Open project page'"
+              [cacTooltip]="'Open project page'"
               (click)="openShell.emit(name)">📊</button>
     </div>
   }

@@ -13,7 +13,7 @@
               class="ptu__head ptu__head--sum"
               data-testid="pipeline-token-usage-total-toggle"
               [attr.aria-expanded]="summaryOpen()"
-              [appTooltip]="'The whole task: every model summed over every run. Expand to see the per-model split. API cost is theoretical - runs go through CLI subscription plans, so the real bill is $0.'"
+              [cacTooltip]="'The whole task: every model summed over every run. Expand to see the per-model split. API cost is theoretical - runs go through CLI subscription plans, so the real bill is $0.'"
               (click)="toggleSummary()">
         <span class="ptu__disclosure" aria-hidden="true">{{ summaryOpen() ? '▾' : '▸' }}</span>
         <span class="ptu__head-label">
@@ -23,7 +23,7 @@
         <span class="ptu__head-total ptu__num ptu__strong"
               data-testid="pipeline-token-usage-grand-total-tokens">{{ tokens(taskTotal().totalTokens) }}</span>
         <span class="ptu__head-cost ptu__num"
-              data-testid="pipeline-token-usage-grand-total-cost">{{ formatCost(taskTotal().costUsd) }}@if (taskTotal().anyModelUnknown) {<span class="ptu__na" [appTooltip]="'One or more models have no price on file; the total excludes them.'">*</span>}</span>
+              data-testid="pipeline-token-usage-grand-total-cost">{{ formatCost(taskTotal().costUsd) }}@if (taskTotal().anyModelUnknown) {<span class="ptu__na" [cacTooltip]="'One or more models have no price on file; the total excludes them.'">*</span>}</span>
       </button>
 
       @if (summaryOpen()) {
@@ -40,7 +40,7 @@
           @for (m of totalByModel(); track m.model) {
             <div class="ptu__grid ptu__grid--model"
                  data-testid="pipeline-token-usage-total-model"
-                 [appTooltip]="modelTooltip(m)">
+                 [cacTooltip]="modelTooltip(m)">
               <span class="ptu__model">
                 <code>{{ m.model }}</code>
                 @if (m.steps > 1) {
@@ -92,7 +92,7 @@
           <span class="ptu__head-total ptu__num ptu__strong"
                 data-testid="pipeline-token-usage-run-total">{{ tokens(run.totalTokens) }}</span>
           <span class="ptu__head-cost ptu__num"
-                data-testid="pipeline-token-usage-run-cost">{{ formatCost(run.totalCostUsd) }}@if (run.anyModelUnknown) {<span class="ptu__na" [appTooltip]="'A model in this run has no price on file; the cost excludes it.'">*</span>}</span>
+                data-testid="pipeline-token-usage-run-cost">{{ formatCost(run.totalCostUsd) }}@if (run.anyModelUnknown) {<span class="ptu__na" [cacTooltip]="'A model in this run has no price on file; the cost excludes it.'">*</span>}</span>
         </button>
 
         @if (isRunOpen(run.attempt)) {
@@ -109,7 +109,7 @@
             @for (m of run.models; track m.model) {
               <div class="ptu__grid ptu__grid--model"
                    data-testid="pipeline-token-usage-run-model"
-                   [appTooltip]="modelTooltip(m)">
+                   [cacTooltip]="modelTooltip(m)">
                 <span class="ptu__model">
                   <code>{{ m.model }}</code>
                   @if (m.steps > 1) {

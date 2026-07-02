@@ -31,20 +31,20 @@
                 (click)="triggerFilePicker()"
                 data-testid="prompt-editor-attach"
                 [attr.aria-label]="uploading() ? 'Uploading image' : 'Insert image'"
-                [appTooltip]="uploading() ? 'Uploading…' : 'Insert image (Ctrl+V also works)'">
+                [cacTooltip]="uploading() ? 'Uploading…' : 'Insert image (Ctrl+V also works)'">
           {{ uploading() ? '⏳' : '📎' }}
         </button>
       }
       <span class="md-editor__status" data-testid="prompt-editor-status">
         @switch (state()) {
           @case ('dirty') {
-            <span class="md-editor__dot md-editor__dot--dirty" [appTooltip]="'Unsaved changes'" aria-label="Unsaved changes"></span>
+            <span class="md-editor__dot md-editor__dot--dirty" [cacTooltip]="'Unsaved changes'" aria-label="Unsaved changes"></span>
           }
           @case ('saved') {
-            <span class="md-editor__dot md-editor__dot--saved" [appTooltip]="'Saved'" aria-label="Saved"></span>
+            <span class="md-editor__dot md-editor__dot--saved" [cacTooltip]="'Saved'" aria-label="Saved"></span>
           }
           @default {
-            <span class="md-editor__dot" [appTooltip]="'Saved'" aria-label="Saved"></span>
+            <span class="md-editor__dot" [cacTooltip]="'Saved'" aria-label="Saved"></span>
           }
         }
         <button class="md-editor__icon-btn"
@@ -52,7 +52,7 @@
                 [disabled]="readOnly()"
                 data-testid="prompt-editor-save"
                 aria-label="Save (Ctrl+S)"
-                [appTooltip]="'Save (Ctrl+S)'">💾</button>
+                [cacTooltip]="'Save (Ctrl+S)'">💾</button>
       </span>
       <button #modeMenuTrigger
               class="md-editor__icon-btn"
@@ -60,7 +60,7 @@
               data-testid="prompt-editor-mode-toggle"
               aria-label="View options"
               [attr.aria-expanded]="modeMenuOpen()"
-              [appTooltip]="'View options'"
+              [cacTooltip]="'View options'"
               (click)="toggleModeMenu()">…</button>
     </div>
   </div>

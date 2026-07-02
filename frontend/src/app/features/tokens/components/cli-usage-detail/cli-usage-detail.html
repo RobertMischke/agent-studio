@@ -11,7 +11,7 @@
       <a class="cud__button"
          data-testid="cli-usage-detail-open-timeline"
          href="#/workspace/tokens"
-         [appTooltip]="'Open workspace token timeline'">
+         [cacTooltip]="'Open workspace token timeline'">
         Timeline
       </a>
       <button type="button"
@@ -19,7 +19,7 @@
               data-testid="cli-usage-detail-refresh-all"
               [disabled]="refreshingAll()"
               (click)="refreshAll.emit($event)"
-              [appTooltip]="'Re-probe every CLI now'">
+              [cacTooltip]="'Re-probe every CLI now'">
         {{ refreshingAll() ? 'Refreshing...' : 'Refresh all' }}
       </button>
     </div>
@@ -59,7 +59,7 @@
         <div class="cud__spark-label">Last 24h</div>
         <div class="cud__bars" aria-label="Token trend for the last 24 hours">
           @for (p of spark24h(); track p.label) {
-            <span [style.height.%]="p.pct" [appTooltip]="p.label + ': ' + formatTokens(p.total)"></span>
+            <span [style.height.%]="p.pct" [cacTooltip]="p.label + ': ' + formatTokens(p.total)"></span>
           }
         </div>
       </div>
@@ -67,7 +67,7 @@
         <div class="cud__spark-label">Last 7d</div>
         <div class="cud__bars" aria-label="Token trend for the last seven days">
           @for (p of spark7d(); track p.label) {
-            <span [style.height.%]="p.pct" [appTooltip]="p.label + ': ' + formatTokens(p.total)"></span>
+            <span [style.height.%]="p.pct" [cacTooltip]="p.label + ': ' + formatTokens(p.total)"></span>
           }
         </div>
       </div>
@@ -86,7 +86,7 @@
                   class="cud__project-row"
                   [attr.data-testid]="'cli-usage-detail-project-' + p.slug"
                   [attr.aria-label]="'Open ' + p.project + ' settings'"
-                  [appTooltip]="projectTooltip(p)"
+                  [cacTooltip]="projectTooltip(p)"
                   (click)="openProjectSettings.emit(p.project)">
             <span class="cud__project-name">{{ p.project }}</span>
             <span class="cud__project-stat cud__num">{{ formatTokens(p.totalTokens) }}</span>
@@ -115,7 +115,7 @@
                   [disabled]="refreshing()[row.cliType]"
                   (click)="refreshOne.emit({ cliType: row.cliType, event: $event })"
                   [attr.data-testid]="'cli-usage-detail-refresh-' + row.cliType"
-                  [appTooltip]="'Re-probe ' + row.label">
+                  [cacTooltip]="'Re-probe ' + row.label">
             {{ refreshing()[row.cliType] ? '...' : '↻' }}
           </button>
         </header>

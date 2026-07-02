@@ -6,7 +6,7 @@
           aria-haspopup="dialog"
           [attr.aria-expanded]="open()"
           [attr.aria-label]="open() ? 'Hide result for ' + h.label : 'Show result for ' + h.label"
-          [appTooltip]="open() ? 'Hide result' : 'Show result'"
+          [cacTooltip]="open() ? 'Hide result' : 'Show result'"
           (click)="toggle()"
           (keydown.escape)="close()">
     <span class="step-result__icon" aria-hidden="true">◰</span>

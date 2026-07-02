@@ -3,7 +3,7 @@ import type { OrchestratorSession } from '../../../../features/orchestrator';
 import { TaskService } from '../../../../services/task.service';
 import { ConceptHelpComponent } from '../../../../components/concept-help/concept-help.component';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 /**
  * Global orchestrator card. Sits above the per-project orchestrator panel
  * and surfaces the singleton session that lives across all projects:

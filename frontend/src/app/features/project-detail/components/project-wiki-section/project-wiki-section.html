@@ -4,7 +4,7 @@
       <button class="pwiki__chrome-btn"
               type="button"
               data-testid="project-wiki-toggle-nav"
-              [appTooltip]="navCollapsed() ? 'Show categories' : 'Hide categories'"
+              [cacTooltip]="navCollapsed() ? 'Show categories' : 'Hide categories'"
               (click)="toggleNav()">
         <app-studio-icon name="panelLeft" [size]="14"></app-studio-icon>
       </button>
@@ -38,7 +38,7 @@
     @if (tree()) {
       <button class="pwiki__new-group pwiki__new-group--accent" type="button"
               data-testid="project-wiki-drift-open"
-              appTooltip="Prepare a page drift prompt, copy it, or create and start a CLI task"
+              cacTooltip="Prepare a page drift prompt, copy it, or create and start a CLI task"
               (click)="openDriftModal()">
         <app-studio-icon name="diff" [size]="12"></app-studio-icon>
         <span>Drift</span>
@@ -58,7 +58,7 @@
       <button class="pwiki__chrome-btn"
               type="button"
               data-testid="project-wiki-toggle-context"
-              [appTooltip]="contextCollapsed() ? 'Show context panels' : 'Hide context panels'"
+              [cacTooltip]="contextCollapsed() ? 'Show context panels' : 'Hide context panels'"
               (click)="toggleContext()">
         <app-studio-icon name="panelRight" [size]="14"></app-studio-icon>
       </button>
@@ -92,7 +92,7 @@
                   type="button"
                   data-testid="project-wiki-filter-toggle"
                   [class.pwiki__tree-tool--active]="filterOpen() || filter()"
-                  appTooltip="Show page filter"
+                  cacTooltip="Show page filter"
                   (click)="toggleFilter()">
             <app-studio-icon name="search" [size]="13"></app-studio-icon>
           </button>
@@ -198,7 +198,7 @@
                                 [attr.data-kind]="chip.key"
                                 [attr.data-testid]="'project-wiki-metric-' + row.node.relPath + '-' + chip.key"
                                 [attr.aria-label]="chip.label"
-                                [appTooltip]="chip.tooltip"
+                                [cacTooltip]="chip.tooltip"
                                 (click)="openReportSection($event, row.node, chip.reportAnchor)">
                           <span class="pwiki__metric-value">
                             <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
@@ -228,7 +228,7 @@
            [attr.aria-valuemin]="navMinWidth"
            [attr.aria-valuemax]="navMaxWidth"
            [attr.aria-valuenow]="navWidth()"
-           appTooltip="Drag to resize the categories"
+           cacTooltip="Drag to resize the categories"
            (pointerdown)="startPanelResize($event, 'nav')"
            (pointermove)="resizePanel($event)"
            (pointerup)="finishPanelResize($event)"
@@ -255,7 +255,7 @@
                       role="tab"
                       [class.pwiki__tab--active]="viewerTab() === 'report'"
                       [attr.aria-selected]="viewerTab() === 'report'"
-                      appTooltip="Open the metadata reasoning report for this document"
+                      cacTooltip="Open the metadata reasoning report for this document"
                       (click)="selectTab('report')"
                       data-testid="project-wiki-tab-report">
                 <app-studio-icon name="book" [size]="13"></app-studio-icon>
@@ -273,7 +273,7 @@
             </div>
             <button class="pwiki__viewer-action" type="button"
                     [disabled]="!canEditDoc() || saveBusy()"
-                    [appTooltip]="editDisabledReason() || 'Edit this Markdown page'"
+                    [cacTooltip]="editDisabledReason() || 'Edit this Markdown page'"
                     (click)="selectTab('edit')"
                     data-testid="project-wiki-edit">
               <app-studio-icon name="code" [size]="12"></app-studio-icon>
@@ -385,7 +385,7 @@
                   <pre>{{ displayJson() }}</pre>
                 </div>
               } @else {
-                <app-markdown class="pwiki__viewer-body pwiki__reader-body"
+                <cac-markdown class="pwiki__viewer-body pwiki__reader-body"
                               data-testid="project-wiki-viewer"
                               [source]="displayContent()"
                               [resolveImageSrc]="imageResolver()" />
@@ -404,7 +404,7 @@
                  [attr.aria-valuemin]="contextMinWidth"
                  [attr.aria-valuemax]="contextMaxWidth"
                  [attr.aria-valuenow]="contextWidth()"
-                 appTooltip="Drag to resize the page context panels"
+                 cacTooltip="Drag to resize the page context panels"
                  (pointerdown)="startPanelResize($event, 'context')"
                  (pointermove)="resizePanel($event)"
                  (pointerup)="finishPanelResize($event)"
@@ -441,7 +441,7 @@
                   <button class="pwiki__panel-action"
                           type="button"
                           data-testid="project-wiki-drift-open-doc"
-                          appTooltip="Open the drift analysis modal for this page"
+                          cacTooltip="Open the drift analysis modal for this page"
                           (click)="openDriftModal()">
                     <app-studio-icon name="diff" [size]="12"></app-studio-icon>
                     <span>Analyze drift</span>
@@ -595,7 +595,7 @@
                                   [attr.data-kind]="chip.key"
                                   [attr.data-testid]="'project-wiki-suggested-metric-' + doc.relPath + '-' + chip.key"
                                   [attr.aria-label]="chip.label"
-                                  [appTooltip]="chip.tooltip"
+                                  [cacTooltip]="chip.tooltip"
                                   (click)="openReportSection($event, doc, chip.reportAnchor)">
                             <span class="pwiki__metric-value">
                               <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
@@ -608,7 +608,7 @@
                                 [attr.data-kind]="chip.key"
                                 [attr.data-testid]="'project-wiki-suggested-metric-' + doc.relPath + '-' + chip.key"
                                 [attr.aria-label]="chip.label"
-                                [appTooltip]="chip.tooltip">
+                                [cacTooltip]="chip.tooltip">
                             <span class="pwiki__metric-value">
                               <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
                               <span>{{ chip.display }}</span>
@@ -634,7 +634,7 @@
                    [attr.aria-valuemin]="contextMinWidth"
                    [attr.aria-valuemax]="contextMaxWidth"
                    [attr.aria-valuenow]="contextWidth()"
-                   appTooltip="Drag to resize the root context panels"
+                   cacTooltip="Drag to resize the root context panels"
                    (pointerdown)="startPanelResize($event, 'context')"
                    (pointermove)="resizePanel($event)"
                    (pointerup)="finishPanelResize($event)"
@@ -797,7 +797,7 @@
           <button class="pwiki__new-group" type="button"
                   data-testid="project-wiki-drift-prepare"
                   [disabled]="driftBusy()"
-                  appTooltip="Create an evidence-only Software / Architecture Drift report without running a CLI"
+                  cacTooltip="Create an evidence-only Software / Architecture Drift report without running a CLI"
                   (click)="prepareDriftEvidenceReport()">
             <app-studio-icon name="file" [size]="12"></app-studio-icon>
             <span>Prepare report</span>
@@ -805,7 +805,7 @@
           <button class="pwiki__new-group pwiki__new-group--accent" type="button"
                   data-testid="project-wiki-drift-start-cli"
                   [disabled]="driftBusy()"
-                  appTooltip="Create a normal task and immediately start it with the selected CLI and model"
+                  cacTooltip="Create a normal task and immediately start it with the selected CLI and model"
                   (click)="startDriftCliTask()">
             <app-studio-icon name="play" [size]="12"></app-studio-icon>
             <span>Start CLI task</span>

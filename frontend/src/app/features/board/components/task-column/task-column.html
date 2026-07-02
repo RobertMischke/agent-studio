@@ -4,7 +4,7 @@
               [class.column-rail--dragover]="isDragOver"
               [attr.data-testid]="'lane-rail-' + state()"
               [attr.data-state]="state()"
-              [appTooltip]="railTooltip()"
+              [cacTooltip]="railTooltip()"
               (click)="collapseToggle.emit()"
               (dragover)="onDragOver($event)"
               (dragleave)="onDragLeave($event)"
@@ -53,7 +53,7 @@
           <span class="column__sort-indicator"
                 [attr.data-testid]="'lane-sort-indicator-' + state()"
                 [attr.data-strategy]="sortStrategy()"
-                [appTooltip]="sort.tooltip"
+                [cacTooltip]="sort.tooltip"
                 aria-hidden="true">{{ sort.icon }}</span>
         }
         @if (infoTopic(); as topic) {
@@ -73,7 +73,7 @@
                     [attr.data-testid]="'lane-running-pill-' + state()"
                     [attr.data-job-id]="run.jobId"
                     [attr.data-foreign]="run.foreign ? 'true' : null"
-                    [appTooltip]="run.tooltip">
+                    [cacTooltip]="run.tooltip">
                 <span class="column__status-pill-dot column__status-pill-dot--live"
                       aria-hidden="true"></span>
                 <span class="column__status-pill-label">RUNNING</span>
@@ -87,7 +87,7 @@
                     [class.column__status-pill--paused]="cluster.mode.kind === 'paused'"
                     [attr.data-testid]="'lane-auto-toggle-' + state()"
                     [attr.data-mode-kind]="cluster.mode.kind"
-                    [appTooltip]="cluster.mode.tooltip"
+                    [cacTooltip]="cluster.mode.tooltip"
                     (click)="autoToggleRequest.emit(autoProject()!); $event.stopPropagation()">
               <span class="column__status-pill-label">{{ cluster.mode.label }}</span>
             </button>
@@ -95,7 +95,7 @@
               <span class="column__status-pill column__status-pill--queue"
                     [attr.data-testid]="'lane-queue-pill-' + state()"
                     [attr.data-queue-count]="q.count"
-                    [appTooltip]="q.tooltip">
+                    [cacTooltip]="q.tooltip">
                 Q:{{ q.count }}
               </span>
             }
@@ -109,7 +109,7 @@
                   [attr.data-archiving]="archiving() ? 'true' : null"
                   [attr.aria-busy]="archiving() ? 'true' : null"
                   [disabled]="archiving()"
-                  [appTooltip]="archiving() ? 'Archiving in progress…' : 'Move all completed tasks to Archive'"
+                  [cacTooltip]="archiving() ? 'Archiving in progress…' : 'Move all completed tasks to Archive'"
                   (click)="archiveAll.emit()">
             @if (archiving()) {
               <span class="column__archive-all__spinner" aria-hidden="true"></span>
@@ -122,7 +122,7 @@
         <button type="button"
                 class="column__collapse"
                 [attr.data-testid]="'lane-collapse-' + state()"
-                [appTooltip]="'Collapse ' + title() + ' lane'"
+                [cacTooltip]="'Collapse ' + title() + ' lane'"
                 (click)="collapseToggle.emit()">‹</button>
       </div>
       <div class="column__body">
@@ -141,7 +141,7 @@
                     [attr.data-testid]="'archive-row'"
                     [style.--project-color]="identityFor(item.projectName).color"
                     [style.--project-on]="identityFor(item.projectName).onColor"
-                    [appTooltip]="archiveTooltip(item)"
+                    [cacTooltip]="archiveTooltip(item)"
                     (click)="jobClick.emit(archiveClickTarget(item))">
               <span class="archive-row__date">{{ formatShortDate(item.lastActivity) }}</span>
               <span class="archive-row__disk"

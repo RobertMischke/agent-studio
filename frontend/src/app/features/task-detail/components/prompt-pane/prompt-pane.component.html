@@ -86,7 +86,7 @@
                   <span class="prompt-history__badge">{{ entry.fileName }}</span>
                   <span class="prompt-history__time">{{ formatTime(entry.writtenAt) }}</span>
                 </header>
-                <app-markdown class="prompt-history__body"
+                <cac-markdown class="prompt-history__body"
                               [source]="entry.markdown"
                               [dense]="true"
                               [resolveImageSrc]="imageResolver()" />

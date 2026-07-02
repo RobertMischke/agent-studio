@@ -168,7 +168,7 @@ $ctp-crust:     #11111b;
 
 /* The lightbox UI moved to the shared `app-media-lightbox` mounted at
  * the app shell. Figures still emit `data-results-lightbox`; the
- * `appMarkdownLightbox` directive on the body forwards clicks. */
+ * `cacMarkdownLightbox` directive on the body forwards clicks. */
 
 /* ---------- Code blocks ---------------------------------------------- */
 .results-code {

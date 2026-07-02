@@ -8,7 +8,7 @@
             <button type="button"
                     class="epic-rollup__field-action"
                     data-testid="epic-title-edit"
-                    [appTooltip]="'Rename the epic'"
+                    [cacTooltip]="'Rename the epic'"
                     (click)="beginEditTitle()">Edit</button>
           }
         </div>
@@ -38,7 +38,7 @@
         } @else {
           <span class="epic-rollup__title-text"
                 data-testid="epic-title-text"
-                [appTooltip]="'Double-click or use Edit to rename'"
+                [cacTooltip]="'Double-click or use Edit to rename'"
                 (dblclick)="beginEditTitle()">{{ info.title || info.id }}</span>
         }
       </div>
@@ -51,7 +51,7 @@
                     class="epic-rollup__field-action"
                     data-testid="epic-description-edit"
                     [disabled]="isRunning()"
-                    [appTooltip]="isRunning() ? 'Stop the run first to edit the description' : 'Edit the epic description'"
+                    [cacTooltip]="isRunning() ? 'Stop the run first to edit the description' : 'Edit the epic description'"
                     (click)="beginEditDesc()">Edit</button>
           } @else {
             <button type="button"
@@ -68,7 +68,7 @@
                                     [watchPath]="watchPath()"
                                     (save)="onDescSave($event)" />
         } @else if (promptMarkdown()) {
-          <app-markdown class="epic-rollup__markdown" [source]="promptMarkdown()" [dense]="true" />
+          <cac-markdown class="epic-rollup__markdown" [source]="promptMarkdown()" [dense]="true" />
         } @else {
           <div class="epic-rollup__muted" data-testid="epic-description-empty">No description yet. Click Edit to add one.</div>
         }
@@ -134,7 +134,7 @@
                           data-testid="epic-rollup-card"
                           [attr.data-sub-id]="sub.id"
                           [attr.aria-current]="selectedSubTaskId() === sub.id ? 'true' : null"
-                          [appTooltip]="'Open sub-task'"
+                          [cacTooltip]="'Open sub-task'"
                           (click)="openSub(sub)">{{ sub.title || sub.id }}</button>
                 </li>
               }

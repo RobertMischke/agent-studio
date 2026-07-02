@@ -2,9 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, ou
 import type { CliType, EpicRollup, EpicSubTaskRef, TaskInfo } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../cli';
 import { TaskService } from '../../../../services/task.service';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor/markdown-rich-editor';
-import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
+import { MarkdownViewComponent } from '@coding-agent/chat/markdown';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { ReferencesSectionComponent } from '../references-section/references-section.component';
 import { LANE_LABELS } from '../../state/lane-pager.service';

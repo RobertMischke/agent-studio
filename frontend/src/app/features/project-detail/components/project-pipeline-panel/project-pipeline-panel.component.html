@@ -45,7 +45,7 @@
                         [attr.draggable]="canDragStep(step) ? 'true' : null"
                         [attr.aria-label]="canDragStep(step) ? 'Drag to reorder ' + step.displayName : 'Fixed pipeline position'"
                         [attr.data-testid]="'pipeline-step-drag-' + step.id"
-                        [appTooltip]="canDragStep(step) ? 'Drag this step within its pipeline section.' : 'This step has a fixed position.'"
+                        [cacTooltip]="canDragStep(step) ? 'Drag this step within its pipeline section.' : 'This step has a fixed position.'"
                         (click)="$event.preventDefault(); $event.stopPropagation()"
                         (dragstart)="onStepDragStart($event, step)">⠿</button>
 
@@ -53,12 +53,12 @@
                   <span class="pp__name">{{ step.displayName }}</span>
                   <span class="pp__kind"
                         [attr.data-kind]="kindKey(step.kind)"
-                        [appTooltip]="'Step kind: ' + step.kind">{{ kindAbbrev(step.kind) }}</span>
+                        [cacTooltip]="'Step kind: ' + step.kind">{{ kindAbbrev(step.kind) }}</span>
                   <button type="button"
                           class="pp__info"
                           [attr.aria-label]="'Explain ' + step.displayName"
                           [attr.data-testid]="'pipeline-step-info-' + step.id"
-                          [appTooltip]="stepTooltip(step)"
+                          [cacTooltip]="stepTooltip(step)"
                           tooltipPosition="right"
                           (click)="$event.preventDefault(); $event.stopPropagation()">i</button>
                 </span>
@@ -70,7 +70,7 @@
                   <span class="pp__chip pp__chip--tokens"
                         [class.pp__chip--tokens-empty]="step.tokenSum === null"
                         [attr.data-testid]="'pipeline-step-tokens-' + step.id"
-                        [appTooltip]="stepTokenTooltip(step)">
+                        [cacTooltip]="stepTokenTooltip(step)">
                     @if (step.tokenSum !== null) {
                       {{ formatTokens(step.tokenSum) }}<span class="pp__chip-unit">&nbsp;tok</span>@if (step.tokenUnknown) {<span class="pp__cost-star">*</span>}
                     } @else {
@@ -79,7 +79,7 @@
                   </span>
                   @if (step.usesModel) {
                     <span class="pp__chip"
-                          [appTooltip]="'Effective model: ' + modelSummary(step) + ' (' + modelSourceLabel(step.effectiveModelSource) + ')'">
+                          [cacTooltip]="'Effective model: ' + modelSummary(step) + ' (' + modelSourceLabel(step.effectiveModelSource) + ')'">
                       {{ modelSummary(step) }}
                     </span>
                   }
@@ -87,7 +87,7 @@
                     <button type="button"
                             class="pp__chip pp__chip--muted pp__chip--action"
                             [attr.data-testid]="'pipeline-step-prompt-open-' + step.id"
-                            [appTooltip]="'Open Prompts for this step binding: ' + promptSummary(step)"
+                            [cacTooltip]="'Open Prompts for this step binding: ' + promptSummary(step)"
                             (click)="openPrompts.emit(); $event.preventDefault(); $event.stopPropagation()">
                       Prompt · {{ promptSummary(step) }}
                     </button>
@@ -130,7 +130,7 @@
                        [attr.data-testid]="'pipeline-step-setting-tokens-' + step.id">
                     <span class="pp__settings-label" role="cell">Tokens · {{ tokenWindowDays }}d</span>
                     <span class="pp__settings-value" role="cell">
-                      <span class="pp__setting-readonly" [appTooltip]="stepTokenTooltip(step)">
+                      <span class="pp__setting-readonly" [cacTooltip]="stepTokenTooltip(step)">
                         {{ stepTokenLabel(step) }}@if (step.tokenUnknown) {<span class="pp__cost-star">*</span>}
                       </span>
                     </span>
@@ -146,7 +146,7 @@
                     <span class="pp__settings-value" role="cell">
                       @if (step.canDisable) {
                       <label class="pp__toggle"
-                             [appTooltip]="step.enabled ? 'Step runs for this project. Click to skip it.' : 'Step is skipped. Click to enable.'">
+                             [cacTooltip]="step.enabled ? 'Step runs for this project. Click to skip it.' : 'Step is skipped. Click to enable.'">
                         <input type="checkbox"
                                [attr.data-testid]="'pipeline-step-enabled-' + step.id"
                                [disabled]="stepBusy[step.id]"
@@ -155,7 +155,7 @@
                         <span class="pp__toggle-text">{{ step.enabled ? 'On' : 'Off' }}</span>
                       </label>
                       } @else {
-                      <span class="pp__locked" [appTooltip]="'Core step; always runs on the task own CLI and model.'">always on</span>
+                      <span class="pp__locked" [cacTooltip]="'Core step; always runs on the task own CLI and model.'">always on</span>
                       }
                     </span>
                     <span class="pp__settings-note" role="cell">{{ activeExplanation(step) }}</span>
@@ -182,7 +182,7 @@
                         <button type="button" class="pp__link"
                                 [attr.data-testid]="'pipeline-step-agent-reset-' + step.id"
                                 [disabled]="!step.enabled || stepBusy[step.id]"
-                                [appTooltip]="'Clear this step agent override and fall back to the project / runtime default.'"
+                                [cacTooltip]="'Clear this step agent override and fall back to the project / runtime default.'"
                                 (click)="resetStepAgent(step.id)">Use default</button>
                       }
                       </span>
@@ -198,29 +198,29 @@
                       <span class="pp__settings-value pp__prompt" role="cell" [attr.data-testid]="'pipeline-step-prompt-' + step.id">
                         @if (step.promptTemplate) {
                           <span class="pp__prompt-ref"
-                                [appTooltip]="'Bound to the ' + step.promptTemplate + ' registry template. Edit its content in Prompts.'">
+                                [cacTooltip]="'Bound to the ' + step.promptTemplate + ' registry template. Edit its content in Prompts.'">
                             ⟐ {{ step.promptTemplate }}
                           </span>
                         } @else {
                           <span class="pp__prompt-ref pp__prompt-ref--default"
-                                [appTooltip]="'No registry template declared; this step uses its built-in catalogue prompt.'">
+                                [cacTooltip]="'No registry template declared; this step uses its built-in catalogue prompt.'">
                             Catalogue default
                           </span>
                         }
                         @if (step.prompt) {
                           <span class="pp__prompt-inline"
-                                [appTooltip]="'A legacy inline override is set on this project. Prompt content should live in the registry — clear this to fall back to the bound template.'">
+                                [cacTooltip]="'A legacy inline override is set on this project. Prompt content should live in the registry — clear this to fall back to the bound template.'">
                             inline override
                           </span>
                           <button type="button" class="pp__link"
                                   [attr.data-testid]="'pipeline-step-prompt-clear-' + step.id"
-                                  [appTooltip]="'Remove the inline override and use the registry / catalogue prompt.'"
+                                  [cacTooltip]="'Remove the inline override and use the registry / catalogue prompt.'"
                                   [disabled]="!step.enabled || stepBusy[step.id]"
                                   (click)="clearStepPrompt(step.id)">Clear</button>
                         }
                         <button type="button" class="pp__link pp__link--manage"
                                 [attr.data-testid]="'pipeline-step-prompt-manage-' + step.id"
-                                [appTooltip]="'Open the Prompts registry to edit this prompt template.'"
+                                [cacTooltip]="'Open the Prompts registry to edit this prompt template.'"
                                 (click)="openPrompts.emit()">Prompts</button>
                       </span>
                       <span class="pp__settings-note" role="cell">{{ promptExplanation(step) }}</span>
@@ -235,7 +235,7 @@
                       <span class="pp__settings-value" role="cell">
                       <select class="pp__select"
                               [attr.data-testid]="'pipeline-step-mode-' + step.id"
-                              [appTooltip]="'Gate mode: Off skips, Warn records but never blocks, Fail can block the transition.'"
+                              [cacTooltip]="'Gate mode: Off skips, Warn records but never blocks, Fail can block the transition.'"
                               [disabled]="!step.enabled || stepBusy[step.id]"
                               [ngModel]="step.mode"
                               (ngModelChange)="onStepModeChange(step.id, $event)">
@@ -256,7 +256,7 @@
                       <span class="pp__settings-value" role="cell">
                       <select class="pp__select"
                               [attr.data-testid]="'pipeline-step-condition-' + step.id"
-                              [appTooltip]="'When this step runs. Always runs whenever enabled; the other options gate it on the run outcome or the task type / tag.'"
+                              [cacTooltip]="'When this step runs. Always runs whenever enabled; the other options gate it on the run outcome or the task type / tag.'"
                               [disabled]="!step.enabled || stepBusy[step.id]"
                               [ngModel]="step.condition"
                               (ngModelChange)="onStepConditionChange(step.id, $event)">
@@ -267,7 +267,7 @@
                       @if (step.conditionNeedsValue) {
                         <input type="text" class="pp__input"
                                [attr.data-testid]="'pipeline-step-condition-value-' + step.id"
-                               [appTooltip]="'The ' + (step.condition === 'tag' ? 'tag' : 'task type') + ' this step is scoped to. Leave empty to clear the condition.'"
+                               [cacTooltip]="'The ' + (step.condition === 'tag' ? 'tag' : 'task type') + ' this step is scoped to. Leave empty to clear the condition.'"
                                [placeholder]="step.condition === 'tag' ? 'tag name' : 'bug / feature / chore'"
                                [disabled]="!step.enabled || stepBusy[step.id]"
                                [ngModel]="step.conditionValue"

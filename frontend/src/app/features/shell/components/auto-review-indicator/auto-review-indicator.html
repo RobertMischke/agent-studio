@@ -4,7 +4,7 @@
       [class.auto-review-indicator--idle]="tone() === 'idle'"
       [class.auto-review-indicator--alert]="tone() === 'alert'"
       [class.auto-review-indicator--stale]="tone() === 'stale'"
-      [appTooltip]="tooltip()">
+      [cacTooltip]="tooltip()">
   <span class="auto-review-indicator__dot" aria-hidden="true"></span>
   <span class="auto-review-indicator__label">{{ label() }}</span>
 </span>

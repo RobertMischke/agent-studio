@@ -5,7 +5,7 @@ import { GitPaneService } from '../../../services/git-pane.service';
 import { GitFileTreeComponent } from '../git-file-tree/git-file-tree.component';
 import type { TaskCommitInfo, TaskCommitMembership, TaskProvenanceView } from '../../../../git';
 
-import { TooltipDirective } from '../../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { formatCompactDateTime, formatDateTime } from '../../../../../services/format.util';
 import { isLargeDiff, describeDiffSize } from '../../../../../utils/large-diff-gate';
 import { currentDiff2Html, hasDiff2HtmlLoaded, loadDiff2Html } from '../../../../../utils/diff2html-lazy';

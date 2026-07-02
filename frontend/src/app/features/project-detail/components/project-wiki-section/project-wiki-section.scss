@@ -811,7 +811,7 @@
   @include m.thin-scroll;
 }
 
-:host ::ng-deep app-markdown.pwiki__reader-body .markdown-body {
+:host ::ng-deep cac-markdown.pwiki__reader-body .markdown-body {
   --md-fg: var(--pwiki-paper-fg);
   --md-fg-strong: rgb(15 23 42);
   --md-fg-em: rgb(55 65 81);

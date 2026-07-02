@@ -17,7 +17,7 @@
 
   @if (mode() === 'file') {
     @if (displayContent(); as body) {
-      <app-markdown class="fsh__markdown"
+      <cac-markdown class="fsh__markdown"
                     [source]="body"
                     [dense]="dense()" />
     } @else if (content() === null) {
@@ -85,7 +85,7 @@
             } @else if (versionState() === 'error') {
               <div class="fsh__state fsh__state--error">{{ versionError() }}</div>
             } @else if (versionContent(); as versionBody) {
-              <app-markdown class="fsh__markdown"
+              <cac-markdown class="fsh__markdown"
                             [source]="versionBody"
                             [dense]="true" />
             }

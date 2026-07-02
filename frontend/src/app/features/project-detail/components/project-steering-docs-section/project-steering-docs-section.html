@@ -4,7 +4,7 @@
       <button class="psd__chrome-btn"
               type="button"
               data-testid="project-steering-docs-toggle-nav"
-              [appTooltip]="navCollapsed() ? 'Show document tree' : 'Hide document tree'"
+              [cacTooltip]="navCollapsed() ? 'Show document tree' : 'Hide document tree'"
               (click)="toggleNav()">
         <app-studio-icon name="panelLeft" [size]="14"></app-studio-icon>
       </button>
@@ -45,7 +45,7 @@
     <button class="psd__chrome-btn"
             type="button"
             data-testid="project-steering-docs-refresh"
-            appTooltip="Refresh agent docs inventory"
+            cacTooltip="Refresh agent docs inventory"
             (click)="refresh()">
       <app-studio-icon name="refresh" [size]="14"></app-studio-icon>
     </button>
@@ -173,7 +173,7 @@
               } @else if (fileError()) {
                 <p class="studio-empty studio-empty--error" data-testid="project-steering-docs-file-error">{{ fileError() }}</p>
               } @else if (fileContent(); as fc) {
-                <app-markdown class="psd__body-md"
+                <cac-markdown class="psd__body-md"
                               testId="project-steering-docs-content"
                               [source]="fc.content" />
               }
@@ -281,7 +281,7 @@
                   <button class="psd__btn"
                           type="button"
                           [attr.data-testid]="'project-steering-docs-action-' + a.slug"
-                          [appTooltip]="a.description"
+                          [cacTooltip]="a.description"
                           [disabled]="busyAction() === a.slug"
                           (click)="runAction(a)">
                     {{ a.label }}

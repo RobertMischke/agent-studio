@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, ViewEncapsulation, input } from '@angular/core';
-import { TooltipDirective } from '../tooltip/tooltip.directive';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 
 /**
  * Shared Studio sidebar header chrome. Explorer, Filters, and Project Hub use

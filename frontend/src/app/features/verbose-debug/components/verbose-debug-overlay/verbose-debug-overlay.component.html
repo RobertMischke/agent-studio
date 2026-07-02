@@ -220,7 +220,7 @@
                       <i class="vdbg__row-bar"><em [style.width.%]="row.percent"></em></i>
                       <b class="vdbg__row-value">{{ row.count }}</b>
                       @if (row.failures > 0) {
-                        <span class="vdbg__row-failures" [appTooltip]="'Failed tool invocations in this family'">{{ row.failures }} ✗</span>
+                        <span class="vdbg__row-failures" [cacTooltip]="'Failed tool invocations in this family'">{{ row.failures }} ✗</span>
                       }
                     </div>
                   }

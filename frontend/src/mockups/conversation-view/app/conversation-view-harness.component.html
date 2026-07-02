@@ -9,7 +9,7 @@
         {{ streaming() ? 'Stop stream' : 'Start stream' }}
       </button>
     </div>
-    <app-conversation-view
+    <cac-conversation-view
       [events]="events()"
       [isRunning]="status() === 'working'"
       [queuedFollowUp]="status() === 'queued'"

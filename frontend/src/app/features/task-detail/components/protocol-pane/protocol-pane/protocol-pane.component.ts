@@ -46,9 +46,9 @@ import { TaskService } from '../../../../../services/task.service';
 import type {
   ConversationEvent,
   RawLineRange,
-} from '../../../../../components/chat/conversation-event';
-import { ConversationViewComponent } from '../../../../../components/chat/conversation-view/conversation-view.component';
-import { projectConversation } from '../../../../../components/chat/conversation-projection';
+} from '@coding-agent/chat/core';
+import { ConversationViewComponent } from '@coding-agent/chat/conversation';
+import { projectConversation } from '@coding-agent/chat/core';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
 import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
 import { SourceViewerComponent, type SourceViewerRequest } from '../../source-viewer/source-viewer.component';
@@ -67,7 +67,7 @@ import {
 } from './protocol-pane-view-model';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
 
-import { TooltipDirective } from '../../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
 import { PaneTabsComponent } from '../../../../../components/pane-tabs/pane-tabs.component';
 import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';
@@ -737,7 +737,7 @@ export class ProtocolPaneComponent implements OnDestroy {
    * when null the panel falls back to {@link defaultActivityView} (Plan when
    * a plan exists, else CLI output). The constructor effect resets it per job.
    *
-   * CLI uses the next-gen `app-conversation-view` over the `ConversationEvent[]`
+   * CLI uses the next-gen `cac-conversation-view` over the `ConversationEvent[]`
    * projection when the flag is enabled, and otherwise falls back to the
    * legacy activity-log conversation view. Trace remains an overflow action.
    */
@@ -879,7 +879,7 @@ export class ProtocolPaneComponent implements OnDestroy {
     return projectConversation({
       source: info.id,
       lines: filtered,
-      job: info,
+      task: info,
       runTimeline: this.runTimeline(),
       tokenSummary: info.tokenSummary ?? null,
       screenshots,

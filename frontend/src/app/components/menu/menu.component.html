@@ -38,7 +38,7 @@
                   [attr.aria-disabled]="item.disabled ? 'true' : null"
                   [attr.aria-current]="item.active ? 'true' : null"
                   [disabled]="item.disabled"
-                  [appTooltip]="item.tooltip ?? ''"
+                  [cacTooltip]="item.tooltip ?? ''"
                   (click)="onRowClick(i)"
                   (mouseenter)="onRowMouseEnter(i)">
             @if (item.leadingGlyph; as g) {

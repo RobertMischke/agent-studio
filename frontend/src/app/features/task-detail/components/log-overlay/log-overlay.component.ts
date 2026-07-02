@@ -14,7 +14,7 @@ import { ActivityLogViewComponent } from '../activity-log-view/activity-log-view
 import { formatTime as fmtTime } from '../../../../services/format.util';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 /**
  * Modal overlay that shows the live CLI output and the parsed protocol
  * log side-by-side. Triggered from the protocol pane's "Maximize log"

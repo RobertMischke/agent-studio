@@ -2,7 +2,7 @@
   <button type="button"
           class="epic-membership"
           data-testid="epic-membership-banner"
-          [appTooltip]="'Jump to epic ' + (e.key ? e.key + ' — ' : '') + e.title"
+          [cacTooltip]="'Jump to epic ' + (e.key ? e.key + ' — ' : '') + e.title"
           (click)="openEpic.emit({ jobId: e.id, watchPath: e.watchPath })">
     <span class="epic-membership__label" aria-hidden="true">⬡ Epic</span>
     @if (e.key) {

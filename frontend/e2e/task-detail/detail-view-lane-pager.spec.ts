@@ -207,13 +207,13 @@ test.describe('Detail view - lane pager', () => {
       const startPos = Number(posStr);
 
       // Tooltip follows the app's canonical [appTooltip] standard: hovering
-      // surfaces the singleton overlay (data-testid="app-tooltip") whose text
+      // surfaces the singleton overlay (data-testid="cac-tooltip") whose text
       // explains the captured iteration in plain, readable language. We hover
       // the count span (it has no tooltip of its own) so the group tooltip,
       // not a button tooltip, is the one that shows.
       await expect(pager).not.toHaveAttribute('title', /.+/);
       await page.getByTestId('lane-pager-count').hover();
-      const tip = page.getByTestId('app-tooltip');
+      const tip = page.getByTestId('cac-tooltip');
       await expect(tip).toBeVisible({ timeout: 5_000 });
       await expect(tip).toHaveText(/Iterating jobs.*Showing job \d+ of \d+/);
 

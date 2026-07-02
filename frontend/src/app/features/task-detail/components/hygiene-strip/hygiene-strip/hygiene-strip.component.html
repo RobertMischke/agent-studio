@@ -8,7 +8,7 @@
             [class.hygiene-strip__icon--warn]="hygiene() && !hygiene()?.job?.jobInfoCommitPresent"
             [attr.data-testid]="'hygiene-commit'"
             [attr.aria-label]="commitTooltip()"
-            [appTooltip]="commitTooltip()">
+            [cacTooltip]="commitTooltip()">
         {{ hygiene()?.job?.jobInfoCommitPresent ? '◆' : '◇' }}
       </span>
       @if (hygiene(); as h) {
@@ -17,13 +17,13 @@
               [class.hygiene-strip__icon--warn]="h.isDirty"
               [attr.data-testid]="'hygiene-tree'"
               [attr.aria-label]="treeTooltip()"
-              [appTooltip]="treeTooltip()">
+              [cacTooltip]="treeTooltip()">
           {{ h.isDirty ? '✱' : '■' }}
         </span>
       } @else {
         <span class="hygiene-strip__icon hygiene-strip__icon--loading"
               data-testid="hygiene-icon-loading"
-              [appTooltip]="'Loading repository state…'">…</span>
+              [cacTooltip]="'Loading repository state…'">…</span>
       }
     </div>
 

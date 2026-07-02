@@ -12,7 +12,7 @@ import { TaskService } from '../../../../services/task.service';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
 import { DialogComponent } from '../../../../components/dialog/dialog.component';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { TagRegistryEntry } from '../../../../models/task.model';
 
 type Phase = 'loading' | 'list' | 'error';

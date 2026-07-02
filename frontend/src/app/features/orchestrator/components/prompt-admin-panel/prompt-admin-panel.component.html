@@ -31,7 +31,7 @@
                 @if (item.hasOverride) {
                   <span class="prompts__override-icon"
                         aria-label="Local override active"
-                        [appTooltip]="overrideTooltip(item)"
+                        [cacTooltip]="overrideTooltip(item)"
                         [attr.data-testid]="'prompt-admin-override-' + item.name">
                     <app-studio-icon name="diff" [size]="12"></app-studio-icon>
                   </span>

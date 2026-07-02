@@ -40,13 +40,13 @@
             data-testid="timeline-event"
             [attr.data-kind]="event.kind">
           <span class="tl-item__rail" aria-hidden="true">
-            <span class="tl-item__glyph" [appTooltip]="event.actor">{{ actorGlyph(event.actor) }}</span>
+            <span class="tl-item__glyph" [cacTooltip]="event.actor">{{ actorGlyph(event.actor) }}</span>
           </span>
           <div class="tl-item__body">
             <div class="tl-item__head">
               <span class="tl-item__kind" data-testid="timeline-event-kind">{{ kindLabel(event.kind) }}</span>
               <time class="tl-item__time"
-                    [appTooltip]="formatAbsoluteTime(event.ts)">{{ formatTime(event.ts) }}</time>
+                    [cacTooltip]="formatAbsoluteTime(event.ts)">{{ formatTime(event.ts) }}</time>
             </div>
             @if (event.summary) {
               <p class="tl-item__summary" data-testid="timeline-event-summary">{{ event.summary }}</p>

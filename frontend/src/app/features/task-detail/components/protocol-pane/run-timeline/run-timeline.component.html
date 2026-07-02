@@ -26,7 +26,7 @@
                     (click)="toggle(item.run.index)">
               <span class="prompt-entry__top">
                 <span class="prompt-entry__label">{{ item.entry.label || ('Prompt #' + item.entry.index) }}</span>
-                <span class="run-card__cli" [appTooltip]="cliLabel(item.run.cli)" [attr.aria-label]="cliLabel(item.run.cli)">
+                <span class="run-card__cli" [cacTooltip]="cliLabel(item.run.cli)" [attr.aria-label]="cliLabel(item.run.cli)">
                   {{ cliIcon(item.run.cli) }}
                 </span>
                 <span class="run-card__chip run-card__chip--intent" [attr.data-intent]="item.run.intent">
@@ -150,9 +150,9 @@
                       @if (r.executionContext?.contextMode) {
                         <span class="exec-context__scalar"
                               [attr.data-testid]="'run-exec-context-mode-' + r.index"
-                              [appTooltip]="r.executionContext?.contextMode === 'clean' ? 'Isolierter Per-Run-Home: nur Prompt + versionierte Repo-Dateien.' : 'Geteilter globaler CLI-Zustand des Operators.'"><small>context</small><code>{{ r.executionContext?.contextMode }}</code></span>
+                              [cacTooltip]="r.executionContext?.contextMode === 'clean' ? 'Isolierter Per-Run-Home: nur Prompt + versionierte Repo-Dateien.' : 'Geteilter globaler CLI-Zustand des Operators.'"><small>context</small><code>{{ r.executionContext?.contextMode }}</code></span>
                       }
-                      <span class="exec-context__origin" [appTooltip]="executionSourceLabel(r.executionContext)">
+                      <span class="exec-context__origin" [cacTooltip]="executionSourceLabel(r.executionContext)">
                         {{ r.executionContext?.source }}
                       </span>
                     </div>
@@ -166,7 +166,7 @@
                                 [attr.data-exists]="s.exists">
                               <span class="exec-context__source-label">{{ s.label }}</span>
                               @if (s.path) {
-                                <code class="exec-context__source-path" [appTooltip]="s.path">{{ s.path }}</code>
+                                <code class="exec-context__source-path" [cacTooltip]="s.path">{{ s.path }}</code>
                               }
                               @if (s.exists === true) {
                                 <span class="exec-context__source-flag exec-context__source-flag--ok">present</span>
@@ -237,7 +237,7 @@
                         class="run-card__filter run-card__filter--primary"
                         (click)="openGitViewer.emit(r); $event.stopPropagation()"
                         [disabled]="!r.headShaBefore || !r.headShaAfter || r.headShaBefore === r.headShaAfter"
-                        [appTooltip]="(!r.headShaBefore || !r.headShaAfter)
+                        [cacTooltip]="(!r.headShaBefore || !r.headShaAfter)
                           ? 'No HEAD SHAs captured for this run (older run or repo unavailable).'
                           : (r.headShaBefore === r.headShaAfter
                             ? 'No commits made during this run.'

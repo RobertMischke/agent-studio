@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, effect, inject, input, signal } fro
 import { FormsModule } from '@angular/forms';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { SecurityMeta, SecurityOverview } from '../../../../models/project-docs.model';
-import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
+import { MarkdownViewComponent } from '@coding-agent/chat/markdown';
 
 /**
  * Project-level Security section: meta header (last review, rating,

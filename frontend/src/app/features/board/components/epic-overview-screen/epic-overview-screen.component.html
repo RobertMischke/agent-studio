@@ -18,7 +18,7 @@
       <button type="button"
               class="epic-overview__new"
               data-testid="epic-overview-new"
-              [appTooltip]="'Create a new epic'"
+              [cacTooltip]="'Create a new epic'"
               (click)="openCreate()">+ New epic</button>
     }
   </header>
@@ -57,7 +57,7 @@
                     [class.epic-overview__expand--open]="expanded"
                     [attr.aria-expanded]="expanded"
                     [attr.data-testid]="'epic-overview-expand'"
-                    [appTooltip]="expanded ? 'Hide sub-tasks' : 'Show sub-tasks'"
+                    [cacTooltip]="expanded ? 'Hide sub-tasks' : 'Show sub-tasks'"
                     [attr.aria-label]="expanded ? 'Hide sub-tasks' : 'Show sub-tasks'"
                     (click)="toggleExpanded(epic.id)">
               <app-studio-icon name="chevronRight" [size]="14"></app-studio-icon>
@@ -65,7 +65,7 @@
             <button type="button"
                     class="epic-overview__epic-title"
                     data-testid="epic-overview-open-epic"
-                    [appTooltip]="'Open epic'"
+                    [cacTooltip]="'Open epic'"
                     (click)="openEpic(epic)">{{ epic.title || epic.id }}</button>
             <span class="epic-overview__project-chip"
                   data-testid="epic-overview-project"
@@ -106,7 +106,7 @@
                             class="epic-overview__sub-btn"
                             data-testid="epic-overview-open-sub"
                             [attr.data-sub-id]="sub.id"
-                            [appTooltip]="'Open sub-task'"
+                            [cacTooltip]="'Open sub-task'"
                             (click)="openSubTask(epic, sub.id)">
                       <span class="epic-overview__sub-title">{{ sub.title || sub.id }}</span>
                       <span class="epic-overview__sub-meta">

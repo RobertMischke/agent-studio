@@ -19,7 +19,7 @@ import {
   cliTypeLabel as fmtCliTypeLabel,
   shortModelName,
 } from '../../services/format.util';
-import { TooltipDirective } from '../tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { ModalStackService } from '../../services/modal-stack.service';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
 import { ConnectedOverlayDirective } from '../../directives/connected-overlay.directive';

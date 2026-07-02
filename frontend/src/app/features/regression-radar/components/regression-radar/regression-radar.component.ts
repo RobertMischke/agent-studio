@@ -11,7 +11,7 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import type { RegressionRadarResult, RegressionRadarTaskGroup, SpecChangeEntry } from '../../models/regression-radar.model';
 import { TaskService } from '../../../../services/task.service';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { InfoButtonComponent } from '../../../../components/info-button/info-button.component';
 
 @Component({

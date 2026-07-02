@@ -67,7 +67,7 @@
               </div>
               <span class="orch-feed__summary">{{ entry.summary }}</span>
               @if (entry.tokenUsage; as tu) {
-                <span class="orch-feed__tokens" [appTooltip]="tokenTooltip(tu)">
+                <span class="orch-feed__tokens" [cacTooltip]="tokenTooltip(tu)">
                   {{ tu.model || '?' }} · ↑{{ tu.inputTokens }} ↓{{ tu.outputTokens }}
                 </span>
               }
@@ -125,7 +125,7 @@
                     class="orch-feed__override"
                     (click)="startOverride(entry)"
                     data-testid="orchestrator-override-start"
-                    [appTooltip]="'Disagree with this decision? Send a Steer follow-up to the agent.'">
+                    [cacTooltip]="'Disagree with this decision? Send a Steer follow-up to the agent.'">
               Override this decision
             </button>
           }

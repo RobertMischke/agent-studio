@@ -85,11 +85,11 @@
               </div>
               <div>
                 <dt>Executable</dt>
-                <dd [appTooltip]="row.path || 'No executable resolved'">{{ row.path || 'not resolved' }}</dd>
+                <dd [cacTooltip]="row.path || 'No executable resolved'">{{ row.path || 'not resolved' }}</dd>
               </div>
               <div>
                 <dt>Session</dt>
-                <dd [appTooltip]="latestSessionTooltip(row)">
+                <dd [cacTooltip]="latestSessionTooltip(row)">
                   {{ latestSessionLabel(row) }}
                   @if (row.latestSession?.updatedAt; as updated) {
                     <span>- {{ formatTime(updated) }}</span>

@@ -83,7 +83,7 @@
               @if (task.key) {
                 <span class="backlog-triage__key-chip" data-testid="backlog-triage-row-key">{{ task.key }}</span>
               }
-              <span class="backlog-triage__title-text" [appTooltip]="task.title">{{ task.title || task.id }}</span>
+              <span class="backlog-triage__title-text" [cacTooltip]="task.title">{{ task.title || task.id }}</span>
             </div>
             <div class="backlog-triage__chips">
               <span class="backlog-triage__type-chip"
@@ -114,30 +114,30 @@
               </span>
               <span class="backlog-triage__age"
                     data-testid="backlog-triage-row-age"
-                    [appTooltip]="task.createdAt">{{ relativeAge(task.createdAt) }}</span>
+                    [cacTooltip]="task.createdAt">{{ relativeAge(task.createdAt) }}</span>
             </div>
           </div>
           <div class="backlog-triage__actions">
             <button type="button"
                     class="backlog-triage__action backlog-triage__action--primary"
                     [attr.data-testid]="'backlog-triage-promote-prep'"
-                    [appTooltip]="'Promote to Preparation lane'"
+                    [cacTooltip]="'Promote to Preparation lane'"
                     (click)="promote(task, '1-preparation')">→ Preparation</button>
             <button type="button"
                     class="backlog-triage__action"
                     [attr.data-testid]="'backlog-triage-promote-ready'"
-                    [appTooltip]="'Promote directly to Ready (skip Preparation)'"
+                    [cacTooltip]="'Promote directly to Ready (skip Preparation)'"
                     (click)="promote(task, '2-ready')">→ Ready</button>
             <button type="button"
                     class="backlog-triage__action"
                     [class.backlog-triage__action--active]="tagEditorOpen() === task.taskKey"
                     [attr.data-testid]="'backlog-triage-edit-tags'"
-                    [appTooltip]="'Edit tags'"
+                    [cacTooltip]="'Edit tags'"
                     (click)="toggleTagEditor(task)">Edit tags</button>
             <button type="button"
                     class="backlog-triage__action backlog-triage__action--danger"
                     [attr.data-testid]="'backlog-triage-delete'"
-                    [appTooltip]="'Delete task'"
+                    [cacTooltip]="'Delete task'"
                     (click)="onDelete(task)">Delete</button>
           </div>
           @if (tagEditorOpen() === task.taskKey) {
@@ -154,7 +154,7 @@
                           [class.backlog-triage__tag-toggle--active]="isTagInDraft(tag.id)"
                           [style.--tag-color]="tag.color || null"
                           [attr.data-testid]="'backlog-triage-tag-toggle-' + tag.id"
-                          [appTooltip]="tag.description || tag.label"
+                          [cacTooltip]="tag.description || tag.label"
                           (click)="toggleDraftTag(tag.id)">{{ tag.label }}</button>
                 }
               }

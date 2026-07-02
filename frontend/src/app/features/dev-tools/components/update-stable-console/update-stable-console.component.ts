@@ -1,7 +1,7 @@
 import { AfterViewChecked, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, signal, ViewChild, output } from '@angular/core';
 
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 interface ConsoleLine {
   kind: 'log' | 'stdout' | 'stderr' | 'error' | 'done';
   text: string;

@@ -125,7 +125,7 @@
                              autocomplete="off"
                              required />
                     </label>
-                    <code class="row__id" [appTooltip]="tag.id">{{ tag.id }}</code>
+                    <code class="row__id" [cacTooltip]="tag.id">{{ tag.id }}</code>
                   </div>
                   <label class="field">
                     <span class="field__label">Description</span>
@@ -163,7 +163,7 @@
                   <div class="row__title">{{ tag.label }}</div>
                   <code class="row__id">{{ tag.id }}</code>
                   @if (tag.description) {
-                    <div class="row__desc" [appTooltip]="tag.description">{{ tag.description }}</div>
+                    <div class="row__desc" [cacTooltip]="tag.description">{{ tag.description }}</div>
                   }
                 </div>
                 <div class="row__actions">

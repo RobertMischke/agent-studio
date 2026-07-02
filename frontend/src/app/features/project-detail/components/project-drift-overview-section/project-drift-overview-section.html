@@ -38,7 +38,7 @@
         @for (a of actions; track a.slug) {
           <button class="pdov__btn"
                   [attr.data-testid]="'project-drift-overview-action-' + a.slug"
-                  [appTooltip]="a.description"
+                  [cacTooltip]="a.description"
                   [disabled]="busyAction() === a.slug"
                   (click)="runAction(a)">
             {{ a.label }}
@@ -110,7 +110,7 @@
                   <footer>
                     <span class="pdov__sev pdov__sev--{{ severityClass(row.dimension.severity) }}"
                           [attr.data-testid]="'project-drift-overview-dim-sev-' + dimSlug(row.type)">{{ tc(row.dimension.severity) }}</span>
-                    <span class="pdov__cov" [appTooltip]="'Source coverage'">cov {{ formatCoverage(row.dimension.sourceCoverage) }}</span>
+                    <span class="pdov__cov" [cacTooltip]="'Source coverage'">cov {{ formatCoverage(row.dimension.sourceCoverage) }}</span>
                     <span class="pdov__status pdov__status--{{ statusClass(row.dimension.status) }}"
                           [attr.data-testid]="'project-drift-overview-dim-status-' + dimSlug(row.type)">{{ tc(row.dimension.status) }}</span>
                   </footer>
@@ -253,7 +253,7 @@
               @if (!parseStatusEq(r.parseStatus, 'Structured')) {
                 <span class="pdov__hist-parse"
                       [attr.data-testid]="'project-drift-overview-history-parse-' + parseStatusClass(r.parseStatus)"
-                      [appTooltip]="parseStatusEq(r.parseStatus, 'MalformedJson') ? (r.parseError ?? 'sidecar invalid') : 'no JSON sidecar'">
+                      [cacTooltip]="parseStatusEq(r.parseStatus, 'MalformedJson') ? (r.parseError ?? 'sidecar invalid') : 'no JSON sidecar'">
                   ⚠️ {{ parseStatusEq(r.parseStatus, 'MalformedJson') ? 'malformed' : 'unstructured' }}
                 </span>
               }

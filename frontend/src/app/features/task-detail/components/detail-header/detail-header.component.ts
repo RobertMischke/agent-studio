@@ -10,7 +10,7 @@ import { projectIdentity } from '../../../../services/project-identity.util';
 import { buildRunActivityBadge } from '../../../../services/run-activity.util';
 import { ProjectHygieneBadgeComponent } from '../hygiene-strip/project-hygiene-badge/project-hygiene-badge.component';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../components/menu';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
@@ -118,7 +118,7 @@ export class DetailHeaderComponent {
 
   /**
    * Tooltip text explaining the snapshot iteration, surfaced through the
-   * app's canonical `[appTooltip]` directive (single visual standard,
+   * app's canonical `[cacTooltip]` directive (single visual standard,
    * instant hover). Plain readable language, no embedded markup.
    */
   readonly pagerTooltip = computed(() => {

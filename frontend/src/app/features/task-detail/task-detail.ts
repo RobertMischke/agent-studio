@@ -62,7 +62,7 @@ import {
   gitToggleTooltip, isCliErrorMessage, rateLimitTooltip, stateLabel,
 } from './services/task-detail-formatters';
 
-import { TooltipDirective } from '../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 @Component({
   selector: 'app-task-detail, app-job-detail',
   standalone: true,

@@ -10,7 +10,7 @@
              (blur)="saveTitle()" />
     } @else {
       <h1 class="ov-title" data-testid="overview-title" tabindex="0"
-          [appTooltip]="'Click to rename'"
+          [cacTooltip]="'Click to rename'"
           (click)="startTitleEdit()" (keydown.enter)="startTitleEdit()">
         <span class="ov-title__text">{{ displayedTitle() }}</span>
         <button type="button" class="ov-title__edit-affordance"
@@ -53,7 +53,7 @@
         <button type="button" class="ov-promote__btn"
                 data-testid="overview-promote-btn"
                 [disabled]="promoting()"
-                [appTooltip]="'Open the create-task modal pre-filled from this planning report — title, prompt body, and copied images. The new coding task lands in In Preparation.'"
+                [cacTooltip]="'Open the create-task modal pre-filled from this planning report — title, prompt body, and copied images. The new coding task lands in In Preparation.'"
                 (click)="promote()">
           <span class="ov-promote__icon" aria-hidden="true">→</span>
           {{ promoting() ? 'Preparing…' : 'Promote to coding task' }}
@@ -103,7 +103,7 @@
           @if (effectiveCliType(); as ct) {
             <span class="ov-agent-combo__cli"
                   data-testid="overview-agent-cli"
-                  [appTooltip]="'CLI: ' + cliTypeLabel(ct)">
+                  [cacTooltip]="'CLI: ' + cliTypeLabel(ct)">
               {{ cliTypeLabel(ct) }}
             </span>
           } @else {
@@ -118,7 +118,7 @@
           @if (owner(); as ow) {
             <span class="ov-owner-chip"
                   [style.color]="ow.colour || 'var(--studio-fg)'"
-                  [appTooltip]="ow.displayName + ' (' + ow.kind + ')'">
+                  [cacTooltip]="ow.displayName + ' (' + ow.kind + ')'">
               <span aria-hidden="true">{{ ow.emoji || '·' }}</span>
               {{ ow.displayName }}
             </span>
@@ -143,13 +143,13 @@
     <section class="ov-section studio-measure studio-measure--tabular-compact" data-testid="overview-pipeline">
       <div class="ov-section__heading-row">
         <h3 class="ov-section__title"
-            [appTooltip]="'Pre steps, core agent work, and post steps for this task. Per-step model and enable/disable are configured in project Settings.'">
+            [cacTooltip]="'Pre steps, core agent work, and post steps for this task. Per-step model and enable/disable are configured in project Settings.'">
           Pipeline
           @if (isPipelineRestart()) {
             <span class="ov-pl-restart-badge"
                   data-testid="overview-pipeline-restart-badge"
                   [attr.data-attempt]="pipelineAttempt()"
-                  [appTooltip]="pipelineStartedAt()
+                  [cacTooltip]="pipelineStartedAt()
                     ? 'Restarted — current run started ' + formatAbsoluteTime(pipelineStartedAt()!)
                     : 'This pipeline was restarted; the steps below are the latest run.'">
               <span class="ov-pl-restart-badge__dot" aria-hidden="true"></span>
@@ -166,7 +166,7 @@
                   [attr.aria-label]="hideDisabledPipelineSteps()
                     ? 'Show disabled pipeline steps'
                     : 'Hide disabled pipeline steps'"
-                  [appTooltip]="hideDisabledPipelineSteps()
+                  [cacTooltip]="hideDisabledPipelineSteps()
                     ? 'Show disabled steps again'
                     : 'Hide disabled steps (' + disabledPipelineStepCount() + ')'"
                   (click)="toggleDisabledPipelineSteps()">
@@ -206,7 +206,7 @@
                     [attr.data-kind]="cur.kind"
                     data-testid="overview-pipeline-run-option"
                     [attr.aria-selected]="selectedPipelineAttemptNumber() === cur.attempt"
-                    [appTooltip]="cur.tooltip"
+                    [cacTooltip]="cur.tooltip"
                     (click)="selectPipelineRun(cur.attempt)">
               <span class="ov-runs-strip__dot" [attr.data-kind]="cur.kind" aria-hidden="true">●</span>
               <span class="ov-runs-strip__num">#{{ cur.attempt }}</span>
@@ -242,7 +242,7 @@
                         role="tab"
                         [attr.aria-selected]="selectedPipelineAttemptNumber() === run.attempt"
                         data-testid="overview-pipeline-run-option"
-                        [appTooltip]="run.tooltip"
+                        [cacTooltip]="run.tooltip"
                         (click)="selectPipelineRun(run.attempt)">
                   <span class="ov-runs-strip__chip-num">#{{ run.attempt }}</span>
                   <span class="ov-runs-strip__chip-glyph" aria-hidden="true">{{ run.glyph }}</span>
@@ -295,7 +295,7 @@
               <span class="ov-pl-phase__info"
                     tabindex="0"
                     aria-label="{{ row.phaseLabel }} phase explanation"
-                    [appTooltip]="row.phaseDescription"
+                    [cacTooltip]="row.phaseDescription"
                     tooltipSeverity="info">i</span>
             </div>
           }
@@ -309,13 +309,13 @@
                [attr.data-run-mode]="row.runMode"
                data-testid="overview-pipeline-step">
             <span class="ov-pl-step__status"
-                  [appTooltip]="stepStatusLabel(row.status)"
+                  [cacTooltip]="stepStatusLabel(row.status)"
                   aria-hidden="true">{{ stepStatusIcon(row.status) }}</span>
             <span class="ov-pl-step__kind">{{ stepKindLabel(row.kind) }}</span>
             <span class="ov-pl-step__name-cell">
               <span class="ov-pl-step__name"
                     data-testid="overview-pipeline-step-name"
-                    [appTooltip]="row.explanation">{{ row.label }}</span>
+                    [cacTooltip]="row.explanation">{{ row.label }}</span>
               <app-task-prompt-popover
                 class="ov-pl-step__prompt"
                 [markdown]="stepPromptMarkdown(row.id)"
@@ -331,21 +331,21 @@
               <span class="ov-pl-step__parallel-note"
                     data-testid="overview-pipeline-step-parallel"
                     aria-label="Parallel review pool"
-                    [appTooltip]="'Runs in parallel with the other aspect reviews (read-only pool)'">
+                    [cacTooltip]="'Runs in parallel with the other aspect reviews (read-only pool)'">
                 ∥
               </span>
             }
             @if (row.isFinalVerdict) {
               <span class="ov-pl-step__final-badge"
                     data-testid="overview-pipeline-step-final-verdict"
-                    [appTooltip]="'The orchestrator&rsquo;s single final ruling, aggregated from the parallel aspect verdicts'">
+                    [cacTooltip]="'The orchestrator&rsquo;s single final ruling, aggregated from the parallel aspect verdicts'">
                 Final verdict
               </span>
             }
             @if (row.status === 'running') {
               <span class="ov-pl-step__running-badge"
                     data-testid="overview-pipeline-step-running"
-                    [appTooltip]="'This step is running right now'">
+                    [cacTooltip]="'This step is running right now'">
                 <span class="ov-pl-step__running-dot" aria-hidden="true"></span>
                 Running
               </span>
@@ -355,7 +355,7 @@
                       class="ov-pl-step__runs"
                       data-testid="overview-pipeline-agent-runs"
                       [attr.data-run-count]="agentRunCount()"
-                      [appTooltip]="agentRunTooltip()"
+                      [cacTooltip]="agentRunTooltip()"
                       [attr.aria-label]="'Agent execution ran ' + agentRunCountLabel() + ' — focus or hover for run details'">
                 {{ agentRunCountLabel() }}
               </button>
@@ -368,7 +368,7 @@
                     tabindex="0"
                     [attr.data-tone]="badge.tone"
                     [attr.data-verdict]="badge.verdict"
-                    [appTooltip]="badge.tooltip"
+                    [cacTooltip]="badge.tooltip"
                     [tooltipSeverity]="badge.severity"
                     [attr.aria-label]="'Decision: ' + badge.label"
                     data-testid="overview-pipeline-step-decision">{{ badge.label }}</span>
@@ -376,7 +376,7 @@
               <span class="ov-pl-step__verdict"
                     [class.ov-pl-step__verdict--concern]="row.concernTooltip"
                     [attr.data-verdict]="row.verdict"
-                    [appTooltip]="row.concernTooltip"
+                    [cacTooltip]="row.concernTooltip"
                     [tooltipSeverity]="row.verdict === 'block' || row.verdict === 'loop-detected' ? 'error' : 'warn'"
                     data-testid="overview-pipeline-step-verdict">{{ row.verdict }}</span>
             }
@@ -393,7 +393,7 @@
                     [class.ov-pl-step__model--resolved]="row.modelIsResolved"
                     data-testid="overview-pipeline-step-model"
                     [attr.data-model-resolved]="row.modelIsResolved ? 'true' : null"
-                    [appTooltip]="row.modelTooltip">{{ row.model }}</span>
+                    [cacTooltip]="row.modelTooltip">{{ row.model }}</span>
             }
             @if (row.modelEditable && row.kind !== 'aspect') {
               <app-cli-model-selector
@@ -412,7 +412,7 @@
             }
             <span class="ov-pl-step__timing"
                   data-testid="overview-pipeline-step-timing"
-                  [appTooltip]="stepTimingTooltip(row)">
+                  [cacTooltip]="stepTimingTooltip(row)">
               <span class="ov-pl-step__started"
                     data-testid="overview-pipeline-step-started"
                     aria-label="Step start time">{{ row.startedAt ? formatClock(row.startedAt) : '—' }}</span>
@@ -424,7 +424,7 @@
               <button type="button"
                       class="ov-pl-step__tokens ov-pl-step__tokens-button ov-value--mono"
                       data-testid="overview-pipeline-step-tokens"
-                      [appTooltip]="row.tokenTooltip"
+                      [cacTooltip]="row.tokenTooltip"
                       [attr.aria-label]="'Open token details for ' + row.label"
                       (click)="openStepTokenModal(row)">
                 {{ formatTokens(row.totalTokens) }}
@@ -435,7 +435,7 @@
             }
             <span class="ov-pl-step__cost ov-value--mono"
                   data-testid="overview-pipeline-step-cost"
-                  [appTooltip]="row.costTooltip">
+                  [cacTooltip]="row.costTooltip">
               @if (row.totalTokens <= 0) {
                 —
               } @else if (!row.costKnown) {
@@ -453,16 +453,16 @@
           <span class="ov-pl-total__label">Task total <span class="ov-dim">SUM</span></span>
           <span class="ov-pl-total__tokens ov-value--mono ov-value--strong"
                 data-testid="overview-pipeline-total-tokens"
-                [appTooltip]="total.tokenTooltip">
+                [cacTooltip]="total.tokenTooltip">
             {{ formatTokens(total.totalTokens) }}
           </span>
           <span class="ov-pl-total__cost ov-value--mono ov-value--strong"
                 data-testid="overview-pipeline-total-cost"
-                [appTooltip]="total.costTooltip">
+                [cacTooltip]="total.costTooltip">
             {{ formatCost(total.totalCostUsd) }}
             @if (total.anyModelUnknown) {
               <span class="ov-dim"
-                    [appTooltip]="'One or more steps used a model with no price on file; the total excludes them.'">*</span>
+                    [cacTooltip]="'One or more steps used a model with no price on file; the total excludes them.'">*</span>
             }
           </span>
         </div>
@@ -589,7 +589,7 @@
   @if (hasAgentWork()) {
     <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-agent-work">
       <h3 class="ov-section__title"
-          [appTooltip]="sessionDebugTooltip()">
+          [cacTooltip]="sessionDebugTooltip()">
         Agent Work
       </h3>
       <div class="ov-grid">
@@ -600,7 +600,7 @@
               <span class="studio-count-badge">{{ aw.calls }} calls</span>
               @if (aw.recovered) {
                 <span class="studio-pill studio-pill--warn"
-                      [appTooltip]="'At least one CLI invocation could not resume the prior session and reconstructed context from disk.'">
+                      [cacTooltip]="'At least one CLI invocation could not resume the prior session and reconstructed context from disk.'">
                   recovered
                 </span>
               }
@@ -611,7 +611,7 @@
             <div class="ov-row ov-row--wide">
               <span class="ov-label">Tools</span>
               <span class="ov-value"
-                    [appTooltip]="toolCountsTooltip()"
+                    [cacTooltip]="toolCountsTooltip()"
                     data-testid="agent-work-tools">
                 <span class="ov-value--mono">{{ aw.toolCalls }}</span>
                 <span class="ov-tool-chips">
@@ -690,7 +690,7 @@
           @for (run of recentRuns(); track run.index) {
             <span class="ov-run-icon"
                   [class.ov-run-icon--active]="run.status === 'running'"
-                  [appTooltip]="runTooltip(run)"
+                  [cacTooltip]="runTooltip(run)"
                   data-testid="overview-run-icon">
               {{ runStatusIcon(run.status) }}
             </span>

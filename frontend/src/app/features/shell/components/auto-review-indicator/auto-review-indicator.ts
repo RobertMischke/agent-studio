@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject } from '@angular/core';
 import { AutoReviewStatusStore } from '../../../../services/auto-review-status.store';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 @Component({
   selector: 'app-auto-review-indicator',
   standalone: true,

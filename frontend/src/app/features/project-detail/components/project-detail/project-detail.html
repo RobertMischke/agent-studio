@@ -28,7 +28,7 @@
           <button class="proj-detail__mode"
                   [class.proj-detail__mode--active]="effectiveMode() === m.id"
                   [attr.data-testid]="'project-detail-mode-' + m.id"
-                  [appTooltip]="m.tooltip"
+                  [cacTooltip]="m.tooltip"
                   (click)="setMode(m.id)">{{ m.label }}</button>
         }
       </div>
@@ -114,7 +114,7 @@
         @for (m of modes; track m.id) {
           <button class="proj-detail__mode"
                   [class.proj-detail__mode--active]="effectiveMode() === m.id"
-                  [appTooltip]="m.tooltip"
+                  [cacTooltip]="m.tooltip"
                   (click)="setMode(m.id)">{{ m.label }}</button>
         }
       </div>
@@ -144,7 +144,7 @@
     <section class="proj-detail__group">
       <h3>Auto-commit</h3>
       <label class="proj-detail__toggle"
-             [appTooltip]="'Auto-Commit: when on, the orchestrator commits after each 3-progress -> 4-auto-review transition and stamps the SHA on TaskInfo.Commit. Changes apply immediately to the next job transition.'">
+             [cacTooltip]="'Auto-Commit: when on, the orchestrator commits after each 3-progress -> 4-auto-review transition and stamps the SHA on TaskInfo.Commit. Changes apply immediately to the next job transition.'">
         <input type="checkbox"
                data-testid="project-detail-auto-commit"
                [(ngModel)]="autoCommitDraft"
@@ -159,7 +159,7 @@
     <section class="proj-detail__group">
       <h3>Crash recovery</h3>
       <label class="proj-detail__toggle"
-             [appTooltip]="'Crash recovery scans this project on backend startup. Orphan working-tree commits never happen automatically; the startup modal asks for confirmation before committing.'">
+             [cacTooltip]="'Crash recovery scans this project on backend startup. Orphan working-tree commits never happen automatically; the startup modal asks for confirmation before committing.'">
         <input type="checkbox"
                data-testid="project-detail-crash-recovery"
                [(ngModel)]="crashRecoveryDraft"
@@ -178,7 +178,7 @@
           <button type="button"
                   class="proj-detail__push-option"
                   [class.proj-detail__push-option--active]="autoPushStrategyDraft === opt.id"
-                  [appTooltip]="opt.tooltip"
+                  [cacTooltip]="opt.tooltip"
                   [attr.aria-pressed]="autoPushStrategyDraft === opt.id"
                   [attr.data-testid]="'project-detail-auto-push-' + opt.id"
                   (click)="setAutoPushStrategy(opt.id)">
@@ -221,10 +221,10 @@
             <span class="proj-detail__cli-source"
                   [attr.data-testid]="'cli-mode-source-' + row.cliType"
                   [class.proj-detail__cli-source--project]="row.source === 'project'"
-                  [appTooltip]="cliSourceHint(row.source)">{{ cliSourceLabel(row.source) }}</span>
+                  [cacTooltip]="cliSourceHint(row.source)">{{ cliSourceLabel(row.source) }}</span>
             <select class="proj-detail__cli-select"
                     [attr.data-testid]="'cli-mode-select-' + row.cliType"
-                    [appTooltip]="cliModeHint(cliModeDraft[row.cliType])"
+                    [cacTooltip]="cliModeHint(cliModeDraft[row.cliType])"
                     [disabled]="cliModeBusy[row.cliType]"
                     [(ngModel)]="cliModeDraft[row.cliType]"
                     (ngModelChange)="onCliModeChange(row.cliType)">
@@ -237,7 +237,7 @@
                       class="proj-detail__cli-reset"
                       [attr.data-testid]="'cli-mode-reset-' + row.cliType"
                       [disabled]="cliModeBusy[row.cliType]"
-                      [appTooltip]="'Clear this project override and revert to the CLI’s global config / platform default.'"
+                      [cacTooltip]="'Clear this project override and revert to the CLI’s global config / platform default.'"
                       (click)="resetCliMode(row.cliType)">Reset</button>
             }
             <code class="proj-detail__cli-args"
@@ -268,11 +268,11 @@
             <span class="proj-detail__cli-source"
                   [attr.data-testid]="'cli-context-mode-source-' + row.cliType"
                   [class.proj-detail__cli-source--project]="row.source === 'project'"
-                  [appTooltip]="cliContextSourceHint(row.source)">{{ cliContextSourceLabel(row.source) }}</span>
+                  [cacTooltip]="cliContextSourceHint(row.source)">{{ cliContextSourceLabel(row.source) }}</span>
             @if (row.supported) {
               <select class="proj-detail__cli-select"
                       [attr.data-testid]="'cli-context-mode-select-' + row.cliType"
-                      [appTooltip]="cliContextModeHint(cliContextModeDraft[row.cliType])"
+                      [cacTooltip]="cliContextModeHint(cliContextModeDraft[row.cliType])"
                       [disabled]="cliContextModeBusy[row.cliType]"
                       [(ngModel)]="cliContextModeDraft[row.cliType]"
                       (ngModelChange)="onCliContextModeChange(row.cliType)">
@@ -285,13 +285,13 @@
                         class="proj-detail__cli-reset"
                         [attr.data-testid]="'cli-context-mode-reset-' + row.cliType"
                         [disabled]="cliContextModeBusy[row.cliType]"
-                        [appTooltip]="'Projekt-Override loeschen und auf den Plattform-Default (clean) zuruecksetzen.'"
+                        [cacTooltip]="'Projekt-Override loeschen und auf den Plattform-Default (clean) zuruecksetzen.'"
                         (click)="resetCliContextMode(row.cliType)">Reset</button>
               }
             } @else {
               <span class="proj-detail__cli-shared-only"
                     [attr.data-testid]="'cli-context-mode-shared-only-' + row.cliType"
-                    [appTooltip]="'Dieses CLI bietet keine Home-Umleitung — laeuft immer shared (im T1a-Panel sichtbar).'">shared-only</span>
+                    [cacTooltip]="'Dieses CLI bietet keine Home-Umleitung — laeuft immer shared (im T1a-Panel sichtbar).'">shared-only</span>
             }
           </div>
         }

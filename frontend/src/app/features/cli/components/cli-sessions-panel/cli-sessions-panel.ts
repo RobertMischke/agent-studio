@@ -10,7 +10,7 @@ import type {
   LinkedJobRef,
 } from '../../../../features/cli';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 interface SelectedSession {
   cliType: CliType;
   projectName: string;

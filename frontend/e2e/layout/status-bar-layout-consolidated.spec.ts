@@ -163,7 +163,7 @@ test.describe('Status bar layout consolidated', () => {
     // Hovering must surface the project's HTML tooltip with state words.
     await codexCard.hover();
     await page.waitForTimeout(200);
-    const tooltip = page.getByTestId('app-tooltip');
+    const tooltip = page.getByTestId('cac-tooltip');
     await expect(tooltip).toBeVisible();
     const tooltipText = (await tooltip.textContent()) ?? '';
     expect(tooltipText.toLowerCase()).toContain('quota warning');

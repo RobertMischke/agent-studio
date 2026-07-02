@@ -18,11 +18,11 @@ import type { WatchPathEntry } from '../../../../models/task.model';
 import { TaskState } from '../../../../models/task.model';
 import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
 import { buildChatNavigationContext } from '../../../../features/orchestrator';
-import { ChatComponent } from '../../../../components/chat/chat/chat.component';
-import { ChatEvent, ChatMessage, ChatSubmitEvent, ChatToolbarItem } from '../../../../components/chat/chat-types';
-import { ProjectChatListComponent } from '../../../project-chat/components/project-chat-list/project-chat-list.component';
+import { ChatComponent } from '@coding-agent/chat/composer';
+import { ChatEvent, ChatMessage, ChatSubmitEvent, ChatToolbarItem } from '@coding-agent/chat/core';
+import { ProjectChatListComponent } from '@coding-agent/chat/history';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
 /**

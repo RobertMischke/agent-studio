@@ -18,7 +18,7 @@ import {
 } from '../../../../models/task.model';
 import { TaskService } from '../../../../services/task.service';
 import { NotificationService } from '../../../../services/notification.service';
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 import { TaskSelectionService } from '../../state/task-selection.service';
 
 /**

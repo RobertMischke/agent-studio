@@ -189,7 +189,7 @@ test('commit-pill tooltip clips long file rows inside the box', async ({ page })
   await chosen!.scrollIntoViewIfNeeded();
   await chosen!.hover();
 
-  const tip = page.getByTestId('app-tooltip');
+  const tip = page.getByTestId('cac-tooltip');
   await expect(tip).toBeVisible({ timeout: 1_000 });
 
   // The tooltip must actually contain a <ul> file list to exercise the fix.

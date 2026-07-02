@@ -160,12 +160,12 @@ async function expectTooltip(
 
   const start = Date.now();
   await target.hover();
-  const tip = page.getByTestId('app-tooltip');
+  const tip = page.getByTestId('cac-tooltip');
   await expect(tip).toBeVisible({ timeout: 250 });
   expect(Date.now() - start).toBeLessThan(500);
   await expect(tip).toContainText(expectedText);
-  await expect(page.locator('[data-testid="app-tooltip"]')).toHaveCount(1);
-  await expect(page.locator('.app-tooltip')).toHaveCount(1);
+  await expect(page.locator('[data-testid="cac-tooltip"]')).toHaveCount(1);
+  await expect(page.locator('.cac-tooltip')).toHaveCount(1);
 
   const shot = await page.screenshot({ fullPage: false });
   await testInfo.attach(`${screenshotName}.png`, { body: shot, contentType: 'image/png' });
@@ -183,7 +183,7 @@ async function expectTooltip(
 test('canonical tooltip layer is lazy, instant, singleton, and visually shared across surfaces', async ({ page }, testInfo) => {
   await openBoard(page);
 
-  await expect(page.getByTestId('app-tooltip')).toHaveCount(0);
+  await expect(page.getByTestId('cac-tooltip')).toHaveCount(0);
 
   await expectTooltip(
     page,

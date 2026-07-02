@@ -38,7 +38,7 @@
               }
               @for (project of section.projects; track project.projectName) {
                 <div class="project">
-                  <button class="project__head" type="button" [appTooltip]="project.rootPath || ''" (click)="toggleProject(section.cliType, project)">
+                  <button class="project__head" type="button" [cacTooltip]="project.rootPath || ''" (click)="toggleProject(section.cliType, project)">
                     <span>{{ isProjectCollapsed(section.cliType, project) ? '>' : 'v' }}</span>
                     <strong>{{ project.projectName }}</strong>
                     <span>{{ project.sessions.length }} session{{ project.sessions.length === 1 ? '' : 's' }}</span>
@@ -57,13 +57,13 @@
                                   type="button"
                                   [class.session--active]="isSelected(section.cliType, project, s)"
                                   (click)="select(section.cliType, project, s)">
-                            <span class="session__id" [appTooltip]="s.id">{{ s.label || shortId(s.id) }}</span>
+                            <span class="session__id" [cacTooltip]="s.id">{{ s.label || shortId(s.id) }}</span>
                             @if (s.linkedJob; as link) {
                               <button class="session__chip"
                                       type="button"
                                       data-testid="session-task-link"
                                       [attr.data-state]="chipState(link)"
-                                      [appTooltip]="chipTooltip(link)"
+                                      [cacTooltip]="chipTooltip(link)"
                                       (click)="onOpenLinkedJob($event, link)">
                                 {{ link.isActive ? 'task: active' : 'task: linked' }}
                               </button>
@@ -98,7 +98,7 @@
           } @else {
             <p class="sessions__muted">No parsed token summary for this session yet.</p>
           }
-          <app-cli-console [lines]="detailLines()" [appTooltip]="'Session ' + shortId(sel.session.id)" [bodyMaxHeight]="'32vh'" />
+          <app-cli-console [lines]="detailLines()" [cacTooltip]="'Session ' + shortId(sel.session.id)" [bodyMaxHeight]="'32vh'" />
         } @else {
           <p class="sessions__muted">Select a session to inspect its metadata.</p>
         }

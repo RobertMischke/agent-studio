@@ -278,7 +278,7 @@ test.describe('Pipeline: orchestrator-review rows are distinct, single final ver
         fullPage: true,
       });
       await phaseHeaders.first().locator('.ov-pl-phase__info').hover();
-      await expect(page.getByTestId('app-tooltip')).toContainText('Preparation checks before the agent gets the task.');
+      await expect(page.getByTestId('cac-tooltip')).toContainText('Preparation checks before the agent gets the task.');
       await page.screenshot({
         path: path.join(RESULTS_DIR, 'pipeline-phase-info-tooltip.png'),
         fullPage: false,
@@ -317,7 +317,7 @@ test.describe('Pipeline: orchestrator-review rows are distinct, single final ver
 
     // The detailed reasoning lives in the tooltip (hover), not inline.
     await badge.hover();
-    const tooltip = page.getByTestId('app-tooltip');
+    const tooltip = page.getByTestId('cac-tooltip');
     await expect(tooltip).toBeVisible();
     await expect(tooltip).toContainText('Moved to 5-human-review for your approval.');
 

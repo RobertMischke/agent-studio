@@ -21,7 +21,7 @@
                     <span class="wdash__author">{{ row.author }}</span>
                     <span class="wdash__dot" aria-hidden="true">&middot;</span>
                     <time [attr.datetime]="row.authorDateUtc"
-                          [appTooltip]="absoluteTime(row.authorDateUtc)">{{ relativeTime(row.authorDateUtc) }}</time>
+                          [cacTooltip]="absoluteTime(row.authorDateUtc)">{{ relativeTime(row.authorDateUtc) }}</time>
                   </span>
                 </span>
               </button>

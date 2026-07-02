@@ -292,7 +292,7 @@ test.describe('Pipeline Agent-execution run count + details popover', () => {
 
     // Keyboard accessibility: focus (not mouse) must open the popover.
     await badge.focus();
-    const tip = page.getByTestId('app-tooltip');
+    const tip = page.getByTestId('cac-tooltip');
     await expect(tip).toBeVisible();
     await expect(tip).toContainText('34 runs');
     await expect(tip).toContainText('Runs: 34');
@@ -331,7 +331,7 @@ test.describe('Pipeline Agent-execution run count + details popover', () => {
     await page.locator('body').click({ position: { x: 2, y: 2 } });
     await expect(tip).toBeHidden();
     await badge.hover();
-    await expect(page.getByTestId('app-tooltip')).toBeVisible();
+    await expect(page.getByTestId('cac-tooltip')).toBeVisible();
   });
 
   for (const theme of ['dark', 'light'] as const) {
@@ -345,7 +345,7 @@ test.describe('Pipeline Agent-execution run count + details popover', () => {
       await expect(badge).toHaveText('34 runs');
 
       await badge.focus();
-      const tip = page.getByTestId('app-tooltip');
+      const tip = page.getByTestId('cac-tooltip');
       await expect(tip).toBeVisible();
       await expect(tip).toContainText('Runs: 34');
 

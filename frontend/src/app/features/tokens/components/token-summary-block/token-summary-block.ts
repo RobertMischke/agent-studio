@@ -3,7 +3,7 @@ import type { TokenSummary } from '../../../../features/tokens';
 import { TaskService } from '../../../../services/task.service';
 import { TokensApiService } from '../../../../features/tokens';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '@coding-agent/chat/shared';
 /**
  * Per-project token rollup block. Three rows:
  *

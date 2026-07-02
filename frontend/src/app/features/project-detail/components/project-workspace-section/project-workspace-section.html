@@ -12,7 +12,7 @@
     <button type="button"
             class="pws__save"
             data-testid="project-detail-workspace-save"
-            [appTooltip]="'Move all tasks in this project to the selected workspace via the change-project endpoint (mirrors cross-project drag and drop).'"
+            [cacTooltip]="'Move all tasks in this project to the selected workspace via the change-project endpoint (mirrors cross-project drag and drop).'"
             [disabled]="!canSave()"
             (click)="onSave()">
       {{ saving() ? 'Moving...' : 'Save' }}
@@ -29,7 +29,7 @@
     <button type="button"
             class="pws__delete"
             data-testid="project-detail-workspace-delete"
-            [appTooltip]="deleteTooltip()"
+            [cacTooltip]="deleteTooltip()"
             [disabled]="!canDelete()"
             (click)="onDelete()">
       {{ deleting() ? 'Deleting...' : 'Delete this workspace' }}

@@ -28,7 +28,7 @@
         @if (provenanceFor(file); as generation) {
           <span class="file-card__provenance"
                 data-testid="file-card-provenance"
-                [appTooltip]="generation.tooltip">
+                [cacTooltip]="generation.tooltip">
             {{ generation.label }}
           </span>
         }
@@ -39,7 +39,7 @@
                   class="file-card__action"
                   data-testid="file-card-prompt-edit"
                   [disabled]="isRunning()"
-                  [appTooltip]="isRunning() ? 'Stop the CLI first to edit prompt.md' : 'Edit prompt.md'"
+                  [cacTooltip]="isRunning() ? 'Stop the CLI first to edit prompt.md' : 'Edit prompt.md'"
                   (click)="beginEditPrompt($event)">Edit</button>
         }
         @if (isPromptFile(file.name) && isExpanded(file.name) && isEditing()) {
@@ -89,7 +89,7 @@
             <div class="file-card__loading">Loading preview…</div>
           } @else if (preview(file); as text) {
             <div class="file-card__preview-rendered">
-              <app-markdown [source]="text" [dense]="true" />
+              <cac-markdown [source]="text" [dense]="true" />
             </div>
             <button type="button" class="file-card__expand-link"
                     [attr.data-testid]="'file-card-expand-' + file.name"
