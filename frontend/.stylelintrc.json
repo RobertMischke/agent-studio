@@ -186,7 +186,6 @@
         "src/app/features/task-detail/task-detail.scss",
         "src/app/features/orchestrator/components/global-orchestrator-card/global-orchestrator-card.scss",
         "src/app/features/orchestrator/components/orchestrator-feed/orchestrator-feed.scss",
-        "src/app/features/orchestrator/components/orchestrator-logic-panel/orchestrator-logic-panel.component.scss",
         "src/app/features/orchestrator/components/prompt-admin-panel/prompt-admin-panel.component.scss",
         "src/app/features/project-chat/components/project-chat-list/project-chat-list.component.scss",
         "src/app/features/project-chat/components/project-chat-rail/project-chat-rail.component.scss",
