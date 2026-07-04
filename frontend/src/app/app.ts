@@ -301,12 +301,6 @@ export class App implements OnInit, OnDestroy {
    */
   readonly verboseDebugContext = signal<VerboseDebugContext | null>(null);
   /**
-   * Orchestrator Settings modal visibility. Replaces the former "Logic" tab
-   * inside the sidesheet; the modal uses the project-shell rail + panel
-   * layout so settings sit visually alongside the project window pattern.
-   */
-  readonly orchestratorSettingsOpen = signal(false);
-  /**
    * Cycle 10a: create-job dialog state + open/cancel/submit logic
    * lives in CreateTaskFormService. The shell re-exposes the visibility
    * signal + the bound fields via getters so the existing template
@@ -379,6 +373,14 @@ export class App implements OnInit, OnDestroy {
   // Cycle 9: side-sheet width owned by UiPreferencesService.
   private readonly uiPrefs = inject(UiPreferencesService);
   readonly sideSheetWidth = this.uiPrefs.sideSheetWidth;
+  /**
+   * Orchestrator Settings modal visibility. Replaces the former "Logic" tab
+   * inside the sidesheet; the modal uses the project-shell rail + panel
+   * layout so settings sit visually alongside the project window pattern.
+   * Persisted via UiPreferencesService so an F5 reload reopens the modal
+   * instead of dropping it.
+   */
+  readonly orchestratorSettingsOpen = this.uiPrefs.orchestratorSettingsOpen;
   readonly collapsedGroups = signal<Set<string>>(
     new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')),
   );
@@ -907,11 +909,11 @@ export class App implements OnInit, OnDestroy {
   }
 
   openOrchestratorSettings(): void {
-    this.orchestratorSettingsOpen.set(true);
+    this.uiPrefs.setOrchestratorSettingsOpen(true);
   }
 
   closeOrchestratorSettings(): void {
-    this.orchestratorSettingsOpen.set(false);
+    this.uiPrefs.setOrchestratorSettingsOpen(false);
   }
 
   /**

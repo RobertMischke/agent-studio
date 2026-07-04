@@ -32,6 +32,7 @@ const STORAGE_KEY_TASK_NAV = 'taskNavCollapsed';
 const STORAGE_KEY_COMPACT_CARDS = 'compactCards';
 const STORAGE_KEY_SIDE_SHEET_WIDTH = 'sideSheetWidth';
 const STORAGE_KEY_GROUP_BY_EPIC = 'boardGroupByEpic';
+const STORAGE_KEY_ORCHESTRATOR_SETTINGS_OPEN = 'orchestratorSettingsOpen';
 
 @Injectable({ providedIn: 'root' })
 export class UiPreferencesService {
@@ -47,6 +48,19 @@ export class UiPreferencesService {
    * so the operator's preferred board shape survives reloads.
    */
   readonly groupByEpic = signal<boolean>(localStorage.getItem(STORAGE_KEY_GROUP_BY_EPIC) === '1');
+
+  /**
+   * Orchestrator Settings modal open state. Persisted so an F5 reload (or a
+   * bookmark-less browser restore) reopens the modal instead of silently
+   * discarding it - the modal has no URL of its own, so localStorage is the
+   * only durable channel. Deliberately excluded from the cross-tab `storage`
+   * listener below: unlike layout prefs, popping this modal open in an
+   * already-open sibling tab just because another tab opened it would
+   * surprise the user (same rationale as `userOverridesCompactWhileRail`).
+   */
+  readonly orchestratorSettingsOpen = signal<boolean>(
+    localStorage.getItem(STORAGE_KEY_ORCHESTRATOR_SETTINGS_OPEN) === '1',
+  );
 
   /**
    * F43: per-tab override that beats the rail-open auto-compact rule
@@ -121,6 +135,11 @@ export class UiPreferencesService {
     const value = !this.groupByEpic();
     this.groupByEpic.set(value);
     localStorage.setItem(STORAGE_KEY_GROUP_BY_EPIC, value ? '1' : '0');
+  }
+
+  setOrchestratorSettingsOpen(open: boolean): void {
+    this.orchestratorSettingsOpen.set(open);
+    localStorage.setItem(STORAGE_KEY_ORCHESTRATOR_SETTINGS_OPEN, open ? '1' : '0');
   }
 
   /**
