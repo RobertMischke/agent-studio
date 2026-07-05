@@ -223,7 +223,10 @@
     background: var(--studio-surface);
   }
 
+  // The diff render surface is <app-diff-content>; it owns its own overflow
+  // and the diff2html theme. Keep it constrained inside the render shell.
   &__render {
+    display: block;
     min-width: 0;
     overflow: auto;
   }
@@ -303,43 +306,6 @@
       line-height: 1.5;
     }
   }
-}
-
-.diff__render ::ng-deep .d2h-wrapper {
-  background: transparent;
-}
-
-.diff__render ::ng-deep .d2h-file-wrapper {
-  border: 0;
-  background: transparent;
-}
-
-.diff__render ::ng-deep .d2h-file-header {
-  background: var(--studio-bg-hover);
-  border-bottom: 1px solid var(--studio-border);
-  color: var(--studio-fg);
-}
-
-.diff__render ::ng-deep .d2h-file-collapse {
-  display: none;
-}
-
-.diff__render ::ng-deep .d2h-code-line,
-.diff__render ::ng-deep .d2h-code-side-line {
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.diff__render ::ng-deep .d2h-ins,
-.diff__render ::ng-deep .d2h-ins.d2h-change {
-  background: var(--diff-add-bg);
-  color: var(--studio-fg);
-}
-
-.diff__render ::ng-deep .d2h-del,
-.diff__render ::ng-deep .d2h-del.d2h-change {
-  background: var(--diff-rem-bg);
-  color: var(--studio-fg);
 }
 
 @media (max-width: 760px) {

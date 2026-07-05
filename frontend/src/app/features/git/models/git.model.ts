@@ -41,6 +41,70 @@ export interface GitProjectSummary {
   totalRemoved: number;
 }
 
+/** Coarse branch classification used by the Project Hub Git View tree. */
+export type GitBranchCategory = 'main' | 'develop' | 'feature' | 'task' | 'other';
+
+/**
+ * One checkout of the project repository (primary or an ADR-0052 per-task
+ * worktree) as reported by the backend inventory. Mirrors backend
+ * `GitWorktreeEntry`. The concrete on-disk {@link path} is always present so
+ * the Git View can show where each checkout lives.
+ */
+export interface GitWorktreeEntry {
+  path: string;
+  branch: string | null;
+  headSha: string | null;
+  headShortSha: string | null;
+  isPrimary: boolean;
+  isDetached: boolean;
+  isBare: boolean;
+}
+
+/** One local branch in the Git View inventory. Mirrors backend `GitBranchEntry`. */
+export interface GitBranchEntry {
+  name: string;
+  category: GitBranchCategory;
+  tipSha: string | null;
+  tipShortSha: string | null;
+  isCurrent: boolean;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  lastCommitSubject: string | null;
+  lastCommitAtUtc: string | null;
+  worktreePath: string | null;
+}
+
+/** One commit in the Git View recent-history list. Mirrors backend `GitCommitInfo`. */
+export interface GitCommitEntry {
+  sha: string;
+  shortSha: string;
+  authorDateUtc: string;
+  author: string;
+  subject: string;
+  filesChanged: number;
+  added: number;
+  removed: number;
+}
+
+/**
+ * Read-only branch / worktree / recent-history inventory for one project.
+ * Mirrors backend `GitProjectInventory`; fetched from
+ * `GET /api/git/inventory?project=<name>` and consumed by the Project Hub Git
+ * View. `isRepo === false` with a populated {@link error} is the empty/error
+ * signal (unknown project, no configured repository, or a non-git folder).
+ */
+export interface GitProjectInventory {
+  projectName: string;
+  repositoryPath: string | null;
+  isRepo: boolean;
+  currentBranch: string | null;
+  worktrees: GitWorktreeEntry[];
+  branches: GitBranchEntry[];
+  recentCommits: GitCommitEntry[];
+  error: string | null;
+}
+
 /**
  * Repository hygiene snapshot. Mirrors backend `GitHygieneStatus`.
  *

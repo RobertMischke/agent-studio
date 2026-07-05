@@ -19,6 +19,11 @@
       <app-project-urls-panel [projectName]="projectName()" />
     }
   }
+  @defer (when activeRail() === 'git') {
+    @if (activeRail() === 'git') {
+      <app-project-git-panel [projectName]="projectName()" />
+    }
+  }
   @defer (when activeRail() === 'security') {
     @if (activeRail() === 'security') {
       <app-security-panel

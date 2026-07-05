@@ -18,6 +18,7 @@ export { ProjectObservabilityPanelComponent } from './components/project-observa
 export { ProjectProductRuntimePanelComponent } from './components/project-product-runtime/project-product-runtime-panel.component';
 export { ProjectPipelinePanelComponent } from './components/project-pipeline-panel/project-pipeline-panel.component';
 export { ProjectUrlsPanelComponent } from './components/project-urls-panel/project-urls-panel.component';
+export { ProjectGitPanelComponent } from './components/project-git-panel/project-git-panel.component';
 
 // section components used cross-feature
 export { ProjectSteeringDocsSectionComponent } from './components/project-steering-docs-section/project-steering-docs-section';

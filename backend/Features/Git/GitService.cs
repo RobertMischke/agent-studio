@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentStudio.Git;
@@ -123,6 +124,65 @@ public record GitProjectSummary(
     int FilesChanged,
     int TotalAdded,
     int TotalRemoved);
+
+/// <summary>
+/// One checkout of the project repository as reported by
+/// <c>git worktree list --porcelain</c>. The primary checkout
+/// (<see cref="IsPrimary"/>) is the repository root itself; additional
+/// entries are the ADR-0052 per-task worktrees living on disk. Backs the
+/// Project Hub Git View "where each checkout lives" surface, so the
+/// concrete on-disk <see cref="Path"/> is always included.
+/// </summary>
+public record GitWorktreeEntry(
+    string Path,
+    string? Branch,
+    string? HeadSha,
+    string? HeadShortSha,
+    bool IsPrimary,
+    bool IsDetached,
+    bool IsBare);
+
+/// <summary>
+/// One local branch in the Project Hub Git View inventory. <see cref="Category"/>
+/// is a coarse classification (<c>main</c> / <c>develop</c> / <c>feature</c> /
+/// <c>task</c> / <c>other</c>) the frontend groups the branch tree by, so the
+/// operator can see at a glance what is integration, what is a feature branch,
+/// and what is an open task branch. <see cref="WorktreePath"/> is non-null when
+/// the branch is currently checked out in one of the <see cref="GitWorktreeEntry"/>
+/// folders.
+/// </summary>
+public record GitBranchEntry(
+    string Name,
+    string Category,
+    string? TipSha,
+    string? TipShortSha,
+    bool IsCurrent,
+    string? Upstream,
+    int Ahead,
+    int Behind,
+    string? LastCommitSubject,
+    DateTime? LastCommitAtUtc,
+    string? WorktreePath);
+
+/// <summary>
+/// Read-only branch + worktree + recent-history inventory for a single
+/// project, returned by <see cref="GitService.GetProjectInventory"/> and
+/// surfaced on the Project Hub Git View. Deliberately project-scoped: it
+/// answers "what branches and checkouts does THIS project's repository have,
+/// and what changed recently", never a global git-client view. Carries an
+/// <see cref="Error"/> (with <see cref="IsRepo"/> false) when the project has
+/// no configured repository or the folder is not a git working tree, so the
+/// frontend can render a clean empty/error state.
+/// </summary>
+public record GitProjectInventory(
+    string ProjectName,
+    string? RepositoryPath,
+    bool IsRepo,
+    string? CurrentBranch,
+    List<GitWorktreeEntry> Worktrees,
+    List<GitBranchEntry> Branches,
+    List<GitCommitInfo> RecentCommits,
+    string? Error);
 
 /// <summary>
 /// Repository hygiene snapshot used by the project header badge and the
@@ -525,6 +585,278 @@ public class GitService
     public void InvalidateHygieneCache()
     {
         lock (_hygieneLock) _hygieneCache.Clear();
+    }
+
+    // ----- Project Hub Git View: branch + worktree + history inventory -----
+
+    private readonly object _inventoryLock = new();
+    private readonly Dictionary<string, (DateTime At, GitProjectInventory Value)> _inventoryCache = new();
+    private static readonly TimeSpan InventoryTtl = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Branch / worktree / recent-history inventory for one project, backing the
+    /// Project Hub Git View. Read-only: it forks a handful of cheap plumbing
+    /// commands (<c>worktree list</c>, <c>for-each-ref</c>, <c>log</c>) and never
+    /// mutates the repository. Cached per project for ~3 s so a polling UI can
+    /// call freely without forking N git processes per render. Returns a shape
+    /// with <see cref="GitProjectInventory.IsRepo"/> false and a populated
+    /// <see cref="GitProjectInventory.Error"/> when the project is unknown, has
+    /// no configured repository, or the folder is not a git working tree - the
+    /// frontend branches on that for its empty/error state.
+    /// </summary>
+    public GitProjectInventory GetProjectInventory(string projectName)
+    {
+        if (string.IsNullOrWhiteSpace(projectName))
+            return EmptyInventory("", null, "projectName is required");
+
+        lock (_inventoryLock)
+        {
+            if (_inventoryCache.TryGetValue(projectName, out var cached) &&
+                DateTime.UtcNow - cached.At < InventoryTtl)
+            {
+                return cached.Value;
+            }
+        }
+
+        var fresh = ComputeProjectInventory(projectName);
+        lock (_inventoryLock)
+        {
+            _inventoryCache[projectName] = (DateTime.UtcNow, fresh);
+        }
+        return fresh;
+    }
+
+    private static GitProjectInventory EmptyInventory(string projectName, string? repoPath, string? error)
+        => new(projectName, repoPath, false, null, [], [], [], error);
+
+    private GitProjectInventory ComputeProjectInventory(string projectName)
+    {
+        var entry = _scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
+        if (entry == null)
+            return EmptyInventory(projectName, null, "Unknown project");
+
+        var configured = ResolveConfiguredRepositoryPath(entry);
+        if (string.IsNullOrWhiteSpace(configured))
+            return EmptyInventory(projectName, null, "Project has no configured repository path.");
+
+        var root = ResolveGitToplevel(configured);
+        if (root == null)
+            return EmptyInventory(projectName, configured, $"Not a git repository: {configured}");
+
+        var (branchOut, _, _) = RunGit(root, "rev-parse --abbrev-ref HEAD");
+        var currentBranch = string.IsNullOrWhiteSpace(branchOut) ? null : branchOut.Trim();
+
+        var (wtOut, _, wtCode) = RunGitArgs(root, "worktree", "list", "--porcelain");
+        var worktrees = wtCode == 0 ? ParseWorktreePorcelain(wtOut) : [];
+        var worktreeByBranch = worktrees
+            .Where(w => !string.IsNullOrEmpty(w.Branch))
+            .GroupBy(w => w.Branch!, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().Path, StringComparer.Ordinal);
+
+        var branches = ReadBranchInventory(root, currentBranch, worktreeByBranch);
+
+        // Recent history on the current HEAD; the tree browser reads this as the
+        // "browse recent commits" list and hands a selected SHA to the reused
+        // diff renderer. Bounded so a long-lived repo can't stall the render.
+        var (logOut, _, logCode) = RunGitArgs(root,
+            "log", "--no-merges", "--max-count=40", "--shortstat",
+            "--pretty=format:%H%x1f%h%x1f%aI%x1f%aN%x1f%s");
+        var recent = logCode == 0 ? ParseLogBlocks(logOut) : [];
+
+        return new GitProjectInventory(
+            projectName, root, true, currentBranch, worktrees, branches, recent, null);
+    }
+
+    /// <summary>
+    /// Parses <c>git worktree list --porcelain</c> into typed entries. The first
+    /// block git emits is always the primary working tree (the repo root); it is
+    /// flagged <see cref="GitWorktreeEntry.IsPrimary"/>. Split out for unit
+    /// testing of the parse without a live repo.
+    /// </summary>
+    internal static List<GitWorktreeEntry> ParseWorktreePorcelain(string output)
+    {
+        var list = new List<GitWorktreeEntry>();
+        if (string.IsNullOrWhiteSpace(output)) return list;
+
+        string? path = null, head = null, branch = null;
+        var detached = false; var bare = false;
+        var first = true;
+
+        void Flush()
+        {
+            if (path == null) return;
+            string? normalized;
+            try { normalized = Path.GetFullPath(path); } catch { normalized = path; }
+            list.Add(new GitWorktreeEntry(
+                normalized,
+                branch,
+                head,
+                head is { Length: > 7 } ? head[..7] : head,
+                first,
+                detached,
+                bare));
+            first = false;
+            path = null; head = null; branch = null; detached = false; bare = false;
+        }
+
+        foreach (var raw in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            var line = raw.TrimEnd();
+            if (line.Length == 0) { Flush(); continue; }
+            if (line.StartsWith("worktree ", StringComparison.Ordinal))
+            {
+                Flush();
+                path = line.Substring("worktree ".Length).Trim();
+            }
+            else if (line.StartsWith("HEAD ", StringComparison.Ordinal))
+                head = line.Substring("HEAD ".Length).Trim();
+            else if (line.StartsWith("branch ", StringComparison.Ordinal))
+            {
+                var refName = line.Substring("branch ".Length).Trim();
+                branch = refName.StartsWith("refs/heads/", StringComparison.Ordinal)
+                    ? refName.Substring("refs/heads/".Length)
+                    : refName;
+            }
+            else if (line == "detached") detached = true;
+            else if (line == "bare") bare = true;
+        }
+        Flush();
+        return list;
+    }
+
+    private List<GitBranchEntry> ReadBranchInventory(
+        string root, string? currentBranch, IReadOnlyDictionary<string, string> worktreeByBranch)
+    {
+        // One for-each-ref pass gives tip SHA, upstream, ahead/behind track, the
+        // last-commit date and subject per branch. Fields are separated by the
+        // Unit Separator (0x1f) so a commit subject with spaces round-trips.
+        const char US = '';
+        var fmt = string.Join(US.ToString(), new[]
+        {
+            "%(refname:short)", "%(objectname)", "%(objectname:short)",
+            "%(upstream:short)", "%(upstream:track)",
+            "%(committerdate:iso-strict)", "%(contents:subject)"
+        });
+        var (output, _, code) = RunGitArgs(root,
+            "for-each-ref", "--sort=-committerdate", "--count=200",
+            $"--format={fmt}", "refs/heads");
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+
+        var list = new List<GitBranchEntry>();
+        foreach (var raw in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            var parts = raw.Split(US);
+            if (parts.Length < 7) continue;
+            var name = parts[0].Trim();
+            if (name.Length == 0) continue;
+
+            var (ahead, behind) = ParseAheadBehind(parts[4]);
+            DateTime? lastAt = null;
+            if (DateTime.TryParse(parts[5], System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var ts))
+                lastAt = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
+
+            list.Add(new GitBranchEntry(
+                Name: name,
+                Category: CategorizeBranch(name),
+                TipSha: EmptyToNull(parts[1]),
+                TipShortSha: EmptyToNull(parts[2]),
+                IsCurrent: string.Equals(name, currentBranch, StringComparison.Ordinal),
+                Upstream: EmptyToNull(parts[3]),
+                Ahead: ahead,
+                Behind: behind,
+                LastCommitSubject: EmptyToNull(parts[6]),
+                LastCommitAtUtc: lastAt,
+                WorktreePath: worktreeByBranch.TryGetValue(name, out var wt) ? wt : null));
+        }
+        return list;
+    }
+
+    private static string? EmptyToNull(string s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    /// <summary>
+    /// Coarse branch classification for the Git View tree grouping. Mirrors the
+    /// project's branch conventions: <c>main</c>/<c>master</c> and
+    /// <c>develop</c>/<c>dev</c> are integration lines, <c>task/*</c> are ADR-0052
+    /// task branches, <c>feature/*</c> (and <c>feat/*</c>) are feature branches,
+    /// everything else is <c>other</c>.
+    /// </summary>
+    internal static string CategorizeBranch(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "other";
+        if (name is "main" or "master") return "main";
+        if (name is "develop" or "dev") return "develop";
+        if (name.StartsWith("task/", StringComparison.Ordinal)) return "task";
+        if (name.StartsWith("feature/", StringComparison.Ordinal) ||
+            name.StartsWith("feat/", StringComparison.Ordinal)) return "feature";
+        return "other";
+    }
+
+    /// <summary>
+    /// Parses git's <c>%(upstream:track)</c> string (e.g. <c>[ahead 2, behind 1]</c>,
+    /// <c>[ahead 3]</c>, <c>[behind 4]</c>, <c>[gone]</c>, or empty) into an
+    /// ahead/behind pair. Returns (0,0) when there is no upstream or nothing to
+    /// report. Internal for unit testing.
+    /// </summary>
+    internal static (int Ahead, int Behind) ParseAheadBehind(string? track)
+    {
+        if (string.IsNullOrWhiteSpace(track)) return (0, 0);
+        var ahead = 0; var behind = 0;
+        foreach (Match m in Regex.Matches(track, @"(ahead|behind)\s+(\d+)"))
+        {
+            if (!int.TryParse(m.Groups[2].Value, out var n)) continue;
+            if (m.Groups[1].Value == "ahead") ahead = n; else behind = n;
+        }
+        return (ahead, behind);
+    }
+
+    /// <summary>
+    /// Project-scoped file list for an already-recorded commit, resolved through
+    /// the project's configured repository (no job context). Backs the Project
+    /// Hub Git View so a selected history commit's changed files can be shown and
+    /// handed to the reused diff renderer. The SHA is validated through
+    /// <see cref="IsLikelyShaOrRef"/> first so a crafted argument cannot smuggle a
+    /// flag into the git invocation. Returns an empty list when the project or
+    /// SHA can't be resolved - never throws.
+    /// </summary>
+    public List<GitFileChange> GetProjectCommitFiles(string projectName, string sha)
+    {
+        if (string.IsNullOrWhiteSpace(sha) || !IsLikelyShaOrRef(sha)) return [];
+        var root = ResolveProjectRoot(projectName);
+        if (root == null) return [];
+        return GetCommitFilesAtRoot(root, sha);
+    }
+
+    /// <summary>
+    /// Project-scoped unified diff for an already-recorded commit, optionally
+    /// scoped to one path. Mirrors <see cref="GetCommitDiffResult"/> but resolves
+    /// the repository from the project name instead of a job, so the Project Hub
+    /// Git View can drive the shared diff renderer with a browsed commit.
+    /// </summary>
+    public GitDiffLookupResult GetProjectCommitDiffResult(string projectName, string sha, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(sha) || !IsLikelyShaOrRef(sha))
+            return new GitDiffLookupResult(false, "", "Invalid commit SHA.");
+        var root = ResolveProjectRoot(projectName);
+        if (root == null)
+            return new GitDiffLookupResult(false, "", "Could not resolve repo root for project.");
+        return GetCommitDiffResultAtRoot(root, sha, path);
+    }
+
+    /// <summary>
+    /// Resolves a project's git toplevel the same way <see cref="GetProjectInventory"/>
+    /// does (scanner entry -> configured repository path -> <c>rev-parse --show-toplevel</c>),
+    /// so an inventory SHA and its diff are always read from the same checkout.
+    /// </summary>
+    private string? ResolveProjectRoot(string projectName)
+    {
+        var entry = _scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
+        if (entry == null) return null;
+        var configured = ResolveConfiguredRepositoryPath(entry);
+        if (string.IsNullOrWhiteSpace(configured)) return null;
+        return ResolveGitToplevel(configured);
     }
 
     /// <summary>Resolve the repository root for a job.</summary>
@@ -1092,7 +1424,19 @@ public class GitService
         if (configured == null) return [];
         var root = ResolveGitToplevel(configured);
         if (root == null) return [];
+        return GetCommitFilesAtRoot(root, sha);
+    }
 
+    /// <summary>
+    /// Root-scoped core of <see cref="GetCommitFiles"/>: the <c>git show
+    /// --name-status</c> + <c>--numstat</c> parse against an already-resolved
+    /// git toplevel. Shared by the job-scoped and project-scoped
+    /// (<see cref="GetProjectCommitFiles"/>) entry points so both derive an
+    /// identical file list. Assumes <paramref name="sha"/> is already validated.
+    /// </summary>
+    private List<GitFileChange> GetCommitFilesAtRoot(string root, string sha)
+    {
+        if (string.IsNullOrWhiteSpace(sha) || !IsLikelyShaOrRef(sha)) return [];
         var (statusOut, _, statusCode) = RunGitArgs(root, "show", "--name-status", "--pretty=format:", sha);
         if (statusCode != 0) return [];
 
@@ -1179,6 +1523,18 @@ public class GitService
         if (configured == null) return new GitDiffLookupResult(false, "", "Could not resolve repo root.");
         var root = ResolveGitToplevel(configured);
         if (root == null) return new GitDiffLookupResult(false, "", $"Not a git repository: {configured}");
+        return GetCommitDiffResultAtRoot(root, sha, path);
+    }
+
+    /// <summary>
+    /// Root-scoped core of <see cref="GetCommitDiffResult"/>: the <c>git show</c>
+    /// unified-diff lookup against an already-resolved git toplevel, optionally
+    /// path-scoped. Shared by the job-scoped and project-scoped
+    /// (<see cref="GetProjectCommitDiffResult"/>) entry points. Assumes
+    /// <paramref name="sha"/> is already validated.
+    /// </summary>
+    private GitDiffLookupResult GetCommitDiffResultAtRoot(string root, string sha, string? path)
+    {
         var (output, err, code) = string.IsNullOrWhiteSpace(path)
             ? RunGitArgs(root, "show", "--pretty=format:", sha)
             : RunGitArgs(root, "show", "--pretty=format:", sha, "--", path!);

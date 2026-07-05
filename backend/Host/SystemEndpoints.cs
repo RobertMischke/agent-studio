@@ -87,6 +87,38 @@ public static class SystemEndpoints
         app.MapGet("/api/git/hygiene", (string project, GitService git) =>
             Results.Ok(git.GetProjectHygiene(project)));
 
+        // Project Hub Git View: read-only branch / worktree / recent-history
+        // inventory for one project. Cached ~3 s server-side. Deliberately
+        // project-scoped (never a global git client): it lists the project's
+        // branches, on-disk worktree/checkout folders, and recent commits so
+        // the Git View tree can distinguish main / develop / feature / task
+        // branches and hand a browsed SHA to the shared diff renderer.
+        app.MapGet("/api/git/inventory", (string project, GitService git) =>
+            Results.Ok(git.GetProjectInventory(project)));
+
+        // Changed-file list for a commit browsed in the project Git View,
+        // resolved through the project's configured repository (no job context).
+        app.MapGet("/api/git/project-commit/files", (string project, string sha, GitService git) =>
+            Results.Ok(new { sha, files = git.GetProjectCommitFiles(project, sha) }));
+
+        // Unified diff for a commit browsed in the project Git View, optionally
+        // scoped to one path. Returns the same { diff, hasDiff, emptyReason }
+        // envelope the per-task commit-diff endpoints use so the frontend diff
+        // surfaces share one payload contract.
+        app.MapGet("/api/git/project-commit/diff", (string project, string sha, string? path, GitService git) =>
+        {
+            var result = git.GetProjectCommitDiffResult(project, sha, path);
+            if (!result.Success)
+                return Results.BadRequest(new { error = result.Error ?? "Could not load diff." });
+            var hasDiff = !string.IsNullOrWhiteSpace(result.Diff);
+            return Results.Ok(new
+            {
+                diff = result.Diff,
+                hasDiff,
+                emptyReason = hasDiff ? null : "No diff for this path in the selected commit."
+            });
+        });
+
         app.MapGet("/healthz", () => Results.Ok("ok"));
     }
 }

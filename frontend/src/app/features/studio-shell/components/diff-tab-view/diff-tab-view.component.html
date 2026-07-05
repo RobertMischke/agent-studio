@@ -95,10 +95,9 @@
                 <button type="button" class="diff__action" data-testid="studio-diff-show-all" (click)="revealAll()">Show all large diffs</button>
               </div>
             </div>
-          } @else if (diffHtml(); as dh) {
-            <div class="diff__render" data-testid="studio-diff-render" [innerHTML]="dh"></div>
           } @else {
-            <p class="diff__note">Preparing diff renderer...</p>
+            <app-diff-content class="diff__render" data-testid="studio-diff-render"
+                              [diffText]="diffText()" [sideBySide]="true" />
           }
         </section>
       </div>

@@ -10,6 +10,7 @@ import {
   ProjectSteeringDocsSectionComponent,
   ProjectWikiSectionComponent,
   ProjectUrlsPanelComponent,
+  ProjectGitPanelComponent,
 } from '../../../project-detail';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { PromptAdminPanelComponent } from '../../../orchestrator';
@@ -27,6 +28,7 @@ import { studioTabKey } from '../../studio-shell.types';
 const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRailKey>([
   'overview',
   'project-urls',
+  'git',
   'visual-evidence',
   'security',
   'architecture',
@@ -75,6 +77,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     ProjectSteeringDocsSectionComponent,
     ProjectWikiSectionComponent,
     ProjectUrlsPanelComponent,
+    ProjectGitPanelComponent,
     PromptAdminPanelComponent,
     WorkspaceScreenshotsComponent,
   ],
