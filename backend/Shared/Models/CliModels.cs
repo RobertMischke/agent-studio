@@ -111,6 +111,7 @@ public static class ModelIds
     public const string ClaudeOpus47 = "claude-opus-4-7";
     public const string ClaudeOpus46 = "claude-opus-4-6";
     public const string ClaudeOpus45 = "claude-opus-4-5";
+    public const string ClaudeSonnet5 = "claude-sonnet-5";
     public const string ClaudeSonnet46 = "claude-sonnet-4-6";
     public const string ClaudeSonnet45 = "claude-sonnet-4-5";
     public const string ClaudeHaiku45 = "claude-haiku-4-5";
@@ -147,6 +148,7 @@ public static class ModelMetadataRegistry
         Claude(ModelIds.ClaudeOpus47, "Claude Opus 4.7", input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.7"]),
         Claude(ModelIds.ClaudeOpus46, "Claude Opus 4.6", input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.6"]),
         Claude(ModelIds.ClaudeOpus45, "Claude Opus 4.5", input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.5"]),
+        Claude(ModelIds.ClaudeSonnet5, "Claude Sonnet 5", input: 3.00m, output: 15.00m, context: 200_000),
         Claude(ModelIds.ClaudeSonnet46, "Claude Sonnet 4.6", input: 3.00m, output: 15.00m, context: 200_000, aliases: ["claude-sonnet-4.6"]),
         Claude(ModelIds.ClaudeSonnet45, "Claude Sonnet 4.5", input: 3.00m, output: 15.00m, context: 200_000, aliases: ["claude-sonnet-4.5"]),
         Claude(ModelIds.ClaudeHaiku45, "Claude Haiku 4.5", input: 1.00m, output: 5.00m, context: 200_000, aliases: ["claude-haiku-4.5"]),
