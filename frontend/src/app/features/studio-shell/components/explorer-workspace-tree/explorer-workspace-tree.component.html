@@ -142,9 +142,10 @@
               </app-tree-row>
             }
             @if (isExpanded(p.name)) {
-              <!-- ASS-658/ASS-597: per-project links are exactly four, all
-                   project-scoped — Board (kanban), Project Hub, Backlog
-                   (triage), and Epics (overview). Per-lane children stay
+              <!-- ASS-658/ASS-597: five fixed per-project rows, all
+                   project-scoped — Board (kanban), Project Hub, Wiki, Backlog
+                   (triage), and Epics (overview) — followed by 0..N dynamic
+                   Project URL rows (see the @for below). Per-lane children stay
                    retired; lanes are reachable from the board itself. -->
               <div class="studio-tree-children">
                 <app-tree-row level="child" glyph="grid"
@@ -195,6 +196,27 @@
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'epics' ? 'page' : null"
                               [testid]="'studio-explorer-project-epics-' + p.name"
                               (selectRequest)="openEpicsRequest.emit(p.name)" />
+                <!-- Project URLs: 0..N extra rows, one per configured URL,
+                     appended after the five fixed rows. A new globe glyph and a
+                     running/offline status dot instead of a count badge.
+                     Clicking opens the URL directly in a new tab (window.open) —
+                     these are plain external links, NOT tabs, so they do not go
+                     through the StudioTabStateService @Output() emitters. -->
+                @for (u of p.urls; track u.id) {
+                  <app-tree-row level="child" glyph="link"
+                                [label]="u.label"
+                                [ariaLabel]="u.label + ', opens ' + u.url + ' in a new tab'"
+                                [cacTooltip]="u.url"
+                                [testid]="'studio-explorer-project-url-' + p.name + '-' + u.id"
+                                (selectRequest)="openUrl(u.url)">
+                    <span class="studio-url-status-dot"
+                          [class.studio-url-status-dot--running]="urlProbe.statusFor(u.url) === 'running'"
+                          [class.studio-url-status-dot--offline]="urlProbe.statusFor(u.url) === 'offline'"
+                          [attr.data-testid]="'studio-explorer-project-url-dot-' + p.name + '-' + u.id"
+                          [attr.data-status]="urlProbe.statusFor(u.url)"
+                          [attr.aria-label]="urlProbe.statusFor(u.url)"></span>
+                  </app-tree-row>
+                }
               </div>
             }
           </div>

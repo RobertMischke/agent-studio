@@ -364,6 +364,140 @@ public sealed class ProjectRegistry
             trimmed == null ? "root-path-cleared" : "root-path-set");
     }
 
+    // ------------------------------------------------------------------
+    // Project URLs — ordered list of watchable dev-server / preview URLs.
+    // Mirrors the SetRepositoryPath pattern: validate, MutateLocked, persist.
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Append a URL to the project. <paramref name="label"/> and
+    /// <paramref name="url"/> are required; the URL must be an absolute
+    /// http/https address. A stable per-project id (<c>url-N</c>) is allocated
+    /// and the new row is placed last. Returns the updated project record.
+    /// </summary>
+    public ProjectRecord AddUrl(string id, string label, string url, ProjectUrlStartRule? startRule = null)
+    {
+        var cleanLabel = (label ?? "").Trim();
+        if (cleanLabel.Length == 0)
+            throw new ArgumentException("label is required", nameof(label));
+        var cleanUrl = ValidateUrl(url);
+        var rule = NormaliseStartRule(startRule);
+        return MutateLocked(id, p =>
+        {
+            var nextSort = p.Urls.Count == 0 ? 0 : p.Urls.Max(u => u.SortOrder) + 1;
+            var record = new ProjectUrlRecord
+            {
+                Id = AllocateUrlId(p.Urls),
+                Label = cleanLabel,
+                Url = cleanUrl,
+                SortOrder = nextSort,
+                StartRule = rule,
+            };
+            return p with { Urls = [.. p.Urls, record] };
+        }, "url-added");
+    }
+
+    /// <summary>
+    /// Update an existing URL's label, address, and start rule. The id and
+    /// sort order are preserved. Throws <see cref="KeyNotFoundException"/>
+    /// when the project or the url id is unknown.
+    /// </summary>
+    public ProjectRecord UpdateUrl(string id, string urlId, string label, string url, ProjectUrlStartRule? startRule)
+    {
+        var cleanLabel = (label ?? "").Trim();
+        if (cleanLabel.Length == 0)
+            throw new ArgumentException("label is required", nameof(label));
+        var cleanUrl = ValidateUrl(url);
+        var rule = NormaliseStartRule(startRule);
+        return MutateLocked(id, p =>
+        {
+            var idx = IndexOfUrl(p.Urls, urlId);
+            var next = p.Urls.ToList();
+            next[idx] = next[idx] with { Label = cleanLabel, Url = cleanUrl, StartRule = rule };
+            return p with { Urls = next };
+        }, "url-updated");
+    }
+
+    /// <summary>Remove a URL by id. Throws when the project or url id is unknown.</summary>
+    public ProjectRecord RemoveUrl(string id, string urlId)
+    {
+        return MutateLocked(id, p =>
+        {
+            var idx = IndexOfUrl(p.Urls, urlId);
+            return p with { Urls = [.. p.Urls.Where((_, i) => i != idx)] };
+        }, "url-removed");
+    }
+
+    /// <summary>
+    /// Reassign sort order from an explicit id sequence. Every existing url id
+    /// must appear exactly once in <paramref name="orderedUrlIds"/>; the new
+    /// <see cref="ProjectUrlRecord.SortOrder"/> is the index in that sequence.
+    /// </summary>
+    public ProjectRecord ReorderUrls(string id, IReadOnlyList<string> orderedUrlIds)
+    {
+        ArgumentNullException.ThrowIfNull(orderedUrlIds);
+        return MutateLocked(id, p =>
+        {
+            var existing = p.Urls.Select(u => u.Id).ToHashSet(StringComparer.Ordinal);
+            if (orderedUrlIds.Count != existing.Count || !orderedUrlIds.All(existing.Contains) ||
+                orderedUrlIds.Distinct(StringComparer.Ordinal).Count() != orderedUrlIds.Count)
+                throw new ArgumentException(
+                    "orderedUrlIds must be a permutation of the project's url ids", nameof(orderedUrlIds));
+            var byId = p.Urls.ToDictionary(u => u.Id, StringComparer.Ordinal);
+            var reordered = orderedUrlIds
+                .Select((uid, i) => byId[uid] with { SortOrder = i })
+                .ToList();
+            return p with { Urls = reordered };
+        }, "urls-reordered");
+    }
+
+    private static string ValidateUrl(string? url)
+    {
+        var trimmed = (url ?? "").Trim();
+        if (trimmed.Length == 0)
+            throw new ArgumentException("url is required", nameof(url));
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var parsed) ||
+            (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps))
+            throw new ArgumentException(
+                "url must be an absolute http or https address", nameof(url));
+        return trimmed;
+    }
+
+    private static ProjectUrlStartRule? NormaliseStartRule(ProjectUrlStartRule? rule)
+    {
+        if (rule == null) return null;
+        var command = (rule.Command ?? "").Trim();
+        if (command.Length == 0) return null; // a rule with no command is no rule
+        var source = string.IsNullOrWhiteSpace(rule.Source) ? "manual" : rule.Source.Trim();
+        return new ProjectUrlStartRule
+        {
+            Command = command,
+            Cwd = string.IsNullOrWhiteSpace(rule.Cwd) ? null : rule.Cwd.Trim(),
+            Port = rule.Port,
+            Source = source,
+        };
+    }
+
+    private static int IndexOfUrl(IReadOnlyList<ProjectUrlRecord> urls, string urlId)
+    {
+        for (var i = 0; i < urls.Count; i++)
+            if (string.Equals(urls[i].Id, urlId, StringComparison.Ordinal))
+                return i;
+        throw new KeyNotFoundException($"Unknown url id: {urlId}");
+    }
+
+    private static string AllocateUrlId(IReadOnlyList<ProjectUrlRecord> urls)
+    {
+        var max = 0;
+        foreach (var u in urls)
+        {
+            if (u.Id.StartsWith("url-", StringComparison.Ordinal) &&
+                int.TryParse(u.Id.AsSpan(4), out var n) && n > max)
+                max = n;
+        }
+        return $"url-{max + 1}";
+    }
+
     /// <summary>
     /// F46 — permanently remove a project record from the registry and
     /// return the removed record so the caller can act on its

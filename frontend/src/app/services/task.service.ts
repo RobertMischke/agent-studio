@@ -27,6 +27,8 @@ import type {
   PromoteToCodingResponse,
   CreateRegistryProjectRequest,
   RegistryProjectSummary,
+  ProjectUrlStartRule,
+  ProjectUrlSuggestion,
 } from '../models/task.model';
 import { TaskState } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
@@ -571,6 +573,38 @@ export class TaskService {
   /** F46 — create a registry project. Backend chooses projects/PROJ-NNN; no path is accepted from the UI. */
   createRegistryProject(body: CreateRegistryProjectRequest) {
     return this.http.post<RegistryProjectSummary>(`${this.baseUrl}/projects`, body);
+  }
+
+  // ----- Project URLs (per-project watchable dev-server / preview URLs) -----
+
+  /** Detected URL suggestions from the project's repo (package.json / angular.json / README). */
+  getProjectUrlSuggestions(projId: string) {
+    return this.http.get<ProjectUrlSuggestion[]>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/url-suggestions`);
+  }
+
+  /** Add a URL to the project. Returns the updated project record. */
+  addProjectUrl(projId: string, body: { label: string; url: string; startRule?: ProjectUrlStartRule | null }) {
+    return this.http.post<RegistryProjectSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls`, body);
+  }
+
+  /** Update an existing URL (label / url / start rule). */
+  updateProjectUrl(projId: string, urlId: string, body: { label: string; url: string; startRule?: ProjectUrlStartRule | null }) {
+    return this.http.put<RegistryProjectSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}`, body);
+  }
+
+  /** Remove a URL by id. Returns the updated project record. */
+  removeProjectUrl(projId: string, urlId: string) {
+    return this.http.delete<RegistryProjectSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}`);
+  }
+
+  /** Build &amp; start (or restart) the dev server behind a URL's start rule. */
+  startProjectUrl(projId: string, urlId: string) {
+    return this.http.post<{ started: boolean; urlId: string }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/start`, {});
   }
 
   /**

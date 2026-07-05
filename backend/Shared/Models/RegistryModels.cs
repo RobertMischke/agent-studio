@@ -1,6 +1,41 @@
 namespace AgentStudio.Shared;
 
 /// <summary>
+/// A single watchable URL attached to a <see cref="ProjectRecord"/> (a dev
+/// server, a preview site, a static page). Ordered by <see cref="SortOrder"/>.
+/// The optional <see cref="StartRule"/> is absent for URLs that have nothing to
+/// spawn (e.g. a static HTML file that is just opened).
+/// </summary>
+public record ProjectUrlRecord
+{
+    /// <summary>Stable per-project identifier (e.g. <c>url-1</c>). Immutable.</summary>
+    public string Id { get; init; } = "";
+    /// <summary>Human-readable label, e.g. "Presentation website".</summary>
+    public string Label { get; init; } = "";
+    /// <summary>Absolute URL to open, e.g. <c>http://localhost:4202</c>.</summary>
+    public string Url { get; init; } = "";
+    /// <summary>Render order within the project. Smaller comes first.</summary>
+    public int SortOrder { get; init; }
+    /// <summary>Optional command that builds/starts this URL's server.</summary>
+    public ProjectUrlStartRule? StartRule { get; init; }
+}
+
+/// <summary>
+/// How to build and start the server that serves a <see cref="ProjectUrlRecord"/>.
+/// </summary>
+public record ProjectUrlStartRule
+{
+    /// <summary>Command to run, e.g. <c>npm run website</c>.</summary>
+    public string Command { get; init; } = "";
+    /// <summary>Working directory; defaults to the project's RepositoryPath when null.</summary>
+    public string? Cwd { get; init; }
+    /// <summary>Port the server listens on, when known.</summary>
+    public int? Port { get; init; }
+    /// <summary>Where the rule came from: <c>manual</c> | <c>package-json</c> | <c>readme</c>.</summary>
+    public string Source { get; init; } = "manual";
+}
+
+/// <summary>
 /// F45a — top-level grouping for projects on the kanban board. Workspaces
 /// are pure metadata: no folder, no on-disk identity beyond an entry in
 /// <c>&lt;TaskRepository&gt;/.metadata/workspaces.json</c>. A project belongs
@@ -81,6 +116,12 @@ public record ProjectRecord
     /// "unknown" (see <c>RunnerEndpoints</c>).
     /// </summary>
     public string? RootPath { get; init; }
+    /// <summary>
+    /// Ordered list of watchable URLs for this project (dev servers, preview
+    /// sites, static pages). Default empty; most projects have none. Managed
+    /// via the AddUrl / UpdateUrl / RemoveUrl / ReorderUrls registry mutators.
+    /// </summary>
+    public IReadOnlyList<ProjectUrlRecord> Urls { get; init; } = [];
     public bool Archived { get; init; }
     public DateTime CreatedAt { get; init; }
 }

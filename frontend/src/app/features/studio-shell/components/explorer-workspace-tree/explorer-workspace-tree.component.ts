@@ -12,7 +12,8 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import type { RegistryWorkspaceListItem } from '../../../../models/task.model';
+import type { RegistryWorkspaceListItem, RegistryProjectUrl } from '../../../../models/task.model';
+import { ProjectUrlProbeService } from '../../../../services/project-url-probe.service';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../../../components/empty-state/empty-state.component';
@@ -48,6 +49,7 @@ export interface ExplorerProjectNode extends ExplorerProjectRow {
   displayLabel: string;
   /** Registry short code for matched rows; the delete confirm accepts it. */
   shortCode: string | null;
+  urls: readonly RegistryProjectUrl[]; // configured URLs → extra child rows
 }
 
 /** One workspace folder and the project rows that belong to it. */
@@ -133,6 +135,8 @@ export class ExplorerWorkspaceTreeComponent {
 
   readonly projectDrag = inject(ProjectDragDropService);
   readonly projectActions = inject(ExplorerProjectActionsService);
+  /** Public so the template can read each URL row's live running/offline dot. */
+  readonly urlProbe = inject(ProjectUrlProbeService);
   private readonly sections = inject(ExplorerSectionsService);
   private readonly modalStack = inject(ModalStackService);
 
@@ -204,12 +208,14 @@ export class ExplorerWorkspaceTreeComponent {
       workspaceId: string | null,
       displayLabel: string,
       shortCode: string | null,
+      urls: readonly RegistryProjectUrl[] = [],
     ): ExplorerProjectNode => ({
       ...r,
       projectId,
       workspaceId,
       displayLabel,
       shortCode,
+      urls,
     });
 
     const workspaces = [...this.registryWorkspaces()].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -244,7 +250,7 @@ export class ExplorerWorkspaceTreeComponent {
           // what to reassign and which workspace drop is a no-op; carry the
           // registry display name + short code so the row renders the live
           // label and the delete confirm can accept the short code.
-          projects.push(node(match, rp.id, ws.id, rp.displayName, rp.shortCode));
+          projects.push(node(match, rp.id, ws.id, rp.displayName, rp.shortCode, rp.urls ?? []));
         }
       }
       projects.sort((a, b) => a.displayLabel.localeCompare(b.displayLabel));
@@ -280,6 +286,9 @@ export class ExplorerWorkspaceTreeComponent {
   isExpanded(name: string): boolean {
     return this.expandedProjects().has(name);
   }
+
+  /** URL rows are plain external links: open directly, never a tab. */
+  openUrl(url: string): void { window.open(url, '_blank', 'noopener'); }
 
   readonly laneCountsFor = laneCountsFor;
   readonly boardLaneCountsLabel = boardLaneCountsLabel;

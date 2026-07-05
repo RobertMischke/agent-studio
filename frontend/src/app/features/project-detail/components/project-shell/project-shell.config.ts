@@ -11,6 +11,7 @@ export type ProjectRailGroup = 'insight' | 'quality' | 'context' | 'config';
 
 export type ProjectRailKey =
   | 'overview'
+  | 'project-urls'
   | 'visual-evidence'
   | 'security'
   | 'architecture'
@@ -72,6 +73,16 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     empty: 'Overview placeholder. Health snapshot and quick actions will land in a later slice.',
     icon: '▤',
     railIcon: 'layout',
+  },
+  {
+    key: 'project-urls',
+    group: 'insight',
+    label: 'Project URLs',
+    panelTitle: 'Project URLs',
+    description: 'Dev-server and preview URLs for this project: status, build/restart, and add',
+    empty: 'No URLs configured yet. Add one to see it here and as a row in the Explorer tree.',
+    icon: '◍',
+    railIcon: 'link',
   },
   {
     key: 'visual-evidence',

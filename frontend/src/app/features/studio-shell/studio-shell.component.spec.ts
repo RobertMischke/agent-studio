@@ -82,6 +82,7 @@ describe('StudioShellComponent workspace-delete gating', () => {
       modelDefault: null,
       sortOrder: 0,
       storageLocation: `C:/proj/${id}`,
+      urls: [],
       archived: false,
       createdAt: '2026-01-01T00:00:00Z',
     };
@@ -149,6 +150,7 @@ describe('StudioShellComponent titlebar breadcrumb', () => {
       modelDefault: null,
       sortOrder: 0,
       storageLocation: `C:/proj/${id}`,
+      urls: [],
       archived: false,
       createdAt: '2026-01-01T00:00:00Z',
     };
@@ -453,6 +455,7 @@ describe('StudioShellComponent hub tab label + icon', () => {
       modelDefault: null,
       sortOrder: 0,
       storageLocation: 'C:/proj/ass',
+      urls: [],
       archived: false,
       createdAt: '2026-01-01T00:00:00Z',
       ...over,
