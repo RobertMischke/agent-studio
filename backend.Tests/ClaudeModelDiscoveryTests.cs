@@ -22,6 +22,21 @@ public class ClaudeModelDiscoveryTests
     }
 
     [Fact]
+    public void ParsePickerSnapshot_MapsSonnet5WithFullThinkingLadder()
+    {
+        var models = ClaudeModelDiscovery.ParsePickerSnapshot("""
+        Select Model
+        > Claude Opus 4.8
+          Sonnet 5
+        """);
+
+        var sonnet5 = Assert.Single(models, m => m.Id == ModelIds.ClaudeSonnet5);
+        Assert.Equal("Claude Sonnet 5", sonnet5.Label);
+        Assert.True(sonnet5.Available);
+        Assert.Equal(new[] { "low", "medium", "high", "xhigh", "max" }, sonnet5.ThinkingLevels);
+    }
+
+    [Fact]
     public void Reconcile_MarksRegistryModelsMissingFromCliUnavailable()
     {
         var discovered = new[]

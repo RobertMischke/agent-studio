@@ -44,11 +44,16 @@ import { FeatureFlagsService } from '../../../../../services/feature-flags.servi
 import { VerboseDebugOverlayComponent } from '../../../../../features/verbose-debug';
 import { TaskService } from '../../../../../services/task.service';
 import type {
+  ChatContextUsage,
+  ChatPermissionOption,
   ConversationEvent,
   RawLineRange,
 } from '@coding-agent/chat/core';
 import { ConversationViewComponent } from '@coding-agent/chat/conversation';
+import { ContextRingComponent, PermissionSelectComponent } from '@coding-agent/chat/composer';
 import { projectConversation } from '@coding-agent/chat/core';
+import type { ContextUsageSnapshot } from '../../../../../models/task.model';
+import { toChatContextUsage } from '../../../context-usage.mapper';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
 import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
 import { SourceViewerComponent, type SourceViewerRequest } from '../../source-viewer/source-viewer.component';
@@ -73,6 +78,35 @@ import { PaneTabsComponent } from '../../../../../components/pane-tabs/pane-tabs
 import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';
 import { OverlayPortalRef, OverlayPortalService } from '../../../../../services/overlay-portal.service';
 export type InspectorTab = 'protocol' | 'activity';
+
+/**
+ * Display metadata for the runner's permission-mode vocabulary
+ * (yolo / workspace-write / read-only / custom). Unknown ids coming from
+ * the backend still render, just without description/tone.
+ */
+const PERMISSION_OPTION_META: Record<string, ChatPermissionOption> = {
+  yolo: {
+    id: 'yolo',
+    label: 'YOLO',
+    tone: 'warn',
+    description: 'Skip every permission, sandbox, and trust prompt.',
+  },
+  'workspace-write': {
+    id: 'workspace-write',
+    label: 'Workspace write',
+    description: 'Auto-approve edits inside the workspace; other tools stay gated.',
+  },
+  'read-only': {
+    id: 'read-only',
+    label: 'Read-only',
+    description: 'Plan/inspect posture — the agent may not freely mutate.',
+  },
+  custom: {
+    id: 'custom',
+    label: 'Custom (global config)',
+    description: "Inject nothing; defer to the CLI's own global configuration.",
+  },
+};
 
 /**
  * Sub-view of the Activity tab: the agent's own task Plan, the compact
@@ -120,6 +154,8 @@ interface InterimSummaryState {
     PaneHeaderComponent,
     PaneTabsComponent,
     CliModelSelectorComponent,
+    ContextRingComponent,
+    PermissionSelectComponent,
   ],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss'],
@@ -197,7 +233,25 @@ export class ProtocolPaneComponent implements OnDestroy {
       if (id !== this.activityViewJobId) {
         this.activityViewJobId = id;
         this.activityViewOverride.set(null);
+        this.contextRefreshResult.set(null);
       }
+    });
+    // Load the project's per-CLI permission modes once per project; the
+    // composer's permission chip reads/writes the project-level setting.
+    effect(() => {
+      const project = this.detail().info.projectName;
+      if (!project || project === this.permissionProject()) return;
+      this.permissionProject.set(project);
+      this.permissionState.set(null);
+      this.jobs.getProjectCliModes(project).subscribe({
+        next: (res) => {
+          if (this.permissionProject() !== project) return;
+          this.permissionState.set({ resolved: res.resolved, available: res.available });
+        },
+        error: () => {
+          // Chip simply stays hidden when the modes cannot be loaded.
+        },
+      });
     });
     effect(() => {
       if (this.outcomeIssueModalOpen()) {
@@ -221,6 +275,71 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   /** Set after "Create follow-up" returns; used to render the success banner. */
   readonly followupCreated = signal<{ jobId: string; targetState: string } | null>(null);
+
+  // --- Composer footer: context ring -------------------------------------
+  /** Snapshot returned by an explicit refresh; wins over the detail's copy
+   *  until the next task switch (the constructor effect clears it). */
+  private readonly contextRefreshResult = signal<ContextUsageSnapshot | null>(null);
+  readonly contextBusy = signal<boolean>(false);
+  readonly chatContextUsage = computed<ChatContextUsage | null>(() =>
+    toChatContextUsage(this.contextRefreshResult() ?? this.detail().contextUsage),
+  );
+
+  onContextRefresh(): void {
+    if (this.contextBusy()) return;
+    const job = this.detail().info;
+    this.contextBusy.set(true);
+    this.jobs.refreshContextUsage(job.id, job.watchPath).subscribe({
+      next: (snapshot) => {
+        this.contextBusy.set(false);
+        if (this.detail().info.id !== job.id) return;
+        this.contextRefreshResult.set(snapshot);
+      },
+      error: () => this.contextBusy.set(false),
+    });
+  }
+
+  // --- Composer footer: permission mode ----------------------------------
+  /** Which project the loaded permission state belongs to. */
+  private readonly permissionProject = signal<string | null>(null);
+  private readonly permissionState = signal<{
+    resolved: Record<string, { mode: string; source: string; args: string[] }>;
+    available: string[];
+  } | null>(null);
+
+  readonly permissionOptions = computed<readonly ChatPermissionOption[]>(() => {
+    const state = this.permissionState();
+    if (!state) return [];
+    return state.available.map((id) => PERMISSION_OPTION_META[id] ?? { id, label: id });
+  });
+
+  /** Effective mode for the task's current CLI, or null while unknown. */
+  readonly permissionMode = computed<string | null>(() => {
+    const state = this.permissionState();
+    const cli = this.cliType();
+    if (!state || !cli) return null;
+    return state.resolved[cli]?.mode ?? null;
+  });
+
+  onPermissionModeChange(mode: string): void {
+    const project = this.permissionProject();
+    const cli = this.cliType();
+    if (!project || !cli) return;
+    this.jobs.setProjectCliMode(project, cli, mode).subscribe({
+      next: (res) => {
+        const state = this.permissionState();
+        if (!state || this.permissionProject() !== project) return;
+        this.permissionState.set({
+          ...state,
+          resolved: { ...state.resolved, [res.cli]: { mode: res.mode, source: res.source, args: res.args } },
+        });
+      },
+      error: () => {
+        // Leave the previous mode visible; the settings panel remains the
+        // fallback surface for diagnosing failed writes.
+      },
+    });
+  }
 
   readonly claudeSession = this.claudePoll.session;
   readonly claudeRateLimit = this.claudePoll.rateLimit;

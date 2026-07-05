@@ -1,151 +1,21 @@
-<button type="button"
-        #triggerBtn
-        class="cli-model-selector"
-        [class.cli-model-selector--disabled]="effectiveDisabledReason() !== null"
-        [class.cli-model-selector--open]="pickerOpen()"
-        [attr.data-testid]="triggerTestid()"
-        [attr.aria-label]="ariaLabel()"
-        [attr.aria-haspopup]="'dialog'"
-        [attr.aria-expanded]="pickerOpen()"
-        [cacTooltip]="tooltip()"
-        [disabled]="effectiveDisabledReason() !== null"
-        (click)="openPicker($event)"
-        (contextmenu)="openPicker($event)">
-  <span class="cli-model-selector__icon" aria-hidden="true">{{ cliEmoji() }}</span>
-  <span class="cli-model-selector__name">{{ displayName() }}</span>
-  <span class="cli-model-selector__caret" aria-hidden="true">▾</span>
-</button>
-
-@if (pickerOpen()) {
-  <div class="cli-model-picker-portal">
-    <div class="cli-model-picker__backdrop"
-         [attr.data-testid]="pickerTestidPrefix() + '-backdrop'"
-         (mousedown)="onBackdropClick(); $event.preventDefault()"></div>
-    <div class="cli-model-picker"
-         role="dialog"
-         aria-modal="false"
-         [appConnectedOverlay]="triggerBtn"
-         connectedOverlayPlacement="above"
-         connectedOverlayAlignment="start"
-         [connectedOverlayGap]="6"
-         [connectedOverlayViewportPadding]="8"
-         [attr.data-testid]="pickerTestidPrefix()"
-         [attr.aria-label]="eyebrow() + ': ' + draftHeaderText()"
-         (mousedown)="$event.stopPropagation()">
-    <div class="cli-model-picker__header">
-      <span class="cli-model-picker__eyebrow">{{ eyebrow() }}</span>
-      <span class="cli-model-picker__current"
-            [attr.data-testid]="pickerTestidPrefix() + '-current'">{{ draftHeaderText() }}</span>
-    </div>
-
-    <section class="cli-model-picker__section">
-      <div class="cli-model-picker__section-label">CLI</div>
-      <div class="cli-model-picker__pills"
-           role="radiogroup"
-           aria-label="CLI"
-           [attr.data-testid]="pickerTestidPrefix() + '-cli-pills'">
-        @for (t of cliTypes; track t) {
-          <button type="button"
-                  class="cli-model-picker__pill"
-                  [class.cli-model-picker__pill--active]="draftCliType() === t"
-                  role="radio"
-                  [attr.aria-checked]="draftCliType() === t"
-                  [attr.data-testid]="pickerTestidPrefix() + '-cli-' + t"
-                  (keydown)="onCliPillKeydown(t, $event)"
-                  (click)="onCliPillClick(t)">
-            <span class="cli-model-picker__pill-icon" aria-hidden="true">{{ cliTypeIcon(t) }}</span>
-            <span class="cli-model-picker__pill-label">{{ cliTypeLabel(t) }}</span>
-          </button>
-        }
-      </div>
-    </section>
-
-    <section class="cli-model-picker__section">
-      <div class="cli-model-picker__section-label">Model</div>
-      @if (loadingCatalog()) {
-        <div class="cli-model-picker__hint"
-             [attr.data-testid]="pickerTestidPrefix() + '-loading'">Loading model catalog...</div>
-      } @else if (catalogError(); as err) {
-        <div class="cli-model-picker__hint cli-model-picker__hint--error"
-             [attr.data-testid]="pickerTestidPrefix() + '-error'">{{ err }}</div>
-      } @else {
-        <div class="cli-model-picker__pills cli-model-picker__pills--column"
-             role="radiogroup"
-             aria-label="Model"
-             [attr.data-testid]="pickerTestidPrefix() + '-model-pills'">
-          <button type="button"
-                  class="cli-model-picker__pill cli-model-picker__pill--row"
-                  [class.cli-model-picker__pill--active]="draftModel() === ''"
-                  role="radio"
-                  [attr.aria-checked]="draftModel() === ''"
-                  [attr.data-testid]="pickerTestidPrefix() + '-model-default'"
-                  (keydown)="onModelPillKeydown('', $event)"
-                  (click)="onDefaultModelClick()">
-            <span class="cli-model-picker__pill-label">(CLI default)</span>
-          </button>
-          @for (m of draftAvailableModels(); track m.id) {
-            <button type="button"
-                    class="cli-model-picker__pill cli-model-picker__pill--row"
-                    [class.cli-model-picker__pill--active]="draftModel() === m.id"
-                    role="radio"
-                    [attr.aria-checked]="draftModel() === m.id"
-                    [attr.data-testid]="pickerTestidPrefix() + '-model-' + m.id"
-                    (keydown)="onModelPillKeydown(m.id, $event)"
-                    (click)="onModelPillClick(m.id)">
-              <span class="cli-model-picker__pill-label">{{ m.label || m.id }}</span>
-              @if (m.isDefault) {
-                <span class="cli-model-picker__pill-hint">default</span>
-              }
-            </button>
-          }
-          @if (draftAvailableModels().length === 0) {
-            <div class="cli-model-picker__hint"
-                 [attr.data-testid]="pickerTestidPrefix() + '-empty'">No models reported for this CLI.</div>
-          }
-        </div>
-      }
-    </section>
-
-    @if (draftThinkingLevels().length > 0) {
-      <section class="cli-model-picker__section">
-        <div class="cli-model-picker__section-label">Level</div>
-        <div class="cli-model-picker__pills"
-             role="radiogroup"
-             aria-label="Thinking level"
-             [attr.data-testid]="pickerTestidPrefix() + '-thinking-pills'">
-          @for (level of draftThinkingLevels(); track level) {
-            <button type="button"
-                    class="cli-model-picker__pill"
-                    [class.cli-model-picker__pill--active]="draftThinkingLevel() === level"
-                    role="radio"
-                    [attr.aria-checked]="draftThinkingLevel() === level"
-                    [attr.data-testid]="pickerTestidPrefix() + '-thinking-' + level"
-                    (keydown)="onThinkingLevelPillKeydown(level, $event)"
-                    (click)="onThinkingLevelPillClick(level)">
-              <span class="cli-model-picker__pill-label">{{ level }}</span>
-            </button>
-          }
-        </div>
-      </section>
-    }
-
-    <footer class="cli-model-picker__footer">
-      <button type="button"
-              class="cli-model-picker__btn cli-model-picker__btn--ghost"
-              [attr.data-testid]="pickerTestidPrefix() + '-refresh'"
-              [disabled]="loadingCatalog()"
-              (click)="refreshCurrentCatalog()">Refresh</button>
-      <span class="cli-model-picker__footer-spacer"></span>
-      <button type="button"
-              class="cli-model-picker__btn cli-model-picker__btn--ghost"
-              [attr.data-testid]="pickerTestidPrefix() + '-cancel'"
-              (click)="onCancelClick()">Cancel</button>
-      <button type="button"
-              class="cli-model-picker__btn cli-model-picker__btn--primary"
-              [attr.data-testid]="pickerTestidPrefix() + '-done'"
-              [disabled]="!hasChanges() || loadingCatalog()"
-              (click)="onDoneClick()">Done</button>
-    </footer>
-    </div>
-  </div>
-}
+<cac-model-selector
+  [cliOptions]="cliOptions()"
+  [cliType]="cliType()"
+  [model]="model()"
+  [thinkingLevel]="thinkingLevel()"
+  [models]="effectiveModels()"
+  [catalogLoading]="catalogLoading()"
+  [catalogError]="catalogError()"
+  [disabled]="disabled()"
+  [disabledReason]="disabledReason()"
+  [eyebrow]="eyebrow()"
+  [ariaLabelOverride]="ariaLabelOverride()"
+  [tooltipOverride]="tooltipOverride()"
+  [triggerTestid]="triggerTestid()"
+  [pickerTestidPrefix]="pickerTestidPrefix()"
+  (commit)="onCommit($event)"
+  (cliTypeChange)="onCliTypeChange($event)"
+  (modelChange)="modelChange.emit($event)"
+  (thinkingLevelChange)="thinkingLevelChange.emit($event)"
+  (catalogRequested)="onCatalogRequested($event)"
+  (refreshRequested)="onRefreshRequested($event)" />

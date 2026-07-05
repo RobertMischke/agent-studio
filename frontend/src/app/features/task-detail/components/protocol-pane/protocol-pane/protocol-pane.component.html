@@ -550,6 +550,16 @@
                           (keydown.control.enter)="sendChat.emit()"
                           (keydown.meta.enter)="sendChat.emit()"></textarea>
                 <div class="chat-compose__actions">
+                  @if (permissionOptions().length > 0) {
+                    <cac-permission-select
+                      [options]="permissionOptions()"
+                      [value]="permissionMode()"
+                      [disabled]="isRunning()"
+                      disabledReason="Stop the run first to change the permission mode."
+                      triggerTestid="chat-compose-permission"
+                      pickerTestidPrefix="chat-permission-picker"
+                      (valueChange)="onPermissionModeChange($event)" />
+                  }
                   <app-cli-model-selector
                     [cliType]="cliType()"
                     [model]="model()"
@@ -559,6 +569,12 @@
                     triggerTestid="chat-compose-model"
                     pickerTestidPrefix="chat-model-picker"
                     (commit)="agentConfigCommit.emit($event)" />
+                  <cac-context-ring
+                    [usage]="chatContextUsage()"
+                    [busy]="contextBusy()"
+                    triggerTestid="chat-compose-context"
+                    popoverTestidPrefix="chat-context-popover"
+                    (refreshRequested)="onContextRefresh()" />
                   <span class="chat-compose__spacer"></span>
                   @if (isRunning()) {
                     <button type="button"
