@@ -160,7 +160,7 @@ test('pipeline: disabling a step persists enabled=false and line-through styling
 });
 
 test('pipeline: abort-review exposes a run-condition control that persists', async ({ page }) => {
-  // Start from a clean abort-review override (opt-in step, default off).
+  // Start from a clean abort-review override (opt-out step, default on since 2026-07-05).
   await setStep({ stepId: ABORT_STEP, enabled: null, model: null, mode: null, condition: null });
 
   await page.goto(`/#/projects/${projectSlug}/pipeline`);
@@ -169,13 +169,17 @@ test('pipeline: abort-review exposes a run-condition control that persists', asy
   const section = page.getByTestId('project-detail-pipeline');
   await expect(section).toBeVisible();
 
-  // The abort-review row renders (appended to the catalogue) and starts off.
+  // The abort-review row renders (appended to the catalogue) and starts on.
   const row = page.getByTestId(`pipeline-step-row-${ABORT_STEP}`);
   await expect(row).toBeVisible();
   const toggle = page.getByTestId(`pipeline-step-enabled-${ABORT_STEP}`);
-  await expect(toggle).not.toBeChecked();
+  await expect(toggle).toBeChecked();
 
-  // Enabling an opt-in step must persist enabled=true (not clear the override).
+  // Opting out must persist enabled=false (not merely clear the override).
+  await toggle.uncheck();
+  await expect.poll(async () => (await getOverride(ABORT_STEP))?.enabled).toBe(false);
+
+  // Re-enable so the condition control below is exercised against a live step.
   await toggle.check();
   await expect.poll(async () => (await getOverride(ABORT_STEP))?.enabled).toBe(true);
 
