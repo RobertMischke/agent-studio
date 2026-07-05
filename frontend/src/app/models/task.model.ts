@@ -819,6 +819,12 @@ export interface CreateRegistryProjectRequest {
   cliDefault?: CliType;
   modelDefault?: string | null;
   color?: string | null;
+  /**
+   * Optional CLI working directory. Without this, a project has no
+   * auto-pickup runner until someone sets it later via project settings
+   * (or hand-edits the gitignored appsettings.Local.json WatchPaths entry).
+   */
+  rootPath?: string;
 }
 
 /**

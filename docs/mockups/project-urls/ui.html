@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Project URLs - Clickable Prototype</title>
+<style>
+  :root {
+    --base: #1e1e2e;
+    --mantle: #181825;
+    --crust: #11111b;
+    --surface0: #313244;
+    --surface1: #45475a;
+    --surface2: #585b70;
+    --text: #cdd6f4;
+    --subtext1: #bac2de;
+    --subtext0: #a6adc8;
+    --overlay0: #6c7086;
+    --overlay1: #7f849c;
+    --mauve: #cba6f7;
+    --blue: #89b4fa;
+    --sky: #89dceb;
+    --teal: #94e2d5;
+    --green: #a6e3a1;
+    --yellow: #f9e2af;
+    --peach: #fab387;
+    --red: #f38ba8;
+    --pink: #f5c2e7;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--crust); color: var(--text); margin: 0; font: 13px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; height: 100%; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; background: var(--surface0); padding: 1px 5px; border-radius: 3px; }
+  svg.ic { width: 12px; height: 12px; flex-shrink: 0; }
+
+  .stage { display: flex; height: 100vh; }
+
+  /* ============ LEFT: real Explorer workspace tree (existing surface) ============ */
+  .explorer { width: 280px; flex-shrink: 0; background: var(--mantle); border-right: 1px solid var(--surface0); overflow-y: auto; padding: 8px 0; }
+  .explorer-title { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--overlay0); padding: 6px 14px 10px; }
+  .section-head { display: flex; align-items: center; gap: 6px; padding: 5px 10px; color: var(--subtext0); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .section-head .count { margin-left: auto; color: var(--overlay0); font-size: 10.5px; }
+
+  .tree-row { display: flex; align-items: center; gap: 7px; width: 100%; height: 28px; padding: 0 10px 0 8px; background: transparent; border: 0; font: inherit; font-size: 13px; color: var(--subtext1); text-align: left; cursor: pointer; white-space: nowrap; }
+  .tree-row:hover { background: var(--surface0); }
+  .tree-row.active { background: color-mix(in srgb, var(--mauve) 16%, var(--surface0)); color: var(--text); font-weight: 600; }
+  .tree-row--root { padding-left: 8px; }
+  .tree-row--child { padding-left: 44px; font-size: 12.5px; }
+  .tree-row--url { padding-left: 44px; font-size: 12.5px; }
+  .chev { width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; color: var(--overlay1); flex-shrink: 0; }
+  .glyph-icon { width: 14px; display: flex; align-items: center; justify-content: center; color: var(--overlay1); flex-shrink: 0; }
+  .glyph-avatar { width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; font-size: 9px; font-weight: 700; color: var(--crust); flex-shrink: 0; }
+  .tree-row__name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .count-badge { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: var(--surface0); color: var(--overlay1); font-variant-numeric: tabular-nums; }
+  .tree-row.active .count-badge { background: var(--surface1); color: var(--text); }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-right: 1px; }
+  .status-dot.running { background: var(--green); }
+  .status-dot.offline { background: var(--overlay0); }
+  .url-rows-note { padding: 4px 10px 8px 44px; font-size: 10.5px; color: var(--overlay0); font-style: italic; }
+
+  /* ============ RIGHT: Project Hub side-sheet ============ */
+  .middle-filler { flex: 1; background: var(--crust); min-width: 0; display: flex; flex-direction: column; }
+  .middle-placeholder { padding: 22px; color: var(--overlay0); }
+  .middle-placeholder h1 { font-size: 14px; color: var(--subtext0); margin: 0 0 6px; }
+  .middle-placeholder p { max-width: 44ch; font-size: 12.5px; }
+  .middle-placeholder code { font-size: 11.5px; }
+
+  /* ============ Future direction: embedded live preview in the main pane ============ */
+  .preview-pane { display: none; flex-direction: column; height: 100%; }
+  .preview-pane.active { display: flex; }
+  .preview-chrome { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--base); border-bottom: 1px solid var(--surface0); flex-shrink: 0; }
+  .preview-chrome button.nav-btn { width: 24px; height: 24px; border-radius: 5px; background: transparent; border: none; color: var(--overlay1); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .preview-chrome button.nav-btn:hover:not(:disabled) { background: var(--surface0); color: var(--text); }
+  .preview-chrome button.nav-btn:disabled { opacity: 0.3; cursor: default; }
+  .preview-chrome button.nav-btn svg { width: 13px; height: 13px; }
+  .preview-chrome button.nav-btn.spin svg { animation: spin 0.6s linear; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .preview-addr { flex: 1; display: flex; align-items: center; gap: 6px; background: var(--crust); border: 1px solid var(--surface1); border-radius: 6px; padding: 5px 10px; font-family: ui-monospace, monospace; font-size: 12px; color: var(--subtext1); min-width: 0; }
+  .preview-addr .status-dot { flex-shrink: 0; }
+  .preview-addr span.url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .preview-chrome .picker-btn { position: relative; }
+  .preview-chrome .picker-btn[disabled] { cursor: help; }
+  .preview-body { flex: 1; overflow: hidden; position: relative; background: #f4f4f6; }
+  .preview-fake-app { position: absolute; inset: 0; padding: 26px; color: #2a2a35; font-family: -apple-system, "Segoe UI", sans-serif; overflow: auto; }
+  .preview-fake-app .badge-mock { display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; background: #e4e4ea; color: #6b6b78; padding: 2px 7px; border-radius: 4px; margin-bottom: 14px; }
+  .preview-fake-app h2 { margin: 0 0 8px; font-size: 20px; }
+  .preview-fake-app p { color: #55555f; max-width: 60ch; font-size: 13px; }
+  .preview-fake-app .fake-card-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+  .preview-fake-app .fake-card { background: #fff; border: 1px solid #e2e2e8; border-radius: 8px; padding: 14px; height: 90px; }
+
+  .console-drawer { flex-shrink: 0; border-top: 1px solid var(--surface0); background: var(--mantle); }
+  .console-tab { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 11.5px; color: var(--overlay1); cursor: pointer; user-select: none; }
+  .console-tab:hover { color: var(--text); }
+  .console-tab svg { width: 11px; height: 11px; transition: transform 0.12s; }
+  .console-drawer.open .console-tab svg { transform: rotate(90deg); }
+  .console-log { display: none; max-height: 140px; overflow-y: auto; padding: 8px 14px 12px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--subtext0); }
+  .console-drawer.open .console-log { display: block; }
+  .console-log div { padding: 1px 0; white-space: pre; }
+  .console-log .err { color: var(--red); }
+  .console-log .ok { color: var(--green); }
+
+  .proj-shell { width: 460px; flex-shrink: 0; background: var(--mantle); border-left: 1px solid var(--surface0); display: flex; flex-direction: column; box-shadow: -12px 0 30px rgba(0,0,0,0.35); }
+  .sidebar-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--surface0); flex-shrink: 0; }
+  .sidebar-header .titles { flex: 1; }
+  .sidebar-header .title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--overlay1); }
+  .sidebar-header .subtitle { font-size: 15px; font-weight: 600; color: var(--text); }
+
+  .hub-body { flex: 1; display: flex; min-height: 0; }
+  .hub-rail { width: 168px; flex-shrink: 0; border-right: 1px solid var(--surface0); overflow-y: auto; padding: 10px 8px; }
+  .hub-rail .rail-group-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--overlay0); margin: 12px 8px 4px; }
+  .hub-rail .rail-group-title:first-child { margin-top: 2px; }
+  .hub-row { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 6px; cursor: pointer; color: var(--subtext0); font-size: 12.5px; }
+  .hub-row:hover { background: var(--surface0); color: var(--text); }
+  .hub-row.active { background: var(--surface0); color: var(--text); }
+  .hub-row.active .glyph-icon { color: var(--sky); }
+  .hub-row .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .hub-panel { flex: 1; overflow-y: auto; padding: 16px 18px 40px; min-width: 0; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  dl.paths { display: grid; grid-template-columns: 1fr; gap: 6px; margin: 0 0 4px; }
+  dl.paths > div { display: grid; grid-template-columns: 96px 1fr; gap: 8px; padding: 3px 0; }
+  dl.paths dt { color: var(--overlay1); font-size: 12px; }
+  dl.paths dd { margin: 0; color: var(--subtext1); font-size: 12.5px; word-break: break-all; }
+
+  h2.page-title { font-size: 15px; margin: 0 0 4px; }
+  p.page-desc { color: var(--overlay1); font-size: 12px; margin: 0 0 18px; }
+
+  .build-strip { display: flex; align-items: center; gap: 8px; background: var(--base); border: 1px solid var(--surface0); border-radius: 7px; padding: 6px 10px; margin-bottom: 12px; }
+  .build-strip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--overlay0); flex-shrink: 0; }
+  .build-strip .dot.ok { background: var(--green); box-shadow: 0 0 0 3px rgba(166,227,161,0.15); }
+  .build-strip .dot.building { background: var(--yellow); animation: pulse 1s infinite; }
+  .build-strip .label { flex: 1; font-size: 12px; color: var(--subtext0); }
+  .build-strip .label b { color: var(--text); font-weight: 600; }
+  .build-strip button { font: inherit; font-size: 11.5px; background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); padding: 4px 10px; border-radius: 5px; cursor: pointer; }
+  .build-strip button:hover { background: var(--surface1); }
+  .build-strip button:disabled { opacity: 0.5; cursor: default; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  .url-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+  .url-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; border: 1px solid transparent; background: var(--base); }
+  .url-row:hover { border-color: var(--surface1); }
+  .url-row .icon { width: 26px; height: 26px; border-radius: 6px; background: var(--surface0); display: flex; align-items: center; justify-content: center; color: var(--sky); flex-shrink: 0; }
+  .url-row .icon svg { width: 14px; height: 14px; }
+  .url-row .meta { flex: 1; min-width: 0; }
+  .url-row .name { font-size: 13px; color: var(--text); font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .url-row .host { font-size: 11.5px; color: var(--overlay1); font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status-pill { font-size: 10px; padding: 1px 7px; border-radius: 999px; letter-spacing: 0.03em; text-transform: uppercase; font-weight: 600; }
+  .status-pill.running { background: rgba(166,227,161,0.15); color: var(--green); }
+  .status-pill.offline { background: rgba(108,112,134,0.18); color: var(--overlay1); }
+  .status-pill.building { background: rgba(249,226,175,0.15); color: var(--yellow); }
+  .url-row .row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .url-row .row-actions button { width: 26px; height: 26px; border-radius: 6px; background: transparent; border: none; color: var(--subtext0); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .url-row .row-actions button:hover { background: var(--surface1); color: var(--text); }
+  .url-row .row-actions button svg { width: 13px; height: 13px; }
+
+  .add-url-btn { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 7px; border: 1px dashed var(--surface2); color: var(--overlay1); font-size: 12.5px; cursor: pointer; background: none; width: 100%; text-align: left; font-family: inherit; }
+  .add-url-btn:hover { color: var(--text); border-color: var(--overlay0); background: var(--base); }
+  .add-url-btn svg { width: 13px; height: 13px; }
+
+  .add-url-panel { margin-top: 8px; background: var(--base); border: 1px solid var(--surface0); border-radius: 8px; padding: 12px; display: none; }
+  .add-url-panel.open { display: block; }
+  .add-url-panel .hint { font-size: 11.5px; color: var(--overlay1); margin: 0 0 10px; }
+  .suggest-chip { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; background: var(--surface0); border: 1px solid var(--surface1); cursor: pointer; margin-bottom: 6px; }
+  .suggest-chip:hover { border-color: var(--sky); }
+  .suggest-chip .src { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 5px; border-radius: 3px; background: var(--surface1); color: var(--overlay1); flex-shrink: 0; }
+  .suggest-chip .src.readme { color: var(--peach); }
+  .suggest-chip .src.pkg { color: var(--teal); }
+  .suggest-chip .txt { flex: 1; font-size: 12px; color: var(--subtext1); }
+  .suggest-chip .txt b { color: var(--text); }
+  .suggest-chip .cmd { font-family: ui-monospace, monospace; font-size: 10.5px; color: var(--overlay1); display: block; margin-top: 2px; }
+  .manual-form { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--surface1); }
+  .manual-form label { display: block; font-size: 11px; color: var(--overlay1); margin: 8px 0 3px; }
+  .manual-form input { width: 100%; font: inherit; font-size: 12px; background: var(--crust); border: 1px solid var(--surface1); color: var(--text); border-radius: 5px; padding: 6px 8px; }
+  .manual-form .actions { display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; }
+  .btn { font: inherit; font-size: 12px; background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+  .btn:hover { background: var(--surface1); }
+  .btn.primary { background: var(--mauve); color: var(--crust); border-color: var(--mauve); font-weight: 600; }
+  .btn.primary:hover { background: var(--pink); border-color: var(--pink); }
+  .btn.link { background: none; border: none; color: var(--overlay1); }
+  .btn.link:hover { color: var(--text); background: none; text-decoration: underline; }
+
+  .empty-box { padding: 34px 16px; text-align: center; color: var(--overlay1); background: var(--base); border: 1px solid var(--surface0); border-radius: 8px; font-size: 12.5px; }
+  .callout { margin-top: 22px; padding: 10px 12px; border-radius: 7px; background: rgba(137,180,250,0.08); border: 1px solid rgba(137,180,250,0.25); font-size: 11.5px; color: var(--subtext0); }
+  .callout b { color: var(--blue); }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <!-- ============ LEFT: Explorer workspace tree (real, existing surface - screenshot) ============ -->
+  <nav class="explorer">
+    <div class="explorer-title">Explorer</div>
+    <div class="section-head"><span>Workspaces</span><span class="count">2</span></div>
+
+    <button class="tree-row tree-row--root">
+      <span class="chev"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+      <span class="glyph-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
+      <span class="tree-row__name">agent-taskboard-devspace</span>
+      <span class="count-badge">6</span>
+    </button>
+
+    <!-- Agent Studio: expanded, showing the 5 existing fixed rows PLUS the new
+         per-project "Project URLs" rows this feature adds. -->
+    <button class="tree-row tree-row--root active">
+      <span class="chev"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+      <span class="glyph-avatar" style="background:#7aa2f7">A</span>
+      <span class="tree-row__name">Agent Studio</span>
+      <span class="count-badge">51</span>
+    </button>
+
+    <button class="tree-row tree-row--child" onclick="showHub('overview', this)">
+      <span class="glyph-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>
+      <span class="tree-row__name">Board</span>
+    </button>
+    <button class="tree-row tree-row--child" onclick="showHub('overview', this)">
+      <span class="glyph-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+      <span class="tree-row__name">Project Hub</span>
+    </button>
+    <button class="tree-row tree-row--child" onclick="showHub('overview', this)">
+      <span class="glyph-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 0-2 2V5z"/><line x1="8" y1="8" x2="15" y2="8"/><line x1="8" y1="12" x2="15" y2="12"/></svg></span>
+      <span class="tree-row__name">Wiki</span>
+    </button>
+    <button class="tree-row tree-row--child" onclick="showHub('overview', this)">
+      <span class="glyph-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="8" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg></span>
+      <span class="tree-row__name">Backlog</span>
+    </button>
+    <button class="tree-row tree-row--child" onclick="showHub('overview', this)">
+      <span class="glyph-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 0-2 2V5z"/><line x1="8" y1="8" x2="15" y2="8"/><line x1="8" y1="12" x2="15" y2="12"/></svg></span>
+      <span class="tree-row__name">Epics</span>
+    </button>
+
+    <!-- NEW rows: one per URL configured for this project. Same tree-row
+         primitive, new glyph, a status dot instead of a count badge.
+         Clicking opens the URL directly - it does NOT open Project Hub. -->
+    <button class="tree-row tree-row--url" onclick="openUrlFromTree('http://localhost:4010')">
+      <span class="glyph-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg></span>
+      <span class="tree-row__name">Dev frontend</span>
+      <span class="status-dot running"></span>
+    </button>
+    <button class="tree-row tree-row--url" onclick="openUrlFromTree('http://localhost:4011')">
+      <span class="glyph-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg></span>
+      <span class="tree-row__name">Stable frontend</span>
+      <span class="status-dot running"></span>
+    </button>
+    <div class="url-rows-note">^ dynamic - 0..N rows, one per configured URL (see "Project URLs" in Project Hub &rarr;)</div>
+
+    <!-- A project with zero configured URLs: no extra rows appear. Collapsed,
+         matching the screenshot exactly. -->
+    <button class="tree-row tree-row--root">
+      <span class="chev"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
+      <span class="glyph-avatar" style="background:#9ece6a">M</span>
+      <span class="tree-row__name">Agent Studio Marketing</span>
+      <span class="count-badge">0</span>
+    </button>
+  </nav>
+
+  <div class="middle-filler">
+    <div class="middle-placeholder" id="middlePlaceholder">
+      <h1>Main content area</h1>
+      <p>In the real app, "Project Hub" opens as a tab here (<code>StudioTabStateService</code>). Drawn on the right below for layout clarity in this click-dummy.</p>
+      <p><strong>Click a URL row on the left</strong> ("Dev frontend" / "Stable frontend") to see the <em>future-direction</em> sketch: an embedded live preview, sketched here per Robert's "perspektivischer Ausblick" - not part of the near-term Project URLs scope above.</p>
+    </div>
+
+    <!-- ===== Future direction sketch: embedded preview, VS Code "Simple Browser"-like ===== -->
+    <div class="preview-pane" id="previewPane">
+      <div class="preview-chrome">
+        <button class="nav-btn" disabled title="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <button class="nav-btn" disabled title="Forward"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+        <button class="nav-btn" id="refreshBtn" title="Refresh" onclick="refreshPreview()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 4 21 10 15 10"/><path d="M21 10a9 9 0 1 0-2.5 7.5"/></svg></button>
+        <div class="preview-addr">
+          <span class="status-dot running"></span>
+          <span class="url" id="previewUrl">http://localhost:4010</span>
+        </div>
+        <button class="nav-btn picker-btn" disabled title="Pick an element to hand to the orchestrator - future, not built yet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 0-2 2V5z"/><line x1="8" y1="8" x2="15" y2="8"/></svg></button>
+        <button class="nav-btn" title="Open in real browser (always available as a fallback)" onclick="openUrl('preview-fallback')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>
+        <button class="nav-btn" title="Go to this URL's settings in Project Hub" onclick="showHub('urls', document.getElementById('hub-row-urls'))"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1A2 2 0 1 1 4.3 17l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9 1.7 1.7 0 0 0 4.3 7.2L4.2 7A2 2 0 1 1 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3.1V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1A2 2 0 1 1 19.7 7l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      </div>
+
+      <div class="preview-body">
+        <div class="preview-fake-app">
+          <span class="badge-mock">mock rendered content - not a real iframe</span>
+          <h2 id="previewTitle">Agent Studio - Dev</h2>
+          <p>This is a stand-in for what a real <code>&lt;iframe&gt;</code> would show once embedded. Its own dev-server live-reload (ng serve / Vite HMR) keeps it current automatically - no separate polling needed for that part.</p>
+          <div class="fake-card-row"><div class="fake-card"></div><div class="fake-card"></div><div class="fake-card"></div></div>
+        </div>
+      </div>
+
+      <div class="console-drawer" id="consoleDrawer">
+        <div class="console-tab" onclick="document.getElementById('consoleDrawer').classList.toggle('open')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+          Console output &middot; dev-server process (collapsed by default - maximum space for content)
+        </div>
+        <div class="console-log">
+          <div>$ npm run start -- --port 4010</div>
+          <div class="ok">✔ Compiled successfully in 2.4s</div>
+          <div>[HMR] Waiting for update signal from WDS...</div>
+          <div>GET /api/projects 200 14ms</div>
+          <div class="err">[vite] hmr update /src/app/app.component.ts</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ RIGHT: Project Hub - "Project URLs" is now ONE rail entry, ONE page ============ -->
+  <div class="proj-shell">
+    <div class="sidebar-header">
+      <div class="titles">
+        <div class="title">Project Hub</div>
+        <div class="subtitle">Agent Studio</div>
+      </div>
+    </div>
+    <div class="hub-body">
+      <nav class="hub-rail">
+        <div class="rail-group-title">Insight</div>
+        <div class="hub-row active" id="hub-row-overview" onclick="showHub('overview', this)">
+          <span class="glyph-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+          <span class="label">Overview</span>
+        </div>
+        <div class="hub-row" id="hub-row-urls" onclick="showHub('urls', this)">
+          <span class="glyph-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg></span>
+          <span class="label">Project URLs</span>
+        </div>
+        <div class="hub-row" onclick="showHub('placeholder', this)">
+          <span class="glyph-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 3 6 21"/><polyline points="18 3 18 21"/><line x1="3" y1="9" x2="9" y2="9"/><line x1="15" y1="15" x2="21" y2="15"/></svg></span>
+          <span class="label">Drift</span>
+        </div>
+        <div class="rail-group-title">Config</div>
+        <div class="hub-row" onclick="showHub('placeholder', this)">
+          <span class="glyph-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8"/></svg></span>
+          <span class="label">Settings</span>
+        </div>
+      </nav>
+
+      <div class="hub-panel">
+
+        <div class="page active" id="page-overview">
+          <h2 class="page-title">Overview</h2>
+          <p class="page-desc">Unchanged by this feature.</p>
+          <dl class="paths">
+            <div><dt>Watch path</dt><dd>C:\Projects\agent-taskboard-workspace\projects\agent-taskboard</dd></div>
+            <div><dt>Repository</dt><dd>agent-taskboard-devspace\agent-taskboard-dev</dd></div>
+          </dl>
+        </div>
+
+        <div class="page" id="page-urls">
+          <h2 class="page-title">Project URLs</h2>
+          <p class="page-desc">One flat page: manage every configured URL here. Each one also gets its own row in the Explorer tree on the left, for one-click access without opening Project Hub at all.</p>
+
+          <div class="build-strip" id="buildStrip">
+            <span class="dot ok" id="buildDot"></span>
+            <span class="label" id="buildLabel">Both dev servers <b>running</b></span>
+            <button id="buildBtn" onclick="rebuildAll()">Rebuild &amp; restart all</button>
+          </div>
+
+          <div class="url-list">
+            <div class="url-row">
+              <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg></span>
+              <div class="meta">
+                <div class="name">Dev frontend <span class="status-pill running" data-pill="dev">running</span></div>
+                <div class="host">http://localhost:4010 &middot; <code>./start-dev.sh</code></div>
+              </div>
+              <div class="row-actions">
+                <button title="Open in browser" onclick="openUrl('dev')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>
+                <button title="Restart" onclick="restartOne('dev')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 4 21 10 15 10"/><path d="M21 10a9 9 0 1 0-2.5 7.5"/></svg></button>
+                <button title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+              </div>
+            </div>
+
+            <div class="url-row">
+              <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg></span>
+              <div class="meta">
+                <div class="name">Stable frontend <span class="status-pill running" data-pill="stable">running</span></div>
+                <div class="host">http://localhost:4011 &middot; <code>./start-stable.sh</code></div>
+              </div>
+              <div class="row-actions">
+                <button title="Open in browser" onclick="openUrl('stable')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>
+                <button title="Restart" onclick="restartOne('stable')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 4 21 10 15 10"/><path d="M21 10a9 9 0 1 0-2.5 7.5"/></svg></button>
+                <button title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+              </div>
+            </div>
+          </div>
+
+          <button class="add-url-btn" onclick="toggleAdd()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add URL
+          </button>
+
+          <div class="add-url-panel" id="addPanel">
+            <p class="hint">Detected from this repository's <code>package.json</code> / <code>README.md</code>. Click to prefill, or fill in manually. Adding one here immediately adds its row in the Explorer tree too.</p>
+            <div class="suggest-chip" onclick="fillFromSuggestion('Companion App (reference)', 'http://localhost:4099', 'npm run companion')">
+              <span class="src pkg">package.json</span>
+              <span class="txt"><b>companion</b> &rarr; reference-only companion app<span class="cmd">npm run companion &middot; port 4099</span></span>
+            </div>
+            <div class="manual-form">
+              <label>Label</label>
+              <input type="text" id="fLabel" placeholder="e.g. Companion App">
+              <label>URL</label>
+              <input type="text" id="fUrl" placeholder="http://localhost:4099">
+              <label>Start command (optional)</label>
+              <input type="text" id="fCmd" placeholder="npm run companion">
+              <div class="actions">
+                <button class="btn link" onclick="toggleAdd()">Cancel</button>
+                <button class="btn primary" onclick="addUrl()">Add URL</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="callout"><b>Note</b> - static click-dummy. Buttons simulate state transitions with a timeout; nothing is really spawned. See <code>README.md</code> for the real plan.</div>
+        </div>
+
+        <div class="page" id="page-placeholder">
+          <h2 class="page-title">Not part of this mockup</h2>
+          <p class="page-desc">Unaffected by the Project URLs feature.</p>
+          <div class="empty-box">Nothing to show here in this prototype.</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showHub(pageId, rowEl) {
+    document.querySelectorAll('.hub-panel .page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + pageId).classList.add('active');
+    document.querySelectorAll('.hub-row').forEach(r => r.classList.remove('active'));
+    if (rowEl && rowEl.classList.contains('hub-row')) rowEl.classList.add('active');
+    else if (pageId === 'overview') document.getElementById('hub-row-overview').classList.add('active');
+  }
+  function openUrlFromTree(url) {
+    document.getElementById('middlePlaceholder').style.display = 'none';
+    document.getElementById('previewPane').classList.add('active');
+    document.getElementById('previewUrl').textContent = url;
+    document.getElementById('previewTitle').textContent = url.includes('4011') ? 'Agent Studio - Stable' : 'Agent Studio - Dev';
+  }
+  function refreshPreview() {
+    const btn = document.getElementById('refreshBtn');
+    btn.classList.add('spin');
+    setTimeout(() => btn.classList.remove('spin'), 600);
+  }
+  function setPill(row, state) {
+    const el = document.querySelector('[data-pill="' + row + '"]');
+    el.className = 'status-pill ' + state;
+    el.textContent = state;
+  }
+  function recomputeStrip() {
+    const pills = ['dev','stable'].map(r => document.querySelector('[data-pill="' + r + '"]').textContent);
+    const running = pills.filter(p => p === 'running').length;
+    const building = pills.some(p => p === 'building');
+    const dot = document.getElementById('buildDot');
+    const label = document.getElementById('buildLabel');
+    if (building) { dot.className = 'dot building'; label.innerHTML = 'Starting dev servers...'; }
+    else if (running === pills.length) { dot.className = 'dot ok'; label.innerHTML = 'Both dev servers <b>running</b>'; }
+    else { dot.className = 'dot'; label.innerHTML = '<b>' + running + '/' + pills.length + '</b> dev servers running'; }
+  }
+  function restartOne(row) {
+    setPill(row, 'building'); recomputeStrip();
+    setTimeout(() => { setPill(row, 'running'); recomputeStrip(); }, 1100);
+  }
+  function rebuildAll() {
+    ['dev','stable'].forEach(r => setPill(r, 'building'));
+    recomputeStrip();
+    document.getElementById('buildBtn').disabled = true;
+    setTimeout(() => {
+      ['dev','stable'].forEach(r => setPill(r, 'running'));
+      recomputeStrip();
+      document.getElementById('buildBtn').disabled = false;
+    }, 1800);
+  }
+  function openUrl(row) {
+    if (row === 'preview-fallback') {
+      alert('Fallback that always stays available: opens ' + document.getElementById('previewUrl').textContent + ' in a real external browser tab, in case the target page refuses to be framed (X-Frame-Options / CSP frame-ancestors) - same escape hatch VS Code\'s "Simple Browser" offers.');
+      return;
+    }
+    alert('Would open the URL for "' + row + '" in the default browser.');
+  }
+  function toggleAdd() { document.getElementById('addPanel').classList.toggle('open'); }
+  function fillFromSuggestion(label, url, cmd) {
+    document.getElementById('fLabel').value = label;
+    document.getElementById('fUrl').value = url;
+    document.getElementById('fCmd').value = cmd;
+  }
+  function addUrl() {
+    const label = document.getElementById('fLabel').value || '(untitled)';
+    alert('Would POST a new ProjectUrlRecord: ' + label + ' -> ' + document.getElementById('fUrl').value + '\n\nIn the real app this immediately adds a new row in the Explorer tree under this project, next to Board/Project Hub/Wiki/Backlog/Epics.');
+    toggleAdd();
+  }
+  recomputeStrip();
+</script>
+</body>
+</html>

@@ -33,6 +33,15 @@
                [ngModel]="shortCode()"
                (ngModelChange)="onCodeChange($event)" />
       </label>
+      <label class="opd__field">
+        <span class="opd__label">Working directory (optional)</span>
+        <input class="opd__input" type="text"
+               placeholder="C:\Projects\my-repo"
+               data-testid="onboard-project-root-path"
+               [ngModel]="rootPath()"
+               (ngModelChange)="rootPath.set($event)" />
+        <span class="opd__hint">The CLI's working directory, if this project has a real checkout. Leave blank for a task-only project - auto-pickup stays off until this is set (here or later in Project Hub &rarr; Settings).</span>
+      </label>
       <div class="opd__field">
         <span class="opd__label">CLI Default</span>
         <app-cli-model-selector

@@ -44,7 +44,8 @@ public static class ProjectSnapshotEndpoints
             ProjectSettingsService settingsSvc,
             OrchestratorLog log,
             OrchestratorSessionStore sessionStore,
-            ITaskAccess taskAccess) =>
+            ITaskAccess taskAccess,
+            AgentStudio.Registry.ProjectRegistry projectRegistry) =>
         {
             // Resolve the watch path once. Every per-project field below
             // either filters from cached state or reads a single
@@ -54,6 +55,15 @@ public static class ProjectSnapshotEndpoints
             var entry = entries.FirstOrDefault(e =>
                 string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            // Registry RootPath wins once a record exists (ADR-0042; same
+            // precedence TaskRunnerService applies at boot) so the "Working
+            // directory" shown here always matches what the runner actually
+            // used, instead of the pre-registry WatchPaths value going stale.
+            var registryRecord = projectRegistry.FindByStorageLocation(entry.Path);
+            var effectiveRootPath = string.IsNullOrWhiteSpace(registryRecord?.RootPath)
+                ? entry.RootPath
+                : registryRecord.RootPath;
 
             // 1) Settings (auto-commit, runner mode, orchestrator model).
             var settings = settingsSvc.Get(projectName);
@@ -108,8 +118,8 @@ public static class ProjectSnapshotEndpoints
                 paths = new
                 {
                     path = entry.Path,
-                    rootPath = entry.RootPath,
-                    repositoryPath = entry.RepositoryPath
+                    rootPath = effectiveRootPath,
+                    repositoryPath = registryRecord?.RepositoryPath ?? entry.RepositoryPath
                 },
                 settings = new
                 {

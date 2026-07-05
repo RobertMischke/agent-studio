@@ -176,6 +176,8 @@ public static class RegistryEndpoints
             try
             {
                 var created = projects.Append(record);
+                if (!string.IsNullOrWhiteSpace(body.RootPath))
+                    created = projects.SetRootPath(created.Id, body.RootPath);
                 loggerFactory.CreateLogger("ProjectCreate").LogInformation(
                     "project-created id={Id} workspaceId={WorkspaceId} storage={Storage}",
                     created.Id, created.WorkspaceId, created.StorageLocation);
@@ -200,6 +202,8 @@ public static class RegistryEndpoints
                 if (body.WorkspaceId != null) result = projects.SetWorkspace(projId, body.WorkspaceId, workspaces);
                 if (body.RepositoryPath != null || body.ClearRepositoryPath == true)
                     result = projects.SetRepositoryPath(projId, body.ClearRepositoryPath == true ? null : body.RepositoryPath);
+                if (body.RootPath != null || body.ClearRootPath == true)
+                    result = projects.SetRootPath(projId, body.ClearRootPath == true ? null : body.RootPath);
                 if (body.Archived.HasValue) result = projects.SetArchived(projId, body.Archived.Value);
                 if (result == null) result = projects.FindById(projId);
                 return result == null
@@ -288,6 +292,13 @@ public sealed record RegistryCreateProjectRequest
     public string? CliDefault { get; init; }
     public string? ModelDefault { get; init; }
     public string? Color { get; init; }
+    /// <summary>
+    /// Optional CLI working directory, set at onboarding time so auto-pickup
+    /// has a runner from the first boot instead of silently having none
+    /// until someone notices the mode toggle failing (see
+    /// <see cref="ProjectRecord.RootPath"/>).
+    /// </summary>
+    public string? RootPath { get; init; }
 }
 
 /// <summary>
@@ -304,6 +315,9 @@ public sealed record UpdateProjectRequest
     /// <summary>Absolute repo checkout path; see <see cref="ProjectRecord.RepositoryPath"/>.</summary>
     public string? RepositoryPath { get; init; }
     public bool? ClearRepositoryPath { get; init; }
+    /// <summary>Absolute CLI working directory; see <see cref="ProjectRecord.RootPath"/>.</summary>
+    public string? RootPath { get; init; }
+    public bool? ClearRootPath { get; init; }
     public bool? Archived { get; init; }
 }
 

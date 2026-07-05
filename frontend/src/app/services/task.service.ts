@@ -552,7 +552,7 @@ export class TaskService {
       `${this.baseUrl}/workspaces/${encodeURIComponent(id)}`);
   }
 
-  /** F45b — patch a project record (rename / short-code / color / workspace / archived). */
+  /** F45b — patch a project record (rename / short-code / color / workspace / archived / paths). */
   updateRegistryProject(projId: string, patch: {
     displayName?: string;
     shortCode?: string;
@@ -560,6 +560,10 @@ export class TaskService {
     clearColor?: boolean;
     workspaceId?: string;
     archived?: boolean;
+    repositoryPath?: string;
+    clearRepositoryPath?: boolean;
+    rootPath?: string;
+    clearRootPath?: boolean;
   }) {
     return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projId)}`, patch);
   }

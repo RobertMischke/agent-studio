@@ -32,11 +32,31 @@ public static class RunnerEndpoints
                 return Results.Ok(new { project = "(global)", session });
             });
 
-        runnerGroup.MapPut("/{projectName}/mode", (string projectName, SetRunnerModeRequest req, TaskRunnerService runner) =>
+        runnerGroup.MapPut("/{projectName}/mode", (string projectName, SetRunnerModeRequest req, TaskRunnerService runner, TaskScannerService scanner) =>
         {
             var result = runner.RequestModeChange(projectName, req.Mode, req.Reason);
             if (result == null)
+            {
+                // The project can be registered (it has a WatchPaths entry and shows
+                // up everywhere else in the UI) while still having no ProjectRunner,
+                // because TaskRunnerService only creates one at startup for entries
+                // whose RootPath is non-empty and exists on disk. Without this check
+                // that case reports "Unknown project", which reads as "this project
+                // doesn't exist" and sends the operator looking in the wrong place
+                // (observed against the "Agent Studio" WatchPaths entry, which had
+                // Path but no RootPath after a lost-and-partially-reconstructed
+                // appsettings.Local.json - see its "//WatchPaths" comment).
+                var watchEntry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
+                if (watchEntry != null && string.IsNullOrWhiteSpace(watchEntry.RootPath))
+                {
+                    return Results.Conflict(new
+                    {
+                        error = $"Project '{projectName}' has no RootPath configured, so its runner was never started.",
+                        hint = "Set RootPath (and RepositoryPath) on this project's WatchPaths entry in appsettings.Local.json, then restart the backend."
+                    });
+                }
                 return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            }
             if (result.Outcome == ModeChangeOutcome.Invalid)
                 return Results.BadRequest(new
                 {
