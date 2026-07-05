@@ -347,10 +347,17 @@ export class App implements OnInit, OnDestroy {
   readonly workspaceScreenshotsOpen = this.workspaceOverlays.screenshotsOpen;
   readonly workspaceSummaryOpen = this.workspaceOverlays.summaryOpen;
   readonly cliAdminOpen = this.workspaceOverlays.cliAdminOpen;
-  /** Drives the status-bar Settings button's pressed/active state. */
+  /**
+   * Drives the status-bar Settings button's pressed/active state. Excludes
+   * the 'caps' (CLI usage) section in both layouts: that section owns the
+   * separate "Usage" pill, and letting Settings light up for it too would
+   * put the single `--studio-accent` active fill on two rail items at once
+   * (see WorkspaceOverlaysService.anyOpenExceptUsage).
+   */
   readonly workspaceSettingsOpen = computed(() => this.featureFlags.vsCodeLayout()
     ? this.studioTabState.activeTab()?.kind === 'workspace-settings'
-    : this.workspaceOverlays.anyOpen());
+      && this.workspaceOverlays.section() !== 'caps'
+    : this.workspaceOverlays.anyOpenExceptUsage());
   private hashListener: (() => void) | null = null;
   private initialHashSyncComplete = false;
   private kanbanKeyListener: ((ev: KeyboardEvent) => void) | null = null;
