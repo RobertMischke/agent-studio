@@ -14,9 +14,11 @@
     <header class="ps-settings__section-head">
       <h3 id="ps-settings-inherited" class="ps-settings__section-title">Workspace defaults</h3>
       <p class="ps-settings__section-desc">
-        Inherited from the global Workspace settings. No per-project override
-        exists for these yet, so they are read-only — open the Workspace
-        settings to change the global value.
+        Defaults that apply to every project in this workspace. The Orchestrator
+        card is editable here and writes the workspace default (a per-project
+        override in the section below still wins). Default agent and usage caps
+        have no per-project override yet, so they stay read-only — open the
+        Workspace settings to change those.
       </p>
     </header>
 
@@ -85,6 +87,49 @@
                 [cacTooltip]="'Open the global usage-caps section to edit caps.'"
                 (click)="openUsageCaps()">Manage usage caps →</button>
       </article>
+
+      @if (workspaceId(); as wsId) {
+        <article class="ps-settings__card" data-testid="project-settings-orchestrator">
+          <div class="ps-settings__card-head">
+            <span class="ps-settings__card-icon" aria-hidden="true">◆</span>
+            <span class="ps-settings__card-title">Orchestrator</span>
+            <span class="ps-settings__badge ps-settings__badge--editable"
+                  data-testid="project-settings-orchestrator-editable">Workspace default</span>
+          </div>
+          <p class="ps-settings__card-desc">
+            The model and autonomy the orchestrator uses by default across
+            <strong>{{ workspaceName() }}</strong>. A per-project override in the
+            section below wins over these.
+          </p>
+          <div class="ps-settings__orch-controls">
+            <label class="ps-settings__field">
+              <span class="ps-settings__field-label">Model</span>
+              <select class="ps-settings__select"
+                      data-testid="project-settings-orchestrator-model"
+                      [disabled]="orchSaving()"
+                      (change)="onWorkspaceModelChange($any($event.target).value)">
+                @for (opt of orchModelOptions(); track opt.id) {
+                  <option [value]="opt.id" [selected]="opt.id === orchModel()">{{ opt.label }}</option>
+                }
+              </select>
+            </label>
+            <label class="ps-settings__field">
+              <span class="ps-settings__field-label">Autonomy</span>
+              <select class="ps-settings__select"
+                      data-testid="project-settings-orchestrator-autonomy"
+                      [disabled]="orchSaving()"
+                      (change)="onWorkspaceAutonomyChange(+$any($event.target).value)">
+                <option [value]="-1" [selected]="orchAutonomy() < 0">Platform default (Balanced)</option>
+                @for (stop of autonomyStops; track stop.level) {
+                  <option [value]="stop.level" [selected]="stop.level === orchAutonomy()">
+                    {{ stop.level }} · {{ stop.name }}
+                  </option>
+                }
+              </select>
+            </label>
+          </div>
+        </article>
+      }
     </div>
   </section>
 

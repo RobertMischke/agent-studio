@@ -165,3 +165,36 @@
   text-decoration: underline;
 }
 .ps-settings__link:hover { color: var(--studio-fg-strong); }
+
+/* AGT-1812: editable workspace-default orchestrator card */
+.ps-settings__badge--editable {
+  border-color: var(--studio-accent, var(--studio-border-strong));
+  color: var(--studio-accent, var(--studio-fg-strong));
+}
+.ps-settings__orch-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-3);
+}
+.ps-settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+}
+.ps-settings__field-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--studio-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.ps-settings__select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 6px;
+  border: 1px solid var(--studio-border-strong);
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+}
+.ps-settings__select:disabled { opacity: 0.6; cursor: progress; }
