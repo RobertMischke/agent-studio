@@ -31,5 +31,17 @@ public static class ProjectSteeringDocsEndpoints
                     ? Results.NotFound(new { error = "File not found, path rejected, or not in the steering inventory." })
                     : Results.Ok(content);
             });
+
+        // Real Tool-Use Read Analytics behind the former mockup: counts which
+        // CLI tool-use reads consumed each agent doc, folded across the
+        // project's task-folder tool-calls logs.
+        app.MapGet("/api/projects/{projectName}/steering/read-analytics",
+            (string projectName, int? days, AgentDocsReadAnalyticsService analytics) =>
+            {
+                var result = analytics.GetAnalytics(projectName, days ?? AgentDocsReadAnalyticsService.DefaultWindowDays);
+                return result == null
+                    ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                    : Results.Ok(result);
+            });
     }
 }

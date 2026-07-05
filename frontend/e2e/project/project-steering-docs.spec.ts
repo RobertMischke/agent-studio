@@ -88,6 +88,55 @@ async function mockSteeringApi(page: Page, projectName: string, watchPath: strin
     }],
   };
 
+  const readAnalytics = {
+    projectName,
+    baseDir: 'C:/Projects/demo',
+    windowDays: 7,
+    hasData: true,
+    totalReads: 9,
+    recentReads: 4,
+    taskCount: 3,
+    lastReadAt: '2026-06-23T09:00:00Z',
+    files: [
+      {
+        relPath: 'AGENTS.md',
+        label: 'AGENTS.md',
+        reads: 6,
+        recentReads: 3,
+        taskCount: 2,
+        lastReadAt: '2026-06-23T09:00:00Z',
+        byCli: [{ cli: 'claude', reads: 4 }, { cli: 'codex', reads: 2 }],
+      },
+      {
+        relPath: 'frontend/AGENTS.md',
+        label: 'AGENTS.md',
+        reads: 3,
+        recentReads: 1,
+        taskCount: 1,
+        lastReadAt: '2026-06-22T09:00:00Z',
+        byCli: [{ cli: 'codex', reads: 3 }],
+      },
+      {
+        relPath: '.github/copilot-instructions.md',
+        label: 'copilot-instructions.md',
+        reads: 0,
+        recentReads: 0,
+        taskCount: 0,
+        lastReadAt: null,
+        byCli: [],
+      },
+    ],
+    byCli: [{ cli: 'claude', reads: 4 }, { cli: 'codex', reads: 5 }],
+    generatedAt: '2026-06-23T10:00:00Z',
+  };
+
+  // Real Tool-Use Read Analytics behind the former mockup.
+  await page.route('**/api/projects/*/steering/read-analytics**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(readAnalytics),
+  }));
+
   await page.route('**/api/projects/*/steering', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -125,7 +174,7 @@ test.describe('Project detail - Agent Docs section', () => {
     await mockSteeringApi(page, projectName, watchPath);
   });
 
-  test('tree shows existing agent docs, CLI scope, gateway warning, and tool-use mockup', async ({ page }) => {
+  test('tree shows existing agent docs, CLI scope, gateway warning, and real tool-use read analytics', async ({ page }) => {
     await openSteeringRail(page, projectName);
     const panel = page.getByTestId('project-shell-panel-steering');
     await expect(panel).toBeVisible();
@@ -147,8 +196,17 @@ test.describe('Project detail - Agent Docs section', () => {
     await expect(panel.getByTestId('project-steering-docs-viewer-path')).toContainText('frontend/AGENTS.md');
     await expect(panel.getByTestId('project-steering-docs-content')).toContainText('Frontend agent rules');
 
-    await expect(panel.getByTestId('project-steering-docs-tool-use-mock')).toContainText('Mockup');
-    await expect(panel.getByTestId('project-steering-docs-action-plan-tool-use-analytics')).toBeVisible();
+    // Real Tool-Use Read Analytics replaced the mockup: live totals, per-file
+    // rows, and per-CLI counts. No "Mockup" pill, no fabricated numbers.
+    const usage = panel.getByTestId('project-steering-docs-tool-use');
+    await expect(usage).toBeVisible();
+    await expect(usage).not.toContainText('Mockup');
+    await expect(panel.getByTestId('project-steering-docs-tool-use-live')).toContainText('9 reads');
+    const rootRow = panel.getByTestId('project-steering-docs-tool-use-row-AGENTS.md');
+    await expect(rootRow).toContainText('Claude Code 4');
+    await expect(rootRow).toContainText('Codex 2');
+    // A zero-read inventory file is not rendered as a usage row.
+    await expect(panel.getByTestId('project-steering-docs-tool-use-row-.github/copilot-instructions.md')).toHaveCount(0);
 
     await page.screenshot({
       path: path.join(SCREENSHOTS, '01-inventory-and-summary.png'),
@@ -156,30 +214,28 @@ test.describe('Project detail - Agent Docs section', () => {
     });
   });
 
-  test('plan action queues the real tool-use analytics feature as a preparation task', async ({ page }) => {
-    let postedBody: Record<string, unknown> | null = null;
-    await page.route('**/api/tasks', async route => {
-      if (route.request().method() !== 'POST') return route.continue();
-      postedBody = route.request().postDataJSON() as Record<string, unknown>;
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ id: postedBody.id }),
-      });
-    });
+  test('renders an honest empty state when no reads are indexed yet', async ({ page }) => {
+    await page.unroute('**/api/projects/*/steering/read-analytics**');
+    await page.route('**/api/projects/*/steering/read-analytics**', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        projectName, baseDir: 'C:/Projects/demo', windowDays: 7, hasData: false,
+        totalReads: 0, recentReads: 0, taskCount: 0, lastReadAt: null,
+        files: [], byCli: [], generatedAt: '2026-06-23T10:00:00Z',
+      }),
+    }));
 
     await openSteeringRail(page, projectName);
-    await expect(page.getByTestId('project-steering-docs-section')).toBeVisible({ timeout: 10_000 });
-    await page.getByTestId('project-steering-docs-action-plan-tool-use-analytics').click();
+    const panel = page.getByTestId('project-shell-panel-steering');
+    await expect(panel.getByTestId('project-steering-docs-section')).toBeVisible({ timeout: 10_000 });
 
-    const msg = page.getByTestId('project-steering-docs-action-msg');
-    await expect(msg).toBeVisible({ timeout: 10_000 });
-    await expect(msg).toContainText(/^Queued steering-plan-tool-use-analytics-/);
-    expect(postedBody?.['targetState']).toBe('1-preparation');
-    expect(postedBody?.['promptMarkdown']).toContain('count which CLI tool-use reads');
+    await expect(panel.getByTestId('project-steering-docs-tool-use-nodata')).toContainText('No data yet');
+    await expect(panel.getByTestId('project-steering-docs-tool-use-empty')).toContainText('No indexed tool-use reads');
+    await expect(panel.getByTestId('project-steering-docs-tool-use-live')).toHaveCount(0);
 
     await page.screenshot({
-      path: path.join(SCREENSHOTS, '04-action-followup-queued.png'),
+      path: path.join(SCREENSHOTS, '04-tool-use-empty-state.png'),
       fullPage: true,
     });
   });

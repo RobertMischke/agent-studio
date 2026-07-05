@@ -429,6 +429,7 @@ builder.Services.AddHostedService<OrphanReaperHostedService>();
 builder.Services.AddHostedService<StaleProgressSweepHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();
+builder.Services.AddSingleton<AgentDocsReadAnalyticsService>();
 builder.Services.AddSingleton<SkillReadinessService>();
 builder.Services.AddSingleton<ConceptDocsService>();
 builder.Services.AddSingleton<SecurityReviewService>();
