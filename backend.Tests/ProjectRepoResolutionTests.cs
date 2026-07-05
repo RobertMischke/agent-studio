@@ -185,4 +185,28 @@ public sealed class ProjectRepoResolverPairingTests : IDisposable
         Assert.Equal(gitRepo, registry.SetRepositoryPath(rec.Id, gitRepo).RepositoryPath);
         Assert.Null(registry.SetRepositoryPath(rec.Id, null).RepositoryPath);
     }
+
+    /// <summary>
+    /// SetRootPath mirrors SetRepositoryPath's path validation (UNC /
+    /// relative / missing all rejected) but deliberately skips the
+    /// git-checkout requirement: a CLI working directory can legitimately be
+    /// a subfolder of a repo (e.g. Runbook's &lt;repo&gt;/App) rather than the
+    /// checkout root itself, so a plain folder with no .git must be accepted.
+    /// </summary>
+    [Fact]
+    public void SetRootPath_RejectsUncRelativeMissingPaths_ButAllowsNonGitFolder()
+    {
+        var (_, registry) = Build(new() { ["TaskRepository"] = Path.Combine(_tempDir, "workspace") });
+        var rec = registry.EnsureProjectForStorage(
+            Path.Combine(_tempDir, "workspace", "projects", "p"), "P", "ws-1");
+
+        Assert.Throws<ArgumentException>(() => registry.SetRootPath(rec.Id, @"\\evil\share"));
+        Assert.Throws<ArgumentException>(() => registry.SetRootPath(rec.Id, @"relative\path"));
+        Assert.Throws<ArgumentException>(() => registry.SetRootPath(rec.Id, Path.Combine(_tempDir, "does-not-exist")));
+
+        var noGit = Path.Combine(_tempDir, "no-git-workdir");
+        Directory.CreateDirectory(noGit);
+        Assert.Equal(noGit, registry.SetRootPath(rec.Id, noGit).RootPath);
+        Assert.Null(registry.SetRootPath(rec.Id, null).RootPath);
+    }
 }

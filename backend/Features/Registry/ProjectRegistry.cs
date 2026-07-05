@@ -335,6 +335,36 @@ public sealed class ProjectRegistry
     }
 
     /// <summary>
+    /// Set (or clear, with null) the project's CLI working directory. Same
+    /// validation as <see cref="SetRepositoryPath"/> minus the git-checkout
+    /// requirement: unlike a repository path, a working directory can
+    /// legitimately be a subfolder of the checkout (e.g. Runbook's
+    /// <c>&lt;repo&gt;/App</c>) rather than the checkout root itself.
+    /// </summary>
+    public ProjectRecord SetRootPath(string id, string? rootPath)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(rootPath) ? null : rootPath.Trim();
+        if (trimmed != null)
+        {
+            if (trimmed.StartsWith(@"\\", StringComparison.Ordinal) || trimmed.StartsWith("//", StringComparison.Ordinal))
+                throw new ArgumentException(
+                    "rootPath must be a local path, not a UNC share", nameof(rootPath));
+            if (!Path.IsPathRooted(trimmed))
+                throw new ArgumentException(
+                    "rootPath must be an absolute path", nameof(rootPath));
+            trimmed = Path.TrimEndingDirectorySeparator(Path.GetFullPath(trimmed));
+            if (string.Equals(trimmed, Path.GetPathRoot(trimmed), StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException(
+                    "rootPath must not be a filesystem root", nameof(rootPath));
+            if (!Directory.Exists(trimmed))
+                throw new ArgumentException(
+                    $"rootPath does not exist: {trimmed}", nameof(rootPath));
+        }
+        return MutateLocked(id, p => p with { RootPath = trimmed },
+            trimmed == null ? "root-path-cleared" : "root-path-set");
+    }
+
+    /// <summary>
     /// F46 — permanently remove a project record from the registry and
     /// return the removed record so the caller can act on its
     /// <see cref="ProjectRecord.StorageLocation"/>. Throws

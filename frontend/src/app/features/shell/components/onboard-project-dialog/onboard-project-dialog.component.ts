@@ -42,6 +42,14 @@ export class OnboardProjectDialogComponent {
   readonly cliDefault = signal<CliType>('claude');
   readonly modelDefault = signal('');
   readonly color = signal(COLORS[0]);
+  /**
+   * Optional CLI working directory. Without this, the project has no
+   * auto-pickup runner until someone sets it later - the mode toggle then
+   * fails with a "no RootPath configured" error instead of "unknown
+   * project", but only once RunnerEndpoints knows to say so (see the
+   * 2026-07-05 "Agent Studio" incident).
+   */
+  readonly rootPath = signal('');
   readonly submitting = signal(false);
   readonly errorMsg = signal<string | null>(null);
   readonly registryWorkspaces = signal<readonly { id: string; displayName: string; projects: readonly unknown[] }[]>([]);
@@ -76,6 +84,7 @@ export class OnboardProjectDialogComponent {
       this.cliDefault.set('claude');
       this.modelDefault.set('');
       this.color.set(COLORS[0]);
+      this.rootPath.set('');
       this.errorMsg.set(null);
       this.tasks.getRegistryWorkspaces().subscribe({
         next: list => this.registryWorkspaces.set(list ?? []),
@@ -120,6 +129,7 @@ export class OnboardProjectDialogComponent {
       cliDefault: this.cliDefault(),
       modelDefault: this.modelDefault() || null,
       color: this.color(),
+      rootPath: this.rootPath().trim() || undefined,
     };
     this.submitting.set(true);
     this.errorMsg.set(null);

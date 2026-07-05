@@ -68,6 +68,19 @@ public record ProjectRecord
     /// layout (<c>&lt;repo&gt;/.orchestrator/jobs</c>).
     /// </summary>
     public string? RepositoryPath { get; init; }
+    /// <summary>
+    /// Absolute path the runner uses as the CLI's working directory, when it
+    /// differs from - or simply needs to exist independently of -
+    /// <see cref="RepositoryPath"/> (e.g. a monorepo subfolder). Durable
+    /// registry data (API-mutable), NOT an appsettings override.
+    /// <see cref="AgentStudio.Runner.TaskRunnerService"/> only creates a
+    /// <c>ProjectRunner</c> for a project whose effective RootPath (this
+    /// field, falling back to the WatchPaths config entry) is non-empty and
+    /// exists on disk - a project with neither has no auto-pickup runner and
+    /// its manual mode toggle reports the project as unavailable, not
+    /// "unknown" (see <c>RunnerEndpoints</c>).
+    /// </summary>
+    public string? RootPath { get; init; }
     public bool Archived { get; init; }
     public DateTime CreatedAt { get; init; }
 }

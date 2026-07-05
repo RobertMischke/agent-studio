@@ -25,6 +25,11 @@
   padding: 0 var(--studio-spacing-2);
 }
 
+.opd__hint {
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+}
+
 .opd__swatches {
   display: flex;
   gap: var(--studio-spacing-1);

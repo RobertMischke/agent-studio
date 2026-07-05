@@ -56,6 +56,12 @@ public class TaskRunnerService : BackgroundService
     // the host does not sleep mid-run. Optional: DI injects the singleton; null
     // when a test fixture builds the service directly (keep-awake then off).
     private readonly SystemKeepAwake? _keepAwake;
+    // Optional: null only when a test fixture builds the service directly.
+    // Consulted at boot so a RootPath set through the registry (onboarding
+    // dialog / project settings) takes effect without anyone having to hand-
+    // edit the gitignored appsettings.Local.json WatchPaths entry (ASS -
+    // "Agent Studio" mode-toggle 404, 2026-07-05).
+    private readonly AgentStudio.Registry.ProjectRegistry? _projectRegistry;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -108,7 +114,8 @@ public class TaskRunnerService : BackgroundService
         HumanReviewEscalation? humanReviewEscalation = null,
         AgentStudio.Runner.PostAbortReviewStepService? postAbortReview = null,
         AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null,
-        SystemKeepAwake? keepAwake = null)
+        SystemKeepAwake? keepAwake = null,
+        AgentStudio.Registry.ProjectRegistry? projectRegistry = null)
     {
         _config = config;
         _logger = logger;
@@ -142,6 +149,7 @@ public class TaskRunnerService : BackgroundService
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
         _keepAwake = keepAwake;
+        _projectRegistry = projectRegistry;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -220,8 +228,20 @@ public class TaskRunnerService : BackgroundService
     {
         // Initialize runners for each watch path
         var entries = _scanner.GetWatchPaths();
-        foreach (var entry in entries)
+        foreach (var rawEntry in entries)
         {
+            // The registry (set via the onboarding dialog or project settings)
+            // is the source of truth once a record exists (ADR-0042); the
+            // static WatchPaths RootPath is only the bootstrap-era fallback
+            // for projects that predate the registry field. Without this, a
+            // RootPath set through the UI after this backend last started
+            // silently has no effect until someone also hand-edits the
+            // gitignored appsettings.Local.json.
+            var registryRootPath = _projectRegistry?.FindByStorageLocation(rawEntry.Path)?.RootPath;
+            var entry = string.IsNullOrWhiteSpace(registryRootPath) || registryRootPath == rawEntry.RootPath
+                ? rawEntry
+                : rawEntry with { RootPath = registryRootPath };
+
             if (string.IsNullOrEmpty(entry.RootPath))
             {
                 _logger.LogWarning("WatchPath '{Name}' has no RootPath configured, skipping runner", entry.Name);
