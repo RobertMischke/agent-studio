@@ -104,22 +104,7 @@
 
     @if (activeProject()) {
       <section class="sheet__chat">
-        @if (virtualChatEnabled()) {
-          <cac-project-chat-list
-            #projectChatList
-            [project]="activeProject()" />
-          <cac-chat
-            variant="embedded"
-            [messages]="[]"
-            [events]="[]"
-            [pending]="sending()"
-            [disabled]="sending()"
-            [placeholder]="'Ask the orchestrator about this project...'"
-            [emptyState]="''"
-            [bodyMaxHeight]="'0px'"
-            (submitMessage)="onSubmit($event)" />
-        } @else {
-          <!-- Single <cac-chat> renders the orchestrator chat. Always
+        <!-- Single <cac-chat> renders the orchestrator chat. Always
                on virtualised mode so the chat scales to thousands of
                turns without DOM blow-up; small-N projects pay nothing
                because the spacer divs collapse to 0px. -->
@@ -157,7 +142,6 @@
               </div>
             }
           </cac-chat>
-        }
 
         <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">
           <button class="sheet__draft-btn sheet__draft-btn--primary"
