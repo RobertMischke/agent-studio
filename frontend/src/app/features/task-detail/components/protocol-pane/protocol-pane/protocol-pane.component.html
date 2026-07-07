@@ -439,10 +439,16 @@
                   }
                   @case ('conversation') {
                     @if (nextGenConversationEnabled()) {
+                      <!-- Virtualised: the transcript can grow into the thousands of
+                           events for a long-running task, so the view windows its own
+                           DOM and owns its own scroll container (bounded by the
+                           `cac-conversation-view` host sizing in the stylesheet below)
+                           instead of the ancestor `.pane__body` scrolling everything. -->
                       <cac-conversation-view [events]="nextGenChatEvents()"
                                              [isRunning]="isRunning() || isActiveJob()"
                                              [queuedFollowUp]="queuedFollowUp()"
                                              [showHeader]="false"
+                                             [virtualised]="true"
                                              variant="embedded"
                                              (openTrace)="onConversationOpenTrace($event)"
                                              (openFollowUp)="onOpenFollowup($event)"
