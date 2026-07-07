@@ -10,6 +10,24 @@ details live in
 
 ---
 
+## 0. Product stance (operator decision, 2026-07-07)
+
+**Remote CLI execution is a first-class product concept**, not an ops
+appendix. Consequences:
+
+- The **public website** needs a strong "run your agents on a remote host"
+  documentation path (CLI-based: SSH in, provision, seed credentials, connect
+  — essentially a public-friendly distillation of the runbook). Messaging:
+  *a strong model does the heavy lifting for you* — plus honest constraints:
+  **tested on Ubuntu 24.04**; other distros/OSes are expected to work but are
+  unverified. → gap **G11** below.
+- **Configuration happens at project level** — the per-project runner
+  assignment (§2 / G7) is the committed UX, not one global "remote mode".
+- **Probes are a runner capability**: each runner probes *its own* CLIs
+  (PTY-based quota/model discovery) and reports snapshots upstream. Proven on
+  Linux 2026-07-07 for both claude (`/usage`: plan Max, both windows) and
+  codex (`/status`: plan Pro, all four windows).
+
 ## 1. Three operating modes (a timeline, not alternatives)
 
 ### Mode A — full stack on the runner host, SSH tunnel (available today)
@@ -117,6 +135,7 @@ that exists, screenshots are a same-host feature.
 | G8 | Runner deploy story (systemd + git pull + health) | 3 | D6 |
 | G9 | Preview/dev-server proxy for remote previews | 4 | D7 |
 | G10 | Linux-green test suite + worktree base fallback | 1.x | carry-overs from Phase 1 findings |
+| G11 | Website: public "remote host" getting-started docs | 2 | first-class-citizen stance (§0); CLI-based path, Ubuntu-tested constraint stated honestly |
 
 **Braucht es einen Produktplan? Ja — aber klein.** Recommendation: treat this
 table as the plan seed, cut it into task cards per row (G1–G4 = one "Phase 2"
