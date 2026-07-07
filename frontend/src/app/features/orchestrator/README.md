@@ -11,6 +11,7 @@ Imports via `from './features/orchestrator'`. See [`index.ts`](./index.ts).
 - `OrchestratorFeedComponent` — per-project log + token rollup + global card; renders inside an overlay opened from the project tab feed icon.
 - `GlobalOrchestratorCardComponent` — shows the singleton orchestrator session above the per-project log.
 - `OrchestratorSideSheetComponent` — right-hand sidesheet that hosts the orchestrator chat and project picker. Settings open in the dedicated Orchestrator Settings modal from the sheet header.
+- `OrchestratorContextHeaderComponent` — the "where am I right now" locator pinned at the top of the sheet content: project · task (key + title) · lane/state pill · live-run telemetry (model + ticking duration). Data-only so it can be reused verbatim by the task-focused orchestrator surface (separate planning task). The host resolves the run in scope (`App.orchSideSheetActiveRun`): the open task's run, or the running task in the active project when on the board.
 
 **Types**:
 

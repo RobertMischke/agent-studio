@@ -22,6 +22,7 @@ import { ChatEvent, ChatMessage, ChatSubmitEvent, ChatToolbarItem } from '@codin
 
 import { TooltipDirective } from '@coding-agent/chat/shared';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
+import { OrchestratorContextHeaderComponent } from '../orchestrator-context-header/orchestrator-context-header.component';
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
 /**
  * Right-hand side sheet that hosts the orchestrator chat. Shell follows
@@ -45,7 +46,8 @@ import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-st
   imports: [
     ChatComponent,
     TooltipDirective,
-    SidesheetComponent
+    SidesheetComponent,
+    OrchestratorContextHeaderComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-side-sheet.component.html',
@@ -74,6 +76,19 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly activeJobId = input<string | null>(null);
   readonly activeJobTitle = input<string | null>(null);
   readonly activeWatchPath = input<string | null>(null);
+
+  /**
+   * "Where am I" context-header inputs. The host resolves the lane/state
+   * and the live run for the scope in view (the open task, or — on the
+   * board — the running task in the active project) and hands them here so
+   * the context header can render the operator's current location without
+   * re-fetching. `activeJobKey` is the short display key (e.g. `AGT-1916`);
+   * `activeJobState` is the canonical lane key; `activeRun` is non-null only
+   * while a CLI run is executing in scope.
+   */
+  readonly activeJobKey = input<string | null>(null);
+  readonly activeJobState = input<string | null>(null);
+  readonly activeRun = input<{ model: string | null; startedAt: string | null } | null>(null);
 
   /**
    * Phase 5: when the user clicks "Make a task from this reply", the

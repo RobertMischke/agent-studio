@@ -86,6 +86,18 @@
   </select>
 
   <main class="sheet__content">
+    <!-- "Where am I right now" locator: project · task · lane · live run.
+         Reusable per task-context so the task-focused orchestrator surface
+         (separate planning task) can drop it in unchanged. -->
+    <app-orchestrator-context-header
+      [project]="activeProject()"
+      [taskTitle]="activeJobTitle()"
+      [taskKey]="activeJobKey()"
+      [taskState]="activeJobState()"
+      [runActive]="activeRun() !== null"
+      [runModel]="activeRun()?.model ?? null"
+      [runStartedAt]="activeRun()?.startedAt ?? null" />
+
     <nav class="sheet__scope-row" aria-label="Orchestrator scope">
       <button type="button" class="sheet__scope sheet__scope--active">
         <span aria-hidden="true">▱</span>

@@ -1723,6 +1723,30 @@ export class App implements OnInit, OnDestroy {
     return { name, watchPath: entry.path };
   });
 
+  /**
+   * Live CLI run in scope for the orchestrator side sheet's "where am I"
+   * header. When a task detail is open we report that task's own run;
+   * otherwise (board scope) we surface the running task in the preferred
+   * project so the operator sees "a run is live" the moment they open the
+   * orchestrator on a busy project. Null when nothing is executing in scope.
+   */
+  readonly orchSideSheetActiveRun = computed<{ model: string | null; startedAt: string | null } | null>(() => {
+    const detail = this.selectedJob();
+    if (detail?.info) {
+      const exec = detail.info.execution;
+      return exec && exec.status === 'running'
+        ? { model: exec.model, startedAt: exec.startedAt }
+        : null;
+    }
+    const project = this.orchSideSheetPreferredProject();
+    if (!project) return null;
+    const running = this.jobService
+      .jobs()
+      .find((j) => j.projectName === project && j.state === TaskState.Progress && j.execution?.status === 'running');
+    const exec = running?.execution;
+    return exec ? { model: exec.model, startedAt: exec.startedAt } : null;
+  });
+
   orchChatTooltip(): string {
     const project = this.orchSideSheetPreferredProject();
     return project ? `Toggle orchestrator chat for "${project}"` : 'No project selected';
