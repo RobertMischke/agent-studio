@@ -111,7 +111,106 @@ behavior only changes when we choose to update.
 | quota probe (Porta.Pty) | `POST /api/cli/quota/refresh/claude` (`X-Client-Id` header!) | ✅ full PTY scrape on Ubuntu 24.04, plan + windows parsed |
 | E2E task run | `POST /api/tasks` + `POST /api/tasks/{id}/start` | ✅ claude spawned, worktree flow (ADR-0057), artifact written, lane → 4-auto-review. Note: repo needs a `develop` branch; `watchPath` = `<RootPath>/.orchestrator/jobs` for in-repo layout |
 
-## 5. Operational notes
+## 5. Operator hands-on — exploring the host
+
+Everything below is safe to run as `agent` (alias `ssh agent-runner`).
+
+**Where things live:**
+
+| Path | What |
+|---|---|
+| `~/agent-taskboard` | clone of agent-studio (backend + frontend), branch `main` |
+| `~/agent-taskboard/backend/appsettings.Local.json` | host-local config: `TaskRepository` + `WatchPaths` |
+| `~/taskboard-workspace` | the task store (git-backed), `projects/<key>/tasks/<lane>/` |
+| `~/projects/website` | pilot project checkout (cloned from the local mirror) |
+| `~/git/website.git` | bare mirror the operator pushes into (see §6) |
+| `~/smoke-project` | throwaway repo from the Phase-1 E2E smoke |
+| `/tmp/ass-worktrees/<project>/<task>` | per-task git worktrees (ADR-0057) |
+| `~/coding-agent-chat` | chat-lib clone + build (the frontend's `file:` dependency) |
+| `~/bin/stack-start.sh`, `~/bin/stack-stop.sh` | start/stop the full stack |
+| `/tmp/backend.log`, `/tmp/ngserve.log` | stack logs |
+
+**Look around / verify the pieces:**
+
+```bash
+ssh agent-runner                      # log in
+htop                                  # what is running / load (q to quit)
+claude -p "Reply with exactly: OK"    # CLI auth still alive?
+git -C ~/agent-taskboard log --oneline -3   # which code version is on the host
+```
+
+**Start / stop the full stack (backend :5030 + board UI :4010):**
+
+```bash
+~/bin/stack-start.sh    # logs: /tmp/backend.log, /tmp/ngserve.log
+~/bin/stack-stop.sh
+```
+
+(The scripts wrap `dotnet run --project backend` and
+`ng serve frontend --port 4010 --proxy-config proxy.conf.json` with `setsid`.
+Two hard-won details inside: the frontend's `@coding-agent/chat` is a
+`file:`-dependency, so `~/coding-agent-chat` must be cloned + built and its
+transitive dep `lowlight` installed `--no-save`; and never `pkill -f` a
+pattern that appears in your own ssh command line — it kills your session.)
+
+**See the product from your own browser** (nothing is exposed publicly —
+the tunnel is the only door): on the *operator* machine run
+
+```bash
+ssh -L 4010:127.0.0.1:4010 -L 5030:127.0.0.1:5030 agent-runner
+```
+
+then open `http://localhost:4010` — the full board UI, served and executed
+on the Linux host.
+
+**Watch a run live:**
+
+```bash
+tail -f /tmp/backend-smoke.log                          # runner + API log
+watch -n2 'pgrep -af "claude|codex" | grep -v pgrep'    # spawned CLIs
+ls /tmp/ass-worktrees/*/*/                              # what the task changed
+curl -s localhost:5030/api/cli/quota | python3 -m json.tool | head -30
+```
+
+## 6. How code reaches the host — git sync & security assessment
+
+**Two channels, both deliberate:**
+
+1. **Public repos** (agent-studio itself): plain `https` clone/fetch from
+   GitHub. Read-only by construction — the host holds **no GitHub
+   credentials at all**, so it *cannot* push to GitHub, delete branches, or
+   read private repos even if fully compromised.
+2. **Private repos** (pilot: the website): the **operator pushes over SSH
+   into a bare mirror** on the host (`git push runner main` →
+   `~/git/website.git`); the working clone pulls from that mirror. Again: no
+   GitHub secret ever touches the host. Results flow back the same way —
+   task branches (`task/<id>`) land in the mirror, and the operator runs
+   `git fetch runner` locally to review them. The sync is **manual and
+   operator-initiated in both directions**, which is the right default while
+   the host is a test environment.
+
+**What secrets *do* live on the host, and the blast radius:**
+
+| Secret | Risk if host is compromised | Mitigation |
+|---|---|---|
+| `~/.claude/.credentials.json` | attacker can consume the Claude subscription and act as the CLI identity | revocable from the operator side (re-login rotates); `autoUpdates` off; monitor /usage |
+| `~/.codex/auth.json` | same for the OpenAI account | revocable |
+| `~/.ssh/authorized_keys` (public keys) | none (public halves) | — |
+| project code in `~/projects` | disclosure — currently code that is public anyway or website content | don't mirror sensitive repos to the test host |
+
+**Deliberately absent:** GitHub tokens/deploy keys, task-server credentials
+(none exist yet — Phase 2), TLS private keys, any inbound service beyond
+`sshd`. The exposure of the box is: SSH (key-only, root prohibited) — and
+outbound HTTPS to github.com/Anthropic/OpenAI.
+
+**When this changes (Phase 3, per `parallel-task-execution.md` §8.2C):**
+multiple runners will need unattended fetch/push. The contract there is
+**per-runner deploy keys with least privilege** (read + push only to
+`task/*` refs of assigned repos), never a personal token. The current
+zero-credential state is the baseline we degrade from *knowingly*, one
+scoped key at a time.
+
+## 7. Operational notes
 
 - **Process containment:** plain `nohup … &` over ssh does *not* reliably
   survive session teardown; use `setsid` (or a systemd unit, which is the
