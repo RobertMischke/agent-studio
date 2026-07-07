@@ -545,6 +545,57 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         Assert.Equal("auto-continuous", bootMode);
     }
 
+    /// <summary>
+    /// The hole the backfill closes: on a LEGACY record (no DesiredRunnerMode)
+    /// a system-sourced flip used to overwrite RunnerMode — the only field the
+    /// boot fallback reads — so one transient CLI-unspawnable pause permanently
+    /// downgraded the project to manual across restarts (observed live
+    /// 2026-07-07: auto-continuous -> manual because the claude npm shim was
+    /// half-healed at boot). The system flip must first preserve the pre-flip
+    /// RunnerMode as the durable DesiredRunnerMode.
+    /// </summary>
+    [Fact]
+    public void SetRunnerMode_SystemFlipOnLegacyRecord_BackfillsDesiredFromPreFlipMode()
+    {
+        File.WriteAllText(StorePath(), """
+        {
+          "runbook": {
+            "RunnerMode": "auto-continuous"
+          }
+        }
+        """);
+        var svc = Build();
+
+        svc.SetRunnerMode("runbook", "manual", source: "system");
+
+        var s = svc.Get("runbook");
+        Assert.Equal("manual", s.RunnerMode);
+        Assert.Equal("auto-continuous", s.DesiredRunnerMode); // backfilled from the pre-flip mirror
+
+        // Boot restore therefore still comes back in the operator's mode.
+        var bootMode = string.IsNullOrWhiteSpace(s.DesiredRunnerMode) ? s.RunnerMode : s.DesiredRunnerMode;
+        Assert.Equal("auto-continuous", bootMode);
+    }
+
+    /// <summary>
+    /// Companion guard: the backfill only fires when Desired is EMPTY. A record
+    /// whose durable intent is already set keeps it verbatim (ASS-1753 contract),
+    /// and a user-sourced change still advances both fields.
+    /// </summary>
+    [Fact]
+    public void SetRunnerMode_SystemFlipWithExistingDesired_DoesNotRewriteDesired()
+    {
+        var svc = Build();
+        svc.SetRunnerMode("runbook", "auto-single", source: "user");
+
+        svc.SetRunnerMode("runbook", "auto-continuous", source: "system");
+        svc.SetRunnerMode("runbook", "manual", source: "circuit-breaker");
+
+        var s = svc.Get("runbook");
+        Assert.Equal("manual", s.RunnerMode);
+        Assert.Equal("auto-single", s.DesiredRunnerMode); // the operator's toggle, not the system flips
+    }
+
     private ProjectSettingsService Build()
     {
         var config = new ConfigurationBuilder()

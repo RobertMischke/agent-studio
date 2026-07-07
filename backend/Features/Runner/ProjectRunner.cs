@@ -170,6 +170,17 @@ public class ProjectRunner
     private string? _modeReason;
     private DateTime? _modeChangedAt;
     private string? _modeSource;
+    // Set when the CLI-unspawnable pickup pause forced auto -> manual: holds
+    // the CLI type whose recovery we are waiting for. While set (and the mode
+    // is still manual), TickCliRecoveryResume probes the CLI at most once per
+    // minute and restores the operator's DesiredRunnerMode as soon as the CLI
+    // spawns again — a transient CLI break (half-healed npm shim, mid-update)
+    // must degrade the runner temporarily, not permanently. Cleared by ANY
+    // explicit SetMode (an operator/system decision supersedes the pending
+    // auto-resume) and after a successful resume. Deliberately NOT set by the
+    // circuit-breaker paths — those own their own cooldown semantics.
+    private string? _autoResumeCliAfterPause;
+    private DateTime _autoResumeNextProbeUtc = DateTime.MinValue;
     private RunnerCircuitBreakerOptions _circuitBreakerOptions = RunnerCircuitBreakerOptions.Default;
     private DateTime? _globalBreakerCooldownUntil;
     private string? _globalBreakerReason;
@@ -478,12 +489,67 @@ public class ProjectRunner
         _pendingMode = null;
         _pendingModeReason = null;
         _pendingModeWillApplyAfter = null;
+        // Any explicit mode change also supersedes a pending CLI-recovery
+        // auto-resume (the pause path re-arms the marker right after its own
+        // SetMode call).
+        _autoResumeCliAfterPause = null;
         _logger.LogInformation(
             "Runner '{Project}' mode '{From}' -> '{To}' because '{Reason}' (source={Source})",
             ProjectName, fromMode, mode, effectiveReason, _modeSource);
         try { OnModePersist?.Invoke(mode, modeSource); }
         catch (Exception ex) { _logger.LogWarning(ex, "OnModePersist subscriber threw for {Project}", ProjectName); }
         NotifyStatus();
+    }
+
+    /// <summary>
+    /// Restores the operator's durable mode after a CLI-unspawnable pickup
+    /// pause, once the CLI spawns again. Armed only by the spawn-failure pause
+    /// path (never by circuit-breaker trips, which own their cooldown
+    /// semantics). Probes at most once per minute because the availability
+    /// check launches <c>&lt;cli&gt; --version</c>. The resume target is
+    /// <see cref="ProjectSettings.DesiredRunnerMode"/> — the value the boot
+    /// restore would use — so a restart and an in-place recovery land in the
+    /// same mode. Public-ish via TickAsync; internal for tests.
+    /// </summary>
+    internal void TickCliRecoveryResume()
+    {
+        var cli = _autoResumeCliAfterPause;
+        if (cli == null) return;
+        if (_mode != "manual") { _autoResumeCliAfterPause = null; return; }
+        var now = DateTime.UtcNow;
+        if (now < _autoResumeNextProbeUtc) return;
+        _autoResumeNextProbeUtc = now.AddSeconds(60);
+
+        string? desired;
+        try { desired = _projectSettings.Get(ProjectName).DesiredRunnerMode; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "CLI-recovery resume: could not read settings for {Project}", ProjectName);
+            return;
+        }
+        if (desired is not ("auto-single" or "auto-continuous"))
+        {
+            // No durable auto intent to restore — disarm instead of probing forever.
+            _autoResumeCliAfterPause = null;
+            return;
+        }
+
+        bool available;
+        try { available = _router.Get(cli).IsAvailable(); }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "CLI-recovery resume: availability probe for '{Cli}' threw", cli);
+            return;
+        }
+        if (!available) return;
+
+        _logger.LogInformation(
+            "Runner '{Project}': the {Cli} CLI is available again; restoring desired mode '{Mode}' after the pickup pause",
+            ProjectName, cli, desired);
+        // SetMode clears the marker; reason starts with "auto-resume" so
+        // ClassifyModeSource files it as system and DesiredRunnerMode stays
+        // untouched.
+        SetMode(desired!, $"auto-resume: the {cli} CLI is available again after the pickup pause");
     }
 
     /// <summary>
@@ -686,6 +752,12 @@ public class ProjectRunner
         // disabled, an active CLI on this project still needs to be watched
         // for hangs. Cheap (one timestamp arithmetic per active job).
         TickWatchdog();
+
+        // CLI-recovery auto-resume: if the unspawnable-CLI pickup pause forced
+        // this runner to manual, probe the CLI (throttled to once per minute)
+        // and restore the operator's durable mode as soon as it spawns again.
+        // No-op unless the pause path armed the marker.
+        TickCliRecoveryResume();
 
         // Continuous decision review (ADR-0027): scan the active job's live
         // output buffer for an unresolved [[TASK_NEEDS_INPUT]] / [[TASK_BLOCKED]]
@@ -6798,6 +6870,12 @@ public class ProjectRunner
             {
                 SetMode("manual",
                     $"auto-pickup paused: the {cliTypeBeforeMove ?? "agent"} CLI for '{slug}' could not be started after {attempts} attempts; the task waits in {TaskStates.Ready} until the CLI is fixed");
+                // Arm the CLI-recovery auto-resume AFTER SetMode (which clears
+                // the marker): once this CLI spawns again, the tick restores
+                // the operator's DesiredRunnerMode instead of leaving the
+                // project parked on manual until a human notices.
+                _autoResumeCliAfterPause = cliTypeBeforeMove ?? CliTypes.Claude;
+                _autoResumeNextProbeUtc = DateTime.UtcNow.AddSeconds(60);
                 return true;
             }
             return false;

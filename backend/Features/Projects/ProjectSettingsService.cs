@@ -251,10 +251,21 @@ public class ProjectSettingsService
         {
             var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
             var isUser = string.Equals(source, "user", StringComparison.OrdinalIgnoreCase);
+            // Legacy-record backfill: entries written before DesiredRunnerMode
+            // existed carry the operator's intent only in RunnerMode. A
+            // system-sourced flip is about to overwrite that mirror — and the
+            // boot restore falls back to RunnerMode when DesiredRunnerMode is
+            // empty — so without this backfill one transient system flip
+            // (CLI-unspawnable pause, circuit breaker) would permanently
+            // downgrade the boot mode. Preserve the pre-flip value as the
+            // durable intent before the mirror moves.
+            var desired = current.DesiredRunnerMode;
+            if (!isUser && string.IsNullOrWhiteSpace(desired) && !string.IsNullOrWhiteSpace(current.RunnerMode))
+                desired = current.RunnerMode;
             _cache[projectName] = current with
             {
                 RunnerMode = mode,
-                DesiredRunnerMode = isUser ? mode : current.DesiredRunnerMode,
+                DesiredRunnerMode = isUser ? mode : desired,
             };
             Persist();
         }
