@@ -7,7 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { TaskService } from '../../../../../services/task.service';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
 import { cleanStepResultMarkdown } from './pipeline-step-result.util';
 

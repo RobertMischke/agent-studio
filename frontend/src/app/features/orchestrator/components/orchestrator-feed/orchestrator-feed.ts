@@ -5,7 +5,7 @@ import { TaskService } from '../../../../services/task.service';
 import { TokenSummaryBlockComponent } from '../../../tokens';
 import { GlobalOrchestratorCardComponent } from '../global-orchestrator-card/global-orchestrator-card';
 
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
  * Per-project orchestrator log feed. Reads
  * `/api/runner/{projectName}/orchestrator-log` on init and every 10s

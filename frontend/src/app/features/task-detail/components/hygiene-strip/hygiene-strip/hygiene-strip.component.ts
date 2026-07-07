@@ -20,7 +20,7 @@ import {
   VisibleIntervalHandle,
 } from '../../../../../utils/visible-interval';
 
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
  * Per-task hygiene strip rendered at the top of the protocol pane for
  * jobs in `4-auto-review`, `5-human-review`, `5e-escalated`,

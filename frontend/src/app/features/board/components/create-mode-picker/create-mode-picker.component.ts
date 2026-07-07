@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, model } from '@angular/core';
 import type { TaskMode } from '../../../../models/task.model';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 
 interface ModeOption {
   readonly value: TaskMode;

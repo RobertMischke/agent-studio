@@ -18,7 +18,7 @@ import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import type { TaskScreenshot } from '../../../screenshots';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
  * Cycle 9g project-detail-feature container: renders the project-level
  * overlays (orch-feed / project-shell / analysis-report). The former

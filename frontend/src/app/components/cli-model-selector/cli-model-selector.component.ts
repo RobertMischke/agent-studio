@@ -17,15 +17,15 @@ import {
   cliTypeIcon as fmtCliTypeIcon,
   cliTypeLabel as fmtCliTypeLabel,
 } from '../../services/format.util';
-import { ModelSelectorComponent } from '@coding-agent/chat/composer';
-import type { ChatCliOption, ChatModelSelection } from '@coding-agent/chat/core';
+import { ModelSelectorComponent } from 'coding-agent-chat/composer';
+import type { ChatCliOption, ChatModelSelection } from 'coding-agent-chat/core';
 import { ModalStackService } from '../../services/modal-stack.service';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
 
 /**
  * Unified CLI + model selector — thin app adapter around the library's
  * `<cac-model-selector>` (picker UI, draft/commit semantics, keyboard
- * navigation all live in `@coding-agent/chat/composer`). This wrapper keeps
+ * navigation all live in `coding-agent-chat/composer`). This wrapper keeps
  * the historical `app-cli-model-selector` API so the ~10 call-sites and
  * their e2e testids stay untouched, and binds the app-only concerns the
  * library deliberately doesn't know about:

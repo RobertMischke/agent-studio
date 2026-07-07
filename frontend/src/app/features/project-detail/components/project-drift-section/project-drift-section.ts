@@ -4,7 +4,7 @@ import { Observable, map } from 'rxjs';
 import { DriftService } from '../../../../services/drift.service';
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import {
   DriftArchitectureElement,
   DriftArchitectureModel,

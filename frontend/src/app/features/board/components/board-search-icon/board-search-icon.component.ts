@@ -1,4 +1,4 @@
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import {
   ChangeDetectionStrategy,
   Component,

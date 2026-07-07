@@ -6,7 +6,7 @@ import {
   input,
 } from '@angular/core';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { NowTickService } from '../../../../services/now-tick.service';
 import { shortModelName, stateLabel } from '../../../../services/format.util';
 import { TaskState } from '../../../../models/task.model';

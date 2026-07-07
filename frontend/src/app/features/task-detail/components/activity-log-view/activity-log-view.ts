@@ -17,7 +17,7 @@ import {
   parseActivityLog,
   parseOrchestratorSteer
 } from '../activity-log.parser';
-import { MarkdownViewComponent } from '@coding-agent/chat/markdown';
+import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import {
   RenderedTurn,
   buildToolChips,
@@ -26,7 +26,7 @@ import {
   roleHeading,
 } from './activity-log-view-model';
 
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../components/menu';
 type ViewMode = 'conversation' | 'trace';
 

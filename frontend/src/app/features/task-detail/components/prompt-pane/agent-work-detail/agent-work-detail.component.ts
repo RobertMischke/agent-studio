@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import type { AgentWorkCall, AgentWorkDetail } from '../../../../session-events';
 import { TaskService } from '../../../../../services/task.service';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 
 /**
  * Drill-down for the Overview "Agent Work" block: a grouped, expandable view

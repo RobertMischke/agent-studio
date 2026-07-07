@@ -3,7 +3,7 @@ import { TaskService } from '../../../../services/task.service';
 import { CLI_TYPES, type CliType } from '../../../../models/task.model';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import type { CliSessionInfo, CliUsageReport, CliUsageSection } from '../../../../features/cli';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 
 interface ProjectCliEnvironmentPaths {
   path: string;

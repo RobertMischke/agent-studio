@@ -11,10 +11,10 @@ import {
   SteeringDocsWarning,
 } from '../../../../models/steering-docs.model';
 import { TaskState } from '../../../../models/task.model';
-import { MarkdownViewComponent } from '@coding-agent/chat/markdown';
+import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
  * Project-level Steering Docs surface. Shows the agent-facing
  * instruction sources for a watched project (README, AGENTS, ROADMAP,

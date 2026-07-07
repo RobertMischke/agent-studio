@@ -17,7 +17,7 @@ import { TaskService } from '../../../../services/task.service';
 import { CliCatalogStore } from '../../../../services/cli-catalog.store';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { CLI_TYPES, CliType, TaskState } from '../../../../models/task.model';
 import {
   WikiFileSaveResult,
@@ -28,7 +28,7 @@ import {
   WikiTreeMetadata,
   WikiTreeNode,
 } from '../../../../models/project-docs.model';
-import { MarkdownViewComponent } from '@coding-agent/chat/markdown';
+import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor/markdown-rich-editor';
 import { MenuComponent } from '../../../../components/menu/menu.component';
 import { MenuItem, MenuItemClickEvent } from '../../../../components/menu/menu.types';

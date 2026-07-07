@@ -10,7 +10,7 @@ import {
 import { MediaLightboxService } from '../../services/media-lightbox.service';
 import { ModalStackService } from '../../services/modal-stack.service';
 import { OverlayPortalDirective } from '../../directives/overlay-portal.directive';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 
 /**
  * Single-instance image lightbox. Mounted once at the app shell so every

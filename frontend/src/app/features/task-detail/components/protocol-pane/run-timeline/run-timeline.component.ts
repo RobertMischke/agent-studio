@@ -4,7 +4,7 @@ import type { CliContextSource, CliExecutionContext, RunCommitInfo, RunPromptEnt
 import { TaskService } from '../../../../../services/task.service';
 import { cliTypeIcon, cliTypeLabel, formatTime as formatTimeValue, formatTokens } from '../../../../../services/format.util';
 
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
  * Run timeline panel rendered above the activity log in the protocol
  * pane. Each card represents one CLI invocation between user inputs

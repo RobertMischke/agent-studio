@@ -4,7 +4,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { Subject, of, throwError } from 'rxjs';
 import { CliModelSelectorComponent } from './cli-model-selector.component';
-import { ModelSelectorComponent } from '@coding-agent/chat/composer';
+import { ModelSelectorComponent } from 'coding-agent-chat/composer';
 import type { CliModelInfo } from '../../features/cli';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
 import { ModalStackService } from '../../services/modal-stack.service';

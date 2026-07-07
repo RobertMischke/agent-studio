@@ -152,19 +152,19 @@ The same guard requires external `templateUrl` files and rejects inline `templat
 
 CSS linting runs with `npm run lint:css` (Stylelint, configured in `.stylelintrc.json`). CSS, component-size, and structure checks all run as part of `npm run lint`.
 
-## Chat surfaces (`@coding-agent/chat` — `<cac-chat>` is canonical)
+## Chat surfaces (`coding-agent-chat` — `<cac-chat>` is canonical)
 
-The chat stack lives in the standalone **`@coding-agent/chat`** Angular library (source: `C:\Projects\coding-agent-chat`, built to `dist/coding-agent-chat`). The app is a **host**: it consumes the library and owns only the app-specific wiring. The former in-app copies (`components/chat/**`, `components/chat-row/`, `components/markdown-view/`, `components/markdown-utils.ts`, `components/tooltip/`, `directives/markdown-image-lightbox.directive.ts`, `features/project-chat/`, `features/workforce/`, the `parseActivityLog`/`buildConversationTurns` halves of `activity-log.parser.ts`) were deleted when the host adoption landed — do not re-create them; change the library instead.
+The chat stack lives in the standalone **`coding-agent-chat`** Angular library (source: `C:\Projects\coding-agent-chat`, built to `dist/coding-agent-chat`). The app is a **host**: it consumes the library and owns only the app-specific wiring. The former in-app copies (`components/chat/**`, `components/chat-row/`, `components/markdown-view/`, `components/markdown-utils.ts`, `components/tooltip/`, `directives/markdown-image-lightbox.directive.ts`, `features/project-chat/`, `features/workforce/`, the `parseActivityLog`/`buildConversationTurns` halves of `activity-log.parser.ts`) were deleted when the host adoption landed — do not re-create them; change the library instead.
 
-Dependency: `"@coding-agent/chat": "file:../../../coding-agent-chat/dist/coding-agent-chat"`. The registry version replaces the `file:` path after the library's first npm publish. `.npmrc` sets `install-links=true` so the `file:` dep is installed as a physical copy (a symlink would make the bundler/vitest resolve a second `@angular/core` from the library workspace). After rebuilding the library dist, re-run `npm install` here to pick up changes.
+Dependency: `"coding-agent-chat": "file:../../../coding-agent-chat/dist/coding-agent-chat"`. The registry version replaces the `file:` path after the library's first npm publish. `.npmrc` sets `install-links=true` so the `file:` dep is installed as a physical copy (a symlink would make the bundler/vitest resolve a second `@angular/core` from the library workspace). After rebuilding the library dist, re-run `npm install` here to pick up changes.
 
 Entry points and what the app uses from them:
-- `@coding-agent/chat/composer` — `<cac-chat>` (`ChatComponent`), `RoleBadgeComponent` (`<cac-role-badge>`), workforce-role catalogue + `resolveRole`, `groupIntoPhases`/`groupIntoSuperPhases` (`ChatPhase`).
-- `@coding-agent/chat/conversation` — `<cac-conversation-view>`, `<cac-conversation-session-card>`, `<cac-tool-burst-chip>`.
-- `@coding-agent/chat/core` — pure kernel: `ChatMessage`/`ChatEvent` types, `ConversationEvent` wire contract, `projectConversation(...)` (note: its context field is `task:`, not `job:`), `parseActivityLog`, `buildConversationTurns`, `mergeByTimestamp`, session/rate-limit meta parsing.
-- `@coding-agent/chat/markdown` — `<cac-markdown>` (`MarkdownViewComponent`, the canonical markdown surface), `markdownToHtml`/`htmlToMarkdown`/`sanitizeHtml`, `MarkdownTaskReference`.
-- `@coding-agent/chat/history` — `<cac-chat-row>`, `<cac-project-chat-list>` (virtualised history), `<cac-project-chat-rail>`, `<cac-phase-summary-list>`, the `PROJECT_CHAT_DATA_SOURCE` + `CHAT_HISTORY_CONFIRM` seams, `ProjectChatTurn` + scroll/search/stats/turn response types.
-- `@coding-agent/chat/shared` — `[cacTooltip]` (`TooltipDirective`), `[cacStickToBottom]`, `[cacMarkdownLightbox]`, `CHAT_MEDIA_LIGHTBOX`.
+- `coding-agent-chat/composer` — `<cac-chat>` (`ChatComponent`), `RoleBadgeComponent` (`<cac-role-badge>`), workforce-role catalogue + `resolveRole`, `groupIntoPhases`/`groupIntoSuperPhases` (`ChatPhase`).
+- `coding-agent-chat/conversation` — `<cac-conversation-view>`, `<cac-conversation-session-card>`, `<cac-tool-burst-chip>`.
+- `coding-agent-chat/core` — pure kernel: `ChatMessage`/`ChatEvent` types, `ConversationEvent` wire contract, `projectConversation(...)` (note: its context field is `task:`, not `job:`), `parseActivityLog`, `buildConversationTurns`, `mergeByTimestamp`, session/rate-limit meta parsing.
+- `coding-agent-chat/markdown` — `<cac-markdown>` (`MarkdownViewComponent`, the canonical markdown surface), `markdownToHtml`/`htmlToMarkdown`/`sanitizeHtml`, `MarkdownTaskReference`.
+- `coding-agent-chat/history` — `<cac-chat-row>`, `<cac-project-chat-list>` (virtualised history), `<cac-project-chat-rail>`, `<cac-phase-summary-list>`, the `PROJECT_CHAT_DATA_SOURCE` + `CHAT_HISTORY_CONFIRM` seams, `ProjectChatTurn` + scroll/search/stats/turn response types.
+- `coding-agent-chat/shared` — `[cacTooltip]` (`TooltipDirective`), `[cacStickToBottom]`, `[cacMarkdownLightbox]`, `CHAT_MEDIA_LIGHTBOX`.
 
 Host wiring (all in `src/app/app.config.ts`):
 - `provideCodingAgentChat({ taskReferences: TaskReferenceNavigationService, mediaLightbox: MediaLightboxService })` — markdown task-key auto-linking + click-to-enlarge images.
@@ -177,7 +177,7 @@ New `ChatEvent` kinds, renderer changes, selector changes: **make them in the li
 
 ## Conversation view (`<cac-conversation-view>` — next-gen chat projection)
 
-`<cac-conversation-view>` (library entry `@coding-agent/chat/conversation`) renders the **next-gen single-pane transcript** from a parsed event model. It never pattern-matches raw CLI lines in the template; the renderer only consumes `ConversationEvent[]` produced by `projectConversation(...)` (`@coding-agent/chat/core`). Keep that split: parsing/classification lives in the projection (pure, unit-tested against fixtures), presentation lives in the component.
+`<cac-conversation-view>` (library entry `coding-agent-chat/conversation`) renders the **next-gen single-pane transcript** from a parsed event model. It never pattern-matches raw CLI lines in the template; the renderer only consumes `ConversationEvent[]` produced by `projectConversation(...)` (`coding-agent-chat/core`). Keep that split: parsing/classification lives in the projection (pure, unit-tested against fixtures), presentation lives in the component.
 
 **Single-pane grouping, one actor header per turn.** Consecutive same-actor agent outputs coalesce into one `messageGroup` row (`<ol class="conv__feed">` → one `<li>` per group, an inner `<ol class="msg__items">` per turn). The actor header (`conversation-message-head`) renders **once** at the head of a run; continued groups carry `data-show-header="false"` and emit no header element. A tool burst between two agent turns preserves role continuity (the second agent group stays header-less); a `USER` turn, a non-tool reset event, or a mid-task **model switch** breaks the run into a new header. Do not reintroduce a per-message "Agent" label.
 

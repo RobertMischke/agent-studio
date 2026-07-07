@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { TaskService } from '../../../../../services/task.service';
 import { MarkdownRichEditorComponent } from '../../../../../components/markdown-rich-editor/markdown-rich-editor';
-import { MarkdownViewComponent } from '@coding-agent/chat/markdown';
+import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { TaskArtifact, TaskArtifactKind } from '../../../../../models/task.model';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
 import { NowTickService } from '../../../../../services/now-tick.service';

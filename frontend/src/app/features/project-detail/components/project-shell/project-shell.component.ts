@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, input, output, si
 import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
 import { StudioSidebarHeaderComponent } from '../../../../components/studio-sidebar-header/studio-sidebar-header.component';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
 import {
   PROJECT_RAIL_ITEMS,

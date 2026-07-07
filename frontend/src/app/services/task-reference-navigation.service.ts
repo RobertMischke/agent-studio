@@ -1,5 +1,5 @@
 import { Injectable, computed, inject } from '@angular/core';
-import type { MarkdownTaskReference } from '@coding-agent/chat/markdown';
+import type { MarkdownTaskReference } from 'coding-agent-chat/markdown';
 import type { TaskInfo } from '../models/task.model';
 import { TaskService } from './task.service';
 // These two services are imported from their concrete module paths rather than
