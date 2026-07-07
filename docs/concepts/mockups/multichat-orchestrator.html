@@ -42,12 +42,38 @@
 
 <div class="wrap">
   <h1>Multichat-Orchestrator (AGT-1917)</h1>
-  <p class="lead">Das Orchestrator-Side-Sheet bekommt links eine <b>Chat-Switcher-Rail</b> (alle Kontexte,
-  parallel, umschaltbar) und oben den <b>Kontext-Header</b> (AGT-1916, wird unverändert wiederverwendet).
-  Rechts läuft der task-fokussierte Chat mit eigener Historie.</p>
+  <p class="lead">Drei Grundsätze (v2, Feedback 2026-07-08): <b>Kontext ergibt sich ausschließlich automatisch</b>
+  aus dem Ort der Navigation — es gibt nirgends „Kontext anlegen". Die <b>Switcher-Rail ist extrem optional</b>:
+  Default ist eingeklappt, das Sheet ist einfach der Chat des Ortes, an dem du bist. Und aus der Rail springt
+  man <b>in den Ort hinein</b> (→), nicht nur in den Chat.</p>
 
+  <h3 style="margin:.5rem 0 0;font-size:.85rem;color:var(--accent);text-transform:uppercase;letter-spacing:.1em">A · Default — keine Rail, Kontext folgt der Navigation</h3>
   <div class="frame">
-    <div class="chrome">Agent Studio — Orchestrator-Side-Sheet (push-layout, unverändert)</div>
+    <div class="chrome">Agent Studio — Orchestrator-Side-Sheet (Task AGT-1917 ist geöffnet)</div>
+    <div class="sheet" style="grid-template-columns:1fr">
+      <section class="pane">
+        <div class="ctxhead">
+          <span class="pin" style="margin-left:0">☰ 3 aktiv</span>
+          <span class="crumb">Agent Studio · <b>AGT-1917</b> Multichat-Orchestrator</span>
+          <span class="pill lane">3-progress</span>
+          <span class="pill live">● opus-4.8 · 04:12</span>
+          <span class="pin">📌</span>
+        </div>
+        <div class="msgs">
+          <div class="m user">Wie ist der Stand bei diesem Task?</div>
+          <div class="m">Der zweite Run läuft seit 4 Minuten und schreibt gerade das Konzept-Dokument.<span class="tool">▸ read: logs/cli-output.log</span></div>
+        </div>
+        <div class="composer">Nachricht an den Task-Orchestrator… <span class="send">Senden</span></div>
+      </section>
+    </div>
+  </div>
+  <p class="note"><b>Das ist die ganze Default-Erfahrung:</b> Task öffnen → Sheet zeigt den Chat dieses Tasks
+  (Session entsteht lazy, Historie persistent). Kein Anlegen, kein Auswählen. Die Rail existiert nur hinter
+  dem unaufdringlichen „☰ 3 aktiv"-Chip — wer sie nie aufklappt, verliert nichts.</p>
+
+  <h3 style="margin:1rem 0 0;font-size:.85rem;color:var(--accent);text-transform:uppercase;letter-spacing:.1em">B · Rail aufgeklappt (optional, über ☰)</h3>
+  <div class="frame">
+    <div class="chrome">Agent Studio — Orchestrator-Side-Sheet, Rail eingeblendet</div>
     <div class="sheet">
       <aside class="rail">
         <span class="search">🔎 Kontexte filtern…</span>
@@ -57,10 +83,10 @@
         <div class="ctx"><span class="st unread"></span> Website<small>2</small></div>
         <div class="ctx"><span class="st park"></span> Agent Studio<small>410k</small></div>
         <h5>Tasks</h5>
-        <div class="ctx active"><span class="st run"></span> AGT-1917 Multichat<small>läuft</small></div>
-        <div class="ctx"><span class="st run"></span> WEB-3 Broken Links<small>läuft</small></div>
-        <div class="ctx"><span class="st unread"></span> AGT-1920 Runner-Fix<small>1</small></div>
-        <div class="ctx"><span class="st park"></span> ASS-324 Layout<small>geparkt</small></div>
+        <div class="ctx active"><span class="st run"></span> AGT-1917 Multichat<small>läuft · →</small></div>
+        <div class="ctx"><span class="st run"></span> WEB-3 Broken Links<small>läuft · →</small></div>
+        <div class="ctx"><span class="st unread"></span> AGT-1920 Runner-Fix<small>1 · →</small></div>
+        <div class="ctx"><span class="st park"></span> ASS-324 Layout<small>→</small></div>
         <div class="more">▸ 26 ältere (geparkt)</div>
       </aside>
       <section class="pane">
@@ -82,9 +108,10 @@
     </div>
   </div>
 
-  <p class="note"><b>Notizen:</b> ● = laufender Turn (zählt gegen den Aktiv-Prozess-Cap, Default 3–5),
-  grau = geparkt (nur Historie + Resume-Token, kostet nichts), blau = ungelesen. Token-Kosten pro Kontext
-  aus dem Session-Record. Task öffnen ⇒ Sheet wechselt automatisch auf dessen Kontext (Anheften friert ein).
-  Historie pro Kontext persistent unter <code style="all:unset;color:#9fd3cb">.metadata/orchestrator-sessions/</code>;
-  Task-Sessions archivieren mit ihrem Task. Details: multichat-orchestrator.md.</p>
+  <p class="note"><b>Notizen zur Rail:</b> ● = laufender Turn (Aktiv-Cap 3–5), grau = geparkt (kostet nichts),
+  blau = ungelesen. <b>Jede Zeile hat zwei Aktionen:</b> Klick auf den Namen = Chat wechseln; Klick auf „→" =
+  <b>in den Ort springen</b> (Task-Detail/Projekt öffnen — die Navigation zieht dann den Kontext ohnehin nach).
+  Die Rail ist reines Monitoring/Absprung für Parallelarbeit — nie ein Pflicht-Schritt. Historie pro Kontext
+  persistent unter <code style="all:unset;color:#9fd3cb">.metadata/orchestrator-sessions/</code>; Task-Sessions
+  archivieren mit ihrem Task. Details: multichat-orchestrator.md.</p>
 </div>

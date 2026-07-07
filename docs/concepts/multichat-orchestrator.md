@@ -56,20 +56,28 @@ persistent) vs. an **active process** (a running CLI turn, expensive).
 ## 4. UI
 
 Host stays the **orchestrator side sheet** (push layout contract unchanged).
-Two additions:
+Three principles (sharpened by operator feedback 2026-07-08):
 
-1. **Chat switcher rail** (left inside the sheet): all sessions grouped
-   Global / Projects / Tasks; each row = context label + badges
-   (● running turn, ◌ parked, unread count, token cost). Search/filter on
-   top; parked sessions collapse under "older".
-2. **Context header** pinned above the chat: exactly the merged AGT-1916
-   `OrchestratorContextHeaderComponent` (project · task + lane pill ·
-   live-run telemetry) — reused verbatim, as designed.
+1. **Context is always automatic.** It derives from where the user is
+   (task page → task context; project board → project context). There is
+   **no "create context" affordance anywhere** — sessions come into being
+   lazily on first open of a place. A pin toggle freezes the sheet on a
+   context; that is the only manual control.
+2. **The switcher rail is extremely optional.** Default state: collapsed —
+   the sheet simply *is* the chat of the current place, full width. A small
+   "☰ n aktiv" chip in the header expands the rail on demand (sessions
+   grouped Global / Projects / Tasks; badges ● running, ◌ parked, unread,
+   token cost). A user who never opens it loses nothing.
+3. **Rail rows go both ways.** Clicking the name switches the chat;
+   clicking the row's "→" **navigates the app to that place** (task detail
+   / project board) — the navigation then pulls the context along anyway.
+   The rail is monitoring + jump-off for parallel work, never a required
+   step.
 
-Navigation coupling: opening a task auto-switches the sheet to that task's
-context (creating the session lazily); a pin toggle freezes the sheet on a
-chosen context. Works unchanged inside the AGT-1915 split view (the sheet
-IS the right-hand pane there).
+**Context header** pinned above the chat: exactly the merged AGT-1916
+`OrchestratorContextHeaderComponent` (project · task + lane pill · live-run
+telemetry) — reused verbatim, as designed. Works unchanged inside the
+AGT-1915 split view (the sheet IS the right-hand pane there).
 
 ## 5. Implementation plan (phases)
 
