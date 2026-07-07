@@ -231,3 +231,23 @@ The pipeline, in priority order:
 
 Remote-host admin (§6.1) and task-server management (§6.2) are the
 follow-on product epics after the MVP is presentable.
+
+### 6.4 Placement in the existing admin system (operator feedback, 2026-07-08)
+
+The §6 screens are **not standalone pages or modals** — they slot into the
+existing administrative surface with its many tabs:
+
+- **Task Server** → a tab at **workspace level**.
+- **Remote Hosts** → a tab at **workspace level**, next to it.
+- **Add-Host wizard** → launched *from* the Remote Hosts tab (its only
+  entry point), rendered as the tab's detail flow.
+- **Enablement state**: remote features are gated — a workspace-level state
+  ("remote execution enabled") controls whether the Remote Hosts tab and
+  the per-project Execution card appear at all. Default off; flipping it on
+  is itself the first onboarding step. This keeps the local-only default
+  experience untouched.
+- **Prerequisite for building any of this**: the new chat
+  (`@coding-agent/chat` composer) must be adopted everywhere first — the
+  wizard's orchestrator panel and the multichat concept
+  ([`multichat-orchestrator.md`](multichat-orchestrator.md), Phase 0) hang
+  off the same component.

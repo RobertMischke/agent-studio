@@ -1,0 +1,90 @@
+<title>Multichat-Orchestrator — UX-Mockup</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161c26;--panel2:#1c2431;--line:#2a3446;--txt:#dbe4f0;--dim:#8494ab;
+    --accent:#3fb6a8;--accent2:#5a9cf8;--ok:#4ac26b;--warn:#d9a840;--note:#e8b34b;font-size:15px}
+  body{background:var(--bg);color:var(--txt);font:400 1rem/1.5 "Segoe UI",system-ui,sans-serif;margin:0;padding:2.5rem 1.5rem 5rem}
+  .wrap{max-width:1060px;margin:0 auto;display:flex;flex-direction:column;gap:1.2rem}
+  h1{font-size:1.6rem;font-weight:600;margin:0}
+  .lead{color:var(--dim);max-width:70ch;margin:0 0 1rem}
+  .frame{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .chrome{padding:.55rem .9rem;border-bottom:1px solid var(--line);background:var(--panel2);color:var(--dim);font-size:.8rem}
+  .sheet{display:grid;grid-template-columns:230px 1fr;min-height:520px}
+  @media(max-width:700px){.sheet{grid-template-columns:1fr}}
+  /* switcher rail */
+  .rail{border-right:1px solid var(--line);background:#121826;padding:.7rem .55rem;display:flex;flex-direction:column;gap:.35rem;font-size:.84rem}
+  .rail .search{background:#0d131d;border:1px solid #223048;border-radius:6px;padding:.3rem .55rem;color:var(--dim);font-size:.8rem}
+  .rail h5{margin:.5rem .3rem .1rem;font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:600}
+  .ctx{display:flex;align-items:center;gap:.45rem;padding:.34rem .5rem;border-radius:6px;color:var(--txt);cursor:default}
+  .ctx small{color:var(--dim);font-size:.72rem;margin-left:auto;font-variant-numeric:tabular-nums}
+  .ctx.active{background:rgba(63,182,168,.13);outline:1px solid #22564f}
+  .st{width:8px;height:8px;border-radius:50%;flex:none}
+  .st.run{background:var(--ok);box-shadow:0 0 5px var(--ok)}
+  .st.park{background:#3a4558}
+  .st.unread{background:var(--accent2)}
+  .more{color:var(--dim);padding:.3rem .5rem;font-size:.78rem}
+  /* chat pane */
+  .pane{display:flex;flex-direction:column}
+  .ctxhead{display:flex;align-items:center;gap:.6rem;padding:.55rem .9rem;border-bottom:1px solid var(--line);background:#18202e;font-size:.84rem;flex-wrap:wrap}
+  .crumb{color:var(--dim)} .crumb b{color:var(--txt);font-weight:600}
+  .pill{border-radius:99px;padding:.06rem .55rem;font-size:.72rem;font-weight:600}
+  .pill.lane{background:#31300f;color:#d9d26b}
+  .pill.live{background:#12332f;color:var(--accent);border:1px solid #1e4a44;font-variant-numeric:tabular-nums}
+  .pin{margin-left:auto;color:var(--dim);font-size:.78rem;border:1px solid var(--line);border-radius:6px;padding:.15rem .5rem}
+  .msgs{flex:1;padding:1rem;display:flex;flex-direction:column;gap:.7rem;font-size:.88rem}
+  .m{max-width:78%;border-radius:9px;padding:.55rem .75rem;background:#1a2333;color:#c6d4e8}
+  .m.user{align-self:flex-end;background:#233046}
+  .m .tool{display:block;font-size:.74rem;color:var(--accent);margin-top:.3rem}
+  .composer{margin:.8rem;border:1px solid #24405c;background:#121926;border-radius:9px;padding:.6rem .8rem;color:var(--dim);display:flex;gap:.6rem;align-items:center;font-size:.86rem}
+  .composer .send{margin-left:auto;background:var(--accent);color:#062521;border-radius:6px;padding:.2rem .7rem;font-weight:600;font-size:.8rem}
+  .note{color:var(--note);font-size:.86rem;max-width:78ch}
+  .note b{font-weight:600}
+</style>
+
+<div class="wrap">
+  <h1>Multichat-Orchestrator (AGT-1917)</h1>
+  <p class="lead">Das Orchestrator-Side-Sheet bekommt links eine <b>Chat-Switcher-Rail</b> (alle Kontexte,
+  parallel, umschaltbar) und oben den <b>Kontext-Header</b> (AGT-1916, wird unverändert wiederverwendet).
+  Rechts läuft der task-fokussierte Chat mit eigener Historie.</p>
+
+  <div class="frame">
+    <div class="chrome">Agent Studio — Orchestrator-Side-Sheet (push-layout, unverändert)</div>
+    <div class="sheet">
+      <aside class="rail">
+        <span class="search">🔎 Kontexte filtern…</span>
+        <h5>Global</h5>
+        <div class="ctx"><span class="st park"></span> Global<small>1,2M tok</small></div>
+        <h5>Projekte</h5>
+        <div class="ctx"><span class="st unread"></span> Website<small>2</small></div>
+        <div class="ctx"><span class="st park"></span> Agent Studio<small>410k</small></div>
+        <h5>Tasks</h5>
+        <div class="ctx active"><span class="st run"></span> AGT-1917 Multichat<small>läuft</small></div>
+        <div class="ctx"><span class="st run"></span> WEB-3 Broken Links<small>läuft</small></div>
+        <div class="ctx"><span class="st unread"></span> AGT-1920 Runner-Fix<small>1</small></div>
+        <div class="ctx"><span class="st park"></span> ASS-324 Layout<small>geparkt</small></div>
+        <div class="more">▸ 26 ältere (geparkt)</div>
+      </aside>
+      <section class="pane">
+        <div class="ctxhead">
+          <span class="crumb">Agent Studio · <b>AGT-1917</b> Multichat-Orchestrator</span>
+          <span class="pill lane">3-progress</span>
+          <span class="pill live">● opus-4.8 · 04:12</span>
+          <span class="pin">📌 anheften</span>
+        </div>
+        <div class="msgs">
+          <div class="m user">Wie ist der Stand? Fass mir die letzten Runs zu diesem Task zusammen.</div>
+          <div class="m">Zwei Runs bisher: Der erste scheiterte am Session-Limit, der zweite läuft seit 4 Minuten
+            und schreibt gerade das Konzept-Dokument.<span class="tool">▸ read: logs/cli-output.log · results/</span></div>
+          <div class="m user">Gut. Wenn er fertig ist, direkt in human-review schieben.</div>
+          <div class="m">Mache ich — ich beobachte den Run und melde mich hier in diesem Chat.</div>
+        </div>
+        <div class="composer">Nachricht an den Task-Orchestrator… <span class="send">Senden</span></div>
+      </section>
+    </div>
+  </div>
+
+  <p class="note"><b>Notizen:</b> ● = laufender Turn (zählt gegen den Aktiv-Prozess-Cap, Default 3–5),
+  grau = geparkt (nur Historie + Resume-Token, kostet nichts), blau = ungelesen. Token-Kosten pro Kontext
+  aus dem Session-Record. Task öffnen ⇒ Sheet wechselt automatisch auf dessen Kontext (Anheften friert ein).
+  Historie pro Kontext persistent unter <code style="all:unset;color:#9fd3cb">.metadata/orchestrator-sessions/</code>;
+  Task-Sessions archivieren mit ihrem Task. Details: multichat-orchestrator.md.</p>
+</div>
