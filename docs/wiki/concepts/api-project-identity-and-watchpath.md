@@ -58,7 +58,7 @@ disk layout to every client:
 1. Identify projects across the API surface by `shortCode` or `projectId`. The
    server resolves the `watchPath` internally and never returns the raw path in
    a response (or returns it only as an opaque handle).
-2. `/api/tasks` is the only public route. **Done** (ADR-0057): the `/api/jobs`
+2. `/api/tasks` is the only public route. **Done** (ADR-0058): the `/api/jobs`
    alias is removed outright; no redirect shim was needed (no operator scripts
    depended on it).
 

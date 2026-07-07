@@ -1,7 +1,9 @@
 # Remote-ready execution — kickoff (2026-07)
 
-**Status.** Kickoff / working document. This is where the "remote-ready" theme
-is started and tracked. It builds directly on the 2026-05 platform trilogy
+**Status.** **Committed — remote execution is a major goal** since 2026-07-07
+(**ADR-0059**, [adr-archive.md](../architecture/decisions/adr-archive.md)).
+This document is the plan of record and the working log for the theme.
+It builds directly on the 2026-05 platform trilogy
 ([`wsl2-vs-windows-decision-2026-05.md`](./wsl2-vs-windows-decision-2026-05.md),
 [`cli-orchestration-survey-2026-05.md`](./cli-orchestration-survey-2026-05.md),
 [`path-forward-plan-2026-05.md`](./path-forward-plan-2026-05.md)) and on the two
@@ -183,10 +185,12 @@ current `main`.
 ## 5. Phased plan
 
 **Phase 0 — SSH test environment (operator, in progress).**
-Provision a Linux host (any modern distro; needs: dotnet 10 SDK or runtime,
-node 22 + npm, git, `claude`/`codex` CLIs, Playwright deps
-`npx playwright install --with-deps`). Operator provides SSH access; agents
-can then script against it.
+Provision a Linux host (decision 2026-07-07: **Ubuntu LTS**; hosting via
+Hetzner — cloud VM vs. Server-Börse dedicated box still open, see kickoff
+discussion). Needs: dotnet 10 SDK or runtime, node 22 + npm, git,
+`claude`/`codex` CLIs, Playwright deps (`npx playwright install --with-deps`).
+Operator provides SSH access (key-auth, one sudo-capable user); agents can
+then script against it. No inbound ports beyond SSH until Phase 2 auth lands.
 
 **Phase 1 — prove the pieces on Linux (no architecture change).**
 1. CI: add a `dotnet build + test` job on `ubuntu-latest` (cheapest first

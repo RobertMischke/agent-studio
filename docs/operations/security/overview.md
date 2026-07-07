@@ -1,14 +1,24 @@
 # Security overview
 
+> **Status note (2026-07-07).** ADR-0059 promotes **remote execution** (Linux
+> runner hosts + a central task-server URL) from explicit non-goal to a major
+> goal. The "local-only" situation below still describes the **current,
+> deployed** state and stays accurate until the remote phases land — but the
+> product-thesis framing is superseded, and this document must be rewritten
+> with a real threat model (auth on the central URL, SSH-provisioned runner
+> hosts, per-runner identities) **before** any port is exposed beyond SSH.
+> Plan of record: [remote-ready-kickoff-2026-07.md](../../research/remote-ready-kickoff-2026-07.md)
+> (phase 2 gates on it, see D4).
+
 ## Situation
 
-Agent Software Studio is a **local-only desktop app**. The backend binds to `localhost:5030`, the frontend to `localhost:4010`, and CORS allows only those origins. There is no public network surface.
+Agent Software Studio is a **local-only desktop app** *(current state; see status note above)*. The backend binds to `localhost:5030`, the frontend to `localhost:4010`, and CORS allows only those origins. There is no public network surface.
 
 The app drives external CLI agents (Claude Code, Codex, Copilot, Gemini) as the logged-in user. Anything the user can do at the shell, the agents can do too; the trust boundary is the user's machine, not the app.
 
 ## Why it looks like this
 
-The product thesis is "a workbench that keeps one project moving, scaled across many projects" (see [ROADMAP.md](../../../ROADMAP.md)). Multi-tenant deployment, remote orchestration, and team-shared infrastructure are explicit non-goals. Treating the app as single-user-on-single-machine collapses most threat-model categories to "the user's account is already root for everything that matters here".
+The product thesis is "a workbench that keeps one project moving, scaled across many projects" (see [ROADMAP.md](../../../ROADMAP.md)). Multi-tenant deployment and team-shared infrastructure are explicit non-goals. Remote orchestration **was** on that list until 2026-07 — ADR-0059 reverses it; single-user stays, single-machine goes. Treating the app as single-user-on-single-machine collapses most threat-model categories to "the user's account is already root for everything that matters here"; that collapse no longer holds once a central URL exists, which is why the remote plan makes authentication a phase-2 gate.
 
 ## Open considerations
 
