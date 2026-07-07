@@ -133,7 +133,7 @@ API break.
 
 ### Reply
 
-The user's reply goes through the existing `POST /api/jobs/{jobId}/continue`
+The user's reply goes through the existing `POST /api/tasks/{jobId}/continue` (route renamed from `/api/jobs/...` per ADR-0058)
 endpoint with `mode: "steer"`. No new write surface. The banner mounts a
 small textarea + "Reply" button that calls the same `JobService.continueJob`
 the chat composer already calls. The orchestrator's [chat-log] write of the
