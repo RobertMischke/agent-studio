@@ -79,6 +79,7 @@ public class TaskMutationService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
+        var previousModel = ModelMetadataRegistry.NormalizeForCli(info.CliType, info.Model);
         var normalizedModel = ModelMetadataRegistry.NormalizeForCli(info.CliType, model);
         TaskJsonFile.UpdateField(info.FolderPath, "model", normalizedModel ?? "", _logger);
         TaskJsonFile.UpdateField(
@@ -86,7 +87,50 @@ public class TaskMutationService
             "thinkingLevel",
             CliThinkingLevels.Normalize(info.CliType, normalizedModel, info.ThinkingLevel) ?? "",
             _logger);
+        AppendModelChangeMarker(info, previousModel, normalizedModel);
         return Updated();
+    }
+
+    /// <summary>
+    /// Record an operator model switch as a <c>[taskboard] Model changed</c>
+    /// line on the <c>[system]</c> stream of <c>logs/cli-output.log</c> so the
+    /// conversation projection can surface it as a "Model changed: X → Y"
+    /// notice in the chat. Only writes when the normalized model actually
+    /// changed and the job already has a conversation log to annotate — a
+    /// pre-run config tweak on a never-run job has no chat to mark. Mirrors the
+    /// text line format the CLI-output parser consumes
+    /// (<c>[HH:mm:ss.fff] [system] …</c>); failures are swallowed so a log
+    /// write can never fail the model PUT.
+    /// </summary>
+    private void AppendModelChangeMarker(TaskInfo info, string? previousModel, string? newModel)
+    {
+        // Gate on the CANONICAL ids: NormalizeForCli trims but does not
+        // canonicalize aliases (e.g. "claude-opus-4.8" vs "claude-opus-4-8"),
+        // so comparing the raw spellings would fire a phantom "Model changed"
+        // notice for what is the same model. The human spelling is still what
+        // gets displayed in the line.
+        if (string.Equals(
+                ModelMetadataRegistry.NormalizeId(previousModel),
+                ModelMetadataRegistry.NormalizeId(newModel),
+                StringComparison.OrdinalIgnoreCase)) return;
+
+        var from = string.IsNullOrWhiteSpace(previousModel) ? "default" : previousModel;
+        var to = string.IsNullOrWhiteSpace(newModel) ? "default" : newModel;
+
+        try
+        {
+            var logPath = TaskPaths.CliOutputLog(info.FolderPath);
+            // Only annotate an existing conversation; skip when the job never ran.
+            if (!File.Exists(logPath) || new FileInfo(logPath).Length == 0) return;
+
+            var ts = DateTime.UtcNow.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
+            var line = $"[{ts}] [system] [taskboard] Model changed from={from} to={to}";
+            File.AppendAllText(logPath, Environment.NewLine + line + Environment.NewLine, Encoding.UTF8);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to record model-change marker in CLI log for {JobId}", info.Id);
+        }
     }
 
     public bool SetJobThinkingLevel(string jobId, string? thinkingLevel, string? watchPath = null)

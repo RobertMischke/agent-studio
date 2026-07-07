@@ -208,31 +208,65 @@
               </ul>
             </section>
 
-            <section class="psd__usage-mock" data-testid="project-steering-docs-tool-use-mock">
-              <header>
-                <h4 class="psd__sub">Tool-use read analytics</h4>
-                <span class="psd__mock-pill">Mockup</span>
-              </header>
-              <p>
-                Future view: count how often CLI tool-use reads consumed each agent doc,
-                by run, task, CLI, and recency. The numbers below are placeholders.
-              </p>
-              <div class="psd__usage-table">
-                <div class="psd__usage-head">
-                  <span>Document</span>
-                  <span>Reads</span>
-                  <span>Last read</span>
-                  <span>By CLI</span>
-                </div>
-                @for (row of toolUseMockRows(); track row.label) {
-                  <div class="psd__usage-row">
-                    <code>{{ row.label }}</code>
-                    <strong>{{ row.reads }}</strong>
-                    <span>{{ row.lastRead }}</span>
-                    <span>{{ row.byCli }}</span>
+            <section class="psd__usage-mock" data-testid="project-steering-docs-tool-use">
+              @if (readAnalytics(); as ra) {
+                <header>
+                  <h4 class="psd__sub">Tool-use read analytics</h4>
+                  @if (ra.hasData) {
+                    <span class="psd__mock-pill psd__mock-pill--live"
+                          data-testid="project-steering-docs-tool-use-live">
+                      {{ ra.totalReads }} read{{ ra.totalReads === 1 ? '' : 's' }}
+                    </span>
+                  } @else {
+                    <span class="psd__mock-pill" data-testid="project-steering-docs-tool-use-nodata">No data yet</span>
+                  }
+                </header>
+                @if (ra.hasData) {
+                  <p>
+                    How often CLI tool-use reads consumed each agent doc across
+                    {{ ra.taskCount }} task{{ ra.taskCount === 1 ? '' : 's' }}.
+                    "Recent" counts the last {{ ra.windowDays }} days.
+                  </p>
+                  @if (ra.byCli.length > 0) {
+                    <div class="psd__cli-chips" data-testid="project-steering-docs-tool-use-by-cli">
+                      @for (c of ra.byCli; track c.cli) {
+                        <span class="psd__cli-chip">{{ cliLabel(c.cli) }} {{ c.reads }}</span>
+                      }
+                    </div>
+                  }
+                  <div class="psd__usage-table">
+                    <div class="psd__usage-head">
+                      <span>Document</span>
+                      <span>Reads</span>
+                      <span>Recent</span>
+                      <span>Last read</span>
+                      <span>By CLI</span>
+                    </div>
+                    @for (row of toolUseRows(); track row.relPath) {
+                      <div class="psd__usage-row"
+                           [attr.data-testid]="'project-steering-docs-tool-use-row-' + row.relPath">
+                        <code>{{ row.relPath }}</code>
+                        <strong>{{ row.reads }}</strong>
+                        <span>{{ row.recentReads }}</span>
+                        <span>{{ row.lastRead }}</span>
+                        <span>{{ row.byCli }}</span>
+                      </div>
+                    }
                   </div>
+                } @else {
+                  <p class="studio-empty" data-testid="project-steering-docs-tool-use-empty">
+                    No indexed tool-use reads for these agent docs yet. Counts appear here once a
+                    Claude, Codex, or Gemini run reads one of the files above.
+                  </p>
                 }
-              </div>
+              } @else if (readAnalyticsError(); as err) {
+                <header><h4 class="psd__sub">Tool-use read analytics</h4></header>
+                <p class="studio-empty studio-empty--error"
+                   data-testid="project-steering-docs-tool-use-error">{{ err }}</p>
+              } @else {
+                <header><h4 class="psd__sub">Tool-use read analytics</h4></header>
+                <p class="studio-empty">Loading read analytics...</p>
+              }
             </section>
 
             <section class="psd__warning-panel">

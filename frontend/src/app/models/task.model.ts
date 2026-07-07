@@ -793,6 +793,35 @@ export interface WatchPathEntry {
   rootPath: string;
 }
 
+/** Mirrors backend `ProjectUrlStartRule`: how to build/start a URL's server. */
+export interface ProjectUrlStartRule {
+  command: string;
+  cwd: string | null;
+  port: number | null;
+  /** `manual` | `package-json` | `readme`. */
+  source: string;
+}
+
+/** Mirrors backend `ProjectUrlRecord`: one watchable URL on a project. */
+export interface RegistryProjectUrl {
+  id: string;
+  label: string;
+  url: string;
+  sortOrder: number;
+  startRule: ProjectUrlStartRule | null;
+}
+
+/** Mirrors backend `ProjectUrlSuggestion` from `GET .../url-suggestions`. */
+export interface ProjectUrlSuggestion {
+  label: string;
+  url: string | null;
+  command: string;
+  cwd: string | null;
+  port: number | null;
+  /** `package-json` | `angular-json` | `readme`. */
+  source: string;
+}
+
 /**
  * F45a / ADR-0042 — flat project summary returned by `GET /api/projects`
  * and embedded under `WorkspaceListItem.projects`. Mirrors backend
@@ -808,6 +837,8 @@ export interface RegistryProjectSummary {
   modelDefault: string | null;
   sortOrder: number;
   storageLocation: string;
+  /** Configured watchable URLs, ordered; empty for most projects. */
+  urls: RegistryProjectUrl[];
   archived: boolean;
   createdAt: string;
 }

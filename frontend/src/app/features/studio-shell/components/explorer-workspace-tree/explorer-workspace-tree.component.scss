@@ -2,6 +2,26 @@
   display: block;
 }
 
+/* Project URL rows carry a small running/offline status dot in place of the
+   count badge. Grey by default (unknown), green when the probe reaches the
+   server, dim grey when it does not. */
+.studio-url-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--studio-fg-muted);
+}
+
+.studio-url-status-dot--running {
+  background: var(--studio-accent-success);
+}
+
+.studio-url-status-dot--offline {
+  background: var(--studio-fg-muted);
+  opacity: 0.6;
+}
+
 /* Workspace folder header sits between the panel section header and the
    project rows; a small top gap separates one workspace group from the
    next so the two-level hierarchy reads at a glance. */

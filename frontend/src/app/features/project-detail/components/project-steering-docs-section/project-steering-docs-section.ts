@@ -4,6 +4,8 @@ import { SteeringDocsService } from '../../../../services/steering-docs.service'
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import {
+  AgentDocsReadAnalytics,
+  AgentDocsReadFile,
   SteeringDocsOverview,
   SteeringDocsSource,
   SteeringDocsWarning,
@@ -56,9 +58,10 @@ interface AgentDocsTreeRow {
   hasChildren: boolean;
 }
 
-interface ToolUseMockRow {
-  label: string;
+interface ToolUseRow {
+  relPath: string;
   reads: number;
+  recentReads: number;
   lastRead: string;
   byCli: string;
 }
@@ -69,7 +72,6 @@ const ACTIONS: SteeringAction[] = [
   { slug: 'analyze-failures', label: 'Analyze Recurring Job Failures', description: 'Spawn a task that scans recent blocked / needs-input outcomes and proposes steering-doc changes.' },
   { slug: 'propose-readme', label: 'Propose README Update', description: 'Spawn a task that drafts a README change for review, evidence-first.' },
   { slug: 'propose-agents', label: 'Propose AGENTS Update', description: 'Spawn a task that drafts an AGENTS.md change for review, evidence-first.' },
-  { slug: 'plan-tool-use-analytics', label: 'Plan Tool-Use Analytics', description: 'Queue the real feature behind the mockup: count which CLI tool-use reads consumed each agent doc.' },
   { slug: 'create-followup', label: 'Create Follow-up Task', description: 'Queue a generic follow-up tied to the steering surface for later scoping.' },
 ];
 
@@ -92,6 +94,9 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
   readonly overview = signal<SteeringDocsOverview | null>(null);
   readonly loading = signal<boolean>(false);
   readonly error = signal<string | null>(null);
+
+  readonly readAnalytics = signal<AgentDocsReadAnalytics | null>(null);
+  readonly readAnalyticsError = signal<string | null>(null);
 
   readonly openedRel = signal<string | null>(null);
   readonly fileContent = signal<{ relPath: string; content: string } | null>(null);
@@ -134,14 +139,19 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
     return buckets;
   });
 
-  readonly toolUseMockRows = computed<ToolUseMockRow[]>(() => {
-    const sources = this.overview()?.sources ?? [];
-    return sources.slice(0, 4).map((source, index) => ({
-      label: source.relPath,
-      reads: [18, 11, 7, 3][index] ?? 1,
-      lastRead: ['2h ago', 'yesterday', '3d ago', 'last week'][index] ?? 'last week',
-      byCli: (source.appliesToClis ?? []).map(cli => this.cliLabel(cli)).join(', ') || 'Unknown',
-    }));
+  readonly toolUseRows = computed<ToolUseRow[]>(() => {
+    const files = this.readAnalytics()?.files ?? [];
+    return files
+      .filter(f => f.reads > 0)
+      .map((f: AgentDocsReadFile) => ({
+        relPath: f.relPath,
+        reads: f.reads,
+        recentReads: f.recentReads,
+        lastRead: this.formatRelative(f.lastReadAt),
+        byCli: (f.byCli ?? [])
+          .map(c => `${this.cliLabel(c.cli)} ${c.reads}`)
+          .join(', ') || '-',
+      }));
   });
 
   private timer?: VisibleIntervalHandle;
@@ -154,6 +164,8 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
         this.openedRel.set(null);
         this.fileContent.set(null);
         this.expanded.set(new Set());
+        this.readAnalytics.set(null);
+        this.readAnalyticsError.set(null);
       }
     });
   }
@@ -186,6 +198,22 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
       error: (err) => {
         this.error.set(this.describe(err, 'Steering docs API call failed.'));
         this.loading.set(false);
+      },
+    });
+    this.loadReadAnalytics();
+  }
+
+  private loadReadAnalytics(): void {
+    const project = this.projectName();
+    if (!project) return;
+    this.svc.getReadAnalytics(project).subscribe({
+      next: (analytics) => {
+        this.readAnalytics.set(analytics);
+        this.readAnalyticsError.set(null);
+      },
+      error: (err) => {
+        this.readAnalytics.set(null);
+        this.readAnalyticsError.set(this.describe(err, 'Could not load read analytics.'));
       },
     });
   }
@@ -347,8 +375,27 @@ ${warnings || '_(no warnings at queue time)_'}
       case 'claude': return 'Claude Code';
       case 'codex': return 'Codex';
       case 'gemini': return 'Gemini';
+      case 'copilot': return 'Copilot';
       default: return cli || 'Unknown';
     }
+  }
+
+  formatRelative(iso: string | null | undefined): string {
+    if (!iso) return 'never';
+    const then = new Date(iso).getTime();
+    if (Number.isNaN(then)) return iso;
+    const diffMs = Date.now() - then;
+    if (diffMs < 0) return 'just now';
+    const mins = Math.floor(diffMs / 60_000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5) return `${weeks}w ago`;
+    return new Date(iso).toLocaleDateString();
   }
 
   cliList(clis: readonly string[] | null | undefined): string {

@@ -1,0 +1,43 @@
+import { Injectable, inject } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import type { Observable } from 'rxjs';
+import type { GitFileChange, GitProjectInventory } from '../features/git';
+
+/** Diff payload envelope shared with the per-task commit-diff endpoints. */
+export interface ProjectCommitDiff {
+  diff: string;
+  hasDiff: boolean;
+  emptyReason: string | null;
+}
+
+/**
+ * HTTP wrapper for the Project Hub Git View endpoints. Thin and stateless:
+ * the panel owns its own signals and calls these for the branch/worktree
+ * inventory and for a browsed commit's files + diff. All three endpoints are
+ * read-only and cached server-side (~3 s for the inventory).
+ */
+@Injectable({ providedIn: 'root' })
+export class ProjectGitService {
+  private readonly http = inject(HttpClient);
+
+  /** Branch / worktree / recent-history inventory for one project. */
+  getInventory(project: string): Observable<GitProjectInventory> {
+    return this.http.get<GitProjectInventory>('/api/git/inventory', {
+      params: new HttpParams().set('project', project),
+    });
+  }
+
+  /** Changed-file list for a commit browsed in the Git View. */
+  getCommitFiles(project: string, sha: string): Observable<{ sha: string; files: GitFileChange[] }> {
+    return this.http.get<{ sha: string; files: GitFileChange[] }>('/api/git/project-commit/files', {
+      params: new HttpParams().set('project', project).set('sha', sha),
+    });
+  }
+
+  /** Unified diff for a browsed commit, optionally scoped to one path. */
+  getCommitDiff(project: string, sha: string, path?: string | null): Observable<ProjectCommitDiff> {
+    let params = new HttpParams().set('project', project).set('sha', sha);
+    if (path) params = params.set('path', path);
+    return this.http.get<ProjectCommitDiff>('/api/git/project-commit/diff', { params });
+  }
+}

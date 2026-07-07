@@ -27,6 +27,8 @@ import type {
   PromoteToCodingResponse,
   CreateRegistryProjectRequest,
   RegistryProjectSummary,
+  ProjectUrlStartRule,
+  ProjectUrlSuggestion,
 } from '../models/task.model';
 import { TaskState } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
@@ -38,12 +40,6 @@ import type {
   OrchestratorChatResponse,
   OrchestratorChatTurn,
 } from '../features/orchestrator';
-import type {
-  ProjectChatScrollResponse,
-  ProjectChatSearchResponse,
-  ProjectChatTurnResponse,
-  ProjectChatStatsResponse,
-} from '@coding-agent/chat/history';
 import type {
   ProjectTokenUsageSummary,
   ProjectTokenHeatmap,
@@ -571,6 +567,38 @@ export class TaskService {
   /** F46 — create a registry project. Backend chooses projects/PROJ-NNN; no path is accepted from the UI. */
   createRegistryProject(body: CreateRegistryProjectRequest) {
     return this.http.post<RegistryProjectSummary>(`${this.baseUrl}/projects`, body);
+  }
+
+  // ----- Project URLs (per-project watchable dev-server / preview URLs) -----
+
+  /** Detected URL suggestions from the project's repo (package.json / angular.json / README). */
+  getProjectUrlSuggestions(projId: string) {
+    return this.http.get<ProjectUrlSuggestion[]>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/url-suggestions`);
+  }
+
+  /** Add a URL to the project. Returns the updated project record. */
+  addProjectUrl(projId: string, body: { label: string; url: string; startRule?: ProjectUrlStartRule | null }) {
+    return this.http.post<RegistryProjectSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls`, body);
+  }
+
+  /** Update an existing URL (label / url / start rule). */
+  updateProjectUrl(projId: string, urlId: string, body: { label: string; url: string; startRule?: ProjectUrlStartRule | null }) {
+    return this.http.put<RegistryProjectSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}`, body);
+  }
+
+  /** Remove a URL by id. Returns the updated project record. */
+  removeProjectUrl(projId: string, urlId: string) {
+    return this.http.delete<RegistryProjectSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}`);
+  }
+
+  /** Build &amp; start (or restart) the dev server behind a URL's start rule. */
+  startProjectUrl(projId: string, urlId: string) {
+    return this.http.post<{ started: boolean; urlId: string }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/start`, {});
   }
 
   /**
@@ -1845,61 +1873,6 @@ export class TaskService {
     return this.http.post<{ fileName: string; relativePath: string; url: string }>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat/attachments`,
       form,
-    );
-  }
-
-  /**
-   * Slice D scroll cursor: returns up to `limit` turns whose `ts` is
-   * strictly before / strictly after the anchor. Cursor is the ISO
-   * timestamp of the boundary turn already in the list. With no anchor
-   * it returns the most recent N (reverse-chronological), which is
-   * what the FE wants for the initial load.
-   */
-  scrollProjectChat(
-    projectName: string,
-    opts: { before?: string; after?: string; limit?: number },
-  ) {
-    let params = new HttpParams();
-    if (opts.before) params = params.set('before', opts.before);
-    if (opts.after) params = params.set('after', opts.after);
-    if (opts.limit != null) params = params.set('limit', String(opts.limit));
-    return this.http.get<ProjectChatScrollResponse>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/scroll`,
-      { params },
-    );
-  }
-
-  /**
-   * BM25-ranked FTS5 search over the per-project chat history. Returns
-   * `<b>...</b>`-marked snippets that are HTML-encoded except for the
-   * marker tags; the caller renders them as `[innerHTML]` after
-   * mapping the markers to `<mark>`.
-   */
-  searchProjectChat(projectName: string, query: string, limit = 20) {
-    const params = new HttpParams().set('q', query).set('limit', String(limit));
-    return this.http.get<ProjectChatSearchResponse>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/search`,
-      { params },
-    );
-  }
-
-  /**
-   * Per-project chat stats: total message count, oldest / newest ts.
-   * Drives the step-load panel's "viewing N of M, going back to …" line.
-   */
-  getProjectChatStats(projectName: string) {
-    return this.http.get<ProjectChatStatsResponse>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/stats`,
-    );
-  }
-
-  /**
-   * Fetch a single chat turn's full body + frontmatter — used after a
-   * search-result click to scroll the live list to that turn.
-   */
-  getProjectChatTurn(projectName: string, turnId: string) {
-    return this.http.get<ProjectChatTurnResponse>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/turn/${encodeURIComponent(turnId)}`,
     );
   }
 

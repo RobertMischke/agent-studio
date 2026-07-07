@@ -256,4 +256,170 @@ public class ProjectRegistryTests : IDisposable
         Assert.Equal(p.Id, reg.FindByIdOrDisplayName("runbook")?.Id);
         Assert.Null(reg.FindByIdOrDisplayName("does-not-exist"));
     }
+
+    // ------------------------------------------------------------------
+    // Project URLs mutation tests
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void AddUrl_AppendsWithAllocatedIdAndSortOrder()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        Assert.Empty(p.Urls);
+
+        var afterFirst = reg.AddUrl(p.Id, "Dev frontend", "http://localhost:4010");
+        var afterSecond = reg.AddUrl(p.Id, "Stable frontend", "http://localhost:4011");
+
+        Assert.Equal(2, afterSecond.Urls.Count);
+        var first = afterSecond.Urls[0];
+        var second = afterSecond.Urls[1];
+        Assert.Equal("url-1", first.Id);
+        Assert.Equal("url-2", second.Id);
+        Assert.Equal("Dev frontend", first.Label);
+        Assert.Equal("http://localhost:4010", first.Url);
+        Assert.Equal(0, first.SortOrder);
+        Assert.Equal(1, second.SortOrder);
+        Assert.Null(first.StartRule);
+    }
+
+    [Fact]
+    public void AddUrl_WithStartRule_NormalisesAndKeepsIt()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+
+        var updated = reg.AddUrl(p.Id, "Website", "http://localhost:4202",
+            new ProjectUrlStartRule { Command = "  npm run website  ", Port = 4202, Source = "package-json" });
+
+        var rule = updated.Urls.Single().StartRule;
+        Assert.NotNull(rule);
+        Assert.Equal("npm run website", rule!.Command); // trimmed
+        Assert.Equal(4202, rule.Port);
+        Assert.Equal("package-json", rule.Source);
+    }
+
+    [Fact]
+    public void AddUrl_EmptyCommandStartRule_BecomesNull()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+
+        var updated = reg.AddUrl(p.Id, "Static", "http://localhost:5000",
+            new ProjectUrlStartRule { Command = "   ", Source = "manual" });
+
+        Assert.Null(updated.Urls.Single().StartRule); // a rule with no command is no rule
+    }
+
+    [Fact]
+    public void AddUrl_ValidatesLabelAndUrl()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+
+        Assert.Throws<ArgumentException>(() => reg.AddUrl(p.Id, "  ", "http://localhost:4010")); // blank label
+        Assert.Throws<ArgumentException>(() => reg.AddUrl(p.Id, "X", ""));                        // blank url
+        Assert.Throws<ArgumentException>(() => reg.AddUrl(p.Id, "X", "not-a-url"));               // not absolute
+        Assert.Throws<ArgumentException>(() => reg.AddUrl(p.Id, "X", "ftp://host/x"));            // wrong scheme
+    }
+
+    [Fact]
+    public void AddUrl_UnknownProject_Throws()
+    {
+        var reg = Build();
+        Assert.Throws<KeyNotFoundException>(() => reg.AddUrl("PROJ-999", "X", "http://localhost:1"));
+    }
+
+    [Fact]
+    public void UpdateUrl_ChangesFieldsKeepsIdAndSortOrder()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        reg.AddUrl(p.Id, "First", "http://localhost:4010");
+        var withSecond = reg.AddUrl(p.Id, "Second", "http://localhost:4011");
+        var secondId = withSecond.Urls[1].Id;
+
+        var updated = reg.UpdateUrl(p.Id, secondId, "Renamed", "http://localhost:4999",
+            new ProjectUrlStartRule { Command = "npm start" });
+
+        var row = updated.Urls.Single(u => u.Id == secondId);
+        Assert.Equal("Renamed", row.Label);
+        Assert.Equal("http://localhost:4999", row.Url);
+        Assert.Equal(1, row.SortOrder); // preserved
+        Assert.Equal("npm start", row.StartRule!.Command);
+    }
+
+    [Fact]
+    public void UpdateUrl_UnknownUrlId_Throws()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        reg.AddUrl(p.Id, "First", "http://localhost:4010");
+        Assert.Throws<KeyNotFoundException>(() =>
+            reg.UpdateUrl(p.Id, "url-999", "X", "http://localhost:1", null));
+    }
+
+    [Fact]
+    public void RemoveUrl_DropsRowAndLeavesOthers()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        reg.AddUrl(p.Id, "First", "http://localhost:4010");
+        var withSecond = reg.AddUrl(p.Id, "Second", "http://localhost:4011");
+        var firstId = withSecond.Urls[0].Id;
+
+        var updated = reg.RemoveUrl(p.Id, firstId);
+
+        Assert.Single(updated.Urls);
+        Assert.Equal("Second", updated.Urls[0].Label);
+        Assert.Throws<KeyNotFoundException>(() => reg.RemoveUrl(p.Id, "url-999"));
+    }
+
+    [Fact]
+    public void ReorderUrls_ReassignsSortOrderFromSequence()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        reg.AddUrl(p.Id, "A", "http://localhost:4010");
+        reg.AddUrl(p.Id, "B", "http://localhost:4011");
+        var withThird = reg.AddUrl(p.Id, "C", "http://localhost:4012");
+        var ids = withThird.Urls.Select(u => u.Id).ToList(); // [url-1, url-2, url-3]
+
+        var reordered = reg.ReorderUrls(p.Id, [ids[2], ids[0], ids[1]]);
+
+        // New order by SortOrder: C, A, B.
+        var ordered = reordered.Urls.OrderBy(u => u.SortOrder).Select(u => u.Label).ToList();
+        Assert.Equal(["C", "A", "B"], ordered);
+    }
+
+    [Fact]
+    public void ReorderUrls_RejectsNonPermutation()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        reg.AddUrl(p.Id, "A", "http://localhost:4010");
+        var withB = reg.AddUrl(p.Id, "B", "http://localhost:4011");
+        var ids = withB.Urls.Select(u => u.Id).ToList();
+
+        Assert.Throws<ArgumentException>(() => reg.ReorderUrls(p.Id, [ids[0]]));            // missing one
+        Assert.Throws<ArgumentException>(() => reg.ReorderUrls(p.Id, [ids[0], ids[0]]));    // duplicate
+        Assert.Throws<ArgumentException>(() => reg.ReorderUrls(p.Id, [ids[0], ids[1], "url-9"])); // unknown
+    }
+
+    [Fact]
+    public void Urls_RoundTrip_ThroughFreshInstance()
+    {
+        var reg = Build();
+        var p = reg.EnsureProjectForStorage(Path.Combine(_root, "p1"), "Demo", DefaultWorkspace.Id);
+        reg.AddUrl(p.Id, "Dev", "http://localhost:4010",
+            new ProjectUrlStartRule { Command = "npm run dev", Port = 4010, Source = "package-json" });
+
+        var reloaded = Build();
+        var reloadedProject = reloaded.FindById(p.Id)!;
+        Assert.Single(reloadedProject.Urls);
+        var url = reloadedProject.Urls[0];
+        Assert.Equal("Dev", url.Label);
+        Assert.Equal("npm run dev", url.StartRule!.Command);
+        Assert.Equal(4010, url.StartRule.Port);
+    }
 }

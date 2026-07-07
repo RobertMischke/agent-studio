@@ -23,6 +23,7 @@ function project(displayName: string, workspaceId: string, storage: string): Reg
     modelDefault: null,
     sortOrder: 0,
     storageLocation: storage,
+    urls: [],
     archived: false,
     createdAt: '2026-01-01T00:00:00Z',
   };

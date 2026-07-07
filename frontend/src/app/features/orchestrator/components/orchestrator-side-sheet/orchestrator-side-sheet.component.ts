@@ -10,7 +10,6 @@ import {
   output,
   signal,
   untracked,
-  viewChild,
 } from '@angular/core';
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
@@ -20,7 +19,6 @@ import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
 import { buildChatNavigationContext } from '../../../../features/orchestrator';
 import { ChatComponent } from '@coding-agent/chat/composer';
 import { ChatEvent, ChatMessage, ChatSubmitEvent, ChatToolbarItem } from '@coding-agent/chat/core';
-import { ProjectChatListComponent } from '@coding-agent/chat/history';
 
 import { TooltipDirective } from '@coding-agent/chat/shared';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
@@ -46,7 +44,6 @@ import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-st
   standalone: true,
   imports: [
     ChatComponent,
-    ProjectChatListComponent,
     TooltipDirective,
     SidesheetComponent
   ],
@@ -132,26 +129,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly contextDismissed = signal(false);
   private readonly lastSentContextSignature = signal<string | null>(null);
   private lastSentProjectForSignature: string | null = null;
-
-  /**
-   * Slice D virtualised chat list. Off by default so the existing
-   * non-virtualised surface (and its Playwright coverage) stays as-is
-   * while the new endpoints + index settle. The flag is read once at
-   * construction; reload to flip it.
-   */
-  readonly virtualChatEnabled = signal<boolean>(this.readVirtualFlag());
-
-  private readonly projectChatList = viewChild<ProjectChatListComponent>('projectChatList');
-
-  /** Read the `?virtualChat=1` URL flag once at construction. */
-  private readVirtualFlag(): boolean {
-    if (typeof window === 'undefined') return false;
-    try {
-      return new URLSearchParams(window.location.search).get('virtualChat') === '1';
-    } catch {
-      return false;
-    }
-  }
 
   /**
    * Searchable project combobox state. The plain list-style picker did
@@ -822,11 +799,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
             for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
           }
         });
-        // Slice D virtualised list: pull the new turn(s) from disk via
-        // /scroll. Cheap (one ranged query) and keeps the windowed
-        // renderer in sync without us having to mirror the OrchestratorChat
-        // append logic on the client side.
-        this.projectChatList()?.resetAndLoad();
       },
       error: (err) => {
         this.sending.set(false);

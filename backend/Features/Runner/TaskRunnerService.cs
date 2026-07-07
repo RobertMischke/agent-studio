@@ -62,6 +62,11 @@ public class TaskRunnerService : BackgroundService
     // edit the gitignored appsettings.Local.json WatchPaths entry (ASS -
     // "Agent Studio" mode-toggle 404, 2026-07-05).
     private readonly AgentStudio.Registry.ProjectRegistry? _projectRegistry;
+    // AGT-1812: two-tier orchestrator resolver (project -> workspace default),
+    // handed to each ProjectRunner so its model-override reads pick up a
+    // workspace default. Optional: null when a test fixture builds the service
+    // directly, in which case runners fall back to the project-only value.
+    private readonly AgentStudio.Registry.OrchestratorDefaultsProvider? _orchestratorDefaults;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -115,7 +120,8 @@ public class TaskRunnerService : BackgroundService
         AgentStudio.Runner.PostAbortReviewStepService? postAbortReview = null,
         AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null,
         SystemKeepAwake? keepAwake = null,
-        AgentStudio.Registry.ProjectRegistry? projectRegistry = null)
+        AgentStudio.Registry.ProjectRegistry? projectRegistry = null,
+        AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null)
     {
         _config = config;
         _logger = logger;
@@ -150,6 +156,7 @@ public class TaskRunnerService : BackgroundService
         _sessionInspector = sessionInspector;
         _keepAwake = keepAwake;
         _projectRegistry = projectRegistry;
+        _orchestratorDefaults = orchestratorDefaults;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -267,7 +274,8 @@ public class TaskRunnerService : BackgroundService
                 pipelineLog: _pipelineLog,
                 humanReviewEscalation: _humanReviewEscalation,
                 postAbortReview: _postAbortReview,
-                sessionInspector: _sessionInspector);
+                sessionInspector: _sessionInspector,
+                orchestratorDefaults: _orchestratorDefaults);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);

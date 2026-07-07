@@ -62,3 +62,40 @@ export interface SteeringFileContent {
   relPath: string;
   content: string;
 }
+
+// Mirrors backend/Features/Docs/AgentDocsReadAnalyticsService.cs DTOs.
+// Real Tool-Use Read Analytics behind the former Agent Docs mockup.
+
+export interface AgentDocsReadCliCount {
+  cli: string;
+  reads: number;
+}
+
+export interface AgentDocsReadFile {
+  relPath: string;
+  label: string;
+  reads: number;
+  recentReads: number;
+  taskCount: number;
+  lastReadAt: string | null;
+  byCli: AgentDocsReadCliCount[];
+}
+
+export interface AgentDocsReadCliTotal {
+  cli: string;
+  reads: number;
+}
+
+export interface AgentDocsReadAnalytics {
+  projectName: string;
+  baseDir: string;
+  windowDays: number;
+  hasData: boolean;
+  totalReads: number;
+  recentReads: number;
+  taskCount: number;
+  lastReadAt: string | null;
+  files: AgentDocsReadFile[];
+  byCli: AgentDocsReadCliTotal[];
+  generatedAt: string;
+}

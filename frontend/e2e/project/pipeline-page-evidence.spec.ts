@@ -38,7 +38,7 @@ const CATALOGUE = {
     { id: 'aspect-code-quality', displayName: 'Aspect: Code quality', kind: 'aspect', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'aspect-code-quality', canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'aspect-security', displayName: 'Aspect: Security', kind: 'aspect', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'aspect-security', canDisable: true, defaultEnabled: true, supportsCondition: false },
     { id: 'decision-gate', displayName: 'Decision: Lint gate', kind: 'tool', usesModel: false, usesPrompt: false, supportsMode: true, canDisable: true, defaultEnabled: true, supportsCondition: false },
-    { id: 'post-abort-review', displayName: 'Post: Abort review', kind: 'tool', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'post-abort-review', canDisable: true, defaultEnabled: false, supportsCondition: true },
+    { id: 'post-abort-review', displayName: 'Post: Abort review', kind: 'tool', usesModel: true, usesPrompt: true, supportsMode: false, promptTemplate: 'post-abort-review', canDisable: true, defaultEnabled: true, supportsCondition: true },
   ],
 };
 
@@ -47,7 +47,7 @@ const SETTINGS_PROJECTION = {
     'aspect-code-quality': { enabled: true, cliType: 'claude', model: 'claude-haiku-4-5', thinkingLevel: null },
     // A legacy inline prompt override -> renders the "inline override" badge + Clear.
     'aspect-security': { enabled: true, prompt: 'Project-specific security checklist (legacy inline).' },
-    // Opt-in step turned on with a run condition.
+    // Opt-out step (default on) with a run condition set.
     'post-abort-review': { enabled: true, condition: { when: 'on-nonzero-exit' } },
   },
   pipelineStepOrder: [],

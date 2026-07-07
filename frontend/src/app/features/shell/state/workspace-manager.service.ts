@@ -79,6 +79,13 @@ export class WorkspaceManagerService {
     this.closeProjectOnboard();
   }
 
+  /** Bump the registry-changed counter without touching the dialogs. Used
+   *  when a mutation elsewhere (e.g. adding a Project URL in the Project Hub)
+   *  must be reflected in the sidebar tree without a page reload. */
+  notifyRegistryChanged(): void {
+    this.registryChanged.update(n => n + 1);
+  }
+
   /** Mirrors `refreshAndClose` for the delete path: refresh the
    *  known list so a subsequent create dialog reflects the removal. */
   refreshAfterDelete(): void {

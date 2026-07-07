@@ -185,6 +185,13 @@ builder.Services.AddSingleton<AgentStudio.Shared.ITaskScanner>(sp => sp.GetRequi
 // not yet load-bearing for the existing lane-folder code paths (F45c).
 builder.Services.AddSingleton<AgentStudio.Registry.WorkspaceRegistry>();
 builder.Services.AddSingleton<AgentStudio.Registry.ProjectRegistry>();
+// AGT-1812: per-workspace default settings store + the two-tier orchestrator
+// resolver (project override -> workspace default -> platform constant default).
+builder.Services.AddSingleton<AgentStudio.Registry.WorkspaceSettingsService>();
+builder.Services.AddSingleton<AgentStudio.Registry.OrchestratorDefaultsProvider>();
+// Project URLs: read-only repo scan for suggestions + minimal dev-server spawn.
+builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlDetectionService>();
+builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlProcessService>();
 builder.Services.AddSingleton<AgentStudio.Tasks.TaskKeyResolver>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
 // F21: per-project write mutex for the lane tree. Must be registered
@@ -426,6 +433,7 @@ builder.Services.AddHostedService<OrphanReaperHostedService>();
 builder.Services.AddHostedService<StaleProgressSweepHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();
+builder.Services.AddSingleton<AgentDocsReadAnalyticsService>();
 builder.Services.AddSingleton<SkillReadinessService>();
 builder.Services.AddSingleton<ConceptDocsService>();
 builder.Services.AddSingleton<SecurityReviewService>();

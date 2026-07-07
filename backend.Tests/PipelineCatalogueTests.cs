@@ -496,26 +496,37 @@ public class PipelineCatalogueTests
     }
 
     [Fact]
-    public void AbortReviewStep_IsOptInOrchestratorStep_NotInLinearPostBracket()
+    public void AbortReviewStep_IsOptOutOrchestratorStep_NotInLinearPostBracket()
     {
         // The "Abbruch-Review" step is abort-triggered, so it must NOT sit in
         // the always-runs Post bracket (otherwise a generic post-step executor
         // would run it on every clean completion). It is exposed as a
-        // standalone definition that defaults OFF (opt-in per project) and is
-        // model-resolvable like the other LLM steps.
+        // standalone definition that defaults ON (opt-out per project, since
+        // 2026-07-05 - was opt-in/off under ADR-0032) and is model-resolvable
+        // like the other LLM steps.
         var step = PipelineCatalogue.AbortReviewStep;
         Assert.Equal(PipelineCatalogue.PostAbortReviewStepId, step.Id);
         Assert.Equal(StepKind.Orchestrator, step.Kind);
         Assert.True(step.Idempotent);
-        Assert.False(step.DefaultEnabled); // opt-in
+        Assert.True(step.DefaultEnabled); // opt-out
 
         // Absent from every section of both pipelines.
         Assert.DoesNotContain(PipelineCatalogue.Standard.AllSteps, s => s.Id == PipelineCatalogue.PostAbortReviewStepId);
         Assert.DoesNotContain(PipelineCatalogue.ReadOnly.AllSteps, s => s.Id == PipelineCatalogue.PostAbortReviewStepId);
 
-        // Opt-in gate + per-project model resolution use the same resolver as
-        // the other steps: default off, but a project override turns it on.
-        Assert.False(PipelineStepConfigResolver.IsEnabled((ProjectSettings?)null, step));
+        // Opt-out gate + per-project model resolution use the same resolver as
+        // the other steps: default on, but a project override can turn it off
+        // (or just override the model while staying enabled).
+        Assert.True(PipelineStepConfigResolver.IsEnabled((ProjectSettings?)null, step));
+        var disabledSettings = new ProjectSettings
+        {
+            PipelineSteps = new Dictionary<string, PipelineStepSetting>
+            {
+                [PipelineCatalogue.PostAbortReviewStepId] = new() { Enabled = false },
+            },
+        };
+        Assert.False(PipelineStepConfigResolver.IsEnabled(disabledSettings, step));
+
         var settings = new ProjectSettings
         {
             OrchestratorModel = "claude-sonnet-4-5",

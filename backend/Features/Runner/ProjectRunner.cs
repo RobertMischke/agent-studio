@@ -118,6 +118,13 @@ public class ProjectRunner
     private readonly OrchestratorRunner _orchestratorRunner;
     private readonly OrchestratorSessionStore _orchestratorSessions;
     private readonly ProjectSettingsService _projectSettings;
+    /// <summary>
+    /// AGT-1812: resolves the orchestrator model override through the two-tier
+    /// config (project -> workspace default). Optional so existing test callers
+    /// that construct a runner directly keep working; a null provider falls back
+    /// to the project-only <see cref="ProjectSettings.OrchestratorModel"/>.
+    /// </summary>
+    private readonly AgentStudio.Registry.OrchestratorDefaultsProvider? _orchestratorDefaults;
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
     private readonly GitService _git;
@@ -376,7 +383,8 @@ public class ProjectRunner
         AgentStudio.Pipeline.PipelineExecutionLog? pipelineLog = null,
         HumanReviewEscalation? humanReviewEscalation = null,
         PostAbortReviewStepService? postAbortReview = null,
-        AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null)
+        AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null,
+        AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -394,6 +402,7 @@ public class ProjectRunner
         _orchestratorRunner = orchestratorRunner;
         _orchestratorSessions = orchestratorSessions;
         _projectSettings = projectSettings;
+        _orchestratorDefaults = orchestratorDefaults;
         _quotaService = quotaService;
         _quotaCaps = quotaCaps;
         _git = git;
@@ -2867,7 +2876,9 @@ public class ProjectRunner
             return;
         }
 
-        var modelOverride = _projectSettings.Get(ProjectName).OrchestratorModel;
+        // AGT-1812: project override -> workspace default (-> platform default below).
+        var modelOverride = _orchestratorDefaults?.ResolveModelOverride(ProjectName)
+            ?? _projectSettings.Get(ProjectName).OrchestratorModel;
         var modelId = string.IsNullOrWhiteSpace(modelOverride) ? OrchestratorRunner.DefaultModel : modelOverride!;
 
         var bootPrompt = BuildOrchestratorBootPrompt();
@@ -3066,7 +3077,10 @@ public class ProjectRunner
             var attachmentsList = BuildAttachmentsList(info.FolderPath);
 
             var orchestratorPrompt = BuildOrchestratorPrompt(_prompts, info, promptText, lastAgentText, attachmentsList);
-            var modelOverride = _projectSettings.Get(info.ProjectName).OrchestratorModel;
+            // AGT-1812: project override -> workspace default; null keeps the
+            // existing session-model / platform-default fallback chain below.
+            var modelOverride = _orchestratorDefaults?.ResolveModelOverride(info.ProjectName)
+                ?? _projectSettings.Get(info.ProjectName).OrchestratorModel;
 
             // Resume the long-lived session if one is on disk; the
             // orchestrator already has project context + recent decisions

@@ -9,6 +9,8 @@ import {
   ProjectPipelinePanelComponent,
   ProjectSteeringDocsSectionComponent,
   ProjectWikiSectionComponent,
+  ProjectUrlsPanelComponent,
+  ProjectGitPanelComponent,
 } from '../../../project-detail';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { PromptAdminPanelComponent } from '../../../orchestrator';
@@ -25,6 +27,8 @@ import { studioTabKey } from '../../studio-shell.types';
 /** Rails whose content panel is real (not the project-shell placeholder). */
 const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRailKey>([
   'overview',
+  'project-urls',
+  'git',
   'visual-evidence',
   'security',
   'architecture',
@@ -72,6 +76,8 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     ProjectPipelinePanelComponent,
     ProjectSteeringDocsSectionComponent,
     ProjectWikiSectionComponent,
+    ProjectUrlsPanelComponent,
+    ProjectGitPanelComponent,
     PromptAdminPanelComponent,
     WorkspaceScreenshotsComponent,
   ],

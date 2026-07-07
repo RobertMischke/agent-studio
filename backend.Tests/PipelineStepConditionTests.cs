@@ -114,12 +114,21 @@ public class PipelineStepConditionTests
         };
 
     [Fact]
-    public void ShouldRun_DisabledByDefault_AbortReviewDoesNotRun()
+    public void ShouldRun_EnabledByDefault_AbortReviewRuns()
     {
-        // Abort review defaults off; with no override ShouldRun is false even
-        // when the condition (none) would otherwise pass.
-        Assert.False(PipelineStepConfigResolver.ShouldRun(
+        // Abort review defaults on (since 2026-07-05); with no override
+        // ShouldRun is true when the condition (aborted) passes.
+        Assert.True(PipelineStepConfigResolver.ShouldRun(
             null, PipelineCatalogue.AbortReviewStep, Ctx(aborted: true)));
+    }
+
+    [Fact]
+    public void ShouldRun_ExplicitlyDisabled_AbortReviewDoesNotRun()
+    {
+        // A project can still opt out even though the default is now on.
+        var settings = SettingsWith(PipelineCatalogue.PostAbortReviewStepId, new PipelineStepSetting { Enabled = false });
+        Assert.False(PipelineStepConfigResolver.ShouldRun(
+            settings, PipelineCatalogue.AbortReviewStep, Ctx(aborted: true)));
     }
 
     [Fact]

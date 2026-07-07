@@ -17,6 +17,11 @@ import { WorkspaceOverlaysService } from '../../../shell';
 import type { CliType } from '../../../../models/task.model';
 import { CLI_TYPES } from '../../../../models/task.model';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
+import { CliCatalogStore } from '../../../../services/cli-catalog.store';
+import {
+  WorkspaceOrchestratorSettingsService,
+  type WorkspaceOrchestratorSettings,
+} from '../../../../services/workspace-orchestrator-settings.service';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
@@ -27,6 +32,27 @@ interface CapSummaryRow {
   label: string;
   icon: string;
   windows: { windowLabel: string; capPct: number }[];
+}
+
+/** ADR-0026 autonomy stops, shared with the per-project slider labels. */
+const AUTONOMY_STOPS: readonly { level: number; name: string }[] = [
+  { level: 0, name: 'Manual' },
+  { level: 1, name: 'Cautious' },
+  { level: 2, name: 'Balanced' },
+  { level: 3, name: 'Confident' },
+  { level: 4, name: 'Fully auto' },
+];
+
+interface ProjectSummaryLite {
+  id: string;
+  displayName: string;
+  workspaceId: string;
+}
+
+interface WorkspaceListItemLite {
+  id: string;
+  displayName: string;
+  projects?: ProjectSummaryLite[];
 }
 
 /**
@@ -63,10 +89,34 @@ export class ProjectSettingsPanelComponent implements OnInit {
   private readonly quotaApi = inject(QuotaApiService);
   private readonly overlays = inject(WorkspaceOverlaysService);
   private readonly http = inject(HttpClient);
+  private readonly cliCatalog = inject(CliCatalogStore);
+  private readonly workspaceOrchestrator = inject(WorkspaceOrchestratorSettingsService);
 
   /** ADR-0052: per-project max parallel coding slots (1 = sequential). */
   readonly maxParallelism = signal<number>(1);
   readonly parallelOptions = [1, 2, 3, 4];
+
+  // --- AGT-1812: editable workspace-default orchestrator settings ---------
+  /** The workspace that owns this project; the tier these defaults write to. */
+  readonly workspaceId = signal<string | null>(null);
+  readonly workspaceName = signal<string>('');
+  readonly orchestratorSettings = signal<WorkspaceOrchestratorSettings | null>(null);
+  readonly autonomyStops = AUTONOMY_STOPS;
+  readonly orchSaving = signal<boolean>(false);
+
+  /** Claude model options for the orchestrator model select ('' = workspace has no default). */
+  readonly orchModelOptions = computed(() => [
+    { id: '', label: 'Platform default' },
+    ...this.cliCatalog
+      .modelsFor('claude')
+      .filter((m) => m.available !== false)
+      .map((m) => ({ id: m.id, label: m.isDefault ? `Default (${m.label})` : m.label })),
+  ]);
+
+  /** The stored workspace-default model, or '' when none is set. */
+  readonly orchModel = computed(() => this.orchestratorSettings()?.orchestratorModel ?? '');
+  /** The stored workspace-default autonomy, or -1 ("Inherit") when none is set. */
+  readonly orchAutonomy = computed(() => this.orchestratorSettings()?.autonomyLevel ?? -1);
 
   /** Global default agent, read-only — the value the orchestrator inherits. */
   readonly defaultCli = signal<CliType | null>(null);
@@ -126,6 +176,67 @@ export class ProjectSettingsPanelComponent implements OnInit {
         if (typeof n === 'number' && n >= 1) this.maxParallelism.set(n);
       },
       error: () => { /* default 1 */ },
+    });
+    this.loadWorkspaceOrchestratorSettings();
+  }
+
+  /**
+   * AGT-1812: resolve this project's owning workspace, then load its default
+   * orchestrator settings so the "Orchestrator" card can edit the workspace
+   * tier (project overrides still win, and live in the Project overrides
+   * section below).
+   */
+  private loadWorkspaceOrchestratorSettings(): void {
+    this.http
+      .get<WorkspaceListItemLite[]>('/api/workspaces?includeArchived=true')
+      .subscribe({
+        next: (workspaces) => {
+          const name = this.projectName();
+          const owner = (workspaces ?? []).find((w) =>
+            (w.projects ?? []).some(
+              (p) => p.displayName === name || p.id === name,
+            ),
+          );
+          if (!owner) return; // project not mapped to a registry workspace yet
+          this.workspaceId.set(owner.id);
+          this.workspaceName.set(owner.displayName);
+          this.workspaceOrchestrator.get(owner.id).subscribe({
+            next: (s) => this.orchestratorSettings.set(s),
+            error: () => { /* card falls back to platform-default labels */ },
+          });
+        },
+        error: () => { /* no workspace context; card stays hidden */ },
+      });
+  }
+
+  /** Persist the workspace-default orchestrator model (blank clears it). */
+  onWorkspaceModelChange(model: string): void {
+    const id = this.workspaceId();
+    if (!id) return;
+    this.orchSaving.set(true);
+    this.workspaceOrchestrator.setModel(id, model || null).subscribe({
+      next: (r) => {
+        this.orchSaving.set(false);
+        this.orchestratorSettings.update((s) =>
+          s ? { ...s, orchestratorModel: r.orchestratorModel, orchestratorThinkingLevel: r.orchestratorThinkingLevel } : s,
+        );
+      },
+      error: () => this.orchSaving.set(false),
+    });
+  }
+
+  /** Persist the workspace-default autonomy level; -1 clears it (inherit platform default). */
+  onWorkspaceAutonomyChange(level: number): void {
+    const id = this.workspaceId();
+    if (!id) return;
+    const value = level < 0 ? null : level;
+    this.orchSaving.set(true);
+    this.workspaceOrchestrator.setAutonomy(id, value).subscribe({
+      next: (r) => {
+        this.orchSaving.set(false);
+        this.orchestratorSettings.update((s) => (s ? { ...s, autonomyLevel: r.autonomyLevel } : s));
+      },
+      error: () => this.orchSaving.set(false),
     });
   }
 

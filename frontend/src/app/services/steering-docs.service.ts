@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { SteeringDocsOverview, SteeringFileContent } from '../models/steering-docs.model';
+import { AgentDocsReadAnalytics, SteeringDocsOverview, SteeringFileContent } from '../models/steering-docs.model';
 
 /**
  * Project-level Steering Docs read API. Fetches the inventory of
@@ -24,6 +24,17 @@ export class SteeringDocsService {
   getFile(projectName: string, relPath: string) {
     return this.http.get<SteeringFileContent>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/steering/files/${this.encodeRelPath(relPath)}`
+    );
+  }
+
+  /**
+   * Real Tool-Use Read Analytics: how often each CLI tool-use read consumed
+   * each agent doc, folded across the project's task-folder logs.
+   */
+  getReadAnalytics(projectName: string, days?: number) {
+    const suffix = days && days > 0 ? `?days=${days}` : '';
+    return this.http.get<AgentDocsReadAnalytics>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/steering/read-analytics${suffix}`
     );
   }
 

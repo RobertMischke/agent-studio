@@ -34,7 +34,7 @@
        back to the ProjectReference:
        ..\..\..\coding-agent-runner\src\CodingAgentRunner\CodingAgentRunner.csproj -->
   <ItemGroup>
-    <PackageReference Include="CodingAgentRunner" Version="0.2.0" />
+    <PackageReference Include="CodingAgentRunner" Version="0.3.1" />
   </ItemGroup>
 
   <!-- Block 6: adopt the library's types by aliasing them to the names the app

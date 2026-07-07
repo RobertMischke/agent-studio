@@ -62,13 +62,18 @@ public sealed class IntakeHostedService : BackgroundService
                 var settings = scope.ServiceProvider.GetRequiredService<ProjectSettingsService>();
                 var scanner = scope.ServiceProvider.GetRequiredService<TaskScannerService>();
                 var intake = scope.ServiceProvider.GetRequiredService<IntakeRunner>();
+                var orchestratorDefaults = scope.ServiceProvider
+                    .GetRequiredService<AgentStudio.Registry.OrchestratorDefaultsProvider>();
 
                 var escalation = scope.ServiceProvider.GetRequiredService<HumanReviewEscalation>();
 
                 var allSettings = settings.GetAll();
+                // AGT-1812: autonomy resolves project override -> workspace
+                // default -> platform default (2) so a workspace-level manual
+                // setting also suppresses background intake.
                 var enabledProjects = scanner.GetWatchPaths()
                     .Where(p => allSettings.TryGetValue(p.Name, out var s)
-                                && ShouldAutoRunIntake(s))
+                                && ShouldAutoRunIntake(s, orchestratorDefaults.ResolveAutonomyLevel(p.Name)))
                     .ToList();
 
                 if (enabledProjects.Count == 0)
@@ -196,5 +201,13 @@ public sealed class IntakeHostedService : BackgroundService
     /// intake explicitly through the manual endpoint.
     /// </summary>
     internal static bool ShouldAutoRunIntake(ProjectSettings settings)
-        => settings.IntakeEnabled is true && (settings.AutonomyLevel ?? 2) > 0;
+        => ShouldAutoRunIntake(settings, settings.AutonomyLevel ?? 2);
+
+    /// <summary>
+    /// Overload taking an already-resolved autonomy level (AGT-1812: project
+    /// override -> workspace default -> platform default). The single-argument
+    /// form uses the project-only value.
+    /// </summary>
+    internal static bool ShouldAutoRunIntake(ProjectSettings settings, int autonomyLevel)
+        => settings.IntakeEnabled is true && autonomyLevel > 0;
 }

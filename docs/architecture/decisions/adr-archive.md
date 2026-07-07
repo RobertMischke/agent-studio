@@ -1090,6 +1090,8 @@ Implementation pointers: [src/AgentTaskboard.Shared/Models/TaskModes.cs](../../.
 
 **Status.** Accepted; backend vertical shipped behind a default-OFF per-project step gate, fully unit-tested. Deferred (explicitly out of this slice): the frontend pipeline-card rendering of the verdict + reasoning (the step is recorded via `PipelineExecutionLog.RecordStep` and so renders as a generic Overview row, but a bespoke card like the auto-review aspects is not built), a live `@billable` prompt probe, and the sister-task config UI for budget / model / enable.
 
+**Update (2026-07-05).** `AbortReviewStep.DefaultEnabled` flipped from `false` to `true` at the operator's direction - the step is now opt-out per project instead of opt-in. The two other safety mechanisms above (fail-closed on an unparseable verdict, the bounded per-job rerun budget) are unchanged and are what make an always-on default acceptable; the per-project `PipelineSteps` override (already wired end-to-end, see `PUT /api/projects/{projectName}/pipeline-step`) still lets a project turn it off. `PipelineCatalogueTests` and `PipelineStepConditionTests` were updated to pin the new default; `frontend/e2e/project/pipeline-step-config.spec.ts` was updated to assert the toggle starts checked.
+
 ---
 
 ## ADR-0055 - Thinking and reasoning levels are model-catalog capabilities (2026-06-05)

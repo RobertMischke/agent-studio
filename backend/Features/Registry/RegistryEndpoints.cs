@@ -253,7 +253,119 @@ public static class RegistryEndpoints
                 storageLocation = record.StorageLocation,
             });
         });
+
+        // ----- Project URLs (per-project watchable dev-server / preview URLs) -----
+
+        // Detection: scan the project's repository (package.json, angular.json,
+        // README.md) and return suggestions the UI offers as one-click chips.
+        // Never auto-applied; the user picks.
+        app.MapGet(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/url-suggestions",
+            (string projId, ProjectRegistry projects, ProjectUrlDetectionService detection) =>
+        {
+            var record = projects.FindById(projId);
+            if (record == null)
+                return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
+            var suggestions = detection.Detect(record);
+            return Results.Ok(suggestions);
+        });
+
+        app.MapPost(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls",
+            (string projId, CreateProjectUrlRequest body, ProjectRegistry projects) =>
+        {
+            if (body == null) return Results.BadRequest(new { error = "body required" });
+            try
+            {
+                var updated = projects.AddUrl(projId, body.Label, body.Url, body.StartRule);
+                return Results.Ok(updated);
+            }
+            catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        });
+
+        app.MapPut(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}",
+            (string projId, string urlId, UpdateProjectUrlRequest body, ProjectRegistry projects) =>
+        {
+            if (body == null) return Results.BadRequest(new { error = "body required" });
+            try
+            {
+                var updated = projects.UpdateUrl(projId, urlId, body.Label, body.Url, body.StartRule);
+                return Results.Ok(updated);
+            }
+            catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        });
+
+        app.MapDelete(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}",
+            (string projId, string urlId, ProjectRegistry projects) =>
+        {
+            try
+            {
+                var updated = projects.RemoveUrl(projId, urlId);
+                return Results.Ok(updated);
+            }
+            catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+        });
+
+        app.MapPost(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/reorder",
+            (string projId, ReorderProjectUrlsRequest body, ProjectRegistry projects) =>
+        {
+            if (body == null) return Results.BadRequest(new { error = "body required" });
+            try
+            {
+                var updated = projects.ReorderUrls(projId, body.OrderedUrlIds);
+                return Results.Ok(updated);
+            }
+            catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        });
+
+        // Build & start / restart a URL's dev server (spawns StartRule.Command
+        // in Cwd, default RepositoryPath). Surfacing stdout/stderr is future
+        // scope; this only gets the process running.
+        app.MapPost(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/start",
+            (string projId, string urlId, ProjectRegistry projects, ProjectUrlProcessService procs) =>
+        {
+            var record = projects.FindById(projId);
+            if (record == null)
+                return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
+            var url = record.Urls.FirstOrDefault(u => string.Equals(u.Id, urlId, StringComparison.Ordinal));
+            if (url == null)
+                return Results.NotFound(new { error = $"Unknown url id '{urlId}'" });
+            if (url.StartRule == null || string.IsNullOrWhiteSpace(url.StartRule.Command))
+                return Results.BadRequest(new { error = "This URL has no start rule to run." });
+            try
+            {
+                procs.Start(record, url);
+                return Results.Ok(new { started = true, urlId = url.Id });
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
     }
+}
+
+/// <summary>POST /api/projects/{id}/urls payload.</summary>
+public sealed record CreateProjectUrlRequest
+{
+    public string Label { get; init; } = "";
+    public string Url { get; init; } = "";
+    public ProjectUrlStartRule? StartRule { get; init; }
+}
+
+/// <summary>PUT /api/projects/{id}/urls/{urlId} payload.</summary>
+public sealed record UpdateProjectUrlRequest
+{
+    public string Label { get; init; } = "";
+    public string Url { get; init; } = "";
+    public ProjectUrlStartRule? StartRule { get; init; }
+}
+
+/// <summary>POST /api/projects/{id}/urls/reorder payload.</summary>
+public sealed record ReorderProjectUrlsRequest
+{
+    public List<string> OrderedUrlIds { get; init; } = [];
 }
 
 /// <summary>F45b — POST /api/workspaces payload.</summary>
@@ -355,6 +467,8 @@ public sealed record ProjectSummary
     public string? ModelDefault { get; init; }
     public int SortOrder { get; init; }
     public string StorageLocation { get; init; } = "";
+    /// <summary>Configured watchable URLs, ordered; empty for most projects.</summary>
+    public IReadOnlyList<ProjectUrlRecord> Urls { get; init; } = [];
     public bool Archived { get; init; }
     public DateTime CreatedAt { get; init; }
 
@@ -369,6 +483,7 @@ public sealed record ProjectSummary
         ModelDefault = p.ModelDefault,
         SortOrder = p.SortOrder,
         StorageLocation = p.StorageLocation,
+        Urls = [.. p.Urls.OrderBy(u => u.SortOrder)],
         Archived = p.Archived,
         CreatedAt = p.CreatedAt,
     };

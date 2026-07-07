@@ -59,6 +59,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
     private readonly TaskScannerService _scanner;
     private readonly TaskStateMachine _states;
     private readonly ProjectSettingsService _settings;
+    private readonly AgentStudio.Registry.OrchestratorDefaultsProvider _orchestratorDefaults;
     private readonly OrchestratorChatLog _chatLog;
     private readonly PipelineExecutionLog _pipelineLog;
     private readonly IConfiguration _configuration;
@@ -71,6 +72,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         TaskScannerService scanner,
         TaskStateMachine states,
         ProjectSettingsService settings,
+        AgentStudio.Registry.OrchestratorDefaultsProvider orchestratorDefaults,
         OrchestratorChatLog chatLog,
         PipelineExecutionLog pipelineLog,
         IConfiguration configuration,
@@ -79,6 +81,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         _scanner = scanner;
         _states = states;
         _settings = settings;
+        _orchestratorDefaults = orchestratorDefaults;
         _chatLog = chatLog;
         _pipelineLog = pipelineLog;
         _configuration = configuration;
@@ -141,7 +144,10 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
     private void ProcessProject(string projectName, string watchPath, int maxIterations, int queueFloor, int maxPerHour)
     {
         var settings = _settings.Get(projectName);
-        var level = settings.AutonomyLevel ?? 2;
+        // AGT-1812: autonomy resolves project override -> workspace default ->
+        // platform default (2). Falls through to the project-only value when no
+        // workspace default is set, so behaviour is unchanged until one is.
+        var level = _orchestratorDefaults.ResolveAutonomyLevel(projectName);
         if (level == 0) return; // manual: never moves a task forward
 
         var allJobs = _scanner.ScanAllJobs().Where(j => j.WatchPath == watchPath).ToList();

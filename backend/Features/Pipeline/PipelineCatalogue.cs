@@ -304,7 +304,7 @@ public static class PipelineCatalogue
     /// step. Kept off the static Post list (it does not run in the normal
     /// post-bracket) but defined here so the per-project config resolver and
     /// the runtime step-execution recorder share one id, display name, default
-    /// (opt-in / off), and model-resolution path.
+    /// (on / opt-out), and model-resolution path.
     /// </summary>
     public static PipelineStep AbortReviewStep { get; } = new()
     {
@@ -317,8 +317,11 @@ public static class PipelineCatalogue
         Kind = StepKind.Orchestrator,
         RunMode = StepRunMode.Sequential,
         Idempotent = true,
-        // Opt-in per project: an extra LLM pass the operator turns on.
-        DefaultEnabled = false,
+        // Default-on 2026-07-05 (was opt-in/off since ADR-0032): the bounded
+        // rerun budget (PostAbortReviewDecider.DefaultRerunBudget = 2) and the
+        // fail-closed-to-human-review behavior on an unparseable verdict make
+        // this safe to run for every project; opt out per project if undesired.
+        DefaultEnabled = true,
     };
 
     /// <summary>

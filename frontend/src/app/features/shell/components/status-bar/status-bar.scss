@@ -173,7 +173,7 @@ app-status-bar {
   min-width: 0;
 }
 
-.statusbar__defaults .cli-model-selector {
+.statusbar__defaults .model-selector {
   height: var(--statusbar-item-height);
   padding: 0 var(--statusbar-item-pad-x);
   border-radius: var(--statusbar-item-radius);
@@ -182,11 +182,11 @@ app-status-bar {
   color: inherit;
 }
 
-.statusbar__defaults .cli-model-selector__icon {
+.statusbar__defaults .model-selector__icon {
   font-size: 12px;
 }
 
-.statusbar__defaults .cli-model-selector__name {
+.statusbar__defaults .model-selector__name {
   max-width: 15ch;
 }
 
@@ -215,7 +215,7 @@ app-status-bar {
     gap: 0;
   }
 
-  .statusbar__defaults .cli-model-selector__name {
+  .statusbar__defaults .model-selector__name {
     max-width: 10ch;
   }
 }
@@ -241,7 +241,7 @@ app-status-bar {
     white-space: nowrap;
   }
 
-  .statusbar__defaults .cli-model-selector__tags {
+  .statusbar__defaults .model-selector__tags {
     display: none;
   }
 }
@@ -264,7 +264,7 @@ app-status-bar {
     padding-inline: var(--studio-spacing-1);
   }
 
-  .statusbar__defaults .cli-model-selector__name {
+  .statusbar__defaults .model-selector__name {
     display: none;
   }
 }

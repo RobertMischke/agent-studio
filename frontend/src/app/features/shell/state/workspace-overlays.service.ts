@@ -53,6 +53,17 @@ export class WorkspaceOverlaysService {
   readonly anyOpen = computed(() => this.settingsOpen());
 
   /**
+   * True iff the home is open on a section OTHER than 'caps'. The 'caps'
+   * (CLI usage) section has its own dedicated "Usage" status-bar pill, so
+   * the "Settings" pill must not also light up while Usage is showing —
+   * otherwise both pills carry the single `--studio-accent` active fill at
+   * once (see docs/frontend/design-system.md, "one accent per rail"). This
+   * is the Settings pill's `active` source; `anyOpen` stays the general
+   * "is the home open at all" read for everything else.
+   */
+  readonly anyOpenExceptUsage = computed(() => this.settingsOpen() && this.section() !== 'caps');
+
+  /**
    * True when the current visible state was reached by a deep-link hash,
    * so a back/forward navigation that drops the hash closes the home.
    * Button-triggered opens survive unrelated hash churn (mirrors the old
