@@ -154,14 +154,19 @@ transitive dep `lowlight` installed `--no-save`; and never `pkill -f` a
 pattern that appears in your own ssh command line — it kills your session.)
 
 **See the product from your own browser** (nothing is exposed publicly —
-the tunnel is the only door): on the *operator* machine run
+the tunnel is the only door): the operator machine's `~/.ssh/config` carries
+a `studio-remote` alias with `LocalForward 14010 127.0.0.1:4010` and
+`LocalForward 15030 127.0.0.1:5030` (local ports deliberately ≠ 4010/5030,
+which the local dev stack may occupy). Then:
 
 ```bash
-ssh -L 4010:127.0.0.1:4010 -L 5030:127.0.0.1:5030 agent-runner
+ssh -N studio-remote     # foreground, Ctrl+C disconnects
 ```
 
-then open `http://localhost:4010` — the full board UI, served and executed
-on the Linux host.
+and open `http://localhost:14010` — the full board UI, served and executed
+on the Linux host. `-N` means "no shell, forwarding only";
+`ExitOnForwardFailure yes` makes a port collision fail loudly instead of
+silently tunneling nothing.
 
 **Watch a run live:**
 
