@@ -1,0 +1,44 @@
+name: Backend CI (Linux)
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'backend/**'
+      - 'backend.Tests/**'
+      - 'agent-taskboard.sln'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'backend.Tests/**'
+      - 'agent-taskboard.sln'
+      - '.github/workflows/backend-ci.yml'
+
+jobs:
+  build-test:
+    name: dotnet build + test (ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore agent-taskboard.sln
+
+      - name: Build
+        run: dotnet build agent-taskboard.sln --no-restore -warnaserror:false
+
+      # Linux is the future runner platform (ADR-0059 / remote-ready kickoff).
+      # This job is the canary for path/PTY/process assumptions that only
+      # surface off Windows. Phase-1 baseline (2026-07-07): the suite has
+      # known Linux failures (machine-bound Analyze_AgainstLiveDevCheckout_*
+      # tests, path assumptions) — the step reports but does not block until
+      # the suite is Linux-green; then drop continue-on-error.
+      - name: Test
+        continue-on-error: true
+        run: dotnet test agent-taskboard.sln --no-build --logger "console;verbosity=minimal"
