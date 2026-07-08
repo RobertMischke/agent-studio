@@ -10,7 +10,17 @@ details live in
 
 ---
 
-## 0. Product stance (operator decision, 2026-07-07)
+## 0. Product stance (operator decision, 2026-07-07; sharpened 2026-07-08)
+
+**The target picture, in the operator's words:** *"Ich habe hier meinen
+lokalen Agent-Orchestrator, und mit dem möchte ich sagen: führe die Sache auf
+einem anderen Host aus."* — The **local** studio stays the brain; remote
+hosts are **execution arms** it delegates to, per project. That is **Mode C
+(runner split)**. Mode A (full stack on the remote host, viewed through a
+tunnel) was the Phase-1 *proof and test bed*, **not the plan** — a
+communication misunderstanding corrected on 2026-07-08. Phase 2 (central
+URL + auth) is the technical prerequisite for runners to talk to the task
+server, not a goal in itself.
 
 **Remote CLI execution is a first-class product concept**, not an ops
 appendix. Consequences:
