@@ -105,8 +105,8 @@
                 data-testid="pane-meta-toggle"
                 (click)="toggleVsCodeMeta()"
                 [class.pane-header__btn--active]="featureFlags.vsCodeMetaOpen()"
-                [cacTooltip]="featureFlags.vsCodeMetaOpen() ? 'Hide meta panel' : 'Show meta panel'"
-                aria-label="Toggle meta panel">
+                [cacTooltip]="featureFlags.vsCodeMetaOpen() ? 'Hide telemetry chips' : 'Show telemetry chips'"
+                aria-label="Toggle telemetry chips">
           i
         </button>
       }
