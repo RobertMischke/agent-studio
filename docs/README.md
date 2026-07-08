@@ -47,6 +47,7 @@ Use this page as the first stop when you need the right document quickly.
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](schemas/wiki-document-companion.schema.json) |
 | Wiki drift audit | [meta/reports/wiki-drift-audit-2026-06-11.html](meta/reports/wiki-drift-audit-2026-06-11.html) |
 | Supported CLIs | [cli/supported-clis.md](cli/supported-clis.md) |
+| Getting started (new install, step by step) | [operations/setup/getting-started.md](operations/setup/getting-started.md) |
 | Setup | [operations/setup/README.md](operations/setup/README.md) |
 | Common problems | [wiki/common-problems/README.md](wiki/common-problems/README.md) |
 | API project identity / watchPath | [wiki/concepts/api-project-identity-and-watchpath.md](wiki/concepts/api-project-identity-and-watchpath.md) |

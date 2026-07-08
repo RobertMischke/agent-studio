@@ -2,9 +2,11 @@
 
 This page covers attaching an additional watched project to a running agent-orchestrator instance. The board can drive any number of projects in parallel (one sequential pipeline per project; see [../../AGENTS.md](../../../AGENTS.md) "Product Goal & Non-Goals").
 
+> **For a normal new project, use the in-app "Onboard Project" dialog** (workspace sidebar "+" -> "+" on a workspace), not the steps below. It calls the project registry API (`POST /api/projects`, ADR-0042/ADR-0046) and needs no backend restart. See [getting-started.md](./getting-started.md) step 3. The `WatchPaths` flow documented on this page is now a legacy bootstrap-only mechanism (still real, still supported, but the harder path) - useful for scripted setups or when you deliberately want an explicit `.orchestrator.yml` project key.
+
 ## Prerequisites
 
-- The backend is already running locally (`./api.sh start`, see [../getting-started.md](./getting-started.md)).
+- The backend is already running locally (`./api.sh start`, see [getting-started.md](./getting-started.md)).
 - The target project lives in a Git working tree on disk. The board only watches checked-out repositories; bare repos and remote URLs are not supported.
 - You know the project's CLI working directory. This is the path the agent's `cwd` will be set to when it picks up a task.
 
