@@ -12,18 +12,6 @@
       "styles": 2008,
       "total": 5477
     },
-    "src/app/components/chat/chat/chat.component.ts": {
-      "typeScript": 656,
-      "template": 242,
-      "styles": 755,
-      "total": 1653
-    },
-    "src/app/components/chat/conversation-view/conversation-view.component.ts": {
-      "typeScript": 653,
-      "template": 357,
-      "styles": 629,
-      "total": 1639
-    },
     "src/app/components/markdown-rich-editor/markdown-rich-editor.ts": {
       "typeScript": 464,
       "template": 102,
