@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 
 import {
   TaskInfo,
@@ -8,6 +8,16 @@ import {
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { formatDateTimeUtc } from '../../../../../services/format.util';
+import { MediaLightboxService } from '../../../../../services/media-lightbox.service';
+import { resolveProtocolImageSrc } from '../protocol-image-resolver';
+
+/**
+ * Extensions we render inline as a thumbnail instead of a bare path. The
+ * screenshot-harvest pipeline drops PNGs into `results/`; other producers
+ * attach JPEG/WebP/GIF. Anything else stays a labelled text reference.
+ */
+const IMAGE_REF_RE = /\.(png|jpe?g|webp|gif|avif|bmp)$/i;
+
 /**
  * Renders the per-task **review evidence** panel: findings from security
  * audits, code-review passes, task checks, or human notes that landed in
@@ -36,6 +46,8 @@ import { formatDateTimeUtc } from '../../../../../services/format.util';
   styleUrl: './review-evidence-panel.component.scss',
 })
 export class ReviewEvidencePanelComponent {
+  private readonly lightbox = inject(MediaLightboxService);
+
   readonly entries = input.required<ReviewEvidenceEntry[]>();
   readonly job = input.required<TaskInfo>();
 
@@ -83,6 +95,66 @@ export class ReviewEvidencePanelComponent {
 
   formatTime(iso: string): string {
     return formatDateTimeUtc(iso);
+  }
+
+  /** True when a reference points to a bitmap image we can thumbnail. */
+  isImageRef(ref: string): boolean {
+    return IMAGE_REF_RE.test((ref ?? '').trim());
+  }
+
+  /**
+   * A type-specific glyph for a non-image reference so the leading icon
+   * actually distinguishes markdown / json / log / config from a plain
+   * file, instead of the old generic paperclip/page glyph.
+   */
+  refIcon(ref: string): string {
+    const p = (ref ?? '').trim().toLowerCase();
+    if (/\.(md|markdown)$/.test(p)) return '📝';
+    if (/\.jsonl?$/.test(p)) return '🧾';
+    if (/\.(log|txt|out|err)$/.test(p)) return '📋';
+    if (/\.(ya?ml|toml|ini|env|cfg|conf)$/.test(p)) return '⚙️';
+    if (/\.(csv|tsv)$/.test(p)) return '📊';
+    if (/\.(cs|ts|js|py|go|rs|java|rb|cpp|c|h|scss|css|html)(:\d+)?$/.test(p)) return '〈〉';
+    return '📄';
+  }
+
+  /** Short basename shown under a thumbnail (the full path lives in the tooltip). */
+  baseName(ref: string): string {
+    const p = (ref ?? '').trim().replace(/[/\\]+$/, '');
+    const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+    return i >= 0 ? p.slice(i + 1) : p;
+  }
+
+  /** Resolve a `results/` or `attachments/` ref to the API URL that serves it. */
+  thumbUrl(ref: string): string {
+    const job = this.job();
+    return resolveProtocolImageSrc((ref ?? '').trim(), job.id, job.watchPath);
+  }
+
+  /**
+   * Image references for an entry, artifacts first then file refs, matching
+   * the render order so the lightbox opens on the thumbnail that was clicked.
+   */
+  imageRefs(e: ReviewEvidenceEntry): string[] {
+    return [...e.artifacts, ...e.fileRefs].filter((r) => this.isImageRef(r));
+  }
+
+  /** Non-image artifacts, kept as labelled text rows. */
+  textArtifacts(e: ReviewEvidenceEntry): string[] {
+    return e.artifacts.filter((r) => !this.isImageRef(r));
+  }
+
+  /** Non-image file references, kept as labelled text rows. */
+  textFileRefs(e: ReviewEvidenceEntry): string[] {
+    return e.fileRefs.filter((r) => !this.isImageRef(r));
+  }
+
+  /** Open the shared media lightbox as a gallery of this entry's images. */
+  openImage(e: ReviewEvidenceEntry, clicked: string): void {
+    const refs = this.imageRefs(e);
+    const images = refs.map((r) => ({ src: this.thumbUrl(r), alt: r }));
+    const index = Math.max(0, refs.indexOf(clicked));
+    this.lightbox.openGallery({ images, index });
   }
 
   onToggleAck(e: ReviewEvidenceEntry): void {
