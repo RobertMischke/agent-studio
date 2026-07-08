@@ -39,6 +39,10 @@ state.
   mapping.
 - `backend/Services/Runner/OrchestratorChatLog.cs`: typed orchestrator messages
   written into `logs/cli-output.log`.
+- `backend/Features/Orchestrator/OrchestratorContextKey.cs` and
+  `OrchestratorSessionRegistry.cs`: context-keyed global, project, and task
+  orchestrator session records persisted under
+  `<TaskRepository>/.metadata/orchestrator-sessions/<encoded>/`.
 - `backend/Services/Runner/OrchestratorReplyParser.cs`: `{REPLY | STEER |
   BLOCK}` grammar.
 - `backend/Services/Runner/RunQuarantineBreaker.cs`: no-progress failure streak

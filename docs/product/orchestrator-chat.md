@@ -44,6 +44,33 @@ This means the app does not need two competing project orchestrators. It needs t
 
 That model matches the existing ADR-0007 and ADR-0009 direction. The chat is not a second brain next to the orchestrator. It is the visible conversation surface for the orchestrator that already owns the project or board scope.
 
+## Session Registry Contract
+
+The backend exposes a context-keyed session registry for the canonical
+orchestrator scopes. The accepted context keys are:
+
+- `global` for the board-level orchestrator.
+- `project:<PROJ-ID>` for one watched project's canonical orchestrator.
+- `task:<PROJ-ID>/<KEY>` for a task-scoped orchestrator context.
+
+The registry is lazy: reading a valid context key creates the backing record
+when it does not already exist. Records are stored below
+`<TaskRepository>/.metadata/orchestrator-sessions/<encoded>/`, where
+`session.json` holds the current session metadata and `history.jsonl` is the
+append-only sidecar for future session events. The encoded path segment is the
+URL-safe form produced by `OrchestratorContextKey`.
+
+The HTTP surface is read-oriented:
+
+- `GET /api/orchestrator/sessions` lists known sessions and ensures the global
+  session exists.
+- `GET /api/orchestrator/sessions/{contextKey}` returns or creates one valid
+  context-key record. Invalid context keys return `400`.
+
+The legacy singleton global orchestrator session is migrated into the `global`
+context key on first registry access so existing installs keep their board-level
+session identity.
+
 ## Memory Model
 
 The orchestrator's memory should be layered, inspectable, and rebuildable:
