@@ -44,11 +44,23 @@ jobs:
       #     machinery (stop/start + npm install); skipped on non-Windows until
       #     the Linux deploy story lands (kickoff D6).
       #   - ProjectRepoResolution path-derivation (3): fixed cross-platform.
-      #   - MergeEndpoints (3) + remaining singles (4): still to enumerate and
-      #     fix on a real Linux run.
-      # continue-on-error STAYS until the suite is confirmed Linux-green
-      # (MergeEndpoints + singles resolved); only then drop it to make the gate
-      # sharp.
+      #   - MergeEndpoints (3): fixed — the failures were the X-Client-Id write
+      #     boundary (ClientIdentityMiddleware), not a path assumption.
+      # Full verification run 2026-07-08 (Windows host, Category!=MachineBound):
+      # 3312 passed / 12 skipped / 8 failed. All four target clusters above pass;
+      # the 8 residual failures are NOT Linux path issues (they fail on Windows
+      # too) and are OUT OF SCOPE for this classification task — pre-existing
+      # product/test drift that must be fixed before the gate can go sharp:
+      #   - 2 flaky under load, green in isolation: ReorderJobsPerf,
+      #     TaskFileHistoryEndpoints (Serilog "logger already frozen" ordering).
+      #   - 6 deterministic: ClaudeEventAdapter (five_hour vs 5-hour string
+      #     drift), CodePatternRuleLoader (docs-rule merge), FilesystemLayer /
+      #     SteeringDocsSummaryDrift (repo-content asserts), ProjectChatMigration
+      #     (perf budget), TaskFolderAccessIsolation (Directory.Delete governance
+      #     guard). Track these as their own fix-ups.
+      # continue-on-error STAYS until those residuals are cleared and a real
+      # Linux run is confirmed green (any Linux-only path singles surface only
+      # off-Windows); only then drop it to make the gate sharp.
       - name: Test
         continue-on-error: true
         run: dotnet test agent-taskboard.sln --no-build --filter "Category!=MachineBound" --logger "console;verbosity=minimal"
