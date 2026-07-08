@@ -14,7 +14,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { renderResultsHtml, type SentinelBanner } from './beautiful-results.renderer';
 import { applyHighlighting } from './beautiful-results.highlight';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
-import { MarkdownImageLightboxDirective } from '@coding-agent/chat/shared';
+import { MarkdownImageLightboxDirective } from 'coding-agent-chat/shared';
 import { perfMark, perfMeasure } from '../../../../utils/perf-tracker';
 
 interface SentinelMeta {

@@ -20,7 +20,7 @@ import { ProjectAnalysisReportsSectionComponent } from '../project-analysis-repo
 import { ProjectWorkspaceSectionComponent } from '../project-workspace-section/project-workspace-section';
 import { AutonomySliderComponent } from '../autonomy-slider/autonomy-slider';
 import { AnalysisReport } from '../../../../models/analysis-report.model';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { ProjectWorkflowSectionComponent } from '../project-workflow-section/project-workflow-section';
 import { ProjectCliEnvironmentSectionComponent } from '../project-cli-environment-section/project-cli-environment-section';
 interface ProjectSettingsRow {

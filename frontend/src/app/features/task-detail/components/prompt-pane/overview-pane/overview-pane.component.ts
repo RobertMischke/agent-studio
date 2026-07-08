@@ -41,8 +41,8 @@ import {
   type PipelineStepResultHeader,
 } from '../pipeline-step-result/pipeline-step-result.component';
 import { ReferencesSectionComponent } from '../../references-section/references-section.component';
-import { TooltipDirective } from '@coding-agent/chat/shared';
-import type { StructuredTooltip, TooltipSeverity } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
+import type { StructuredTooltip, TooltipSeverity } from 'coding-agent-chat/shared';
 import { TaskPromptPopoverComponent } from '../task-prompt-popover/task-prompt-popover.component';
 import {
   isSteeringKind,

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { projectIdentity } from '../../../../services/project-identity.util';
 
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 export interface ProjectRunnerIndicator { icon: string; cls: string; }
 
 /**

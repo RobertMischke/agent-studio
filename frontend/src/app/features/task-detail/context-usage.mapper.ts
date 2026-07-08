@@ -1,4 +1,4 @@
-import type { ChatContextUsage, ChatContextSection } from '@coding-agent/chat/core';
+import type { ChatContextUsage, ChatContextSection } from 'coding-agent-chat/core';
 import type { ContextUsageSnapshot } from '../../models/task.model';
 
 /**

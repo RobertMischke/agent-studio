@@ -14,7 +14,7 @@ import type { TaskScreenshot } from '../../../../features/screenshots';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
  * Visual-evidence strip + lightbox. Two surfaces share this component:
  *

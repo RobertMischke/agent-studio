@@ -1,6 +1,6 @@
 // Specs for the app-side activity-log helpers. Coverage for the canonical
 // grouper (`parseActivityLog`) and turn builder (`buildConversationTurns`)
-// moved to the @coding-agent/chat library together with the implementations.
+// moved to the coding-agent-chat library together with the implementations.
 import { describe, expect, it } from 'vitest';
 import {
   binToolBurstByKind,

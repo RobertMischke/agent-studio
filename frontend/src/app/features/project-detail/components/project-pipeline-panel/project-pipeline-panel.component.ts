@@ -19,8 +19,8 @@ import type {
 } from '../../../task-pipeline';
 import type { ProjectPipelineCostTimeline } from '../../../project-token-usage';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
-import { TooltipDirective } from '@coding-agent/chat/shared';
-import type { StructuredTooltip } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
+import type { StructuredTooltip } from 'coding-agent-chat/shared';
 import {
   PIPELINE_GATE_MODES,
   PIPELINE_CONDITIONS,

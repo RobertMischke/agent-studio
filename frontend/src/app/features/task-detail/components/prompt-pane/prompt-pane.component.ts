@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
-import { MarkdownViewComponent } from '@coding-agent/chat/markdown';
+import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { TaskArtifact, TaskInfo, TaskPromptHistoryEntry, TaskTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource, TaskState } from '../../../../models/task.model';
 import type { CliType } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../cli';

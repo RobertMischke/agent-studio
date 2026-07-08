@@ -3,7 +3,7 @@
  *
  * The canonical activity-log grouper (`parseActivityLog`) and the
  * conversation-turn builder (`buildConversationTurns`) moved into
- * `@coding-agent/chat/core` during the library extraction; they are
+ * `coding-agent-chat/core` during the library extraction; they are
  * re-exported here so existing app imports keep working. What remains in
  * this file is the app-specific layer the library intentionally does not
  * own: filter state, the legacy chat-message mapping, the live-status
@@ -15,7 +15,7 @@ import {
   buildConversationTurns,
   type ActivityLogGroup,
   type ActivityLogKind,
-} from '@coding-agent/chat/core';
+} from 'coding-agent-chat/core';
 import { CliOutputLine } from '../../../models/task.model';
 
 export {

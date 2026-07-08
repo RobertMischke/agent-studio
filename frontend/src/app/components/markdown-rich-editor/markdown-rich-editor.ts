@@ -1,12 +1,12 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { Editor } from '@tiptap/core';
-import { htmlToMarkdown, markdownToHtml, MarkdownImageOptions } from '@coding-agent/chat/markdown';
+import { htmlToMarkdown, markdownToHtml, MarkdownImageOptions } from 'coding-agent-chat/markdown';
 import { shouldEmitEditorSave } from './markdown-rich-editor.guard';
 import { CLIENT_ID } from '../../services/client-id.interceptor';
 import { MediaLightboxService } from '../../services/media-lightbox.service';
 
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../menu';
 type EditorState = 'idle' | 'dirty' | 'saved';
 

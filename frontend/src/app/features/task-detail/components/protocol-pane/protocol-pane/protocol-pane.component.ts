@@ -48,10 +48,10 @@ import type {
   ChatPermissionOption,
   ConversationEvent,
   RawLineRange,
-} from '@coding-agent/chat/core';
-import { ConversationViewComponent } from '@coding-agent/chat/conversation';
-import { ContextRingComponent, PermissionSelectComponent } from '@coding-agent/chat/composer';
-import { projectConversation } from '@coding-agent/chat/core';
+} from 'coding-agent-chat/core';
+import { ConversationViewComponent } from 'coding-agent-chat/conversation';
+import { ContextRingComponent, PermissionSelectComponent } from 'coding-agent-chat/composer';
+import { projectConversation } from 'coding-agent-chat/core';
 import type { ContextUsageSnapshot } from '../../../../../models/task.model';
 import { toChatContextUsage } from '../../../context-usage.mapper';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
@@ -72,7 +72,7 @@ import {
 } from './protocol-pane-view-model';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
 
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
 import { PaneTabsComponent } from '../../../../../components/pane-tabs/pane-tabs.component';
 import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';

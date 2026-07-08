@@ -19,7 +19,7 @@ import { StudioIconComponent } from '../../../../components/studio-icon/studio-i
 import { EmptyStateComponent } from '../../../../components/empty-state/empty-state.component';
 import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { MenuComponent, type MenuItem, type MenuItemClickEvent } from '../../../../components/menu';
 import { ProjectDragDropService } from '../../../shell';
 import { ExplorerSectionsService } from '../../services/explorer-sections.service';

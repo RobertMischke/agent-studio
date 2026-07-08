@@ -14,25 +14,25 @@ import type { CliOutputLine, TaskInfo } from '../../../../models/task.model';
 import type { RunRecord, RunTimeline } from '../../../../features/run-timeline';
 import type { TaskScreenshot } from '../../../../features/screenshots';
 import type { TaskTokenSummary } from '../../../../features/tokens';
-import { projectConversation } from '@coding-agent/chat/core';
+import { projectConversation } from 'coding-agent-chat/core';
 import type {
   ConversationEvent,
   MessageEvent,
   RawLineRange,
   ToolFamily,
   WorkbenchDebugEvent,
-} from '@coding-agent/chat/core';
+} from 'coding-agent-chat/core';
 import {
   groupIntoPhases,
   groupIntoSuperPhases,
   type ChatPhase,
   type PhaseInputMessage,
   type SuperPhase,
-} from '@coding-agent/chat/composer';
+} from 'coding-agent-chat/composer';
 import { formatTokens as fmtTokens } from '../../../../services/format.util';
 
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 export type VerboseDebugTab =
   | 'overview'
   | 'actors'

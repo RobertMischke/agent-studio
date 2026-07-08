@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { ArchitectureOverview } from '../../../../models/project-docs.model';
-import { MarkdownViewComponent } from '@coding-agent/chat/markdown';
+import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 
 /**
  * Project-level Architecture section: browse the project's

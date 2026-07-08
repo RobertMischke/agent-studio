@@ -48,7 +48,7 @@ import { ProjectLookupService } from '../../services/project-lookup.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
 import { ExplorerWorkspaceTreeComponent, type ExplorerProjectSurface } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { TaskStatusPopoverDirective } from '../../components/task-status-card';
 import { buildProjectPickerItems, buildTabCtxMenuItems } from './studio-shell.menu-builders';
 import { StudioTabStateService } from './services/studio-tab-state.service';

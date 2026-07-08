@@ -17,10 +17,10 @@ import type { WatchPathEntry } from '../../../../models/task.model';
 import { TaskState } from '../../../../models/task.model';
 import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
 import { buildChatNavigationContext } from '../../../../features/orchestrator';
-import { ChatComponent } from '@coding-agent/chat/composer';
-import { ChatEvent, ChatMessage, ChatSubmitEvent, ChatToolbarItem } from '@coding-agent/chat/core';
+import { ChatComponent } from 'coding-agent-chat/composer';
+import { ChatEvent, ChatMessage, ChatSubmitEvent, ChatToolbarItem } from 'coding-agent-chat/core';
 
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
 import { OrchestratorContextHeaderComponent } from '../orchestrator-context-header/orchestrator-context-header.component';
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';

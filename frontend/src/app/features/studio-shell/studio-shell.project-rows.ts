@@ -1,6 +1,6 @@
 import type { GroupedJobs, TaskInfo } from '../../models/task.model';
 import { projectIdentity } from '../../services/project-identity.util';
-import type { StructuredTooltip } from '@coding-agent/chat/shared';
+import type { StructuredTooltip } from 'coding-agent-chat/shared';
 
 export interface ExplorerLaneCounts {
   ready: number;

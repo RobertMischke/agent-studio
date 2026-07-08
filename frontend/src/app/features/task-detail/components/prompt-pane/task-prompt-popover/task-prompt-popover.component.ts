@@ -8,8 +8,8 @@ import {
   input,
   signal,
 } from '@angular/core';
-import { MarkdownViewComponent } from '@coding-agent/chat/markdown';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { OverlayPortalDirective } from '../../../../../directives/overlay-portal.directive';
 import { ModalStackService } from '../../../../../services/modal-stack.service';
 import { resolveProtocolImageSrc } from '../../protocol-pane/protocol-image-resolver';

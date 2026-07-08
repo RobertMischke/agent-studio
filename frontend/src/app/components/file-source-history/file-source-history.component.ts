@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
-import { MarkdownViewComponent } from '@coding-agent/chat/markdown';
+import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import type { TaskFileHistoryEntry, TaskFileSourceScope } from '../../models/task.model';
 import { TaskService } from '../../services/task.service';
 import { formatDateTimeUtc, formatRelativeTime } from '../../services/format.util';

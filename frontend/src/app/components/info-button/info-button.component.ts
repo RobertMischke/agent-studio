@@ -10,8 +10,8 @@ import {
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { TooltipDirective } from '@coding-agent/chat/shared';
-import { MarkdownViewComponent } from '@coding-agent/chat/markdown';
+import { TooltipDirective } from 'coding-agent-chat/shared';
+import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { DialogComponent } from '../dialog/dialog.component';
 import { ModalStackService } from '../../services/modal-stack.service';
 

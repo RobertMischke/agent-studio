@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import type { CliType } from '../../../../models/task.model';
 import { ConceptHelpComponent } from '../../../../components/concept-help/concept-help.component';
 import type { QuotaWindow } from '../../../../features/quota';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type {
   AdHocUsageAggregate,

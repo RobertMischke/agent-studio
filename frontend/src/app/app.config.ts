@@ -1,7 +1,7 @@
 import { ApplicationConfig, ErrorHandler, provideBrowserGlobalErrorListeners, isDevMode } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideServiceWorker } from '@angular/service-worker';
-import { provideCodingAgentChat } from '@coding-agent/chat';
+import { provideCodingAgentChat } from 'coding-agent-chat';
 import { ModalErrorHandler } from './services/error-dialog.service';
 import { clientIdInterceptor } from './services/client-id.interceptor';
 import { offlineGuardInterceptor } from './services/offline-guard.interceptor';
@@ -13,7 +13,7 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideHttpClient(withInterceptors([offlineGuardInterceptor, clientIdInterceptor])),
     { provide: ErrorHandler, useClass: ModalErrorHandler },
-    // @coding-agent/chat host seams: markdown task-reference auto-linking and
+    // coding-agent-chat host seams: markdown task-reference auto-linking and
     // click-to-enlarge images route into the app's existing root services.
     provideCodingAgentChat({
       taskReferences: TaskReferenceNavigationService,

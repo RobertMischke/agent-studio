@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { AspectFindingsListComponent } from '../../../../components/aspect-findings';
 import { TaskTimelinePollService } from '../../../polling/services/task-timeline-poll.service';
 import {

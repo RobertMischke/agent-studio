@@ -15,7 +15,7 @@ import { ConceptKey, getConceptEntry } from '../../concept-docs/concept-doc-regi
 import { ModalStackService } from '../../services/modal-stack.service';
 import { ConnectedOverlayDirective } from '../../directives/connected-overlay.directive';
 
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 const REPO_BLOB_BASE = 'https://github.com/RobertMischke/agent-taskboard/blob/main/';
 
 /**

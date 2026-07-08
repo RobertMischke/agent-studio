@@ -8,7 +8,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { TooltipDirective } from '@coding-agent/chat/shared';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { TaskService } from '../../../../services/task.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
