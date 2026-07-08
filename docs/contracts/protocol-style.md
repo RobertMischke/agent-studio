@@ -212,6 +212,17 @@ When the agent task orchestrator runs a CLI (Claude Code, Codex, Copilot, Gemini
 
 The frontend's markdown renderer and protocol pane already handle `results/playwright/<spec>/<name>` paths just like any other `results/` image. Haiku's summary (`status.md`) extracts image references from the CLI output; if the run produced screenshots and the CLI mentioned them, Haiku includes them in the `## Images` section of the protocol. `SummaryGenerationService` also runs a deterministic pass over the full CLI log and appends any missing `results/` or `attachments/` image references so visible proof is not lost when the summarizer omits a path or the image appeared before the summary tail.
 
+### 4.2.6 Review-evidence panel reference rendering
+
+The evidence panel (`review-evidence-panel.component`, driven by `review-evidence.jsonl`) renders each finding's `artifacts` and `fileRefs` — it does **not** go through the `status.md` markdown path in §4.2, so its reference rendering is specified separately here:
+
+| Reference kind | How it renders |
+|----------------|----------------|
+| Bitmap image (`.png` / `.jpg` / `.jpeg` / `.webp` / `.gif` / `.avif` / `.bmp`) | An **inline thumbnail** (not a bare path). The `src` is resolved by [`resolveProtocolImageSrc`](../../frontend/src/app/features/task-detail/components/protocol-pane/protocol-image-resolver.ts) to the same `/api/tasks/{jobId}/results/{name}?watchPath=…` URL as §4.2. Thumbnails are `loading="lazy"` / `decoding="async"` (a finding may carry many PNGs) and height-bounded (`max-height: 96px`). Clicking one opens the shared `MediaLightboxService` gallery focused on the clicked image. |
+| Any other reference (`.md`, `.jsonl`, `.log`, config, `.csv`, source `file:line`, …) | A labelled **text row** prefixed by a **file-type-specific glyph** (`refIcon()` distinguishes markdown / json / log / config / csv / code from a plain file) instead of one generic artifact icon. |
+
+Both surfaces read `--studio-*` design tokens so they render correctly in either theme. Image refs are pulled out of `artifacts` + `fileRefs` (artifacts first) so the lightbox gallery index matches the on-screen thumbnail order.
+
 ### 4.3 Git policy
 
 Job folders are checked into the **target project's** repo (the watched workspace), not this app's repo. The product position is: **the protocol is the durable record; the screenshots are local proof.** Logs are text and cheap, so they push; images are heavy binaries and stay local.

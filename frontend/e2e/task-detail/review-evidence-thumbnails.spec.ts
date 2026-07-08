@@ -19,8 +19,8 @@ import { setTheme, dismissDevErrorDialog } from '../helpers/theme';
 // --- minimal solid-colour PNG encoder (no image deps) ----------------------
 function crc32(buf: Buffer): number {
   let c = ~0;
-  for (let i = 0; i < buf.length; i++) {
-    c ^= buf[i];
+  for (const byte of buf) {
+    c ^= byte;
     for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
   }
   return (~c) >>> 0;
@@ -130,7 +130,7 @@ async function installRoutes(page: Page): Promise<void> {
 
   // Broad catch-all first; specific routes registered afterwards win (LIFO).
   await page.route('**/api/**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {}),
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined),
   );
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
