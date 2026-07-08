@@ -41,14 +41,14 @@ New `ProjectSettings` fields (alongside `OrchestratorModel`, `AutoCommit`, `Pipe
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `maxParallelism` | int (1–N) | **1** | Concurrent worker slots for this project. `1` = today's serial behaviour, byte-for-byte. |
-| `integrationBranch` | string | **`develop`** | Branch tasks branch from and integrate into. `main` stays released/protected. Per-user override keyed on `OwnerClientId` (see open decision D3). |
+| `integrationBranch` | string | **`develop`**, with repository default fallback | Branch tasks branch from and integrate into. If the configured branch does not exist, the runner falls back to the repository default branch, for example `main` in a main-only repo. Per-user override keyed on `OwnerClientId` (see open decision D3). |
 | `integrationStrategy` | enum | `direct-merge` | `direct-merge` \| `pull-request` (§5). |
 
 "Slot / worker / lane" is a **runner** concept. Git only knows repo / branch / commit / worktree. The runner owns N slots; each occupied slot maps to one worktree + one `task/<id>` branch.
 
 ## 3. Branch model + isolation
 
-- **Integration line = `integrationBranch`** (default `develop`). `main` = released.
+- **Integration line = resolved `integrationBranch`** (configured branch when present, otherwise repository default branch). In the original default this is `develop`; main-only repositories resolve to `main`.
 - **Serial (`maxParallelism = 1`):** work proceeds exactly as today. *Optionally* directly on `integrationBranch`, no task branch. Zero new worktree I/O when a project never opts in — this keeps ADR-0001's original "don't triplicate I/O for sequential work" objection answered.
 - **Parallel (`maxParallelism ≥ 2`):** per concurrently-running task, an **ephemeral** branch `task/<id>` cut fresh from `integrationBranch`, checked out in its **own `git worktree`** (shared `.git` object store, no full clone). The branch lives for exactly one run and is deleted on cleanup. This is throwaway plumbing, **not** a feature-branch workflow.
 - **Why worktree ⇒ branch-per-task:** git forbids two worktrees on the same branch, and two agents must never write the same working tree or race the same ref. Worktree-per-task therefore forces branch-per-task. Short branches keep merges small and conflict-rare.

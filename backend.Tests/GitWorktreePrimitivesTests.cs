@@ -54,6 +54,45 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
     }
 
     [Fact]
+    public void ResolveIntegrationBranch_DefaultDevelopMissing_FallsBackToMain()
+    {
+        var repo = SeedRepo("main-only");
+        var git = BuildGitService(("Fixture", repo));
+        var wtPath = Path.Combine(_tempDir, "wt-main-only");
+
+        var resolved = git.ResolveIntegrationBranch(repo, "develop");
+        var result = git.WorktreeAdd(repo, wtPath, "task/main-only", resolved);
+
+        Assert.Equal("main", resolved);
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(0, RunGit(repo, "rev-parse --verify task/main-only").Code);
+        Assert.Equal(
+            RunGit(repo, "rev-parse main").Out.Trim(),
+            RunGit(wtPath, "rev-parse HEAD").Out.Trim());
+    }
+
+    [Fact]
+    public void ResolveIntegrationBranch_ConfiguredBranchExists_WinsOverRepositoryDefault()
+    {
+        var repo = SeedRepo("configured-branch");
+        var git = BuildGitService(("Fixture", repo));
+        var wtPath = Path.Combine(_tempDir, "wt-configured");
+
+        RunGit(repo, "checkout -q -b integration");
+        File.WriteAllText(Path.Combine(repo, "integration.txt"), "integration branch");
+        Commit(repo, "feat: integration branch");
+        var integrationTip = RunGit(repo, "rev-parse integration").Out.Trim();
+        RunGit(repo, "checkout -q main");
+
+        var resolved = git.ResolveIntegrationBranch(repo, "integration");
+        var result = git.WorktreeAdd(repo, wtPath, "task/configured", resolved);
+
+        Assert.Equal("integration", resolved);
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(integrationTip, RunGit(wtPath, "rev-parse HEAD").Out.Trim());
+    }
+
+    [Fact]
     public void WorktreeAdd_PathWithSpaces_IsHandledByArgumentList()
     {
         var repo = SeedRepo("add-spaces");

@@ -2014,6 +2014,62 @@ public class GitService
     }
 
     /// <summary>
+    /// Resolves the branch that task worktrees should branch from and merge back
+    /// into. The configured project branch wins when it exists; otherwise the
+    /// repository's default branch is used so main-only repositories do not fail
+    /// with "invalid reference: develop".
+    /// </summary>
+    public string ResolveIntegrationBranch(string repoRoot, string? configuredBranch)
+    {
+        var configured = string.IsNullOrWhiteSpace(configuredBranch)
+            ? new ProjectSettings().IntegrationBranch
+            : configuredBranch.Trim();
+
+        if (BranchExists(repoRoot, configured))
+            return configured;
+
+        var fallback = ResolveRepositoryDefaultBranch(repoRoot);
+        if (!string.IsNullOrWhiteSpace(fallback) && BranchExists(repoRoot, fallback))
+        {
+            _logger.LogInformation(
+                "Integration branch {ConfiguredBranch} does not exist at {RepoRoot}; using repository default branch {FallbackBranch}.",
+                configured,
+                repoRoot,
+                fallback);
+            return fallback;
+        }
+
+        return configured;
+    }
+
+    private string? ResolveRepositoryDefaultBranch(string repoRoot)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return null;
+
+        var (remoteHead, _, remoteHeadCode) = RunGitArgs(repoRoot, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD");
+        if (remoteHeadCode == 0 && !string.IsNullOrWhiteSpace(remoteHead))
+        {
+            var branch = remoteHead.Trim();
+            const string originPrefix = "origin/";
+            if (branch.StartsWith(originPrefix, StringComparison.Ordinal))
+                branch = branch[originPrefix.Length..];
+            if (IsLikelyBranchName(branch))
+                return branch;
+        }
+
+        var (head, _, headCode) = RunGitArgs(repoRoot, "symbolic-ref", "--quiet", "--short", "HEAD");
+        if (headCode == 0)
+        {
+            var branch = head.Trim();
+            if (IsLikelyBranchName(branch))
+                return branch;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Attaches an <b>existing</b> local branch into a fresh worktree
     /// (<c>git worktree add &lt;path&gt; &lt;branch&gt;</c>, no <c>-b</c>). The
     /// reuse counterpart to <see cref="WorktreeAdd"/>: a task that already owns a

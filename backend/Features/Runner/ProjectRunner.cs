@@ -1002,7 +1002,7 @@ public class ProjectRunner
             $"Worktree run stayed contained in `{run.WorktreePath}`.");
 
         var settings = _projectSettings.Get(ProjectName);
-        var workBranch = string.IsNullOrWhiteSpace(settings.IntegrationBranch) ? "develop" : settings.IntegrationBranch!;
+        var workBranch = _git.ResolveIntegrationBranch(Entry.RootPath, settings.IntegrationBranch);
         var strategy = string.IsNullOrWhiteSpace(settings.IntegrationStrategy) ? IntegrationStrategies.DirectMerge : settings.IntegrationStrategy!;
         try
         {
@@ -1718,7 +1718,7 @@ public class ProjectRunner
         try
         {
             var settings = _projectSettings.Get(ProjectName);
-            var workBranch = string.IsNullOrWhiteSpace(settings.IntegrationBranch) ? "develop" : settings.IntegrationBranch!;
+            var workBranch = _git.ResolveIntegrationBranch(Entry.RootPath, settings.IntegrationBranch);
             var res = Worktree.TeardownIfIntegrated(Entry.RootPath, jobId, workBranch, WorktreeRoot());
             if (!res.Success)
                 _logger.LogWarning("[taskboard] worktree teardown for {Job} reported: {Err}", jobId, res.Error);
@@ -1923,7 +1923,7 @@ public class ProjectRunner
             {
                 claimed.Parallelism = PredictParallelism(info);
                 var wtSettings = _projectSettings.Get(ProjectName);
-                var workBranch = string.IsNullOrWhiteSpace(wtSettings.IntegrationBranch) ? "develop" : wtSettings.IntegrationBranch!;
+                var workBranch = _git.ResolveIntegrationBranch(Entry.RootPath, wtSettings.IntegrationBranch);
                 var prep = Worktree.PrepareOrReuse(Entry.RootPath, jobId, workBranch, WorktreeRoot());
                 if (prep.Success)
                 {
