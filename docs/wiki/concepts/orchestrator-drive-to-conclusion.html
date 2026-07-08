@@ -401,6 +401,29 @@
             Never stranded.</span>
           </td>
         </tr>
+        <tr>
+          <td>2026-07-08</td>
+          <td><code>AGT-1945</code><br><span class="small">reissue-verliert-uncommittete-arbeit-worktree-wipe<br>(RM-3 <code>AGT-1937</code>, RM-1 <code>AGT-1935</code>)</span></td>
+          <td>
+            A managed worktree run produced a real deliverable, but the platform auto-commit landed nothing (the branch tip
+            stayed at <code>develop</code>). The reissue / accept verdict then reached terminal teardown, which force-removed the
+            worktree and its <code>task/&lt;id&gt;</code> branch. The next attempt found an empty branch (HEAD == develop), no
+            dangling commits, and the work was irrecoverable.
+          </td>
+          <td>
+            <code>WorktreeTaskLifecycle.TeardownIfIntegrated</code> gated only on <em>committed</em> history
+            (<code>IsAncestor(task/&lt;id&gt;, develop)</code>). A dirty worktree whose branch tip still equals
+            <code>develop</code> reads as "already merged", so <code>git worktree remove --force</code> wiped the uncommitted
+            deliverable. The gate never inspected the working tree.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> teardown now snapshots any uncommitted work onto <code>task/&lt;id&gt;</code> as a
+            platform WIP safety commit <em>before</em> any removal; that commit puts the branch ahead of <code>develop</code>, so
+            the same merged-ancestor gate defers teardown and the work survives for a reissue / human review. A failed snapshot
+            refuses teardown instead of dropping the work, and a genuine auto-commit failure at integration is now a loud High
+            <code>integration-error</code>, never silent.
+          </td>
+        </tr>
       </tbody>
     </table>
 

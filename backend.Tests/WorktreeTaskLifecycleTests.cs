@@ -581,6 +581,58 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
         Assert.True(td.Success, td.Error);
     }
 
+    [Fact]
+    public void TeardownIfIntegrated_PreservesUncommittedWork_OnTaskBranch()
+    {
+        // AGT-1945 regression: a run whose auto-commit failed/was skipped leaves
+        // the deliverable ONLY as uncommitted changes in the worktree. The task
+        // branch tip then still equals develop, so a naive "is the branch merged?"
+        // check reads it as safe-to-remove and the force-remove wipes the work
+        // irreversibly. Terminal teardown MUST snapshot the work onto task/<id>
+        // first so a reissue / human review can still reach it.
+        var (repo, life) = SeedWithDevelop("tdi-dirty");
+        var wtRoot = WorktreeRoot();
+        var prep = life.PrepareOrReuse(repo, "task-dirty", "develop", wtRoot);
+        Assert.True(prep.Success, prep.Error);
+
+        // Uncommitted work only: no Commit(), simulating a failed auto-commit.
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "deliverable.txt"), "hard-won work");
+
+        var td = life.TeardownIfIntegrated(repo, "task-dirty", "develop", wtRoot);
+
+        Assert.True(td.Success, td.Error);
+        // Branch survives and now carries the work as a WIP safety commit.
+        Assert.Equal(0, RunGit(repo, "rev-parse --verify task/task-dirty").Code);
+        Assert.Equal("hard-won work", RunGit(repo, "show task/task-dirty:deliverable.txt").Out.Trim());
+        // Not folded into develop -> teardown deferred, worktree kept.
+        Assert.NotEqual(0, RunGit(repo, "merge-base --is-ancestor task/task-dirty develop").Code);
+    }
+
+    [Fact]
+    public void TeardownIfIntegrated_PreservesUncommittedWork_EvenWhenEarlierWorkMerged()
+    {
+        // A reissue can produce NEW uncommitted edits on top of already-merged
+        // work. The branch tip is an ancestor of develop, so the merge check
+        // alone would allow teardown - the new edits must be snapshotted first.
+        var (repo, life) = SeedWithDevelop("tdi-dirty-merged");
+        var wtRoot = WorktreeRoot();
+        var prep = life.PrepareOrReuse(repo, "task-dm", "develop", wtRoot);
+        Assert.True(prep.Success, prep.Error);
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "first.txt"), "first pass");
+        Commit(prep.WorktreePath!, "feat: first pass");
+        Assert.Equal(IntegrationOutcome.Merged,
+            life.Integrate(repo, prep.WorktreePath!, prep.Branch!, "develop", IntegrationStrategies.DirectMerge).Outcome);
+
+        // New uncommitted edits from a follow-up run that never got committed.
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "second.txt"), "second pass");
+
+        var td = life.TeardownIfIntegrated(repo, "task-dm", "develop", wtRoot);
+
+        Assert.True(td.Success, td.Error);
+        Assert.Equal(0, RunGit(repo, "rev-parse --verify task/task-dm").Code);
+        Assert.Equal("second pass", RunGit(repo, "show task/task-dm:second.txt").Out.Trim());
+    }
+
     // --- harness ------------------------------------------------------------
 
     private string WorktreeRoot()

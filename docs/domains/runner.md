@@ -72,6 +72,13 @@ state.
   [ADR-0057](../architecture/decisions/adr-archive.md#adr-0057---always-worktree-garantie-every-coding-run-is-worktree-isolated-including-single-slot-resumereissue-with-a-main-checkout-guard-2026-06-22).
 - Supervisor code is advice-first. Emergency primitives must call runner
   services, not poke task state directly.
+- Teardown never drops uncommitted work. `WorktreeTaskLifecycle.TeardownIfIntegrated`
+  snapshots any dirty/untracked worktree onto its `task/<id>` branch as a
+  platform WIP safety commit before removing anything, and refuses teardown if
+  that snapshot fails (AGT-1945). The merged-ancestor gate alone is not enough:
+  a failed auto-commit leaves the branch tip at develop, which reads as "merged"
+  and would force-remove the deliverable. Genuine auto-commit failures at
+  integration are surfaced as a High `integration-error`, never silent.
 
 ## Verification
 

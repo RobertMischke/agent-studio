@@ -1014,8 +1014,26 @@ public class ProjectRunner
             var commit = _git.WorktreeRunCommit(ProjectName, run.WorktreePath!,
                 $"{info.Title}\n\n{GitService.WorktreeRunCommitTrailer(run.JobId)}");
             if (commit.Success)
+            {
                 _logger.LogInformation("[taskboard] parallel run {Job} committed agent edits on {Branch} at {Sha}",
                     run.JobId, run.Branch, commit.Sha ?? "<unknown>");
+            }
+            else if (!string.IsNullOrEmpty(commit.Error)
+                     && !commit.Error.Contains("Nothing to commit", StringComparison.OrdinalIgnoreCase))
+            {
+                // A genuine commit failure (not a benign clean tree) must never be
+                // silent (AGT-1945 option 2): the branch tip stays at develop, so
+                // the merge below would fold in nothing and the run's deliverable
+                // would only live as uncommitted files in the worktree. Surface it
+                // as a High integration issue. The pre-teardown WIP safety commit
+                // (WorktreeTaskLifecycle.TeardownIfIntegrated) still preserves the
+                // work, but the operator must see that the landing failed here.
+                _logger.LogWarning("[taskboard] parallel run {Job} could not commit agent edits on {Branch}: {Error}",
+                    run.JobId, run.Branch, commit.Error);
+                _chatLog.Append(info, OrchestratorMessageKind.IntegrationError,
+                    $"[integration-error] Could not commit worktree edits onto `{run.Branch}` before integration: {commit.Error}. "
+                    + "The work stays in the worktree and is snapshotted as a WIP safety commit at teardown.");
+            }
             var branchHeadAfterRun = _git.ReadHeadShaAt(run.WorktreePath!);
             var pushResult = await PushTaskBranchForPortabilityAsync(info, run, branchHeadAfterRun);
             // 2) serialize integration into the shared work branch. The local
