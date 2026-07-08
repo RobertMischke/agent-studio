@@ -34,9 +34,9 @@
   align-items: center;
   gap: var(--studio-spacing-1);
   min-width: 0;
-  padding: 3px 9px;
+  padding: calc(var(--studio-spacing-1) * 0.75) var(--studio-spacing-2);
   border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--studio-border) 0%, transparent);
+  border: 1px solid transparent;
   font-size: 12px;
   font-weight: 600;
   color: var(--studio-fg);
@@ -102,7 +102,7 @@
 .octx__pill {
   display: inline-flex;
   align-items: center;
-  padding: 2px 9px;
+  padding: calc(var(--studio-spacing-1) / 2) var(--studio-spacing-2);
   border-radius: 999px;
   border: 1px solid var(--studio-border);
   background: var(--studio-bg-hover);
@@ -137,7 +137,11 @@
   align-items: center;
   gap: var(--studio-spacing-1);
   margin-left: auto;
-  padding: 2px 10px 2px 8px;
+  padding:
+    calc(var(--studio-spacing-1) / 2)
+    calc(var(--studio-spacing-2) + (var(--studio-spacing-1) / 2))
+    calc(var(--studio-spacing-1) / 2)
+    var(--studio-spacing-2);
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--studio-accent-3) 40%, transparent);
   background: var(--studio-bg-running);
