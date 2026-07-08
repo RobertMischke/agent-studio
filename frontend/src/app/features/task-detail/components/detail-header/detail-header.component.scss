@@ -128,32 +128,10 @@
 :host .detail__triage-primary--acting {
   opacity: 0.85;
 }
-/* Landed-status pill shown beside the Human Review acceptance primary once the
-   work is already on develop (or released): a read-only state, not an offer. */
-:host .detail__triage-merge-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-  flex-shrink: 0;
-  color: var(--studio-success, var(--studio-accent-3-strong, var(--studio-accent)));
-  background: color-mix(in srgb, var(--studio-success, var(--studio-accent-3, var(--studio-accent))) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--studio-success, var(--studio-accent-3, var(--studio-accent))) 36%, transparent);
-}
-:host .detail__triage-merge-status--released {
-  color: var(--studio-accent);
-  background: color-mix(in srgb, var(--studio-accent) 14%, transparent);
-  border-color: color-mix(in srgb, var(--studio-accent) 38%, transparent);
-}
-:host .detail__triage-merge-status-glyph {
-  font-size: 12px;
-  line-height: 1;
-}
+/* The landed-status pill that used to sit beside the Human Review acceptance
+   primary was removed (UI-feedback 2026-07-09): the task's on-develop state is
+   shown once, at the task commit (git pane landed ladder). The primary itself
+   still relabels to "Accept" once the work has landed. */
 :host .detail__triage-overflow {
   background: var(--studio-bg-hover);
   border: 1px solid var(--studio-border);

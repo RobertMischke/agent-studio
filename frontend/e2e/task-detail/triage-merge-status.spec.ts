@@ -3,9 +3,14 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 /**
  * Branch task: make the Human Review primary ("Merge into Develop")
  * state-dependent. When the task's work has already landed (a recorded
- * merge fact, or a live `landedState` of merged/released) the cluster shows a
- * truthful landed-status pill (`studio-triage-merge-status`) and relabels the
- * primary to "Accept" instead of promising a merge that already happened.
+ * merge fact, or a live `landedState` of merged/released) the cluster relabels
+ * the primary to "Accept" instead of promising a merge that already happened.
+ *
+ * UI-feedback 2026-07-09: the redundant landed-status pill that used to sit
+ * beside the primary (`studio-triage-merge-status`) was removed. The task's
+ * on-develop state is shown once, at the task commit (git pane landed ladder),
+ * not repeated in the top-bar action cluster. These tests therefore assert the
+ * primary relabel AND that the pill is no longer rendered.
  *
  * Fully mocked (no backend): the studio resolves `selectedJob().info` from the
  * `GET /api/tasks/{id}` detail endpoint, so the persisted provenance/merge fact
@@ -139,7 +144,7 @@ async function openJob(page: Page): Promise<void> {
 }
 
 test.describe('Human Review acceptance primary is landed-state aware', () => {
-  test('not landed: keeps the "Merge into Develop" offer and hides the status pill', async ({ page }) => {
+  test('not landed: keeps the "Merge into Develop" offer and shows no status pill', async ({ page }) => {
     await installBaseRoutes(page);
     await installJobRoutes(page, { detailMerge: null, landedState: 'on-branch-only' });
     await openJob(page);
@@ -147,10 +152,10 @@ test.describe('Human Review acceptance primary is landed-state aware', () => {
     const primary = page.getByTestId('studio-triage-action-mark-done');
     await expect(primary).toBeVisible();
     await expect(primary).toHaveText(/Merge into Develop/);
-    await expect(page.getByTestId('studio-triage-merge-status')).toBeHidden();
+    await expect(page.getByTestId('studio-triage-merge-status')).toHaveCount(0);
   });
 
-  test('merged to develop: relabels the primary to "Accept" and shows the merged pill', async ({ page }) => {
+  test('merged to develop: relabels the primary to "Accept" without a redundant pill', async ({ page }) => {
     await installBaseRoutes(page);
     await installJobRoutes(page, { detailMerge: { mergeCommit: MERGE_SHA }, landedState: 'merged-to-develop' });
     await openJob(page);
@@ -159,23 +164,18 @@ test.describe('Human Review acceptance primary is landed-state aware', () => {
     await expect(primary).toBeVisible();
     await expect(primary).toHaveText(/Accept/);
 
-    const pill = page.getByTestId('studio-triage-merge-status');
-    await expect(pill).toBeVisible();
-    await expect(pill).toHaveAttribute('data-landed-state', 'merged-to-develop');
-    await expect(pill).toContainText('Merged to develop');
-    await expect(pill).toContainText(MERGE_SHA.slice(0, 7));
+    // The former "Merged to develop" pill is gone; the on-develop state lives
+    // once at the task commit (git pane landed ladder), not in this cluster.
+    await expect(page.getByTestId('studio-triage-merge-status')).toHaveCount(0);
   });
 
-  test('released to main: live landed-state upgrades the pill wording to "Released to main"', async ({ page }) => {
+  test('released to main: still relabels the primary to "Accept" without a pill', async ({ page }) => {
     await installBaseRoutes(page);
     await installJobRoutes(page, { detailMerge: { mergeCommit: MERGE_SHA }, landedState: 'released-to-main' });
     await openJob(page);
 
     await expect(page.getByTestId('studio-triage-action-mark-done')).toHaveText(/Accept/);
-    const pill = page.getByTestId('studio-triage-merge-status');
-    await expect(pill).toBeVisible();
-    await expect(pill).toHaveAttribute('data-landed-state', 'released-to-main');
-    await expect(pill).toContainText('Released to main');
+    await expect(page.getByTestId('studio-triage-merge-status')).toHaveCount(0);
   });
 
   test('landed-state evidence — merged vs not-landed primary', async ({ page }) => {
