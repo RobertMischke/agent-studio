@@ -74,6 +74,21 @@ public sealed class WorkspaceArtifactCommitService
                 new ArtifactCommitPlan(BuildExternalCompletionMessage(jobId, normalizedSource), 0, null));
     }
 
+    public WorkspaceArtifactCommitResult TryCommitArtifactUpload(
+        string? workspaceRoot,
+        string jobId,
+        string jobFolderPath,
+        IReadOnlyList<string> files)
+        => TryCommitJobFolder(
+            workspaceRoot,
+            jobId,
+            beforeMoveFolderPath: null,
+            afterMoveFolderPath: jobFolderPath,
+            logLabel: $"artifact-upload files={files.Count}",
+            failLabel: "artifact-upload",
+            planMessage: (_, _, _) =>
+                new ArtifactCommitPlan(BuildArtifactUploadMessage(jobId, files), 0, null));
+
     /// <summary>
     /// Shared add/diff/commit core for the workspace evidence commits. The
     /// caller supplies the commit message (and the run-index/steps it wants
@@ -161,6 +176,17 @@ public sealed class WorkspaceArtifactCommitService
         return
             $"chore(workspace): record external completion for {normalizedJob}\n\n" +
             $"Completed-Externally-By: {normalizedSource}\n";
+    }
+
+    internal static string BuildArtifactUploadMessage(string jobId, IReadOnlyList<string> files)
+    {
+        var normalizedJob = string.IsNullOrWhiteSpace(jobId) ? "job" : jobId.Trim();
+        var normalizedFiles = files.Count == 0
+            ? "none"
+            : string.Join(",", files.Select(f => string.IsNullOrWhiteSpace(f) ? "unknown" : f.Trim()));
+        return
+            $"chore(workspace): record uploaded artifacts for {normalizedJob}\n\n" +
+            $"Artifact-Upload-Files: {normalizedFiles}\n";
     }
 
     /// <summary>Message plan produced once the tree is known dirty: the commit body plus the run-index/steps echoed in the result.</summary>

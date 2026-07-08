@@ -101,7 +101,9 @@ current `main`.
   (`JOB_RESULTS_DIR=<jobFolder>/results`), reads `prompt.md`, agents write
   `status.md`/`results/*` per protocol. Biggest single blocker: a remote
   runner needs either a local task-folder mirror or every write routed
-  through the API (today only `POST /api/runner/logs` exists).
+  through the API. `POST /api/runner/logs` ingests CLI output, and
+  `POST /api/runner/artifacts` now uploads base64 result files into
+  `<job>/results/` and snapshots the task store evidence git repo.
 - Already Linux-friendly: home resolution (`USERPROFILE` **then** `HOME`),
   POSIX git guard (`AgentGitCommandGuard` writes a POSIX wrapper +
   `SetUnixFileMode`), Codex prompt prefix has an `isWindows` branch, env
