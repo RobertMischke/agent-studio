@@ -164,8 +164,10 @@ test.describe('Task-Review merge-status shown once', () => {
     await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
     await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 10_000 });
 
-    // The single on-develop status line survives...
+    // The single on-develop status line survives — and, crucially for a
+    // "show it only once" task, it renders exactly once (not one-of-several).
     const ladder = page.getByTestId('git-landed-ladder');
+    await expect(ladder).toHaveCount(1);
     await expect(ladder).toBeVisible();
     await expect(page.getByTestId('git-ladder-integration')).toContainText('develop');
     await expect(page.getByTestId('git-ladder-integration')).toContainText('merged');
@@ -190,6 +192,10 @@ test.describe('Task-Review merge-status shown once', () => {
 
     await expect(page.getByTestId('studio-triage-action-mark-done')).toHaveText(/Accept/);
     await expect(page.getByTestId('studio-triage-merge-status')).toHaveCount(0);
+    // Belt-and-braces: no "Merged to develop" pill survives ANYWHERE on the
+    // page (top-bar, detail header, or git pane) — the develop state lives
+    // solely in the git-pane landed ladder rungs, which spell it "merged".
+    await expect(page.getByText('Merged to develop')).toHaveCount(0);
 
     if (RESULTS_DIR) {
       await page.getByTestId('studio-triage-panel').screenshot({ path: path.join(RESULTS_DIR, 'top-bar-no-merge-pill--mocked.png') });
