@@ -123,7 +123,7 @@ public static class TaskCrudEndpoints
             IEnumerable<TaskInfo> archived = all;
 
             if (!string.IsNullOrWhiteSpace(watchPath))
-                archived = archived.Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase));
+                archived = archived.Where(j => WatchPathComparison.PathsEqual(j.WatchPath, watchPath));
             if (includeFixtures != true)
                 archived = archived.Where(j => !j.Fixture);
 

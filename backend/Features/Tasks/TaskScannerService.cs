@@ -412,7 +412,12 @@ public class TaskScannerService : ITaskScanner
         var matches = ScanAllJobs().Where(j => j.Id == jobId);
         if (!string.IsNullOrWhiteSpace(watchPath))
         {
-            matches = matches.Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase));
+            // Path-aware, OS-correct project match. A raw OrdinalIgnoreCase
+            // string compare 404'd a card whose stored WatchPath spelled the
+            // same directory differently (separator/trailing-slash) and, on
+            // Linux, matched the WRONG project when two paths differed only in
+            // case. See WatchPathComparison (AGT-1940).
+            matches = matches.Where(j => WatchPathComparison.PathsEqual(j.WatchPath, watchPath));
         }
 
         var resolved = matches.ToList();
@@ -450,7 +455,7 @@ public class TaskScannerService : ITaskScanner
         foreach (var entry in GetWatchPaths())
         {
             if (!string.IsNullOrWhiteSpace(watchPath)
-                && !string.Equals(entry.Path, watchPath, StringComparison.OrdinalIgnoreCase))
+                && !WatchPathComparison.PathsEqual(entry.Path, watchPath))
             {
                 continue;
             }
