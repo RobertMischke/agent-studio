@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { LayoutPanesService } from '../../services/layout-panes.service';
 import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { TaskArtifact, TaskInfo, TaskPromptHistoryEntry, TaskTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource, TaskState } from '../../../../models/task.model';
 import type { CliType } from '../../../../models/task.model';
@@ -156,6 +157,21 @@ export class PromptPaneComponent {
   setTab(tab: PromptPaneTabId): void {
     this.activeTab.set(tab);
   }
+
+  /**
+   * Consume a cross-pane tab request (e.g. the git pane's commit-row
+   * code-review badge, AGT-1995). Reading the shared layout signal here
+   * rather than taking an imperative call means a request raised while this
+   * pane was hidden is still honoured: the pane re-renders on reveal and
+   * this effect picks the pending request up on creation, then clears it.
+   */
+  private readonly layout = inject(LayoutPanesService);
+  private readonly requestedTabEffect = effect(() => {
+    const requested = this.layout.requestedPromptTab();
+    if (!requested) return;
+    this.onPromptTabChange(requested);
+    this.layout.requestedPromptTab.set(null);
+  });
 
   /** Type-safe bridge from the generic pane-tabs `tabChange` event. */
   onPromptTabChange(id: string): void {

@@ -347,6 +347,55 @@
   outline-offset: 1px;
 }
 
+// Commit-row code-review rating badge (AGT-1995): a compact, tinted pill
+// that surfaces the review verdict for the shown commit and jumps to the
+// Code Review tab on click. It is the successor to the token chip AGT-1990
+// removed from this same line. Tone colours mirror the Code Review tab.
+.git-view__commit-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--studio-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--studio-fg);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+.git-view__commit-review:hover {
+  background: var(--studio-bg-hover);
+}
+.git-view__commit-review:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 1px;
+}
+.git-view__commit-review-glyph {
+  font-weight: 700;
+}
+.git-view__commit-review-label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.git-view__commit-review--pass {
+  color: var(--severity-pass);
+  border-color: color-mix(in srgb, var(--severity-pass) 55%, var(--studio-border));
+}
+.git-view__commit-review--concerns {
+  color: var(--severity-warn);
+  border-color: color-mix(in srgb, var(--severity-warn) 55%, var(--studio-border));
+}
+.git-view__commit-review--block {
+  color: var(--severity-high);
+  border-color: color-mix(in srgb, var(--severity-high) 55%, var(--studio-border));
+}
+.git-view__commit-review--unknown {
+  color: var(--studio-fg-dim);
+}
+
 /*
  * Split layout: when the pane is maximized the user wants the tree on
  * the left and the diff on the right (the user's "fullscreen, links die

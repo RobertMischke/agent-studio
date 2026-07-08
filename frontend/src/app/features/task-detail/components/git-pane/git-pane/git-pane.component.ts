@@ -2,8 +2,16 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, ou
 import { DatePipe } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { GitPaneService } from '../../../services/git-pane.service';
+import { LayoutPanesService } from '../../../services/layout-panes.service';
 import { GitFileTreeComponent } from '../git-file-tree/git-file-tree.component';
 import type { TaskCommitInfo } from '../../../../git';
+import type { CodeReviewListEntry } from '../../../../../services/task.service';
+import {
+  codeReviewVerdictGlyph,
+  codeReviewVerdictLabel,
+  codeReviewVerdictTone,
+  type CodeReviewVerdictTone,
+} from '../../code-review-verdict.util';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { formatCompactDateTime, formatDateTime } from '../../../../../services/format.util';
@@ -61,6 +69,7 @@ export class GitPaneComponent {
   readonly hide = output<void>();
 
   readonly git = inject(GitPaneService);
+  private readonly layout = inject(LayoutPanesService);
   private readonly sanitizer = inject(DomSanitizer);
 
   /** Diff section fullscreen toggle, scoped to this component. */
@@ -211,6 +220,41 @@ export class GitPaneComponent {
   short(sha: string | null | undefined): string {
     if (!sha) return '—';
     return sha.length > 7 ? sha.slice(0, 7) : sha;
+  }
+
+  // --- Commit-row code-review rating badge (AGT-1995) --------------------
+  // A compact indicator of the code-review verdict for the commit currently
+  // shown on the commit line. Tone/label/glyph come from the shared verdict
+  // util so this stays in lockstep with the Code Review tab; the review data
+  // itself lives on GitPaneService.commitReview().
+
+  reviewTone(verdict: string | null | undefined): CodeReviewVerdictTone {
+    return codeReviewVerdictTone(verdict);
+  }
+
+  reviewLabel(verdict: string | null | undefined): string {
+    return codeReviewVerdictLabel(verdict);
+  }
+
+  reviewGlyph(verdict: string | null | undefined): string {
+    return codeReviewVerdictGlyph(verdict);
+  }
+
+  /** Tooltip for the rating badge: verdict + one-line summary + affordance. */
+  reviewTooltip(review: CodeReviewListEntry): string {
+    const label = codeReviewVerdictLabel(review.verdict);
+    const summary = (review.summary ?? '').trim();
+    const head = summary ? `Code review: ${label} · ${summary}` : `Code review: ${label}`;
+    return `${head}. Click to open the Code Review tab.`;
+  }
+
+  /**
+   * Reveal the prompt pane (if hidden) and focus its Code Review tab. Routed
+   * through the shared layout service rather than an @Output so the git pane
+   * does not need the task-detail shell to mediate a same-feature navigation.
+   */
+  openCodeReview(): void {
+    this.layout.openPromptTab('code-review');
   }
 }
 

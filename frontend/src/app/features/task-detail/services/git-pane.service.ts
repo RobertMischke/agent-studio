@@ -8,6 +8,7 @@ import type {
   TaskProvenanceView,
 } from '../../../features/git';
 import { TaskService } from '../../../services/task.service';
+import type { CodeReviewListEntry } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import {
   setVisibleInterval,
@@ -87,6 +88,28 @@ export class GitPaneService implements OnDestroy {
   // That data survives future work in the repo and is what the user wants
   // to see when reviewing a finished task.
   readonly commitDetail = signal<TaskCommitDetail | null>(null);
+
+  /**
+   * User-triggered code-review artifacts for this task (newest first),
+   * mirroring the Code Review tab's listing. Loaded lazily when the job is
+   * set / gains a commit so the commit view can surface a compact rating
+   * badge on the commit line (AGT-1995). Silent on error: the badge simply
+   * stays hidden, it is never load-bearing for the diff/commit flow.
+   */
+  readonly codeReviews = signal<CodeReviewListEntry[]>([]);
+
+  /**
+   * The most recent code review whose reviewed commit matches the commit the
+   * detail view is currently showing, or `null` when none matches (or when
+   * the aggregated "all commits" view is active, which has no single commit
+   * line). Drives the commit-row rating badge + its "jump to Code Review"
+   * click.
+   */
+  readonly commitReview = computed<CodeReviewListEntry | null>(() => {
+    const sha = this.commitDetail()?.commit?.sha ?? null;
+    if (!sha) return null;
+    return this.codeReviews().find((r) => reviewMatchesSha(r.commit, sha)) ?? null;
+  });
 
   /**
    * Commit-provenance & landed-state (ASS-1724): the live, graph-derived view
@@ -196,6 +219,9 @@ export class GitPaneService implements OnDestroy {
         // A new commit (or a just-landed merge) can move the landed-state, so
         // re-pull the graph-derived provenance when the chain grows.
         this.loadProvenance();
+        // A follow-up commit may carry a fresh code-review verdict; refresh
+        // the listing so the commit-row badge tracks the new commit.
+        this.loadCodeReviews();
       }
       return;
     }
@@ -210,11 +236,27 @@ export class GitPaneService implements OnDestroy {
     this.committing.set(false);
     this.generatingMsg.set(false);
     this.provenance.set(null);
+    this.codeReviews.set([]);
     this.clearDiffCache();
     const chain = info?.commits ?? (info?.commit ? [info.commit] : []);
     this.commitChain.set(chain);
     this.applyCommitDefault(chain);
     this.loadProvenance();
+    this.loadCodeReviews();
+  }
+
+  /**
+   * Load the code-review listing for the current job (newest first). Silent
+   * on error - the commit-row rating badge simply stays hidden. No-op in
+   * worktree-only tasks with no commit, but harmless to call regardless.
+   */
+  loadCodeReviews(): void {
+    const info = this.currentJob;
+    if (!info) return;
+    this.jobService.listCodeReviews(info.id, info.watchPath).subscribe({
+      next: (resp) => this.codeReviews.set(resp.entries ?? []),
+      error: () => this.codeReviews.set([]),
+    });
   }
 
   /**
@@ -487,4 +529,15 @@ export class GitPaneService implements OnDestroy {
         this.errorDialog.show(err, { title: 'Open in VS Code failed', source: `Task ${info.id}` }),
     });
   }
+}
+
+/**
+ * Match a code-review entry's reviewed-commit field against a commit SHA.
+ * The review may record either a full or an abbreviated SHA (it stores
+ * whatever HEAD resolved to at review time), so we accept a prefix match in
+ * either direction rather than requiring equal-length strings.
+ */
+function reviewMatchesSha(reviewCommit: string | null | undefined, sha: string): boolean {
+  if (!reviewCommit || !sha) return false;
+  return sha === reviewCommit || sha.startsWith(reviewCommit) || reviewCommit.startsWith(sha);
 }

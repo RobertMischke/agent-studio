@@ -125,6 +125,17 @@
               <span class="git-view__commit-files">{{ c.filesChanged }} {{ c.filesChanged === 1 ? 'file' : 'files' }}</span>
             }
             <span class="git-view__commit-when">{{ c.at | date:'medium' }}</span>
+            @if (git.commitReview(); as review) {
+              <button type="button"
+                      class="git-view__commit-review git-view__commit-review--{{ reviewTone(review.verdict) }}"
+                      data-testid="git-commit-review-badge"
+                      [attr.data-verdict]="reviewTone(review.verdict)"
+                      [cacTooltip]="reviewTooltip(review)"
+                      (click)="openCodeReview()">
+                <span class="git-view__commit-review-glyph" aria-hidden="true">{{ reviewGlyph(review.verdict) }}</span>
+                <span class="git-view__commit-review-label">{{ reviewLabel(review.verdict) }}</span>
+              </button>
+            }
             <button type="button"
                     class="git-view__commit-collapse"
                     data-testid="git-commit-collapse-toggle"

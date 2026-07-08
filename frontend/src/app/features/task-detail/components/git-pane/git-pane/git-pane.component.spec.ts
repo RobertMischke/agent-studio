@@ -7,7 +7,9 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { GitPaneComponent } from './git-pane.component';
 import { GitPaneService } from '../../../services/git-pane.service';
+import { LayoutPanesService } from '../../../services/layout-panes.service';
 import type { GitFileChange, GitStatus, TaskCommitDetail, TaskCommitInfo, TaskProvenanceView } from '../../../../git';
+import type { CodeReviewListEntry } from '../../../../../services/task.service';
 import { LARGE_DIFF_LINE_THRESHOLD } from '../../../../../utils/large-diff-gate';
 import { formatCompactDateTime, formatDateTime, formatTime } from '../../../../../services/format.util';
 
@@ -56,11 +58,16 @@ function worktreeStatus(isWorktree: boolean): GitStatus {
   };
 }
 
-function makeGitPaneMock(options?: { viewMode?: 'commit' | 'worktree'; status?: GitStatus | null }) {
+function makeGitPaneMock(options?: {
+  viewMode?: 'commit' | 'worktree';
+  status?: GitStatus | null;
+  codeReviews?: CodeReviewListEntry[];
+}) {
   const selectedCommitSha = signal<string | null>(null);
   const commitChain = signal<TaskCommitInfo[]>(commits);
   const commitFiles = signal<GitFileChange[]>(files);
   const commitDetail = signal<TaskCommitDetail | null>(null);
+  const codeReviews = signal<CodeReviewListEntry[]>(options?.codeReviews ?? []);
 
   return {
     viewMode: signal<'commit' | 'worktree'>(options?.viewMode ?? 'commit'),
@@ -73,6 +80,18 @@ function makeGitPaneMock(options?: { viewMode?: 'commit' | 'worktree'; status?: 
     provenance: signal<TaskProvenanceView | null>(null),
     commitFiles,
     commitDetail,
+    codeReviews,
+    // Mirrors the real service computed: the newest review whose reviewed
+    // commit matches the shown commit's SHA (prefix-tolerant), else null.
+    commitReview: computed<CodeReviewListEntry | null>(() => {
+      const sha = commitDetail()?.commit?.sha ?? null;
+      if (!sha) return null;
+      return (
+        codeReviews().find(
+          (r) => !!r.commit && (sha === r.commit || sha.startsWith(r.commit) || r.commit.startsWith(sha)),
+        ) ?? null
+      );
+    }),
     isAggregate: computed(() => commitChain().length > 1 && selectedCommitSha() === null),
     selectAllCommits: () => selectedCommitSha.set(null),
     selectChainCommit: (sha: string) => {
@@ -82,6 +101,19 @@ function makeGitPaneMock(options?: { viewMode?: 'commit' | 'worktree'; status?: 
     },
     selectDiffPath: () => undefined,
     refresh: () => undefined,
+  };
+}
+
+function makeReview(overrides?: Partial<CodeReviewListEntry>): CodeReviewListEntry {
+  return {
+    fileName: 'code-review-2026-06-09.md',
+    verdict: 'pass',
+    summary: 'No blocking issues found.',
+    model: 'claude-opus-4-8',
+    cliType: 'claude',
+    commit: commits[1].sha,
+    runAt: '2026-06-09T11:00:00Z',
+    ...overrides,
   };
 }
 
@@ -100,6 +132,7 @@ describe('GitPaneComponent', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: GitPaneService, useValue: git },
+        LayoutPanesService,
       ],
     }).compileComponents();
 
@@ -125,6 +158,7 @@ describe('GitPaneComponent', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: GitPaneService, useValue: git },
+        LayoutPanesService,
       ],
     }).compileComponents();
 
@@ -151,6 +185,7 @@ describe('GitPaneComponent', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: GitPaneService, useValue: git },
+        LayoutPanesService,
       ],
     }).compileComponents();
 
@@ -186,6 +221,7 @@ describe('GitPaneComponent', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: GitPaneService, useValue: git },
+        LayoutPanesService,
       ],
     }).compileComponents();
 
@@ -216,6 +252,7 @@ describe('GitPaneComponent', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: GitPaneService, useValue: git },
+        LayoutPanesService,
       ],
     }).compileComponents();
 
@@ -240,6 +277,7 @@ describe('GitPaneComponent', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: GitPaneService, useValue: git },
+        LayoutPanesService,
       ],
     }).compileComponents();
 
@@ -251,5 +289,62 @@ describe('GitPaneComponent', () => {
     const location = root.querySelector('[data-testid="git-run-location"]');
     expect(location?.textContent?.trim()).toBe('(Haupt-Checkout)');
     expect(location?.classList.contains('git-view__location--worktree')).toBe(false);
+  });
+
+  it('renders a code-review rating badge on the commit line and jumps to the review on click (AGT-1995)', async () => {
+    const git = makeGitPaneMock({ codeReviews: [makeReview({ verdict: 'concerns', summary: 'Two nits worth a look.' })] });
+    await TestBed.configureTestingModule({
+      imports: [GitPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: GitPaneService, useValue: git },
+        LayoutPanesService,
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    // Pin the view to a single commit so the commit line (and its badge) render.
+    git.selectChainCommit(commits[1].sha);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const badge = root.querySelector<HTMLButtonElement>('[data-testid="git-commit-review-badge"]');
+    expect(badge).not.toBeNull();
+    expect(badge?.getAttribute('data-verdict')).toBe('concerns');
+    expect(badge?.textContent).toContain('Concerns');
+
+    // Clicking asks the shared layout service to reveal + focus the Code
+    // Review tab of the prompt pane.
+    const layout = TestBed.inject(LayoutPanesService);
+    badge?.click();
+    expect(layout.requestedPromptTab()).toBe('code-review');
+    expect(layout.panesVisible().prompt).toBe(true);
+  });
+
+  it('shows no rating badge when no review matches the shown commit (AGT-1995)', async () => {
+    const git = makeGitPaneMock({ codeReviews: [makeReview({ commit: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef' })] });
+    await TestBed.configureTestingModule({
+      imports: [GitPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: GitPaneService, useValue: git },
+        LayoutPanesService,
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    git.selectChainCommit(commits[1].sha);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[data-testid="git-commit-review-badge"]')).toBeNull();
   });
 });
