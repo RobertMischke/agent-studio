@@ -35,10 +35,20 @@ jobs:
 
       # Linux is the future runner platform (ADR-0059 / remote-ready kickoff).
       # This job is the canary for path/PTY/process assumptions that only
-      # surface off Windows. Phase-1 baseline (2026-07-07): the suite has
-      # known Linux failures (machine-bound Analyze_AgainstLiveDevCheckout_*
-      # tests, path assumptions) — the step reports but does not block until
-      # the suite is Linux-green; then drop continue-on-error.
+      # surface off Windows. Phase-1 baseline (2026-07-07): the suite had 23
+      # known Linux failures. Classification + remediation (task RM-1/AGT-1935):
+      #   - Machine-bound live-checkout drift scans (5): tagged
+      #     Category=MachineBound and excluded here (they assert facts about the
+      #     on-disk checkout, not a hermetic fixture).
+      #   - Update Service integration suite (8): Windows-native same-disk deploy
+      #     machinery (stop/start + npm install); skipped on non-Windows until
+      #     the Linux deploy story lands (kickoff D6).
+      #   - ProjectRepoResolution path-derivation (3): fixed cross-platform.
+      #   - MergeEndpoints (3) + remaining singles (4): still to enumerate and
+      #     fix on a real Linux run.
+      # continue-on-error STAYS until the suite is confirmed Linux-green
+      # (MergeEndpoints + singles resolved); only then drop it to make the gate
+      # sharp.
       - name: Test
         continue-on-error: true
-        run: dotnet test agent-taskboard.sln --no-build --logger "console;verbosity=minimal"
+        run: dotnet test agent-taskboard.sln --no-build --filter "Category!=MachineBound" --logger "console;verbosity=minimal"

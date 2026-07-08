@@ -45,6 +45,10 @@ public sealed class MergeEndpointsIntegrationTests : IDisposable
 
         using var factory = BuildFactory();
         using var client = factory.CreateClient();
+        // Mutating routes cross the X-Client-Id write boundary
+        // (ClientIdentityMiddleware); register as the default client like the
+        // other write-endpoint integration tests do.
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
         var watchPath = Uri.EscapeDataString(_watchPath);
 
         using var candidates = await client.GetAsync($"/api/tasks/primary/merge/candidates?watchPath={watchPath}");
@@ -92,6 +96,10 @@ public sealed class MergeEndpointsIntegrationTests : IDisposable
 
         using var factory = BuildFactory();
         using var client = factory.CreateClient();
+        // Mutating routes cross the X-Client-Id write boundary
+        // (ClientIdentityMiddleware); register as the default client like the
+        // other write-endpoint integration tests do.
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
         var watchPath = Uri.EscapeDataString(_watchPath);
 
         using var response = await client.PostAsync($"/api/tasks/false-done/re-evaluate?watchPath={watchPath}", content: null);
@@ -119,6 +127,10 @@ public sealed class MergeEndpointsIntegrationTests : IDisposable
 
         using var factory = BuildFactory();
         using var client = factory.CreateClient();
+        // Mutating routes cross the X-Client-Id write boundary
+        // (ClientIdentityMiddleware); register as the default client like the
+        // other write-endpoint integration tests do.
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
 
         using var start = await client.PostAsync($"/api/projects/{ProjectName}/completed-lane/audit", content: null);
 
