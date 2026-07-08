@@ -800,4 +800,60 @@ describe('ProjectWikiSectionComponent', () => {
     expect(document.querySelector('[data-testid="wiki-ctx-item-delete"]'), 'subpage delete').toBeTruthy();
     http.verify();
   });
+
+  /** History payload for a frame shell (no git metadata, no commits). */
+  function flushFrameHistory(http: HttpTestingController, rel: string): void {
+    http.expectOne(`/api/projects/Demo/wiki/history/${rel}`).flush({
+      relPath: rel, model: null,
+      metadata: { model: null, updatedAt: null, reason: null, taskKey: null, status: null, runCount: null, hasFrontmatter: false },
+      commits: [],
+    });
+  }
+
+  it('navigates between frame landing shells, rendering each in the script-disabled iframe', async () => {
+    const { fixture, http } = await setup(FRAME_TREE);
+    expandFrame(fixture);
+    const root = el(fixture);
+
+    // Open the frame overview shell.
+    root.querySelector<HTMLButtonElement>(
+      '[data-testid="project-wiki-file-engineering-workstream/00-overview.html"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/engineering-workstream/00-overview.html')
+      .flush({
+        relPath: 'engineering-workstream/00-overview.html',
+        content: '<!doctype html><html><body><h1>The development story</h1>'
+          + '<section class="ew-grid">Current Development State</section></body></html>',
+      });
+    flushFrameHistory(http, 'engineering-workstream/00-overview.html');
+    fixture.detectChanges();
+
+    let frame = root.querySelector<HTMLIFrameElement>('[data-testid="project-wiki-html-frame"]');
+    expect(frame, 'overview iframe').toBeTruthy();
+    expect(frame!.getAttribute('sandbox')).toBe(''); // no allow-scripts token
+    expect(frame!.getAttribute('srcdoc') ?? frame!.srcdoc).toContain('The development story');
+    expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
+      .toContain('engineering-workstream/00-overview.html');
+
+    // Navigate on to the Decision Log area landing shell — the viewer switches
+    // to the new frame page and re-renders the sandboxed iframe with its content.
+    root.querySelector<HTMLButtonElement>(
+      '[data-testid="project-wiki-file-engineering-workstream/40-decision-log/index.html"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/engineering-workstream/40-decision-log/index.html')
+      .flush({
+        relPath: 'engineering-workstream/40-decision-log/index.html',
+        content: '<!doctype html><html><body><h1>Decision Log</h1>'
+          + '<div class="ew-rail"><span class="ew-pill ew-pill--here">04</span></div></body></html>',
+      });
+    flushFrameHistory(http, 'engineering-workstream/40-decision-log/index.html');
+    fixture.detectChanges();
+
+    frame = root.querySelector<HTMLIFrameElement>('[data-testid="project-wiki-html-frame"]');
+    expect(frame!.getAttribute('srcdoc') ?? frame!.srcdoc).toContain('Decision Log');
+    expect(frame!.getAttribute('srcdoc') ?? frame!.srcdoc).toContain('ew-pill--here');
+    expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
+      .toContain('engineering-workstream/40-decision-log/index.html');
+    http.verify();
+  });
 });
