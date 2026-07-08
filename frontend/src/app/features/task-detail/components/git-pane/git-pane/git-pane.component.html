@@ -103,11 +103,6 @@
                     <span class="git-view__commit-chain-step">#{{ i + 1 }}</span>
                     <span class="git-view__commit-chain-sha">{{ entry.shortSha }}</span>
                     <span class="git-view__commit-chain-subject">{{ entry.message.split('\n')[0] }}</span>
-                    @if (confidencePercent(entry); as pct) {
-                      <span class="git-view__commit-confidence"
-                            data-testid="git-commit-confidence"
-                            [cacTooltip]="attributionTooltip(entry)">{{ pct }}</span>
-                    }
                     <span class="git-view__commit-chain-meta"
                           data-testid="git-commit-chain-meta">{{ entry.filesChanged }}f · {{ commitChainTimestamp(entry) }}</span>
                   </button>
@@ -130,11 +125,6 @@
               <span class="git-view__commit-files">{{ c.filesChanged }} {{ c.filesChanged === 1 ? 'file' : 'files' }}</span>
             }
             <span class="git-view__commit-when">{{ c.at | date:'medium' }}</span>
-            @if (confidencePercent(c); as pct) {
-              <span class="git-view__commit-confidence"
-                    data-testid="git-commit-header-confidence"
-                    [cacTooltip]="attributionTooltip(c)">{{ pct }}</span>
-            }
             <button type="button"
                     class="git-view__commit-collapse"
                     data-testid="git-commit-collapse-toggle"

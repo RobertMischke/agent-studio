@@ -199,6 +199,7 @@ export class GitPaneComponent {
     return `${entry.shortSha} · ${entry.message.split('\n')[0]}`;
   }
 
+<<<<<<< HEAD
   /** Confidence as a whole-percent string (e.g. "90%"); empty when absent. */
   confidencePercent(entry: TaskCommitInfo): string {
     if (entry.confidence == null) return '';
@@ -222,6 +223,12 @@ export class GitPaneComponent {
   // (UI-feedback 2026-07-09: the redundant "Merged to develop" pill and the
   // per-commit "on develop" membership chips were removed). Each rung carries
   // its own reached/pending tooltip inline in the template.
+=======
+  // --- Commit-provenance / landed-state (ASS-1724) ----------------------
+  // The landed ladder (task/<id> -> develop -> main) and per-commit branch
+  // membership are derived live off the git graph by the backend and read
+  // through git.provenance(). Labels are text-only per the slice's UI rule.
+>>>>>>> c5a61045 (Task-commit-Ansicht: Session-Token-Chip (60%-Badge) entfernen)
 
   /** Short-SHA display; em-dash placeholder when a rung has no resolved HEAD. */
   short(sha: string | null | undefined): string {

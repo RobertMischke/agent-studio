@@ -547,17 +547,6 @@
   flex: 0 0 auto;
   white-space: nowrap;
 }
-.git-view__commit-confidence {
-  flex: 0 0 auto;
-  font-family: var(--font-mono, monospace);
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--severity-info) 16%, var(--studio-bg-elevated));
-  color: var(--severity-info);
-  border: 1px solid color-mix(in srgb, var(--severity-info) 30%, var(--studio-border));
-}
-
 /*
  * Commit-provenance landed-ladder (ASS-1724). A compact, text-only strip
  * (no menu icons) showing the task/<id> -> develop -> main rungs with each
