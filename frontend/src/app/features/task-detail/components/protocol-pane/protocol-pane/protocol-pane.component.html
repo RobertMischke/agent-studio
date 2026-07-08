@@ -114,7 +114,10 @@
   </app-pane-header>
   <div class="pane__body">
     @if (protocolVerdict(); as v) {
-      <app-protocol-verdict-banner [verdict]="v" />
+      <app-protocol-verdict-banner
+        [verdict]="v"
+        [chain]="verdictChain()"
+        (openEvidence)="onVerdictChainEvidence($event)" />
     }
     @if (interimSummary(); as s) {
       @if (s.status === 'pending' || s.status === 'ready' || s.status === 'failed') {

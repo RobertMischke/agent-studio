@@ -60,6 +60,7 @@ import { SourceViewerComponent, type SourceViewerRequest } from '../../source-vi
 import { MenuComponent } from '../../../../../components/menu';
 import type { MenuItem, MenuItemClickEvent } from '../../../../../components/menu';
 import { deriveProtocolVerdict, stripStatusHeader, type ProtocolVerdict } from '../protocol-verdict';
+import { deriveVerdictChain, type ChainEvidenceLink, type VerdictChain } from '../protocol-verdict-chain';
 import { ProtocolVerdictBannerComponent } from '../protocol-verdict-banner/protocol-verdict-banner.component';
 import {
   buildInspectorTabs,
@@ -527,6 +528,33 @@ export class ProtocolPaneComponent implements OnDestroy {
       orchestratorVerdict: this.detail().info.orchestratorVerdict,
     }),
   );
+
+  /**
+   * The visible verdict chain (Run → Gate → Review aspects → Lane decision)
+   * shown beneath the pill (BEFUND 2), plus the causal narrative that links the
+   * earlier steps to the leading decision (BEFUND 3). Null while there is no run
+   * outcome or lane decision to narrate. Derived from the same signals as the
+   * head verdict so the two never disagree.
+   */
+  readonly verdictChain = computed<VerdictChain | null>(() =>
+    deriveVerdictChain({
+      verdict: this.protocolVerdict(),
+      laneState: this.detail().info.state,
+      orchestratorVerdict: this.detail().info.orchestratorVerdict,
+      reviewEvidence: this.detail().reviewEvidence,
+    }),
+  );
+
+  /**
+   * A user clicked an evidence link in the verdict chain. The status.md link
+   * opens the source viewer; review-evidence / lane links are informational for
+   * now (the review-evidence panel lives in the prompt pane's Evidence tab).
+   */
+  onVerdictChainEvidence(link: ChainEvidenceLink): void {
+    if (link.target === 'status') {
+      this.openSource({ path: 'status.md', line: null });
+    }
+  }
 
   /**
    * Status.md body with the `# Status` header (Result + Duration) lifted out

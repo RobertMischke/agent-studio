@@ -60,3 +60,63 @@
     }
   </div>
 }
+@if (chain(); as c) {
+  <!-- BEFUND 2: the visible verdict chain (Run → Gate → Review aspects → Lane
+       decision) with links to each step's evidence, so the user can see which
+       signal leads the head state and how it got there. BEFUND 3: the causal
+       line connects the earlier steps to the leading decision (e.g. why the
+       card escalated even though the run's checks passed). Collapsed by
+       default; opens with the reason/history via the same expand toggle. -->
+  <div class="protocol-verdict-chain"
+       [class.protocol-verdict-chain--open]="expanded()"
+       data-testid="protocol-verdict-chain">
+    <button type="button"
+            class="protocol-verdict-chain__toggle"
+            data-testid="protocol-verdict-chain-toggle"
+            [attr.aria-expanded]="expanded()"
+            (click)="toggle()">
+      <span class="protocol-verdict-chain__glyph" aria-hidden="true">⛓</span>
+      <span class="protocol-verdict-chain__title">Verdict chain</span>
+      <span class="protocol-verdict-chain__caret" aria-hidden="true">{{ expanded() ? '▴' : '▾' }}</span>
+    </button>
+    @if (expanded()) {
+      <ol class="protocol-verdict-chain__steps" data-testid="protocol-verdict-chain-steps">
+        @for (step of c.steps; track step.key) {
+          <li class="protocol-verdict-chain__step"
+              [attr.data-status]="step.status"
+              [class.protocol-verdict-chain__step--leading]="step.key === c.leadingStepKey"
+              [attr.data-testid]="'protocol-verdict-chain-step-' + step.key">
+            <span class="protocol-verdict-chain__dot" [attr.data-status]="step.status" aria-hidden="true"></span>
+            <div class="protocol-verdict-chain__step-body">
+              <div class="protocol-verdict-chain__step-head">
+                <span class="protocol-verdict-chain__step-title">{{ step.title }}</span>
+                @if (step.key === c.leadingStepKey) {
+                  <span class="protocol-verdict-chain__leading-pill"
+                        data-testid="protocol-verdict-chain-leading">leads</span>
+                }
+              </div>
+              <p class="protocol-verdict-chain__step-summary">{{ step.summary }}</p>
+              @if (step.evidence.length > 0) {
+                <div class="protocol-verdict-chain__evidence">
+                  @for (link of step.evidence; track link.label) {
+                    <button type="button"
+                            class="protocol-verdict-chain__evidence-link"
+                            [attr.data-target]="link.target"
+                            [attr.data-testid]="'protocol-verdict-chain-evidence-' + link.target"
+                            [cacTooltip]="'Open evidence: ' + link.label"
+                            (click)="onEvidence(link)">
+                      <span class="protocol-verdict-chain__evidence-icon" aria-hidden="true">🔗</span>
+                      {{ link.label }}
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+          </li>
+        }
+      </ol>
+      <p class="protocol-verdict-chain__narrative"
+         data-testid="protocol-verdict-chain-narrative">{{ c.causalNarrative }}</p>
+    }
+  </div>
+}

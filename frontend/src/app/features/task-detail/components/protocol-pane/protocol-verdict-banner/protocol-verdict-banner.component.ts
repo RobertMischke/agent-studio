@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, effect, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { ProtocolVerdict } from '../protocol-verdict';
+import type { ChainEvidenceLink, VerdictChain } from '../protocol-verdict-chain';
 
 /**
  * The three-state verdict pill at the top of the protocol pane, plus the
@@ -31,6 +32,17 @@ import type { ProtocolVerdict } from '../protocol-verdict';
 export class ProtocolVerdictBannerComponent {
   readonly verdict = input.required<ProtocolVerdict>();
 
+  /**
+   * The four-step verdict chain (Run → Gate → Review → Lane) with evidence
+   * links (BEFUND 2) plus the causal narrative (BEFUND 3). Optional: when null
+   * the banner renders just the head pill (e.g. no run yet). Rendered inside
+   * the expandable region so it opens together with the reason/history.
+   */
+  readonly chain = input<VerdictChain | null>(null);
+
+  /** Emitted when the user clicks an evidence link in the chain. */
+  readonly openEvidence = output<ChainEvidenceLink>();
+
   /** Whether the reason (and any superseded history) is shown in full. */
   readonly expanded = signal(false);
 
@@ -40,7 +52,7 @@ export class ProtocolVerdictBannerComponent {
    */
   readonly expandable = computed<boolean>(() => {
     const v = this.verdict();
-    return !!v.superseded || (v.detail?.length ?? 0) > 64;
+    return !!v.superseded || !!this.chain() || (v.detail?.length ?? 0) > 64;
   });
 
   constructor() {
@@ -59,5 +71,9 @@ export class ProtocolVerdictBannerComponent {
 
   toggle(): void {
     this.expanded.update((x) => !x);
+  }
+
+  onEvidence(link: ChainEvidenceLink): void {
+    this.openEvidence.emit(link);
   }
 }
