@@ -52,6 +52,16 @@ export class OrchestratorContextHeaderComponent {
   /** ISO start timestamp of the live run; drives the ticking duration. */
   readonly runStartedAt = input<string | null>(null);
 
+  /**
+   * MC-2: whether the sheet's context is pinned (frozen) rather than
+   * following navigation. Data-only, like the rest of this header — the
+   * pin toggle itself lives in the sheet toolbar; here it only renders a
+   * subtle "Pinned" chip so the operator can see the scope is frozen.
+   */
+  readonly pinned = input(false);
+  /** Canonical navigation context key (`project:<P>` / `task:<P>/<K>`). */
+  readonly contextKey = input<string | null>(null);
+
   private readonly nowTick = inject(NowTickService);
 
   readonly hasProject = computed<boolean>(() => !!this.project()?.trim());

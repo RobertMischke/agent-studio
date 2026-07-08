@@ -26,7 +26,8 @@
              class="sheet__combo-input"
              data-testid="orch-side-sheet-project-combo"
              [value]="comboQuery()"
-             [placeholder]="activeProject() ?? 'Pick a project...'"
+             [placeholder]="effectiveProject() ?? 'Pick a project...'"
+             [disabled]="pinned()"
              (input)="onComboInput($event)"
              (focus)="onComboFocus()"
              (blur)="onComboBlur()"
@@ -54,7 +55,14 @@
     </div>
 
     <div class="sheet__header-actions">
-      @if (activeJobId() && activeWatchPath()) {
+      <button class="sheet__btn sheet__btn--pin"
+              type="button"
+              [class.sheet__btn--pinned]="pinned()"
+              [attr.aria-pressed]="pinned()"
+              (click)="togglePin()"
+              [cacTooltip]="pinned() ? 'Unpin — follow navigation again' : 'Pin this context — stop following navigation'"
+              data-testid="orch-side-sheet-pin">{{ pinned() ? '📌 Pinned' : '📌 Pin' }}</button>
+      @if (effectiveJobId() && effectiveWatchPath()) {
         <button class="sheet__btn"
                 type="button"
                 (click)="onOpenVerboseDebug()"
@@ -90,10 +98,12 @@
          Reusable per task-context so the task-focused orchestrator surface
          (separate planning task) can drop it in unchanged. -->
     <app-orchestrator-context-header
-      [project]="activeProject()"
-      [taskTitle]="activeJobTitle()"
-      [taskKey]="activeJobKey()"
-      [taskState]="activeJobState()"
+      [project]="effectiveProject()"
+      [taskTitle]="effectiveJobTitle()"
+      [taskKey]="effectiveJobKey()"
+      [taskState]="effectiveJobState()"
+      [pinned]="pinned()"
+      [contextKey]="contextKey()"
       [runActive]="activeRun() !== null"
       [runModel]="activeRun()?.model ?? null"
       [runStartedAt]="activeRun()?.startedAt ?? null" />
@@ -114,7 +124,7 @@
       <div class="sheet__error">{{ err }}</div>
     }
 
-    @if (activeProject()) {
+    @if (effectiveProject()) {
       <section class="sheet__chat">
         <!-- Single Composer-owned chat surface. Project-chat's former
              app-local virtual history list deliberately gives way here;

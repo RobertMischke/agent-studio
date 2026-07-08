@@ -44,9 +44,9 @@
     },
     "src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.ts": {
       "typeScript": 1104,
-      "template": 186,
-      "styles": 323,
-      "total": 1613
+      "template": 190,
+      "styles": 337,
+      "total": 1631
     },
     "src/app/features/project-detail/components/project-detail/project-detail.ts": {
       "typeScript": 903,

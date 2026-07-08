@@ -68,6 +68,26 @@
   flex: 1 1 auto;
 }
 
+/* MC-2: pinned marker. Sits at the trailing edge of the primary row so the
+   frozen-context state is visible without competing with the project/task
+   chips. Quiet by default (muted), tinted with the accent to echo the
+   toolbar's pinned button. */
+.octx__pin {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  padding: calc(var(--studio-spacing-1) * 0.75) var(--studio-spacing-2);
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--studio-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--studio-accent) 12%, transparent);
+  color: var(--studio-fg-strong);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .octx__chip--board {
   border-color: var(--studio-border);
   background: var(--studio-bg-hover);
