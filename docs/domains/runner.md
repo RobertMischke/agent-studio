@@ -39,9 +39,12 @@ state.
   mapping.
 - `backend/Services/Runner/OrchestratorChatLog.cs`: typed orchestrator messages
   written into `logs/cli-output.log`.
-- `backend/Features/Orchestrator/OrchestratorContextKey.cs` and
-  `OrchestratorSessionRegistry.cs`: context-keyed global, project, and task
-  orchestrator session records persisted under
+- `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
+  `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
+  `OrchestratorTurnService.cs`: context-keyed global, project, and task
+  orchestrator sessions, the `/api/orchestrator/sessions/{contextKey}/turns`
+  and `/park` API surface, and session turn dispatch through the existing
+  orchestrator CLI runner. Records persist under
   `<TaskRepository>/.metadata/orchestrator-sessions/<encoded>/`.
 - `backend/Services/Runner/OrchestratorReplyParser.cs`: `{REPLY | STEER |
   BLOCK}` grammar.
@@ -67,6 +70,13 @@ state.
   detection.
 - No-progress failures count across auto-pickup and `UserContinue` reissues
   until progress, review, or quarantine resets the streak.
+- Orchestrator session turns use the existing CLI session machinery. A context
+  with a stored session id resumes that session; otherwise the first turn starts
+  a fresh run and persists the captured session id. Active turns are capped by
+  `Orchestrator:SessionTurns:ActiveLimit` with default `4`; overflow responses
+  return `status: "queued"` and a one-based `queuePosition`. Posting `/park`
+  cancels the active turn for that context and parks queued turns for the same
+  context.
 - Every coding run is worktree-isolated - single-slot resume/reissue included,
   not just parallel slots. The shared main checkout is read-only reference + the
   integration target; on a failed worktree prepare the run is deferred, never

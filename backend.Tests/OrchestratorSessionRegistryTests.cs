@@ -140,6 +140,12 @@ public sealed class OrchestratorSessionRegistryTests : IDisposable
 
         using var park = await client.PostAsync("/api/orchestrator/sessions/project:PROJ-001/park", content: null);
         park.EnsureSuccessStatusCode();
+        using (var parkDoc = JsonDocument.Parse(await park.Content.ReadAsStringAsync()))
+        {
+            Assert.Equal("project:PROJ-001", parkDoc.RootElement.GetProperty("contextKey").GetString());
+            Assert.True(parkDoc.RootElement.GetProperty("cancelledActiveTurn").GetBoolean());
+            Assert.Equal(1, parkDoc.RootElement.GetProperty("parkedQueuedTurns").GetInt32());
+        }
         runner.ReleaseAll();
     }
 
