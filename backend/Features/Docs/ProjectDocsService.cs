@@ -200,6 +200,8 @@ public class ProjectDocsService
 
     public WikiSaveResult WriteWikiFile(string projectName, string relPath, string content)
     {
+        if (EngineeringWorkstreamFrame.IsContentLocked(relPath))
+            return WikiSaveResult.Fail(FrameLockMessage(relPath, "overwritten"));
         var full = ResolveWikiPath(projectName, relPath, requireDoc: true);
         if (full == null) return WikiSaveResult.Fail("Invalid path.");
         if (!File.Exists(full)) return WikiSaveResult.Fail("File not found.");
@@ -360,7 +362,9 @@ public class ProjectDocsService
             var children = BuildTreeNodes(sub, docsRoot, metadataByRelPath);
             if (children.Count == 0) continue; // prune empty folders
             var rel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
-            nodes.Add(new WikiTreeNode(sub.Name, StripOrderPrefix(sub.Name), rel, "folder", children, null));
+            nodes.Add(new WikiTreeNode(
+                sub.Name, StripOrderPrefix(sub.Name), rel, "folder", children, null,
+                EngineeringWorkstreamFrame.IsStructural(rel)));
         }
 
         foreach (var file in dir.GetFiles())
@@ -377,7 +381,9 @@ public class ProjectDocsService
             var title = ExtractDocTitle(file.FullName, ext)
                 ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(file.Name));
             metadataByRelPath.TryGetValue(rel, out var metadata);
-            nodes.Add(new WikiTreeNode(file.Name, title, rel, type, [], metadata));
+            nodes.Add(new WikiTreeNode(
+                file.Name, title, rel, type, [], metadata,
+                EngineeringWorkstreamFrame.IsStructural(rel)));
         }
 
         nodes.Sort(CompareTreeNodes);
@@ -608,6 +614,15 @@ public class ProjectDocsService
     /// </summary>
     public string? ResolveWikiNodeFullPath(string projectName, string relPath) =>
         ResolveWikiPath(projectName, relPath, requireDoc: false);
+
+    /// <summary>
+    /// Rejection message for a blocked structural or content mutation of a fixed
+    /// Engineering Workstream frame node. Kept in one place so the service and the
+    /// endpoints phrase the immutability rule identically.
+    /// </summary>
+    public static string FrameLockMessage(string relPath, string verb) =>
+        $"'{relPath}' is part of the fixed Engineering Workstream frame and cannot be {verb}. "
+        + "Create or edit subpages under an area folder instead.";
 
     /// <summary>
     /// Creates a new wiki document on disk (seed content optional). Returns the
@@ -954,7 +969,8 @@ public record WikiTreeNode(
     string? RelPath,
     string Type,
     List<WikiTreeNode> Children,
-    WikiTreeMetadata? Metadata);
+    WikiTreeMetadata? Metadata,
+    bool Immutable = false);
 
 /// <summary>The physical docs/ folder tree exposed to the wiki UI.</summary>
 public record WikiTree(string ProjectName, string BaseDir, bool Exists, List<WikiTreeNode> Root);

@@ -119,6 +119,13 @@ export interface WikiTreeNode {
   type: WikiNodeType;
   children: WikiTreeNode[];
   metadata?: WikiTreeMetadata | null;
+  /**
+   * True for a fixed Engineering Workstream frame node (a frame folder or a
+   * landing shell). The tree marks such nodes with a lock affordance and the
+   * context menu suppresses rename/delete/move so the frame's shape stays
+   * stable. Mirrors backend `WikiTreeNode.Immutable`.
+   */
+  immutable?: boolean;
 }
 
 /** The physical docs/ folder tree backing the wiki navigation. */

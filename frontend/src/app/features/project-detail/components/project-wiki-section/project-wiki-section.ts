@@ -249,6 +249,14 @@ export class ProjectWikiSectionComponent {
     const t = this.menuTarget();
     if (!t) return [];
     if (t.type === 'folder') {
+      // A fixed frame area still accepts subpages, but its own shape is locked:
+      // no rename, no delete.
+      if (t.immutable) {
+        return [
+          { kind: 'row', id: 'new-page', label: 'New page' },
+          { kind: 'row', id: 'new-folder', label: 'New category' },
+        ];
+      }
       return [
         { kind: 'row', id: 'new-page', label: 'New page' },
         { kind: 'row', id: 'new-folder', label: 'New category' },
@@ -256,6 +264,10 @@ export class ProjectWikiSectionComponent {
         { kind: 'separator' },
         { kind: 'row', id: 'delete', label: 'Delete category', danger: true },
       ];
+    }
+    // A locked frame landing shell is read-only: only history is offered.
+    if (t.immutable) {
+      return [{ kind: 'row', id: 'history', label: 'View history' }];
     }
     return [
       { kind: 'row', id: 'rename', label: 'Rename' },
@@ -968,6 +980,7 @@ export class ProjectWikiSectionComponent {
   // ---- rename (inline) ----
 
   startRename(node: WikiTreeNode): void {
+    if (node.immutable) return; // frame folders and shells cannot be renamed
     this.renamingId.set(nodeId(node));
     this.renameValue.set(node.name);
     queueMicrotask(() => {
@@ -997,7 +1010,7 @@ export class ProjectWikiSectionComponent {
   // ---- delete ----
 
   private deleteNode(node: WikiTreeNode): void {
-    if (!node.relPath) return;
+    if (!node.relPath || node.immutable) return;
     const ok = this.confirm(`Delete "${node.name}"? This is committed to the repository.`);
     if (!ok) return;
     if (this.openedRel() === node.relPath) this.closeFile();
@@ -1008,6 +1021,7 @@ export class ProjectWikiSectionComponent {
 
   onFileDragStart(ev: DragEvent, node: WikiTreeNode): void {
     if (node.type === 'folder' || !node.relPath || !ev.dataTransfer) return;
+    if (node.immutable) return; // frame shells cannot be moved
     ev.dataTransfer.setData(FILE_DRAG_TYPE, node.relPath);
     ev.dataTransfer.setData('text/plain', node.relPath);
     ev.dataTransfer.effectAllowed = 'move';

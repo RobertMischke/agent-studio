@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decision Log</title>
+<style>
+:root {
+  --ew-bg: #11111b;
+  --ew-surface: #181825;
+  --ew-surface-2: #1e1e2e;
+  --ew-border: rgba(255, 255, 255, 0.09);
+  --ew-border-strong: rgba(255, 255, 255, 0.16);
+  --ew-fg: #cdd6f4;
+  --ew-fg-strong: #f5f5ff;
+  --ew-fg-dim: #a6adc8;
+  --ew-fg-muted: #7f849c;
+  --ew-accent: #cba6f7;
+  --ew-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.28);
+  --ew-space-1: 4px; --ew-space-2: 8px; --ew-space-3: 12px;
+  --ew-space-4: 16px; --ew-space-5: 24px; --ew-space-6: 32px;
+  --ew-radius: 12px; --ew-radius-sm: 8px;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --ew-bg: #f4f5fb;
+    --ew-surface: #ffffff;
+    --ew-surface-2: #ffffff;
+    --ew-border: rgba(15, 23, 42, 0.1);
+    --ew-border-strong: rgba(15, 23, 42, 0.18);
+    --ew-fg: #1e293b;
+    --ew-fg-strong: #0f172a;
+    --ew-fg-dim: #475569;
+    --ew-fg-muted: #64748b;
+    --ew-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 10px 24px rgba(15, 23, 42, 0.08);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--ew-bg);
+  color: var(--ew-fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.ew-wrap { max-width: 1000px; margin: 0 auto; padding: var(--ew-space-6) var(--ew-space-5); }
+.ew-hero {
+  position: relative;
+  padding: var(--ew-space-6);
+  border: 1px solid var(--ew-border);
+  border-radius: var(--ew-radius);
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--ew-accent) 26%, transparent), transparent 60%),
+    var(--ew-surface);
+  box-shadow: var(--ew-shadow);
+  overflow: hidden;
+}
+.ew-hero::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 4px;
+  background: var(--ew-accent);
+}
+.ew-eyebrow {
+  display: inline-flex; align-items: center; gap: var(--ew-space-2);
+  margin: 0 0 var(--ew-space-3);
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ew-accent);
+}
+.ew-eyebrow b { color: var(--ew-fg-muted); font-weight: 700; }
+.ew-hero h1 {
+  margin: 0; font-size: clamp(1.6rem, 4vw, 2.2rem); line-height: 1.12;
+  color: var(--ew-fg-strong); letter-spacing: -0.01em;
+}
+.ew-lede { margin: var(--ew-space-4) 0 0; max-width: 62ch; font-size: 1.02rem; color: var(--ew-fg-dim); }
+.ew-lock {
+  display: inline-flex; align-items: center; gap: var(--ew-space-2);
+  margin-top: var(--ew-space-5); padding: var(--ew-space-2) var(--ew-space-3);
+  border: 1px dashed var(--ew-border-strong); border-radius: var(--ew-radius-sm);
+  color: var(--ew-fg-muted); font-size: 0.82rem;
+}
+.ew-section-label {
+  margin: var(--ew-space-6) 0 var(--ew-space-4);
+  font-size: 0.74rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ew-fg-muted);
+}
+.ew-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--ew-space-4); }
+.ew-panel {
+  padding: var(--ew-space-5);
+  border: 1px solid var(--ew-border); border-radius: var(--ew-radius);
+  background: var(--ew-surface-2); box-shadow: var(--ew-shadow);
+}
+.ew-panel h2 { margin: 0 0 var(--ew-space-3); font-size: 1rem; color: var(--ew-fg-strong); }
+.ew-panel ul { margin: 0; padding-left: 1.1em; }
+.ew-panel li { margin: 0 0 var(--ew-space-2); font-size: 0.9rem; color: var(--ew-fg-dim); }
+.ew-panel p { margin: 0; font-size: 0.9rem; color: var(--ew-fg-dim); }
+/* Orientation rail: the five areas, current one lit. */
+.ew-rail { display: flex; flex-wrap: wrap; gap: var(--ew-space-2); margin-top: var(--ew-space-2); }
+.ew-pill {
+  display: inline-flex; align-items: center; gap: var(--ew-space-2);
+  padding: var(--ew-space-2) var(--ew-space-3);
+  border: 1px solid var(--ew-border); border-radius: 999px;
+  font-size: 0.8rem; color: var(--ew-fg-muted); background: var(--ew-surface);
+}
+.ew-pill b { color: var(--ew-fg-dim); font-weight: 600; }
+.ew-pill--here {
+  border-color: color-mix(in srgb, var(--ew-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--ew-accent) 16%, var(--ew-surface));
+  color: var(--ew-fg-strong);
+}
+.ew-pill--here b { color: var(--ew-fg-strong); }
+.ew-pill-num { font-variant-numeric: tabular-nums; opacity: 0.7; }
+.ew-foot {
+  margin-top: var(--ew-space-6); padding-top: var(--ew-space-4);
+  border-top: 1px solid var(--ew-border); font-size: 0.8rem; color: var(--ew-fg-muted);
+}
+.ew-foot code {
+  padding: 1px 6px; border-radius: 5px;
+  background: color-mix(in srgb, var(--ew-fg-muted) 16%, transparent); font-size: 0.9em;
+}
+</style>
+</head>
+<body>
+<main class="ew-wrap">
+  <header class="ew-hero">
+    <span class="ew-eyebrow"><b>Engineering Workstream &middot; Area 04 of 05</b></span>
+    <h1>Decision Log</h1>
+    <p class="ew-lede">Why the system is shaped the way it is: decisions taken, alternatives rejected, and their triggers.</p>
+    <span class="ew-lock" aria-label="This page is part of the immutable frame">
+      Fixed frame page &middot; this area and its landing page cannot be renamed, moved,
+      or deleted. Add subpages beneath it &mdash; they keep full git history.
+    </span>
+  </header>
+
+  <p class="ew-section-label">Where you are</p>
+  <div class="ew-rail">
+      <span class="ew-pill"><span class="ew-pill-num">01</span> <b>Current Development State</b></span>
+      <span class="ew-pill"><span class="ew-pill-num">02</span> <b>Development Signals</b></span>
+      <span class="ew-pill"><span class="ew-pill-num">03</span> <b>System Knowledge</b></span>
+      <span class="ew-pill ew-pill--here"><span class="ew-pill-num">04</span> <b>Decision Log</b></span>
+      <span class="ew-pill"><span class="ew-pill-num">05</span> <b>Workstream Log</b></span>
+  </div>
+
+  <p class="ew-section-label">Working in this area</p>
+  <section class="ew-cols">
+    <article class="ew-panel">
+      <h2>What belongs here</h2>
+      <ul>
+        <li>One page per decision: the context, the choice, the alternatives, and the trigger.</li>
+        <li>Explicit non-goals and things deliberately not done.</li>
+        <li>Back-links to the signal or state that prompted the decision.</li>
+      </ul>
+    </article>
+    <article class="ew-panel">
+      <h2>What does not</h2>
+      <p>The mechanics of what was built (that is System Knowledge).</p>
+    </article>
+  </section>
+
+  <p class="ew-foot">
+    Part of the fixed Engineering Workstream frame. Concept:
+    <code>docs/concepts/engineering-workstream.md</code>. Create subpages under
+    <code>40-decision-log/</code> to add content.
+  </p>
+</main>
+</body>
+</html>
