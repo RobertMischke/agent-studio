@@ -360,6 +360,11 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.formatCost(0.002)).toBe('$0.0020');
     expect(c.formatCost(1.5)).toBe('$1.50');
 
+    // The ASPECT section defaults collapsed once its work is done (quiet,
+    // finished, not the frontier); expand it so the per-step cells are in the DOM.
+    c.expandAllPipelineGroups();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('[data-testid="overview-pipeline-toggle-disabled"]')).not.toBeNull();
     const stepUsage = host.querySelector('[data-step-id="aspect-code-quality"] [data-testid="overview-pipeline-step-tokens"]');
@@ -817,6 +822,9 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.pipelineTotal()?.tokenTooltip?.title).toBe('Task total tokens (SUM)');
     expect(c.pipelineTotal()?.tokenTooltip?.body).toContain('Source: SUM of pipeline steps');
 
+    c.expandAllPipelineGroups();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="overview-pipeline-step-tokens"]')?.textContent?.trim()).toBe('19.70M');
     expect(el.querySelector('[data-testid="overview-pipeline-agent-runs"]')?.textContent?.trim()).toBe('8 runs');
@@ -876,6 +884,9 @@ describe('OverviewPaneComponent (smoke)', () => {
       runRecord({ startedAt, endedAt: completedAt, durationSeconds: 125 }),
     ]));
 
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    fixture.componentInstance.expandAllPipelineGroups();
     try { fixture.detectChanges(); } catch { /* ignore */ }
 
     const host = fixture.nativeElement as HTMLElement;
@@ -1084,6 +1095,14 @@ describe('OverviewPaneComponent (smoke)', () => {
     // The loop guard is the first row (pre steps), so a detected loop is visible early.
     expect(rows[0].id).toBe('pre-loop-guard');
     expect(c.stepKindLabel(rows[0].kind)).toBe('Pre steps');
+    // The per-row kind column shows the compact uppercase marker (the wide lane
+    // text is reserved for the tooltip), one short code per kind.
+    expect(c.stepKindMarker(rows[0].kind)).toBe('PRE');
+    expect(c.stepKindMarker('core')).toBe('CORE');
+    expect(c.stepKindMarker('aspect')).toBe('ASPECT');
+    expect(c.stepKindMarker('orchestrator')).toBe('DECISION');
+    expect(c.stepKindMarker('tool')).toBe('TOOL');
+    expect(c.stepKindMarker('drift')).toBe('DRIFT');
 
     const guard = rows.find(r => r.id === 'pre-loop-guard')!;
     expect(guard.status).toBe('failed');
@@ -1376,22 +1395,96 @@ describe('OverviewPaneComponent (smoke)', () => {
       'i', 'i', 'i', 'i', 'i', 'i',
     ]);
     expect(groups.some(g => g.querySelector('.ov-pl-phase__description'))).toBe(false);
+    // Each header is a real toggle button carrying an accessible name that folds
+    // in the aggregate state (state itself rides on aria-expanded, not colour).
+    expect(groups.every(g => g.tagName === 'BUTTON')).toBe(true);
     expect(groups.map(g => g.getAttribute('aria-label'))).toEqual([
-      'PRE STEPS pipeline phase: Preparation checks before the agent gets the task.',
-      'CORE AGENT WORK pipeline phase: The coding agent work.',
-      'ASPECT pipeline phase: Parallel review passes over the finished work.',
-      'TOOL pipeline phase: Deterministic post-run tooling and evidence steps.',
-      'DECISION pipeline phase: The orchestrator ruling that accepts, reissues, or escalates.',
-      'DRIFT pipeline phase: Optional drift-analysis passes.',
+      'PRE STEPS phase, pending, 1 step. Preparation checks before the agent gets the task.',
+      'CORE AGENT WORK phase, pending, 1 step. The coding agent work.',
+      'ASPECT phase, pending, 1 step. Parallel review passes over the finished work.',
+      'TOOL phase, pending, 1 step. Deterministic post-run tooling and evidence steps.',
+      'DECISION phase, pending, 1 step. The orchestrator ruling that accepts, reissues, or escalates.',
+      'DRIFT phase, pending, 1 step. Optional drift-analysis passes.',
     ]);
     expect(groups.map(g => g.getAttribute('data-phase'))).toEqual([
       'pre', 'core', 'aspect', 'tool', 'decision', 'drift',
     ]);
 
+    // Nothing has run (execution === null) -> the Empty scenario collapses every
+    // section, so no step rows render and every marker shows the "+" affordance.
+    expect(groups.map(g => g.getAttribute('aria-expanded'))).toEqual(
+      ['false', 'false', 'false', 'false', 'false', 'false'],
+    );
+    expect(groups.map(g => g.querySelector('.ov-pl-phase__marker')?.textContent?.trim())).toEqual(
+      ['+', '+', '+', '+', '+', '+'],
+    );
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step"]').length).toBe(0);
+
+    // Expanding reveals the per-step rows in pipeline order, one row per phase.
+    fixture.componentInstance.expandAllPipelineGroups();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
     const stepPhases = Array.from(
       fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step"]'),
     ).map(el => (el as HTMLElement).getAttribute('data-phase'));
     expect(stepPhases).toEqual(['pre', 'core', 'aspect', 'tool', 'decision', 'drift']);
+  });
+
+  it('pipeline block: sections carry aggregate tone and default collapse for a mid-flight run', async () => {
+    const fixture = await build(baseJob({ state: '3-progress' }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'pre-loop-guard', displayName: 'Loop check', kind: 'module', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+          { id: 'core-agent-run', displayName: 'Agent execution', kind: 'core', runMode: 'sequential', dependsOn: [], idempotent: false, stub: false },
+          { id: 'aspect-code-quality', displayName: 'Code quality', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+          { id: 'post-orchestrator-decision', displayName: 'Final verdict', kind: 'orchestrator', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: new Date().toISOString(), completedAt: null,
+        steps: [
+          { stepId: 'pre-loop-guard', kind: 'module', status: 'passed', startedAt: '2026-06-02T08:00:00Z', completedAt: '2026-06-02T08:00:01Z', durationMs: 900, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+          { stepId: 'core-agent-run', kind: 'core', model: 'claude-opus-4-7', status: 'running', startedAt: new Date().toISOString(), completedAt: null, durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+        ],
+      },
+      cost: emptyCost(),
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    const byPhase = Object.fromEntries(c.pipelineGroups().map(g => [g.phaseKey, g]));
+
+    // Tone: the finished PRE section reads ok, the live CORE section reads warn,
+    // the not-yet-reached ASPECT / DECISION sections read neutral.
+    expect(byPhase['pre'].tone).toBe('ok');
+    expect(byPhase['core'].tone).toBe('warn');
+    expect(byPhase['aspect'].tone).toBe('neutral');
+
+    // Default collapse mid-flight: the running section (warn + frontier) opens,
+    // the quiet finished PRE section recedes, and the not-yet-reached tail sections
+    // stay collapsed.
+    expect(c.isGroupCollapsed(byPhase['core'])).toBe(false);
+    expect(c.isGroupCollapsed(byPhase['pre'])).toBe(true);
+    expect(c.isGroupCollapsed(byPhase['aspect'])).toBe(true);
+
+    // The header carries the tone + status word so state never rides on colour alone.
+    const host = fixture.nativeElement as HTMLElement;
+    const coreHeader = host.querySelector('[data-testid="overview-pipeline-group"][data-phase="core"] [data-testid="overview-pipeline-phase"]');
+    expect(coreHeader?.getAttribute('data-tone')).toBe('warn');
+    expect(coreHeader?.getAttribute('aria-expanded')).toBe('true');
+    expect(coreHeader?.querySelector('[data-testid="overview-pipeline-phase-summary"] .ov-pl-phase__status')?.textContent?.trim())
+      .toBe('Running');
+
+    // Toggling is an explicit operator override in both directions.
+    c.toggleGroup(byPhase['pre']);
+    expect(c.isGroupCollapsed(byPhase['pre'])).toBe(false);
+    c.toggleGroup(byPhase['core']);
+    expect(c.isGroupCollapsed(byPhase['core'])).toBe(true);
   });
 
   it('pipeline block: every step row carries a "what happens here" explanation tooltip keyed by step id', async () => {
@@ -1445,7 +1538,10 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(byId('post-orchestrator-decision').explanation.body).toContain('final ruling');
     expect(byId('post-drift-adr-code').explanation.body).toContain('off by default');
 
-    // The DOM renders the tooltip-bearing name span once per step.
+    // The DOM renders the tooltip-bearing name span once per step (sections start
+    // collapsed with no run, so expand them to bring every row into the DOM).
+    fixture.componentInstance.expandAllPipelineGroups();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
     const names = fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step-name"]');
     expect(names.length).toBe(rows.length);
   });

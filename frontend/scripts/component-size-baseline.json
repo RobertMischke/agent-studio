@@ -109,10 +109,10 @@
       "total": 1058
     },
     "src/app/features/task-detail/components/prompt-pane/overview-pane/overview-pane.component.ts": {
-      "typeScript": 1629,
-      "template": 630,
-      "styles": 1268,
-      "total": 3527
+      "typeScript": 1904,
+      "template": 753,
+      "styles": 1679,
+      "total": 4336
     },
     "src/app/features/task-detail/components/protocol-pane/protocol-pane/protocol-pane.component.ts": {
       "typeScript": 1198,

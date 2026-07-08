@@ -298,6 +298,20 @@ async function dismissErrorDialog(page: Page): Promise<void> {
   }
 }
 
+/**
+ * Expand every collapsible pipeline section (ASS-1914). Sections that hold no
+ * running/failed work default-collapse, so a test that asserts on a specific
+ * row must first open its section. Each header is a toggle button carrying
+ * `aria-expanded`; clicking a collapsed one reduces the count.
+ */
+async function expandAllPipelineSections(page: Page): Promise<void> {
+  const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
+  for (let i = 0; i < 20; i++) {
+    if ((await collapsed.count()) === 0) break;
+    await collapsed.first().click();
+  }
+}
+
 test.describe('Regression radar pipeline step', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -325,13 +339,15 @@ test.describe('Regression radar pipeline step', () => {
     // The Overview pipeline block is up.
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
 
-    // The radar is a first-class row, marked as a Tool step that Passed.
+    // The radar is a first-class row, marked as a Tool step that Passed; its
+    // compact kind marker reads TOOL (full name in the tooltip).
     const radarRow = page.locator('[data-step-id="post-regression-radar"]');
     await expect(radarRow).toBeVisible();
     await expect(radarRow).toHaveAttribute('data-status', 'passed');
     await expect(radarRow).toContainText('Regression radar');
-    await expect(radarRow).toContainText('Tool');
+    await expect(radarRow).toContainText('TOOL');
 
     // Status pill carries the worst spec-change category as its verdict.
     await expect(radarRow.getByTestId('overview-pipeline-step-verdict')).toHaveText(RADAR_VERDICT);

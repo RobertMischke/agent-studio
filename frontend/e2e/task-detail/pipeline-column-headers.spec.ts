@@ -297,6 +297,20 @@ async function dismissErrorDialog(page: Page): Promise<void> {
   }
 }
 
+/**
+ * Expand every collapsible pipeline section (ASS-1914). Sections that hold no
+ * running/failed work default-collapse, so a test that asserts on the full
+ * configured row set must first open every section. Each header is a toggle
+ * button carrying `aria-expanded`; clicking a collapsed one reduces the count.
+ */
+async function expandAllPipelineSections(page: Page): Promise<void> {
+  const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
+  for (let i = 0; i < 20; i++) {
+    if ((await collapsed.count()) === 0) break;
+    await collapsed.first().click();
+  }
+}
+
 test.describe('Pipeline: per-step metric column headers', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -380,17 +394,22 @@ test.describe('Pipeline: per-step metric column headers', () => {
       'DRIFT',
     ]);
 
+    // Section headers carry an accessible name that folds in the phase label,
+    // its aggregate tone/step count, and the description (ASS-1914).
     const phaseAriaLabels = await phases.evaluateAll(els =>
       els.map(el => el.getAttribute('aria-label') ?? ''),
     );
     expect(phaseAriaLabels).toEqual([
-      expect.stringContaining('PRE STEPS pipeline phase:'),
-      expect.stringContaining('CORE AGENT WORK pipeline phase:'),
-      expect.stringContaining('ASPECT pipeline phase:'),
-      expect.stringContaining('TOOL pipeline phase:'),
-      expect.stringContaining('DECISION pipeline phase:'),
-      expect.stringContaining('DRIFT pipeline phase:'),
+      expect.stringContaining('PRE STEPS phase,'),
+      expect.stringContaining('CORE AGENT WORK phase,'),
+      expect.stringContaining('ASPECT phase,'),
+      expect.stringContaining('TOOL phase,'),
+      expect.stringContaining('DECISION phase,'),
+      expect.stringContaining('DRIFT phase,'),
     ]);
+
+    // Open every section so the grouped DOM order below includes each step row.
+    await expandAllPipelineSections(page);
 
     const domOrder = await page.evaluate(() => {
       return Array
@@ -452,6 +471,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
     await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(6);
 
     const geometry = await page.evaluate(() => {

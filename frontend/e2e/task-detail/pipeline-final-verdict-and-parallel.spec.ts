@@ -273,6 +273,20 @@ async function dismissErrorDialog(page: Page): Promise<void> {
   }
 }
 
+/**
+ * Expand every collapsible pipeline section (ASS-1914). Sections that hold no
+ * running/failed work default-collapse, so a test that measures the full
+ * configured row set (e.g. the shared stage gutter across PRE…DRIFT) must open
+ * every section first. Each header is a toggle button carrying `aria-expanded`.
+ */
+async function expandAllPipelineSections(page: Page): Promise<void> {
+  const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
+  for (let i = 0; i < 20; i++) {
+    if ((await collapsed.count()) === 0) break;
+    await collapsed.first().click();
+  }
+}
+
 test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -296,6 +310,7 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
 
     // Each aspect row carries quiet parallel metadata (read-only pool, Req 1 + 3).
     const parallelNotes = page.getByTestId('overview-pipeline-step-parallel');
@@ -304,9 +319,10 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     await expect(parallelNotes.first()).toHaveAttribute('aria-label', 'Parallel review pool');
 
     // The orchestrator decision is its own, clearly separated final-verdict row.
+    // Its compact kind marker reads DECISION (the full name rides the tooltip).
     const decisionRow = page.locator('[data-step-id="post-orchestrator-decision"]');
     await expect(decisionRow).toBeVisible();
-    await expect(decisionRow).toContainText('Decision');
+    await expect(decisionRow).toContainText('DECISION');
     await expect(decisionRow).toHaveClass(/ov-pl-step--final-verdict/);
     await expect(decisionRow).toHaveAttribute('data-run-mode', 'sequential');
 
@@ -364,6 +380,7 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
 
     const metrics = await page.getByTestId('overview-pipeline-step').evaluateAll((rows) =>
       rows.map((row) => {

@@ -156,6 +156,13 @@ async function installRoutes(page: Page, state: string) {
   await page.route('**/api/**', (route) => {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
   });
+  // The header quota chip reads `{ snapshots: [] }`; the generic `[]` catch-all
+  // above makes `report.snapshots` undefined and crashes the chip into a global
+  // error dialog that then intercepts pointer events. Mock the real shape so the
+  // pipeline interactions below are never blocked by that overlay.
+  await page.route(/\/api\/cli\/quota(\?|$)/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ snapshots: [] }) }),
+  );
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200,
@@ -218,6 +225,22 @@ async function dismissErrorDialog(page: Page): Promise<void> {
   }
 }
 
+/**
+ * Expand every collapsible pipeline section (ASS-1914). The Overview folds the
+ * pipeline into per-phase sections that default-collapse when they hold no
+ * running/failed work (a finished or not-yet-reached section recedes), so a
+ * test that asserts on the full configured row set must first open every
+ * section. Each header is a toggle button carrying `aria-expanded`; clicking a
+ * collapsed one reduces the remaining count until none are left.
+ */
+async function expandAllPipelineSections(page: Page): Promise<void> {
+  const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
+  for (let i = 0; i < 20; i++) {
+    if ((await collapsed.count()) === 0) break;
+    await collapsed.first().click();
+  }
+}
+
 test.describe('Pipeline: orchestrator-review rows are distinct, single final verdict', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -234,6 +257,7 @@ test.describe('Pipeline: orchestrator-review rows are distinct, single final ver
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
 
     // EXACTLY one "Final verdict" chip across the whole pipeline.
     const finalChips = page.getByTestId('overview-pipeline-step-final-verdict');
@@ -254,10 +278,12 @@ test.describe('Pipeline: orchestrator-review rows are distinct, single final ver
     await expect(decisionRow.getByTestId('overview-pipeline-step-name')).toHaveText('Final Orchestrator-Review');
 
     // Phase headers group the flat pipeline list without changing row order.
+    // The header carries the descriptive phase name (the compact short code
+    // lives on the per-row kind marker instead).
     const phaseHeaders = page.getByTestId('overview-pipeline-phase');
     await expect(phaseHeaders.locator('.ov-pl-phase__label')).toHaveText([
-      'PRE',
-      'CORE',
+      'PRE STEPS',
+      'CORE AGENT WORK',
       'DECISION',
       'ASPECT',
       'TOOL',
@@ -293,6 +319,7 @@ test.describe('Pipeline: orchestrator-review rows are distinct, single final ver
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
 
     // ASS-1706: the redundant expanded steering block is gone from every row.
     await expect(page.getByTestId('overview-pipeline-step-steering')).toHaveCount(0);
