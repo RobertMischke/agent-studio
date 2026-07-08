@@ -13,6 +13,7 @@ The application owns:
 - Starting, stopping, and continuing CLI runs.
 - Enforcing per-project slot admission (`maxParallelism`), including the default one-active-coding-task behavior.
 - Recording CLI execution state, session ids, logs, summaries, and review transitions.
+- Preparing, reusing, and tearing down task worktrees and reissuing tasks without losing uncommitted or unpushed work (see Worktree Lifecycle Safety Invariant below).
 
 The agent owns:
 
@@ -20,6 +21,16 @@ The agent owns:
 - Implementing the requested change in the project source tree.
 - Reading existing task evidence when resuming or recovering.
 - Writing review evidence such as screenshots, result files, or short notes when project instructions require it.
+
+### Worktree Lifecycle Safety Invariant
+
+The platform owns the commit boundary (agents leave git to the application; see the commit-push-doctrine), so it also guarantees that tearing down a worktree or reissuing a task never destroys uncommitted or unpushed task work:
+
+- Before removing a worktree, the platform snapshots any dirty or untracked changes onto the task's `task/<id>` branch as a platform WIP safety commit, and refuses teardown if that snapshot fails rather than force-removing the deliverable. A merged-ancestor ("already folded into develop") check alone is not sufficient: a failed auto-commit leaves the branch tip at develop while the real work lives only as dirty files in the worktree (AGT-1945).
+- Committed work that is not yet merged into the integration branch keeps the worktree. Terminal teardown only proceeds when `task/<id>` is a strict ancestor of develop, so an unmerged attempt is preserved for a reissue or human review.
+- A genuine failure to land agent edits onto the task branch at integration is surfaced as a High `integration-error`, never silently swallowed on the happy path.
+
+This is why an agent may safely end a run with work left uncommitted: durably preserving it is the platform's responsibility, not the agent's. The runner-side mechanics live in `docs/domains/runner.md` and the incident log in `docs/wiki/concepts/orchestrator-drive-to-conclusion.html`.
 
 ## Agent Rules
 
