@@ -1,6 +1,6 @@
 # Auto-curated project knowledge area — working name "Chartroom"
 
-**Status:** concept 2026-07-08 (operator direction, Findungsphase). Related:
+**Status:** SUPERSEDED by [engineering-workstream.md](engineering-workstream.md) — operator refinement 2026-07-09, naming settled: Engineering Workstream. Original concept 2026-07-08 (operator direction, Findungsphase). Related:
 [`project-relationship-model`] (AGT-1984 — this area lives in the wiki's
 own checkout, branch-bound), [`multichat-orchestrator.md`](multichat-orchestrator.md)
 (the curator is an orchestrator context; the area is *pullable* into chats),
