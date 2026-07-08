@@ -52,13 +52,13 @@ auto-discovers via `testDir: './e2e'` so no path tweaks are needed.
 |--------|--------|--------------|
 | `add-task/` | Add-Task dialog flows: open, attachments, prompt enhance, generated titles. | 6 |
 | `board/` | Kanban / lanes / cards: lane reorder, archive, backlog tags, auto-pickup, drag-and-drop, lane scroll. | 30 |
-| `chat/` | Activity log + chat surfaces + next-gen chat workbench: messages, tool bursts, markdown, virtualisation, role attribution. | 21 |
+| `chat/` | Activity log + chat surfaces + next-gen chat workbench: messages, tool bursts, markdown, Composer host wiring. | 19 |
 | `cli/` | CLI back-ends: Claude / Codex / Gemini / Copilot smokes, quota, sessions, CLI-usage hub in the settings home. | 13 |
 | `dev-tools/` | Dev mode, stable update pipeline, backend fixture, smoke + refactor baselines. | 7 |
 | `git/` | Git pane: diff viewer, tree, commit chain, tooltip overflow, no-NG0600 regression. | 6 |
 | `layout/` | VS-Code-layout shell, statusbar, sidebar filter sheet, drag-auto-scroll, header buttons. | 7 |
 | `mockups/` | Pure mockup-screenshot specs that pin design references (`docs/mockups/...`). | 5 |
-| `orchestrator/` | Orchestrator side sheet + settings + steering + project-chat (live + virtualised). | 11 |
+| `orchestrator/` | Orchestrator side sheet + settings + steering + Composer-backed project chat. | 9 |
 | `perf/` | Perf baselines + frontend stress. | 3 |
 | `project/` | Per-project detail panels: drift, observability, runtime, security, UX/UI, token usage, steering, identity. | 15 |
 | `system/` | Cross-cutting chrome: modal stack, caret suppression, markdown body, concept help, decision banner, update banner. | 8 |
@@ -189,7 +189,6 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `chat-attachment-inline-and-lightbox.spec.ts` | Project chat — inline attachment render + lightbox |
 | `chat-continue.spec.ts` | Activity tab — interactive chat continuation |
 | `chat-embedded-events.spec.ts` | Project chat — Slice B embedded events |
-| `chat-history-virtualisation.spec.ts` | Chat history — deep backfill + step-load panel |
 | `chat-markdown-collapse.spec.ts` | Project chat markdown — Slice A primitives |
 | `chat-tool-burst.spec.ts` | @mockup next-gen chat tool-burst chip |
 | `continuation-log-accumulation.spec.ts` | Continuation log accumulation |
@@ -198,7 +197,6 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `next-gen-chat-task-host.spec.ts` | Next-gen chat task host adapter (Frontend:NextGenChat) |
 | `next-gen-chat-workbench-regression.spec.ts` | @regression next-gen chat workbench |
 | `token-bubble.spec.ts` | Token bubble on job cards |
-| `workforce-chat-role-attribution.spec.ts` | Workforce chat — role attribution + compressed summary |
 
 ### `cli/` — 13 specs
 
@@ -276,8 +274,6 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `project-chat-bug-directive.spec.ts` | Project chat — Slice E /bug directive |
 | `project-chat-context-awareness.spec.ts` | Project chat context awareness |
 | `project-chat-fix.spec.ts` | Project chat fix - silent drop, sluggishness, parallel use |
-| `project-chat-rail.spec.ts` | Project chat — right-rail markers |
-| `project-chat-virtual.spec.ts` | Project chat — virtualised history + FTS search |
 
 ### `perf/` — 3 specs
 

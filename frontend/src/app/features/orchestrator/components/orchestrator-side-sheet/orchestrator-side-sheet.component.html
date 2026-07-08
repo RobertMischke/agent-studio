@@ -116,13 +116,12 @@
 
     @if (activeProject()) {
       <section class="sheet__chat">
-        <!-- Single <cac-chat> renders the orchestrator chat. Always
-               on virtualised mode so the chat scales to thousands of
-               turns without DOM blow-up; small-N projects pay nothing
-               because the spacer divs collapse to 0px. -->
+        <!-- Single Composer-owned chat surface. Project-chat's former
+             app-local virtual history list deliberately gives way here;
+             the library owns chat rendering while this host owns only
+             project selection, context, and endpoint wiring. -->
           <cac-chat
             variant="embedded"
-            [virtualised]="true"
             [messages]="messages()"
             [events]="events()"
             [pending]="sending()"

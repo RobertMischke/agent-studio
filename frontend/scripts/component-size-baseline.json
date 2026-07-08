@@ -48,12 +48,6 @@
       "styles": 323,
       "total": 1613
     },
-    "src/app/features/project-chat/components/project-chat-list/project-chat-list.component.ts": {
-      "typeScript": 621,
-      "template": 197,
-      "styles": 184,
-      "total": 1002
-    },
     "src/app/features/project-detail/components/project-detail/project-detail.ts": {
       "typeScript": 903,
       "template": 551,

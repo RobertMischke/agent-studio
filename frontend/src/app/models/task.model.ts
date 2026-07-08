@@ -430,14 +430,9 @@ export interface ContinueTaskQueuedInfo {
  */
 // (Orchestrator session + chat now in features/orchestrator/models; re-exported below)
 
-/**
- * One turn returned by the Slice D project-chat surface
- * (`/api/projects/{project}/chat/...`). Wider author + kind enums
- * than the legacy `OrchestratorChatTurn`: the new tree carries
- * embedded events (tool-call / watchdog / rate-limit / ...) as
- * first-class records alongside conventional turns.
- */
-// (Project chat turn + responses now in features/project-chat/models; re-exported below)
+// Project chat now renders through the `coding-agent-chat` Composer host in
+// features/orchestrator. The former app-local Slice D models/components were
+// retired with MC-0a.
 
 // (TokenSummaryByModel now in features/tokens/models/tokens.model.ts; re-exported below)
 
