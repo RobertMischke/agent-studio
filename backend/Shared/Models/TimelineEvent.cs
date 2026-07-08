@@ -168,6 +168,19 @@ public static class TimelineEventKinds
     /// by the run-detail panel. Emitted by the runner at run-finish.
     /// </summary>
     public const string ExecutionContext = "execution_context";
+    /// <summary>
+    /// The task was completed out-of-band (operator chat, external agent, a
+    /// remote host) and reconciled through
+    /// <c>POST /api/tasks/{id}/external-completion</c> instead of a runner run.
+    /// <see cref="TimelineEvent.Summary"/> reads "Completed externally by
+    /// &lt;source&gt;"; <see cref="TimelineEvent.Details"/> carries the source and
+    /// the target lane, and <see cref="TimelineEvent.PayloadRef"/> points at
+    /// <c>results/deliverables.md</c>. This is the first-class ingest path for
+    /// externally produced results described in
+    /// <c>docs/concepts/out-of-band-task-completion.md</c> §3, so a card's
+    /// history shows the external hand-off rather than ending in a corpse.
+    /// </summary>
+    public const string ExternalCompletion = "external_completion";
 }
 
 /// <summary>
@@ -181,5 +194,12 @@ public static class TimelineActors
     public const string Orchestrator = "orchestrator";
     public const string QualityLoop = "quality-loop";
     public const string System = "system";
+    /// <summary>
+    /// Work that arrived from outside the local runner: an operator chat, an
+    /// external agent, or a remote host. Used by the out-of-band completion
+    /// ingest path (<c>external_completion</c> timeline events) so the Timeline
+    /// filter chips can tell externally produced results from runner activity.
+    /// </summary>
+    public const string External = "external";
     public static string Human(string email) => string.IsNullOrWhiteSpace(email) ? "human" : $"human:{email}";
 }

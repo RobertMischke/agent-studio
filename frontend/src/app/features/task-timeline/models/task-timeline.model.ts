@@ -46,6 +46,7 @@ export const TIMELINE_KIND = {
   epicDecomposed: 'epic_decomposed',
   mergedIn: 'merged_in',
   readOnlyContainmentViolation: 'read_only_containment_violation',
+  externalCompletion: 'external_completion',
 } as const;
 
 /** The three terminals of the completion loop. */

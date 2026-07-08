@@ -556,6 +556,21 @@ public class TaskMutationService
         return Updated();
     }
 
+    /// <summary>
+    /// Application-owned write of the <c>externalCompletion</c> object on a
+    /// job's <c>task.json</c> (out-of-band task completion, §3 of
+    /// <c>docs/concepts/out-of-band-task-completion.md</c>). Replace-all write:
+    /// the external-completion endpoint owns the record and hands the finished
+    /// shape here. Invalidates the scanner cache so the "extern erledigt" badge
+    /// shows without waiting out the FileSystemWatcher debounce.
+    /// </summary>
+    public bool SetExternalCompletionOnFolder(string folderPath, ExternalCompletionInfo externalCompletion)
+    {
+        if (!Directory.Exists(folderPath)) return false;
+        TaskJsonFile.UpdateField(folderPath, "externalCompletion", externalCompletion, _logger);
+        return Updated();
+    }
+
     public string? CreateJob(CreateTaskRequest req)
     {
         var watchPaths = _scanner.GetWatchPaths();

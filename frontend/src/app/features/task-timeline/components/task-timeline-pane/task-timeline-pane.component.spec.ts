@@ -109,6 +109,27 @@ describe('TaskTimelinePaneComponent', () => {
     expect(c.kindLabel(TIMELINE_KIND.runnerSlotAdmission)).toBe('Slot admitted');
     expect(c.kindLabel(TIMELINE_KIND.epicDecomposed)).toBe('Epic decomposed');
     expect(c.kindLabel(TIMELINE_KIND.readOnlyContainmentViolation)).toBe('Containment violation');
+    expect(c.kindLabel(TIMELINE_KIND.externalCompletion)).toBe('Completed externally');
+    expect(c.rowTone(TIMELINE_KIND.externalCompletion)).toBe('ok');
+  });
+
+  it('renders an external-completion entry in the story', async () => {
+    const fixture = await build([
+      {
+        ts: '2026-07-08T10:00:00Z',
+        kind: TIMELINE_KIND.externalCompletion,
+        actor: 'external',
+        summary: 'Completed externally by operator-chat',
+        details: { source: 'operator-chat', targetState: '5-human-review' },
+      },
+    ]);
+    const c = fixture.componentInstance;
+    expect(c.hasEvents()).toBe(true);
+    const html = fixture.nativeElement as HTMLElement;
+    const rows = html.querySelectorAll('[data-testid="timeline-event"]');
+    expect(rows.length).toBe(1);
+    expect(rows[0].getAttribute('data-kind')).toBe(TIMELINE_KIND.externalCompletion);
+    expect(html.textContent).toContain('Completed externally by operator-chat');
   });
 
   it('renders run-summary rows when a legacy card has run records but no ledger run events', async () => {

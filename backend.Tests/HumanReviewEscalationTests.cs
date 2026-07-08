@@ -112,6 +112,41 @@ public sealed class HumanReviewEscalationTests : IDisposable
     }
 
     [Fact]
+    public async Task EscalateAsync_WithFilesInResults_StatusSaysPartialResultsPresent()
+    {
+        // A run that died AFTER writing partial deliverables into results/ (the
+        // AGT-1917 shape). The escalation stub must surface that instead of the
+        // misleading "no agent-written summary" line
+        // (docs/concepts/out-of-band-task-completion.md §3, last paragraph).
+        const string jobId = "died-with-drafts";
+        WriteJob(TaskStates.Progress, jobId);
+        var resultsDir = Path.Combine(_watchPath, TaskStates.Progress, jobId, "results");
+        Directory.CreateDirectory(resultsDir);
+        File.WriteAllText(Path.Combine(resultsDir, "draft.md"), "partial work");
+
+        var funnel = BuildFunnel();
+        var outcome = await funnel.EscalateAsync(
+            jobId, _watchPath, ProjectName,
+            HumanReviewEscalationCategories.WatchdogKill,
+            "CLI exceeded the watchdog deadline");
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.True(File.Exists(Path.Combine(_watchPath, TaskStates.Escalated, jobId, "results", "draft.md")),
+            $"results/draft.md should have moved with the folder; NewFolderPath={outcome.NewFolderPath}");
+        var status = File.ReadAllText(Path.Combine(_watchPath, TaskStates.Escalated, jobId, "status.md"));
+        Assert.Contains("partial results are present", status);
+    }
+
+    [Fact]
+    public void BuildStatusStub_WithoutPartialResults_KeepsNoSummaryLine()
+    {
+        var stub = HumanReviewEscalation.BuildStatusStub(
+            HumanReviewEscalationCategories.WatchdogKill, "deadline", partialResultsPresent: false);
+        Assert.Contains("no agent-written summary", stub);
+        Assert.DoesNotContain("partial results present", stub);
+    }
+
+    [Fact]
     public void Escalate_Sync_PickupZombie_MovesAndRecordsVerdictAndStatus()
     {
         const string jobId = "zombie-card";

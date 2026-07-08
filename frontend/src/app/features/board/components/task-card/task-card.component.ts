@@ -20,6 +20,7 @@ import {
   buildExecutionBadge,
   buildGitStateBadge,
   buildHumanReviewBadge,
+  buildExternalDoneBadge,
   buildLoopTooltip,
   buildModeBadge,
   buildOutcomeIssueBadge,
@@ -220,6 +221,13 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   );
 
   readonly humanReviewBadge = computed(() => buildHumanReviewBadge(this.job()));
+
+  /**
+   * "extern erledigt" badge for a task completed out-of-band and reconciled via
+   * the external-completion endpoint. Null on every task finished through the
+   * normal runner/review path. See {@link buildExternalDoneBadge}.
+   */
+  readonly externalDoneBadge = computed(() => buildExternalDoneBadge(this.job()));
 
   /**
    * Quality-grade badge (ASS-1657). The automatic code-review step grades every

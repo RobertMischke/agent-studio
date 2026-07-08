@@ -118,6 +118,7 @@ export class TaskTimelinePaneComponent {
   rowTone(kind: string): string {
     switch (kind) {
       case TIMELINE_KIND.orchestratorVerdictAccepted:    return 'ok';
+      case TIMELINE_KIND.externalCompletion:             return 'ok';
       case TIMELINE_KIND.qualityLoopReopened:            return 'warn';
       case TIMELINE_KIND.orchestratorEscalated:          return 'danger';
       case TIMELINE_KIND.readOnlyContainmentViolation:   return 'danger';
@@ -157,6 +158,7 @@ export class TaskTimelinePaneComponent {
       case TIMELINE_KIND.epicDecomposed:              return 'Epic decomposed';
       case TIMELINE_KIND.mergedIn:                    return 'Merged in';
       case TIMELINE_KIND.readOnlyContainmentViolation: return 'Containment violation';
+      case TIMELINE_KIND.externalCompletion:         return 'Completed externally';
       default:                                        return kind;
     }
   }

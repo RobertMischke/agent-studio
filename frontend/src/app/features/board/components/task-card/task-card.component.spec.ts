@@ -17,6 +17,7 @@ import {
   buildOwnerChip,
   buildPipelineDots,
   buildTokenBubble,
+  buildExternalDoneBadge,
 } from './task-card-view-model';
 
 /**
@@ -1394,6 +1395,73 @@ function makeOwner(overrides: Partial<ClientSummary> = {}): ClientSummary {
     ...overrides,
   };
 }
+
+describe('buildExternalDoneBadge', () => {
+  it('returns null for a task with no external completion', () => {
+    expect(buildExternalDoneBadge(makeJob())).toBeNull();
+  });
+
+  it('surfaces the source and summary for an externally completed task', () => {
+    const badge = buildExternalDoneBadge(makeJob({
+      externalCompletion: {
+        source: 'operator-chat',
+        summary: 'Implemented out-of-band in docs/concepts.',
+        completedAt: '2026-07-08T10:00:00Z',
+      },
+    }));
+    expect(badge).not.toBeNull();
+    expect(badge!.label).toBe('extern erledigt');
+    expect(badge!.tooltip).toContain('operator-chat');
+    expect(badge!.tooltip).toContain('Implemented out-of-band');
+  });
+});
+
+describe('TaskCardComponent external-done badge render', () => {
+  it('renders the extern-erledigt pill when externalCompletion is set', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      state: '5-human-review',
+      externalCompletion: {
+        source: 'operator-chat',
+        summary: 'done elsewhere',
+        completedAt: '2026-07-08T10:00:00Z',
+      },
+    }));
+    fixture.detectChanges();
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-external-done"]') as HTMLElement | null;
+    expect(pill).not.toBeNull();
+    expect(pill!.textContent).toContain('extern erledigt');
+  });
+
+  it('does not render the pill for a normally completed task', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({ state: '6-completed' }));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-external-done"]')).toBeNull();
+  });
+});
 
 function makeJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {

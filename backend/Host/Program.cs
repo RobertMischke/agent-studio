@@ -256,6 +256,9 @@ builder.Services.AddSingleton<IAutoReviewPostProcessingQueue>(sp =>
     sp.GetRequiredService<AutoReviewPostProcessingQueue>());
 builder.Services.AddSingleton<TaskProvenanceService>();
 builder.Services.AddSingleton<TaskTransitionService>();
+// Out-of-band task completion (docs/concepts/out-of-band-task-completion.md §3):
+// reconciles a task finished outside the runner in one atomic call.
+builder.Services.AddSingleton<ExternalCompletionService>();
 builder.Services.AddSingleton<TaskWatcherService>();
 // Cycle 1: in-memory snapshot of all jobs across watch paths. Reads from
 // TaskScannerService.ScanAllJobsRaw on miss, invalidated by TaskWatcherService

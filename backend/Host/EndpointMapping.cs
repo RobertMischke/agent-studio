@@ -22,6 +22,7 @@ public static class EndpointMapping
         tasks.MapTaskGitEndpoints();
         tasks.MapTaskClaudeEndpoints();
         tasks.MapTaskReviewEvidenceEndpoints();
+        tasks.MapTaskExternalCompletionEndpoints();
         tasks.MapTaskCodeReviewEndpoints();
         tasks.MapTaskRegressionRadarEndpoints();
         tasks.MapTaskPipelineEndpoints();

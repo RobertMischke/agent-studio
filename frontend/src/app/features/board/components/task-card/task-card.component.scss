@@ -529,6 +529,7 @@
     .task-card__human-review-pill,
     .task-card__git-state-pill,
     .task-card__grade-pill,
+    .task-card__external-pill,
     .task-card__phase-pill {
       display: inline-flex;
       align-items: center;
@@ -824,6 +825,22 @@
       color: var(--studio-accent-6-strong);
       background: color-mix(in srgb, var(--studio-accent-6) 18%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-6) 45%, transparent);
+    }
+    /* "extern erledigt" badge: a task reconciled through the external-completion
+       endpoint. Info/blue tone reads as neutral-positive (deliberately distinct
+       from the green "accepted" and red "attention" pills) so an out-of-band
+       completion looks intentionally done, not abandoned. */
+    .task-card__external-pill {
+      border: 1px solid transparent;
+      cursor: help;
+      white-space: nowrap;
+      color: var(--studio-accent-3-strong);
+      background: color-mix(in srgb, var(--studio-accent-3) 16%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-3) 40%, transparent);
+    }
+    .task-card__external-glyph {
+      font-size: 11px;
+      line-height: 1;
     }
     .task-card__execution-pill {
       border: 1px solid transparent;

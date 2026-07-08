@@ -998,6 +998,33 @@ export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
   }
 }
 
+export interface ExternalDoneBadge { label: string; tooltip: string; }
+
+/**
+ * "extern erledigt" badge for a task completed out-of-band (operator chat,
+ * external agent, remote host) and reconciled through the external-completion
+ * endpoint. Renders next to the CLI/model chip so a card whose work happened
+ * outside the runner reads as intentionally done, not abandoned. See
+ * docs/concepts/out-of-band-task-completion.md §3.
+ */
+export function buildExternalDoneBadge(job: TaskInfo): ExternalDoneBadge | null {
+  const ext = job.externalCompletion;
+  if (!ext) return null;
+  const source = (ext.source ?? '').trim() || 'external';
+  const when = formatExternalCompletionDate(ext.completedAt);
+  const summary = (ext.summary ?? '').trim();
+  const parts = [`Completed out-of-band by ${source}${when ? ` on ${when}` : ''}.`];
+  if (summary) parts.push(summary);
+  parts.push('Reconciled via the external-completion endpoint; see results/deliverables.md.');
+  return { label: 'extern erledigt', tooltip: parts.join('\n\n') };
+}
+
+function formatExternalCompletionDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
+}
+
 /** Host-level "this card needs a human" flag: an escalate/reissue verdict in a
  *  human-decision lane. Drives the red uniform ring + faint tint. */
 export function cardNeedsAttention(job: TaskInfo): boolean {

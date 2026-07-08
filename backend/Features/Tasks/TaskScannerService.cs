@@ -390,7 +390,8 @@ public class TaskScannerService : ITaskScanner
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),
                 References = ReadReferences(raw),
-                Provenance = ReadProvenance(raw)
+                Provenance = ReadProvenance(raw),
+                ExternalCompletion = ReadExternalCompletion(raw)
             };
         }
         catch (Exception ex)
@@ -747,6 +748,26 @@ public class TaskScannerService : ITaskScanner
         try
         {
             return JsonSerializer.Deserialize<TaskProvenance>(prov.GetRawText(), TaskJsonFile.ReadOpts);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads the <c>externalCompletion</c> object written by the out-of-band
+    /// completion endpoint. Returns null on tasks finished through the normal
+    /// runner/review path (the common case). See
+    /// <see cref="ExternalCompletionInfo"/>.
+    /// </summary>
+    private static ExternalCompletionInfo? ReadExternalCompletion(JsonElement raw)
+    {
+        if (!raw.TryGetProperty("externalCompletion", out var ext) || ext.ValueKind != JsonValueKind.Object)
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<ExternalCompletionInfo>(ext.GetRawText(), TaskJsonFile.ReadOpts);
         }
         catch
         {
