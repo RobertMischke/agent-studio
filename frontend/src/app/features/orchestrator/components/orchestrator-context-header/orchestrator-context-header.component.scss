@@ -36,7 +36,7 @@
   min-width: 0;
   padding: 3px 9px;
   border-radius: 6px;
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--studio-border) 0%, transparent);
   font-size: 12px;
   font-weight: 600;
   color: var(--studio-fg);
