@@ -60,6 +60,7 @@ import { SourceViewerComponent, type SourceViewerRequest } from '../../source-vi
 import { MenuComponent } from '../../../../../components/menu';
 import type { MenuItem, MenuItemClickEvent } from '../../../../../components/menu';
 import { deriveProtocolVerdict, stripStatusHeader, type ProtocolVerdict } from '../protocol-verdict';
+import { ProtocolVerdictBannerComponent } from '../protocol-verdict-banner/protocol-verdict-banner.component';
 import {
   buildInspectorTabs,
   claudeSessionTooltip,
@@ -151,6 +152,7 @@ interface InterimSummaryState {
     SourceViewerComponent,
     MenuComponent,
     TooltipDirective,
+    ProtocolVerdictBannerComponent,
     PaneHeaderComponent,
     PaneTabsComponent,
     CliModelSelectorComponent,
@@ -508,9 +510,11 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   /**
    * Three-state simplified verdict shown at the very top of the protocol
-   * pane (above hygiene strip, evidence panels, tabs). Pure derivation
-   * from the existing signals - see protocol-verdict.ts for the priority
-   * table. Recomputes on any input change.
+   * pane. Pure derivation from the existing signals - see protocol-verdict.ts
+   * for the priority table. `laneState`/`orchestratorVerdict` let the current
+   * lane / review decision lead the head verdict so a Blocked from a superseded
+   * run is demoted to collapsed history (BEFUND 2); the banner rendering lives
+   * in <app-protocol-verdict-banner>. Recomputes on any input change.
    */
   readonly protocolVerdict = computed<ProtocolVerdict>(() =>
     deriveProtocolVerdict({
@@ -519,6 +523,8 @@ export class ProtocolPaneComponent implements OnDestroy {
       statusMarkdown: this.detail().statusMarkdown,
       outcomeIssue: this.detail().info.outcomeIssue,
       hasActivity: this.hasActivity(),
+      laneState: this.detail().info.state,
+      orchestratorVerdict: this.detail().info.orchestratorVerdict,
     }),
   );
 

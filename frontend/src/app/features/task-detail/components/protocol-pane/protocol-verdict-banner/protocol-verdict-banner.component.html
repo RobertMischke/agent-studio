@@ -1,0 +1,62 @@
+@let v = verdict();
+<div class="protocol-verdict"
+     [attr.data-kind]="v.kind"
+     [class.protocol-verdict--expanded]="expanded()"
+     [attr.data-testid]="'protocol-verdict-' + v.kind"
+     role="status">
+  <span class="protocol-verdict__emoji" aria-hidden="true">{{ v.emoji }}</span>
+  <span class="protocol-verdict__label">{{ v.label }}</span>
+  @if (expandable()) {
+    <!-- BEFUND 1: the reason can be a long blocker sentence. Clicking it
+         unclamps the one-line ellipsis so it wraps in full; the tooltip
+         carries the whole text while collapsed. -->
+    <button type="button"
+            class="protocol-verdict__detail protocol-verdict__detail--toggle"
+            data-testid="protocol-verdict-detail"
+            [cacTooltip]="expanded() ? '' : v.detail"
+            [attr.aria-expanded]="expanded()"
+            aria-label="Toggle full reason"
+            (click)="toggle()">
+      <span class="protocol-verdict__detail-text">{{ v.detail }}</span>
+      <span class="protocol-verdict__detail-caret" aria-hidden="true">{{ expanded() ? '▴' : '▾' }}</span>
+    </button>
+  } @else {
+    <span class="protocol-verdict__detail"
+          data-testid="protocol-verdict-detail"
+          [cacTooltip]="v.detail">
+      <span class="protocol-verdict__detail-text">{{ v.detail }}</span>
+    </span>
+  }
+  @if (v.duration) {
+    <span class="protocol-verdict__duration"
+          [cacTooltip]="'Run duration: ' + v.duration"
+          data-testid="protocol-verdict-duration"
+          aria-label="Run duration">
+      <span class="protocol-verdict__duration-icon" aria-hidden="true">⏱</span>
+      <span class="protocol-verdict__duration-value">{{ v.duration }}</span>
+    </span>
+  }
+</div>
+@if (v.superseded; as sup) {
+  <!-- BEFUND 2 + 3: a Blocked/Failed run outcome the accepted stand has
+       overtaken. It never leads; it sits here as collapsed history and expands
+       with the verdict so the user can follow the sequence (accepted stand now
+       leads, superseded run below). -->
+  <div class="protocol-verdict-superseded"
+       [class.protocol-verdict-superseded--open]="expanded()"
+       data-testid="protocol-verdict-superseded">
+    <button type="button"
+            class="protocol-verdict-superseded__toggle"
+            data-testid="protocol-verdict-superseded-toggle"
+            [attr.aria-expanded]="expanded()"
+            (click)="toggle()">
+      <span class="protocol-verdict-superseded__glyph" aria-hidden="true">↩</span>
+      <span class="protocol-verdict-superseded__label">Superseded run outcome: {{ sup.label }}</span>
+      <span class="protocol-verdict-superseded__caret" aria-hidden="true">{{ expanded() ? '▴' : '▾' }}</span>
+    </button>
+    @if (expanded()) {
+      <p class="protocol-verdict-superseded__detail"
+         data-testid="protocol-verdict-superseded-detail">{{ sup.detail }}</p>
+    }
+  </div>
+}

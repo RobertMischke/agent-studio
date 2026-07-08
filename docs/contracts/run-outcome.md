@@ -21,6 +21,7 @@ Hard sentinel matches win over process exit code. This is load-bearing on Window
 - Summary generation must enforce `ProtocolResult` after the Haiku summary is produced.
 - UI failure surfacing must use the `runOutcome` field when present and fall back to legacy `execution.status === 'failed'` only when it is absent.
 - Raw process status and exit code remain visible for diagnostics, but they do not override a terminal sentinel.
+- **UI head-state precedence.** A single run outcome is not the leading head state on the task-detail surface: the *current lane / review decision leads*. The protocol pane's verdict pill (`frontend/.../protocol-pane/protocol-verdict.ts`) demotes a run-outcome `Blocked`/`Failed` to a collapsed "superseded run outcome" history strip once the card reaches an accepted stand (`orchestratorVerdict === 'accept'`, or lane `6-completed`/`7-archive`). A `Blocked` from an overhauled run context must never contradict an accepted stand as the head banner. See `frontend/src/app/features/task-detail/README.md` ("Protocol verdict precedence").
 
 ## Expected Cases
 
