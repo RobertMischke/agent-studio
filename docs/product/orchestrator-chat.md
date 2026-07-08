@@ -60,12 +60,24 @@ when it does not already exist. Records are stored below
 append-only sidecar for future session events. The encoded path segment is the
 URL-safe form produced by `OrchestratorContextKey`.
 
-The HTTP surface is read-oriented:
+The HTTP surface includes registry reads plus asynchronous turn dispatch:
 
 - `GET /api/orchestrator/sessions` lists known sessions and ensures the global
   session exists.
 - `GET /api/orchestrator/sessions/{contextKey}` returns or creates one valid
   context-key record. Invalid context keys return `400`.
+- `POST /api/orchestrator/sessions/{contextKey}/turns` appends a user prompt
+  to the canonical session context and dispatches it through the existing
+  orchestrator CLI runner. If `session.json` has a `sessionId`, the runner uses
+  the resume path; otherwise it starts a fresh one-shot and stores the captured
+  session id.
+- `POST /api/orchestrator/sessions/{contextKey}/park` parks queued turns for
+  that context and cancels the active turn if one is running.
+
+Turn dispatch is capped by `Orchestrator:SessionTurns:ActiveLimit`, default
+`4`. Requests above the cap return `status: "queued"` with a one-based
+`queuePosition`; requests admitted immediately return `status: "active"`.
+All state changes append compact entries to `history.jsonl`.
 
 The legacy singleton global orchestrator session is migrated into the `global`
 context key on first registry access so existing installs keep their board-level

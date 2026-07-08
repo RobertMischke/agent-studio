@@ -1,0 +1,290 @@
+using AgentStudio.Runner;
+
+namespace AgentStudio.Orchestrator;
+
+public sealed record OrchestratorTurnRequest(string Prompt, string? Model = null, string? WorkingDirectory = null);
+
+public sealed record OrchestratorTurnResponse(
+    string ContextKey,
+    string TurnId,
+    string Status,
+    int? QueuePosition,
+    int ActiveCount,
+    int ActiveLimit);
+
+public sealed record OrchestratorParkResponse(
+    string ContextKey,
+    int ParkedQueuedTurns,
+    bool CancelledActiveTurn);
+
+internal sealed class OrchestratorTurnWorkItem
+{
+    public required string ContextKey { get; init; }
+    public required string TurnId { get; init; }
+    public required string Prompt { get; init; }
+    public string? Model { get; init; }
+    public string? WorkingDirectory { get; init; }
+}
+
+public sealed class OrchestratorTurnService
+{
+    public const string StatusActive = "active";
+    public const string StatusQueued = "queued";
+    public const string StatusCompleted = "completed";
+    public const string StatusFailed = "failed";
+    public const string StatusParked = "parked";
+
+    private readonly OrchestratorSessionRegistry _registry;
+    private readonly OrchestratorRunner _runner;
+    private readonly IConfiguration _config;
+    private readonly ILogger<OrchestratorTurnService> _logger;
+    private readonly object _gate = new();
+    private readonly Queue<OrchestratorTurnWorkItem> _queued = new();
+    private readonly Dictionary<string, CancellationTokenSource> _active = new(StringComparer.Ordinal);
+
+    public OrchestratorTurnService(
+        OrchestratorSessionRegistry registry,
+        OrchestratorRunner runner,
+        IConfiguration config,
+        ILogger<OrchestratorTurnService> logger)
+    {
+        _registry = registry;
+        _runner = runner;
+        _config = config;
+        _logger = logger;
+    }
+
+    public OrchestratorTurnResponse Enqueue(string rawContextKey, OrchestratorTurnRequest request)
+    {
+        if (!OrchestratorContextKey.TryParse(rawContextKey, out var key))
+            throw new ArgumentException("Invalid orchestrator context key.", nameof(rawContextKey));
+        if (string.IsNullOrWhiteSpace(request.Prompt))
+            throw new ArgumentException("Prompt is required.", nameof(request));
+
+        var item = new OrchestratorTurnWorkItem
+        {
+            ContextKey = key.Value,
+            TurnId = Guid.NewGuid().ToString("N"),
+            Prompt = request.Prompt,
+            Model = request.Model,
+            WorkingDirectory = request.WorkingDirectory
+        };
+
+        _registry.GetOrCreate(key.Value);
+
+        lock (_gate)
+        {
+            var limit = ActiveLimit;
+            if (_active.Count < limit)
+            {
+                StartLocked(item);
+                _registry.AppendHistory(key.Value, History(item, StatusActive, queuePosition: null));
+                return new OrchestratorTurnResponse(key.Value, item.TurnId, StatusActive, null, _active.Count, limit);
+            }
+
+            _queued.Enqueue(item);
+            var position = QueuePositionLocked(item.TurnId);
+            _registry.AppendHistory(key.Value, History(item, StatusQueued, queuePosition: position));
+            return new OrchestratorTurnResponse(key.Value, item.TurnId, StatusQueued, position, _active.Count, limit);
+        }
+    }
+
+    public OrchestratorParkResponse Park(string rawContextKey)
+    {
+        if (!OrchestratorContextKey.TryParse(rawContextKey, out var key))
+            throw new ArgumentException("Invalid orchestrator context key.", nameof(rawContextKey));
+
+        var parkedQueued = 0;
+        var cancelledActive = false;
+        lock (_gate)
+        {
+            var keep = new Queue<OrchestratorTurnWorkItem>();
+            while (_queued.TryDequeue(out var item))
+            {
+                if (string.Equals(item.ContextKey, key.Value, StringComparison.Ordinal))
+                {
+                    parkedQueued++;
+                    _registry.AppendHistory(key.Value, History(item, StatusParked, queuePosition: null));
+                }
+                else
+                {
+                    keep.Enqueue(item);
+                }
+            }
+            while (keep.TryDequeue(out var item))
+                _queued.Enqueue(item);
+
+            foreach (var pair in _active.Where(p => p.Key.StartsWith(key.Value + "|", StringComparison.Ordinal)).ToList())
+            {
+                cancelledActive = true;
+                pair.Value.Cancel();
+            }
+        }
+
+        _registry.AppendHistory(key.Value, new OrchestratorSessionHistoryEntry(
+            DateTime.UtcNow, "park", Guid.NewGuid().ToString("N"), StatusParked,
+            null, null, null, null, null, null));
+
+        return new OrchestratorParkResponse(key.Value, parkedQueued, cancelledActive);
+    }
+
+    private int ActiveLimit => Math.Max(1, _config.GetValue("Orchestrator:SessionTurns:ActiveLimit", 4));
+
+    private void StartLocked(OrchestratorTurnWorkItem item)
+    {
+        var cts = new CancellationTokenSource();
+        _active[ActiveKey(item)] = cts;
+        _ = Task.Run(() => RunOneAsync(item, cts.Token));
+    }
+
+    private async Task RunOneAsync(OrchestratorTurnWorkItem item, CancellationToken ct)
+    {
+        try
+        {
+            var before = _registry.GetOrCreate(item.ContextKey);
+            var workingDirectory = ResolveWorkingDirectory(item);
+            var model = string.IsNullOrWhiteSpace(item.Model) ? before.Model : item.Model;
+            OrchestratorDecisionResult result;
+
+            if (!string.IsNullOrWhiteSpace(before.SessionId))
+            {
+                var rejected = false;
+                result = await _runner.ResumeWithFallbackAsync(
+                    before.SessionId!,
+                    item.Prompt,
+                    fallbackPromptBuilder: () => item.Prompt,
+                    onSessionRejected: () => rejected = true,
+                    model,
+                    workingDirectory,
+                    ct).ConfigureAwait(false);
+                if (rejected)
+                {
+                    _registry.Update(item.ContextKey, r => r with
+                    {
+                        SessionId = null,
+                        UpdatedAt = DateTime.UtcNow,
+                        LastError = "resume rejected"
+                    });
+                }
+            }
+            else
+            {
+                result = await _runner.DecideAsync(item.Prompt, model, workingDirectory, ct).ConfigureAwait(false);
+            }
+
+            PersistResult(item, result);
+        }
+        catch (OperationCanceledException)
+        {
+            _registry.AppendHistory(item.ContextKey, History(item, StatusParked, error: "cancelled", queuePosition: null));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "orchestrator-session-turn failed contextKey={ContextKey} turnId={TurnId}", item.ContextKey, item.TurnId);
+            _registry.Update(item.ContextKey, r => r with
+            {
+                UpdatedAt = DateTime.UtcNow,
+                Calls = r.Calls + 1,
+                LastUsedAt = DateTime.UtcNow,
+                LastError = ex.Message
+            });
+            _registry.AppendHistory(item.ContextKey, History(item, StatusFailed, error: ex.Message, queuePosition: null));
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                if (_active.Remove(ActiveKey(item), out var cts))
+                    cts.Dispose();
+                StartQueuedUntilFullLocked();
+            }
+        }
+    }
+
+    private void PersistResult(OrchestratorTurnWorkItem item, OrchestratorDecisionResult result)
+    {
+        var now = DateTime.UtcNow;
+        _registry.Update(item.ContextKey, r => r with
+        {
+            UpdatedAt = now,
+            SessionId = string.IsNullOrWhiteSpace(result.CapturedSessionId) ? r.SessionId : result.CapturedSessionId,
+            Model = string.IsNullOrWhiteSpace(result.Model) ? r.Model : result.Model,
+            CumulativeInputTokens = r.CumulativeInputTokens + (result.TokenUsage?.InputTokens ?? 0),
+            CumulativeOutputTokens = r.CumulativeOutputTokens + (result.TokenUsage?.OutputTokens ?? 0),
+            CumulativeCacheReadTokens = r.CumulativeCacheReadTokens + (result.TokenUsage?.CacheReadTokens ?? 0),
+            CumulativeCacheCreationTokens = r.CumulativeCacheCreationTokens + (result.TokenUsage?.CacheCreationTokens ?? 0),
+            Calls = r.Calls + 1,
+            LastUsedAt = now,
+            LastError = result.Success ? null : result.ErrorMessage
+        });
+
+        _registry.AppendHistory(item.ContextKey, History(
+            item,
+            result.Success ? StatusCompleted : StatusFailed,
+            replyPreview: Preview(result.ReplyText),
+            model: result.Model,
+            sessionId: result.CapturedSessionId,
+            error: result.ErrorMessage,
+            queuePosition: null));
+    }
+
+    private void StartQueuedUntilFullLocked()
+    {
+        var limit = ActiveLimit;
+        while (_active.Count < limit && _queued.TryDequeue(out var next))
+        {
+            StartLocked(next);
+            _registry.AppendHistory(next.ContextKey, History(next, StatusActive, queuePosition: null));
+        }
+    }
+
+    private int QueuePositionLocked(string turnId)
+    {
+        var i = 1;
+        foreach (var queued in _queued)
+        {
+            if (queued.TurnId == turnId)
+                return i;
+            i++;
+        }
+        return i;
+    }
+
+    private string ResolveWorkingDirectory(OrchestratorTurnWorkItem item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.WorkingDirectory) && Directory.Exists(item.WorkingDirectory))
+            return item.WorkingDirectory!;
+        var root = _registry.TaskRepositoryRoot;
+        return string.IsNullOrWhiteSpace(root) ? Path.GetTempPath() : root!;
+    }
+
+    private static string ActiveKey(OrchestratorTurnWorkItem item) => item.ContextKey + "|" + item.TurnId;
+
+    private static OrchestratorSessionHistoryEntry History(
+        OrchestratorTurnWorkItem item,
+        string status,
+        string? replyPreview = null,
+        string? model = null,
+        string? sessionId = null,
+        string? error = null,
+        int? queuePosition = null) =>
+        new(
+            DateTime.UtcNow,
+            "turn",
+            item.TurnId,
+            status,
+            Preview(item.Prompt),
+            replyPreview,
+            model,
+            sessionId,
+            error,
+            queuePosition);
+
+    private static string Preview(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "";
+        var collapsed = value.Replace("\r", " ").Replace("\n", " ").Trim();
+        return collapsed.Length <= 600 ? collapsed : collapsed[..600] + "...";
+    }
+}

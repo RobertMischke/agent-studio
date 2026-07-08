@@ -25,6 +25,18 @@ public sealed record OrchestratorSessionRecord(
     DateTime? LastUsedAt,
     string? LastError);
 
+public sealed record OrchestratorSessionHistoryEntry(
+    DateTime Ts,
+    string Kind,
+    string TurnId,
+    string? Status,
+    string? PromptPreview,
+    string? ReplyPreview,
+    string? Model,
+    string? SessionId,
+    string? Error,
+    int? QueuePosition);
+
 public sealed class OrchestratorSessionRegistry
 {
     public const string SessionsFolderName = "orchestrator-sessions";
@@ -118,6 +130,37 @@ public sealed class OrchestratorSessionRegistry
                 "orchestrator-session-created contextKey={ContextKey} encodedKey={EncodedKey} kind={Kind}",
                 created.ContextKey, created.EncodedKey, created.Kind);
             return created;
+        }
+    }
+
+    public OrchestratorSessionRecord Update(string rawContextKey, Func<OrchestratorSessionRecord, OrchestratorSessionRecord> update)
+    {
+        if (!OrchestratorContextKey.TryParse(rawContextKey, out var key))
+            throw new ArgumentException("Invalid orchestrator context key.", nameof(rawContextKey));
+
+        lock (_gate)
+        {
+            var current = GetOrCreate(rawContextKey);
+            var next = update(current);
+            if (!string.Equals(next.ContextKey, current.ContextKey, StringComparison.Ordinal))
+                throw new InvalidOperationException("Cannot change an orchestrator session context key during update.");
+            WriteRecord(next);
+            EnsureHistoryFile(key);
+            return next;
+        }
+    }
+
+    public void AppendHistory(string rawContextKey, OrchestratorSessionHistoryEntry entry)
+    {
+        if (!OrchestratorContextKey.TryParse(rawContextKey, out var key))
+            throw new ArgumentException("Invalid orchestrator context key.", nameof(rawContextKey));
+
+        lock (_gate)
+        {
+            _ = GetOrCreate(rawContextKey);
+            var path = HistoryFilePath(key);
+            var line = JsonSerializer.Serialize(entry, WriteOpts) + Environment.NewLine;
+            File.AppendAllText(path, line, Encoding.UTF8);
         }
     }
 

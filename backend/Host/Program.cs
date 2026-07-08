@@ -243,6 +243,7 @@ builder.Services.AddSingleton<OrchestratorRunner>(sp => new OrchestratorRunner(
 builder.Services.AddSingleton<OrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorSessionStore>();
 builder.Services.AddSingleton<OrchestratorSessionRegistry>();
+builder.Services.AddSingleton<OrchestratorTurnService>();
 builder.Services.AddSingleton<GlobalOrchestratorBootstrap>();
 builder.Services.AddSingleton<TokenSummaryCacheStore>();
 builder.Services.AddSingleton<WorkspaceTokensCacheStore>();

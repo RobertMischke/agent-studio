@@ -1,7 +1,11 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -111,13 +115,75 @@ public sealed class OrchestratorSessionRegistryTests : IDisposable
         Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
     }
 
+    [Fact]
+    public async Task PostTurn_UsesActiveCapAndReportsQueuedPosition()
+    {
+        var runner = new BlockingFakeOrchestratorRunner();
+        using var factory = CreateFactory(runner, new Dictionary<string, string?>
+        {
+            ["Orchestrator:SessionTurns:ActiveLimit"] = "1"
+        });
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+
+        using var first = await client.PostAsJsonAsync("/api/orchestrator/sessions/project:PROJ-001/turns", new { prompt = "first" });
+        Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
+        using var firstDoc = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        Assert.Equal("active", firstDoc.RootElement.GetProperty("status").GetString());
+        Assert.Equal(1, firstDoc.RootElement.GetProperty("activeCount").GetInt32());
+
+        using var second = await client.PostAsJsonAsync("/api/orchestrator/sessions/project:PROJ-001/turns", new { prompt = "second" });
+        Assert.Equal(HttpStatusCode.Accepted, second.StatusCode);
+        using var secondDoc = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("queued", secondDoc.RootElement.GetProperty("status").GetString());
+        Assert.Equal(1, secondDoc.RootElement.GetProperty("queuePosition").GetInt32());
+
+        using var park = await client.PostAsync("/api/orchestrator/sessions/project:PROJ-001/park", content: null);
+        park.EnsureSuccessStatusCode();
+        runner.ReleaseAll();
+    }
+
+    [Fact]
+    public async Task PostTurn_WithStoredSessionId_ResumesAndUpdatesSessionRecord()
+    {
+        var runner = new BlockingFakeOrchestratorRunner(block: false);
+        using var factory = CreateFactory(runner);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+
+        using var created = await client.GetAsync("/api/orchestrator/sessions/task:PROJ-001/AGT-1930");
+        created.EnsureSuccessStatusCode();
+
+        var registry = factory.Services.GetRequiredService<AgentStudio.Orchestrator.OrchestratorSessionRegistry>();
+        registry.Update("task:PROJ-001/AGT-1930", r => r with
+        {
+            SessionId = "stored-session",
+            Model = "test-model"
+        });
+
+        using var post = await client.PostAsJsonAsync("/api/orchestrator/sessions/task:PROJ-001/AGT-1930/turns", new { prompt = "continue" });
+        Assert.Equal(HttpStatusCode.Accepted, post.StatusCode);
+
+        await WaitUntilAsync(() => runner.ResumeCalls == 1);
+        await WaitUntilAsync(() => registry.GetOrCreate("task:PROJ-001/AGT-1930").Calls == 1);
+
+        var record = registry.GetOrCreate("task:PROJ-001/AGT-1930");
+        Assert.Equal("stored-session", runner.LastResumeSessionId);
+        Assert.Equal("captured-session-1", record.SessionId);
+        Assert.Equal(1, record.Calls);
+        Assert.Equal(7, record.CumulativeInputTokens);
+        Assert.Equal(3, record.CumulativeOutputTokens);
+    }
+
     private OrchestratorSessionRegistry Build()
     {
         var legacy = new GlobalOrchestratorSessionStore(_config, NullLogger<GlobalOrchestratorSessionStore>.Instance);
         return new OrchestratorSessionRegistry(_config, legacy, NullLogger<OrchestratorSessionRegistry>.Instance);
     }
 
-    private WebApplicationFactory<Program> CreateFactory()
+    private WebApplicationFactory<Program> CreateFactory(
+        OrchestratorRunner? runner = null,
+        Dictionary<string, string?>? extraConfig = null)
     {
         var projectRoot = Path.Combine(_root, "projects", "agent-taskboard");
         var codeRoot = Path.Combine(_root, "code");
@@ -130,15 +196,100 @@ public sealed class OrchestratorSessionRegistryTests : IDisposable
                 builder.UseEnvironment("Test");
                 builder.ConfigureAppConfiguration((_, cfg) =>
                 {
-                    cfg.AddInMemoryCollection(new Dictionary<string, string?>
+                    var values = new Dictionary<string, string?>
                     {
                         ["TaskRepository"] = _root,
                         ["WatchPaths:0:Name"] = "agent-taskboard",
                         ["WatchPaths:0:Path"] = projectRoot,
                         ["WatchPaths:0:RootPath"] = codeRoot,
                         ["WatchPaths:0:RepositoryPath"] = codeRoot,
-                    });
+                    };
+                    if (extraConfig != null)
+                    {
+                        foreach (var pair in extraConfig)
+                            values[pair.Key] = pair.Value;
+                    }
+                    cfg.AddInMemoryCollection(values);
                 });
+                if (runner != null)
+                {
+                    builder.ConfigureTestServices(services =>
+                    {
+                        services.RemoveAll<OrchestratorRunner>();
+                        services.AddSingleton(runner);
+                    });
+                }
             });
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> predicate)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (predicate())
+                return;
+            await Task.Delay(25);
+        }
+        Assert.True(predicate(), "Timed out waiting for condition.");
+    }
+
+    private sealed class BlockingFakeOrchestratorRunner : OrchestratorRunner
+    {
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int DecideCalls { get; private set; }
+        public int ResumeCalls { get; private set; }
+        public string? LastResumeSessionId { get; private set; }
+
+        public BlockingFakeOrchestratorRunner(bool block = true)
+            : base(null!, NullLogger<OrchestratorRunner>.Instance)
+        {
+            if (!block)
+                _release.SetResult();
+        }
+
+        public void ReleaseAll() => _release.TrySetResult();
+
+        public override async Task<OrchestratorDecisionResult> DecideAsync(
+            string prompt,
+            string? model,
+            string workingDirectory,
+            CancellationToken ct = default)
+        {
+            DecideCalls++;
+            await _release.Task.WaitAsync(ct);
+            return Result(model);
+        }
+
+        public override async Task<OrchestratorDecisionResult> ResumeAsync(
+            string sessionId,
+            string prompt,
+            string? model,
+            string workingDirectory,
+            IReadOnlyList<CliOneShotImage>? inlineImages,
+            CancellationToken ct = default)
+        {
+            ResumeCalls++;
+            LastResumeSessionId = sessionId;
+            await _release.Task.WaitAsync(ct);
+            return Result(model);
+        }
+
+        private static OrchestratorDecisionResult Result(string? model) =>
+            new(
+                Success: true,
+                ReplyText: "ok",
+                Model: model ?? "test-model",
+                TokenUsage: new OrchestratorTokenUsage
+                {
+                    Model = model ?? "test-model",
+                    InputTokens = 7,
+                    OutputTokens = 3,
+                    CacheReadTokens = 2,
+                    CacheCreationTokens = 1
+                },
+                CapturedSessionId: "captured-session-1",
+                ErrorMessage: null);
     }
 }

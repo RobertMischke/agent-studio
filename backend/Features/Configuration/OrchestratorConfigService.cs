@@ -297,6 +297,14 @@ internal static class OrchestratorConfigCatalog
             DefaultValue: false,
             SourceFile: "backend/Services/Supervisor/OrchestratorPrepHostedService.cs"),
         new(
+            "Orchestrator:SessionTurns:ActiveLimit",
+            "Orchestrator",
+            "Session-turn active limit",
+            "Maximum orchestrator session turns allowed to run at once before later turns report queued positions.",
+            "int",
+            DefaultValue: 4,
+            SourceFile: "backend/Features/Orchestrator/OrchestratorTurnService.cs"),
+        new(
             "Supervisor:MetaCycleEnabled",
             "Supervisor",
             "Layer-2.5 meta-cycle",
