@@ -46,6 +46,11 @@ public static class RunQuarantineBreaker
         RunIssueKind.EnvironmentBlocker => false,
         RunIssueKind.EmptyFastExit      => false,
         RunIssueKind.ContextOverflow    => false,
+        // A wrong/unsupported model and an exhausted quota are not the task's
+        // fault: re-running the same task content will not fix them, so they
+        // must not accrue toward the per-task no-progress quarantine streak.
+        RunIssueKind.ModelInvalid       => false,
+        RunIssueKind.QuotaExhausted     => false,
         RunIssueKind.CliLaunchFailed    => false,
         RunIssueKind.SilentCompletion   => false,
         RunIssueKind.Quarantined        => false,

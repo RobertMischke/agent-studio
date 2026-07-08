@@ -482,4 +482,64 @@ public class AgentOutcomeAnalyzerTests
         Assert.NotEqual(RunIssueKind.ContextOverflow, outcome.IssueKind);
         Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
     }
+
+    [Theory]
+    // The exact codex ChatGPT-account signature (AGT-1928/1929/1930/1936):
+    // codex-cli 0.143 rejects -m gpt-5-codex with a 400 invalid_request.
+    [InlineData("● Turn failed: {\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"The 'gpt-5-codex' model is not supported when using Codex with a ChatGPT account.\"}}")]
+    [InlineData("Error: model_not_found")]
+    [InlineData("The model `gpt-9` does not exist or you do not have access to it.")]
+    [InlineData("unsupported model: foo-bar")]
+    public void ModelInvalid_OnFailedRun_TypesAsModelInvalid(string reply)
+    {
+        // A wrong/unsupported model must type as model-invalid (non-retryable)
+        // instead of the orchestrator-inconclusive catch-all, so the escalation
+        // reason tells a human to change the model (AGT-1941).
+        var lines = Lines(reply);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 4.9, exitCode: 1);
+        Assert.Equal(RunIssueKind.ModelInvalid, outcome.IssueKind);
+    }
+
+    [Fact]
+    public void ModelInvalid_PhraseOnSuccessfulRun_IsNotTyped()
+    {
+        // An agent discussing a model-support error mid-success must not be
+        // hijacked; the detection is gated on a failed run.
+        var lines = Lines("I noted that the old model is not supported, then switched the config.", "[[TASK_DONE]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 20.0);
+        Assert.NotEqual(RunIssueKind.ModelInvalid, outcome.IssueKind);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+    }
+
+    [Theory]
+    // The exact AGT-1918/1919/1920 signature: claude-sonnet-5 five-hour
+    // session-limit rejection on 2026-07-07.
+    [InlineData("You've hit your session limit · resets 8:10pm (Europe/Berlin)")]
+    [InlineData("● Rate limit · five-hour · rejected · reset in 3,6 h  [window=five_hour status=rejected resetsAt=1783447800 overage=rejected usingOverage=false]")]
+    [InlineData("Error: rate_limit_exceeded")]
+    [InlineData("You've reached your usage limit for this model.")]
+    public void QuotaExhausted_OnFailedRun_TypesAsQuotaExhausted(string reply)
+    {
+        // A usage/session/rate-limit exhaustion must type as quota-exhausted
+        // (transient) instead of the orchestrator-inconclusive catch-all so the
+        // escalation reason is honest and re-queue-after-reset is the clear next
+        // step (AGT-1918/1919/1920).
+        var lines = Lines(reply);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 5.1, exitCode: 1);
+        Assert.Equal(RunIssueKind.QuotaExhausted, outcome.IssueKind);
+    }
+
+    [Fact]
+    public void QuotaExhausted_BenignRateLimitTelemetryOnSuccess_IsNotTyped()
+    {
+        // Claude prints a benign `Rate limit ... allowed` telemetry marker on
+        // healthy runs. It must NOT be read as exhaustion: detection matches
+        // only the rejected/exhausted shapes and is gated on a failed run.
+        var lines = Lines(
+            "● Rate limit · five-hour · allowed  [window=five_hour status=allowed resetsAt=1783447800 overage=none usingOverage=false]",
+            "[[TASK_DONE]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 25.0);
+        Assert.NotEqual(RunIssueKind.QuotaExhausted, outcome.IssueKind);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+    }
 }

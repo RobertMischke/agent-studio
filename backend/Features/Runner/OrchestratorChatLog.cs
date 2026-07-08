@@ -207,6 +207,21 @@ public enum OrchestratorMessageKind
     /// </summary>
     Quarantined,
     /// <summary>
+    /// The configured model is invalid/unsupported for this account or CLI
+    /// (invalid_request / HTTP 400 "model not supported"). Non-retryable: the
+    /// orchestrator routes it to human review with a model-invalid reason so a
+    /// human changes the model, instead of re-issuing into the same rejection.
+    /// </summary>
+    ModelInvalid,
+    /// <summary>
+    /// The account's usage/session/rate-limit budget is exhausted. Transient:
+    /// the orchestrator routes it to human review with a quota-exhausted reason
+    /// (and schedules a rate-limit cooldown) rather than the misleading
+    /// orchestrator-inconclusive, so re-queueing after reset is the clear next
+    /// step.
+    /// </summary>
+    QuotaExhausted,
+    /// <summary>
     /// A worktree-isolated run modified the shared main checkout. The runner
     /// skipped integration and surfaced the harness integrity violation.
     /// </summary>
@@ -261,6 +276,8 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.SilentCompletion  => "codex-silent-completion",
         OrchestratorMessageKind.ContextOverflow   => "context-overflow",
         OrchestratorMessageKind.Quarantined       => "quarantined",
+        OrchestratorMessageKind.ModelInvalid      => "model-invalid",
+        OrchestratorMessageKind.QuotaExhausted    => "quota-exhausted",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
         OrchestratorMessageKind.IntegrationConflict => "integration-conflict",
@@ -287,6 +304,8 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.SilentCompletion  => "codex-silent-completion",
         OrchestratorMessageKind.ContextOverflow   => "context-overflow",
         OrchestratorMessageKind.Quarantined       => "quarantined",
+        OrchestratorMessageKind.ModelInvalid      => "model-invalid",
+        OrchestratorMessageKind.QuotaExhausted    => "quota-exhausted",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
         OrchestratorMessageKind.IntegrationConflict => "integration-conflict",

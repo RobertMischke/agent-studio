@@ -119,7 +119,10 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
         Assert.NotNull(info);
         Assert.Equal("codex", info!.CliType);
         Assert.Equal("codex", info.Agent);
-        Assert.Equal(ModelIds.Gpt5Codex, info.Model);
+        // Codex CLI default is now gpt-5.5 (AGT-1941: gpt-5-codex is rejected by
+        // codex-cli 0.143 on a ChatGPT account), so a foreign-model remap lands
+        // on the new default rather than the retired gpt-5-codex.
+        Assert.Equal(ModelIds.Gpt55, info.Model);
         Assert.Equal("high", info.ThinkingLevel);
     }
 
@@ -145,7 +148,9 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
         var info = scanner.FindJob("bad-model-update", _watchPath);
         Assert.NotNull(info);
         Assert.Equal("codex", info!.CliType);
-        Assert.Equal(ModelIds.Gpt5Codex, info.Model);
+        // Remapping a foreign model back to the codex CLI default now yields
+        // gpt-5.5 (the account-valid default), not the retired gpt-5-codex.
+        Assert.Equal(ModelIds.Gpt55, info.Model);
         Assert.Equal("medium", info.ThinkingLevel);
     }
 

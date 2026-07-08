@@ -32,6 +32,19 @@ public static class HumanReviewEscalationCategories
     /// instead of being re-issued into the same overflow.</summary>
     public const string ContextOverflow = "context-overflow";
 
+    /// <summary>The configured model is invalid/unsupported for this account or
+    /// CLI (invalid_request / HTTP 400 "model not supported"). Non-retryable:
+    /// re-issuing spawns into the same 400, so it is routed to human review with
+    /// a clear model-invalid reason instead of the orchestrator-inconclusive
+    /// catch-all.</summary>
+    public const string ModelInvalid = "model-invalid";
+
+    /// <summary>The account's usage/session/rate-limit budget is exhausted.
+    /// Transient (clears when the quota window resets); escalated with an honest
+    /// quota-exhausted reason so a human can re-queue after reset instead of
+    /// mistaking it for an orchestrator-inconclusive failure.</summary>
+    public const string QuotaExhausted = "quota-exhausted";
+
     /// <summary>The per-task circuit breaker tripped after N consecutive failed
     /// runs without progress; the task was parked to stop an endless reissue
     /// loop.</summary>

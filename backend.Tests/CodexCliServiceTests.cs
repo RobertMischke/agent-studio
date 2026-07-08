@@ -165,7 +165,7 @@ public class CodexCliServiceTests
         Assert.Contains("-", psi.ArgumentList);
         Assert.Contains("--experimental-json", psi.ArgumentList);
         Assert.DoesNotContain("--json", psi.ArgumentList);
-        Assert.Contains("gpt-5-codex", psi.ArgumentList);
+        Assert.Contains("gpt-5.5", psi.ArgumentList);
         Assert.DoesNotContain("claude-opus-4-7", psi.ArgumentList);
 
         var argvText = psi.FileName + " " + string.Join(" ", psi.ArgumentList);
@@ -218,7 +218,7 @@ public class CodexCliServiceTests
             sessionName: null,
             resumeSession: false);
 
-        Assert.Contains("model=gpt-5-codex", line);
+        Assert.Contains("model=gpt-5.5", line);
         Assert.DoesNotContain("claude-opus-4-7", line);
     }
 

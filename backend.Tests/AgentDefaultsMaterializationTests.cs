@@ -129,7 +129,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
         Assert.NotNull(info);
         Assert.Equal("codex", info!.Agent);
         Assert.Equal("codex", info.CliType);
-        Assert.Equal(ModelIds.Gpt5Codex, info.Model);
+        Assert.Equal(ModelIds.Gpt55, info.Model);
         Assert.Equal("medium", info.ThinkingLevel);
     }
 
@@ -152,7 +152,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
         Assert.NotNull(info);
         Assert.Equal("codex", info!.Agent);
         Assert.Equal("codex", info.CliType);
-        Assert.Equal(ModelIds.Gpt5Codex, info.Model);
+        Assert.Equal(ModelIds.Gpt55, info.Model);
     }
 
     [Fact]

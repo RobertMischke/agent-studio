@@ -4592,9 +4592,11 @@ public class ProjectRunner
                     && ShouldRouteIssueToHumanReview(action.IssueKind)
                     // Non-retryable verdicts skip abort-review entirely: rerunning
                     // a context-overflow walks straight back into the same input
-                    // window, and the quarantine breaker exists precisely to STOP
-                    // re-running this task. Both go directly to human review.
-                    && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
+                    // window, a model-invalid into the same 400, and a quota-
+                    // exhausted into the same rejection; the quarantine breaker
+                    // exists precisely to STOP re-running this task. All go
+                    // directly to human review.
+                    && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.ModelInvalid or RunIssueKind.QuotaExhausted or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
                     && _postAbortReview != null
                     && AgentStudio.Pipeline.PipelineStepConfigResolver.ShouldRun(
                         _projectSettings.Get(ProjectName),
@@ -5024,6 +5026,12 @@ public class ProjectRunner
                      or RunIssueKind.EnvironmentBlocker
                      or RunIssueKind.EmptyFastExit
                      or RunIssueKind.ContextOverflow
+                     // Non-retryable model rejection and transient quota
+                     // exhaustion both reach human review with an honest,
+                     // distinct reason instead of the orchestrator-inconclusive
+                     // catch-all (AGT-1941: codex model-invalid / claude quota).
+                     or RunIssueKind.ModelInvalid
+                     or RunIssueKind.QuotaExhausted
                      or RunIssueKind.Quarantined
                      or RunIssueKind.AgentGitViolation
                      // Drive-to-conclusion: a failed run the deterministic
@@ -5074,6 +5082,8 @@ public class ProjectRunner
         RunIssueKind.EnvironmentBlocker       => "environment-blocker",
         RunIssueKind.SilentCompletion         => "codex-silent-completion",
         RunIssueKind.ContextOverflow          => "context-overflow",
+        RunIssueKind.ModelInvalid             => "model-invalid",
+        RunIssueKind.QuotaExhausted           => "quota-exhausted",
         RunIssueKind.Quarantined              => "quarantined",
         RunIssueKind.AgentGitViolation        => "agent-git-violation",
         _                                     => "none"
@@ -5089,6 +5099,8 @@ public class ProjectRunner
         RunIssueKind.EnvironmentBlocker => HumanReviewEscalationCategories.EnvironmentBlocker,
         RunIssueKind.EmptyFastExit      => HumanReviewEscalationCategories.EmptyFastExit,
         RunIssueKind.ContextOverflow    => HumanReviewEscalationCategories.ContextOverflow,
+        RunIssueKind.ModelInvalid       => HumanReviewEscalationCategories.ModelInvalid,
+        RunIssueKind.QuotaExhausted     => HumanReviewEscalationCategories.QuotaExhausted,
         RunIssueKind.Quarantined        => HumanReviewEscalationCategories.Quarantined,
         RunIssueKind.AgentGitViolation  => HumanReviewEscalationCategories.AgentGitViolation,
         RunIssueKind.InfraCrash         => HumanReviewEscalationCategories.InfraCrash,
