@@ -1,7 +1,13 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import type { Observable } from 'rxjs';
-import type { GitFileChange, GitProjectInventory } from '../features/git';
+import type {
+  CleanupExecutionItem,
+  GitCleanupPlan,
+  GitCleanupResult,
+  GitFileChange,
+  GitProjectInventory,
+} from '../features/git';
 
 /** Diff payload envelope shared with the per-task commit-diff endpoints. */
 export interface ProjectCommitDiff {
@@ -39,5 +45,29 @@ export class ProjectGitService {
     let params = new HttpParams().set('project', project).set('sha', sha);
     if (path) params = params.set('path', path);
     return this.http.get<ProjectCommitDiff>('/api/git/project-commit/diff', { params });
+  }
+
+  /**
+   * Read-only cleanup dry-run: which merged task/* branches, refs/backups/* refs
+   * and stale worktrees can be pruned against the integration branch. Nothing is
+   * deleted by this call.
+   */
+  getCleanupPlan(project: string): Observable<GitCleanupPlan> {
+    return this.http.get<GitCleanupPlan>('/api/git/cleanup/plan', {
+      params: new HttpParams().set('project', project),
+    });
+  }
+
+  /**
+   * Executes an operator-confirmed subset of the cleanup plan. The backend
+   * re-verifies each item is still merged before deleting (AGT-1945), so a stale
+   * selection can never drop unmerged work; the result reports n-deleted / m-kept.
+   */
+  executeCleanup(project: string, items: CleanupExecutionItem[]): Observable<GitCleanupResult> {
+    return this.http.post<GitCleanupResult>(
+      '/api/git/cleanup/execute',
+      { items },
+      { params: new HttpParams().set('project', project) },
+    );
   }
 }

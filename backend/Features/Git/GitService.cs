@@ -165,6 +165,17 @@ public record GitBranchEntry(
     string? WorktreePath);
 
 /// <summary>
+/// One ref as emitted by <c>git for-each-ref</c>, used by the Git-Management
+/// cleanup analysis (<see cref="GitCleanupService"/>) to enumerate local
+/// <c>task/*</c> heads, <c>origin/task/*</c> remote-tracking refs, and the
+/// operational <c>refs/backups/*</c> safety net. <see cref="FullName"/> is the
+/// fully-qualified ref (e.g. <c>refs/backups/2026-07-09</c>) used for deletion
+/// via <c>update-ref -d</c>; <see cref="ShortName"/> is git's abbreviated form
+/// (e.g. <c>task/42</c>, <c>origin/task/42</c>) used for merge-base checks.
+/// </summary>
+public record GitRefLine(string FullName, string ShortName, string Sha, string ShortSha);
+
+/// <summary>
 /// Read-only branch + worktree + recent-history inventory for a single
 /// project, returned by <see cref="GitService.GetProjectInventory"/> and
 /// surfaced on the Project Hub Git View. Deliberately project-scoped: it
@@ -858,6 +869,18 @@ public class GitService
         if (string.IsNullOrWhiteSpace(configured)) return null;
         return ResolveGitToplevel(configured);
     }
+
+    /// <summary>
+    /// Public counterpart to <see cref="ResolveProjectRoot"/>: the git toplevel a
+    /// project's Git-Management surfaces read, resolved the same way
+    /// <see cref="GetProjectInventory"/> does (scanner entry -> configured
+    /// repository path -> <c>rev-parse --show-toplevel</c>). The cleanup service
+    /// (<see cref="GitCleanupService"/>) uses this so the branches it analyses and
+    /// prunes always come from the same checkout the Git View shows. Returns null
+    /// when the project is unknown, has no configured repository, or the folder is
+    /// not a git working tree.
+    /// </summary>
+    public string? ResolveProjectRepoRoot(string projectName) => ResolveProjectRoot(projectName);
 
     /// <summary>Resolve the repository root for a job.</summary>
     public string? ResolveRepoRoot(string jobId, string? watchPath)
@@ -2390,6 +2413,89 @@ public class GitService
     }
 
     /// <summary>
+    /// Enumerates the refs under a fully-qualified namespace pattern (e.g.
+    /// <c>refs/heads/task</c>, <c>refs/remotes/origin/task</c>,
+    /// <c>refs/backups</c>) via <c>git for-each-ref</c>. Read-only: it backs the
+    /// Git-Management cleanup analysis, which needs the tip SHA of every candidate
+    /// ref to check whether it is already contained in the integration branch. The
+    /// pattern must start with <c>refs/</c> and is validated against the same
+    /// safe-name rules the mutating primitives use, so a crafted argument cannot
+    /// smuggle a flag into the git invocation. Returns an empty list when the
+    /// pattern is unsafe, the repo is missing, or nothing matches.
+    /// </summary>
+    public IReadOnlyList<GitRefLine> ListRefs(string repoRoot, string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return [];
+        if (!IsLikelyRefPattern(pattern)) return [];
+
+        const char US = '\x1f';
+        var fmt = string.Join(US.ToString(), new[]
+        {
+            "%(refname)", "%(refname:short)", "%(objectname)", "%(objectname:short)"
+        });
+        var (output, _, code) = RunGitArgs(repoRoot, "for-each-ref", $"--format={fmt}", pattern);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+
+        var list = new List<GitRefLine>();
+        foreach (var raw in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            var parts = raw.Split(US);
+            if (parts.Length < 4) continue;
+            var full = parts[0].Trim();
+            if (full.Length == 0) continue;
+            list.Add(new GitRefLine(full, parts[1].Trim(), parts[2].Trim(), parts[3].Trim()));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Typed <c>git worktree list --porcelain</c> for a repo root, reusing
+    /// <see cref="ParseWorktreePorcelain"/>. Read-only helper for the cleanup
+    /// analysis, which cross-references the registered worktrees against on-disk
+    /// folders to spot stale (orphaned) registrations and to keep branches that
+    /// are still checked out out of the delete set.
+    /// </summary>
+    public IReadOnlyList<GitWorktreeEntry> ListWorktrees(string repoRoot)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return [];
+        var (output, _, code) = RunGitArgs(repoRoot, "worktree", "list", "--porcelain");
+        return code == 0 ? ParseWorktreePorcelain(output) : [];
+    }
+
+    /// <summary>
+    /// Deletes a single fully-qualified ref via <c>git update-ref -d</c>. The
+    /// Git-Management cleanup uses this to drop <c>refs/backups/*</c> entries whose
+    /// commit is already contained in the integration branch (the operational
+    /// safety net has served its purpose). Guarded: the ref must start with
+    /// <c>refs/</c> and pass the safe-name check, so it can never be coaxed into
+    /// deleting a branch head or an arbitrary path. Deleting a missing ref is
+    /// treated as success (idempotent teardown).
+    /// </summary>
+    public GitWorktreeResult DeleteRef(string repoRoot, string fullRef)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitWorktreeResult(false, null, "Repo root does not exist.");
+        if (!IsLikelyRefPattern(fullRef) || !fullRef.StartsWith("refs/", StringComparison.Ordinal))
+            return new GitWorktreeResult(false, null, $"Invalid ref '{fullRef}'.");
+
+        var (_, err, code) = RunGitArgs(repoRoot, "update-ref", "-d", fullRef);
+        if (code == 0)
+        {
+            _logger.LogInformation("Deleted ref {Ref} at {Path}", fullRef, repoRoot);
+            return new GitWorktreeResult(true, null, null);
+        }
+
+        var error = err.Trim();
+        if (error.Contains("does not exist", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("cannot lock ref", StringComparison.OrdinalIgnoreCase) && error.Contains("unable to resolve", StringComparison.OrdinalIgnoreCase))
+            return new GitWorktreeResult(true, null, null);
+
+        _logger.LogWarning("Delete ref {Ref} failed at {Path}: {Error}", fullRef, repoRoot, error);
+        return new GitWorktreeResult(false, null, error);
+    }
+
+    /// <summary>
     /// Creates a fresh pooled worktree at <paramref name="worktreePath"/> on a
     /// DETACHED HEAD at <paramref name="atRef"/> (<c>git worktree add --detach</c>).
     /// The recycling pool (Slice A / ASS-1664) keeps idle worktrees on a detached
@@ -2924,6 +3030,28 @@ public class GitService
     /// depth rather than the only guard.
     /// </summary>
     private static bool IsLikelyBranchName(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        if (s[0] == '-' || s[0] == '/' || s[^1] == '/') return false;
+        if (s.Contains("..", StringComparison.Ordinal)) return false;
+        if (s.EndsWith(".lock", StringComparison.Ordinal)) return false;
+        foreach (var c in s)
+        {
+            if (!(char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '.' || c == '/')) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// True when <paramref name="s"/> is a safe fully-qualified ref namespace or
+    /// ref (e.g. <c>refs/heads/task</c>, <c>refs/remotes/origin/task</c>,
+    /// <c>refs/backups/2026-07-09</c>). Like <see cref="IsLikelyBranchName"/> it
+    /// allows the slashes a ref path needs while rejecting whitespace, shell
+    /// metacharacters, a leading dash (so the value can't be read as a flag), and
+    /// git's invalid <c>..</c> / <c>.lock</c> sequences. Defence in depth: the
+    /// value flows into a git argument list, not a shell.
+    /// </summary>
+    private static bool IsLikelyRefPattern(string s)
     {
         if (string.IsNullOrWhiteSpace(s)) return false;
         if (s[0] == '-' || s[0] == '/' || s[^1] == '/') return false;

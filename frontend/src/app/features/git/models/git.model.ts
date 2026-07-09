@@ -106,6 +106,65 @@ export interface GitProjectInventory {
 }
 
 /**
+ * Git-Management cleanup (AGT-2009). Mirrors backend `GitCleanupService` models.
+ * The plan is a read-only dry-run preview; execution acts on an operator-confirmed
+ * subset and only ever removes GEMERGTES (AGT-1945 invariant).
+ */
+export type CleanupTargetKind = 'localBranch' | 'remoteBranch' | 'backupRef' | 'staleWorktree';
+export type CleanupMergeStatus = 'merged' | 'unmerged' | 'notApplicable';
+
+/** One row of the cleanup dry-run preview. Mirrors backend `CleanupCandidate`. */
+export interface CleanupCandidate {
+  kind: CleanupTargetKind;
+  name: string;
+  remote: string | null;
+  tipSha: string | null;
+  tipShortSha: string | null;
+  mergeStatus: CleanupMergeStatus;
+  /** True only when the item is provably safe to delete (merged / stale). */
+  eligible: boolean;
+  /** Merge evidence when eligible; why-kept reason otherwise. */
+  reason: string;
+}
+
+/** The cleanup dry-run plan for one project. Mirrors backend `GitCleanupPlan`. */
+export interface GitCleanupPlan {
+  projectName: string;
+  repositoryPath: string | null;
+  isRepo: boolean;
+  integrationBranch: string;
+  candidates: CleanupCandidate[];
+  error: string | null;
+}
+
+/** One confirmed item posted to the execute endpoint. Mirrors backend `CleanupExecutionItem`. */
+export interface CleanupExecutionItem {
+  kind: CleanupTargetKind;
+  name: string;
+  remote: string | null;
+}
+
+/** Per-item outcome of an executed cleanup. Mirrors backend `CleanupActionOutcome`. */
+export interface CleanupActionOutcome {
+  kind: CleanupTargetKind;
+  name: string;
+  remote: string | null;
+  deleted: boolean;
+  reason: string;
+}
+
+/** Result report of an executed cleanup. Mirrors backend `GitCleanupResult`. */
+export interface GitCleanupResult {
+  projectName: string;
+  integrationBranch: string;
+  isRepo: boolean;
+  deletedCount: number;
+  keptCount: number;
+  actions: CleanupActionOutcome[];
+  error: string | null;
+}
+
+/**
  * Repository hygiene snapshot. Mirrors backend `GitHygieneStatus`.
  *
  * Used by:
