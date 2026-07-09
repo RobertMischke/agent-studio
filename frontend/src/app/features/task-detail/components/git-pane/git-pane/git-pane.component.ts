@@ -97,6 +97,94 @@ export class GitPaneComponent {
   }
 
   /**
+   * Master collapse for the whole commit-meta head (landed ladder +
+   * "N task commits" group + per-commit banner) that sits above the
+   * tree/diff split. Collapsing it hands all the vertical space to the
+   * tree + diff so the review surface reads compact; persisted so the
+   * operator's preference survives a reload. Default expanded so the
+   * ladder / commit context stays visible for first-time viewers.
+   */
+  readonly headCollapsed = signal<boolean>(readHeadCollapsed());
+
+  toggleHeadCollapsed(): void {
+    const next = !this.headCollapsed();
+    this.headCollapsed.set(next);
+    writeHeadCollapsed(next);
+  }
+
+  /** Compact label for the collapsed head strip. */
+  readonly headTitle = computed<string>(() => {
+    const n = this.git.commitChain().length;
+    return n > 1 ? `${n} task commits` : 'Commit details';
+  });
+
+  /**
+   * Diff render layout. Side-by-side shows the before/after columns; the
+   * unified (inline) mode collapses to a single "just the change" column
+   * per the operator's ask. Persisted; default side-by-side. This is now
+   * the single source of truth for the diff2html `outputFormat` - the
+   * previous behaviour (implicitly side-by-side only while maximized,
+   * line-by-line otherwise) is replaced by this explicit, remembered
+   * toggle so maximizing no longer silently changes the layout.
+   */
+  readonly diffViewMode = signal<DiffViewMode>(readDiffViewMode());
+
+  toggleDiffViewMode(): void {
+    const next: DiffViewMode = this.diffViewMode() === 'side-by-side' ? 'line-by-line' : 'side-by-side';
+    this.diffViewMode.set(next);
+    writeDiffViewMode(next);
+  }
+
+  // --- Tree | diff splitter (draggable, persisted) -----------------------
+  // In the split (pane-maximized) layout the file-change tree sits left of
+  // the diff. The divider between them is draggable; its width is stored in
+  // px and pushed to the tree column through the `--git-tree-width` custom
+  // property so the SCSS keeps the min/behaviour in one place. Clamp math
+  // lives in `clampTreeWidth` so the drag can never squeeze either side
+  // below its readable floor.
+  readonly treeColWidth = signal<number>(readTreeWidth());
+  readonly treeResizing = signal(false);
+  private treeResize: { pointerId: number; container: HTMLElement } | null = null;
+
+  startTreeResize(event: PointerEvent): void {
+    const splitter = event.currentTarget as HTMLElement;
+    const container = splitter.parentElement;
+    if (!container) return;
+    event.preventDefault();
+    splitter.setPointerCapture(event.pointerId);
+    this.treeResize = { pointerId: event.pointerId, container };
+    this.treeResizing.set(true);
+    document.body.style.cursor = 'col-resize';
+  }
+
+  onTreeResizeMove(event: PointerEvent): void {
+    const drag = this.treeResize;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const rect = drag.container.getBoundingClientRect();
+    this.treeColWidth.set(clampTreeWidth(event.clientX - rect.left, rect.width));
+  }
+
+  endTreeResize(event: PointerEvent): void {
+    const drag = this.treeResize;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+    this.treeResize = null;
+    this.treeResizing.set(false);
+    document.body.style.cursor = '';
+    writeTreeWidth(this.treeColWidth());
+  }
+
+  onTreeResizeKey(event: KeyboardEvent): void {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const container = (event.currentTarget as HTMLElement).parentElement;
+    const width = container?.getBoundingClientRect().width ?? 0;
+    const step = event.key === 'ArrowLeft' ? -TREE_RESIZE_STEP : TREE_RESIZE_STEP;
+    this.treeColWidth.set(clampTreeWidth(this.treeColWidth() + step, width));
+    writeTreeWidth(this.treeColWidth());
+  }
+
+  /**
    * Title rendered in the pane header. Surfaces the multi-commit case
    * ("3 task commits") so the user sees at a glance that the chain has
    * more than one entry.
@@ -174,7 +262,7 @@ export class GitPaneComponent {
     if (this.diffGated()) return null;
     const diff2html = currentDiff2Html();
     if (!this.diff2htmlReady() || !diff2html) return null;
-    const sideBySide = this.maximized() || this.diffMaximized();
+    const sideBySide = this.diffViewMode() === 'side-by-side';
     const rendered = diff2html.html(text, {
       drawFileList: false,
       outputFormat: sideBySide ? 'side-by-side' : 'line-by-line',
@@ -258,8 +346,29 @@ export class GitPaneComponent {
   }
 }
 
+export type DiffViewMode = 'side-by-side' | 'line-by-line';
+
 const COMMIT_HEADER_COLLAPSED_KEY = 'taskboard.gitPane.commitHeaderCollapsed';
 const COMMIT_GROUP_COLLAPSED_KEY = 'taskboard.gitPane.commitGroupCollapsed';
+const HEAD_COLLAPSED_KEY = 'taskboard.gitPane.headCollapsed';
+const DIFF_VIEW_MODE_KEY = 'taskboard.gitPane.diffViewMode';
+const TREE_WIDTH_KEY = 'taskboard.gitPane.treeWidth';
+
+// Splitter clamp: the tree may not drop below MIN_TREE_PX nor squeeze the
+// diff below MIN_DIFF_PX. Keyboard arrows nudge by TREE_RESIZE_STEP. The
+// tree floor mirrors the SCSS `min-width` on `.git-view__tree-col` so the
+// CSS minimum never fights the flex-basis mid-drag (the spring-back bug the
+// pane splitter documents in layout-panes.service).
+const MIN_TREE_PX = 200;
+const MIN_DIFF_PX = 320;
+const TREE_WIDTH_DEFAULT = 300;
+const TREE_RESIZE_STEP = 16;
+
+/** Clamp a proposed tree width against its floor and the diff's floor. */
+export function clampTreeWidth(raw: number, containerWidth: number): number {
+  const upper = containerWidth > 0 ? Math.max(MIN_TREE_PX, containerWidth - MIN_DIFF_PX) : Number.POSITIVE_INFINITY;
+  return Math.round(Math.max(MIN_TREE_PX, Math.min(upper, raw)));
+}
 
 function readCommitHeaderCollapsed(): boolean {
   try { return localStorage.getItem(COMMIT_HEADER_COLLAPSED_KEY) === '1'; }
@@ -281,5 +390,41 @@ function readCommitGroupCollapsed(): boolean {
 
 function writeCommitGroupCollapsed(value: boolean): void {
   try { localStorage.setItem(COMMIT_GROUP_COLLAPSED_KEY, value ? '1' : '0'); }
+  catch { /* ignore quota / privacy-mode errors */ }
+}
+
+function readHeadCollapsed(): boolean {
+  try { return localStorage.getItem(HEAD_COLLAPSED_KEY) === '1'; }
+  catch { return false; }
+}
+
+function writeHeadCollapsed(value: boolean): void {
+  try { localStorage.setItem(HEAD_COLLAPSED_KEY, value ? '1' : '0'); }
+  catch { /* ignore quota / privacy-mode errors */ }
+}
+
+function readDiffViewMode(): DiffViewMode {
+  try {
+    return localStorage.getItem(DIFF_VIEW_MODE_KEY) === 'line-by-line' ? 'line-by-line' : 'side-by-side';
+  }
+  catch { return 'side-by-side'; }
+}
+
+function writeDiffViewMode(value: DiffViewMode): void {
+  try { localStorage.setItem(DIFF_VIEW_MODE_KEY, value); }
+  catch { /* ignore quota / privacy-mode errors */ }
+}
+
+function readTreeWidth(): number {
+  try {
+    const raw = Number(localStorage.getItem(TREE_WIDTH_KEY));
+    if (Number.isFinite(raw) && raw >= MIN_TREE_PX) return Math.round(raw);
+  }
+  catch { /* ignore */ }
+  return TREE_WIDTH_DEFAULT;
+}
+
+function writeTreeWidth(value: number): void {
+  try { localStorage.setItem(TREE_WIDTH_KEY, String(Math.round(value))); }
   catch { /* ignore quota / privacy-mode errors */ }
 }

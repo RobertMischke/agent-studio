@@ -71,6 +71,29 @@ const COMMITS: CommitFixture[] = [
 // "All commits" file list surfaces.
 const AGGREGATE_FILES = ['src/feature.ts', 'src/feature.spec.ts', 'README.md', 'CHANGELOG.md'];
 
+// Graph-derived provenance (ASS-1724): the landed ladder shown above the
+// commit group. Mocked so `git.provenance()` resolves to a well-formed
+// view rather than the generic `[]` catch-all body, which the ladder
+// template dereferences (`prov.ladder.branch`) and would otherwise crash on.
+const PROVENANCE = {
+  branch: 'task/multi-commit-task',
+  base: 'develop',
+  transitions: [],
+  merge: null,
+  landedState: 'merged-to-develop',
+  ladder: {
+    branch: 'task/multi-commit-task',
+    branchTip: COMMITS[2].sha,
+    integrationBranch: 'develop',
+    integrationHead: 'abcdef1234567890abcdef1234567890abcdef12',
+    mergedToIntegration: true,
+    releaseBranch: 'main',
+    releaseHead: 'fedcba0987654321fedcba0987654321fedcba09',
+    releasedToRelease: false,
+  },
+  commits: [],
+};
+
 function makeDetail() {
   const newest = COMMITS[COMMITS.length - 1];
   return {
@@ -162,6 +185,8 @@ async function installRoutes(page: Page) {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ projectName: PROJECT, isRepo: true, isDirty: false, hasUpstream: true, ahead: 0, behind: 0, job: { jobId: JOB_ID, state: '5-human-review', jobInfoCommitPresent: true, stampedCommitSha: COMMITS[2].sha, acceptedTaskUncommitted: false }, error: null }) }));
   await page.route(new RegExp(`/api/tasks/${idEsc}/git/status(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ isRepo: true, branch: 'main', filesChanged: 0, totalAdded: 0, totalRemoved: 0, files: [], error: null }) }));
+  await page.route(new RegExp(`/api/tasks/${idEsc}/provenance(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PROVENANCE) }));
   await page.route(new RegExp(`/api/tasks/${idEsc}/commit(\\?|$)`), (route) =>
     route.fulfill({
       status: 200, contentType: 'application/json',
@@ -427,6 +452,86 @@ test.describe('Task-detail multi-commit chain', () => {
     // rather than the singular "Task commit" so reviewers see the
     // chain length without scanning the strip.
     await expect(page.locator('[data-testid="pane-git"] .pane__title')).toContainText('3 task commits');
+  });
+
+  test('diff layout toggle switches side-by-side <-> unified and persists the choice', async ({ page }) => {
+    await installRoutes(page);
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 10_000 });
+
+    // Default layout is side-by-side (pressed). The combined diff must be
+    // rendered for the toolbar toggle to be present.
+    await expect(page.getByTestId('git-diff')).toContainText('aggregated across all commits', { timeout: 5_000 });
+    const toggle = page.getByTestId('git-diff-mode-toggle');
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(toggle).toHaveText('Side-by-side');
+
+    // Flip to unified/inline; the label + pressed state follow and the
+    // choice is written to localStorage.
+    await toggle.click();
+    await expect(toggle).toHaveText('Unified');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    // diff2html re-renders line-by-line (no side-by-side split columns).
+    await expect(page.locator('[data-testid="git-diff"] .d2h-file-side-diff')).toHaveCount(0);
+    const stored = await page.evaluate(() => localStorage.getItem('taskboard.gitPane.diffViewMode'));
+    expect(stored).toBe('line-by-line');
+
+    if (RESULTS_DIR) {
+      await page.getByTestId('pane-git').screenshot({ path: path.join(RESULTS_DIR, 'diff-toggle-unified--mocked.png') });
+    }
+  });
+
+  test('commit-meta head collapses to a compact strip and back', async ({ page }) => {
+    await installRoutes(page);
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 10_000 });
+
+    const head = page.getByTestId('git-head-collapse-toggle');
+    await expect(head).toBeVisible();
+    await expect(head).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByTestId('git-commit-group')).toBeVisible();
+
+    await head.click();
+    await expect(head).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('git-commit-group')).toHaveCount(0);
+    await expect(page.getByTestId('git-head-summary')).toBeVisible();
+    const stored = await page.evaluate(() => localStorage.getItem('taskboard.gitPane.headCollapsed'));
+    expect(stored).toBe('1');
+
+    if (RESULTS_DIR) {
+      await page.getByTestId('pane-git').screenshot({ path: path.join(RESULTS_DIR, 'commit-head-collapsed--mocked.png') });
+    }
+  });
+
+  test('tree|diff splitter resizes the tree in the maximized split layout and persists', async ({ page }) => {
+    await installRoutes(page);
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('git-diff')).toContainText('aggregated across all commits', { timeout: 5_000 });
+
+    // The splitter is a split-layout affordance: maximize the pane so the
+    // tree sits left of the diff and the divider becomes draggable.
+    await page.getByTestId('pane-maximize-git').click();
+    const splitter = page.getByTestId('git-tree-splitter');
+    await expect(splitter).toBeVisible();
+
+    const treeCol = page.getByTestId('git-tree-col');
+    const before = (await treeCol.boundingBox())!.width;
+    const box = (await splitter.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 140, box.y + box.height / 2, { steps: 8 });
+    await page.mouse.up();
+
+    const after = (await treeCol.boundingBox())!.width;
+    expect(after).toBeGreaterThan(before + 40);
+    const stored = await page.evaluate(() => Number(localStorage.getItem('taskboard.gitPane.treeWidth')));
+    expect(stored).toBeGreaterThan(before);
+
+    if (RESULTS_DIR) {
+      await page.getByTestId('git-view-body').screenshot({ path: path.join(RESULTS_DIR, 'tree-splitter-resized--mocked.png') });
+    }
   });
 
   test('studio overflow menu exposes worktree commit actions', async ({ page }) => {

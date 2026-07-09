@@ -5,7 +5,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { GitPaneComponent } from './git-pane.component';
+import { GitPaneComponent, clampTreeWidth } from './git-pane.component';
 import { GitPaneService } from '../../../services/git-pane.service';
 import { LayoutPanesService } from '../../../services/layout-panes.service';
 import type { GitFileChange, GitStatus, TaskCommitDetail, TaskCommitInfo, TaskProvenanceView } from '../../../../git';
@@ -120,7 +120,24 @@ function makeReview(overrides?: Partial<CodeReviewListEntry>): CodeReviewListEnt
 describe('GitPaneComponent', () => {
   beforeEach(() => {
     localStorage.removeItem('taskboard.gitPane.commitGroupCollapsed');
+    localStorage.removeItem('taskboard.gitPane.headCollapsed');
+    localStorage.removeItem('taskboard.gitPane.diffViewMode');
+    localStorage.removeItem('taskboard.gitPane.treeWidth');
   });
+
+  function mountGit(git: ReturnType<typeof makeGitPaneMock>) {
+    return TestBed.configureTestingModule({
+      imports: [GitPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: GitPaneService, useValue: git },
+        LayoutPanesService,
+      ],
+    }).compileComponents();
+  }
 
   it('renders the multi-commit group collapsed by default without a duplicate aggregate header', async () => {
     const git = makeGitPaneMock();
@@ -346,5 +363,101 @@ describe('GitPaneComponent', () => {
 
     const root = fixture.nativeElement as HTMLElement;
     expect(root.querySelector('[data-testid="git-commit-review-badge"]')).toBeNull();
+  });
+
+  it('defaults the diff layout to side-by-side and toggles to unified, persisting the choice', async () => {
+    const git = makeGitPaneMock();
+    await mountGit(git);
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const toggle = root.querySelector<HTMLButtonElement>('[data-testid="git-diff-mode-toggle"]');
+    expect(toggle).not.toBeNull();
+    // Default: side-by-side, pressed.
+    expect(fixture.componentInstance.diffViewMode()).toBe('side-by-side');
+    expect(toggle?.getAttribute('aria-pressed')).toBe('true');
+    expect(toggle?.textContent?.trim()).toBe('Side-by-side');
+
+    toggle?.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.diffViewMode()).toBe('line-by-line');
+    expect(toggle?.getAttribute('aria-pressed')).toBe('false');
+    expect(toggle?.textContent?.trim()).toBe('Unified');
+    expect(localStorage.getItem('taskboard.gitPane.diffViewMode')).toBe('line-by-line');
+  });
+
+  it('restores the persisted unified diff layout on construction', async () => {
+    localStorage.setItem('taskboard.gitPane.diffViewMode', 'line-by-line');
+    const git = makeGitPaneMock();
+    await mountGit(git);
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.diffViewMode()).toBe('line-by-line');
+    const root = fixture.nativeElement as HTMLElement;
+    const toggle = root.querySelector<HTMLButtonElement>('[data-testid="git-diff-mode-toggle"]');
+    expect(toggle?.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('collapses the whole commit-meta head with one toggle and remembers the state', async () => {
+    const git = makeGitPaneMock();
+    await mountGit(git);
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    // Expanded by default: the head toggle and the commit group are present.
+    const head = root.querySelector<HTMLButtonElement>('[data-testid="git-head-collapse-toggle"]');
+    expect(head).not.toBeNull();
+    expect(head?.getAttribute('aria-expanded')).toBe('true');
+    expect(root.querySelector('[data-testid="git-commit-group"]')).not.toBeNull();
+
+    head?.click();
+    fixture.detectChanges();
+
+    // Collapsed: the meta block is gone, only the compact summary strip stays.
+    expect(fixture.componentInstance.headCollapsed()).toBe(true);
+    expect(head?.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('[data-testid="git-commit-group"]')).toBeNull();
+    expect(root.querySelector('[data-testid="git-head-summary"]')).not.toBeNull();
+    expect(localStorage.getItem('taskboard.gitPane.headCollapsed')).toBe('1');
+  });
+
+  it('renders the draggable tree splitter carrying the persisted width', async () => {
+    localStorage.setItem('taskboard.gitPane.treeWidth', '360');
+    const git = makeGitPaneMock();
+    await mountGit(git);
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const splitter = root.querySelector('[data-testid="git-tree-splitter"]');
+    expect(splitter).not.toBeNull();
+    expect(splitter?.getAttribute('role')).toBe('separator');
+    expect(fixture.componentInstance.treeColWidth()).toBe(360);
+    const splitBody = root.querySelector<HTMLElement>('.git-view__split-body');
+    expect(splitBody?.style.getPropertyValue('--git-tree-width')).toBe('360px');
+  });
+
+  it('clamps the tree width against both the tree floor and the diff floor', () => {
+    // Below the tree floor snaps up to 200.
+    expect(clampTreeWidth(50, 1000)).toBe(200);
+    // Comfortable middle stays put (rounded).
+    expect(clampTreeWidth(300.4, 1000)).toBe(300);
+    // Near the right edge is capped so the diff keeps its 320px floor.
+    expect(clampTreeWidth(900, 1000)).toBe(680);
+    // Unknown container width (0) only enforces the lower floor.
+    expect(clampTreeWidth(5000, 0)).toBe(5000);
+    expect(clampTreeWidth(10, 0)).toBe(200);
   });
 });

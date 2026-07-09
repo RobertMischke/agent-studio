@@ -20,6 +20,23 @@
        [class.git-view--split]="maximized()"
        data-testid="git-view-body">
     @if (git.viewMode() === 'commit') {
+      @if (git.provenance() || git.commitChain().length > 1 || git.commitDetail()?.commit) {
+        <div class="git-view__head"
+             [class.git-view__head--collapsed]="headCollapsed()"
+             data-testid="git-commit-head">
+          <button type="button"
+                  class="git-view__head-toggle"
+                  data-testid="git-head-collapse-toggle"
+                  [attr.aria-expanded]="!headCollapsed()"
+                  [cacTooltip]="headCollapsed() ? 'Show commit details' : 'Hide commit details'"
+                  (click)="toggleHeadCollapsed()">
+            <span class="git-view__head-caret">{{ headCollapsed() ? '▾' : '▴' }}</span>
+            <span class="git-view__head-title">{{ headTitle() }}</span>
+            @if (headCollapsed()) {
+              <span class="git-view__head-summary" data-testid="git-head-summary">{{ selectedCommitSummary() }}</span>
+            }
+          </button>
+          @if (!headCollapsed()) {
       @if (git.provenance(); as prov) {
         <section class="git-view__landed" data-testid="git-landed-ladder">
           <!--
@@ -151,9 +168,12 @@
           }
         </div>
       }
+          }
+        </div>
+      }
       @if (git.isAggregate() || git.commitDetail()?.commit) {
         @if (git.commitFiles().length) {
-          <div class="git-view__split-body">
+          <div class="git-view__split-body" [style.--git-tree-width.px]="treeColWidth()">
             <div class="git-view__tree-col" data-testid="git-tree-col">
               <app-git-file-tree
                 [files]="git.commitFiles()"
@@ -161,6 +181,19 @@
                 [fill]="maximized()"
                 (selectRequest)="git.selectDiffPath($event)" />
             </div>
+
+            <div class="git-view__splitter"
+                 data-testid="git-tree-splitter"
+                 role="separator"
+                 aria-orientation="vertical"
+                 aria-label="Resize file tree column"
+                 tabindex="0"
+                 [class.git-view__splitter--dragging]="treeResizing()"
+                 (pointerdown)="startTreeResize($event)"
+                 (pointermove)="onTreeResizeMove($event)"
+                 (pointerup)="endTreeResize($event)"
+                 (pointercancel)="endTreeResize($event)"
+                 (keydown)="onTreeResizeKey($event)"></div>
 
             @if (git.selectedDiffPath()) {
               <div class="git-view__diff-col" data-testid="git-diff-col">
@@ -170,7 +203,14 @@
                      data-testid="git-diff-wrap">
                   <div class="git-view__diff-toolbar">
                     <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
-                    <span class="git-view__diff-mode">{{ (maximized() || diffMaximized()) ? 'side-by-side' : 'line-by-line' }}</span>
+                    <button type="button"
+                            class="git-view__diff-mode-toggle"
+                            data-testid="git-diff-mode-toggle"
+                            [attr.aria-pressed]="diffViewMode() === 'side-by-side'"
+                            [cacTooltip]="diffViewMode() === 'side-by-side' ? 'Switch to unified (inline) diff' : 'Switch to side-by-side diff'"
+                            (click)="toggleDiffViewMode()">
+                      {{ diffViewMode() === 'side-by-side' ? 'Side-by-side' : 'Unified' }}
+                    </button>
                     @if (!maximized()) {
                       <button class="pane__maximize"
                               data-testid="git-diff-maximize"
@@ -244,7 +284,7 @@
         @if (g.files.length === 0) {
           <div class="git-view__empty">Working tree clean.</div>
         } @else {
-          <div class="git-view__split-body">
+          <div class="git-view__split-body" [style.--git-tree-width.px]="treeColWidth()">
             <div class="git-view__tree-col" data-testid="git-tree-col">
               <app-git-file-tree
                 [files]="g.files"
@@ -252,6 +292,19 @@
                 [fill]="maximized()"
                 (selectRequest)="git.selectDiffPath($event)" />
             </div>
+
+            <div class="git-view__splitter"
+                 data-testid="git-tree-splitter"
+                 role="separator"
+                 aria-orientation="vertical"
+                 aria-label="Resize file tree column"
+                 tabindex="0"
+                 [class.git-view__splitter--dragging]="treeResizing()"
+                 (pointerdown)="startTreeResize($event)"
+                 (pointermove)="onTreeResizeMove($event)"
+                 (pointerup)="endTreeResize($event)"
+                 (pointercancel)="endTreeResize($event)"
+                 (keydown)="onTreeResizeKey($event)"></div>
 
             @if (git.selectedDiffPath()) {
               <div class="git-view__diff-col" data-testid="git-diff-col">
@@ -261,7 +314,14 @@
                      data-testid="git-diff-wrap">
                   <div class="git-view__diff-toolbar">
                     <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
-                    <span class="git-view__diff-mode">{{ (maximized() || diffMaximized()) ? 'side-by-side' : 'line-by-line' }}</span>
+                    <button type="button"
+                            class="git-view__diff-mode-toggle"
+                            data-testid="git-diff-mode-toggle"
+                            [attr.aria-pressed]="diffViewMode() === 'side-by-side'"
+                            [cacTooltip]="diffViewMode() === 'side-by-side' ? 'Switch to unified (inline) diff' : 'Switch to side-by-side diff'"
+                            (click)="toggleDiffViewMode()">
+                      {{ diffViewMode() === 'side-by-side' ? 'Side-by-side' : 'Unified' }}
+                    </button>
                     @if (!maximized()) {
                       <button class="pane__maximize"
                               data-testid="git-diff-maximize"
