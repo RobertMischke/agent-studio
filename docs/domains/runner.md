@@ -56,6 +56,11 @@ state.
   state after process failure.
 - `backend/Services/Supervisor/*`: Layer 2 advisory loop, meta-cycle, and rare
   intervention primitives.
+- `runner/*`: the standalone remote runner (RM-5, Runner-Split C). A dependency-
+  free console process that runs one task on a Linux host against the Task Server
+  API only (fenced lease + heartbeat, git-origin checkout, log + artifact upload,
+  external-completion). Owns no task state and never pushes git. Operator runbook:
+  [docs/operations/setup/linux-runner-host.md](../operations/setup/linux-runner-host.md).
 
 ## Invariants
 
