@@ -17,6 +17,31 @@ import { test, expect, Page } from '@playwright/test';
 const PROJECT = 'project-neuen';
 
 async function stubWorkspace(page: Page) {
+  // Hermetic catch-all so the spec runs without a live backend (its stated
+  // design). Registered first, so the specific stubs below take precedence
+  // (Playwright matches routes in reverse registration order). Without this,
+  // the board's background polls (cli models/quota, runner status, environment,
+  // projects/settings, crash-recovery, archive, …) hit the down backend, return
+  // status 0, and pop the shared "Backend not reachable" error dialog whose
+  // overlay intercepts every click. Most endpoints tolerate an empty object;
+  // the ones below whose consumers read a nested array (`.length`/`Object.keys`)
+  // or that are list-shaped need a minimally-valid empty body so nothing throws.
+  const emptyBodyFor = (path: string): string => {
+    if (/\/api\/(tags|workspaces|clients)\/?$/.test(path)) return '[]';
+    if (/\/api\/runner\/status$/.test(path)) return '{"projects":{}}';
+    if (/\/api\/cli\/quota$/.test(path)) return '{"snapshots":[]}';
+    if (/\/api\/tasks\/archive/.test(path)) return '{"items":[],"total":0,"offset":0,"limit":0}';
+    return '{}';
+  };
+  await page.route(/\/api\//, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: emptyBodyFor(path),
+    });
+  });
+
   await page.route(/\/api\/watch-paths$/, async (route) => {
     await route.fulfill({
       status: 200,
