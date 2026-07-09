@@ -150,6 +150,20 @@ describe('ActivityLogViewComponent — internal-event rendering (Trace)', () => 
     // The whole rendered conversation must never contain the raw frame body.
     expect(host.textContent ?? '').not.toContain('"type":"assistant"');
     expect(host.textContent ?? '').not.toContain('secret reasoning');
+
+    // Assert the conversation VIEW-MODEL (the turns handed to the template),
+    // not the DOM: the CDK virtual-scroll viewport has no height under the test
+    // harness, so it renders zero rows and a DOM-only check would pass even if
+    // the pipeline dropped everything. Reading visibleConversation() proves the
+    // Conversation surface (the exact surface the bug was reported on) carries
+    // the redacted marker text and never the raw frame body.
+    const convoText = fixture.componentInstance
+      .visibleConversation()
+      .map((item) => item.turn.text ?? '')
+      .join('\n');
+    expect(convoText).toContain('[internal event]');
+    expect(convoText).not.toContain('"type":"assistant"');
+    expect(convoText).not.toContain('secret reasoning');
     fixture.destroy();
   });
 });
