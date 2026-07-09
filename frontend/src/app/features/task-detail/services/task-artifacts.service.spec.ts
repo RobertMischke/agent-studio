@@ -7,10 +7,13 @@ import { TaskService } from '../../../services/task.service';
 import type { TaskArtifact, TaskArtifactsResponse, TaskInfo } from '../../../models/task.model';
 
 /**
- * The Files-tab count must reflect the CURRENT set of `.md` artifacts, not
- * a value frozen when the task was first opened. These tests pin the poller
- * contract that keeps the badge live: an immediate fetch on `syncTo`, a
- * forced re-fetch on `refresh`, and a clear when no job is selected.
+ * The Files-tab count must reflect the CURRENT set of USER-RELEVANT `.md`
+ * artifacts, not a value frozen when the task was first opened and not the
+ * raw job-root listing (which includes orchestrator machinery). These tests
+ * pin the poller contract that keeps the badge live — an immediate fetch on
+ * `syncTo`, a forced re-fetch on `refresh`, a clear when no job is selected —
+ * and the machinery filter that keeps the count honest (`orchestrator-follow-up.md`
+ * must never reach the manifest, the root cause of the over-counted "9").
  */
 describe('TaskArtifactsService', () => {
   let calls: Array<{ jobId: string; watchPath?: string }>;
@@ -89,5 +92,36 @@ describe('TaskArtifactsService', () => {
     const svc = make();
     svc.syncTo(jobInfo('a'));
     expect(svc.artifacts()).toEqual([]);
+  });
+
+  it('drops orchestrator machinery so the Files count only sums user artifacts', () => {
+    // The backend `/artifacts` listing includes `orchestrator-follow-up.md`
+    // (the reissue reason written for the pickup runner). It sits in the job
+    // root but is not a user "file"; it must not inflate the badge count.
+    nextResponse = {
+      jobId: 'a',
+      files: [
+        artifact('prompt.md'),
+        artifact('aspect-code-quality.md'),
+        artifact('orchestrator-follow-up.md'),
+      ],
+    };
+    const svc = make();
+
+    svc.syncTo(jobInfo('a'));
+
+    expect(svc.artifacts().map((f) => f.name)).toEqual(['prompt.md', 'aspect-code-quality.md']);
+  });
+
+  it('matches machinery names case-insensitively', () => {
+    nextResponse = {
+      jobId: 'a',
+      files: [artifact('prompt.md'), artifact('Orchestrator-Follow-Up.md')],
+    };
+    const svc = make();
+
+    svc.syncTo(jobInfo('a'));
+
+    expect(svc.artifacts().map((f) => f.name)).toEqual(['prompt.md']);
   });
 });
