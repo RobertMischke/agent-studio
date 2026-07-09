@@ -1,8 +1,13 @@
-# Engineering Workstream — orientation in the running development stream
+# Workstream — orientation in the running development stream
 
-**Status:** concept v2, 2026-07-09 — finalized from the operator's refinement
-of [`project-chartroom-concept.md`](project-chartroom-concept.md) (now
-superseded; naming settled: **Engineering Workstream**, entry page
+**Status:** concept v3, 2026-07-09 — renamed by the operator from
+"Engineering Workstream" to just **Workstream**; it is the **top element**
+of the wiki content tree, and above it the wiki opens on the generated
+**Pulse** dashboard — see
+[`wiki-pulse-dashboard.md`](wiki-pulse-dashboard.md). v2 was finalized from
+the operator's refinement of
+[`project-chartroom-concept.md`](project-chartroom-concept.md) (now
+superseded; entry page
 **Current Development State**). Related: AGT-1984 (wiki own checkout,
 branch-bound), [`multichat-orchestrator.md`](multichat-orchestrator.md)
 (collector/curator are orchestrator contexts),
@@ -17,13 +22,14 @@ project plan, no Project Brief / System Overview / Target State / Roadmap
 entry page. It answers: *"Wo steht die Entwicklung gerade, was ist relevant,
 was wiederholt sich, und wo braucht es Aufmerksamkeit?"*
 
-> Das Kanban-Board bleibt für Arbeit. Der Engineering Workstream bleibt für
+> Das Kanban-Board bleibt für Arbeit. Der Workstream bleibt für
 > Orientierung.
 
 ## 2. The fixed frame
 
 ```
-Engineering Workstream
+(Pulse dashboard — wiki landing, generated view, not a page)
+Workstream                       <- oberstes Element des Wiki-Baums
 ├── Current Development State   <- zentrale Startseite
 ├── Development Signals
 ├── System Knowledge

@@ -1,0 +1,126 @@
+<title>Wiki Pulse — Dashboard-Mockup</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161c26;--panel2:#1c2431;--line:#2a3446;--txt:#dbe4f0;--dim:#8494ab;
+    --accent:#3fb6a8;--accent2:#5a9cf8;--ok:#4ac26b;--warn:#d9a840;--bad:#e2635a;--note:#e8b34b;font-size:15px}
+  body{background:var(--bg);color:var(--txt);font:400 1rem/1.5 "Segoe UI",system-ui,sans-serif;margin:0;padding:2.5rem 1.5rem 5rem}
+  .wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:1.2rem}
+  h1{font-size:1.6rem;font-weight:600;margin:0}
+  .lead{color:var(--dim);max-width:78ch;margin:0 0 .5rem}
+  .lead b{color:var(--txt);font-weight:600}
+  .frame{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .chrome{padding:.55rem .9rem;border-bottom:1px solid var(--line);background:var(--panel2);color:var(--dim);font-size:.8rem;display:flex;gap:.7rem;align-items:center}
+  .chrome b{color:var(--txt);font-weight:600}
+  .chrome .crumbsep{opacity:.5}
+  .body{padding:1rem;display:flex;flex-direction:column;gap:1rem}
+  /* drift strip */
+  .drift{display:grid;grid-template-columns:repeat(5,1fr);gap:.6rem}
+  @media(max-width:760px){.drift{grid-template-columns:repeat(2,1fr)}}
+  .area{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.6rem .7rem;display:flex;flex-direction:column;gap:.25rem}
+  .area h4{margin:0;font-size:.74rem;font-weight:600;color:var(--dim);letter-spacing:.06em;text-transform:uppercase}
+  .grade{display:flex;align-items:center;gap:.45rem;font-size:.95rem;font-weight:600}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .fresh .dot{background:var(--ok);box-shadow:0 0 6px var(--ok)} .fresh .g{color:var(--ok)}
+  .aging .dot{background:var(--warn)} .aging .g{color:var(--warn)}
+  .stale .dot{background:var(--bad);box-shadow:0 0 6px var(--bad)} .stale .g{color:var(--bad)}
+  .area small{color:var(--dim);font-size:.72rem}
+  /* grid */
+  .grid{display:grid;grid-template-columns:3fr 2fr;gap:1rem;align-items:start}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
+  .tile{background:var(--panel2);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .tile>h3{margin:0;padding:.55rem .8rem;font-size:.78rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:.5rem}
+  .tile>h3 .count{margin-left:auto;font-variant-numeric:tabular-nums;background:#0d131d;border:1px solid var(--line);border-radius:99px;padding:0 .5rem;font-size:.72rem;color:var(--txt)}
+  .stack{display:flex;flex-direction:column;gap:1rem}
+  /* feed */
+  .day{padding:.45rem .8rem .1rem;color:var(--dim);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase}
+  .row{display:flex;gap:.6rem;align-items:baseline;padding:.42rem .8rem;border-top:1px solid #202a3a;font-size:.86rem}
+  .row:hover{background:#18202e}
+  .row .t{color:var(--txt);font-weight:600}
+  .row .sub{color:var(--dim);font-size:.76rem}
+  .row .meta{margin-left:auto;color:var(--dim);font-size:.74rem;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .badge{border-radius:4px;padding:.02rem .42rem;font-size:.68rem;font-weight:600;white-space:nowrap;flex:none}
+  .b-know{background:#152d3f;color:#6db7e8}
+  .b-sig{background:#3a2a12;color:var(--note)}
+  .b-dec{background:#241a3a;color:#b18ae8}
+  .b-log{background:#12332f;color:var(--accent)}
+  .b-state{background:#122d1c;color:var(--ok)}
+  .b-out{background:#3a1a1a;color:var(--bad)}
+  .key{color:var(--accent2);font-size:.76rem;font-weight:600}
+  /* warnings / inbox / active */
+  .item{display:flex;gap:.55rem;padding:.5rem .8rem;border-top:1px solid #202a3a;font-size:.84rem;align-items:baseline}
+  .item:first-of-type{border-top:0}
+  .item .why{color:var(--dim);font-size:.76rem;display:block}
+  .sev{flex:none;width:8px;height:8px;border-radius:50%;position:relative;top:-1px}
+  .sev.w{background:var(--warn)} .sev.b{background:var(--bad);box-shadow:0 0 5px var(--bad)} .sev.i{background:var(--accent2)}
+  .empty{padding:.7rem .8rem;color:var(--dim);font-size:.82rem}
+  .empty b{color:var(--ok);font-weight:600}
+  .live{display:flex;align-items:center;gap:.5rem}
+  .pulse{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok);flex:none;animation:pp 1.6s infinite}
+  @keyframes pp{50%{opacity:.35}}
+  .note{color:var(--note);font-size:.86rem;max-width:80ch}
+  .note b{font-weight:600}
+</style>
+
+<div class="wrap">
+  <h1>Wiki Pulse — der Einstieg ins Wiki</h1>
+  <p class="lead">Das Wiki öffnet nicht mehr auf Baum oder Seite, sondern auf <b>Pulse</b>: eine <b>generierte
+  Sicht</b> (keine Wiki-Seite, nichts zu pflegen) mit Änderungs-Historie, Warnings, Sortierbedarf, laufender
+  Arbeit und <b>Drift-Grading</b> — „wo lügt das Wiki inzwischen?". Darunter beginnt der Content-Baum mit dem
+  <b>Workstream</b> (umbenannt, oberstes Element). Konzept: <code>wiki-pulse-dashboard.md</code></p>
+
+  <div class="frame">
+    <div class="chrome">Agent Studio <span class="crumbsep">·</span> <b>agent-taskboard</b> <span class="crumbsep">·</span> Wiki <span class="crumbsep">·</span> <b style="color:var(--accent)">Pulse</b><span style="margin-left:auto">Branch: develop · Stand 09:41</span></div>
+    <div class="body">
+
+      <div class="drift">
+        <div class="area fresh"><h4>Current State</h4><div class="grade"><span class="dot"></span><span class="g">Fresh</span></div><small>ersetzt vor 2 h</small></div>
+        <div class="area fresh"><h4>Signals</h4><div class="grade"><span class="dot"></span><span class="g">Fresh</span></div><small>12 aktiv · Budget 30</small></div>
+        <div class="area aging"><h4>System Knowledge</h4><div class="grade"><span class="dot"></span><span class="g">Aging</span></div><small>3 Seiten hinter dem Code</small></div>
+        <div class="area fresh"><h4>Decision Log</h4><div class="grade"><span class="dot"></span><span class="g">Fresh</span></div><small>zuletzt gestern</small></div>
+        <div class="area stale"><h4>Workstream Log</h4><div class="grade"><span class="dot"></span><span class="g">Stale</span></div><small>62 Commits seit Eintrag</small></div>
+      </div>
+
+      <div class="grid">
+        <section class="tile">
+          <h3>Änderungs-Feed <span class="count">letzte 14</span></h3>
+          <div class="day">Heute — 09.07.</div>
+          <div class="row"><span class="badge b-know">Knowledge</span><span><span class="t">Runner &amp; Lease-Fencing</span> <span class="sub">— Abschnitt Remote-Host ergänzt</span></span><span class="meta"><span class="key">AGT-1937</span> · 08:56</span></div>
+          <div class="row"><span class="badge b-sig">Signal</span><span><span class="t">Sticky Completion-Gate</span> <span class="sub">— Frequency: Repeated → Systemic</span></span><span class="meta"><span class="key">AGT-1944</span> · 08:12</span></div>
+          <div class="row"><span class="badge b-state">State</span><span><span class="t">Current Development State</span> <span class="sub">— ersetzt (Refresh)</span></span><span class="meta">Collector · 07:40</span></div>
+          <div class="day">Gestern — 08.07.</div>
+          <div class="row"><span class="badge b-dec">Decision</span><span><span class="t">Tasks-API statt Jobs-API</span> <span class="sub">— Status: Accepted</span></span><span class="meta"><span class="key">ADR-0058</span> · 23:02</span></div>
+          <div class="row"><span class="badge b-log">Log</span><span><span class="t">Reissue-Wipe behoben</span> <span class="sub">— Knowledge + 2 Signals aktualisiert</span></span><span class="meta"><span class="key">AGT-1945</span> · 22:37</span></div>
+          <div class="row"><span class="badge b-know">Knowledge</span><span><span class="t">Post-Processing-Pipeline</span> <span class="sub">— Outcome-Taxonomie eingearbeitet</span></span><span class="meta"><span class="key">AGT-1934</span> · 21:14</span></div>
+          <div class="row"><span class="badge b-out">außerhalb</span><span><span class="t">notes-tmp.md</span> <span class="sub">— außerhalb des Frames abgelegt → Inbox</span></span><span class="meta"><span class="key">AGT-1991</span> · 20:48</span></div>
+        </section>
+
+        <div class="stack">
+          <section class="tile">
+            <h3>Warnings <span class="count">3</span></h3>
+            <div class="item"><span class="sev b"></span><span><span class="t">Signal „Sticky Completion-Gate"</span><span class="why">Human Action offen: Gate-Regeln freigeben (seit 2 Tagen)</span></span></div>
+            <div class="item"><span class="sev w"></span><span><span class="t">System Knowledge über Budget</span><span class="why">52/50 Seiten — Kurator muss mergen, bevor Neues entsteht</span></span></div>
+            <div class="item"><span class="sev w"></span><span><span class="t">2 tote interne Links</span><span class="why">nach Umbenennung „Engineering Workstream" → „Workstream"</span></span></div>
+          </section>
+
+          <section class="tile">
+            <h3>Sortierbedarf <span class="count">2</span></h3>
+            <div class="item"><span class="sev i"></span><span><span class="t">notes-tmp.md</span><span class="why">Fragment außerhalb des Frames — mergen oder einsortieren</span></span></div>
+            <div class="item"><span class="sev i"></span><span><span class="t">signal-draft-flaky-e2e.md</span><span class="why">Duplikat-Verdacht: Signal „Flaky E2E" existiert</span></span></div>
+          </section>
+
+          <section class="tile">
+            <h3>In Arbeit</h3>
+            <div class="item"><span class="pulse"></span><span class="live"><span><span class="t">AGT-1932 · MC-2</span><span class="why">Run berührt docs/ — läuft seit 14 min</span></span></span></div>
+            <div class="empty">Letzter Kurator-Lauf: <b>heute 07:40, ok</b> — 2 Merges, 1 Verdichtung</div>
+          </section>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <p class="note"><b>Harte Eigenschaften:</b> Pulse ist eine Sicht, keine Seite — nicht editierbar, nicht
+  prompt-known, der Collector kann nicht hineinschreiben. v1 ist <b>rein deterministisch</b> (git-Historie +
+  Frame-Metadaten + Signal-Frontmatter), kein LLM. Drift-Heuristik v1: Commits unter den Code-Roots seit dem
+  letzten Seiten-Update — 0–9 Fresh · 10–49 Aging · 50+ Stale. Voraussetzung: Wiki-Performance-Layer
+  (Caching), damit der Einstieg &lt; 1 s warm lädt.</p>
+</div>
