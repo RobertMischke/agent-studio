@@ -581,21 +581,21 @@ export class ProtocolPaneComponent implements OnDestroy {
    * Progressive spinner label so a slow Haiku call doesn't look frozen.
    * The backend caps the call at HaikuTimeoutSeconds = 90 s; we
    * intentionally mirror that constant here. Tiers:
-   *   < 30 s         "Generating protocol..."
-   *   30 s ... 60 s  "Generating protocol... (>=30 s)"
-   *   >= 60 s        "Generating protocol... (>=60 s, will time out)"
+   *   < 30 s         "Generating the result..."
+   *   30 s ... 60 s  "Generating the result... (>=30 s)"
+   *   >= 60 s        "Generating the result... (>=60 s, will time out)"
    * Re-evaluates on every NowTickService tick while summaryStatus is
    * 'generating'; falls back to the base label as soon as the state
    * flips to ready or failed.
    */
   readonly summarySpinnerLabel = computed<string>(() => {
-    if (this.summaryStatus() !== 'generating') return 'Generating protocol...';
+    if (this.summaryStatus() !== 'generating') return 'Generating the result...';
     const startedAtIso = this.detail().summaryState?.startedAt;
-    if (!startedAtIso) return 'Generating protocol...';
+    if (!startedAtIso) return 'Generating the result...';
     const elapsed = (this.nowTick() - new Date(startedAtIso).getTime()) / 1000;
-    if (elapsed >= 60) return 'Generating protocol... (>=60 s, will time out)';
-    if (elapsed >= 30) return 'Generating protocol... (>=30 s)';
-    return 'Generating protocol...';
+    if (elapsed >= 60) return 'Generating the result... (>=60 s, will time out)';
+    if (elapsed >= 30) return 'Generating the result... (>=30 s)';
+    return 'Generating the result...';
   });
 
   /**

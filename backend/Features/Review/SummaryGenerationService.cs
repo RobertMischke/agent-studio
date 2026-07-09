@@ -109,7 +109,7 @@ public sealed class SummaryGenerationService
             var truncated = TruncateTail(rawLog, MaxLogChars);
             runOutcome ??= TerminalRunOutcomeClassifier.TryClassifyRenderedLog(rawLog)?.Outcome;
             var prompt = _prompts.Render(RuntimePromptService.SummaryProtocol,
-                new Dictionary<string, string?> { ["log"] = truncated });
+                BuildSummarySlots(info, truncated, runOutcome?.ProtocolResult ?? "unknown"));
 
             var result = await RunHaikuAsync(prompt, info.FolderPath, ct);
             if (!result.Ok || string.IsNullOrWhiteSpace(result.Summary))
@@ -190,8 +190,10 @@ public sealed class SummaryGenerationService
         }
 
         var truncated = TruncateTail(rawLog, MaxLogChars);
+        // Interim peek: the run is still alive, so there is no terminal outcome
+        // to feed the classifier. Say so explicitly instead of guessing one.
         var prompt = _prompts.Render(RuntimePromptService.SummaryProtocol,
-            new Dictionary<string, string?> { ["log"] = truncated });
+            BuildSummarySlots(info, truncated, "in progress"));
 
         var sw = Stopwatch.StartNew();
         var result = await RunHaikuAsync(prompt, info.FolderPath, ct);
@@ -227,6 +229,26 @@ public sealed class SummaryGenerationService
         var tail = text[^maxChars..];
         return "[earlier output truncated]\n" + tail;
     }
+
+    /// <summary>
+    /// Builds the placeholder set for <c>summary-protocol.md</c>. Besides the
+    /// log tail, it feeds the task metadata (<c>taskType</c> / <c>mode</c>) and
+    /// the run <c>outcome</c> so the summarizer can pick the right result
+    /// <c>Case</c> and frame the overview honestly (a blocked run reads as
+    /// "where it stopped", not "shipped"). The frontend result view classifies
+    /// the same signals independently, so these slots only need to nudge the
+    /// model; a missing or wrong value degrades to the client-side heuristic.
+    /// Exposed for the prompt-contract test that pins this wiring without a
+    /// billable Haiku round-trip.
+    /// </summary>
+    public static Dictionary<string, string?> BuildSummarySlots(TaskInfo info, string log, string outcome)
+        => new()
+        {
+            ["log"] = log,
+            ["taskType"] = info.TaskType,
+            ["mode"] = info.Mode,
+            ["outcome"] = outcome,
+        };
 
     private async Task<HaikuSummaryResult> RunHaikuAsync(
         string prompt, string workingDirectory, CancellationToken ct)

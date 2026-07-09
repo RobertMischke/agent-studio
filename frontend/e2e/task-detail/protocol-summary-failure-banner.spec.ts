@@ -56,7 +56,7 @@ test.describe('Protocol pane — summary failure banner', () => {
 
       const banner = page.getByTestId('protocol-summary-error');
       await expect(banner).toBeVisible();
-      await expect(banner).toContainText('Protocol could not be generated');
+      await expect(banner).toContainText('Result could not be generated');
       const message = page.getByTestId('protocol-summary-error-message');
       await expect(message).toContainText('cli-output.log');
 
