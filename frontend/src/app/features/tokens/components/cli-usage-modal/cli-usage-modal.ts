@@ -80,6 +80,13 @@ export class CliUsageModalComponent {
     if (window.used !== null && window.limit !== null) {
       return `${window.used} / ${window.limit}${window.unit ? ' ' + window.unit : ''}`;
     }
+    // Operator rule: a "%" window with no explicit numeric limit is capped
+    // at 100% (the CLI reports "66% used", so the limit is implicitly 100%).
+    // Show the implied cap instead of a bare "n/a" so Codex windows
+    // (used/limit null, only usedPct) read as "66%" against "100%".
+    if (window.unit === '%' && window.usedPct !== null) {
+      return '100%';
+    }
     return 'n/a';
   }
 

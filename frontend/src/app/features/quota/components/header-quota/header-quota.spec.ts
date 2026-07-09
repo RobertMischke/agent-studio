@@ -222,3 +222,78 @@ describe('HeaderQuotaComponent (semantic state)', () => {
     expect(chips[0].value).toBe('—');
   });
 });
+
+/**
+ * Regression for the "Codex missing from the taskbar strip although the
+ * API delivers it" bug (2026-07-10). The live `/api/cli/quota` payload for
+ * Codex reports its windows as `unit: "%"` with BOTH `used` and `limit`
+ * null and only `usedPct` populated. A fresh Codex snapshot in that shape
+ * must still produce a real, non-empty card in the strip — a CLI whose
+ * snapshot has no error must never fall out of the row.
+ */
+describe('HeaderQuotaComponent (Codex %-only payload)', () => {
+  interface CardModel {
+    cliType: string;
+    chips: Chip[];
+    state: string;
+    tone: string;
+  }
+
+  // Real Codex shape: 4 windows, unit '%', used/limit both null, only usedPct.
+  const codexWindows: QuotaWindowInput[] = [
+    { label: 'Current session (5h)', usedPct: 66, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '02:33' },
+    { label: 'Weekly', usedPct: 12, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '21:33 on 3 May' },
+    { label: 'Spark 5-hour', usedPct: 0, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '21:25' },
+    { label: 'Spark Weekly', usedPct: 4, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '16:25 on 14 Jun' },
+  ];
+
+  async function renderWithCodex() {
+    await TestBed.configureTestingModule({
+      imports: [HeaderQuotaComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: JobsHubClient, useClass: JobsHubClientStub },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(HeaderQuotaComponent);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController).expectOne('/api/cli/quota').flush({
+      ttlSeconds: 600,
+      snapshots: [
+        {
+          cliType: 'codex',
+          plan: 'Pro',
+          fetchedAt: new Date().toISOString(),
+          source: '/status',
+          error: null,
+          windows: codexWindows,
+        },
+      ],
+    });
+    fixture.detectChanges();
+    const cards = (fixture.componentInstance as unknown as { cards: () => CardModel[] }).cards();
+    return cards.find((c) => c.cliType === 'codex')!;
+  }
+
+  it('keeps the Codex card in the strip with one chip per reported window', async () => {
+    const codex = await renderWithCodex();
+    expect(codex).toBeTruthy();
+    expect(codex.chips.map((ch) => ch.windowKey)).toEqual(['5h', 'wk', 'spark-5h', 'spark-wk']);
+    // No empty "—" placeholder: the %-only payload maps to real values.
+    expect(codex.chips.map((ch) => ch.value)).toEqual(['66%', '12%', '0%', '4%']);
+    expect(codex.chips.some((ch) => ch.windowKey === 'none')).toBe(false);
+  });
+
+  it('treats unit "%" with a null limit as progress against 100 (bar + tone)', async () => {
+    const codex = await renderWithCodex();
+    const session = codex.chips.find((ch) => ch.windowKey === '5h')!;
+    expect(session.value).toBe('66%');
+    expect(session.barPct).toBe(66); // progress against 100, not against a null limit
+    expect(session.tone).toBe('ok');
+    // A fresh, error-free snapshot is never "unavailable".
+    expect(codex.state).not.toBe('unavailable');
+  });
+});
