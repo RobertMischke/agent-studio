@@ -55,6 +55,7 @@ import { projectConversation } from 'coding-agent-chat/core';
 import type { ContextUsageSnapshot } from '../../../../../models/task.model';
 import { toChatContextUsage } from '../../../context-usage.mapper';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
+import { ResultViewComponent } from '../result-view/result-view.component';
 import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
 import { SourceViewerComponent, type SourceViewerRequest } from '../../source-viewer/source-viewer.component';
 import { MenuComponent } from '../../../../../components/menu';
@@ -149,6 +150,7 @@ interface InterimSummaryState {
     RunGitViewerComponent,
     VerboseDebugOverlayComponent,
     BeautifulResultsComponent,
+    ResultViewComponent,
     FileSourceHistoryComponent,
     SourceViewerComponent,
     MenuComponent,

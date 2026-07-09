@@ -16,7 +16,7 @@
     (hide)="hide.emit()">
     <ng-container tabs>
       <app-pane-tabs variant="header"
-                     ariaLabel="Protocol / Activity"
+                     ariaLabel="Result / Activity"
                      [tabs]="protocolTabs()"
                      [activeTabId]="activeInspectorTab()"
                      [listModifier]="inProgress() ? 'activity-first' : null"
@@ -309,12 +309,11 @@
                                          [content]="detail().statusMarkdown"
                                          [contentTransform]="statusHistoryTransform" />
               } @else {
-                <app-beautiful-results class="notes-panel__body"
-                                       data-testid="protocol-beautiful-results"
-                                       [markdown]="statusMarkdownBody()"
-                                       [jobId]="detail().info.id"
-                                       [watchPath]="detail().info.watchPath"
-                                       (openSource)="openSource($event)" />
+                <app-result-view class="notes-panel__body"
+                                 data-testid="protocol-beautiful-results"
+                                 [detail]="detail()"
+                                 [verdict]="protocolVerdict()"
+                                 (openSource)="openSource($event)" />
               }
             }
           </section>

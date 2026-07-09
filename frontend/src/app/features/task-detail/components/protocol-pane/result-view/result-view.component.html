@@ -1,0 +1,64 @@
+@if (doc(); as d) {
+  <article class="result" [attr.data-case]="d.case.case" data-testid="result-view">
+    <!-- 1. Metric head: case badge + at-a-glance chips. Product-directed
+         metric row (frontend/AGENTS.md "Result view"), not a metrics grid. -->
+    <header class="result__head">
+      <span class="result__case"
+            [attr.data-tone]="caseMeta().tone"
+            data-testid="result-case-badge"
+            [cacTooltip]="d.case.reason">
+        <span class="result__case-glyph" aria-hidden="true">{{ caseMeta().glyph }}</span>
+        <span class="result__case-label">{{ caseMeta().label }}</span>
+      </span>
+      <div class="result__metrics" role="group" aria-label="Run metrics">
+        @for (m of d.metrics; track m.id) {
+          <span class="result__metric"
+                [attr.data-metric]="m.id"
+                [attr.data-tone]="m.tone || 'neutral'"
+                [attr.data-testid]="'result-metric-' + m.id"
+                [cacTooltip]="m.tooltip || m.label">
+            <span class="result__metric-icon" aria-hidden="true">{{ m.icon }}</span>
+            <span class="result__metric-value">{{ m.value }}</span>
+          </span>
+        }
+      </div>
+    </header>
+
+    <!-- 2. Overview: the shareable "problem -> solution", case-tuned labels. -->
+    @if (hasOverview()) {
+      <section class="result__overview"
+               [attr.data-tone]="caseMeta().tone"
+               data-testid="result-overview">
+        @if (d.overview.problem) {
+          <div class="result__overview-row">
+            <span class="result__overview-label">{{ caseMeta().problemLabel }}</span>
+            <p class="result__overview-text" data-testid="result-overview-problem">{{ d.overview.problem }}</p>
+          </div>
+        }
+        @if (d.overview.solution) {
+          <div class="result__overview-row result__overview-row--solution">
+            <span class="result__overview-label">{{ caseMeta().solutionLabel }}</span>
+            <p class="result__overview-text" data-testid="result-overview-solution">{{ d.overview.solution }}</p>
+          </div>
+        }
+        @if (d.overview.synthesized) {
+          <p class="result__overview-hint" data-testid="result-overview-synthesized">
+            Derived from the task title and summary. New runs write an explicit overview.
+          </p>
+        }
+      </section>
+    }
+
+    <!-- 3. Detail: the existing rich markdown body, one layer down. -->
+    @if (d.hasDetail) {
+      <section class="result__detail" data-testid="result-detail">
+        <h4 class="result__detail-title">Details</h4>
+        <app-beautiful-results
+          [markdown]="d.detailMarkdown"
+          [jobId]="detail().info.id"
+          [watchPath]="detail().info.watchPath"
+          (openSource)="onOpenSource($event)" />
+      </section>
+    }
+  </article>
+}
