@@ -153,6 +153,28 @@ public static class PipelineCatalogue
     /// from <c>TaskTransitionService</c>.
     /// </summary>
     public const string MergeIntoDevelopStepId = "post-merge-into-develop";
+
+    /// <summary>
+    /// Deferred, operator-triggered post-step that pushes the integration branch
+    /// (<c>develop</c>) to <c>origin</c> after <see cref="MergeIntoDevelopStepId"/>
+    /// has folded an accepted task branch into it (AGT-1999). Closes the
+    /// "integration nur lokal" gap: without it the platform pushed every
+    /// <c>task/*</c> branch but never the integration branch, so <c>origin/develop</c>
+    /// drifted stale, develop-push CI and the remote verification host tested an
+    /// old tree, and there was no remote backup. Like the merge step it is
+    /// <see cref="PipelineStep.Deferred"/> (runs only on the accept trigger, never
+    /// automatically) and ordered right after it. The push runs off the request
+    /// path (the same offload strategy as the completed-job workspace push, via
+    /// <c>IntegrationPushQueue</c> / <c>IntegrationPushWorker</c>): a transient
+    /// failure retries with backoff per the AGT-1944 environmental-retry taxonomy
+    /// and, once the budget is spent, is recorded as a visible
+    /// <see cref="PipelineStepStatus.Failed"/> step flagged <c>environmental</c>
+    /// rather than silently dropped. It is a git step (the read-only pipeline
+    /// drops it) and default-on; opt out per project via the same
+    /// <see cref="ProjectSettings.PipelineSteps"/> override the other steps use.
+    /// Implemented by <c>MergeIntoDevelopRunner.PushIntegrationBranchAsync</c>.
+    /// </summary>
+    public const string MergeIntoDevelopPushStepId = "post-merge-into-develop-push";
     /// <summary>
     /// Deterministic post-step that compiles the changed repository state before
     /// the orchestrator trusts any self-reported Success. It runs after the
@@ -342,6 +364,7 @@ public static class PipelineCatalogue
         IntegrateMergeStepId,
         ConflictResolutionStepId,
         MergeIntoDevelopStepId,
+        MergeIntoDevelopPushStepId,
     };
 
     private static readonly TaskPipeline StandardPipeline = BuildStandardPipeline();
@@ -533,6 +556,20 @@ public static class PipelineCatalogue
                     // Implemented but operator-triggered (the "Merge into Develop"
                     // acceptance action), so it stays "pending" until then rather
                     // than running automatically in the post-bracket.
+                    Deferred = true,
+                },
+                new PipelineStep
+                {
+                    Id = MergeIntoDevelopPushStepId,
+                    DisplayName = "Push develop to origin",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    // Runs only once the merge into develop has actually landed.
+                    DependsOn = [MergeIntoDevelopStepId],
+                    // Re-runnable: an already-pushed branch is an ancestor no-op.
+                    Idempotent = true,
+                    // Same acceptance trigger as the merge, off the request path:
+                    // stays "pending" until the operator accepts the task.
                     Deferred = true,
                 },
                 new PipelineStep

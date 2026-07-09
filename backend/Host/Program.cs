@@ -432,6 +432,13 @@ builder.Services.AddSingleton<BuildProfileValidationService>();
 builder.Services.AddSingleton<CompletedPushQueue>();
 builder.Services.AddHostedService<CompletedPushWorker>();
 builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
+// AGT-1999: the "Merge into Develop" post-step pushes the integration branch to
+// origin after a successful merge, off the accept-transition request path.
+// MergeIntoDevelopRunner enqueues here (instant); IntegrationPushWorker drains and
+// performs the git push with the AGT-1944 environmental retry. Same offload shape
+// as the completed-job workspace push above.
+builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
+builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
 // Periodic reap of orphaned CLI process trees (codex/node) that a finished or
 // crashed run left behind. Closes the days-long accumulation gap the startup
 // reaper alone cannot: those survivors hold job-folder handles and wedge the

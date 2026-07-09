@@ -1746,6 +1746,75 @@ public class GitService
         return last ?? new GitPushResult(false, sha, "failed", "Push did not run.");
     }
 
+    /// <summary>
+    /// Pushes the integration branch itself (e.g. <c>develop</c>) to
+    /// <c>origin</c> so an accepted merge lands on the remote, not only in the
+    /// local checkout (AGT-1999). Companion to <see cref="PushShaAsync"/> - that
+    /// one pushes a completed task's commit SHA to a target branch; this one
+    /// pushes the local integration branch ref by name after
+    /// <see cref="MergeBranchIntoIntegration"/> has folded the task branch into
+    /// it. Never force-pushes: a diverged remote is reported
+    /// <c>remote-rejected</c> (the caller surfaces it, git leaves the remote
+    /// untouched). Status values mirror <see cref="PushShaAsync"/>:
+    /// <c>pushed</c> / <c>already-remote</c> / <c>remote-rejected</c> /
+    /// <c>failed</c>, plus <c>no-remote</c> (no <c>origin</c> configured -
+    /// a local-only project, treated as a benign skip, not a failure) and
+    /// <c>missing-branch</c> (the integration branch does not exist locally).
+    /// </summary>
+    public Task<GitPushResult> PushIntegrationBranchAsync(string repoRoot, string branch, CancellationToken ct = default)
+    {
+        if (ct.IsCancellationRequested)
+            return Task.FromResult(new GitPushResult(false, string.Empty, "cancelled", "Push cancelled."));
+
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return Task.FromResult(new GitPushResult(false, string.Empty, "repo-missing", "Could not resolve repo root."));
+
+        if (!IsLikelyBranchName(branch))
+            return Task.FromResult(new GitPushResult(false, string.Empty, "invalid-branch", $"Invalid integration branch '{branch}'."));
+
+        // Resolve the local branch tip for reporting / the ancestor short-circuit.
+        var (headRaw, headErr, headCode) = RunGitArgs(repoRoot, "rev-parse", "--verify", $"refs/heads/{branch}");
+        if (headCode != 0)
+            return Task.FromResult(new GitPushResult(false, string.Empty, "missing-branch", headErr.Trim()));
+        var sha = headRaw.Trim();
+
+        // A project without an origin remote is a local-only checkout; there is
+        // nothing to push. Treat as a benign skip so the step is not flagged as
+        // a failure.
+        if (!HasRemote(repoRoot, "origin"))
+            return Task.FromResult(new GitPushResult(true, sha, "no-remote", null));
+
+        RunGitArgs(repoRoot, "fetch", "origin", branch);
+
+        var (_, remoteErr, remoteCode) = RunGitArgs(repoRoot, "rev-parse", "--verify", $"origin/{branch}");
+        if (remoteCode == 0)
+        {
+            var (_, ancestorErr, ancestorCode) = RunGitArgs(repoRoot, "merge-base", "--is-ancestor", sha, $"origin/{branch}");
+            if (ancestorCode == 0)
+                return Task.FromResult(new GitPushResult(true, sha, "already-remote", null));
+            if (ancestorCode != 1)
+                _logger.LogInformation("Integration-branch push ancestor check for {Branch} returned {Code}: {Error}", branch, ancestorCode, ancestorErr.Trim());
+        }
+        else
+        {
+            _logger.LogInformation("Integration-branch push did not find origin/{Branch} before pushing: {Error}", branch, remoteErr.Trim());
+        }
+
+        // Non-force push of the branch ref. A non-fast-forward (diverged remote)
+        // is reported, never overwritten.
+        var (pushOut, pushErr, pushCode) = RunGitArgs(repoRoot, "push", "origin", $"refs/heads/{branch}:refs/heads/{branch}");
+        if (pushCode == 0)
+            return Task.FromResult(new GitPushResult(true, sha, "pushed", null));
+
+        var err = string.IsNullOrWhiteSpace(pushErr) ? pushOut.Trim() : pushErr.Trim();
+        var status = err.Contains("non-fast-forward", StringComparison.OrdinalIgnoreCase)
+            || err.Contains("fetch first", StringComparison.OrdinalIgnoreCase)
+            || err.Contains("rejected", StringComparison.OrdinalIgnoreCase)
+                ? "remote-rejected"
+                : "failed";
+        return Task.FromResult(new GitPushResult(false, sha, status, err));
+    }
+
     public GitWorktreeResult DeleteRemoteBranch(string repoRoot, string branch, string remote = "origin")
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))

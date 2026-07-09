@@ -33,7 +33,17 @@ pipeline view.
   `task/<id> -> develop` merge via `GitService.MergeBranchIntoIntegration` when
   the operator accepts a done-green task (the `HumanReview -> Completed`
   transition wired in `TaskTransitionService`), then records the outcome so the
-  pending step flips to passed / failed / skipped in place.
+  pending step flips to passed / failed / skipped in place. After a successful
+  merge it also pushes the integration branch itself to `origin`
+  (`post-merge-into-develop-push`, AGT-1999) so integration is never only local:
+  the push is offloaded via `IntegrationPushQueue` / `IntegrationPushWorker`
+  (`PushIntegrationBranchAsync`, the same "not on the request path" strategy as
+  the completed-job workspace push), a transient failure retries with backoff per
+  the AGT-1944 environmental-retry taxonomy, and a spent budget records a visible
+  `Failed` step flagged `environmental`. Default-on; opt out per project via the
+  step's `PipelineSteps` override. The origin push primitive is
+  `GitService.PushIntegrationBranchAsync` (non-force; a diverged remote is
+  reported, never overwritten).
 - `backend/Services/Pipeline/PipelineStepConfigResolver.cs`: effective model and
   step config resolution.
 - `backend/Services/Pipeline/PipelineStepConditionEvaluator.cs`: per-step
@@ -107,7 +117,13 @@ pipeline view.
   merge into develop is best-effort and runs only after the lane move has
   already landed, so it can never block the transition; a conflict is a visible
   `Failed` outcome (conflicted files in the verdict summary) and the working
-  tree is left clean, never silently resolved.
+  tree is left clean, never silently resolved. The paired
+  `post-merge-into-develop-push` step (AGT-1999) pushes the integration branch to
+  `origin` after a successful merge; it is offloaded off the request path and
+  never force-pushes, so it too can never block the transition, and a push
+  failure is a visible step outcome (`environmental` after the AGT-1944 retry
+  budget is spent, or `remote-rejected` on a diverged remote) rather than a
+  silent drop.
 - Pipeline history is per run. Re-opened tasks append a new attempt and keep
   earlier attempts addressable.
 - Raw step-call prompts are captured once, at central dispatch, into

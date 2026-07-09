@@ -37,9 +37,10 @@ public class PipelineCatalogueTests
         // Post includes the deterministic review/build gates, four aspects,
         // implemented tool steps (incl. the opt-in wiki-maintenance and
         // wiki-learnings distillation steps), the deferred operator-triggered
-        // "Merge into Develop" step, the automatic code-review quality-grade
-        // step, final orchestrator decision, and opt-in drift dimensions.
-        Assert.Equal(22, p.Post.Count);
+        // "Merge into Develop" step and its integration-branch push twin, the
+        // automatic code-review quality-grade step, final orchestrator decision,
+        // and opt-in drift dimensions.
+        Assert.Equal(23, p.Post.Count);
     }
 
     [Fact]
@@ -271,6 +272,50 @@ public class PipelineCatalogueTests
         // It is a git step (read-only pipeline drops it).
         Assert.Contains(PipelineCatalogue.MergeIntoDevelopStepId, PipelineCatalogue.GitStepIds);
         Assert.DoesNotContain(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.MergeIntoDevelopStepId);
+    }
+
+    [Fact]
+    public void StandardPipeline_MergeIntoDevelopPush_IsDeferredGitStep_RightAfterTheMerge()
+    {
+        // AGT-1999: the integration-branch push ships as a deferred,
+        // operator-triggered Tool post-step placed immediately after the
+        // "Merge into Develop" step - the push only makes sense once the merge
+        // has landed. Like the merge it is Deferred (runs on the accept trigger,
+        // off the request path) and default-on, and it is a git step so the
+        // read-only pipeline drops it.
+        var p = PipelineCatalogue.Standard;
+        var push = p.Post.First(s => s.Id == PipelineCatalogue.MergeIntoDevelopPushStepId);
+
+        Assert.Equal("post-merge-into-develop-push", push.Id);
+        Assert.Equal("Push develop to origin", push.DisplayName);
+        Assert.Equal(StepKind.Tool, push.Kind);
+        Assert.Equal(StepRunMode.Sequential, push.RunMode);
+        Assert.True(push.Deferred, "merge-into-develop push must be a deferred (operator-triggered) step");
+        Assert.False(push.Stub, "merge-into-develop push is implemented, not a stub");
+        Assert.True(push.Idempotent);
+        Assert.True(push.DefaultEnabled);
+        Assert.Contains(PipelineCatalogue.MergeIntoDevelopStepId, push.DependsOn);
+
+        // Ordered immediately after the merge step.
+        var mergeIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.MergeIntoDevelopStepId);
+        var pushIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.MergeIntoDevelopPushStepId);
+        Assert.True(mergeIndex >= 0 && pushIndex >= 0);
+        Assert.Equal(mergeIndex + 1, pushIndex);
+
+        // It is a git step (read-only pipeline drops it).
+        Assert.Contains(PipelineCatalogue.MergeIntoDevelopPushStepId, PipelineCatalogue.GitStepIds);
+        Assert.DoesNotContain(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.MergeIntoDevelopPushStepId);
+
+        // Default-on, but an operator can disable it per project.
+        Assert.True(PipelineStepConfigResolver.IsEnabled((ProjectSettings?)null, PipelineCatalogue.MergeIntoDevelopPushStepId));
+        var disabled = new ProjectSettings
+        {
+            PipelineSteps = new Dictionary<string, PipelineStepSetting>
+            {
+                [PipelineCatalogue.MergeIntoDevelopPushStepId] = new() { Enabled = false },
+            },
+        };
+        Assert.False(PipelineStepConfigResolver.IsEnabled(disabled, PipelineCatalogue.MergeIntoDevelopPushStepId));
     }
 
     [Fact]

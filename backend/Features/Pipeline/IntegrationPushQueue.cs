@@ -1,0 +1,51 @@
+using System.Threading.Channels;
+
+namespace AgentStudio.Pipeline;
+
+/// <summary>
+/// One queued integration-branch push: everything
+/// <see cref="MergeIntoDevelopRunner.PushIntegrationBranchAsync"/> needs to push
+/// the freshly merged integration branch (e.g. <c>develop</c>) to <c>origin</c>
+/// off the request path.
+/// </summary>
+public sealed record IntegrationPushRequest(
+    string Project,
+    string JobId,
+    string JobFolderPath,
+    string? WatchPath,
+    string IntegrationBranch);
+
+/// <summary>
+/// Hand-off point that lifts the integration-branch <c>git fetch</c> +
+/// <c>git push</c> off the "Merge into Develop" accept trigger (AGT-1999). It is
+/// the merge-step twin of <see cref="AgentStudio.Runner.CompletedPushQueue"/>:
+/// the merge post-step (<see cref="MergeIntoDevelopRunner"/>) performs the local
+/// merge synchronously and then drops a snapshot here - an instant, non-blocking
+/// channel write - so the accept transition never awaits the ~2-3 s network
+/// round-trip. <see cref="IntegrationPushWorker"/> drains it and performs the
+/// push (with the AGT-1944 environmental retry) on a background thread.
+/// <para>
+/// Unbounded and single-reader by design: volume is one item per accepted task,
+/// and the reader is serialized so two pushes of the same integration branch can
+/// never race each other. A deferred push is always still correct - it pushes
+/// whatever the local integration branch points at when it runs.
+/// </para>
+/// </summary>
+public sealed class IntegrationPushQueue
+{
+    private readonly Channel<IntegrationPushRequest> _channel =
+        Channel.CreateUnbounded<IntegrationPushRequest>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false,
+        });
+
+    public ChannelReader<IntegrationPushRequest> Reader => _channel.Reader;
+
+    /// <summary>
+    /// Enqueue an integration-branch push. Never blocks. Returns false only if
+    /// the channel has been completed (shutdown); the local merge already landed,
+    /// so the branch simply pushes on the next accept or an operator re-trigger.
+    /// </summary>
+    public bool Enqueue(IntegrationPushRequest request) => _channel.Writer.TryWrite(request);
+}
