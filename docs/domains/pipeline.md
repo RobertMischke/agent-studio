@@ -123,7 +123,12 @@ pipeline view.
   never force-pushes, so it too can never block the transition, and a push
   failure is a visible step outcome (`environmental` after the AGT-1944 retry
   budget is spent, or `remote-rejected` on a diverged remote) rather than a
-  silent drop.
+  silent drop. The optional AGT-2009 counterpart - auto-cleanup of merged
+  `task/*`/`refs/backups/*` refs right after a successful merge step - is
+  intentionally **not** wired into the pipeline; merged-ref removal is an
+  operator-triggered action only (Project Hub Git-Management). See
+  `docs/wiki/concepts/task-integration-and-merge-workflow.md` §"Branch cleanup"
+  for the dry-run/execute contract and the AGT-1945 guard it would reuse.
 - Pipeline history is per run. Re-opened tasks append a new attempt and keep
   earlier attempts addressable.
 - Raw step-call prompts are captured once, at central dispatch, into
