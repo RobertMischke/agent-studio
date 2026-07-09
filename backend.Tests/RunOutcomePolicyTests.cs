@@ -388,13 +388,14 @@ public class RunOutcomePolicyTests
 
     /// <summary>
     /// Case (a): a CLI launch / resume failure (codex rejected the resume
-    /// target, exit 2, ~0s) is routed to Recovery, never a terminal
-    /// inconclusive FAILURE. The policy accepts the run quietly with a
-    /// typed CliLaunchFailed marker so the runner's existing recovery machinery
-    /// rebuilds from disk on the next pickup. This is the core ASS-755 fix.
+    /// target, exit 2, ~0s) must never be a terminal inconclusive FAILURE. The
+    /// category's copy promises "rebuilding from disk on the next attempt", so
+    /// the policy MAKES that attempt: one automatic fresh-start retry before it
+    /// escalates (AGT-1944; belege AGT-1945/1929/1930). This is the ASS-755 fix
+    /// carried forward from "accept quietly" to "actually retry".
     /// </summary>
     [Fact]
-    public void CliLaunchFailed_RoutesToRecovery_NotTerminalFailure()
+    public void CliLaunchFailed_FirstDetection_FreshStartRetries_NotTerminalFailure()
     {
         var diagnosis = "The agent CLI rejected the resume target; rebuilding from disk on the next attempt.";
         var action = RunOutcomePolicy.Decide(
@@ -408,15 +409,89 @@ public class RunOutcomePolicyTests
             followupPrompt: "please continue",
             reissueAttempt: 0);
 
-        Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
-        Assert.NotEqual(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
         Assert.Equal(RunIssueKind.CliLaunchFailed, action.IssueKind);
         Assert.Equal(OrchestratorMessageKind.CliLaunchFailed, action.MessageKind);
-        Assert.False(action.IsHeuristicFallback);
-        Assert.Equal(diagnosis, action.MetaMessage);
+        Assert.Equal(1, action.RetryAttempt);
+        Assert.True(action.IsPreframedRetryPrompt);
+        Assert.False(string.IsNullOrWhiteSpace(action.FollowupRetryPrompt));
+        Assert.Equal(TimeSpan.Zero, action.RetryBackoff); // a dead session should retry promptly
         // Must not masquerade as an inconclusive / infra-crash verdict.
         Assert.NotEqual(OrchestratorMessageKind.OrchestratorInconclusive, action.MessageKind);
         Assert.NotEqual(OrchestratorMessageKind.InfraCrash, action.MessageKind);
+    }
+
+    /// <summary>
+    /// After the one automatic fresh-start retry, a CLI launch/resume failure that
+    /// still fails routes to human review with the cli-launch-failed category -
+    /// no endless recovery loop (AGT-1944).
+    /// </summary>
+    [Fact]
+    public void CliLaunchFailed_AfterFreshStartRetry_RoutesToHumanReview()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 0.0, agentChars: 10) with
+            {
+                IssueKind = RunIssueKind.CliLaunchFailed,
+                Summary = "still cannot launch"
+            },
+            followupPrompt: "please continue",
+            reissueAttempt: PostProcessingOutcomeTaxonomy.MaxCliLaunchRetries);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(RunIssueKind.CliLaunchFailed, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.CliLaunchFailed, action.MessageKind);
+    }
+
+    /// <summary>
+    /// A transient host file lock / network glitch retries with backoff before
+    /// escalating: the code was not the problem, and the fault clears on its own
+    /// (AGT-1944 environmental retry-with-backoff).
+    /// </summary>
+    [Fact]
+    public void EnvironmentalTransient_FirstDetection_RetriesWithBackoff()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 42.0, agentChars: 120) with
+            {
+                IssueKind = RunIssueKind.EnvironmentalTransient,
+                Summary = "The run failed on a host file lock (MSB302x / file-in-use)."
+            },
+            followupPrompt: null,
+            reissueAttempt: 0);
+
+        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
+        Assert.Equal(RunIssueKind.EnvironmentalTransient, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.EnvironmentalRetry, action.MessageKind);
+        Assert.Equal(1, action.RetryAttempt);
+        Assert.True(action.IsPreframedRetryPrompt);
+        Assert.Equal(TimeSpan.FromSeconds(30), action.RetryBackoff);
+    }
+
+    /// <summary>
+    /// Once the bounded retry budget is spent, a persistent transient fault stops
+    /// and routes to human review flagged environmental (AGT-1944).
+    /// </summary>
+    [Fact]
+    public void EnvironmentalTransient_BudgetSpent_RoutesToHumanReview()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 42.0, agentChars: 120) with
+            {
+                IssueKind = RunIssueKind.EnvironmentalTransient,
+                Summary = "still locked"
+            },
+            followupPrompt: null,
+            reissueAttempt: PostProcessingOutcomeTaxonomy.DefaultMaxEnvironmentalRetries);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(RunIssueKind.EnvironmentalTransient, action.IssueKind);
     }
 
     [Fact]
@@ -539,8 +614,8 @@ public class RunOutcomePolicyTests
     /// <summary>
     /// The two new failed-run kinds must not be confused with the structural
     /// neighbours that share their surface shape (Unknown kind, no sentinel,
-    /// real agent text): a CLI launch/resume failure routes to Recovery
-    /// (NotifyUserAndAccept + CliLaunchFailed marker), while
+    /// real agent text): a CLI launch/resume failure takes a fresh-start retry
+    /// (ReissueWithStrongerFraming + CliLaunchFailed marker), while
     /// missing-terminal-sentinel spends one soft intervention. The two
     /// drive-to-conclusion kinds STOP. Feed the identical outcome with each
     /// issue kind and assert four separate routings.
@@ -561,8 +636,8 @@ public class RunOutcomePolicyTests
         var missingSentinel = RunOutcomePolicy.Decide(
             RunIntent.UserContinue, ContinuePlan(), Shape(RunIssueKind.MissingTerminalSentinel), null, 0);
 
-        // CLI launch failure -> Recovery accept; NOT a stop.
-        Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, cliLaunchFailed.Kind);
+        // CLI launch failure -> one automatic fresh-start retry; NOT a terminal stop.
+        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, cliLaunchFailed.Kind);
         Assert.Equal(OrchestratorMessageKind.CliLaunchFailed, cliLaunchFailed.MessageKind);
 
         // missing-terminal-sentinel -> one soft intervention, tagged distinctly.

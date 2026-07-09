@@ -51,6 +51,10 @@ public static class RunQuarantineBreaker
         // must not accrue toward the per-task no-progress quarantine streak.
         RunIssueKind.ModelInvalid       => false,
         RunIssueKind.QuotaExhausted     => false,
+        // A transient host file lock / network glitch is not the task's fault and
+        // has its own bounded retry-with-backoff; it must not accrue toward the
+        // per-task no-progress quarantine streak (AGT-1944).
+        RunIssueKind.EnvironmentalTransient => false,
         RunIssueKind.CliLaunchFailed    => false,
         RunIssueKind.SilentCompletion   => false,
         RunIssueKind.Quarantined        => false,

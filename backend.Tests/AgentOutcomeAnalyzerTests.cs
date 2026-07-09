@@ -542,4 +542,39 @@ public class AgentOutcomeAnalyzerTests
         Assert.NotEqual(RunIssueKind.QuotaExhausted, outcome.IssueKind);
         Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
     }
+
+    [Theory]
+    // Host file-lock family (MSB302x copy-lock): a build output was momentarily
+    // locked by a lingering process. The lock releases on its own, so this is a
+    // transient environmental fault, not a code failure (AGT-1944).
+    [InlineData("error MSB3027: Could not copy \"obj\\Api.dll\" to \"bin\\Api.dll\". Exceeded retry count of 10. Failed.")]
+    [InlineData("error MSB3021: Unable to copy file \"a.dll\" to \"b.dll\". The process cannot access the file 'b.dll' because it is being used by another process.")]
+    [InlineData("The process cannot access the file because it is being used by another process.")]
+    // Network glitches: DNS failure, reset/timed-out sockets, transient gateways.
+    [InlineData("fatal: unable to access 'https://github.com/x.git/': Could not resolve host: github.com")]
+    [InlineData("Error: connect ECONNRESET 140.82.113.3:443")]
+    [InlineData("dial tcp: lookup api.example.com: Temporary failure in name resolution")]
+    [InlineData("HTTP 503 Service Unavailable")]
+    public void EnvironmentalTransient_OnFailedRun_TypesAsEnvironmentalTransient(string reply)
+    {
+        // A transient host file lock / network glitch must type as
+        // environmental-transient so the runner retries it with backoff instead
+        // of escalating it as a code failure.
+        var lines = Lines("Running the post-build test gate...", reply);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 42.0, exitCode: 1);
+        Assert.Equal(RunIssueKind.EnvironmentalTransient, outcome.IssueKind);
+    }
+
+    [Fact]
+    public void EnvironmentalTransient_PhraseOnSuccessfulRun_IsNotTyped()
+    {
+        // An agent that merely mentions a lock/network phrase in a healthy turn
+        // must not be hijacked; detection is gated on a failed run.
+        var lines = Lines(
+            "I retried the copy after the file was being used by another process, then it succeeded.",
+            "[[TASK_DONE]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 30.0);
+        Assert.NotEqual(RunIssueKind.EnvironmentalTransient, outcome.IssueKind);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+    }
 }

@@ -4478,8 +4478,17 @@ public class ProjectRunner
             // so the retries before the park are spaced, not saturating.
             var isRapidCrash = !deliberateStop
                 && RapidCrashBreaker.IsRapidCrash(execution.Status ?? "", execution.DurationSeconds ?? 0.0, commitsDuringRun);
+            // A transient environmental fault (host file lock / network / dead
+            // CLI session) is never the task's fault and has its own bounded
+            // retry-with-backoff budget, so an environmental cycle must not accrue
+            // toward the per-task no-progress quarantine streak - not even when it
+            // happens to crash fast enough to look "rapid" (AGT-1944). The
+            // rapid-crash backoff still applies to genuine tight-looping crashes.
+            var isRetryableEnvironmental = action != null
+                && PostProcessingOutcomeTaxonomy.IsRetryableEnvironmental(action.IssueKind);
             if (action != null && activeInfo != null
                 && !movedToReview && !deliberateStop && commitsDuringRun == 0
+                && !isRetryableEnvironmental
                 && (RunQuarantineBreaker.CountsAsNoProgressFailure(action.IssueKind) || isRapidCrash))
             {
                 var fails = _consecutiveFailNoProgress.AddOrUpdate(jobId, 1, (_, n) => n + 1);
@@ -4571,10 +4580,22 @@ public class ProjectRunner
                         ? action.FollowupRetryPrompt!
                         : RunOutcomePolicy.BuildReissueFollowupPrompt(action.FollowupRetryPrompt!, recoveryContext: wasRecovery);
                     var retryAttempt = action.RetryAttempt;
+                    // Environmental retries carry a backoff so a transient host
+                    // file lock / network glitch gets real wall-clock time to
+                    // clear before the re-run (AGT-1944). Zero for every other
+                    // reissue, so ordinary continuations still run promptly.
+                    var retryBackoff = action.RetryBackoff;
                     _ = Task.Run(async () =>
                     {
                         try
                         {
+                            if (retryBackoff > TimeSpan.Zero)
+                            {
+                                _logger.LogInformation(
+                                    "[environmental-retry] {JobId} backing off {Backoff} before retry (attempt {Attempt})",
+                                    jobId, retryBackoff, retryAttempt);
+                                await Task.Delay(retryBackoff, CancellationToken.None);
+                            }
                             await RunCliAsync(jobId, RunIntent.UserContinue, retryPrompt, retryAttempt, ContinueModes.Continue, CancellationToken.None);
                         }
                         catch (Exception ex)
@@ -4709,7 +4730,7 @@ public class ProjectRunner
                     TeardownWorktreeForJob(jobId);
                     var move = await _humanReviewEscalation.EscalateAsync(
                         jobId, activeInfo.WatchPath, ProjectName,
-                        ToEscalationCategory(action.IssueKind),
+                        ResolveEscalationCategory(action.IssueKind, activeInfo.FolderPath),
                         action.MetaMessage ?? ToIssueTopic(action.IssueKind),
                         CancellationToken.None);
                     if (move.Status != MoveJobStatus.Success)
@@ -5050,6 +5071,12 @@ public class ProjectRunner
                      // catch-all (AGT-1941: codex model-invalid / claude quota).
                      or RunIssueKind.ModelInvalid
                      or RunIssueKind.QuotaExhausted
+                     // A transient environmental fault that persisted after the
+                     // bounded retry-with-backoff, and a CLI launch/resume failure
+                     // that persisted after the fresh-start retry, both reach human
+                     // review with their own honest category (AGT-1944).
+                     or RunIssueKind.EnvironmentalTransient
+                     or RunIssueKind.CliLaunchFailed
                      or RunIssueKind.Quarantined
                      or RunIssueKind.AgentGitViolation
                      // Drive-to-conclusion: a failed run the deterministic
@@ -5102,6 +5129,7 @@ public class ProjectRunner
         RunIssueKind.ContextOverflow          => "context-overflow",
         RunIssueKind.ModelInvalid             => "model-invalid",
         RunIssueKind.QuotaExhausted           => "quota-exhausted",
+        RunIssueKind.EnvironmentalTransient   => "environmental",
         RunIssueKind.Quarantined              => "quarantined",
         RunIssueKind.AgentGitViolation        => "agent-git-violation",
         _                                     => "none"
@@ -5115,6 +5143,8 @@ public class ProjectRunner
         RunIssueKind.WatchdogTimeout    => HumanReviewEscalationCategories.WatchdogKill,
         RunIssueKind.PermissionBlocked  => HumanReviewEscalationCategories.PermissionBlocked,
         RunIssueKind.EnvironmentBlocker => HumanReviewEscalationCategories.EnvironmentBlocker,
+        RunIssueKind.EnvironmentalTransient => HumanReviewEscalationCategories.Environmental,
+        RunIssueKind.CliLaunchFailed    => HumanReviewEscalationCategories.CliLaunchFailed,
         RunIssueKind.EmptyFastExit      => HumanReviewEscalationCategories.EmptyFastExit,
         RunIssueKind.ContextOverflow    => HumanReviewEscalationCategories.ContextOverflow,
         RunIssueKind.ModelInvalid       => HumanReviewEscalationCategories.ModelInvalid,
@@ -5125,6 +5155,43 @@ public class ProjectRunner
         RunIssueKind.OrchestratorInconclusive => HumanReviewEscalationCategories.OrchestratorInconclusive,
         _                               => HumanReviewEscalationCategories.AutoFailurePark
     };
+
+    /// <summary>
+    /// Results-aware escalation category. For an inconclusive run (the contract
+    /// could not map it to a terminal verdict) that nonetheless left files in
+    /// <c>results/</c>, this returns the distinct
+    /// <see cref="HumanReviewEscalationCategories.InconclusiveWithResults"/>
+    /// category so the board routes it to human review WITH a "there is partial
+    /// work to inspect" hint rather than the bare inconclusive park. Only an
+    /// inconclusive run with an EMPTY results/ dir keeps the plain category
+    /// (AGT-1944 taxonomy: inconclusive-with-results vs inconclusive-empty).
+    /// Every other issue kind is unchanged.
+    /// </summary>
+    private string ResolveEscalationCategory(RunIssueKind issueKind, string? jobFolderPath)
+    {
+        var isInconclusive = issueKind is RunIssueKind.OrchestratorInconclusive or RunIssueKind.InfraCrash;
+        if (isInconclusive && HasNonEmptyResults(jobFolderPath))
+            return HumanReviewEscalationCategories.InconclusiveWithResults;
+        return ToEscalationCategory(issueKind);
+    }
+
+    /// <summary>True when the task's <c>results/</c> dir holds at least one file.
+    /// Best-effort and fails closed (no results claim on an unreadable dir).</summary>
+    private static bool HasNonEmptyResults(string? jobFolderPath)
+    {
+        if (string.IsNullOrWhiteSpace(jobFolderPath)) return false;
+        try
+        {
+            var resultsDir = TaskPaths.ResultsDir(jobFolderPath);
+            return Directory.Exists(resultsDir)
+                && Directory.EnumerateFiles(resultsDir, "*", SearchOption.AllDirectories).Any();
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectRunner: best-effort results probe for the inconclusive escalation category.");
+            return false;
+        }
+    }
 
     private static bool IsAgentGitMutationAllowed(TaskInfo info)
         => info.Tags.Any(tag => string.Equals(tag, "allow-agent-git-mutation", StringComparison.OrdinalIgnoreCase));

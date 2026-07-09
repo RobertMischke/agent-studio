@@ -34,6 +34,10 @@ public class RunQuarantineBreakerTests
     [InlineData(RunIssueKind.EmptyFastExit)]
     [InlineData(RunIssueKind.ContextOverflow)]
     [InlineData(RunIssueKind.CliLaunchFailed)]
+    // A transient host file lock / network glitch has its own bounded
+    // retry-with-backoff; it must not accrue toward the quarantine streak
+    // (AGT-1944).
+    [InlineData(RunIssueKind.EnvironmentalTransient)]
     [InlineData(RunIssueKind.SilentCompletion)]
     [InlineData(RunIssueKind.Quarantined)]
     public void RoutedOrTerminalKinds_DoNotCountTowardStreak(RunIssueKind kind)

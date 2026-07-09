@@ -45,6 +45,26 @@ public static class HumanReviewEscalationCategories
     /// mistaking it for an orchestrator-inconclusive failure.</summary>
     public const string QuotaExhausted = "quota-exhausted";
 
+    /// <summary>A transient environmental fault (host file lock / MSB302x, network
+    /// glitch) that persisted after the orchestrator's bounded retry-with-backoff.
+    /// Flagged environmental so a reviewer reads it as an infra problem to retry,
+    /// not a failed change (AGT-1944).</summary>
+    public const string Environmental = "environmental";
+
+    /// <summary>The agent CLI could not launch or resume its session even after an
+    /// automatic fresh-start retry (a dead session after a backend restart, a
+    /// rejected resume id). Distinct from the generic auto-failure park so the
+    /// board shows the recoverable host/CLI cause (AGT-1944; belege
+    /// AGT-1945/1929/1930).</summary>
+    public const string CliLaunchFailed = "cli-launch-failed";
+
+    /// <summary>The run could not be mapped to a terminal verdict, but it left
+    /// files in <c>results/</c>. Routed to human review WITH a "there is partial
+    /// work to inspect" hint rather than a bare inconclusive park, so a reviewer
+    /// looks at the deliverables before deciding (AGT-1944 taxonomy:
+    /// inconclusive-with-results).</summary>
+    public const string InconclusiveWithResults = "inconclusive-with-results";
+
     /// <summary>The per-task circuit breaker tripped after N consecutive failed
     /// runs without progress; the task was parked to stop an endless reissue
     /// loop.</summary>

@@ -42,6 +42,52 @@ Hard sentinel matches win over process exit code. This is load-bearing on Window
 
 When a run exits non-zero **without** a terminal sentinel but `git rev-list HeadShaBefore..HeadShaAfter` shows it committed at least one change, the non-zero exit is almost always a killed downstream step (classically the watchdog terminating a post-commit test run, which on Windows reports `exitCode=-1`) rather than a genuine crash. Hard-failing such a run would discard a real commit, re-loop the card via reissue, and trip the auto-failure circuit breaker that flips the runner to manual mode. Instead the classifier routes it to `4-auto-review` as `committed-partial` (`ProtocolResult: Partial`, no crash toast). A no-sentinel card in `4-auto-review` is left for a human by `ReviewDecisionOrchestrator` — it is never auto-reissued — so auto-continuous mode is preserved. A failed run with **zero** commits is unaffected and still hard-fails.
 
+## Post-processing outcome taxonomy
+
+Beyond the terminal-outcome wire value, the gate / escalation path classifies a
+run that did NOT sign off cleanly into one of five buckets
+(`PostProcessingOutcomeTaxonomy`, AGT-1944). The bucket - not the raw exit code -
+decides what happens next:
+
+| Bucket | Meaning | Routing |
+|---|---|---|
+| `success` | clean terminal verdict (DONE / NOOP) | accept |
+| `code-defect` | a self-reported build / compile / test failure, or an agent process violation | normal reissue / human review as a code problem |
+| `environmental` | failed on the host / provider / CLI, not the change | transient members retry with backoff; every member escalates flagged `environmental` |
+| `inconclusive-with-results` | no terminal verdict, but files present in `results/` | human review WITH a "partial work to inspect" hint |
+| `inconclusive-empty` | no terminal verdict and nothing in `results/` | the bare `5e-escalated` park |
+
+**Environmental retry-with-backoff.** A *transient* environmental fault clears on
+its own, so the orchestrator retries it with exponential backoff before
+escalating instead of parking it on first detection:
+
+- `EnvironmentalTransient` - a host file lock (the MSBuild `MSB3021` / `MSB3026`
+  / `MSB3027` copy-lock family, "the process cannot access the file … because it
+  is being used by another process") or a network glitch (DNS failure,
+  `ECONNRESET` / `ETIMEDOUT` / `EAI_AGAIN`, a 502/503/504 gateway blip). Retried
+  up to `PostProcessingOutcomeTaxonomy.DefaultMaxEnvironmentalRetries` (2) with a
+  30s / 120s / 300s backoff, then escalated with the `environmental` category.
+- `CliLaunchFailed` - the agent CLI could not launch or its `--resume` target was
+  rejected (a dead session after a backend restart). Gets one automatic
+  fresh-start retry (rebuild from disk), then escalates with the
+  `cli-launch-failed` category. It no longer parks straight to `5e` on the first
+  launch failure.
+
+Non-retryable environmental members (`ModelInvalid`, `ContextOverflow`,
+`QuotaExhausted`, `EnvironmentBlocker`) still escalate on first detection with
+their own honest categories (AGT-1941) - re-running would hit the same wall.
+
+Environmental cycles never accrue toward the per-task no-progress quarantine
+streak (`RunQuarantineBreaker.CountsAsNoProgressFailure`), and a transient
+environmental fault does not raise the crash toast while it is being retried.
+
+**Escalation categories.** The system-initiated escalation funnel
+(`HumanReviewEscalationCategories`) records WHY a card was parked. AGT-1944 adds
+`environmental`, `cli-launch-failed`, and `inconclusive-with-results` to the
+existing set; an inconclusive run picks `inconclusive-with-results` over the bare
+`orchestrator-inconclusive` / `infra-crash` category when its `results/` dir is
+non-empty.
+
 ## Regression cover
 
 `backend.Tests/RunOutcomeContractTests.cs` locks the contract end to end: each terminal sentinel drives lane, `status.md` `ProtocolResult`, and the failure toast from one classification, and `CodexExitMinusOne_WithSentinel_ClassifiesIdenticallyAcrossAllConsumers` feeds a rendered `cli-output.log` whose exit line reports the Windows kill artifact (`status=failed, exitCode=-1`) and asserts the sentinel still wins for every consumer. This is the case the divergence bug was named after. `FailedRunThatCommitted_RoutesToReviewAsCommittedPartial` and `FailedRunWithZeroCommits_StaysHardFailure` pin the commit-aware branch: a failed, sentinel-less run routes to review as `committed-partial` only when `commitsDuringRun > 0`, and still hard-fails at zero commits.
