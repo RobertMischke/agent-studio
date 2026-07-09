@@ -19,7 +19,12 @@
         <span class="git-tree__count">{{ node.count }}</span>
       } @else {
         <span class="git-tree__status" [cacTooltip]="node.status">{{ (node.status || '').trim() || '·' }}</span>
-        <span class="git-tree__label">{{ node.label }}</span>
+        <span class="git-tree__label" [cacTooltip]="fileTooltip(node)">{{ node.label }}</span>
+        @if (dirHint(node); as hint) {
+          <span class="git-tree__dir-hint"
+                data-testid="git-tree-dir-hint"
+                [cacTooltip]="fileTooltip(node)">{{ hint }}</span>
+        }
       }
       @if (node.added || node.removed) {
         <span class="git-tree__stat">+{{ node.added }}/−{{ node.removed }}</span>

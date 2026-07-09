@@ -22,6 +22,15 @@ public record GitPushResult(bool Success, string Sha, string Status, string? Err
 public record GitDiffLookupResult(bool Success, string Diff, string? Error);
 
 /// <summary>
+/// Result of a single-file content lookup that backs the git-pane's
+/// rendered md/html preview (AGT-2008). <paramref name="Content"/> is the
+/// UTF-8 text of the file at the requested ref (working tree or commit);
+/// <paramref name="IsBinary"/> flags a NUL-containing blob so the UI can
+/// decline to render it as text instead of splattering control bytes.
+/// </summary>
+public record GitFileContentResult(bool Success, string Content, bool IsBinary, string? Error);
+
+/// <summary>
 /// ADR-0052: result of a worktree / integration primitive
 /// (<see cref="GitService.WorktreeAdd"/>, <see cref="GitService.WorktreeRemove"/>,
 /// <see cref="GitService.RebaseOnto"/>, <see cref="GitService.ContinueRebase"/>,
@@ -1165,6 +1174,92 @@ public class GitService
             }
         }
         return new GitDiffLookupResult(true, output, null);
+    }
+
+    /// <summary>
+    /// Full text of a single tracked file, for the git-pane's rendered
+    /// md/html preview (AGT-2008). With a non-empty <paramref name="sha"/> the
+    /// content is read from that commit (<c>git show &lt;sha&gt;:&lt;path&gt;</c>)
+    /// so a historical / commit-mode preview matches the diff; otherwise the
+    /// live working-tree copy is read. <paramref name="preferRunLocation"/>
+    /// mirrors <see cref="GetDiffResult"/> so a per-task worktree run previews
+    /// its own file, never a sibling checkout's. A NUL-containing blob is
+    /// reported as binary (Success=true, IsBinary=true) so the caller can show
+    /// a "not previewable" note rather than raw bytes.
+    /// </summary>
+    public GitFileContentResult GetFileContentResult(
+        string jobId, string? watchPath, string? path, string? sha, bool preferRunLocation = false)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return new GitFileContentResult(false, "", false, "No file path given.");
+
+        var normalizedPath = path.Replace('\\', '/').TrimStart('/');
+        if (normalizedPath.Length == 0 || normalizedPath.Split('/').Contains(".."))
+            return new GitFileContentResult(false, "", false, "Invalid file path.");
+
+        // Historical preview: read the blob at a specific commit. Validated the
+        // same way as the diff endpoints so an arbitrary ref can't be shown.
+        if (!string.IsNullOrWhiteSpace(sha))
+        {
+            if (!IsLikelyShaOrRef(sha))
+                return new GitFileContentResult(false, "", false, "Invalid commit SHA.");
+            var commitRoot = ResolveRepoRoot(jobId, watchPath);
+            if (commitRoot == null) return new GitFileContentResult(false, "", false, "Could not resolve repo root.");
+            var (blob, blobErr, blobCode) = RunGitArgs(commitRoot, "show", $"{sha}:{normalizedPath}");
+            if (blobCode != 0)
+                return new GitFileContentResult(false, "", false,
+                    string.IsNullOrWhiteSpace(blobErr) ? "File not found in that commit." : blobErr.Trim());
+            return ClassifyContent(blob);
+        }
+
+        // Live preview: read the working-tree file at the run location.
+        string? root;
+        if (preferRunLocation)
+        {
+            var loc = ResolveRunLocation(jobId, watchPath);
+            if (loc?.Root == null) return new GitFileContentResult(false, "", false, "Could not resolve repo root.");
+            root = loc.Root;
+        }
+        else
+        {
+            var configured = ResolveRepoRoot(jobId, watchPath);
+            root = configured == null ? null : ResolveGitToplevel(configured) ?? configured;
+            if (root == null) return new GitFileContentResult(false, "", false, "Could not resolve repo root.");
+        }
+
+        var full = Path.GetFullPath(Path.Combine(root, normalizedPath));
+        var rootFull = Path.GetFullPath(root);
+        // Containment guard: never read outside the repo root even if the
+        // normalized path somehow re-escapes (belt-and-braces with the `..`
+        // reject above).
+        if (!full.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase))
+            return new GitFileContentResult(false, "", false, "Invalid file path.");
+        if (!File.Exists(full))
+            return new GitFileContentResult(false, "", false, "File is not present in the working tree.");
+        try
+        {
+            var bytes = File.ReadAllBytes(full);
+            return ClassifyContent(Encoding.UTF8.GetString(bytes), bytes);
+        }
+        catch (Exception ex)
+        {
+            return new GitFileContentResult(false, "", false, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Classify a fetched blob as text or binary. A NUL byte in the first
+    /// slice is git's own heuristic for "binary"; we mirror it so the preview
+    /// declines control-byte content instead of rendering garbage.
+    /// </summary>
+    private static GitFileContentResult ClassifyContent(string content, byte[]? rawBytes = null)
+    {
+        var probe = rawBytes is { Length: > 0 }
+            ? rawBytes.AsSpan(0, Math.Min(rawBytes.Length, 8000)).IndexOf((byte)0) >= 0
+            : content.AsSpan(0, Math.Min(content.Length, 8000)).IndexOf('\0') >= 0;
+        return probe
+            ? new GitFileContentResult(true, "", true, null)
+            : new GitFileContentResult(true, content, false, null);
     }
 
     /// <summary>

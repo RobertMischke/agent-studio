@@ -87,6 +87,16 @@ export interface CodeReviewListEntry {
   generation?: FileGenerationMeta | null;
 }
 
+/**
+ * Reply from `GET /api/tasks/{id}/git/file` (and the commit-scoped variant).
+ * `content` is the file's UTF-8 text; `isBinary` is true for a NUL-containing
+ * blob, in which case `content` is empty and the pane declines to preview it.
+ */
+export interface GitFileContentResponse {
+  content: string;
+  isBinary: boolean;
+}
+
 /** Reply from `GET /api/tasks/code-review/defaults` (see backend `CodeReviewDefaultsResponse`). */
 export interface CodeReviewDefaults {
   cliType: string;
@@ -1069,6 +1079,31 @@ export class TaskService {
     return this.http.get<{ diff: string }>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/diff`,
       opts,
+    );
+  }
+
+  /**
+   * Full working-tree text of one file, for the git-pane's rendered md/html
+   * preview (AGT-2008). Returns `{ content, isBinary }`; a binary blob comes
+   * back with empty content + `isBinary: true` so the pane shows a
+   * "not previewable" note instead of raw bytes.
+   */
+  getGitFileContent(jobId: string, path: string, watchPath?: string) {
+    return this.http.get<GitFileContentResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/git/file`,
+      this.withWatchPathAndPath(watchPath, path),
+    );
+  }
+
+  /**
+   * File text at a specific commit in this task's chain, for the commit-mode
+   * md/html preview. Mirrors {@link getGitFileContent}; the SHA is validated
+   * server-side as a known job commit.
+   */
+  getJobCommitFileBySha(jobId: string, sha: string, path: string, watchPath?: string) {
+    return this.http.get<GitFileContentResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/file`,
+      this.withWatchPathAndPath(watchPath, path),
     );
   }
 

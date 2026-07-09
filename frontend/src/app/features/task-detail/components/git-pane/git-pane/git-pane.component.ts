@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { GitPaneService } from '../../../services/git-pane.service';
 import { LayoutPanesService } from '../../../services/layout-panes.service';
 import { GitFileTreeComponent } from '../git-file-tree/git-file-tree.component';
@@ -16,6 +17,7 @@ import {
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { formatCompactDateTime, formatDateTime } from '../../../../../services/format.util';
 import { isLargeDiff, describeDiffSize } from '../../../../../utils/large-diff-gate';
+import { coalesceDiffByFile } from '../../../../../utils/coalesce-diff';
 import { currentDiff2Html, hasDiff2HtmlLoaded, loadDiff2Html } from '../../../../../utils/diff2html-lazy';
 // Cycle 7f: diff2html (~120 KB minified, includes its own theme CSS) is
 // loaded lazily the first time a non-empty diff arrives. The pre-Cycle-7f
@@ -43,7 +45,7 @@ import { currentDiff2Html, hasDiff2HtmlLoaded, loadDiff2Html } from '../../../..
   selector: 'app-git-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, GitFileTreeComponent, TooltipDirective],
+  imports: [DatePipe, NgTemplateOutlet, GitFileTreeComponent, TooltipDirective, MarkdownViewComponent],
   templateUrl: './git-pane.component.html',
   styleUrls: ['./git-pane.component.scss']
 })
@@ -263,7 +265,11 @@ export class GitPaneComponent {
     const diff2html = currentDiff2Html();
     if (!this.diff2htmlReady() || !diff2html) return null;
     const sideBySide = this.diffViewMode() === 'side-by-side';
-    const rendered = diff2html.html(text, {
+    // Group multiple same-file sections (the aggregate diff concatenates one
+    // `diff --git` block per attributed commit) under a single file header so
+    // a file changed across several commits no longer renders as repeated
+    // "README" blocks - the AGT-2008 "Datei-Gruppierung" fix.
+    const rendered = diff2html.html(coalesceDiffByFile(text), {
       drawFileList: false,
       outputFormat: sideBySide ? 'side-by-side' : 'line-by-line',
       matching: 'lines',
@@ -275,6 +281,72 @@ export class GitPaneComponent {
   toggleDiffMaximize(): void {
     this.diffMaximized.update(v => !v);
   }
+
+  // --- md/html preview (AGT-2008) ---------------------------------------
+  // Changed .md/.html files can be shown as a rendered preview instead of a
+  // raw diff (UI-feedback 2026-07-09, observed on two README.md). The toggle
+  // is per selected file and defaults to Diff; markdown renders through the
+  // shared <cac-markdown> surface, html through a scripts-disabled sandboxed
+  // iframe so untrusted page markup can never execute in the app origin.
+
+  /** Whether the rendered preview (vs. the diff) is shown for the current file. */
+  readonly previewActive = signal(false);
+
+  /** Preview kind for the selected file, or null when it is not previewable. */
+  readonly previewKind = computed<'markdown' | 'html' | null>(() =>
+    previewKindOf(this.git.selectedDiffPath()),
+  );
+
+  readonly selectedIsPreviewable = computed<boolean>(() => this.previewKind() !== null);
+
+  /**
+   * Reset the Diff/Preview toggle back to Diff whenever the selected file
+   * changes or stops being previewable, so a leftover "Preview" state never
+   * applies to a file that has no preview.
+   */
+  private readonly _resetPreviewOnSelectionChange = effect(() => {
+    if (!this.selectedIsPreviewable() && this.previewActive()) {
+      this.previewActive.set(false);
+    }
+  });
+
+  togglePreview(): void {
+    const next = !this.previewActive();
+    this.previewActive.set(next);
+    const path = this.git.selectedDiffPath();
+    if (next && path) this.git.loadPreview(path);
+  }
+
+  /**
+   * Keep the preview in sync when the operator switches to another previewable
+   * file while Preview stays active: `selectDiffPath` clears the old content,
+   * so kick a fresh load for the new path. Scheduled off the effect's
+   * synchronous pass (microtask) so it never writes signals mid-effect; the
+   * guards stop it re-firing once a load is in flight or has resolved.
+   */
+  private readonly _loadPreviewWhenActive = effect(() => {
+    const path = this.git.selectedDiffPath();
+    const active = this.previewActive();
+    const previewable = this.selectedIsPreviewable();
+    const empty = this.git.previewContent() === null
+      && !this.git.previewIsBinary()
+      && !this.git.previewLoading()
+      && !this.git.previewError();
+    if (!path || !active || !previewable || !empty) return;
+    Promise.resolve().then(() => this.git.loadPreview(path));
+  });
+
+  /**
+   * Sandboxed srcdoc for the html preview. The iframe carries `sandbox=""`
+   * (no allow-scripts / allow-same-origin) so the document is inert; the
+   * content is trusted only for rendering, never for execution.
+   */
+  readonly previewHtmlDoc = computed<SafeHtml | null>(() => {
+    if (this.previewKind() !== 'html') return null;
+    const content = this.git.previewContent();
+    if (content == null) return null;
+    return this.sanitizer.bypassSecurityTrustHtml(content);
+  });
 
   commitChainTooltip(entry: TaskCommitInfo, index: number): string {
     return `${index + 1}/${this.git.commitChain().length} · ${entry.shortSha} · ${formatDateTime(entry.at)} · ${entry.message}`;
@@ -368,6 +440,23 @@ export class GitPaneComponent {
 }
 
 export type DiffViewMode = 'side-by-side' | 'line-by-line';
+
+/**
+ * Classify a changed-file path for the rendered preview: markdown for
+ * `.md`/`.markdown`, html for `.html`/`.htm`, null for everything else.
+ * Extension match is case-insensitive; the query/hash-free basename is used
+ * so a path is never mis-classified by a trailing fragment.
+ */
+export function previewKindOf(path: string | null | undefined): 'markdown' | 'html' | null {
+  if (!path) return null;
+  const clean = path.split(/[?#]/)[0];
+  const dot = clean.lastIndexOf('.');
+  if (dot < 0) return null;
+  const ext = clean.slice(dot + 1).toLowerCase();
+  if (ext === 'md' || ext === 'markdown') return 'markdown';
+  if (ext === 'html' || ext === 'htm') return 'html';
+  return null;
+}
 
 const COMMIT_HEADER_COLLAPSED_KEY = 'taskboard.gitPane.commitHeaderCollapsed';
 const COMMIT_GROUP_COLLAPSED_KEY = 'taskboard.gitPane.commitGroupCollapsed';

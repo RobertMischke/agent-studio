@@ -5,7 +5,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { GitPaneComponent, clampTreeWidth } from './git-pane.component';
+import { GitPaneComponent, clampTreeWidth, previewKindOf } from './git-pane.component';
 import { GitPaneService } from '../../../services/git-pane.service';
 import { LayoutPanesService } from '../../../services/layout-panes.service';
 import type { GitFileChange, GitStatus, TaskCommitDetail, TaskCommitInfo, TaskProvenanceView } from '../../../../git';
@@ -62,18 +62,36 @@ function makeGitPaneMock(options?: {
   viewMode?: 'commit' | 'worktree';
   status?: GitStatus | null;
   codeReviews?: CodeReviewListEntry[];
+  selectedDiffPath?: string | null;
+  /** Content loadPreview() should publish for the selected file. */
+  previewOnLoad?: { content?: string; isBinary?: boolean };
 }) {
   const selectedCommitSha = signal<string | null>(null);
   const commitChain = signal<TaskCommitInfo[]>(commits);
   const commitFiles = signal<GitFileChange[]>(files);
   const commitDetail = signal<TaskCommitDetail | null>(null);
   const codeReviews = signal<CodeReviewListEntry[]>(options?.codeReviews ?? []);
+  const previewContent = signal<string | null>(null);
+  const previewIsBinary = signal(false);
+  const previewLoading = signal(false);
+  const previewError = signal<string | null>(null);
 
   return {
+    previewContent,
+    previewIsBinary,
+    previewLoading,
+    previewError,
+    loadPreview: (_path: string) => {
+      const p = options?.previewOnLoad;
+      previewContent.set(p?.content ?? null);
+      previewIsBinary.set(p?.isBinary ?? false);
+      previewError.set(null);
+      previewLoading.set(false);
+    },
     viewMode: signal<'commit' | 'worktree'>(options?.viewMode ?? 'commit'),
     commitChain,
     selectedCommitSha,
-    selectedDiffPath: signal<string | null>('src/one.ts'),
+    selectedDiffPath: signal<string | null>(options?.selectedDiffPath ?? 'src/one.ts'),
     diffText: signal(''),
     loading: signal(false),
     status: signal<GitStatus | null>(options?.status ?? null),
@@ -491,6 +509,80 @@ describe('GitPaneComponent', () => {
     expect(fixture.componentInstance.treeColWidth()).toBe(360);
     const splitBody = root.querySelector<HTMLElement>('.git-view__split-body');
     expect(splitBody?.style.getPropertyValue('--git-tree-width')).toBe('360px');
+  });
+
+  it('offers a Preview toggle only for md/html files and renders the markdown preview (AGT-2008)', async () => {
+    const git = makeGitPaneMock({
+      selectedDiffPath: 'docs/README.md',
+      previewOnLoad: { content: '# Hello preview' },
+    });
+    await mountGit(git);
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const toggle = root.querySelector<HTMLButtonElement>('[data-testid="git-preview-toggle"]');
+    expect(toggle).not.toBeNull();
+    expect(toggle?.textContent?.trim()).toBe('Preview');
+    // Diff shown by default; the preview surface is absent.
+    expect(root.querySelector('[data-testid="git-preview"]')).toBeNull();
+
+    toggle?.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.previewActive()).toBe(true);
+    expect(toggle?.textContent?.trim()).toBe('Diff');
+    // Preview surface takes over; the raw diff + layout toggle step aside.
+    expect(root.querySelector('[data-testid="git-preview"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="git-preview-markdown"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="git-diff-mode-toggle"]')).toBeNull();
+  });
+
+  it('renders the html preview in a scripts-disabled sandboxed iframe (AGT-2008)', async () => {
+    const git = makeGitPaneMock({
+      selectedDiffPath: 'site/index.html',
+      previewOnLoad: { content: '<h1>Hi</h1>' },
+    });
+    await mountGit(git);
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    root.querySelector<HTMLButtonElement>('[data-testid="git-preview-toggle"]')?.click();
+    fixture.detectChanges();
+
+    const frame = root.querySelector<HTMLIFrameElement>('[data-testid="git-preview-html"]');
+    expect(frame).not.toBeNull();
+    // sandbox="" => no allow-scripts / allow-same-origin, so the document is inert.
+    expect(frame?.getAttribute('sandbox')).toBe('');
+    expect(frame?.getAttribute('srcdoc') ?? '').toContain('<h1>Hi</h1>');
+  });
+
+  it('shows no Preview toggle for a non-previewable file', async () => {
+    const git = makeGitPaneMock({ selectedDiffPath: 'src/one.ts' });
+    await mountGit(git);
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[data-testid="git-preview-toggle"]')).toBeNull();
+  });
+
+  it('previewKindOf classifies md/html and rejects others', () => {
+    expect(previewKindOf('README.md')).toBe('markdown');
+    expect(previewKindOf('docs/guide.markdown')).toBe('markdown');
+    expect(previewKindOf('a/index.html')).toBe('html');
+    expect(previewKindOf('page.htm')).toBe('html');
+    expect(previewKindOf('DIR/File.HTML')).toBe('html');
+    expect(previewKindOf('src/app.ts')).toBeNull();
+    expect(previewKindOf('LICENSE')).toBeNull();
+    expect(previewKindOf(null)).toBeNull();
   });
 
   it('clamps the tree width against both the tree floor and the diff floor', () => {

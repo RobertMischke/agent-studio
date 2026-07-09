@@ -160,6 +160,101 @@ describe('GitPaneService.loadCodeReviews (defensive shape guard)', () => {
   });
 });
 
+/**
+ * md/html preview (AGT-2008): the git-pane fetches a file's full text so it
+ * can render a formatted preview instead of the diff. The source ref follows
+ * the current view — the working tree in worktree mode, the newest task commit
+ * in the aggregated commit view — and results are cached so toggling
+ * Diff <-> Preview is instant.
+ */
+describe('GitPaneService.loadPreview', () => {
+  let service: GitPaneService;
+  let http: HttpTestingController;
+
+  async function boot(job: TaskInfo, drain: () => void) {
+    await TestBed.configureTestingModule({
+      providers: [
+        GitPaneService,
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    service = TestBed.inject(GitPaneService);
+    http = TestBed.inject(HttpTestingController);
+    service.setJob(job);
+    drain();
+  }
+
+  afterEach(() => http.verify());
+
+  it('reads the working-tree file in worktree mode and caches it', async () => {
+    const job = { id: 'job-x', watchPath: '/wp' } as unknown as TaskInfo;
+    await boot(job, () => {
+      http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/provenance')).flush(null);
+      http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/code-review/list')).flush({ entries: [] });
+    });
+
+    service.selectDiffPath('docs/README.md');
+    http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/git/diff') && r.params.get('path') === 'docs/README.md')
+      .flush(utf8Buffer('DIFF'));
+
+    service.loadPreview('docs/README.md');
+    const fileReq = http.expectOne(
+      (r) => r.url.endsWith('/api/tasks/job-x/git/file') && r.params.get('path') === 'docs/README.md',
+    );
+    fileReq.flush({ content: '# Hello', isBinary: false });
+    expect(service.previewContent()).toBe('# Hello');
+    expect(service.previewIsBinary()).toBe(false);
+    expect(service.previewLoading()).toBe(false);
+
+    // Second call is served from cache — no new round-trip.
+    service.loadPreview('docs/README.md');
+    http.expectNone((r) => r.url.endsWith('/api/tasks/job-x/git/file'));
+    expect(service.previewContent()).toBe('# Hello');
+  });
+
+  it('flags a binary blob and shows no text', async () => {
+    const job = { id: 'job-x', watchPath: '/wp' } as unknown as TaskInfo;
+    await boot(job, () => {
+      http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/provenance')).flush(null);
+      http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/code-review/list')).flush({ entries: [] });
+    });
+
+    service.selectDiffPath('logo.html');
+    http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/git/diff') && r.params.get('path') === 'logo.html')
+      .flush(utf8Buffer('DIFF'));
+
+    service.loadPreview('logo.html');
+    http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/git/file')).flush({ content: '', isBinary: true });
+    expect(service.previewIsBinary()).toBe(true);
+    expect(service.previewContent()).toBe('');
+  });
+
+  it('previews the newest task commit in the aggregated multi-commit view', async () => {
+    const older = { sha: 'a'.repeat(40), shortSha: 'aaaaaaa', message: 'first', filesChanged: 1, files: ['README.md'], at: '2026-06-01T10:00:00Z' };
+    const newer = { sha: 'b'.repeat(40), shortSha: 'bbbbbbb', message: 'second', filesChanged: 1, files: ['README.md'], at: '2026-06-02T10:00:00Z' };
+    const job = { id: 'job-x', watchPath: '/wp', commits: [older, newer] } as unknown as TaskInfo;
+    await boot(job, () => {
+      http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/provenance')).flush(null);
+      // Multi-commit -> aggregate file list + code-review listing.
+      http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/commits/files')).flush({ files: [{ status: 'M', path: 'README.md', added: 1, removed: 0 }] });
+      http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/code-review/list')).flush({ entries: [] });
+      // Aggregate default-selects README.md, firing its aggregate diff.
+      http.expectOne((r) => r.url.endsWith('/api/tasks/job-x/commits/diff') && r.params.get('path') === 'README.md').flush({ diff: 'DIFF' });
+    });
+
+    service.loadPreview('README.md');
+    // Preview must hit the NEWEST commit's blob, not the oldest.
+    const req = http.expectOne(
+      (r) => r.url.endsWith(`/api/tasks/job-x/commits/${'b'.repeat(40)}/file`) && r.params.get('path') === 'README.md',
+    );
+    req.flush({ content: '# newest', isBinary: false });
+    expect(service.previewContent()).toBe('# newest');
+  });
+});
+
 function utf8Buffer(value: string): ArrayBuffer {
   const bytes = new TextEncoder().encode(value);
   const buffer = new ArrayBuffer(bytes.byteLength);

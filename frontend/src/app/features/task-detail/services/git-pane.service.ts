@@ -35,6 +35,19 @@ export class GitPaneService implements OnDestroy {
   readonly loading = signal(false);
   readonly selectedDiffPath = signal<string | null>(null);
   readonly diffText = signal<string>('');
+
+  // --- md/html preview (AGT-2008) --------------------------------------
+  // The git-pane can render a changed .md/.html file as a formatted preview
+  // instead of its diff. Content is fetched lazily the first time the preview
+  // is shown for a path, from the same ref the diff came from (working tree,
+  // the selected commit, or - in the aggregated view - the newest task
+  // commit) so the preview matches what the diff shows.
+  readonly previewContent = signal<string | null>(null);
+  readonly previewLoading = signal(false);
+  readonly previewError = signal<string | null>(null);
+  readonly previewIsBinary = signal(false);
+  private readonly PREVIEW_CACHE_LIMIT = 16;
+  private previewCache = new Map<string, { content: string; isBinary: boolean }>();
   readonly commitMessage = signal('');
   readonly committing = signal(false);
   readonly generatingMsg = signal(false);
@@ -80,6 +93,11 @@ export class GitPaneService implements OnDestroy {
   private invalidateWorktreeCache(): void {
     for (const key of [...this.diffCache.keys()]) {
       if (key.startsWith('worktree|')) this.diffCache.delete(key);
+    }
+  }
+  private invalidateWorktreePreviewCache(): void {
+    for (const key of [...this.previewCache.keys()]) {
+      if (key.startsWith('worktree|')) this.previewCache.delete(key);
     }
   }
 
@@ -252,6 +270,8 @@ export class GitPaneService implements OnDestroy {
     this.provenanceLoaded.set(false);
     this.codeReviews.set([]);
     this.clearDiffCache();
+    this.previewCache.clear();
+    this.resetPreview();
     const chain = info?.commits ?? (info?.commit ? [info.commit] : []);
     this.commitChain.set(chain);
     this.applyCommitDefault(chain);
@@ -416,6 +436,7 @@ export class GitPaneService implements OnDestroy {
     // picks up a fresh diff. Commit-mode entries are immutable per sha,
     // so we keep those.
     this.invalidateWorktreeCache();
+    this.invalidateWorktreePreviewCache();
     this.jobService.getGitStatus(info.id, info.watchPath).subscribe({
       next: (status) => {
         this.status.set(status);
@@ -426,6 +447,7 @@ export class GitPaneService implements OnDestroy {
         if (selected && !status.files.some((f) => f.path === selected)) {
           this.selectedDiffPath.set(null);
           this.diffText.set('');
+          this.resetPreview();
         }
       },
       error: (err) => {
@@ -436,6 +458,9 @@ export class GitPaneService implements OnDestroy {
   }
 
   selectDiffPath(path: string): void {
+    // Preview state is per-selected-file; drop it whenever the selection moves
+    // so a stale .md/.html render never lingers under a different file.
+    this.resetPreview();
     if (this.selectedDiffPath() === path) {
       this.selectedDiffPath.set(null);
       this.diffText.set('');
@@ -506,6 +531,95 @@ export class GitPaneService implements OnDestroy {
       },
       error: () => { if (stillSelected()) this.diffText.set('(failed to load diff)'); },
     });
+  }
+
+  /**
+   * Fetch the formatted-preview source for a path (md/html rendering). Serves
+   * from an LRU cache when possible so toggling Diff <-> Preview is instant;
+   * otherwise pulls the file text from the ref that backs the current view
+   * (working tree, the selected commit, or the newest task commit for the
+   * aggregated diff). Late responses are dropped when the selection has moved
+   * on, mirroring {@link selectDiffPath}'s stale-guard.
+   */
+  loadPreview(path: string): void {
+    const info = this.currentJob;
+    if (!info || !path) return;
+
+    const key = this.previewKey(path);
+    const cached = this.previewCacheGet(key);
+    if (cached) {
+      this.previewContent.set(cached.content);
+      this.previewIsBinary.set(cached.isBinary);
+      this.previewError.set(null);
+      this.previewLoading.set(false);
+      return;
+    }
+
+    this.previewContent.set(null);
+    this.previewIsBinary.set(false);
+    this.previewError.set(null);
+    this.previewLoading.set(true);
+
+    const stillSelected = () => this.selectedDiffPath() === path;
+    const apply = (res: { content?: string; isBinary?: boolean } | null) => {
+      const content = typeof res?.content === 'string' ? res.content : '';
+      const isBinary = res?.isBinary === true;
+      this.previewCachePut(key, { content, isBinary });
+      if (!stillSelected()) return;
+      this.previewLoading.set(false);
+      this.previewIsBinary.set(isBinary);
+      this.previewContent.set(isBinary ? '' : content);
+    };
+    const fail = () => {
+      if (!stillSelected()) return;
+      this.previewLoading.set(false);
+      this.previewError.set('Failed to load preview.');
+    };
+
+    if (this.viewMode() === 'commit') {
+      // Aggregated view has no single commit; preview the file at the newest
+      // task commit so the "final" version is shown. A single-commit view uses
+      // that commit's blob so the preview matches its diff.
+      const sha = this.selectedCommitSha() ?? this.newestCommitSha();
+      if (!sha) { this.previewLoading.set(false); this.previewError.set('No commit to preview.'); return; }
+      this.jobService.getJobCommitFileBySha(info.id, sha, path, info.watchPath).subscribe({ next: apply, error: fail });
+      return;
+    }
+    this.jobService.getGitFileContent(info.id, path, info.watchPath).subscribe({ next: apply, error: fail });
+  }
+
+  /** Newest SHA on the task's commit chain (the chain is oldest -> newest). */
+  private newestCommitSha(): string | null {
+    const chain = this.commitChain();
+    return chain.length ? chain[chain.length - 1].sha : null;
+  }
+
+  private previewKey(path: string): string {
+    if (this.viewMode() === 'commit') {
+      const sha = this.selectedCommitSha() ?? this.newestCommitSha() ?? '';
+      return `commit|${sha}|${path}`;
+    }
+    return `worktree|${path}`;
+  }
+  private previewCacheGet(key: string): { content: string; isBinary: boolean } | undefined {
+    const v = this.previewCache.get(key);
+    if (v !== undefined) { this.previewCache.delete(key); this.previewCache.set(key, v); }
+    return v;
+  }
+  private previewCachePut(key: string, value: { content: string; isBinary: boolean }): void {
+    if (this.previewCache.has(key)) this.previewCache.delete(key);
+    this.previewCache.set(key, value);
+    while (this.previewCache.size > this.PREVIEW_CACHE_LIMIT) {
+      const oldest = this.previewCache.keys().next().value;
+      if (oldest === undefined) break;
+      this.previewCache.delete(oldest);
+    }
+  }
+  private resetPreview(): void {
+    this.previewContent.set(null);
+    this.previewIsBinary.set(false);
+    this.previewError.set(null);
+    this.previewLoading.set(false);
   }
 
   generateCommitMessage(): void {

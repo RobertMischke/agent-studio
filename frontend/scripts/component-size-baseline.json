@@ -85,10 +85,10 @@
       "total": 1436
     },
     "src/app/features/task-detail/components/git-pane/git-pane/git-pane.component.ts": {
-      "typeScript": 244,
-      "template": 262,
-      "styles": 552,
-      "total": 1058
+      "typeScript": 541,
+      "template": 382,
+      "styles": 866,
+      "total": 1789
     },
     "src/app/features/task-detail/components/prompt-pane/overview-pane/overview-pane.component.ts": {
       "typeScript": 1904,

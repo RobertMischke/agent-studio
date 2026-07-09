@@ -207,52 +207,7 @@
                  (keydown)="onTreeResizeKey($event)"></div>
 
             @if (git.selectedDiffPath()) {
-              <div class="git-view__diff-col" data-testid="git-diff-col">
-                <div class="git-view__diff-wrap"
-                     [class.git-view__diff-wrap--maximized]="diffMaximized()"
-                     [class.git-view__diff-wrap--inline]="maximized()"
-                     data-testid="git-diff-wrap">
-                  <div class="git-view__diff-toolbar">
-                    <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
-                    <button type="button"
-                            class="git-view__diff-mode-toggle"
-                            data-testid="git-diff-mode-toggle"
-                            [attr.aria-pressed]="diffViewMode() === 'side-by-side'"
-                            [cacTooltip]="diffViewMode() === 'side-by-side' ? 'Switch to unified (inline) diff' : 'Switch to side-by-side diff'"
-                            (click)="toggleDiffViewMode()">
-                      {{ diffViewMode() === 'side-by-side' ? 'Side-by-side' : 'Unified' }}
-                    </button>
-                    @if (!maximized()) {
-                      <button class="pane__maximize"
-                              data-testid="git-diff-maximize"
-                              (click)="toggleDiffMaximize()"
-                              [cacTooltip]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
-                        {{ diffMaximized() ? '⤡' : '⤢' }}
-                      </button>
-                    }
-                  </div>
-                  @if (diffGated()) {
-                    <div class="git-view__diff git-view__diff--gated" data-testid="git-diff-gated">
-                      <div class="git-view__gated-meta">
-                        @if (selectedFileStatus(); as st) {
-                          <span class="git-view__gated-status" [attr.data-status]="st">{{ st }}</span>
-                        }
-                        <span class="git-view__gated-name">{{ git.selectedDiffPath() }}</span>
-                        <span class="git-view__gated-size">{{ diffSizeLabel() }}</span>
-                      </div>
-                      <p class="git-view__gated-hint">Large file - not rendered automatically to keep the editor fast.</p>
-                      <div class="git-view__gated-actions">
-                        <button type="button" class="btn-sm" data-testid="git-diff-show" (click)="revealCurrentDiff()">Show diff</button>
-                        <button type="button" class="btn-sm" data-testid="git-diff-show-all" (click)="revealAll()">Show all large diffs</button>
-                      </div>
-                    </div>
-                  } @else if (diffHtml(); as dh) {
-                    <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
-                  } @else {
-                    <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>
-                  }
-                </div>
-              </div>
+              <ng-container [ngTemplateOutlet]="diffPanel" />
             } @else if (maximized()) {
               <div class="git-view__diff-col git-view__diff-col--empty" data-testid="git-diff-col">
                 <div class="git-view__empty">Select a file on the left to view its diff.</div>
@@ -318,52 +273,7 @@
                  (keydown)="onTreeResizeKey($event)"></div>
 
             @if (git.selectedDiffPath()) {
-              <div class="git-view__diff-col" data-testid="git-diff-col">
-                <div class="git-view__diff-wrap"
-                     [class.git-view__diff-wrap--maximized]="diffMaximized()"
-                     [class.git-view__diff-wrap--inline]="maximized()"
-                     data-testid="git-diff-wrap">
-                  <div class="git-view__diff-toolbar">
-                    <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
-                    <button type="button"
-                            class="git-view__diff-mode-toggle"
-                            data-testid="git-diff-mode-toggle"
-                            [attr.aria-pressed]="diffViewMode() === 'side-by-side'"
-                            [cacTooltip]="diffViewMode() === 'side-by-side' ? 'Switch to unified (inline) diff' : 'Switch to side-by-side diff'"
-                            (click)="toggleDiffViewMode()">
-                      {{ diffViewMode() === 'side-by-side' ? 'Side-by-side' : 'Unified' }}
-                    </button>
-                    @if (!maximized()) {
-                      <button class="pane__maximize"
-                              data-testid="git-diff-maximize"
-                              (click)="toggleDiffMaximize()"
-                              [cacTooltip]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
-                        {{ diffMaximized() ? '⤡' : '⤢' }}
-                      </button>
-                    }
-                  </div>
-                  @if (diffGated()) {
-                    <div class="git-view__diff git-view__diff--gated" data-testid="git-diff-gated">
-                      <div class="git-view__gated-meta">
-                        @if (selectedFileStatus(); as st) {
-                          <span class="git-view__gated-status" [attr.data-status]="st">{{ st }}</span>
-                        }
-                        <span class="git-view__gated-name">{{ git.selectedDiffPath() }}</span>
-                        <span class="git-view__gated-size">{{ diffSizeLabel() }}</span>
-                      </div>
-                      <p class="git-view__gated-hint">Large file - not rendered automatically to keep the editor fast.</p>
-                      <div class="git-view__gated-actions">
-                        <button type="button" class="btn-sm" data-testid="git-diff-show" (click)="revealCurrentDiff()">Show diff</button>
-                        <button type="button" class="btn-sm" data-testid="git-diff-show-all" (click)="revealAll()">Show all large diffs</button>
-                      </div>
-                    </div>
-                  } @else if (diffHtml(); as dh) {
-                    <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
-                  } @else {
-                    <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>
-                  }
-                </div>
-              </div>
+              <ng-container [ngTemplateOutlet]="diffPanel" />
             } @else if (maximized()) {
               <div class="git-view__diff-col git-view__diff-col--empty" data-testid="git-diff-col">
                 <div class="git-view__empty">Select a file on the left to view its diff.</div>
@@ -378,3 +288,94 @@
     }
   </div>
 </section>
+
+<!--
+  Shared diff / preview panel for the selected file. Rendered in both the
+  commit-mode and worktree-mode split bodies via [ngTemplateOutlet] so the
+  toolbar + diff + preview markup lives in exactly one place. For .md/.html
+  files a Preview toggle swaps the diff for a rendered view (AGT-2008):
+  markdown through the shared <cac-markdown> surface, html through a
+  scripts-disabled sandboxed iframe.
+-->
+<ng-template #diffPanel>
+  <div class="git-view__diff-col" data-testid="git-diff-col">
+    <div class="git-view__diff-wrap"
+         [class.git-view__diff-wrap--maximized]="diffMaximized()"
+         [class.git-view__diff-wrap--inline]="maximized()"
+         data-testid="git-diff-wrap">
+      <div class="git-view__diff-toolbar">
+        <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
+        @if (selectedIsPreviewable()) {
+          <button type="button"
+                  class="git-view__diff-mode-toggle git-view__preview-toggle"
+                  data-testid="git-preview-toggle"
+                  [attr.aria-pressed]="previewActive()"
+                  [cacTooltip]="previewActive() ? 'Show the raw diff' : 'Show a rendered preview of this file'"
+                  (click)="togglePreview()">
+            {{ previewActive() ? 'Diff' : 'Preview' }}
+          </button>
+        }
+        @if (!previewActive()) {
+          <button type="button"
+                  class="git-view__diff-mode-toggle"
+                  data-testid="git-diff-mode-toggle"
+                  [attr.aria-pressed]="diffViewMode() === 'side-by-side'"
+                  [cacTooltip]="diffViewMode() === 'side-by-side' ? 'Switch to unified (inline) diff' : 'Switch to side-by-side diff'"
+                  (click)="toggleDiffViewMode()">
+            {{ diffViewMode() === 'side-by-side' ? 'Side-by-side' : 'Unified' }}
+          </button>
+        }
+        @if (!maximized()) {
+          <button class="pane__maximize"
+                  data-testid="git-diff-maximize"
+                  (click)="toggleDiffMaximize()"
+                  [cacTooltip]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
+            {{ diffMaximized() ? '⤡' : '⤢' }}
+          </button>
+        }
+      </div>
+      @if (previewActive()) {
+        <div class="git-view__preview" data-testid="git-preview">
+          @if (git.previewLoading()) {
+            <div class="git-view__diff--placeholder">(loading preview…)</div>
+          } @else if (git.previewError(); as err) {
+            <div class="git-view__preview-note" data-testid="git-preview-error">{{ err }}</div>
+          } @else if (git.previewIsBinary()) {
+            <div class="git-view__preview-note">Binary file — no text preview available.</div>
+          } @else if (previewKind() === 'markdown') {
+            <cac-markdown class="git-view__preview-body"
+                          data-testid="git-preview-markdown"
+                          [source]="git.previewContent()" />
+          } @else if (previewKind() === 'html' && previewHtmlDoc(); as doc) {
+            <iframe class="git-view__preview-frame"
+                    data-testid="git-preview-html"
+                    title="HTML preview"
+                    sandbox=""
+                    [srcdoc]="doc"></iframe>
+          } @else {
+            <div class="git-view__diff--placeholder">(loading preview…)</div>
+          }
+        </div>
+      } @else if (diffGated()) {
+        <div class="git-view__diff git-view__diff--gated" data-testid="git-diff-gated">
+          <div class="git-view__gated-meta">
+            @if (selectedFileStatus(); as st) {
+              <span class="git-view__gated-status" [attr.data-status]="st">{{ st }}</span>
+            }
+            <span class="git-view__gated-name">{{ git.selectedDiffPath() }}</span>
+            <span class="git-view__gated-size">{{ diffSizeLabel() }}</span>
+          </div>
+          <p class="git-view__gated-hint">Large file - not rendered automatically to keep the editor fast.</p>
+          <div class="git-view__gated-actions">
+            <button type="button" class="btn-sm" data-testid="git-diff-show" (click)="revealCurrentDiff()">Show diff</button>
+            <button type="button" class="btn-sm" data-testid="git-diff-show-all" (click)="revealAll()">Show all large diffs</button>
+          </div>
+        </div>
+      } @else if (diffHtml(); as dh) {
+        <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
+      } @else {
+        <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>
+      }
+    </div>
+  </div>
+</ng-template>

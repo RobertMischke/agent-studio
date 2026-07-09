@@ -26,6 +26,12 @@ public static class TaskGitEndpoints
         group.MapGet("/{jobId}/git/diff", (string jobId, string? watchPath, string? path, GitService git) =>
             DiffTextResult(git.GetDiffResult(jobId, watchPath, path, preferRunLocation: true)));
 
+        // Full working-tree text of one file, for the git-pane's rendered
+        // md/html preview (AGT-2008). Reads the task's own run location so a
+        // per-task worktree previews its own copy, matching /git/diff.
+        group.MapGet("/{jobId}/git/file", (string jobId, string? watchPath, string? path, GitService git) =>
+            FileContentResult(git.GetFileContentResult(jobId, watchPath, path, sha: null, preferRunLocation: true)));
+
         group.MapPost("/{jobId}/git/commit", (string jobId, string? watchPath, GitCommitRequest req, GitService git) =>
         {
             var result = git.Commit(jobId, watchPath, req.Message);
@@ -158,6 +164,20 @@ public static class TaskGitEndpoints
             return result.Success
                 ? Results.Ok(DiffJsonResponse(result.Diff, "No diff for this path in the selected commit."))
                 : Results.BadRequest(new { error = result.Error ?? "Could not load diff." });
+        });
+
+        // File content at one of the job's commits, for the commit-mode md/html
+        // preview (AGT-2008). Same known-commit gate as the diff endpoint so the
+        // blob can only be read from a commit that actually belongs to this job.
+        group.MapGet("/{jobId}/commits/{sha}/file", (
+            string jobId, string sha, string? path, string? watchPath,
+            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            if (!IsKnownJobCommit(info, sessions, jobId, watchPath, git, sha))
+                return Results.NotFound(new { error = "Commit is not associated with this job." });
+            return FileContentResult(git.GetFileContentResult(jobId, watchPath, path, sha));
         });
 
         // Commit-provenance & landed-state (ASS-1724). Returns the persisted
@@ -353,6 +373,19 @@ public static class TaskGitEndpoints
         if (string.IsNullOrWhiteSpace(result.Diff))
             return Results.NoContent();
         return Results.Text(result.Diff, "text/plain", Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Shapes a <see cref="GitFileContentResult"/> into the preview JSON the
+    /// git-pane consumes: <c>{ content, isBinary }</c> on success, a 400 with an
+    /// error message otherwise. A binary blob is a success with empty content +
+    /// <c>isBinary: true</c> so the UI shows a "not previewable" note.
+    /// </summary>
+    private static IResult FileContentResult(GitFileContentResult result)
+    {
+        if (!result.Success)
+            return Results.BadRequest(new { error = result.Error ?? "Could not load file." });
+        return Results.Ok(new { content = result.Content, isBinary = result.IsBinary });
     }
 
     private static object DiffJsonResponse(string diff, string emptyReason)
