@@ -116,12 +116,27 @@ Recommended per-CLI headless defaults (verify against your installed version):
    /opt/agent-runner/agent-runner <TASK-KEY>
    ```
 
-The runner then, in order: acquires the fenced lease, starts heartbeating,
-checks out the branch from origin, fetches `prompt.md` over the API, spawns the
-CLI in the working tree, ships stdout/stderr to the server every few seconds,
-uploads everything under `results/`, posts the external-completion, and releases
-the lease. Exit code `0` means a clean handoff; `1` a blocked/needs-input
-outcome; `2` lease not granted; `3` lease lost mid-run.
+The runner then, in order: **registers its client identity** (see below),
+acquires the fenced lease, starts heartbeating, checks out the branch from
+origin, fetches `prompt.md` over the API, spawns the CLI in the working tree,
+ships stdout/stderr to the server every few seconds, uploads everything under
+`results/`, posts the external-completion, and releases the lease. Exit code `0`
+means a clean handoff; `1` a blocked/needs-input outcome; `2` lease not granted;
+`3` lease lost mid-run; `4` the task server was unreachable or rejected a call.
+
+### Client identity registration (required)
+
+The Task Server guards every mutation behind an `X-Client-Id` registration
+boundary (`ClientIdentityMiddleware`): a POST from an id the server has never
+seen is rejected `401 client-unknown`. Reads (prompt fetch) stay open, but the
+lease, log, artifact, and external-completion writes do not. The runner
+therefore **self-registers before its first write**: on startup it POSTs its
+`RUNNER_NAME` to `/api/clients/register` (an open-path route) and adopts the
+server-assigned id as its `X-Client-Id` for the rest of the run. Registration is
+idempotent on the name, so restarts reuse the same identity and the board
+attributes the completion to the same runner. No operator action is needed; this
+is documented so a `401 client-unknown` in the logs points at the right cause
+(usually a reverse proxy stripping the `X-Client-Id` header).
 
 ## 5. Acceptance walkthrough
 
@@ -148,3 +163,8 @@ The task passes RM-5 acceptance when, after the runner exits `0`:
   task key.
 - **CLI exits immediately / wrong flags** - the headless flags do not match the
   installed CLI version. Adjust `RUNNER_CLI_ARGS` or wrap the CLI in a script.
+- **`401 client-unknown` on a lease/log/upload call** - the runner's
+  `X-Client-Id` never reached the server, so it looks unregistered. The runner
+  registers itself automatically, so this almost always means a reverse proxy or
+  tunnel is dropping the `X-Client-Id` request header; forward it, or point
+  `RUNNER_SERVER_URL` straight at the Studio.

@@ -24,6 +24,12 @@ public sealed class RemoteTaskRunner
     /// <returns>Process exit code: 0 on a clean handoff, non-zero when the run could not complete.</returns>
     public async Task<int> RunAsync(string taskKey, CancellationToken shutdown)
     {
+        // Register the runner identity first: the server's X-Client-Id boundary
+        // rejects every write (lease, logs, artifacts, completion) from an
+        // unregistered id with 401, so this must precede the lease acquire.
+        var clientId = await _client.RegisterAsync(_options.RunnerName, "service", shutdown);
+        _log($"registered runner identity '{_options.RunnerName}' as client '{clientId}'");
+
         _log($"acquiring lease for task '{taskKey}' as runner '{_options.RunnerId}' ({_options.RunnerName})");
         var acquire = await _client.AcquireLeaseAsync(new RunLeaseAcquireRequest(
             taskKey, _options.RunnerId, _options.RunnerName, _options.Hostname,

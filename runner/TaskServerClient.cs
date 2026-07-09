@@ -21,9 +21,51 @@ public sealed class TaskServerClient : IDisposable
         _http = new HttpClient { BaseAddress = new Uri(options.ServerUrl), Timeout = TimeSpan.FromSeconds(60) };
         if (!string.IsNullOrWhiteSpace(options.AuthToken))
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.AuthToken);
-        // The server treats X-Client-Id as a registration boundary; identify the
-        // runner so the completion attribution and logs name the right actor.
-        _http.DefaultRequestHeaders.Add("X-Client-Id", options.RunnerId);
+        // The server treats X-Client-Id as a registration boundary; seed it with
+        // the provisional runner id so reads (and the registration POST itself)
+        // are attributed. RegisterAsync swaps in the server-assigned id before the
+        // first write, since an unregistered id is rejected 401 on mutations.
+        SetClientId(options.RunnerId);
+    }
+
+    /// <summary>
+    /// Test seam: drive the client against an already-configured <see cref="HttpClient"/>
+    /// — e.g. one produced by the backend's in-memory WebApplicationFactory — so the
+    /// runner's real HTTP + WireModels round-trip is exercised end-to-end against the
+    /// live server endpoints without a socket. Not for production use; the production
+    /// path is the <see cref="RunnerOptions"/> constructor above.
+    /// </summary>
+    internal TaskServerClient(HttpClient http, string runnerId)
+    {
+        _http = http;
+        SetClientId(runnerId);
+    }
+
+    /// <summary>
+    /// Register the runner as a client identity and adopt the server-assigned id as
+    /// the X-Client-Id for every subsequent write. Idempotent on the display name;
+    /// the registration route is an open path so it works with the provisional id.
+    /// Returns the adopted client id (falls back to the provisional id on an empty
+    /// reply so a misconfigured open-auth server still gets a stable header).
+    /// </summary>
+    public async Task<string> RegisterAsync(string displayName, string kind, CancellationToken ct)
+    {
+        var resp = await PostJsonAsync<ClientRegisterRequest, ClientRegisterResponse>(
+            "/api/clients/register", new ClientRegisterRequest(displayName, kind), ct);
+        if (!string.IsNullOrWhiteSpace(resp?.Id))
+            SetClientId(resp!.Id);
+        return resp?.Id ?? string.Empty;
+    }
+
+    /// <summary>The client id this runner presents as X-Client-Id (server-assigned after registration).</summary>
+    public string ClientId { get; private set; } = string.Empty;
+
+    private void SetClientId(string clientId)
+    {
+        ClientId = clientId;
+        _http.DefaultRequestHeaders.Remove("X-Client-Id");
+        if (!string.IsNullOrWhiteSpace(clientId))
+            _http.DefaultRequestHeaders.Add("X-Client-Id", clientId);
     }
 
     public async Task<RunLeaseResponse> AcquireLeaseAsync(RunLeaseAcquireRequest req, CancellationToken ct)

@@ -11,6 +11,19 @@ namespace AgentRunner;
 // case-insensitive binding), so plain PascalCase records serialise/deserialise
 // cleanly in both directions via System.Text.Json with camelCase policy.
 
+/// <summary>
+/// Runner -> Server: register the runner as a client identity
+/// (/api/clients/register). The server's X-Client-Id middleware rejects every
+/// mutation (lease, log, artifact, external-completion) from an unregistered id
+/// with 401 <c>client-unknown</c>, so the runner must register before it writes.
+/// Registration is idempotent on <see cref="DisplayName"/> and the open-path
+/// carve-out means it needs no prior identity itself.
+/// </summary>
+public sealed record ClientRegisterRequest(string DisplayName, string? Kind = null, string? Notes = null);
+
+/// <summary>Server projection of a registered client identity; only <see cref="Id"/> is used (as the X-Client-Id).</summary>
+public sealed record ClientRegisterResponse(string Id, string DisplayName, string Kind);
+
 /// <summary>Runner -> Server: acquire the fenced run lease for a task (/api/runner/lease/acquire).</summary>
 public sealed record RunLeaseAcquireRequest(
     string TaskKey,

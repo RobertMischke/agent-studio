@@ -21,4 +21,15 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <!--
+    The backend integration test (backend.Tests/RemoteRunnerEndToEndTests.cs)
+    drives this runner's real TaskServerClient against the in-process backend to
+    prove the RM-3/RM-4 wire contract end-to-end. It references the internal
+    HttpClient test-seam constructor via this grant. Nothing in the shipped
+    runner binary changes.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="OrchestratorApi.Tests" />
+  </ItemGroup>
+
 </Project>
