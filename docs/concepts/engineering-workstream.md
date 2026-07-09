@@ -46,6 +46,11 @@ Workstream                       <- oberstes Element des Wiki-Baums
 3. Every frame page is **prompt-known**: the collector/aggregator knows the
    page exists and has the *duty* to write into it — filling happens
    automatically through the pipeline, never as a manual setup step.
+   **Creation works the same way (operator decision 2026-07-10):** every
+   wiki-writing pipeline step runs an idempotent *ensure-frame* before
+   writing, so activating the steps for a project **is** the frame
+   onboarding — no manual bootstrap action, no "not onboarded" state
+   (AGT-2024). Public/open-source repos get English frame pages.
 4. **Anti-overgrowth is a first-class rule** (§5).
 5. Pages are **HTML, not Markdown** — the operator wants a strong, punchy
    ("knallig") layout for fast orientation: self-contained HTML in the wiki
