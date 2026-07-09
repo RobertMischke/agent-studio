@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using AgentStudio.Orchestrator;
 
 namespace AgentStudio.Runner;
 
@@ -51,12 +52,24 @@ public class OrchestratorChat
         _scanner = scanner;
     }
 
-    public bool Append(string watchPath, OrchestratorChatTurn turn)
+    public bool Append(string watchPath, OrchestratorChatTurn turn) => Append(watchPath, turn, context: null);
+
+    /// <summary>
+    /// Append one turn to the transcript for a specific navigation context
+    /// (MC-2, Concept §4). A <see cref="OrchestratorContextKey.TaskKind"/>
+    /// context is persisted to its own per-task file so a task page and the
+    /// board no longer share one history; <c>project</c> / <c>global</c> /
+    /// <c>null</c> resolve to the canonical per-project
+    /// <c>orchestrator-chat.jsonl</c>, so existing project chats are
+    /// unaffected. Only project-scoped turns mirror into the project chat
+    /// tree; task threads stay out of the project-level FTS index.
+    /// </summary>
+    public bool Append(string watchPath, OrchestratorChatTurn turn, OrchestratorContextKey? context)
     {
         if (string.IsNullOrWhiteSpace(watchPath)) return false;
         try
         {
-            var path = ResolvePath(watchPath);
+            var path = ResolveContextPath(watchPath, context);
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
             // Strip inline-base64 / mime before persisting: the jsonl log is
@@ -71,7 +84,11 @@ public class OrchestratorChat
             // Slice D mirror: also write the per-turn markdown file so the
             // new file-tree + FTS index stay current as turns are appended.
             // Best-effort; legacy JSONL remains the fallback if this fails.
-            MirrorToProjectChat(watchPath, persisted);
+            // Only the project-scoped thread mirrors — the project chat tree
+            // is per-project, so folding task-context turns into it would
+            // cross-contaminate the board's history.
+            if (!IsTaskContext(context))
+                MirrorToProjectChat(watchPath, persisted);
             return true;
         }
         catch (Exception ex)
@@ -139,11 +156,18 @@ public class OrchestratorChat
         }
     }
 
-    public List<OrchestratorChatTurn> Read(string watchPath)
+    public List<OrchestratorChatTurn> Read(string watchPath) => Read(watchPath, context: null);
+
+    /// <summary>
+    /// Read the transcript for a specific navigation context (MC-2). Returns
+    /// the per-task thread for a task context and the canonical per-project
+    /// thread otherwise. An absent file is an empty (not failed) transcript.
+    /// </summary>
+    public List<OrchestratorChatTurn> Read(string watchPath, OrchestratorContextKey? context)
     {
         var result = new List<OrchestratorChatTurn>();
         if (string.IsNullOrWhiteSpace(watchPath)) return result;
-        var path = ResolvePath(watchPath);
+        var path = ResolveContextPath(watchPath, context);
         if (!File.Exists(path)) return result;
         foreach (var line in File.ReadLines(path, Encoding.UTF8))
         {
@@ -164,6 +188,24 @@ public class OrchestratorChat
 
     private static string ResolvePath(string watchPath) =>
         Path.Combine(watchPath, ".orchestrator", "orchestrator-chat.jsonl");
+
+    private static bool IsTaskContext(OrchestratorContextKey? context) =>
+        context != null && context.Kind == OrchestratorContextKey.TaskKind;
+
+    /// <summary>
+    /// Resolve the on-disk transcript file for a navigation context. Task
+    /// contexts get a dedicated file under <c>.orchestrator/context-chats/</c>
+    /// keyed by the reversible <see cref="OrchestratorContextKey.Encode"/>
+    /// folder-safe form; every other context (including <c>null</c>) resolves
+    /// to the legacy per-project <c>orchestrator-chat.jsonl</c> so the board
+    /// thread and older callers are byte-for-byte unchanged.
+    /// </summary>
+    internal static string ResolveContextPath(string watchPath, OrchestratorContextKey? context)
+    {
+        if (!IsTaskContext(context))
+            return ResolvePath(watchPath);
+        return Path.Combine(watchPath, ".orchestrator", "context-chats", context!.Encode() + ".jsonl");
+    }
 
     /// <summary>
     /// Persist a chat-composer image under
@@ -414,18 +456,41 @@ public class OrchestratorChatService
 
     public List<OrchestratorChatTurn> Read(string watchPath) => _chat.Read(watchPath);
 
+    /// <summary>Read the transcript for a specific navigation context (MC-2).</summary>
+    public List<OrchestratorChatTurn> Read(string watchPath, OrchestratorContextKey? context)
+        => _chat.Read(watchPath, context);
+
     public Task<OrchestratorChatTurn> SendAsync(
         string projectName,
         string watchPath,
         SendOrchestratorChatRequest req,
         CancellationToken ct)
-        => SendAsync(projectName, watchPath, req, clientId: null, ct);
+        => SendAsync(projectName, watchPath, req, clientId: null, context: null, ct);
 
+    public Task<OrchestratorChatTurn> SendAsync(
+        string projectName,
+        string watchPath,
+        SendOrchestratorChatRequest req,
+        string? clientId,
+        CancellationToken ct)
+        => SendAsync(projectName, watchPath, req, clientId, context: null, ct);
+
+    /// <summary>
+    /// Send a user message and persist both turns to the transcript for the
+    /// given navigation context (MC-2, Concept §4). <paramref name="context"/>
+    /// only selects which on-disk thread the turns land in and are read back
+    /// from; the resumed Claude session, prompt, and usage accounting stay
+    /// project-level (one shared session across contexts, as before). A task
+    /// context therefore keeps its own visible history while still speaking
+    /// to the same orchestrator. Passing <c>null</c> is identical to the
+    /// pre-MC-2 per-project behaviour.
+    /// </summary>
     public async Task<OrchestratorChatTurn> SendAsync(
         string projectName,
         string watchPath,
         SendOrchestratorChatRequest req,
         string? clientId,
+        OrchestratorContextKey? context,
         CancellationToken ct)
     {
         // Append the user turn outside the gate so the audit log records
@@ -436,7 +501,7 @@ public class OrchestratorChatService
             Text = req.Text,
             Attachments = req.Attachments
         };
-        _chat.Append(watchPath, userTurn);
+        _chat.Append(watchPath, userTurn, context);
 
         // Serialize on the singleton-session gate. Two concurrent resumes
         // race on the session id, the on-disk usage record, and Claude's
@@ -463,7 +528,7 @@ public class OrchestratorChatService
                     Text = "",
                     ErrorMessage = "Global orchestrator session has not booted yet. Try again in a moment, or check the backend logs."
                 };
-                _chat.Append(watchPath, failure);
+                _chat.Append(watchPath, failure, context);
                 return failure;
             }
 
@@ -519,7 +584,7 @@ public class OrchestratorChatService
                     ErrorMessage = translation.FriendlyMessage,
                     ErrorDetail = translation.RawDetail
                 };
-                _chat.Append(watchPath, failure);
+                _chat.Append(watchPath, failure, context);
                 return failure;
             }
 
@@ -538,7 +603,7 @@ public class OrchestratorChatService
                     ErrorMessage = translation.FriendlyMessage,
                     ErrorDetail = translation.RawDetail
                 };
-                _chat.Append(watchPath, failure);
+                _chat.Append(watchPath, failure, context);
                 // Session-bookkeeping policy on failure:
                 //   - resumeRejected: the runner already rebootstrapped via
                 //     onSessionRejected, so we must not touch the session
@@ -565,7 +630,7 @@ public class OrchestratorChatService
                 Model = result.Model,
                 TokenUsage = result.TokenUsage
             };
-            _chat.Append(watchPath, reply);
+            _chat.Append(watchPath, reply, context);
 
             if (resumeRejected && !string.IsNullOrWhiteSpace(result.CapturedSessionId))
             {

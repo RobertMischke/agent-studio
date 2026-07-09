@@ -131,6 +131,32 @@ const STATE_TO_LANE: Record<string, LaneKey> = {
   [TaskState.Archive]: 'archive',
 };
 
+/**
+ * Turn an orchestrator context key (`project:<PROJ>` or `task:<PROJ>/<KEY>`,
+ * mirroring the backend `OrchestratorContextKey`) into the URL path segment(s)
+ * for the `/api/runner/{contextKey}/orchestrator-chat` route. Each id part is
+ * URL-encoded on its own so a project name with spaces stays valid while the
+ * literal `task:`/`project:` prefix and the `<proj>/<key>` slash — which the
+ * backend routes match structurally — are preserved. Unrecognized shapes fall
+ * back to encoding the whole key as one segment.
+ */
+export function orchestratorContextChatSegment(contextKey: string): string {
+  const taskPrefix = 'task:';
+  const projectPrefix = 'project:';
+  if (contextKey.startsWith(taskPrefix)) {
+    const rest = contextKey.slice(taskPrefix.length);
+    const slash = rest.indexOf('/');
+    if (slash >= 0) {
+      const proj = rest.slice(0, slash);
+      const key = rest.slice(slash + 1);
+      return `task:${encodeURIComponent(proj)}/${encodeURIComponent(key)}`;
+    }
+  } else if (contextKey.startsWith(projectPrefix)) {
+    return `project:${encodeURIComponent(contextKey.slice(projectPrefix.length))}`;
+  }
+  return encodeURIComponent(contextKey);
+}
+
 @Injectable({ providedIn: 'root' })
 export class TaskService {
   private http = inject(HttpClient);
@@ -1835,6 +1861,21 @@ export class TaskService {
   getOrchestratorChat(projectName: string) {
     return this.http.get<OrchestratorChatResponse>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat`,
+    );
+  }
+
+  /**
+   * MC-2 (Concept §4): read the transcript for a specific navigation context.
+   * The side sheet derives a `project:<PROJ>` or `task:<PROJ>/<KEY>` context
+   * key from where the operator is (board vs. task page); this hits
+   * `GET /api/runner/{contextKey}/orchestrator-chat` so a pinned task and the
+   * board no longer share one history. A `project:` context resolves to the
+   * same canonical per-project thread {@link getOrchestratorChat} returns, so
+   * the board's chat is unchanged.
+   */
+  getOrchestratorChatByContext(contextKey: string) {
+    return this.http.get<OrchestratorChatResponse>(
+      `${this.baseUrl}/runner/${orchestratorContextChatSegment(contextKey)}/orchestrator-chat`,
     );
   }
 

@@ -83,6 +83,36 @@ The legacy singleton global orchestrator session is migrated into the `global`
 context key on first registry access so existing installs keep their board-level
 session identity.
 
+## Per-Context Chat Transcript
+
+The side sheet's chat follows the operator's navigation (MC-2, Concept §4): the
+board is a `project:<PROJ>` context, an open task page is a `task:<PROJ>/<KEY>`
+context, and a pin freezes whichever is current. Each context has its own
+transcript so a pinned task and the board no longer share one history.
+
+- `GET /api/runner/{contextKey}/orchestrator-chat` returns the transcript for a
+  navigation context. `{contextKey}` is the same canonical key as the session
+  registry — `project:<PROJ>` (one path segment) or `task:<PROJ>/<KEY>` (two).
+  The response is `{ contextKey, project, turns }`.
+- `POST /api/runner/{contextKey}/orchestrator-chat` sends a user message and
+  persists both turns to that context's transcript, returning
+  `{ contextKey, project, reply }`.
+
+Storage is context-keyed on top of the existing per-project chat store: a
+`task` context is written to `<watchPath>/.orchestrator/context-chats/<encoded>.jsonl`
+(the reversible `OrchestratorContextKey` encoding), while `project` / `global`
+contexts resolve to the canonical `<watchPath>/.orchestrator/orchestrator-chat.jsonl`.
+A `project:<PROJ>` request therefore serves the exact same thread as the legacy
+`GET /api/runner/{projectName}/orchestrator-chat` route, so the board's chat is
+unchanged. The literal-prefixed routes are strictly more specific than the
+`{projectName}` route, so routing prefers them without ambiguity — the same
+pattern the session-turn endpoints use.
+
+The shared Claude session, prompt building, and usage accounting stay
+project-level; the context key only selects which on-disk thread turns land in
+and are read back from, so every context still speaks to the one orchestrator
+that owns the scope.
+
 ## Memory Model
 
 The orchestrator's memory should be layered, inspectable, and rebuildable:
