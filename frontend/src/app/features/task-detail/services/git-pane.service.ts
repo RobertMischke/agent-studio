@@ -254,7 +254,14 @@ export class GitPaneService implements OnDestroy {
     const info = this.currentJob;
     if (!info) return;
     this.jobService.listCodeReviews(info.id, info.watchPath).subscribe({
-      next: (resp) => this.codeReviews.set(resp.entries ?? []),
+      // Guard the shape explicitly: the listing contract is `{ entries: [...] }`,
+      // but a malformed/unexpected body (e.g. a bare array) would make
+      // `resp.entries` resolve to `Array.prototype.entries` - a truthy function
+      // that slips past `?? []` and then throws `.find is not a function` inside
+      // the `commitReview` computed, aborting the git-pane's change-detection
+      // pass and leaving the commit header half-rendered. Only trust an actual
+      // array here so the rating badge stays a strictly best-effort overlay.
+      next: (resp) => this.codeReviews.set(Array.isArray(resp?.entries) ? resp.entries : []),
       error: () => this.codeReviews.set([]),
     });
   }

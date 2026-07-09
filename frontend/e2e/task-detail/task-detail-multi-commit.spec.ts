@@ -187,6 +187,12 @@ async function installRoutes(page: Page) {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ isRepo: true, branch: 'main', filesChanged: 0, totalAdded: 0, totalRemoved: 0, files: [], error: null }) }));
   await page.route(new RegExp(`/api/tasks/${idEsc}/provenance(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PROVENANCE) }));
+  // Code-review listing: the real endpoint returns `{ entries: [...] }`. Pin the
+  // real shape here rather than leaning on the `**/api/**` catch-all's bare `[]`,
+  // whose `.entries` is `Array.prototype.entries` (a function) and would slip
+  // past the service's guard and crash the commit-row rating badge's computed.
+  await page.route(new RegExp(`/api/tasks/${idEsc}/code-review/list(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ entries: [] }) }));
   await page.route(new RegExp(`/api/tasks/${idEsc}/commit(\\?|$)`), (route) =>
     route.fulfill({
       status: 200, contentType: 'application/json',
