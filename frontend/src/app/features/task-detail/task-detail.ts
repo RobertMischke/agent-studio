@@ -1294,7 +1294,7 @@ export class TaskDetailComponent implements OnDestroy {
       .subscribe({
         next: () => {
           if (fileName === 'prompt.md') this.editingPrompt.set(false);
-          this.artifactsService.reload(this.detail()?.info ?? null);
+          this.artifactsService.refresh();
           this.fileSaved.emit();
         },
         error: (err) => this.showError(err),

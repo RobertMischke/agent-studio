@@ -24,7 +24,14 @@
 .pane-tabs--header {
   display: flex;
   flex: 1;
-  height: 100%;
+  // Stretch to the header's full height instead of `height: 100%`. Against
+  // an auto-height header (`min-height: 32px`, no definite height) a
+  // percentage height collapses the strip to its ~19px content box and
+  // pins it to the top — which floated the whole tab row ~6px above the
+  // header's mid-axis (the "icons sit too high" report). `align-self:
+  // stretch` fills the header so the tabs' `height: 100%` centres their
+  // content on the same axis as the trailing expand/close buttons.
+  align-self: stretch;
 }
 
 .pane-tabs--pill {
@@ -77,6 +84,12 @@
 .pane-tabs--header .pane-tab {
   padding: 0 12px;
   height: 100%;
+  // Symmetric transparent top border balances the 2 px active underline
+  // below. With `box-sizing: border-box` a bottom-only border shifts the
+  // centered icon/label/badge ~1 px upward off the header's mid-axis;
+  // matching it on top keeps the row optically centred (active + inactive
+  // tabs stay pixel-identical since only the colour changes on activate).
+  border-top: 2px solid transparent;
   border-bottom: 2px solid transparent;
 
   &:hover:not(:disabled) {
@@ -116,6 +129,12 @@
 
 .pane-tab__icon {
   flex: 0 0 auto;
+  // Render the inline SVG as a flex box so its baseline descender gap
+  // doesn't push the glyph ~1px above the row's centre axis (the "icons
+  // sit a bit too high" report). Everything in the strip then shares one
+  // vertical mid-line.
+  display: flex;
+  align-items: center;
 }
 
 .pane-tab__emoji {

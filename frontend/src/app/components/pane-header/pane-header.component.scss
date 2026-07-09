@@ -73,6 +73,14 @@
   @include m.icon-button(24px);
   align-self: center;
 
+  // Blockify the inline expand/close SVG so its baseline descender gap
+  // doesn't lift the glyph off the header's mid-axis — this keeps the two
+  // trailing buttons flush with the tab-strip icons on one centre line.
+  app-studio-icon {
+    display: flex;
+    align-items: center;
+  }
+
   &--active {
     background: var(--studio-bg-selected, var(--studio-bg-elevated));
     color: var(--studio-fg-strong);

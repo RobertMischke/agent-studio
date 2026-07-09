@@ -25,21 +25,27 @@
     color: var(--studio-on-accent);
   }
 
+  // Tab-strip variant: a dezent number chip that sits on the tab's
+  // icon/label baseline. Deliberately borderless and pill-shaped (vs the
+  // earlier chunky bordered block) so it reads as a quiet count, not a
+  // loud badge. The fill is a low-alpha wash of `--studio-fg-dim`, which
+  // flips for free in both themes (dim resolves dark on light surfaces,
+  // light on dark ones).
   &--pane-tab {
-    min-width: 20px;
-    height: 18px;
-    padding: 0 var(--studio-spacing-2);
-    border: 1px solid color-mix(in srgb, var(--studio-fg-dim) 18%, transparent);
-    border-radius: 9px;
-    background: color-mix(in srgb, var(--studio-bg-elevated) 76%, var(--studio-fg-dim) 24%);
-    color: var(--studio-fg);
-    font-size: 11px;
+    min-width: 16px;
+    height: 15px;
+    padding: 0 var(--studio-spacing-1);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--studio-fg-dim) 16%, transparent);
+    color: var(--studio-fg-dim);
+    font-size: 10px;
     font-weight: 600;
   }
 
+  // Active tab: a soft accent wash instead of a solid accent block, so the
+  // selected tab's count reads warmer without turning into a red brick.
   &--pane-tab.count-badge--active {
-    border-color: color-mix(in srgb, var(--studio-accent) 36%, transparent);
-    background: color-mix(in srgb, var(--studio-accent) 16%, var(--studio-bg-elevated) 84%);
+    background: color-mix(in srgb, var(--studio-accent) 20%, transparent);
     color: var(--studio-fg-strong);
   }
 }
