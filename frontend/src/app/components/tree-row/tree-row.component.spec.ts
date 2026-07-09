@@ -44,6 +44,37 @@ describe('TreeRowComponent (smoke)', () => {
     }
   });
 
+  it('marks the active row with the unified modifier + aria-current', () => {
+    // Guards the shared active side-menu contract (AGT-2010): the `active`
+    // input drives the `.tree-row--active` class (which the SCSS paints as the
+    // accent band + side bar) and the caller-supplied `aria-current` lands on
+    // the row button so assistive tech announces the current destination.
+    TestBed.configureTestingModule({
+      imports: [TreeRowComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const fixture = TestBed.createComponent(TreeRowComponent);
+    fixture.componentRef.setInput('label', 'Overview');
+    fixture.componentRef.setInput('active', true);
+    fixture.componentRef.setInput('ariaCurrent', 'page');
+    fixture.detectChanges();
+
+    const btn = (fixture.nativeElement as HTMLElement).querySelector('button.tree-row')!;
+    expect(btn.classList.contains('tree-row--active')).toBe(true);
+    expect(btn.getAttribute('aria-current')).toBe('page');
+
+    fixture.componentRef.setInput('active', false);
+    fixture.componentRef.setInput('ariaCurrent', null);
+    fixture.detectChanges();
+    expect(btn.classList.contains('tree-row--active')).toBe(false);
+    expect(btn.getAttribute('aria-current')).toBeNull();
+  });
+
   it('can reserve chevron and glyph columns for iconless rows', () => {
     TestBed.configureTestingModule({
       imports: [TreeRowComponent],

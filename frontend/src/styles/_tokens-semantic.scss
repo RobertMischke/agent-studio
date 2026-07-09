@@ -169,6 +169,26 @@
   --studio-on-accent: var(--color-grey-950);
 
   // ---------------------------------------------------------------------------
+  // Navigation: the ONE active side-menu-item treatment (AGT-2010)
+  // ---------------------------------------------------------------------------
+  // Operator directive 2026-07-09: the active entry in every side menu must be
+  // a clearly *coloured* band that reads at a glance, with one shared visual
+  // concept across all of them. Before this, each rail rolled its own active
+  // look: a near-grey 14% tint on the shared tree-row, a plain grey
+  // bg-selected on the settings rails, and hard-coded off-brand blue / indigo
+  // on the CLI-session and focused-view task lists. These four tokens are the
+  // single source of truth: an accent-tinted fill, a bright accent side bar,
+  // strong foreground text, and a distinct hover-on-active. Every side menu
+  // (Explorer tree, Project Hub rail, Prompt catalogue, Workspace / Orchestrator
+  // settings rails, Wiki + Agent-Docs trees, Open-tabs list, activity bar)
+  // consumes them so the concept stays identical and future-proof. The bar is
+  // painted by consumers via `inset <n>px 0 0 0 var(--studio-nav-active-bar)`.
+  --studio-nav-active-bg:       color-mix(in srgb, var(--studio-accent) 30%, var(--studio-bg-selected));
+  --studio-nav-active-bg-hover: color-mix(in srgb, var(--studio-accent) 38%, var(--studio-bg-selected));
+  --studio-nav-active-fg:       var(--studio-fg-strong);
+  --studio-nav-active-bar:      var(--studio-accent);
+
+  // ---------------------------------------------------------------------------
   // Severity — pass / warn / high / info / pending verdict colours
   // ---------------------------------------------------------------------------
   --severity-pass:    var(--color-green-400);
@@ -565,6 +585,14 @@
   --studio-error:                 var(--studio-accent-6-strong);
   --studio-mono:                  var(--studio-fg-strong);
   --studio-hash:                  var(--studio-accent-success-strong);
+
+  // Navigation active-item fill on the white shell. Mixed over the opaque
+  // elevated grey (not the translucent orange bg-selected) so the band stays a
+  // predictable, clearly-warm orange tint that reads against the near-white
+  // sidebar; fg + bar inherit the :root definitions (fg-strong flips to near
+  // black, the bar stays brand orange).
+  --studio-nav-active-bg:       color-mix(in srgb, var(--studio-accent) 26%, var(--studio-bg-elevated));
+  --studio-nav-active-bg-hover: color-mix(in srgb, var(--studio-accent) 34%, var(--studio-bg-elevated));
 
   // Teal status pigment — darker teal so teal-on-tint stays legible on white.
   --studio-accent-teal:           var(--color-teal-700);

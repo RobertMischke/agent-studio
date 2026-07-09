@@ -37,14 +37,26 @@
     background: var(--studio-bg-hover);
   }
 
+  // Visible keyboard focus. The shell resets native button chrome
+  // (`.studio button` clears outline via the reset), so the unified nav needs
+  // its own focus ring. Inset so it is not clipped by the rail's overflow.
+  &:focus-visible {
+    outline: 2px solid var(--studio-accent);
+    outline-offset: -2px;
+  }
+
+  // Unified active side-menu item (AGT-2010): a clearly accent-tinted band
+  // with a bright accent side bar, driven by the shared --studio-nav-active-*
+  // tokens so every rail using <app-tree-row> reads identically in both themes.
   &--active {
-    background: color-mix(in srgb, var(--studio-accent) 14%, var(--studio-bg-selected));
-    color: var(--studio-fg-strong);
+    background: var(--studio-nav-active-bg);
+    color: var(--studio-nav-active-fg);
     font-weight: 600;
+    box-shadow: inset 3px 0 0 0 var(--studio-nav-active-bar);
   }
 
   &--active:hover {
-    background: color-mix(in srgb, var(--studio-accent) 18%, var(--studio-bg-selected));
+    background: var(--studio-nav-active-bg-hover);
   }
 
   &--active .tree-row__chev,

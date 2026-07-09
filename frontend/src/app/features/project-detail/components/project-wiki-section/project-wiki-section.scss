@@ -372,8 +372,8 @@
 }
 
 .pwiki__row--active {
-  background: color-mix(in srgb, var(--studio-accent) 10%, transparent);
-  border-color: color-mix(in srgb, var(--studio-accent) 22%, transparent);
+  background: var(--studio-nav-active-bg); // AGT-2010 shared active fill
+  border-color: color-mix(in srgb, var(--studio-accent) 45%, transparent);
 }
 
 .pwiki__row--active .pwiki__label--doc {

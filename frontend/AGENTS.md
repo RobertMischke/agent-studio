@@ -58,6 +58,27 @@ Stylelint enforces this scoped per file via `scale-unlimited/declaration-strict-
 
 If a value legitimately doesn't fit the scale (true one-off like a 1 px hairline, an animation frame, a sub-pixel border), inline a `/* stylelint-disable-next-line scale-unlimited/declaration-strict-value */` with a short rationale on the same line.
 
+## Navigation active-item: one shared token contract (AGT-2010)
+
+Every side menu marks its current entry the same way: a clearly accent-tinted
+band plus a bright accent side bar, so the active destination reads at a glance
+in both themes. The look is defined once as the `--studio-nav-active-*` tokens in
+[`src/styles/_tokens-semantic.scss`](src/styles/_tokens-semantic.scss)
+(`-bg`, `-bg-hover`, `-fg`, `-bar`); never hand-roll a per-rail active colour and
+never hard-code a hex/rgba for it (two rails used to hard-code off-brand blue and
+indigo that ignored the theme).
+
+The canonical nav item is `<app-tree-row>` (Explorer workspace tree, Project Hub
+rail, Prompt catalogue) with `<app-section-header>` group heads and
+`<app-count-badge>` counts; `<app-list-row>` is the flat variant (Open tabs).
+Reach for those first. When a surface genuinely needs its own row element (the
+Workspace / Orchestrator settings rails, the Wiki and Agent-Docs trees, the CLI
+session list, the focused-view task rail), style its `--active`/`--selected`
+state from the same tokens: `background: var(--studio-nav-active-bg)`, a
+`box-shadow: inset 3px 0 0 0 var(--studio-nav-active-bar)` side bar (flush rails)
+or a strengthened accent border (card rows), and a `:focus-visible` accent
+outline plus `aria-current="page"`. Do not add a new bespoke active look.
+
 ## Side-sheet layout contract (`<app-orchestrator-side-sheet>`, `<app-kanban-filter-sidesheet>`)
 
 Both right-edge side sheets are **panels that push the workspace, not overlays that float over it**. The push behaviour rides on three coordinated pieces; break any one and the panel either floats, overlays, leaves a transparent gap, or stacks on the wrong side. Locked by the `open pushes studio-shell + inner panel fills host` test in `e2e/orchestrator-side-sheet-position.spec.ts`.

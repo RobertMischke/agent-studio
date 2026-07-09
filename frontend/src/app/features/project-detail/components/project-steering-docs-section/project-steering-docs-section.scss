@@ -17,8 +17,8 @@
   --psd-border: color-mix(in srgb, var(--studio-border) 78%, transparent);
   --psd-surface: color-mix(in srgb, var(--studio-bg-editor) 60%, transparent);
   --psd-surface-hover: var(--studio-bg-hover);
-  --psd-active-bg: color-mix(in srgb, var(--studio-accent) 10%, transparent);
-  --psd-active-border: color-mix(in srgb, var(--studio-accent) 24%, var(--studio-border));
+  --psd-active-bg: var(--studio-nav-active-bg); // AGT-2010 shared active fill
+  --psd-active-border: color-mix(in srgb, var(--studio-accent) 45%, var(--studio-border));
   --psd-warn-bg: color-mix(in srgb, var(--severity-warn) 12%, transparent);
   --psd-warn-border: color-mix(in srgb, var(--severity-warn) 42%, var(--studio-border));
   --psd-error-bg: color-mix(in srgb, var(--severity-high) 12%, transparent);
