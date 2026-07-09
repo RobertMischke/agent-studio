@@ -786,7 +786,11 @@ export class StudioShellComponent {
   }
 
   openHub(projectName: string): void {
-    this.tabState.open({ kind: 'hub', projectName });
+    // Clicking "Project" is an explicit request for the Overview rail, even
+    // when the Hub tab is already open on another section (e.g. Wiki). We
+    // pass section=overview rather than leaving it undefined so the intent is
+    // unambiguous and re-opening moves the rail back to Overview.
+    this.tabState.open({ kind: 'hub', projectName, section: 'overview' });
   }
 
   /**

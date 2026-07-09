@@ -65,11 +65,25 @@ export class StudioTabStateService {
     return ALL_BOARD_KEY;
   }
 
-  /** Open the tab if it's not already there, then focus it. */
+  /**
+   * Open the tab if it's not already there, then focus it. When a tab with
+   * the same key is already open, adopt the fresh payload in place rather
+   * than keeping the stale one — the tab key intentionally omits some fields
+   * (a Hub tab keys on project only, not its {@link HubTab.section}), so an
+   * `open()` that carries a new section must be able to move the open tab to
+   * it. Without this, re-opening the Hub on a different section (Project vs.
+   * Wiki) would silently drop the section and "do nothing".
+   */
   open(tab: StudioTab): void {
     const normalized = this.normalizeTab(tab);
     const key = studioTabKey(normalized);
-    this._tabs.update(list => list.some(t => studioTabKey(t) === key) ? list : [...list, normalized]);
+    this._tabs.update(list => {
+      const idx = list.findIndex(t => studioTabKey(t) === key);
+      if (idx < 0) return [...list, normalized];
+      const next = list.slice();
+      next[idx] = normalized;
+      return next;
+    });
     this._activeKey.set(key);
     this.persist();
   }

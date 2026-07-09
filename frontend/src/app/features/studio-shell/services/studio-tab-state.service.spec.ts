@@ -90,6 +90,34 @@ describe('StudioTabStateService', () => {
     expect(svc.activeKey()).toBe('task:demo|x');
   });
 
+  describe('re-opening a Hub tab adopts the fresh section (no duplicate)', () => {
+    it('moves an open Overview Hub to Wiki when openWiki reuses the key', () => {
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'wiki' });
+
+      expect(svc.tabs().filter(t => studioTabKey(t) === 'hub:Project A')).toHaveLength(1);
+      expect(svc.activeKey()).toBe('hub:Project A');
+      expect(svc.activeTab()).toEqual({ kind: 'hub', projectName: 'Project A', section: 'wiki' });
+    });
+
+    it('moves an open Wiki Hub back to Overview when re-opened without a section', () => {
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'wiki' });
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
+
+      expect(svc.tabs().filter(t => studioTabKey(t) === 'hub:Project A')).toHaveLength(1);
+      expect(svc.activeTab()).toEqual({ kind: 'hub', projectName: 'Project A', section: 'overview' });
+    });
+
+    it('keeps the tab in its original slot when adopting a new section', () => {
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'wiki' });
+      svc.open({ kind: 'task', taskKey: 'later' });
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
+
+      expect(svc.tabs().map(t => studioTabKey(t)))
+        .toEqual([ALL_BOARD_KEY, 'hub:Project A', 'task:later']);
+    });
+  });
+
   it('closing the active tab falls back to the previous one', () => {
     svc.open({ kind: 'task', taskKey: 'a' });
     svc.open({ kind: 'task', taskKey: 'b' });
