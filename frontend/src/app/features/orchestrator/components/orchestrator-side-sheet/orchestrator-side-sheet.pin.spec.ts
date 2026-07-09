@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { OrchestratorSideSheetComponent } from './orchestrator-side-sheet.component';
@@ -129,5 +129,46 @@ describe('OrchestratorSideSheetComponent · navigation context + pin', () => {
 
     expect(c.contextChipText()).toBe(`Context: demo-project · Task 'Fix the header'`);
     expect(c.subtitleText()).toBe('demo-project · canonical session');
+  });
+
+  // MC-2: the chat body must actually READ the per-context thread, not just
+  // derive the key. A task page reads the `task:<PROJ>/<KEY>` route; the board
+  // reads the `project:<PROJ>` route. This is the wiring the B-grade review
+  // flagged as missing ("chat still reads the project thread").
+  it('refresh reads the task-context transcript route on a task page', async () => {
+    const fixture = await makeFixture();
+    const c = fixture.componentInstance;
+    const http = TestBed.inject(HttpTestingController);
+
+    c.activeProject.set('demo-project');
+    fixture.componentRef.setInput('activeJobId', 'job-1');
+    fixture.componentRef.setInput('activeJobTitle', 'Fix the header');
+    fixture.componentRef.setInput('activeJobKey', 'AGT-1916');
+    expect(c.contextKey()).toBe('task:demo-project/AGT-1916');
+
+    c.refresh(true);
+    const req = http.expectOne('/api/runner/task:demo-project/AGT-1916/orchestrator-chat');
+    expect(req.request.method).toBe('GET');
+    req.flush({
+      project: 'demo-project',
+      turns: [{ id: 't1', ts: '2026-07-09T00:00:00Z', role: 'user', text: 'task thread' }],
+    });
+    expect(c.turns().map((t) => t.text)).toEqual(['task thread']);
+    http.verify();
+  });
+
+  it('refresh reads the project-context transcript route on the board', async () => {
+    const fixture = await makeFixture();
+    const c = fixture.componentInstance;
+    const http = TestBed.inject(HttpTestingController);
+
+    c.activeProject.set('demo-project');
+    expect(c.contextKey()).toBe('project:demo-project');
+
+    c.refresh(true);
+    const req = http.expectOne('/api/runner/project:demo-project/orchestrator-chat');
+    expect(req.request.method).toBe('GET');
+    req.flush({ project: 'demo-project', turns: [] });
+    http.verify();
   });
 });

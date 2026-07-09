@@ -113,6 +113,14 @@ project-level; the context key only selects which on-disk thread turns land in
 and are read back from, so every context still speaks to the one orchestrator
 that owns the scope.
 
+The side sheet consumes these routes directly: it derives the context key from
+navigation (`contextKey` on `OrchestratorSideSheetComponent`, frozen while
+pinned) and reads/sends through `getOrchestratorChatByContext` /
+`sendOrchestratorChatByContext`. The reload effect tracks the context key, so
+moving between the board and a task in the same project swaps the visible
+transcript even though the project is unchanged. When no context key is
+derivable it falls back to the per-project route, keeping the board identical.
+
 ## Memory Model
 
 The orchestrator's memory should be layered, inspectable, and rebuildable:

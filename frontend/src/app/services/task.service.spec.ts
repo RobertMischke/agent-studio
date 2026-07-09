@@ -242,6 +242,25 @@ describe('TaskService', () => {
     expect(req.request.method).toBe('GET');
     req.flush({ project: 'Agent Studio', turns: [] });
   });
+
+  it('sends a task-context message to the context route so it lands in its own thread', () => {
+    let reply = '';
+    service
+      .sendOrchestratorChatByContext('task:Agent Studio/AGT-1916', { text: 'where do you stand?' })
+      .subscribe((r) => {
+        reply = r.reply.text ?? '';
+      });
+
+    const req = http.expectOne('/api/runner/task:Agent%20Studio/AGT-1916/orchestrator-chat');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ text: 'where do you stand?' });
+    req.flush({
+      project: 'Agent Studio',
+      reply: { id: '2', ts: '2026-07-09T00:00:01Z', role: 'orchestrator', text: 'on the header' },
+    });
+
+    expect(reply).toBe('on the header');
+  });
 });
 
 describe('orchestratorContextChatSegment', () => {

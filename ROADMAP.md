@@ -711,7 +711,7 @@ Planned capabilities:
 
 The redesign handoff is [docs/product/orchestrator-chat-redesign-handoff.md](./docs/product/orchestrator-chat-redesign-handoff.md). The load-bearing UI boundary is archived in [ADR-0036](./docs/architecture/decisions/adr-archive.md#adr-0036---session-mechanics-render-as-timeline-events-not-primary-chat-objects-2026-05-17): session mechanics are audit events, not the primary chat object.
 
-Delivered so far (Multichat, Concept §4): the side sheet follows the operator's navigation and can pin a context (MC-2), and per-context transcript history is served by `GET/POST /api/runner/{contextKey}/orchestrator-chat` — a `task:<PROJ>/<KEY>` context keeps its own thread while `project:<PROJ>` resolves to the canonical board thread. See [docs/product/orchestrator-chat.md](./docs/product/orchestrator-chat.md#per-context-chat-transcript). Remaining: switch the side sheet's live read/send from the per-project route to the context-keyed route so a pinned task shows its own transcript in the app.
+Delivered (Multichat, Concept §4): the side sheet follows the operator's navigation and can pin a context (MC-2), per-context transcript history is served by `GET/POST /api/runner/{contextKey}/orchestrator-chat` — a `task:<PROJ>/<KEY>` context keeps its own thread while `project:<PROJ>` resolves to the canonical board thread — and the side sheet reads and sends through the context-keyed route, so a pinned task now shows its own transcript in the app while the board is byte-for-byte unchanged. See [docs/product/orchestrator-chat.md](./docs/product/orchestrator-chat.md#per-context-chat-transcript).
 
 ### Focused UX
 

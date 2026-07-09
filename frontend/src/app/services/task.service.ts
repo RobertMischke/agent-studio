@@ -1939,6 +1939,33 @@ export class TaskService {
   }
 
   /**
+   * MC-2 (Concept §4): send a user message scoped to a navigation context.
+   * Hits `POST /api/runner/{contextKey}/orchestrator-chat` so a task context's
+   * turns land in — and are read back from — its own thread, while a `project:`
+   * context resolves to the same canonical per-project thread
+   * {@link sendOrchestratorChat} writes to. The resumed orchestrator session,
+   * prompt, and usage accounting stay project-level regardless of context.
+   */
+  sendOrchestratorChatByContext(
+    contextKey: string,
+    body: {
+      text: string;
+      attachments?: {
+        alt: string;
+        relativePath: string;
+        inlineBase64?: string | null;
+        mimeType?: string | null;
+      }[];
+      navigationContext?: import('../features/orchestrator').ChatNavigationContext | null;
+    },
+  ) {
+    return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(
+      `${this.baseUrl}/runner/${orchestratorContextChatSegment(contextKey)}/orchestrator-chat`,
+      body,
+    );
+  }
+
+  /**
    * Upload one image to the project's chat-attachments folder so the
    * subsequent `sendOrchestratorChat` call can reference it by its
    * relative path. Multipart/form-data with `file` field.
