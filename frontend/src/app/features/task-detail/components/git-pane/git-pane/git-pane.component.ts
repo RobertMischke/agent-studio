@@ -4,7 +4,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { GitPaneService } from '../../../services/git-pane.service';
 import { LayoutPanesService } from '../../../services/layout-panes.service';
 import { GitFileTreeComponent } from '../git-file-tree/git-file-tree.component';
-import type { TaskCommitInfo } from '../../../../git';
+import type { TaskCommitInfo, TaskLandedLadder } from '../../../../git';
 import type { CodeReviewListEntry } from '../../../../../services/task.service';
 import {
   codeReviewVerdictGlyph,
@@ -308,6 +308,27 @@ export class GitPaneComponent {
   short(sha: string | null | undefined): string {
     if (!sha) return '—';
     return sha.length > 7 ? sha.slice(0, 7) : sha;
+  }
+
+  /**
+   * Reached/pending tooltip for the develop-integration ladder rung. Kept as
+   * a component method (rather than an inline template ternary) so the rung's
+   * conditional stays within the angular-eslint template conditional-complexity
+   * budget; the string is identical to the former inline expression.
+   */
+  integrationRungTooltip(ladder: TaskLandedLadder): string {
+    const head = this.short(ladder.integrationHead);
+    return ladder.mergedToIntegration
+      ? `Merged into ${ladder.integrationBranch} (HEAD now ${head})`
+      : `Not yet merged into ${ladder.integrationBranch} (HEAD now ${head})`;
+  }
+
+  /** Reached/pending tooltip for the release ladder rung. See {@link integrationRungTooltip}. */
+  releaseRungTooltip(ladder: TaskLandedLadder): string {
+    const head = this.short(ladder.releaseHead);
+    return ladder.releasedToRelease
+      ? `Released into ${ladder.releaseBranch} (HEAD now ${head})`
+      : `Not yet released into ${ladder.releaseBranch} (HEAD now ${head})`;
   }
 
   // --- Commit-row code-review rating badge (AGT-1995) --------------------

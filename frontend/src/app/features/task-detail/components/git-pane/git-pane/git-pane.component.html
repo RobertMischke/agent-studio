@@ -54,9 +54,7 @@
             <li class="git-view__ladder-rung"
                 [class.git-view__ladder-rung--reached]="prov.ladder.mergedToIntegration"
                 data-testid="git-ladder-integration"
-                [cacTooltip]="prov.ladder.mergedToIntegration
-                  ? 'Merged into ' + prov.ladder.integrationBranch + ' (HEAD now ' + short(prov.ladder.integrationHead) + ')'
-                  : 'Not yet merged into ' + prov.ladder.integrationBranch + ' (HEAD now ' + short(prov.ladder.integrationHead) + ')'">
+                [cacTooltip]="integrationRungTooltip(prov.ladder)">
               <span class="git-view__ladder-arrow">→</span>
               <span class="git-view__ladder-name">{{ prov.ladder.integrationBranch }}</span>
               <span class="git-view__ladder-sha">{{ short(prov.ladder.integrationHead) }}</span>
@@ -65,9 +63,7 @@
             <li class="git-view__ladder-rung"
                 [class.git-view__ladder-rung--reached]="prov.ladder.releasedToRelease"
                 data-testid="git-ladder-release"
-                [cacTooltip]="prov.ladder.releasedToRelease
-                  ? 'Released into ' + prov.ladder.releaseBranch + ' (HEAD now ' + short(prov.ladder.releaseHead) + ')'
-                  : 'Not yet released into ' + prov.ladder.releaseBranch + ' (HEAD now ' + short(prov.ladder.releaseHead) + ')'">
+                [cacTooltip]="releaseRungTooltip(prov.ladder)">
               <span class="git-view__ladder-arrow">→</span>
               <span class="git-view__ladder-name">{{ prov.ladder.releaseBranch }}</span>
               <span class="git-view__ladder-sha">{{ short(prov.ladder.releaseHead) }}</span>
