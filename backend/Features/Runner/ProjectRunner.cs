@@ -5166,12 +5166,26 @@ public class ProjectRunner
     /// inconclusive run with an EMPTY results/ dir keeps the plain category
     /// (AGT-1944 taxonomy: inconclusive-with-results vs inconclusive-empty).
     /// Every other issue kind is unchanged.
+    ///
+    /// <para>The inconclusive-with-results decision is delegated to
+    /// <see cref="PostProcessingOutcomeTaxonomy.Classify"/> so the taxonomy
+    /// classifier is the single source of truth for "no terminal verdict but left
+    /// work to inspect", rather than a parallel inline probe that could drift from
+    /// the bucket definition. The delegation is gated on the same inconclusive
+    /// kinds this method already handled, so it is behaviour-preserving: Classify
+    /// returns <see cref="PostProcessingOutcome.InconclusiveWithResults"/> for an
+    /// inconclusive kind iff its results/ dir is non-empty.</para>
     /// </summary>
     private string ResolveEscalationCategory(RunIssueKind issueKind, string? jobFolderPath)
     {
         var isInconclusive = issueKind is RunIssueKind.OrchestratorInconclusive or RunIssueKind.InfraCrash;
-        if (isInconclusive && HasNonEmptyResults(jobFolderPath))
-            return HumanReviewEscalationCategories.InconclusiveWithResults;
+        if (isInconclusive)
+        {
+            var outcome = PostProcessingOutcomeTaxonomy.Classify(
+                issueKind, terminalKind: null, hasResults: HasNonEmptyResults(jobFolderPath));
+            if (outcome == PostProcessingOutcome.InconclusiveWithResults)
+                return HumanReviewEscalationCategories.InconclusiveWithResults;
+        }
         return ToEscalationCategory(issueKind);
     }
 

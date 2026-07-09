@@ -3790,9 +3790,53 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     }
 
     private static int CountPriorReissues(string workspace, string project, string jobId)
+        => CountReissuesInCurrentChain(ReviewDecisionLog.ReadAll(workspace, project), jobId);
+
+    /// <summary>
+    /// Count the reissues in the job's CURRENT attempt chain - the reissues
+    /// recorded SINCE the most recent chain-ending verdict
+    /// (<see cref="ReviewDecisionKind.Escalate"/> /
+    /// <see cref="ReviewDecisionKind.AcceptAsDone"/>), not the job's whole
+    /// lifetime total.
+    ///
+    /// <para>
+    /// A verdict that parks the card to human review or accepts it CLOSES the
+    /// chain: whatever happens next (a human reopens it, a follow-up moves it back
+    /// to <c>2-ready</c>) begins a fresh attempt chain that must get its own
+    /// reissue budget. Before this the count was sticky - it summed EVERY
+    /// <see cref="ReviewDecisionKind.Reissue"/> record the job ever accrued, so a
+    /// card whose budget was already spent on an earlier, already-resolved chain
+    /// could never pass a budget-gated check again: it escalated on the first new
+    /// concern instead of getting a fresh reissue (AGT-1935 sticky-budget belege).
+    /// Counting per-chain fixes that while leaving in-chain behaviour identical -
+    /// with no chain-ender in between, this returns exactly the old lifetime total.
+    /// </para>
+    ///
+    /// <para><see cref="ReviewDecisionKind.Skipped"/> is not a chain boundary: it
+    /// leaves the card for the normal sentinel path, so it neither counts nor
+    /// resets. Records are consumed in append (chronological) order, the order
+    /// <see cref="ReviewDecisionLog.ReadAll"/> returns them.</para>
+    /// </summary>
+    internal static int CountReissuesInCurrentChain(IEnumerable<ReviewDecisionRecord> records, string jobId)
     {
-        return ReviewDecisionLog.ReadAll(workspace, project)
-            .Count(r => r.JobId == jobId && r.Kind == ReviewDecisionKind.Reissue);
+        var count = 0;
+        foreach (var record in records)
+        {
+            if (record.JobId != jobId) continue;
+            switch (record.Kind)
+            {
+                case ReviewDecisionKind.Reissue:
+                    count++;
+                    break;
+                case ReviewDecisionKind.Escalate:
+                case ReviewDecisionKind.AcceptAsDone:
+                    // Chain boundary: the previous attempt chain is closed. Reset
+                    // so a reopened card gets a fresh reissue budget (AGT-1935).
+                    count = 0;
+                    break;
+            }
+        }
+        return count;
     }
 
     /// <summary>

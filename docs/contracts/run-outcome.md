@@ -81,6 +81,18 @@ Environmental cycles never accrue toward the per-task no-progress quarantine
 streak (`RunQuarantineBreaker.CountsAsNoProgressFailure`), and a transient
 environmental fault does not raise the crash toast while it is being retried.
 
+**Per-attempt-chain reissue budget.** The shared reissue budget (spent by the
+completion gate, evidence gate, and reissue-loop breaker) is counted per attempt
+chain, not over the job's whole lifetime:
+`ReviewDecisionOrchestrator.CountReissuesInCurrentChain` counts the `Reissue`
+records recorded *since* the most recent chain-ending verdict (`Escalate` /
+`AcceptAsDone`). A verdict that parks a card to human review or accepts it closes
+the chain, so when a human reopens it the next attempt chain starts with a fresh
+budget. Before this the count was sticky - a card whose budget was spent on an
+earlier, already-resolved chain could never pass a budget-gated check again and
+escalated on the first new concern (AGT-1935). In-chain behaviour is unchanged:
+with no chain-ender in between, the per-chain count equals the old lifetime total.
+
 **Escalation categories.** The system-initiated escalation funnel
 (`HumanReviewEscalationCategories`) records WHY a card was parked. AGT-1944 adds
 `environmental`, `cli-launch-failed`, and `inconclusive-with-results` to the
