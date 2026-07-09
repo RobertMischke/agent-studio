@@ -21,17 +21,30 @@
   min-width: 0;
 }
 
+/* The component host `<app-pane-tabs>` is itself a flex ITEM of
+ * `<app-pane-header>` (a flex row with `align-items: stretch`), so the
+ * header already stretches it to the full 32px height. The catch: with
+ * `ViewEncapsulation.None` there is no `:host` rule, and by default the
+ * host lays its children out in a *block* formatting context — where the
+ * inner `.pane-tabs--header` div's `flex`/`align-self` are inert and a
+ * percentage `height` resolves against a `min-height`-only parent to the
+ * ~19px content box. That top-pinned the whole strip ~6px above the
+ * header's mid-axis (the "icons sit too high" report — the earlier
+ * `align-self: stretch` fix never took because the host wasn't a flex
+ * parent). Making the host an `inline-flex` stretch container lets the
+ * inner strip fill the header height through the flex algorithm (no
+ * fragile percentage-height chain), so the tab icons/labels/badge and the
+ * trailing expand/close buttons finally settle on one centre line.
+ * `inline-flex` (not `flex`) keeps the host hugging its content width so
+ * the pill variant is unaffected. */
+app-pane-tabs {
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
 .pane-tabs--header {
   display: flex;
-  flex: 1;
-  // Stretch to the header's full height instead of `height: 100%`. Against
-  // an auto-height header (`min-height: 32px`, no definite height) a
-  // percentage height collapses the strip to its ~19px content box and
-  // pins it to the top — which floated the whole tab row ~6px above the
-  // header's mid-axis (the "icons sit too high" report). `align-self:
-  // stretch` fills the header so the tabs' `height: 100%` centres their
-  // content on the same axis as the trailing expand/close buttons.
-  align-self: stretch;
 }
 
 .pane-tabs--pill {
