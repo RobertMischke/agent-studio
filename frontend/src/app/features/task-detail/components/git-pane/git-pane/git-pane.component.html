@@ -71,6 +71,21 @@
             </li>
           </ol>
         </section>
+      } @else if (!git.provenanceLoaded()) {
+        <!--
+          AGT-2006: while the graph-derived landed status is still loading, show
+          an explicit skeleton in the same slot instead of an empty gap, so the
+          git-status area reads as "loading" consistently with the header's
+          gated acceptance primary. Replaced atomically by the real ladder once
+          provenance resolves. -->
+        <section class="git-view__landed git-view__landed--loading"
+                 data-testid="git-landed-ladder-loading"
+                 role="status"
+                 aria-live="polite">
+          <span class="git-view__ladder-skeleton" aria-hidden="true"></span>
+          <span class="git-view__ladder-skeleton git-view__ladder-skeleton--wide" aria-hidden="true"></span>
+          <span class="visually-hidden">Loading landed status…</span>
+        </section>
       }
       @if (git.commitChain().length > 1) {
         <section class="git-view__commit-group"

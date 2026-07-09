@@ -145,11 +145,16 @@
                 class="detail__triage-primary"
                 [attr.data-testid]="'triage-action-' + primary.id"
                 [attr.data-action-id]="primary.id"
+                [attr.data-git-loading]="primaryAwaitingGit() ? 'true' : null"
                 [class.detail__triage-primary--acting]="triageActingId() === primary.id"
-                [disabled]="mutationsBlocked() || triageActingId() !== null"
+                [class.detail__triage-primary--loading]="primaryAwaitingGit()"
+                [disabled]="mutationsBlocked() || triageActingId() !== null || primaryAwaitingGit()"
                 [cacTooltip]="primaryTooltip()"
                 (click)="onPrimaryClick()">
-          @if (triageActingId() === primary.id) {
+          @if (primaryAwaitingGit()) {
+            <span class="detail__triage-primary-skeleton" aria-hidden="true"></span>
+            <span class="visually-hidden">Checking git status…</span>
+          } @else if (triageActingId() === primary.id) {
             <span aria-hidden="true">⏳</span>
             <span>{{ primaryLabel() }}…</span>
           } @else {

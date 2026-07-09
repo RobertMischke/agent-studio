@@ -226,11 +226,22 @@
                 @if (studioTriagePrimary(); as primary) {
                   <button type="button"
                           class="studio-tab-action studio-tab-action--primary"
+                          [class.studio-tab-action--git-loading]="studioPrimaryAwaitingGit()"
                           [attr.data-testid]="'studio-triage-action-' + primary.id"
                           [attr.data-action-id]="primary.id"
-                          [disabled]="updateClient.mutationsBlocked()"
-                          [cacTooltip]="(studioMergeAcceptView()?.statusTooltip || studioPrimaryLabel()) + ' (Enter)'"
-                          (click)="onStudioTriagePrimary()">{{ studioPrimaryLabel() }}</button>
+                          [attr.data-git-loading]="studioPrimaryAwaitingGit() ? 'true' : null"
+                          [disabled]="updateClient.mutationsBlocked() || studioPrimaryAwaitingGit()"
+                          [cacTooltip]="studioPrimaryAwaitingGit()
+                            ? 'Checking git status — action available once loaded.'
+                            : (studioMergeAcceptView()?.statusTooltip || studioPrimaryLabel()) + ' (Enter)'"
+                          (click)="onStudioTriagePrimary()">
+                    @if (studioPrimaryAwaitingGit()) {
+                      <span class="studio-tab-action__skeleton" aria-hidden="true"></span>
+                      <span class="visually-hidden">Checking git status…</span>
+                    } @else {
+                      {{ studioPrimaryLabel() }}
+                    }
+                  </button>
                 }
                 <button type="button"
                         class="studio-tab-action studio-tab-action--icon"

@@ -78,6 +78,10 @@ function makeGitPaneMock(options?: {
     loading: signal(false),
     status: signal<GitStatus | null>(options?.status ?? null),
     provenance: signal<TaskProvenanceView | null>(null),
+    // Default to "resolved" so these render tests don't paint the AGT-2006
+    // landed-status skeleton over their expectations; a dedicated case flips
+    // it to false to assert the loading placeholder.
+    provenanceLoaded: signal<boolean>(true),
     commitFiles,
     commitDetail,
     codeReviews,
@@ -225,6 +229,46 @@ describe('GitPaneComponent', () => {
     expect(meta[1].textContent?.trim()).not.toBe(`1f · ${secondTimeOnly}`);
     expect(meta[0].textContent).not.toBe(meta[1].textContent);
     expect(fixture.componentInstance.commitChainTooltip(commits[0], 0)).toContain(formatDateTime(commits[0].at));
+  });
+
+  it('shows a landed-status skeleton while provenance is still loading, then the ladder (AGT-2006)', async () => {
+    const git = makeGitPaneMock();
+    git.provenanceLoaded.set(false);
+    await mountGit(git);
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    // Loading: the skeleton placeholder stands in for the ladder.
+    expect(root.querySelector('[data-testid="git-landed-ladder-loading"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="git-landed-ladder"]')).toBeNull();
+
+    // Provenance resolves -> the real ladder replaces the skeleton.
+    git.provenance.set({
+      branch: 'task/demo-task',
+      base: 'base0000',
+      transitions: [],
+      merge: null,
+      landedState: 'merged-to-develop',
+      ladder: {
+        branch: 'task/demo-task',
+        branchTip: 'tip00000',
+        integrationBranch: 'develop',
+        integrationHead: 'devhead0',
+        mergedToIntegration: true,
+        releaseBranch: 'main',
+        releaseHead: 'mainhead',
+        releasedToRelease: false,
+      },
+      commits: [],
+    } as TaskProvenanceView);
+    git.provenanceLoaded.set(true);
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="git-landed-ladder-loading"]')).toBeNull();
+    expect(root.querySelector('[data-testid="git-landed-ladder"]')).not.toBeNull();
   });
 
   it('gates a large selected diff until the operator reveals it', async () => {

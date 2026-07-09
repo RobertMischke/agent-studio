@@ -246,6 +246,15 @@ export class TaskDetailComponent implements OnDestroy {
   readonly generatingMsg = this.git.generatingMsg;
   /** Live-derived landed position of the task's work; null while unknown/loading. */
   readonly landedState = computed(() => this.git.provenance()?.landedState ?? null);
+  /**
+   * True while the graph-derived git provenance for the open job has not settled
+   * yet. Gates the detail-header's git-dependent acceptance primary so it cannot
+   * fire (or show a guessed "Merge into Develop" label) before the branch/merge
+   * truth is known (AGT-2006). Flips to `false` atomically with `landedState`
+   * resolving, so the button switches straight to its true label without a
+   * wrong -> right flicker.
+   */
+  readonly gitInfoLoading = computed(() => !this.git.provenanceLoaded());
   readonly commitActionsAvailable = computed(() => {
     const status = this.git.status();
     return this.git.viewMode() === 'worktree'

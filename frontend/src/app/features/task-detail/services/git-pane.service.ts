@@ -121,6 +121,19 @@ export class GitPaneService implements OnDestroy {
   readonly provenance = signal<TaskProvenanceView | null>(null);
 
   /**
+   * Whether the graph-derived provenance has resolved (success OR error) for the
+   * currently-open job. Starts `false` on every job change and flips `true` the
+   * first time `loadProvenance()` settles. Git-dependent UI (the detail-header
+   * "Merge into Develop" / "Accept" acceptance primary) reads this to stay
+   * disabled + show a loading state until the branch/merge truth is known, so a
+   * still-loading `provenance() === null` no longer renders as an actionable
+   * "not yet merged" button that later flips to "already merged" (AGT-2006).
+   * A same-job refresh that re-pulls provenance leaves this `true` so the
+   * acceptance primary does not flicker back into a skeleton on every poll.
+   */
+  readonly provenanceLoaded = signal(false);
+
+  /**
    * Ordered chain of commits attributed to this task (oldest -&gt; newest).
    * Mirrors <c>TaskInfo.commits</c>; surfaces an in-memory list so the
    * git-pane can render a multi-commit strip and let the user pick which
@@ -236,6 +249,7 @@ export class GitPaneService implements OnDestroy {
     this.committing.set(false);
     this.generatingMsg.set(false);
     this.provenance.set(null);
+    this.provenanceLoaded.set(false);
     this.codeReviews.set([]);
     this.clearDiffCache();
     const chain = info?.commits ?? (info?.commit ? [info.commit] : []);
@@ -276,8 +290,11 @@ export class GitPaneService implements OnDestroy {
     const info = this.currentJob;
     if (!info) return;
     this.jobService.getTaskProvenance(info.id, info.watchPath).subscribe({
-      next: (view) => this.provenance.set(view),
-      error: () => this.provenance.set(null),
+      // Flip the resolved flag on both settle paths: a failed load still means
+      // "we are no longer waiting", so the acceptance primary falls back to the
+      // persisted merge fact instead of staying disabled forever.
+      next: (view) => { this.provenance.set(view); this.provenanceLoaded.set(true); },
+      error: () => { this.provenance.set(null); this.provenanceLoaded.set(true); },
     });
   }
 

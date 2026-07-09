@@ -128,6 +128,37 @@
 :host .detail__triage-primary--acting {
   opacity: 0.85;
 }
+/* AGT-2006: git-dependent acceptance primary held disabled until the live
+   branch/merge status resolves. A shimmer skeleton stands in for the label so
+   the button reads as "loading", never as an actionable "Merge into Develop"
+   that would later flip to "Accept". A fixed min-width reserves the label's
+   footprint so the atomic switch to the real label does not shift the layout. */
+:host .detail__triage-primary--loading {
+  cursor: progress;
+  min-width: 132px;
+  justify-content: center;
+}
+:host .detail__triage-primary-skeleton {
+  display: block;
+  width: 96px;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--studio-accent) 22%, transparent) 25%,
+    color-mix(in srgb, var(--studio-accent) 48%, transparent) 50%,
+    color-mix(in srgb, var(--studio-accent) 22%, transparent) 75%
+  );
+  background-size: 200% 100%;
+  animation: detail-triage-skeleton-shimmer 1.1s ease-in-out infinite;
+}
+@keyframes detail-triage-skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :host .detail__triage-primary-skeleton { animation-duration: 2.4s; }
+}
 /* The landed-status pill that used to sit beside the Human Review acceptance
    primary was removed (UI-feedback 2026-07-09): the task's on-develop state is
    shown once, at the task commit (git pane landed ladder). The primary itself

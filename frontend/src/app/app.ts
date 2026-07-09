@@ -1360,6 +1360,19 @@ export class App implements OnInit, OnDestroy {
     if (!p) return '';
     return this.studioMergeAcceptView()?.acceptLabel ?? p.label;
   });
+  /**
+   * True while the studio Human Review acceptance primary (`mark-done`) depends
+   * on git status that has not loaded yet. Until the graph-derived provenance
+   * settles, `landedState` is `null` and the label would guess "Merge into
+   * Develop" (an actionable merge) before flipping to "Accept" once the work is
+   * revealed as already merged - the race Robert reported (AGT-2006). The button
+   * stays disabled + skeletoned while this holds, then switches atomically.
+   */
+  readonly studioPrimaryAwaitingGit = computed(() => {
+    const p = this.studioTriagePrimary();
+    if (!p || p.id !== 'mark-done') return false;
+    return this.jobDetailSig()?.gitInfoLoading() ?? false;
+  });
   readonly studioTriageHasActions = computed(
     () => this.studioTriagePrimary() !== null || this.studioTriageOverflow().length > 0 || this.studioCommitActionsAvailable(),
   );
@@ -1402,6 +1415,9 @@ export class App implements OnInit, OnDestroy {
     const sel = this.selectedJob();
     const p = this.studioTriagePrimary();
     if (!sel || !p) return;
+    // Hold git-dependent acceptance until the branch/merge status has loaded, so
+    // a click cannot trigger a merge while the label is still a guess (AGT-2006).
+    if (this.studioPrimaryAwaitingGit()) return;
     this.dispatchStudioTriage(sel.info, p);
   }
 

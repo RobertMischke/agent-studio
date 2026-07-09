@@ -719,6 +719,48 @@
 }
 .git-view__ladder-rung--reached .git-view__ladder-flag { color: var(--severity-pass); }
 
+/* AGT-2006: landed-ladder loading placeholder. Occupies the ladder's slot with
+   shimmer bars while the graph-derived provenance resolves, so the git-status
+   area shows an explicit loading state instead of an empty gap. */
+.git-view__landed--loading {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}
+.git-view__ladder-skeleton {
+  display: block;
+  height: 12px;
+  width: 88px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--studio-fg-muted) 14%, transparent) 25%,
+    color-mix(in srgb, var(--studio-fg-muted) 30%, transparent) 50%,
+    color-mix(in srgb, var(--studio-fg-muted) 14%, transparent) 75%
+  );
+  background-size: 200% 100%;
+  animation: git-landed-skeleton-shimmer 1.1s ease-in-out infinite;
+}
+.git-view__ladder-skeleton--wide { width: 132px; }
+@keyframes git-landed-skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .git-view__ladder-skeleton { animation-duration: 2.4s; }
+}
+.git-view .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /*
  * Collapsible commit-meta head. Wraps the landed ladder, the "N task
  * commits" group, and the per-commit banner so one toggle hides the whole

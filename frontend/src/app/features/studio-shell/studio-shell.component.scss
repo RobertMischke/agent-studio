@@ -1569,6 +1569,28 @@
   align-items: center;
   gap: 4px;
   padding: 0 2px;
+
+  // Screen-reader-only label for the skeleton loading state (AGT-2006); the
+  // visible content is the shimmer bar, the text is announced to AT.
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+@keyframes studio-triage-skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio-tab-action__skeleton { animation-duration: 2.4s; }
 }
 
 /* The landed-status pill that used to sit beside the Human Review acceptance
@@ -1680,6 +1702,32 @@
       filter: brightness(1.1);
       color: #1a1a1a;
     }
+  }
+
+  // AGT-2006: the git-dependent acceptance primary held disabled until the live
+  // branch/merge status resolves. A shimmer skeleton stands in for the label so
+  // the button reads as "loading", never as an actionable "Merge into Develop"
+  // that would later flip to "Accept". A min-width reserves the label footprint
+  // so the atomic switch to the real label does not shift the tab-bar layout.
+  &--git-loading {
+    cursor: progress;
+    min-width: 108px;
+    justify-content: center;
+  }
+
+  &__skeleton {
+    display: block;
+    width: 80px;
+    height: 10px;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, #1a1a1a 24%, transparent) 25%,
+      color-mix(in srgb, #1a1a1a 44%, transparent) 50%,
+      color-mix(in srgb, #1a1a1a 24%, transparent) 75%
+    );
+    background-size: 200% 100%;
+    animation: studio-triage-skeleton-shimmer 1.1s ease-in-out infinite;
   }
 
   // Must precede `&--active` so the pressed state wins on equal specificity.

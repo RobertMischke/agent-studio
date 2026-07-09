@@ -87,6 +87,14 @@ export class DetailHeaderComponent {
    * fallback, so a "Merged to develop" status renders even before this resolves.
    */
   readonly landedState = input<LandedState | null>(null);
+  /**
+   * True while the graph-derived git status (branch/merge position) for the open
+   * job has not settled yet. Gates the git-dependent acceptance primary: until
+   * the truth is known the button must not be clickable and must not show a
+   * guessed label, because `landedState` is still `null` and would render the
+   * "not yet merged" default that later flips to "already merged" (AGT-2006).
+   */
+  readonly gitInfoLoading = input(false);
   readonly commitMessageDraft = input<string>('');
   readonly generatingCommitMessage = input(false);
   readonly committing = input(false);
@@ -209,6 +217,24 @@ export class DetailHeaderComponent {
     return this.mergeAcceptView()?.acceptLabel ?? p.label;
   });
 
+  /**
+   * Primary-action ids whose label and effect depend on the live git landed
+   * status. The Human Review acceptance (`mark-done`) is the sole one today: it
+   * reads "Merge into Develop" vs "Accept" off `landedState`, so it must not act
+   * (or show a guessed label) while the git status is still loading (AGT-2006).
+   */
+  private readonly GIT_DEPENDENT_PRIMARY_IDS: ReadonlySet<string> = new Set(['mark-done']);
+
+  /**
+   * True when the current primary depends on git status that is still loading.
+   * Drives the button's disabled + skeleton state so the acceptance action is
+   * held back until the branch/merge truth resolves, then switches atomically.
+   */
+  readonly primaryAwaitingGit = computed(() => {
+    const p = this.triagePrimary();
+    return !!p && this.GIT_DEPENDENT_PRIMARY_IDS.has(p.id) && this.gitInfoLoading();
+  });
+
   /** Remaining lane actions + always-on Edit/Delete fallbacks. */
   readonly triageOverflow = computed<TriageButton[]>(() =>
     overflowActionsFor(this.info().state),
@@ -268,6 +294,7 @@ export class DetailHeaderComponent {
   primaryTooltip(): string {
     const p = this.triagePrimary();
     if (!p) return '';
+    if (this.primaryAwaitingGit()) return 'Checking git status — action available once loaded.';
     if (this.mutationsBlocked()) return 'Update in progress — actions paused.';
     const label = this.primaryLabel();
     if (this.triageActingId() === p.id) return `${label}…`;
@@ -285,6 +312,9 @@ export class DetailHeaderComponent {
   onPrimaryClick(): void {
     const p = this.triagePrimary();
     if (!p) return;
+    // Hold git-dependent primaries until the branch/merge status has loaded, so
+    // Enter / click cannot trigger an acceptance while the label is still a guess.
+    if (this.primaryAwaitingGit()) return;
     this.emitTriage(p);
   }
 
