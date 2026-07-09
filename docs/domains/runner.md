@@ -73,6 +73,27 @@ state.
   append run history instead of flattening earlier evidence.
 - Context overflow is non-retryable and routes to human review on first
   detection.
+- Post-processing classifies every run that did not sign off cleanly into one of
+  five outcome buckets (`success` / `code-defect` / `environmental` /
+  `inconclusive-with-results` / `inconclusive-empty`,
+  `PostProcessingOutcomeTaxonomy`), and the bucket - not the raw exit code -
+  drives what happens next. Environmental faults are never the change's fault:
+  a *transient* one (host file lock in the MSB302x copy-lock family, network
+  glitch, or a CLI launch/resume failure) retries with exponential backoff before
+  escalating; the retry budget is bounded per kind (`EnvironmentalTransient` 2,
+  `CliLaunchFailed` one fresh-start), and every environmental member that does
+  escalate is flagged `environmental` so a reviewer never reads an infra blip as
+  a failed change. An inconclusive run with files in `results/` routes to human
+  review with a "partial work to inspect" hint rather than a bare `5e` park. See
+  the taxonomy section of
+  [docs/contracts/run-outcome.md](../contracts/run-outcome.md).
+- Environmental cycles do not count against progress or budget: a transient
+  environmental fault never accrues toward the no-progress quarantine streak
+  (`RunQuarantineBreaker.CountsAsNoProgressFailure`), and the shared reissue
+  budget is counted per attempt chain, not over the job's whole lifetime -
+  `ReviewDecisionOrchestrator.CountReissuesInCurrentChain` resets the count on the
+  most recent chain-ending verdict (`Escalate` / `AcceptAsDone`) so a reopened
+  card gets a fresh budget instead of escalating on the first new concern.
 - No-progress failures count across auto-pickup and `UserContinue` reissues
   until progress, review, or quarantine resets the streak.
 - Orchestrator session turns use the existing CLI session machinery. A context
