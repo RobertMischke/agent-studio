@@ -126,6 +126,13 @@ landed.
   disabled with the reason), a two-step confirm before deletion, and the result
   report. Coverage: `GitCleanupServiceTests` (backend, temp repo) and
   `project-git-cleanup.component.spec.ts` (frontend).
+- **Automation status**: cleanup is operator-triggered only. The optional
+  "auto-cleanup after a successful merge step" hook (the counterpart to the
+  push-on-merge from AGT-1999) is intentionally **not** wired yet - there is no
+  automatic ref deletion anywhere in the pipeline. When it is added it should reuse
+  `GitCleanupService.BuildPlan`/`Execute` unchanged (so the AGT-1945 guard keeps
+  holding) and gate on the same per-project setting as push-on-merge; until then,
+  removing merged refs is always an explicit operator action.
 
 ## See also
 
