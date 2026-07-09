@@ -6,20 +6,33 @@ import { TaskBackgroundPoller } from '../../polling/services/task-background-pol
 
 /**
  * Job-root `.md` files that are orchestrator/runner machinery rather than
- * user-facing artifacts. They live in the job root next to the real
- * artifacts, so the backend `/artifacts` listing includes them, but they
- * must not count toward — or clutter — the Files tab. Names are matched
- * case-insensitively.
+ * user-facing artifacts. They live in the job (or state) folder root next
+ * to the real artifacts, so the backend `/artifacts` listing includes
+ * them, but they must not count toward — or clutter — the Files tab. Names
+ * are matched case-insensitively.
+ *
+ * This is the full set of machinery `.md` files the backend writes into a
+ * task folder root (verified against `backend/` — every other
+ * `orchestrator-*.md` / `runner-*.md` name is a prompt template under
+ * `prompts/`, never a job-folder file):
  *
  *   - `orchestrator-follow-up.md` — the reissue reason the review
  *     orchestrator writes for the pickup runner (see backend
- *     `ReviewDecisionOrchestrator`). It is surfaced in the Timeline /
- *     decision UI, not as a "file" the operator dropped.
+ *     `ReviewDecisionOrchestrator` / `ProjectRunner`). Surfaced in the
+ *     Timeline / decision UI, not a "file" the operator dropped.
+ *   - `failed-pickup-reason.md` — why a pickup was abandoned; written into
+ *     the `failed-pickup/<slug>/` folder root (see `TaskAccessService`).
+ *   - `archive-reason.md` — why a task was archived; written into the
+ *     `archive/<slug>/` folder root (see `TaskAccessService`).
  *
  * (`status.md` is already dropped server-side because it owns the
  * Protocol tab, so it never reaches this filter.)
  */
-const MACHINERY_ARTIFACT_NAMES = new Set<string>(['orchestrator-follow-up.md']);
+const MACHINERY_ARTIFACT_NAMES = new Set<string>([
+  'orchestrator-follow-up.md',
+  'failed-pickup-reason.md',
+  'archive-reason.md',
+]);
 
 function isUserRelevantArtifact(artifact: TaskArtifact): boolean {
   return !MACHINERY_ARTIFACT_NAMES.has(artifact.name.toLowerCase());
@@ -34,13 +47,12 @@ function isUserRelevantArtifact(artifact: TaskArtifact): boolean {
  * an operator would call a "file": subfolders (`logs/`, `results/`,
  * `attachments/`) and non-`.md` state (`lifecycle.json`,
  * `pipeline-execution.json`, `*.jsonl`) are already excluded by the
- * backend `/artifacts` endpoint (top-level `*.md` only, minus
- * `status.md`); the remaining machinery `.md` files that DO sit in the
- * job root — {@link MACHINERY_ARTIFACT_NAMES}, currently
- * `orchestrator-follow-up.md` — are stripped here in
- * {@link applyResponse}. Without this the badge over-counted (the
- * "kaputt" 9): the orchestrator follow-up file inflated every reissued
- * task's Files count.
+ * backend `/artifacts` endpoint (top-level `*.md` + `aspect-*.json` only,
+ * minus `status.md`); the remaining machinery `.md` files that DO sit in
+ * the job/state-folder root — {@link MACHINERY_ARTIFACT_NAMES} — are
+ * stripped here in {@link applyResponse}. Without this the badge
+ * over-counted (the "kaputt" 9): the orchestrator follow-up file inflated
+ * every reissued task's Files count.
  *
  * Polls on a slow cadence so the count stays live while a run generates
  * fresh aspect / code-review files, instead of freezing at the value

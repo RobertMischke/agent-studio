@@ -124,4 +124,56 @@ describe('TaskArtifactsService', () => {
 
     expect(svc.artifacts().map((f) => f.name)).toEqual(['prompt.md']);
   });
+
+  it('excludes every machinery reason file the backend writes into a folder root', () => {
+    // failed-pickup / archive states drop their own reason file next to the
+    // artifacts (see backend TaskAccessService). They are machinery, not
+    // operator files, so they must not lift the count either.
+    nextResponse = {
+      jobId: 'a',
+      files: [
+        artifact('prompt.md'),
+        artifact('failed-pickup-reason.md'),
+        artifact('archive-reason.md'),
+      ],
+    };
+    const svc = make();
+
+    svc.syncTo(jobInfo('a'));
+
+    expect(svc.artifacts().map((f) => f.name)).toEqual(['prompt.md']);
+  });
+
+  it('counts exactly the user-relevant artifacts named in the task spec', () => {
+    // Spec: the badge should sum "nutzerrelevante Artefakte (prompt,
+    // results/*, aspect-Dateien)" and code-review notes, while internal
+    // machinery (logs/, run-context, lifecycle.json, pipeline-execution.json)
+    // must NOT count. Subfolders + non-`.md` state never reach the frontend —
+    // the backend `/artifacts` endpoint is top-level `*.md` + `aspect-*.json`
+    // only (see TaskScannerService.ListArtifacts) — so a manifest that mixes
+    // real artifacts with the one machinery `.md` that does leak through must
+    // resolve to just the user-relevant set.
+    nextResponse = {
+      jobId: 'a',
+      files: [
+        artifact('prompt.md'),
+        artifact('aspect-requirement-fit.md'),
+        artifact('aspect-tests-and-evidence.md'),
+        artifact('code-review-grade-2026-07-09.md'),
+        artifact('orchestrator-follow-up.md'), // machinery — excluded
+      ],
+    };
+    const svc = make();
+
+    svc.syncTo(jobInfo('a'));
+
+    const counted = svc.artifacts().map((f) => f.name);
+    expect(counted).toEqual([
+      'prompt.md',
+      'aspect-requirement-fit.md',
+      'aspect-tests-and-evidence.md',
+      'code-review-grade-2026-07-09.md',
+    ]);
+    expect(counted).toHaveLength(4);
+  });
 });
