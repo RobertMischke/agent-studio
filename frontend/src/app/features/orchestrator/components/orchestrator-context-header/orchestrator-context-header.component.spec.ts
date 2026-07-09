@@ -89,6 +89,24 @@ describe('OrchestratorContextHeaderComponent', () => {
     expect(text(fixture, 'orch-context-run-duration')).toBe('1m');
   });
 
+  it('renders the pinned chip and reflects pinned + context key as data attributes (MC-2)', async () => {
+    const fixture = await makeFixture();
+    fixture.componentRef.setInput('project', 'demo-project');
+    fixture.componentRef.setInput('contextKey', 'project:demo-project');
+    fixture.detectChanges();
+    // Not pinned: no chip, no data-pinned attribute.
+    expect(fixture.nativeElement.querySelector('[data-testid="orch-context-pin"]')).toBeNull();
+    const headerUnpinned = fixture.nativeElement.querySelector('[data-testid="orch-context-header"]');
+    expect(headerUnpinned.getAttribute('data-pinned')).toBeNull();
+    expect(headerUnpinned.getAttribute('data-context-key')).toBe('project:demo-project');
+
+    fixture.componentRef.setInput('pinned', true);
+    fixture.detectChanges();
+    expect(text(fixture, 'orch-context-pin')).toContain('Pinned');
+    const headerPinned = fixture.nativeElement.querySelector('[data-testid="orch-context-header"]');
+    expect(headerPinned.getAttribute('data-pinned')).toBe('true');
+  });
+
   it('hides the run duration when no start timestamp is known', async () => {
     const fixture = await makeFixture();
     fixture.componentRef.setInput('project', 'demo-project');

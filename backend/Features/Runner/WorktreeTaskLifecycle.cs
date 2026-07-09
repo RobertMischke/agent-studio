@@ -393,6 +393,22 @@ public sealed class WorktreeTaskLifecycle
     /// branch is already gone, is a clean no-op. This is the deferred counterpart
     /// to <see cref="Teardown"/>: the runner no longer tears down per run so a
     /// resume/reissue can reuse the worktree (<see cref="PrepareOrReuse"/>).
+    ///
+    /// <para>
+    /// AGT-1945 invariant: a worktree that still carries UNCOMMITTED work must
+    /// never be torn down. A run whose auto-commit failed or was skipped leaves
+    /// its deliverable only as dirty/untracked files in the worktree; the branch
+    /// tip then still equals <paramref name="integrationBranch"/>, so the
+    /// merge-ancestor gate below reads it as "already folded in" and the
+    /// force-remove would wipe the work irreversibly. So we snapshot any
+    /// uncommitted work onto <c>task/&lt;id&gt;</c> as a platform WIP commit
+    /// FIRST (commit-push-doctrine: the platform owns the commit boundary). That
+    /// commit puts the branch ahead of the integration branch, which then trips
+    /// the same merged-ancestor gate into deferring teardown so a reissue / human
+    /// review can still reach the work. If the snapshot itself fails we refuse to
+    /// remove the worktree and report the failure rather than silently dropping
+    /// the deliverable.
+    /// </para>
     /// </summary>
     public TeardownResult TeardownIfIntegrated(string repoRoot, string taskId, string integrationBranch, string worktreeRoot)
     {
@@ -403,6 +419,24 @@ public sealed class WorktreeTaskLifecycle
         if (!_git.BranchExists(repoRoot, branch))
             return new TeardownResult(true, null); // never isolated / already cleaned
 
+        var path = _git.WorktreePathForBranch(repoRoot, branch)
+                   ?? Path.Combine(worktreeRoot, WorktreeDirName(taskId));
+
+        // Preserve uncommitted work BEFORE any merge-state check: the check only
+        // looks at committed history, so a dirty worktree on a branch that reads
+        // as "merged" would otherwise be force-removed and lost (AGT-1945).
+        if (Directory.Exists(path) && _git.RepoHasUncommittedChanges(path))
+        {
+            if (!PreserveUncommittedWork(taskId, branch, path))
+            {
+                var error = $"Refusing teardown for task {taskId}: worktree at {path} still carries "
+                          + $"uncommitted work that could not be snapshotted onto {branch}; kept intact "
+                          + "so the deliverable is not lost.";
+                _logger.LogWarning("{Message}", error);
+                return new TeardownResult(false, error);
+            }
+        }
+
         if (!_git.IsAncestor(repoRoot, branch, integrationBranch))
         {
             _logger.LogInformation(
@@ -411,9 +445,49 @@ public sealed class WorktreeTaskLifecycle
             return new TeardownResult(true, null);
         }
 
-        var path = _git.WorktreePathForBranch(repoRoot, branch)
-                   ?? Path.Combine(worktreeRoot, WorktreeDirName(taskId));
         return Teardown(repoRoot, path, branch, deleteBranch: true, force: true, deleteRemoteBranch: true);
+    }
+
+    /// <summary>
+    /// AGT-1945 safety net: snapshot a worktree's uncommitted changes onto its
+    /// <c>task/&lt;id&gt;</c> branch as a platform WIP commit before teardown
+    /// removes the worktree. The commit is platform-owned (a run inside a managed
+    /// slot never commits for itself) and carries the durable
+    /// <see cref="GitService.WorktreeRunCommitTrailer"/> so per-task history
+    /// reconstruction still finds it. Returns <c>true</c> when the worktree is
+    /// clean afterwards - either the snapshot committed, or a benign race had
+    /// already left nothing to commit - and <c>false</c> only when a real git
+    /// failure means the work is still uncommitted and must not be discarded.
+    /// </summary>
+    private bool PreserveUncommittedWork(string taskId, string branch, string worktreePath)
+    {
+        var message =
+            "chore(wip): preserve uncommitted task work before teardown\n\n"
+            + "Platform WIP safety commit (AGT-1945): the worktree still carried "
+            + $"uncommitted changes at terminal teardown; snapshotting onto {branch} "
+            + "so a reissue or human review never loses the deliverable.\n\n"
+            + GitService.WorktreeRunCommitTrailer(taskId);
+
+        var commit = _git.WorktreeRunCommit(taskId, worktreePath, message);
+        if (commit.Success)
+        {
+            _logger.LogWarning(
+                "Preserved uncommitted work for task {TaskId} as WIP safety commit {Sha} on {Branch} before teardown.",
+                taskId, commit.Sha ?? "<unknown>", branch);
+            return true;
+        }
+
+        // WorktreeRunCommit reports a clean tree as a non-success "Nothing to
+        // commit"; treat that as already-safe (the dirt was committed between the
+        // status probe and here).
+        if (!string.IsNullOrEmpty(commit.Error)
+            && commit.Error.Contains("Nothing to commit", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        _logger.LogWarning(
+            "Could not preserve uncommitted work for task {TaskId} on {Branch}: {Error}",
+            taskId, branch, commit.Error);
+        return false;
     }
 
     /// <summary>

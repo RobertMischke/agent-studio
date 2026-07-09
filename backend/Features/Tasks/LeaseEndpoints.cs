@@ -1,20 +1,21 @@
-
-
 namespace AgentStudio.Tasks;
 
 /// <summary>
-/// The Runner ↔ Server lease API under <c>/api/runner/lease</c> (Step 6 of the
-/// task-execution-and-log architecture). This is the boundary that lets the
-/// server be the single lease authority while a Runner — in-process today, on
-/// another machine tomorrow — acquires/heartbeats/releases a task lease over
-/// HTTP before spawning a CLI on it.
+/// The fenced Runner ↔ Server run-lease API under <c>/api/runner/lease</c>
+/// (parallel-task-execution.md §8.2C; ADR-0060). The server is the single lease
+/// authority: <c>acquire</c> mints a lease id + a monotonic fencing token per
+/// task, <c>renew</c>/<c>release</c> must present the current token, and a stale
+/// token — presented after a TTL takeover raised the fence — is rejected. That
+/// rejection is the split-brain guard.
 ///
 /// <para>
-/// The endpoints are thin glue over the unit-tested lease primitive
-/// (<see cref="PickupLockFile"/>): they resolve a task key to its folder, build
-/// the caller's <see cref="PickupLockOwner"/> from the request body, and map the
-/// lock outcome onto the wire <see cref="LeaseResponse"/>. The TTL/heartbeat
-/// semantics (a lapsed remote lease becomes reclaimable) live in the primitive.
+/// The endpoints are thin glue over the unit-tested lease authority
+/// (<see cref="RunLeaseService"/>): they validate the task exists, stamp the
+/// caller's <see cref="RunnerIdentity"/> onto a partial acquire request, and
+/// return the service's <see cref="RunLeaseResponse"/> verbatim. This is the
+/// productive successor to the disk-backed <c>.pickup-lock.json</c> lease
+/// (ADR-0044, <see cref="PickupLockFile"/>), which stays the same-machine pickup
+/// guard until the runner split (ADR-0059) cuts over.
 /// </para>
 /// </summary>
 public static class LeaseEndpoints
@@ -23,83 +24,44 @@ public static class LeaseEndpoints
     {
         var group = app.MapGroup("/api/runner/lease");
 
-        group.MapPost("/acquire", (LeaseAcquireRequest req, ITaskScanner scanner, PickupLockFile locks) =>
+        group.MapPost("/acquire", (RunLeaseAcquireRequest req, ITaskScanner scanner, RunLeaseService leases, RunnerIdentity identity) =>
         {
-            var folder = ResolveFolder(scanner, req.TaskKey);
-            if (folder is null)
-                return Results.NotFound(new LeaseResponse("TaskNotFound", false, null, $"No task '{req.TaskKey}'."));
-
-            var owner = new PickupLockOwner
-            {
-                Pid = req.Pid,
-                Hostname = req.Hostname,
-                Role = req.Role,
-                BackendName = req.BackendName,
-                BackendPort = req.BackendPort ?? 0,
-                ProjectName = req.ProjectName,
-                JobId = req.TaskKey
-            };
-
-            var outcome = locks.TryAcquire(folder, owner, out var existing);
-            var granted = outcome != LockAcquireOutcome.ForeignHeld;
-            // On grant the authoritative record is the freshly-written one; on a
-            // foreign hold it is the existing owner the caller lost the race to.
-            var info = granted ? locks.Peek(folder) : existing;
-            return Results.Ok(new LeaseResponse(outcome.ToString(), granted, ToDto(info)));
+            if (!TaskExists(scanner, req.TaskKey))
+                return Results.NotFound(new RunLeaseResponse("TaskNotFound", false, null, $"No task '{req.TaskKey}'."));
+            return Results.Ok(leases.TryAcquire(StampIdentity(req, identity)));
         });
 
-        group.MapPost("/renew", (LeaseRenewRequest req, ITaskScanner scanner, PickupLockFile locks) =>
-        {
-            var folder = ResolveFolder(scanner, req.TaskKey);
-            if (folder is null)
-                return Results.NotFound(new LeaseResponse("TaskNotFound", false, null, $"No task '{req.TaskKey}'."));
+        group.MapPost("/renew", (RunLeaseHeartbeatRequest req, RunLeaseService leases) =>
+            Results.Ok(leases.Renew(req)));
 
-            var owner = OwnerFor(req.Pid, req.Hostname, req.BackendName, req.TaskKey);
-            var ok = locks.Renew(folder, owner);
-            return Results.Ok(new LeaseResponse(ok ? "Renewed" : "NotOwner", ok, ToDto(locks.Peek(folder))));
-        });
+        group.MapPost("/release", (RunLeaseReleaseRequest req, RunLeaseService leases) =>
+            Results.Ok(leases.Release(req)));
 
-        group.MapPost("/release", (LeaseReleaseRequest req, ITaskScanner scanner, PickupLockFile locks) =>
-        {
-            var folder = ResolveFolder(scanner, req.TaskKey);
-            if (folder is null)
-                return Results.NotFound(new LeaseResponse("TaskNotFound", false, null, $"No task '{req.TaskKey}'."));
-
-            locks.Release(folder, OwnerFor(req.Pid, req.Hostname, req.BackendName, req.TaskKey));
-            return Results.Ok(new LeaseResponse("Released", false, ToDto(locks.Peek(folder))));
-        });
-
-        group.MapGet("/{taskKey}", (string taskKey, ITaskScanner scanner, PickupLockFile locks) =>
-        {
-            var folder = ResolveFolder(scanner, taskKey);
-            if (folder is null)
-                return Results.NotFound(new LeaseResponse("TaskNotFound", false, null, $"No task '{taskKey}'."));
-            var info = locks.Peek(folder);
-            return Results.Ok(new LeaseResponse(info is null ? "Free" : "Held", false, ToDto(info)));
-        });
+        group.MapGet("/{taskKey}", (string taskKey, RunLeaseService leases) =>
+            Results.Ok(leases.Peek(taskKey)));
     }
 
-    private static PickupLockOwner OwnerFor(int pid, string hostname, string backendName, string taskKey) => new()
+    /// <summary>
+    /// Fill a partial acquire request with this backend's runner identity so a
+    /// local caller need only name the task; a remote runner supplies its own
+    /// identity and those values win. Keeps the previously-unused lease API
+    /// productive for the in-process runner without forcing every caller to
+    /// re-derive host/pid/backend.
+    /// </summary>
+    private static RunLeaseAcquireRequest StampIdentity(RunLeaseAcquireRequest req, RunnerIdentity identity) => req with
     {
-        Pid = pid,
-        Hostname = hostname,
-        Role = "",
-        BackendName = backendName,
-        JobId = taskKey
+        RunnerId = string.IsNullOrWhiteSpace(req.RunnerId) ? identity.RunnerId : req.RunnerId,
+        RunnerName = string.IsNullOrWhiteSpace(req.RunnerName) ? identity.RunnerName : req.RunnerName,
+        Hostname = string.IsNullOrWhiteSpace(req.Hostname) ? identity.Hostname : req.Hostname,
+        BackendName = string.IsNullOrWhiteSpace(req.BackendName) ? identity.BackendName : req.BackendName,
+        Pid = req.Pid == 0 ? Environment.ProcessId : req.Pid,
     };
 
-    private static string? ResolveFolder(ITaskScanner scanner, string taskKey)
+    private static bool TaskExists(ITaskScanner scanner, string taskKey)
     {
-        if (string.IsNullOrWhiteSpace(taskKey)) return null;
-        var task = scanner.ScanAllJobs().FirstOrDefault(t =>
+        if (string.IsNullOrWhiteSpace(taskKey)) return false;
+        return scanner.ScanAllJobs().Any(t =>
             string.Equals(t.TaskKey, taskKey, StringComparison.OrdinalIgnoreCase)
             || string.Equals(t.Id, taskKey, StringComparison.OrdinalIgnoreCase));
-        return string.IsNullOrWhiteSpace(task?.FolderPath) ? null : task!.FolderPath;
     }
-
-    private static LeaseInfoDto? ToDto(PickupLockInfo? info) => info is null
-        ? null
-        : new LeaseInfoDto(
-            info.Hostname, info.Pid, info.BackendName, info.Role,
-            info.ProjectName, info.AcquiredAt, info.ExpiresAt);
 }

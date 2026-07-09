@@ -264,10 +264,11 @@ test.describe('Pipeline loop guard (Ralph-loop early detection)', () => {
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
 
-    // The loop guard is the FIRST row ("frueh markiert") and is a Pre step.
+    // The loop guard is the FIRST row ("frueh markiert") and is a Pre step;
+    // its compact kind marker reads PRE (full name in the tooltip).
     const firstRow = page.getByTestId('overview-pipeline-step').first();
     await expect(firstRow).toHaveAttribute('data-step-id', 'pre-loop-guard');
-    await expect(firstRow).toContainText('Pre');
+    await expect(firstRow).toContainText('PRE');
     await expect(firstRow).toContainText('Loop check');
 
     // The detected loop reads as a hard stop with a `loop-detected` verdict pill.

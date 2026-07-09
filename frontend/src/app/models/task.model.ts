@@ -261,6 +261,32 @@ export interface TaskInfo {
    * Progress-lane tasks; null/absent on every other lane. Pure visibility.
    */
   runActivity?: TaskRunActivity | null;
+
+  /**
+   * Set when the task was completed out-of-band (operator chat, external
+   * agent, remote host) and reconciled through
+   * `POST /api/tasks/{id}/external-completion` instead of a runner run.
+   * Mirrors backend `TaskInfo.ExternalCompletion`; null on every task that
+   * finished through the normal runner/review path. Drives the
+   * "extern erledigt" badge on the card. See
+   * docs/concepts/out-of-band-task-completion.md §3.
+   */
+  externalCompletion?: ExternalCompletionInfo | null;
+}
+
+/**
+ * Provenance of an out-of-band task completion. Mirrors backend
+ * `ExternalCompletionInfo`; the canonical narrative lives in
+ * `results/deliverables.md` and the `external_completion` timeline event, this
+ * is the small card-renderable summary behind the "extern erledigt" badge.
+ */
+export interface ExternalCompletionInfo {
+  /** Who / which channel completed the task (operator name, agent id, "chat", ...). */
+  source: string;
+  /** One-line result summary shown in the badge tooltip; may be empty. */
+  summary?: string | null;
+  /** UTC instant the external completion was recorded (ISO 8601). */
+  completedAt: string;
 }
 
 export interface TaskOutcomeIssue {
@@ -430,14 +456,9 @@ export interface ContinueTaskQueuedInfo {
  */
 // (Orchestrator session + chat now in features/orchestrator/models; re-exported below)
 
-/**
- * One turn returned by the Slice D project-chat surface
- * (`/api/projects/{project}/chat/...`). Wider author + kind enums
- * than the legacy `OrchestratorChatTurn`: the new tree carries
- * embedded events (tool-call / watchdog / rate-limit / ...) as
- * first-class records alongside conventional turns.
- */
-// (Project chat turn + responses now in features/project-chat/models; re-exported below)
+// Project chat now renders through the `coding-agent-chat` Composer host in
+// features/orchestrator. The former app-local Slice D models/components were
+// retired with MC-0a.
 
 // (TokenSummaryByModel now in features/tokens/models/tokens.model.ts; re-exported below)
 

@@ -71,7 +71,7 @@ public sealed class TaskProvenanceService
             if (string.IsNullOrWhiteSpace(repoRoot)) return;
 
             var branch = WorktreeTaskLifecycle.BranchFor(info.Id);
-            var integrationBranch = ResolveIntegrationBranch(info.ProjectName);
+            var integrationBranch = ResolveIntegrationBranch(info.ProjectName, repoRoot);
 
             var branchTip = _git.GetBranchTip(repoRoot, branch);
             var workBranchHead = HeadOf(repoRoot, integrationBranch);
@@ -232,9 +232,9 @@ public sealed class TaskProvenanceService
     public TaskProvenanceView BuildView(TaskInfo info)
     {
         var branch = WorktreeTaskLifecycle.BranchFor(info.Id);
-        var integrationBranch = ResolveIntegrationBranch(info.ProjectName);
         var prov = info.Provenance;
         var repoRoot = _git.ResolveRepoRootForWatchPath(info.WatchPath);
+        var integrationBranch = ResolveIntegrationBranch(info.ProjectName, repoRoot);
 
         // No resolvable repo (e.g. project not configured for git): surface the
         // persisted facts with an empty derived view rather than throwing.
@@ -360,9 +360,11 @@ public sealed class TaskProvenanceService
             .ToList();
     }
 
-    private string ResolveIntegrationBranch(string projectName)
+    private string ResolveIntegrationBranch(string projectName, string? repoRoot)
     {
         var configured = _settings.Get(projectName).IntegrationBranch;
+        if (!string.IsNullOrWhiteSpace(repoRoot))
+            return _git.ResolveIntegrationBranch(repoRoot, configured);
         return string.IsNullOrWhiteSpace(configured) ? new ProjectSettings().IntegrationBranch : configured;
     }
 

@@ -268,6 +268,35 @@ public record TaskInfo
     /// <c>job.json</c>; carries no behavior. See <see cref="TaskRunActivity"/>.
     /// </summary>
     public TaskRunActivity? RunActivity { get; init; }
+
+    /// <summary>
+    /// Set when the task was completed out-of-band (operator chat, external
+    /// agent, remote host) and reconciled through
+    /// <c>POST /api/tasks/{id}/external-completion</c> instead of a runner run.
+    /// Persisted as the <c>"externalCompletion"</c> object in <c>task.json</c>;
+    /// null on every task that finished through the normal runner/review path.
+    /// Drives the "extern erledigt" badge on the kanban card. See
+    /// <c>docs/concepts/out-of-band-task-completion.md</c> §3.
+    /// </summary>
+    public ExternalCompletionInfo? ExternalCompletion { get; init; }
+}
+
+/// <summary>
+/// Provenance of an out-of-band task completion. Written by the external
+/// completion endpoint into <c>task.json</c> so the board can render an
+/// "extern erledigt" badge and attribute who/what finished the work. The
+/// canonical narrative lives in <c>results/deliverables.md</c> and the
+/// <c>external_completion</c> timeline event; this record is the small,
+/// card-renderable summary.
+/// </summary>
+public record ExternalCompletionInfo
+{
+    /// <summary>Who or which channel completed the task (operator name, agent id, "chat", ...).</summary>
+    public string Source { get; init; } = "";
+    /// <summary>One-line result summary shown in the badge tooltip; may be empty.</summary>
+    public string? Summary { get; init; }
+    /// <summary>UTC instant the external completion was recorded.</summary>
+    public DateTime CompletedAt { get; init; }
 }
 
 public record TaskOutcomeIssue

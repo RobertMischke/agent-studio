@@ -24,6 +24,12 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
 import { OrchestratorContextHeaderComponent } from '../orchestrator-context-header/orchestrator-context-header.component';
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
+import {
+  suppressLocalDuplicates,
+  parseBugHashtags,
+  resolveAttachmentUrl,
+  readFileAsBase64,
+} from './orchestrator-side-sheet.util';
 /**
  * Right-hand side sheet that hosts the orchestrator chat. Shell follows
  * the same flex-collapse pattern as `kanban-filter-sidesheet` (host width
@@ -129,6 +135,64 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   private readonly panelState = inject(OrchestratorPanelStateService);
   readonly panelWidth = this.panelState.width;
   readonly activeProject = signal<string | null>(null);
+
+  /**
+   * MC-2 (Concept §4): the side sheet's context follows the operator's
+   * navigation — a task page yields a `task` context, the board yields a
+   * `project` context. `pinned` freezes that so navigating away no longer
+   * auto-switches the sheet; the frozen scope is captured in
+   * {@link pinnedSnapshot} at pin time. There is deliberately no "create
+   * context" UI: the context is derived from navigation, never authored.
+   */
+  readonly pinned = signal(false);
+  private readonly pinnedSnapshot = signal<{
+    project: string | null;
+    jobId: string | null;
+    jobTitle: string | null;
+    jobKey: string | null;
+    jobState: string | null;
+    watchPath: string | null;
+  } | null>(null);
+
+  /**
+   * Effective navigation scope: the frozen snapshot while pinned, otherwise
+   * the live host inputs. Every scope-dependent surface (context header,
+   * context chip, subtitle, and the chat data flow) reads these so the pin
+   * freezes the whole sheet coherently, not just the header.
+   */
+  readonly effectiveProject = computed<string | null>(() =>
+    this.pinned() ? (this.pinnedSnapshot()?.project ?? null) : this.activeProject());
+  readonly effectiveJobId = computed<string | null>(() =>
+    this.pinned() ? (this.pinnedSnapshot()?.jobId ?? null) : this.activeJobId());
+  readonly effectiveJobTitle = computed<string | null>(() =>
+    this.pinned() ? (this.pinnedSnapshot()?.jobTitle ?? null) : this.activeJobTitle());
+  readonly effectiveJobKey = computed<string | null>(() =>
+    this.pinned() ? (this.pinnedSnapshot()?.jobKey ?? null) : this.activeJobKey());
+  readonly effectiveJobState = computed<string | null>(() =>
+    this.pinned() ? (this.pinnedSnapshot()?.jobState ?? null) : this.activeJobState());
+  readonly effectiveWatchPath = computed<string | null>(() =>
+    this.pinned() ? (this.pinnedSnapshot()?.watchPath ?? null) : this.activeWatchPath());
+
+  /**
+   * Navigation-derived context kind and canonical context key. A task
+   * context needs both an id and a title in scope; anything else is the
+   * project (board) context. The key mirrors the backend registry shape
+   * (`project:<PROJ>` / `task:<PROJ>/<KEY>`, see OrchestratorContextKey) so
+   * it is ready to address the per-context session once a transcript read
+   * endpoint exists; today the chat body still reads the project thread.
+   */
+  readonly contextKind = computed<'task' | 'project'>(() =>
+    this.effectiveJobId() && this.effectiveJobTitle() ? 'task' : 'project');
+  readonly contextKey = computed<string | null>(() => {
+    const proj = (this.effectiveProject() ?? '').trim();
+    if (!proj) return null;
+    if (this.contextKind() === 'task') {
+      const key = (this.effectiveJobKey() ?? '').trim();
+      if (key) return `task:${proj}/${key}`;
+    }
+    return `project:${proj}`;
+  });
+
   readonly turns = signal<OrchestratorChatTurn[]>([]);
   readonly loading = signal(false);
   readonly sending = signal(false);
@@ -225,7 +289,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * and the server turn takes over with the byte-identical cached image.
    */
   readonly messages = computed<ChatMessage[]>(() => {
-    const proj = this.activeProject();
+    const proj = this.effectiveProject();
     const local = this.localTurns();
     const serverFiltered = suppressLocalDuplicates(this.turns(), local);
     const merged = [...serverFiltered, ...local];
@@ -260,16 +324,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       alt: a.alt,
       // Server returns "chat-attachments/<file>"; resolve through the
       // GET endpoint so the <img> in the bubble actually loads.
-      url: this.resolveAttachmentUrl(projectName, a.relativePath)
+      url: resolveAttachmentUrl(projectName, a.relativePath)
     }));
-  }
-
-  private resolveAttachmentUrl(projectName: string | null, relativePath: string): string {
-    if (!projectName || !relativePath) return relativePath;
-    const fileName = relativePath.startsWith('chat-attachments/')
-      ? relativePath.substring('chat-attachments/'.length)
-      : relativePath;
-    return `/api/runner/${encodeURIComponent(projectName)}/orchestrator-chat/attachments/${encodeURIComponent(fileName)}`;
   }
 
   readonly emptyStateText = computed(() => {
@@ -278,16 +334,18 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   });
 
   // F14: subtitle tracks the active picker (was hardcoded before).
+  // MC-2: reads the effective (pinned-or-live) project so a pinned sheet
+  // keeps naming its frozen scope.
   readonly subtitleText = computed<string>(() => {
-    const proj = this.activeProject();
+    const proj = this.effectiveProject();
     return proj ? `${proj} · canonical session` : 'canonical session';
   });
 
   readonly contextChipText = computed<string | null>(() => {
-    const proj = this.activeProject();
+    const proj = this.effectiveProject();
     if (!proj) return null;
-    const tail = this.activeJobId() && this.activeJobTitle()
-      ? `Task '${this.activeJobTitle()}'`
+    const tail = this.contextKind() === 'task'
+      ? `Task '${this.effectiveJobTitle()}'`
       : 'Board';
     return `Context: ${proj} · ${tail}`;
   });
@@ -327,10 +385,13 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   });
 
   constructor() {
+    // MC-2: reload when the *effective* project changes — pinning freezes
+    // the scope, so following the effective value (not the raw picker)
+    // keeps a pinned sheet on its frozen thread while nav moves on.
     effect(() => {
-      this.activeProject();
+      const proj = this.effectiveProject();
       this.open();
-      if (this.open() && this.activeProject()) {
+      if (this.open() && proj) {
         this.localTurns.set([]);
         this.refresh(false);
       }
@@ -340,8 +401,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     // and (on project change) clears the cache so the new thread sees
     // a fresh context block on its first send.
     effect(() => {
-      const proj = this.activeProject();
-      this.activeJobId();
+      const proj = this.effectiveProject();
+      this.effectiveJobId();
       untracked(() => {
         if (this.contextDismissed()) this.contextDismissed.set(false);
         if (proj !== this.lastSentProjectForSignature) {
@@ -362,6 +423,9 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       const preferred = this.preferredProject();
       const projects = this.projects();
       untracked(() => {
+        // MC-2: a pinned sheet ignores navigation — do not let the host's
+        // preferred project snap the frozen scope back.
+        if (this.pinned()) return;
         if (!preferred) {
           if (this.activeProject() == null && projects.length > 0) {
             this.activeProject.set(projects[0]);
@@ -376,12 +440,41 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
 
   }
 
+  /**
+   * MC-2: pin freezes the current navigation context; unpin resumes
+   * following navigation. Pinning snapshots the live scope so the header,
+   * chip, and chat body all stay on it. Unpinning snaps the project back to
+   * the host's current preferred project because the preferred-sync effect
+   * only fires on an input change — without this nudge an unpinned sheet
+   * would keep the frozen project until the operator next navigated.
+   */
+  togglePin(): void {
+    if (this.pinned()) {
+      this.pinned.set(false);
+      this.pinnedSnapshot.set(null);
+      const preferred = this.preferredProject();
+      if (preferred && this.projects().includes(preferred)) {
+        this.activeProject.set(preferred);
+      }
+      return;
+    }
+    this.pinnedSnapshot.set({
+      project: this.activeProject(),
+      jobId: this.activeJobId(),
+      jobTitle: this.activeJobTitle(),
+      jobKey: this.activeJobKey(),
+      jobState: this.activeJobState(),
+      watchPath: this.activeWatchPath(),
+    });
+    this.pinned.set(true);
+  }
+
   ngOnInit(): void {
     // Slow poll: the chat history only changes when the user sends a
     // message (which we already refresh after) or when something else
     // appends a turn. 30s keeps the UI honest without burning quota.
     this.pollTimer = setVisibleInterval(() => {
-      if (this.open() && this.activeProject() && !this.loading() && !this.sending()) {
+      if (this.open() && this.effectiveProject() && !this.loading() && !this.sending()) {
         this.refresh(true);
       }
     }, 30_000);
@@ -521,6 +614,9 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   setActiveProject(proj: string): void {
+    // MC-2: the picker is inert while pinned — the frozen scope wins until
+    // the operator unpins.
+    if (this.pinned()) return;
     if (proj === this.activeProject()) return;
     this.activeProject.set(proj);
   }
@@ -636,21 +732,21 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   private currentContextSignature(): string {
-    const proj = (this.activeProject() ?? '').trim();
-    const jobId = (this.activeJobId() ?? '').trim();
-    const jobTitle = (this.activeJobTitle() ?? '').trim();
+    const proj = (this.effectiveProject() ?? '').trim();
+    const jobId = (this.effectiveJobId() ?? '').trim();
+    const jobTitle = (this.effectiveJobTitle() ?? '').trim();
     return `${proj}|${jobId}|${jobTitle}`;
   }
 
   onOpenVerboseDebug(): void {
-    const jobId = this.activeJobId();
-    const watchPath = this.activeWatchPath();
+    const jobId = this.effectiveJobId();
+    const watchPath = this.effectiveWatchPath();
     if (!jobId || !watchPath) return;
-    this.openVerboseDebug.emit({ jobId, watchPath, jobTitle: this.activeJobTitle() });
+    this.openVerboseDebug.emit({ jobId, watchPath, jobTitle: this.effectiveJobTitle() });
   }
 
   refresh(silent = false): void {
-    const proj = this.activeProject();
+    const proj = this.effectiveProject();
     if (!proj) return;
     if (!silent) this.loading.set(true);
     this.jobService.getOrchestratorChat(proj).subscribe({
@@ -676,7 +772,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   private readonly bugEventTargets = new Map<string, { jobId: string; watchPath: string }>();
 
   async onSubmit(event: ChatSubmitEvent): Promise<void> {
-    const proj = this.activeProject();
+    const proj = this.effectiveProject();
     if (!proj) return;
     const text = event.text.trim();
     if (!text && event.attachments.length === 0) return;
@@ -735,7 +831,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       for (const att of event.attachments) {
         const [resp, inline] = await Promise.all([
           this.uploadOne(proj, att.file),
-          this.readAsBase64(att.file).catch(() => null)
+          readFileAsBase64(att.file).catch(() => null)
         ]);
         uploaded.push({
           alt: att.alt,
@@ -760,8 +856,8 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       !this.contextDismissed() && contextSignature !== this.lastSentContextSignature();
     const contextPayload = shouldShipContext
       ? buildChatNavigationContext({
-          activeJobId: this.activeJobId(),
-          activeJobTitle: this.activeJobTitle()
+          activeJobId: this.effectiveJobId(),
+          activeJobTitle: this.effectiveJobTitle()
         })
       : null;
 
@@ -785,7 +881,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
             const img = new Image();
             img.onload = () => resolve();
             img.onerror = () => resolve();
-            img.src = this.resolveAttachmentUrl(proj, u.relativePath);
+            img.src = resolveAttachmentUrl(proj, u.relativePath);
           })
         );
         // Fetch the server's view of the conversation. While the local
@@ -967,38 +1063,11 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Read a pasted/dropped file as a base64 payload for the multimodal
-   * fast path. Strips the `data:<mime>;base64,` prefix so the backend
-   * only sees the raw base64. Files larger than 10 MB resolve to null
-   * so the inline path is skipped and the chat falls back to the
-   * archived-only behaviour (matches the backend upload cap).
-   */
-  private readAsBase64(file: File): Promise<{ base64: string; mimeType: string } | null> {
-    return new Promise((resolve) => {
-      if (file.size > 10 * 1024 * 1024) {
-        resolve(null);
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = typeof reader.result === 'string' ? reader.result : '';
-        const comma = result.indexOf(',');
-        const base64 = comma >= 0 ? result.substring(comma + 1) : result;
-        const mimeMatch = /^data:([^;]+);base64,/.exec(result);
-        const mimeType = mimeMatch?.[1] ?? file.type ?? 'image/png';
-        resolve({ base64, mimeType });
-      };
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
-    });
-  }
-
-  /**
    * Phase 5: hand the latest orchestrator reply back to the host so it
    * can open the create-task dialog pre-filled with that text.
    */
   onCreateTaskFromLastReply(): void {
-    const proj = this.activeProject();
+    const proj = this.effectiveProject();
     if (!proj) return;
     const last = [...this.turns()].reverse().find(
       (t) => t.role === 'orchestrator' && !!t.text && !t.errorMessage
@@ -1015,7 +1084,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * affordance works the moment a message is submitted.
    */
   onCreateTaskFromYourMessage(): void {
-    const proj = this.activeProject();
+    const proj = this.effectiveProject();
     if (!proj) return;
     const merged = [...this.turns(), ...this.localTurns()];
     const last = [...merged].reverse().find(
@@ -1025,67 +1094,4 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.createTaskFromDraft.emit({ projectName: proj, promptText: last.text });
   }
 
-}
-
-/**
- * Hide any server user turn that an in-flight local turn already represents.
- *
- * After the operator hits Send we render a local "optimistic" turn so the
- * bubble shows up immediately (including the inline blob preview of any
- * attached image). When the round-trip to the orchestrator finishes the
- * server now reports the same user turn back, but the local turn is still
- * on screen until the persisted attachment URL has been pre-decoded into
- * the browser image cache. Without this dedup, the user would see the
- * bubble briefly duplicate during that pre-decode window.
- *
- * Match strategy: walk local user turns newest-to-oldest and pair each
- * with the newest unmatched server user turn that has the same text and
- * the same number of attachments. Pairing is greedy and one-shot so
- * sending the same message twice in a row only suppresses one copy per
- * local turn.
- */
-function suppressLocalDuplicates(
-  server: OrchestratorChatTurn[],
-  local: (OrchestratorChatTurn & { localAttachments?: { alt: string; previewUrl: string }[] })[]
-): OrchestratorChatTurn[] {
-  if (local.length === 0) return server;
-  const localUsers = local.filter((t) => t.role === 'user');
-  if (localUsers.length === 0) return server;
-  const suppress = new Set<string>();
-  for (const lt of localUsers) {
-    const ltAttCount = lt.localAttachments?.length ?? lt.attachments?.length ?? 0;
-    for (let i = server.length - 1; i >= 0; i--) {
-      const st = server[i];
-      if (suppress.has(st.id)) continue;
-      if (st.role !== 'user') continue;
-      if ((st.text ?? '') !== (lt.text ?? '')) continue;
-      const stAttCount = st.attachments?.length ?? 0;
-      if (stAttCount !== ltAttCount) continue;
-      suppress.add(st.id);
-      break;
-    }
-  }
-  return suppress.size === 0 ? server : server.filter((s) => !suppress.has(s.id));
-}
-
-/**
- * Slice E: parse `#tag1 #tag2` patterns at the start of any line in the
- * `/bug` description. A tag word is `[A-Za-z][\w-]*`; a leading `# ` (with
- * a space) is treated as Markdown heading syntax and skipped, so the
- * common case where the user opens the description with a heading does
- * not capture the heading text as a tag.
- */
-function parseBugHashtags(description: string): string[] {
-  const found: string[] = [];
-  for (const line of description.split('\n')) {
-    const trimmed = line.trim();
-    if (!/^#[A-Za-z]/.test(trimmed)) continue;
-    const matches = trimmed.match(/#[A-Za-z][\w-]*/g);
-    if (!matches) continue;
-    for (const m of matches) {
-      const tag = m.substring(1);
-      if (!found.includes(tag)) found.push(tag);
-    }
-  }
-  return found;
 }

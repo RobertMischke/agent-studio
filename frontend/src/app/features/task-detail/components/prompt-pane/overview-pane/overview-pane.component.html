@@ -284,21 +284,66 @@
           <span class="ov-pl-header__cell ov-pl-header__tokens">Tokens</span>
           <span class="ov-pl-header__cell ov-pl-header__cost">Cost</span>
         </div>
-        @for (row of visiblePipelineRows(); track row.id) {
-          @if (row.startsPhase) {
-            <div class="ov-pl-phase"
-                 [attr.data-phase]="row.phaseKey"
-                 aria-label="{{ row.phaseLabel }} pipeline phase: {{ row.phaseDescription }}"
-                 data-testid="overview-pipeline-phase">
-              <span class="ov-pl-phase__label">{{ row.phaseLabel }}</span>
-              <span class="ov-pl-phase__rule" aria-hidden="true"></span>
+        @for (group of pipelineGroups(); track group.key) {
+          <div class="ov-pl-group"
+               [attr.data-phase]="group.phaseKey"
+               [attr.data-tone]="group.tone"
+               [attr.data-collapsed]="isGroupCollapsed(group) ? 'true' : 'false'"
+               data-testid="overview-pipeline-group">
+            <!-- Collapsible section header (ASS-1914): the whole row is the
+                 toggle (a button, so keyboard collapse/expand is native). The
+                 aggregate tone rides on the left accent + status word, never on
+                 row content, and the collapsed summary keeps enough state
+                 (ran/step counts, concerns, disabled, tokens) to read the
+                 section without expanding it. -->
+            <button type="button"
+                    class="ov-pl-phase"
+                    [attr.data-phase]="group.phaseKey"
+                    [attr.data-tone]="group.tone"
+                    [attr.aria-expanded]="!isGroupCollapsed(group)"
+                    [attr.aria-label]="groupAriaLabel(group)"
+                    data-testid="overview-pipeline-phase"
+                    (click)="toggleGroup(group)">
+              <span class="ov-pl-phase__marker"
+                    data-testid="overview-pipeline-phase-marker"
+                    aria-hidden="true">{{ isGroupCollapsed(group) ? '+' : '−' }}</span>
+              <span class="ov-pl-phase__label">{{ group.label }}</span>
               <span class="ov-pl-phase__info"
-                    tabindex="0"
-                    aria-label="{{ row.phaseLabel }} phase explanation"
-                    [cacTooltip]="row.phaseDescription"
+                    aria-hidden="true"
+                    [cacTooltip]="group.description"
                     tooltipSeverity="info">i</span>
-            </div>
-          }
+              <span class="ov-pl-phase__rule" aria-hidden="true"></span>
+              <span class="ov-pl-phase__summary"
+                    data-testid="overview-pipeline-phase-summary"
+                    [attr.data-tone]="group.tone">
+                <span class="ov-pl-phase__status" [attr.data-tone]="group.tone">{{ groupToneLabel(group.tone) }}</span>
+                @if (group.ranCount > 0) {
+                  <span class="ov-pl-phase__count"
+                        data-testid="overview-pipeline-phase-ran">{{ group.ranCount }}/{{ group.stepCount }}</span>
+                } @else {
+                  <span class="ov-pl-phase__count">{{ group.stepCount }} {{ group.stepCount === 1 ? 'step' : 'steps' }}</span>
+                }
+                @if (group.concernCount > 0) {
+                  <span class="ov-pl-phase__concern"
+                        data-testid="overview-pipeline-phase-concern"
+                        [cacTooltip]="group.concernCount === 1
+                          ? '1 step in this section flagged a concern'
+                          : group.concernCount + ' steps in this section flagged concerns'"
+                        tooltipSeverity="warn"
+                        [attr.aria-label]="group.concernCount === 1 ? '1 concern' : group.concernCount + ' concerns'">⚠ {{ group.concernCount }}</span>
+                }
+                @if (group.offCount > 0) {
+                  <span class="ov-pl-phase__off"
+                        data-testid="overview-pipeline-phase-off"
+                        [attr.aria-label]="group.offCount + ' disabled'">{{ group.offCount }} off</span>
+                }
+                @if (group.totalTokens > 0) {
+                  <span class="ov-pl-phase__tokens ov-value--mono">{{ formatTokens(group.totalTokens) }}</span>
+                }
+              </span>
+            </button>
+            @if (!isGroupCollapsed(group)) {
+            @for (row of group.rows; track row.id) {
           <div class="ov-pl-step"
                [class.ov-pl-step--disabled]="row.status === 'disabled'"
                [class.ov-pl-step--running]="row.status === 'running'"
@@ -311,7 +356,9 @@
             <span class="ov-pl-step__status"
                   [cacTooltip]="stepStatusLabel(row.status)"
                   aria-hidden="true">{{ stepStatusIcon(row.status) }}</span>
-            <span class="ov-pl-step__kind">{{ stepKindLabel(row.kind) }}</span>
+            <span class="ov-pl-step__kind"
+                  [cacTooltip]="stepKindLabel(row.kind)"
+                  [attr.aria-label]="stepKindLabel(row.kind) + ' step'">{{ stepKindMarker(row.kind) }}</span>
             <span class="ov-pl-step__name-cell">
               <span class="ov-pl-step__name"
                     data-testid="overview-pipeline-step-name"
@@ -444,6 +491,9 @@
                 {{ formatCost(row.costUsd) }}
               }
             </span>
+          </div>
+            }
+            }
           </div>
         }
       </div>

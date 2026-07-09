@@ -242,6 +242,8 @@ builder.Services.AddSingleton<OrchestratorRunner>(sp => new OrchestratorRunner(
     sp.GetService<CliOneShotRegistry>()));
 builder.Services.AddSingleton<OrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorSessionStore>();
+builder.Services.AddSingleton<OrchestratorSessionRegistry>();
+builder.Services.AddSingleton<OrchestratorTurnService>();
 builder.Services.AddSingleton<GlobalOrchestratorBootstrap>();
 builder.Services.AddSingleton<TokenSummaryCacheStore>();
 builder.Services.AddSingleton<WorkspaceTokensCacheStore>();
@@ -254,6 +256,9 @@ builder.Services.AddSingleton<IAutoReviewPostProcessingQueue>(sp =>
     sp.GetRequiredService<AutoReviewPostProcessingQueue>());
 builder.Services.AddSingleton<TaskProvenanceService>();
 builder.Services.AddSingleton<TaskTransitionService>();
+// Out-of-band task completion (docs/concepts/out-of-band-task-completion.md §3):
+// reconciles a task finished outside the runner in one atomic call.
+builder.Services.AddSingleton<ExternalCompletionService>();
 builder.Services.AddSingleton<TaskWatcherService>();
 // Cycle 1: in-memory snapshot of all jobs across watch paths. Reads from
 // TaskScannerService.ScanAllJobsRaw on miss, invalidated by TaskWatcherService
@@ -314,6 +319,11 @@ builder.Services.AddSingleton<AgentStudio.AdHoc.AdHocUsageRecorder>();
 builder.Services.AddSingleton<AgentStudio.AdHoc.AdHocUsageService>();
 builder.Services.AddSingleton<PickupLockFile>();
 builder.Services.AddSingleton<IntegrationLeaseService>();
+// RM-3 / ADR-0060: the fenced task-run lease + this backend's runner identity
+// back the productive /api/runner/lease API (§8.2C), the prepared successor to
+// the disk-backed .pickup-lock.json guard.
+builder.Services.AddSingleton<RunLeaseService>();
+builder.Services.AddSingleton(sp => RunnerIdentity.Resolve(sp.GetRequiredService<IConfiguration>()));
 // ASS-1729: keep the host awake while >=1 agent run is active. Default ON;
 // disable via "KeepAwakeDuringRuns": false. Uses the Windows Power Request API
 // on Windows (visible under `powercfg /requests`, system-required only so the

@@ -201,6 +201,44 @@ public static class RunOutcomePolicy
             };
         }
 
+        if (outcome.IssueKind == RunIssueKind.ModelInvalid)
+        {
+            // The configured model is invalid/unsupported for this account or
+            // CLI (invalid_request / HTTP 400 "model not supported"). NON-
+            // RETRYABLE: re-issuing spawns straight back into the same 400.
+            // Route to human review with a clear model-invalid reason so a
+            // human changes the model, instead of the misleading
+            // orchestrator-inconclusive catch-all. Mirrors ContextOverflow.
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndStop,
+                MetaMessage: outcome.Summary
+                    ?? "The configured model is invalid/unsupported for this account or CLI. This cannot be fixed by re-issuing; change the model on the task. Routing to human review.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.ModelInvalid,
+                MessageKind = OrchestratorMessageKind.ModelInvalid
+            };
+        }
+
+        if (outcome.IssueKind == RunIssueKind.QuotaExhausted)
+        {
+            // The account's usage/session/rate-limit budget is exhausted. This
+            // is transient (it clears when the quota window resets), so re-
+            // issuing right now walks into the same rejection. Route to human
+            // review with an honest quota-exhausted reason (the runner also
+            // exempts it from the per-task no-progress quarantine streak) rather
+            // than the misleading orchestrator-inconclusive.
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndStop,
+                MetaMessage: outcome.Summary
+                    ?? "The account's usage/session/rate-limit budget is exhausted. This is transient; re-queue the task after the quota window resets. Routing to human review.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.QuotaExhausted,
+                MessageKind = OrchestratorMessageKind.QuotaExhausted
+            };
+        }
+
         if (outcome.IssueKind == RunIssueKind.EnvironmentBlocker)
         {
             // Environment blockers are unrecoverable by the agent. The

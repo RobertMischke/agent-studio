@@ -856,4 +856,50 @@ public class RunOutcomePolicyTests
         Assert.Equal(OrchestratorMessageKind.ContextOverflow, action.MessageKind);
         Assert.False(action.IsHeuristicFallback);
     }
+
+    /// <summary>
+    /// A model-invalid failure (invalid_request / 400 "model not supported") is
+    /// non-retryable - re-issuing spawns into the same 400 - so the policy stops
+    /// and routes to human review with a clear model-invalid reason instead of
+    /// the orchestrator-inconclusive catch-all (AGT-1941 codex signature).
+    /// </summary>
+    [Fact]
+    public void ModelInvalid_StopsAndRoutesToHumanReview()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown) with { IssueKind = RunIssueKind.ModelInvalid },
+            followupPrompt: "please continue",
+            reissueAttempt: 0,
+            codexEvidence: null);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(RunIssueKind.ModelInvalid, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.ModelInvalid, action.MessageKind);
+        Assert.False(action.IsHeuristicFallback);
+    }
+
+    /// <summary>
+    /// A quota-exhausted failure (session/usage/rate limit) is transient but
+    /// re-issuing right now hits the same rejection, so the policy stops and
+    /// routes to human review with an honest quota-exhausted reason instead of
+    /// the orchestrator-inconclusive catch-all (AGT-1918/1919/1920 signature).
+    /// </summary>
+    [Fact]
+    public void QuotaExhausted_StopsAndRoutesToHumanReview()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown) with { IssueKind = RunIssueKind.QuotaExhausted },
+            followupPrompt: "please continue",
+            reissueAttempt: 0,
+            codexEvidence: null);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(RunIssueKind.QuotaExhausted, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.QuotaExhausted, action.MessageKind);
+        Assert.False(action.IsHeuristicFallback);
+    }
 }

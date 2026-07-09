@@ -7,6 +7,18 @@ import type { TaskOutcomeIssue, TaskSummaryStatus } from '../../../../models/tas
  */
 export type ProtocolVerdictKind = 'ok' | 'problem' | 'unclear';
 
+/**
+ * A run-outcome problem (Blocked / Failed) that the current leading lane
+ * state has already overtaken. Instead of shouting as the head banner it is
+ * demoted to a collapsed "history" line beneath the leading verdict, so the
+ * user can still read what an earlier, superseded run reported without the
+ * stale blocker contradicting the accepted stand (BEFUND 2).
+ */
+export interface SupersededBlocker {
+  label: string;
+  detail: string;
+}
+
 export interface ProtocolVerdict {
   kind: ProtocolVerdictKind;
   emoji: string;
@@ -19,6 +31,13 @@ export interface ProtocolVerdict {
    * body. Null when status.md has no Duration line yet.
    */
   duration: string | null;
+  /**
+   * Present only when the run-derived verdict was a Blocked/Failed that the
+   * leading lane state (accepted / completed) has superseded. The head verdict
+   * then leads with the accepted stand and this carries the demoted blocker
+   * for the collapsed history line.
+   */
+  superseded: SupersededBlocker | null;
 }
 
 export interface ProtocolVerdictInputs {
@@ -29,6 +48,18 @@ export interface ProtocolVerdictInputs {
   outcomeIssue: TaskOutcomeIssue | null | undefined;
   /** Has any cli-output / log activity been observed for this job at all? */
   hasActivity: boolean;
+  /**
+   * Canonical lane key the card currently lives in (`TaskInfo.state`, e.g.
+   * `6-completed`). The current lane leads the head verdict; a run outcome
+   * from a superseded context is subordinate history (BEFUND 2). Optional so
+   * callers/tests that only exercise the status.md derivation stay untouched.
+   */
+  laneState?: string | null;
+  /**
+   * Latest orchestrator-review verdict for the card (`TaskInfo.orchestratorVerdict`).
+   * `accept` marks an accepted stand that overtakes an earlier Blocked run.
+   */
+  orchestratorVerdict?: 'pending' | 'reissue' | 'escalate' | 'accept' | null;
 }
 
 /**
@@ -53,15 +84,62 @@ export interface ProtocolVerdictInputs {
  * to `Result: Success`; sentinels and explicit non-success Result lines still
  * win at their original priority.
  *
+ * Precedence reconciliation (BEFUND 2): the *current lane state leads* the head
+ * verdict; a run outcome is subordinate history. After the base derivation above
+ * runs over status.md, {@link reconcileWithLeadingState} demotes a Blocked/Failed
+ * base to a collapsed history line when the card already lives in an accepted
+ * stand (`orchestratorVerdict === 'accept'`, or lane `6-completed` / `7-archive`).
+ * A stale Blocked from a superseded context must never be the head banner once
+ * the work was accepted; it is kept only as history (`superseded`).
+ *
  * Pure function so the protocol-pane component can wrap it in a `computed()`
  * and unit tests can hammer every branch without a fixture.
  */
 export function deriveProtocolVerdict(input: ProtocolVerdictInputs): ProtocolVerdict {
   const base = computeVerdictBase(input);
-  return { ...base, duration: parseDuration(input.statusMarkdown) };
+  const reconciled = reconcileWithLeadingState(base, input);
+  return { ...reconciled, duration: parseDuration(input.statusMarkdown) };
 }
 
-function computeVerdictBase(input: ProtocolVerdictInputs): Omit<ProtocolVerdict, 'duration'> {
+/** Lane keys that represent an accepted / done stand — the work is behind us. */
+const ACCEPTED_LANE_STATES = new Set(['6-completed', '7-archive']);
+
+/**
+ * Decide whether the card's current lane state represents an accepted stand
+ * that should lead the head verdict over a stale run-outcome blocker.
+ */
+export function isAcceptedStand(input: ProtocolVerdictInputs): boolean {
+  if (input.orchestratorVerdict === 'accept') return true;
+  return !!input.laneState && ACCEPTED_LANE_STATES.has(input.laneState);
+}
+
+/**
+ * When the status.md-derived base verdict is a run-outcome Blocked/Failed but
+ * the card already lives in an accepted stand, lead with the accepted state and
+ * demote the blocker to `superseded` history. Only run-outcome problems (labels
+ * `Blocked` / `Failed`) are demoted; a `Summary failed` render error or a
+ * high-severity runner outcome issue stays leading because it is orthogonal to
+ * review acceptance. Every non-demoted verdict passes through with
+ * `superseded: null`.
+ */
+function reconcileWithLeadingState(
+  base: Omit<ProtocolVerdict, 'duration' | 'superseded'>,
+  input: ProtocolVerdictInputs,
+): Omit<ProtocolVerdict, 'duration'> {
+  const isRunOutcomeProblem = base.kind === 'problem' && (base.label === 'Blocked' || base.label === 'Failed');
+  if (!isRunOutcomeProblem || !isAcceptedStand(input)) {
+    return { ...base, superseded: null };
+  }
+  return {
+    kind: 'ok',
+    emoji: emojiFor('ok'),
+    label: 'Accepted',
+    detail: 'Current stand: accepted by review. An earlier run reported a blocker, kept as history below.',
+    superseded: { label: base.label, detail: base.detail },
+  };
+}
+
+function computeVerdictBase(input: ProtocolVerdictInputs): Omit<ProtocolVerdict, 'duration' | 'superseded'> {
   if (input.isRunning) {
     return verdict('unclear', 'Running', 'Agent is still working - click Interim status to peek.');
   }
@@ -124,7 +202,7 @@ function computeVerdictBase(input: ProtocolVerdictInputs): Omit<ProtocolVerdict,
   return verdict('unclear', 'No run yet', 'Start the task to see how it goes.');
 }
 
-function verdict(kind: ProtocolVerdictKind, label: string, detail: string): Omit<ProtocolVerdict, 'duration'> {
+function verdict(kind: ProtocolVerdictKind, label: string, detail: string): Omit<ProtocolVerdict, 'duration' | 'superseded'> {
   return { kind, emoji: emojiFor(kind), label, detail };
 }
 
@@ -185,7 +263,11 @@ function emojiFor(kind: ProtocolVerdictKind): string {
 }
 
 type SentinelKind = 'done' | 'blocked' | 'needs_input' | 'noop';
-const SENTINEL_RE = /\[\[TASK_(DONE|BLOCKED|NEEDS_INPUT|NOOP)(?::([^\]]*))?\]\]/gi;
+// Reason capture is lazy up to the closing `]]` (`[\s\S]*?`) rather than
+// "any char that is not `]`" so a reason that itself contains a single `]`,
+// a quote, or other special characters is preserved whole instead of being
+// truncated at the first bracket (BEFUND 1: robust against Sonderzeichen).
+const SENTINEL_RE = /\[\[TASK_(DONE|BLOCKED|NEEDS_INPUT|NOOP)(?::([\s\S]*?))?\]\]/gi;
 
 function parseSentinel(markdown: string | null | undefined): { kind: SentinelKind; reason: string | null } | null {
   if (!markdown) return null;
@@ -288,19 +370,40 @@ function findBlockerPhrase(body: string): { phrase: string; sentence: string } |
   return { phrase: best.phrase, sentence: extractSentence(body, best.index) };
 }
 
+/**
+ * True when the `.`/`!`/`?` at `punctIndex` is a real sentence terminator:
+ * followed by whitespace or end-of-text. A dot glued to the next character is
+ * not a boundary, so file extensions (`protocol-verdict.ts`), decimals (`5.1`),
+ * and abbreviations (`e.g.`) no longer split a sentence mid-word — the exact
+ * cause of the "…ts' rendering 5 canonical states…" truncation (BEFUND 1).
+ */
+function isSentenceBoundary(text: string, punctIndex: number): boolean {
+  const ch = text[punctIndex];
+  if (ch !== '.' && ch !== '!' && ch !== '?') return false;
+  const next = text[punctIndex + 1];
+  return next === undefined || /\s/.test(next);
+}
+
 function extractSentence(text: string, atIndex: number): string {
   let start = atIndex;
   while (start > 0) {
     const ch = text[start - 1];
-    if (ch === '\n' || ch === '.' || ch === '!' || ch === '?') break;
+    if (ch === '\n') break;
+    if (isSentenceBoundary(text, start - 1)) break;
     start--;
   }
   let end = atIndex;
   while (end < text.length) {
-    const ch = text[end];
-    if (ch === '\n') break;
-    if (ch === '.' || ch === '!' || ch === '?') { end++; break; }
+    if (text[end] === '\n') break;
+    if (isSentenceBoundary(text, end)) { end++; break; }
     end++;
   }
-  return text.slice(start, end).trim().replace(/^[-*\s]+/, '').trim();
+  // Strip leading markdown bullet / block-quote / wrapping-quote noise and any
+  // trailing wrapping quote so the surfaced reason reads as a clean sentence.
+  return text
+    .slice(start, end)
+    .trim()
+    .replace(/^[-*>\s"'`]+/, '')
+    .replace(/["'`]+$/, '')
+    .trim();
 }

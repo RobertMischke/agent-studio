@@ -24,6 +24,74 @@ public record CreateFollowupFromEvidenceResponse
     public string TargetState { get; init; } = TaskStates.Preparation;
 }
 
+/// <summary>
+/// Body for <c>POST /api/tasks/{id}/external-completion</c>. Reconciles a task
+/// that was completed outside the runner (operator chat, external agent, a
+/// remote host) in one atomic call, per
+/// <c>docs/concepts/out-of-band-task-completion.md</c> §3: writes
+/// <c>status.md</c> + <c>results/deliverables.md</c>, terminalizes
+/// <c>lifecycle.json</c>, appends an <c>external</c> timeline entry, moves the
+/// lane, and commits the workspace evidence.
+/// </summary>
+public record ExternalCompletionRequest
+{
+    /// <summary>Result summary that replaces the stale <c>status.md</c> text. Required.</summary>
+    public string? Summary { get; init; }
+    /// <summary>What was delivered and where (repo paths + commits, or URLs).</summary>
+    public List<ExternalDeliverable>? Deliverables { get; init; }
+    /// <summary>Who or which channel did the work (operator name, agent id, "chat", ...).</summary>
+    public string? Source { get; init; }
+    /// <summary>
+    /// Optional destination lane. Defaults to <c>5-human-review</c> (the card
+    /// still gets a quick operator confirmation). Must be a valid
+    /// <see cref="TaskStates"/> value.
+    /// </summary>
+    public string? TargetState { get; init; }
+}
+
+/// <summary>One delivered artifact recorded in <c>results/deliverables.md</c>.</summary>
+public record ExternalDeliverable
+{
+    /// <summary>Repo-relative path (with an optional <c>@sha</c> commit hint) of the delivered artifact.</summary>
+    public string? Path { get; init; }
+    /// <summary>External URL when the deliverable lives outside the repo.</summary>
+    public string? Url { get; init; }
+    /// <summary>Free-form note about this deliverable.</summary>
+    public string? Note { get; init; }
+}
+
+/// <summary>Typed outcome of the external-completion service, mapped to HTTP by the endpoint.</summary>
+public enum ExternalCompletionStatus
+{
+    Success,
+    NotFound,
+    InvalidRequest,
+    MoveConflict,
+    MoveFailed
+}
+
+/// <summary>
+/// Result of an external-completion attempt. <see cref="TargetState"/> and
+/// <see cref="EvidenceCommitSha"/> are populated only on
+/// <see cref="ExternalCompletionStatus.Success"/>.
+/// </summary>
+public record ExternalCompletionOutcome(
+    ExternalCompletionStatus Status,
+    string? Message = null,
+    string? JobId = null,
+    string? TargetState = null,
+    string? EvidenceCommitSha = null);
+
+/// <summary>200 body for <c>POST /api/tasks/{id}/external-completion</c>.</summary>
+public record ExternalCompletionResponse
+{
+    public string JobId { get; init; } = "";
+    public string TargetState { get; init; } = TaskStates.HumanReview;
+    public string Source { get; init; } = "";
+    /// <summary>Short SHA of the workspace evidence commit, or null when nothing was committed.</summary>
+    public string? EvidenceCommitSha { get; init; }
+}
+
 public record MoveJobRequest
 {
     public string TargetState { get; init; } = "";

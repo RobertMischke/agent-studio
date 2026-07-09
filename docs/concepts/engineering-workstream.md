@@ -199,6 +199,6 @@ their frame page. History = git history of the checkout.
 
 | Slice | Scope | Gate |
 |---|---|---|
-| **EW-1 frame** | fixed 5-area frame in the wiki area: HTML shell, immutability enforcement, sub-page mechanics with history, navigation | none — buildable now |
+| **EW-1 frame** | fixed 5-area frame in the wiki area: HTML shell, immutability enforcement, sub-page mechanics with history, navigation | **implemented 2026-07-09** (AGT-1986, merged) |
 | **EW-2 collector** | pipeline step on onboarding/completion writing Log/Signals/Knowledge/State per §4.1 with §5 rules; prompt template with frame map | EW-1 |
 | **EW-3 retro-pilot + curator** | one-shot retroactive generation for Agent Studio (validates the approach on real history — tonight alone yields signals like "post-processing robustness" and "restart resume orphans"), then the periodic curator | EW-2 |

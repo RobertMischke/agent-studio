@@ -216,6 +216,14 @@
         }
         <span class="task-card__effective-model-name">{{ effectiveModelChip().label }}</span>
       </span>
+      @if (externalDoneBadge(); as edb) {
+        <span class="task-card__external-pill"
+              [cacTooltip]="edb.tooltip"
+              data-testid="task-card-external-done">
+          <span class="task-card__external-glyph" aria-hidden="true">✓</span>
+          {{ edb.label }}
+        </span>
+      }
       @if (tokenBubble(); as tb) {
         <span class="task-card__token-wrap" appTokenPopover>
           <button type="button"

@@ -3,7 +3,9 @@
 @if (hasProject()) {
   <section class="octx"
            data-testid="orch-context-header"
-           [attr.data-scope]="hasTask() ? 'task' : 'board'">
+           [attr.data-scope]="hasTask() ? 'task' : 'board'"
+           [attr.data-pinned]="pinned() ? 'true' : null"
+           [attr.data-context-key]="contextKey()">
     <!-- Primary row: project + scope. Always present. -->
     <div class="octx__row octx__row--primary">
       <span class="octx__chip octx__chip--project"
@@ -30,6 +32,12 @@
           <app-studio-icon class="octx__chip-icon" name="grid" [size]="13"></app-studio-icon>
           <span class="octx__chip-text">Board</span>
         </span>
+      }
+
+      @if (pinned()) {
+        <span class="octx__pin"
+              data-testid="orch-context-pin"
+              [cacTooltip]="'Context pinned — the sheet is not following navigation'">📌 Pinned</span>
       }
     </div>
 

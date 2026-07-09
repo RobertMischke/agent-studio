@@ -59,19 +59,45 @@
             </div>
           }
 
-          @if (e.artifacts.length > 0 || e.fileRefs.length > 0) {
+          @if (imageRefs(e).length > 0) {
+            <!-- Image references (screenshots, harvested evidence) render as
+                 inline thumbnails; a click opens the shared media lightbox.
+                 Thumbnails lazy-load and are height-bounded so a finding with
+                 many PNGs stays compact. -->
+            <ul class="evidence-row__thumbs"
+                [attr.data-testid]="'review-evidence-thumbs-' + e.id">
+              @for (img of imageRefs(e); track img) {
+                <li class="evidence-row__thumb-item">
+                  <button type="button"
+                          class="evidence-row__thumb"
+                          [attr.data-testid]="'review-evidence-thumb-' + e.id"
+                          [cacTooltip]="img"
+                          [attr.aria-label]="'Open ' + baseName(img)"
+                          (click)="openImage(e, img)">
+                    <img class="evidence-row__thumb-img"
+                         [src]="thumbUrl(img)"
+                         [alt]="img"
+                         loading="lazy"
+                         decoding="async" />
+                    <span class="evidence-row__thumb-name">{{ baseName(img) }}</span>
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+          @if (textArtifacts(e).length > 0 || textFileRefs(e).length > 0) {
             <ul class="evidence-row__refs">
-              @for (a of e.artifacts; track a) {
+              @for (a of textArtifacts(e); track a) {
                 <li class="evidence-row__ref evidence-row__ref--artifact"
                     [attr.data-testid]="'review-evidence-artifact-' + e.id">
-                  <span class="evidence-row__ref-icon" aria-hidden="true">📎</span>
+                  <span class="evidence-row__ref-icon" aria-hidden="true">{{ refIcon(a) }}</span>
                   <code>{{ a }}</code>
                 </li>
               }
-              @for (f of e.fileRefs; track f) {
+              @for (f of textFileRefs(e); track f) {
                 <li class="evidence-row__ref evidence-row__ref--file"
                     [attr.data-testid]="'review-evidence-fileref-' + e.id">
-                  <span class="evidence-row__ref-icon" aria-hidden="true">📄</span>
+                  <span class="evidence-row__ref-icon" aria-hidden="true">{{ refIcon(f) }}</span>
                   <code>{{ f }}</code>
                 </li>
               }

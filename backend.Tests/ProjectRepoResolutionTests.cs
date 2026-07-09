@@ -19,6 +19,18 @@ public sealed class ProjectRepoResolutionTests
     private static WatchPathEntry Entry(string path = "", string rootPath = "", string repositoryPath = "")
         => new() { Name = "Demo", Path = path, RootPath = rootPath, RepositoryPath = repositoryPath };
 
+    // Storage-layout derivation runs the input through Path.GetFullPath, so the
+    // literal must be rooted with the running OS's separators or GetFullPath on
+    // Linux treats a "C:\..." string as a single relative segment and prepends
+    // the CWD. Build the fixtures per-OS so the derivation contract is pinned on
+    // both Windows and Linux (the resolution-order tests above pass string
+    // literals straight through and stay OS-neutral).
+    private static string Abs(params string[] segments)
+    {
+        var root = OperatingSystem.IsWindows() ? @"C:\" : "/";
+        return Path.Combine(new[] { root }.Concat(segments).ToArray());
+    }
+
     [Fact]
     public void RegistryRepositoryPath_WinsOverEverything()
     {
@@ -49,19 +61,22 @@ public sealed class ProjectRepoResolutionTests
     [Fact]
     public void InRepoStorageLayout_DerivesRepositoryWithoutAnyConfig()
     {
+        var repo = Abs("Projects", "my-lib");
+        var storage = Path.Combine(repo, ".orchestrator", "jobs");
         var resolved = ProjectRepoResolver.Resolve(
-            Record(storage: @"C:\Projects\my-lib\.orchestrator\jobs"),
-            Entry(path: @"C:\Projects\my-lib\.orchestrator\jobs"));
-        Assert.Equal(@"C:\Projects\my-lib", resolved);
+            Record(storage: storage),
+            Entry(path: storage));
+        Assert.Equal(repo, resolved);
     }
 
     [Fact]
     public void Derivation_FallsBackToWatchPathEntry_WhenNoRecordExists()
     {
+        var storage = Path.Combine(Abs("Projects", "my-lib"), ".orchestrator", "jobs");
         var resolved = ProjectRepoResolver.Resolve(
             record: null,
-            entry: Entry(path: @"C:\Projects\my-lib\.orchestrator\jobs"));
-        Assert.Equal(@"C:\Projects\my-lib", resolved);
+            entry: Entry(path: storage));
+        Assert.Equal(Abs("Projects", "my-lib"), resolved);
     }
 
     [Theory]
@@ -79,8 +94,10 @@ public sealed class ProjectRepoResolutionTests
     [Fact]
     public void TrailingSeparator_DoesNotBreakDerivation()
     {
-        Assert.Equal(@"C:\Projects\my-lib",
-            ProjectRepoResolver.DeriveFromStorage(@"C:\Projects\my-lib\.orchestrator\jobs\"));
+        var repo = Abs("Projects", "my-lib");
+        var storageWithSeparator =
+            Path.Combine(repo, ".orchestrator", "jobs") + Path.DirectorySeparatorChar;
+        Assert.Equal(repo, ProjectRepoResolver.DeriveFromStorage(storageWithSeparator));
     }
 
     [Fact]

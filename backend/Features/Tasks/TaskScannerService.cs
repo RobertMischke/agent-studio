@@ -390,7 +390,8 @@ public class TaskScannerService : ITaskScanner
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),
                 References = ReadReferences(raw),
-                Provenance = ReadProvenance(raw)
+                Provenance = ReadProvenance(raw),
+                ExternalCompletion = ReadExternalCompletion(raw)
             };
         }
         catch (Exception ex)
@@ -412,7 +413,12 @@ public class TaskScannerService : ITaskScanner
         var matches = ScanAllJobs().Where(j => j.Id == jobId);
         if (!string.IsNullOrWhiteSpace(watchPath))
         {
-            matches = matches.Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase));
+            // Path-aware, OS-correct project match. A raw OrdinalIgnoreCase
+            // string compare 404'd a card whose stored WatchPath spelled the
+            // same directory differently (separator/trailing-slash) and, on
+            // Linux, matched the WRONG project when two paths differed only in
+            // case. See WatchPathComparison (AGT-1940).
+            matches = matches.Where(j => WatchPathComparison.PathsEqual(j.WatchPath, watchPath));
         }
 
         var resolved = matches.ToList();
@@ -450,7 +456,7 @@ public class TaskScannerService : ITaskScanner
         foreach (var entry in GetWatchPaths())
         {
             if (!string.IsNullOrWhiteSpace(watchPath)
-                && !string.Equals(entry.Path, watchPath, StringComparison.OrdinalIgnoreCase))
+                && !WatchPathComparison.PathsEqual(entry.Path, watchPath))
             {
                 continue;
             }
@@ -742,6 +748,26 @@ public class TaskScannerService : ITaskScanner
         try
         {
             return JsonSerializer.Deserialize<TaskProvenance>(prov.GetRawText(), TaskJsonFile.ReadOpts);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads the <c>externalCompletion</c> object written by the out-of-band
+    /// completion endpoint. Returns null on tasks finished through the normal
+    /// runner/review path (the common case). See
+    /// <see cref="ExternalCompletionInfo"/>.
+    /// </summary>
+    private static ExternalCompletionInfo? ReadExternalCompletion(JsonElement raw)
+    {
+        if (!raw.TryGetProperty("externalCompletion", out var ext) || ext.ValueKind != JsonValueKind.Object)
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<ExternalCompletionInfo>(ext.GetRawText(), TaskJsonFile.ReadOpts);
         }
         catch
         {

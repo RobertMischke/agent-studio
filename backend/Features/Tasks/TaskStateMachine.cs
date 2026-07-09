@@ -527,7 +527,7 @@ public class TaskStateMachine
         }
 
         var entry = _scanner.GetWatchPaths()
-            .FirstOrDefault(e => string.Equals(e.Path, watchPath, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(e => WatchPathComparison.PathsEqual(e.Path, watchPath));
         if (entry == null)
         {
             return new OrphanFolderDeleteResult(OrphanFolderDeleteStatus.NotFound, "Watch path not found.");
@@ -634,30 +634,36 @@ public class TaskStateMachine
     public bool ChangeProject(string jobId, string targetWatchPath, string? watchPath = null)
     {
         var entries = _scanner.GetWatchPaths();
-        var targetEntry = entries.FirstOrDefault(e => e.Path == targetWatchPath);
+        // Path-aware target resolution, and carry the RESOLVED entry path
+        // forward so the copy lands under the canonical project directory even
+        // when the caller passed a differently-spelled watchPath (D1: change
+        // project by PROJ-ID/path). A raw ordinal `==` matched no entry when
+        // the spelling differed. See WatchPathComparison (AGT-1940).
+        var targetEntry = entries.FirstOrDefault(e => WatchPathComparison.PathsEqual(e.Path, targetWatchPath));
         if (targetEntry == null) return false;
+        var canonicalTarget = targetEntry.Path;
 
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        if (info.WatchPath == targetWatchPath) return true;
+        if (WatchPathComparison.PathsEqual(info.WatchPath, canonicalTarget)) return true;
 
         // F21: take both source and target lane mutexes. Lock order is
         // ordinal-lowercased ascending so two simultaneous cross-project
         // moves (A->B and B->A) cannot deadlock.
         var (firstKey, secondKey) = string.CompareOrdinal(
             info.WatchPath.ToLowerInvariant(),
-            targetWatchPath.ToLowerInvariant()) <= 0
-            ? (info.WatchPath, targetWatchPath)
-            : (targetWatchPath, info.WatchPath);
+            canonicalTarget.ToLowerInvariant()) <= 0
+            ? (info.WatchPath, canonicalTarget)
+            : (canonicalTarget, info.WatchPath);
         using var _outerLock = _laneMutex.Acquire(firstKey);
         using var _innerLock = _laneMutex.Acquire(secondKey);
 
         var recheck = _scanner.FindJob(jobId, watchPath);
         if (recheck == null) return false;
-        if (recheck.WatchPath == targetWatchPath) return true;
+        if (WatchPathComparison.PathsEqual(recheck.WatchPath, canonicalTarget)) return true;
 
         var jobFolderName = Path.GetFileName(recheck.FolderPath);
-        var targetDir = Path.Combine(targetWatchPath, recheck.State, jobFolderName);
+        var targetDir = Path.Combine(canonicalTarget, recheck.State, jobFolderName);
 
         if (Directory.Exists(targetDir)) return false;
 

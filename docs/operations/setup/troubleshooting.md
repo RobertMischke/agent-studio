@@ -103,3 +103,11 @@ Symptom: `POST /api/tasks/<id>/move` returns `409 Job already exists or invalid 
 Cause: you passed `rootPath` as `watchPath`. The server resolves jobs against the *resolved job-folder root* under the workspace, not the project's source tree.
 
 Fix: use the `path` field returned by `GET /api/watch-paths`, not `rootPath`. The full pitfall and ready-to-use Node templates live in [../../.agents/skills/task-api/SKILL.md](../../../.agents/skills/task-api/SKILL.md).
+
+## "Claude quota panel is empty / plan shows unknown"
+
+Symptom: the Claude quota widget (status bar donut, admin panel) shows no usage windows and no plan, even though `claude` works fine when you run it yourself.
+
+Cause: the backend's quota probe drives `claude` headlessly and sends `/usage`. If the CLI has never been taken past its first-run onboarding (folder-trust dialog, theme picker, a "try the new renderer" upsell), those screens sit in front of the ready REPL and swallow the `/usage` command, so the probe returns zero windows. `ClaudeQuotaProbe.LooksLikeOnboardingWizard` (see [ClaudeQuotaProbe.cs](../../../backend/Features/Cli/Quota/ClaudeQuotaProbe.cs)) detects this case and logs it distinctly from an actual `/usage` output-format drift.
+
+Fix: run `claude` interactively yourself once, log in, and click through every first-run screen until you reach the normal `? for shortcuts` prompt. The onboarding state persists in `~/.claude.json`, so this is a one-time fix per machine/user. See [getting-started.md](./getting-started.md) step 1 for the full first-install version of this.

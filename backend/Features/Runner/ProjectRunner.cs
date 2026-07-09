@@ -1002,7 +1002,7 @@ public class ProjectRunner
             $"Worktree run stayed contained in `{run.WorktreePath}`.");
 
         var settings = _projectSettings.Get(ProjectName);
-        var workBranch = string.IsNullOrWhiteSpace(settings.IntegrationBranch) ? "develop" : settings.IntegrationBranch!;
+        var workBranch = _git.ResolveIntegrationBranch(Entry.RootPath, settings.IntegrationBranch);
         var strategy = string.IsNullOrWhiteSpace(settings.IntegrationStrategy) ? IntegrationStrategies.DirectMerge : settings.IntegrationStrategy!;
         try
         {
@@ -1014,8 +1014,26 @@ public class ProjectRunner
             var commit = _git.WorktreeRunCommit(ProjectName, run.WorktreePath!,
                 $"{info.Title}\n\n{GitService.WorktreeRunCommitTrailer(run.JobId)}");
             if (commit.Success)
+            {
                 _logger.LogInformation("[taskboard] parallel run {Job} committed agent edits on {Branch} at {Sha}",
                     run.JobId, run.Branch, commit.Sha ?? "<unknown>");
+            }
+            else if (!string.IsNullOrEmpty(commit.Error)
+                     && !commit.Error.Contains("Nothing to commit", StringComparison.OrdinalIgnoreCase))
+            {
+                // A genuine commit failure (not a benign clean tree) must never be
+                // silent (AGT-1945 option 2): the branch tip stays at develop, so
+                // the merge below would fold in nothing and the run's deliverable
+                // would only live as uncommitted files in the worktree. Surface it
+                // as a High integration issue. The pre-teardown WIP safety commit
+                // (WorktreeTaskLifecycle.TeardownIfIntegrated) still preserves the
+                // work, but the operator must see that the landing failed here.
+                _logger.LogWarning("[taskboard] parallel run {Job} could not commit agent edits on {Branch}: {Error}",
+                    run.JobId, run.Branch, commit.Error);
+                _chatLog.Append(info, OrchestratorMessageKind.IntegrationError,
+                    $"[integration-error] Could not commit worktree edits onto `{run.Branch}` before integration: {commit.Error}. "
+                    + "The work stays in the worktree and is snapshotted as a WIP safety commit at teardown.");
+            }
             var branchHeadAfterRun = _git.ReadHeadShaAt(run.WorktreePath!);
             var pushResult = await PushTaskBranchForPortabilityAsync(info, run, branchHeadAfterRun);
             // 2) serialize integration into the shared work branch. The local
@@ -1718,7 +1736,7 @@ public class ProjectRunner
         try
         {
             var settings = _projectSettings.Get(ProjectName);
-            var workBranch = string.IsNullOrWhiteSpace(settings.IntegrationBranch) ? "develop" : settings.IntegrationBranch!;
+            var workBranch = _git.ResolveIntegrationBranch(Entry.RootPath, settings.IntegrationBranch);
             var res = Worktree.TeardownIfIntegrated(Entry.RootPath, jobId, workBranch, WorktreeRoot());
             if (!res.Success)
                 _logger.LogWarning("[taskboard] worktree teardown for {Job} reported: {Err}", jobId, res.Error);
@@ -1923,7 +1941,7 @@ public class ProjectRunner
             {
                 claimed.Parallelism = PredictParallelism(info);
                 var wtSettings = _projectSettings.Get(ProjectName);
-                var workBranch = string.IsNullOrWhiteSpace(wtSettings.IntegrationBranch) ? "develop" : wtSettings.IntegrationBranch!;
+                var workBranch = _git.ResolveIntegrationBranch(Entry.RootPath, wtSettings.IntegrationBranch);
                 var prep = Worktree.PrepareOrReuse(Entry.RootPath, jobId, workBranch, WorktreeRoot());
                 if (prep.Success)
                 {
@@ -4592,9 +4610,11 @@ public class ProjectRunner
                     && ShouldRouteIssueToHumanReview(action.IssueKind)
                     // Non-retryable verdicts skip abort-review entirely: rerunning
                     // a context-overflow walks straight back into the same input
-                    // window, and the quarantine breaker exists precisely to STOP
-                    // re-running this task. Both go directly to human review.
-                    && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
+                    // window, a model-invalid into the same 400, and a quota-
+                    // exhausted into the same rejection; the quarantine breaker
+                    // exists precisely to STOP re-running this task. All go
+                    // directly to human review.
+                    && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.ModelInvalid or RunIssueKind.QuotaExhausted or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
                     && _postAbortReview != null
                     && AgentStudio.Pipeline.PipelineStepConfigResolver.ShouldRun(
                         _projectSettings.Get(ProjectName),
@@ -5024,6 +5044,12 @@ public class ProjectRunner
                      or RunIssueKind.EnvironmentBlocker
                      or RunIssueKind.EmptyFastExit
                      or RunIssueKind.ContextOverflow
+                     // Non-retryable model rejection and transient quota
+                     // exhaustion both reach human review with an honest,
+                     // distinct reason instead of the orchestrator-inconclusive
+                     // catch-all (AGT-1941: codex model-invalid / claude quota).
+                     or RunIssueKind.ModelInvalid
+                     or RunIssueKind.QuotaExhausted
                      or RunIssueKind.Quarantined
                      or RunIssueKind.AgentGitViolation
                      // Drive-to-conclusion: a failed run the deterministic
@@ -5074,6 +5100,8 @@ public class ProjectRunner
         RunIssueKind.EnvironmentBlocker       => "environment-blocker",
         RunIssueKind.SilentCompletion         => "codex-silent-completion",
         RunIssueKind.ContextOverflow          => "context-overflow",
+        RunIssueKind.ModelInvalid             => "model-invalid",
+        RunIssueKind.QuotaExhausted           => "quota-exhausted",
         RunIssueKind.Quarantined              => "quarantined",
         RunIssueKind.AgentGitViolation        => "agent-git-violation",
         _                                     => "none"
@@ -5089,6 +5117,8 @@ public class ProjectRunner
         RunIssueKind.EnvironmentBlocker => HumanReviewEscalationCategories.EnvironmentBlocker,
         RunIssueKind.EmptyFastExit      => HumanReviewEscalationCategories.EmptyFastExit,
         RunIssueKind.ContextOverflow    => HumanReviewEscalationCategories.ContextOverflow,
+        RunIssueKind.ModelInvalid       => HumanReviewEscalationCategories.ModelInvalid,
+        RunIssueKind.QuotaExhausted     => HumanReviewEscalationCategories.QuotaExhausted,
         RunIssueKind.Quarantined        => HumanReviewEscalationCategories.Quarantined,
         RunIssueKind.AgentGitViolation  => HumanReviewEscalationCategories.AgentGitViolation,
         RunIssueKind.InfraCrash         => HumanReviewEscalationCategories.InfraCrash,

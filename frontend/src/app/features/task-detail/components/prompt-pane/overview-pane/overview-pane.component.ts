@@ -58,6 +58,12 @@ import { TaskService } from '../../../../../services/task.service';
 import { NotificationService } from '../../../../../services/notification.service';
 import { ModalStackService } from '../../../../../services/modal-stack.service';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
+import {
+  buildPipelineGroups,
+  groupAriaLabel,
+  groupToneLabel,
+  type PipelineGroupVm,
+} from './pipeline-groups.util';
 
 /** One per-step row in the Overview pipeline block. */
 interface PipelineRowVm {
@@ -913,6 +919,62 @@ export class OverviewPaneComponent {
   }
 
   /**
+   * The complete configured pipeline folded into collapsible sections — one per
+   * contiguous run of the same phase (PRE STEPS, CORE AGENT WORK, ASPECT, TOOL,
+   * DECISION, DRIFT, and the repeated TOOL/DECISION runs in the post-bracket).
+   * Each carries the aggregate tone + honest counters ({@link PipelineGroupVm})
+   * the header shows whether expanded or collapsed. Derivation lives in the
+   * dependency-free `pipeline-groups.util` so the grouping/tone/collapse rules
+   * are unit-tested in isolation from this 1800-line host.
+   */
+  readonly pipelineGroups = computed<PipelineGroupVm<PipelineRowVm>[]>(() =>
+    buildPipelineGroups(this.visiblePipelineRows()),
+  );
+
+  /**
+   * Explicit per-section collapse choices, keyed by group key
+   * (`${phaseKey}#${occurrence}`). Absent -> the section follows its derived
+   * {@link PipelineGroupVm.defaultCollapsed} (attention sections open, quiet
+   * finished / not-yet-reached sections collapse), so the strip reacts to the
+   * run as it progresses until the operator overrides a section by hand.
+   */
+  private readonly groupCollapseOverrides = signal<ReadonlyMap<string, boolean>>(new Map());
+
+  /** Effective collapse state: an explicit operator choice wins over the default. */
+  isGroupCollapsed(group: Pick<PipelineGroupVm, 'key' | 'defaultCollapsed'>): boolean {
+    const override = this.groupCollapseOverrides().get(group.key);
+    return override ?? group.defaultCollapsed;
+  }
+
+  /** Flip a section between collapsed and expanded, recording the operator's choice. */
+  toggleGroup(group: Pick<PipelineGroupVm, 'key' | 'defaultCollapsed'>): void {
+    const collapsed = this.isGroupCollapsed(group);
+    this.groupCollapseOverrides.update(prev => {
+      const next = new Map(prev);
+      next.set(group.key, !collapsed);
+      return next;
+    });
+  }
+
+  /** Force every current section open (backs an expand-all affordance / tests). */
+  expandAllPipelineGroups(): void {
+    const groups = this.pipelineGroups();
+    this.groupCollapseOverrides.update(prev => {
+      const next = new Map(prev);
+      for (const group of groups) next.set(group.key, false);
+      return next;
+    });
+  }
+
+  /**
+   * Section-tone label + header accessible name are pure derivations kept in
+   * `pipeline-groups.util` (unit-tested there); bound here so the template can
+   * call them directly.
+   */
+  readonly groupToneLabel = groupToneLabel;
+  readonly groupAriaLabel = groupAriaLabel;
+
+  /**
    * Latest raw step-call prompt per pipeline step, keyed by lowercased step id.
    * Fed from `GET /step-prompts` (the `.metadata/prompts.jsonl` read-model) so
    * the Overview "Prompt" affordance on a step can show the exact prompt that
@@ -1681,6 +1743,26 @@ export class OverviewPaneComponent {
       case 'tool':         return 'Tool';
       case 'drift':        return 'Drift';
       default:             return kind;
+    }
+  }
+
+  /**
+   * Compact per-row kind marker for the pipeline's second lane column. The
+   * handoff calls for this column to be a compact kind marker (with a tooltip),
+   * not the wide lane text — so the row shows a short code (PRE / CORE / ASPECT
+   * / TOOL / DECISION / DRIFT) that fits the fixed narrow column without
+   * wrapping, while {@link stepKindLabel} still supplies the full name for the
+   * marker's tooltip / accessible label.
+   */
+  stepKindMarker(kind: StepKind): string {
+    switch (kind) {
+      case 'module':       return 'PRE';
+      case 'core':         return 'CORE';
+      case 'aspect':       return 'ASPECT';
+      case 'orchestrator': return 'DECISION';
+      case 'tool':         return 'TOOL';
+      case 'drift':        return 'DRIFT';
+      default:             return String(kind).toUpperCase();
     }
   }
 

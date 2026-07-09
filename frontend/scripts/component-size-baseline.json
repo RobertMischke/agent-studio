@@ -12,18 +12,6 @@
       "styles": 2008,
       "total": 5477
     },
-    "src/app/components/chat/chat/chat.component.ts": {
-      "typeScript": 656,
-      "template": 242,
-      "styles": 755,
-      "total": 1653
-    },
-    "src/app/components/chat/conversation-view/conversation-view.component.ts": {
-      "typeScript": 653,
-      "template": 357,
-      "styles": 629,
-      "total": 1639
-    },
     "src/app/components/markdown-rich-editor/markdown-rich-editor.ts": {
       "typeScript": 464,
       "template": 102,
@@ -44,15 +32,9 @@
     },
     "src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.ts": {
       "typeScript": 1104,
-      "template": 186,
-      "styles": 323,
-      "total": 1613
-    },
-    "src/app/features/project-chat/components/project-chat-list/project-chat-list.component.ts": {
-      "typeScript": 621,
-      "template": 197,
-      "styles": 184,
-      "total": 1002
+      "template": 190,
+      "styles": 337,
+      "total": 1631
     },
     "src/app/features/project-detail/components/project-detail/project-detail.ts": {
       "typeScript": 903,
@@ -109,10 +91,10 @@
       "total": 1058
     },
     "src/app/features/task-detail/components/prompt-pane/overview-pane/overview-pane.component.ts": {
-      "typeScript": 1629,
-      "template": 630,
-      "styles": 1268,
-      "total": 3527
+      "typeScript": 1904,
+      "template": 753,
+      "styles": 1679,
+      "total": 4336
     },
     "src/app/features/task-detail/components/protocol-pane/protocol-pane/protocol-pane.component.ts": {
       "typeScript": 1198,

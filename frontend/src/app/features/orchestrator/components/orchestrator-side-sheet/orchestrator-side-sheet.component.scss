@@ -98,6 +98,21 @@
 }
 .sheet__btn:disabled { opacity: 0.5; cursor: progress; }
 
+/* MC-2: the pin toggle. Default reads like any header action; the pinned
+   state lights up with the studio accent so "I froze the context" is
+   legible at a glance and matches the header's pinned chip. Uses the
+   global --studio-accent (not the inner-sheet --orch-* aliases) so the
+   tint resolves for the header-projected button. */
+.sheet__btn--pin { white-space: nowrap; }
+.sheet__btn--pinned {
+  background: color-mix(in srgb, var(--studio-accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--studio-accent) 42%, transparent);
+  color: var(--studio-fg-strong);
+}
+.sheet__btn--pinned:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--studio-accent) 20%, transparent);
+}
+
 .sheet__project-picker {
   position: relative;
   min-width: 0;

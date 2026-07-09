@@ -32,6 +32,19 @@ public static class HumanReviewEscalationCategories
     /// instead of being re-issued into the same overflow.</summary>
     public const string ContextOverflow = "context-overflow";
 
+    /// <summary>The configured model is invalid/unsupported for this account or
+    /// CLI (invalid_request / HTTP 400 "model not supported"). Non-retryable:
+    /// re-issuing spawns into the same 400, so it is routed to human review with
+    /// a clear model-invalid reason instead of the orchestrator-inconclusive
+    /// catch-all.</summary>
+    public const string ModelInvalid = "model-invalid";
+
+    /// <summary>The account's usage/session/rate-limit budget is exhausted.
+    /// Transient (clears when the quota window resets); escalated with an honest
+    /// quota-exhausted reason so a human can re-queue after reset instead of
+    /// mistaking it for an orchestrator-inconclusive failure.</summary>
+    public const string QuotaExhausted = "quota-exhausted";
+
     /// <summary>The per-task circuit breaker tripped after N consecutive failed
     /// runs without progress; the task was parked to stop an endless reissue
     /// loop.</summary>
@@ -223,7 +236,7 @@ public sealed class HumanReviewEscalation
     /// escalated-without-review card: a <c>- Result:</c> line (same shape the
     /// generated summaries use), the category, the reason, and a pointer to the
     /// logs and the decision journal.</summary>
-    public static string BuildStatusStub(string category, string reason)
+    public static string BuildStatusStub(string category, string reason, bool partialResultsPresent = false)
     {
         var c = string.IsNullOrWhiteSpace(category) ? HumanReviewEscalationCategories.UnknownLegacy : category.Trim();
         var r = (reason ?? string.Empty).Trim();
@@ -231,8 +244,16 @@ public sealed class HumanReviewEscalation
         var sb = new System.Text.StringBuilder();
         sb.Append("# Status").Append(nl).Append(nl);
         sb.Append("- Result: Escalated to human decision (").Append(c).Append(')').Append(nl).Append(nl);
-        sb.Append("This card was routed to 5e-escalated by the orchestrator runtime without an automated quality review, so there is no agent-written summary.")
-          .Append(nl).Append(nl);
+        // When a dying run left files in results/, say so: "no agent-written
+        // summary" made AGT-1917 look twice as lost as it was. Surfacing the
+        // partial results tells the reviewer there is work to inspect before
+        // deciding (docs/concepts/out-of-band-task-completion.md §3, last para).
+        if (partialResultsPresent)
+            sb.Append("This card was routed to 5e-escalated by the orchestrator runtime without an automated quality review, so there is no agent-written summary - but partial results are present in `results/`, review them before deciding.")
+              .Append(nl).Append(nl);
+        else
+            sb.Append("This card was routed to 5e-escalated by the orchestrator runtime without an automated quality review, so there is no agent-written summary.")
+              .Append(nl).Append(nl);
         sb.Append("- Category: ").Append(c).Append(nl);
         if (r.Length > 0)
             sb.Append("- Reason: ").Append(r).Append(nl);
@@ -252,13 +273,34 @@ public sealed class HumanReviewEscalation
                 if (!string.IsNullOrWhiteSpace(existing)) return; // never clobber a real summary
             }
             Directory.CreateDirectory(folderPath);
-            File.WriteAllText(path, BuildStatusStub(category, reason));
+            File.WriteAllText(path, BuildStatusStub(category, reason, HasPartialResults(folderPath)));
         }
         catch (Exception ex)
         {
             // Best-effort: the verdict already records the escalation; an
             // unwritable status.md must not crash the runner.
             _logger.LogWarning(ex, "HumanReviewEscalation: failed to write status.md stub at {Path}", path);
+        }
+    }
+
+    /// <summary>
+    /// True when the task's <c>results/</c> directory holds at least one file -
+    /// i.e. a dying run left partial deliverables the reviewer should see.
+    /// Best-effort and fails closed (no results claim on an unreadable dir):
+    /// a wrong "partial results present" line is worse than a missing one.
+    /// </summary>
+    private static bool HasPartialResults(string folderPath)
+    {
+        try
+        {
+            var resultsDir = AgentStudio.Tasks.TaskPaths.ResultsDir(folderPath);
+            return Directory.Exists(resultsDir)
+                && Directory.EnumerateFiles(resultsDir, "*", SearchOption.AllDirectories).Any();
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "HumanReviewEscalation: best-effort partial-results probe for the status stub.");
+            return false;
         }
     }
 

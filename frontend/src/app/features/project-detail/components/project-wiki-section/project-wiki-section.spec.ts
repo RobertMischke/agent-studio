@@ -62,8 +62,19 @@ async function setup(tree: WikiTree = TREE) {
   fixture.detectChanges();
 
   http.expectOne('/api/projects/Demo/wiki/tree').flush(tree);
+  flushWikiRecent(http);
   fixture.detectChanges();
   return { fixture, http };
+}
+
+/**
+ * refresh() fetches the git-backed dashboard recent-edits list alongside the
+ * tree. Every refresh (initial load and post-mutation re-read) issues it, so the
+ * fake backend must answer it or verify() trips on the dangling request.
+ */
+function flushWikiRecent(http: HttpTestingController): void {
+  http.expectOne(r => r.url.includes('/wiki/recent'))
+    .flush({ projectName: 'Demo', baseDir: '/repo/docs', exists: true, edits: [] });
 }
 
 const el = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
@@ -278,6 +289,7 @@ describe('ProjectWikiSectionComponent', () => {
     });
     http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
     http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
+    flushWikiRecent(http);
     fixture.detectChanges();
 
     expect(fixture.componentInstance.openedContent()).toBe('# Changed\n');
@@ -603,6 +615,7 @@ describe('ProjectWikiSectionComponent', () => {
 
     // The mutation triggers a refresh of the physical tree.
     http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
+    flushWikiRecent(http);
     fixture.detectChanges();
     http.verify();
   });
@@ -628,6 +641,7 @@ describe('ProjectWikiSectionComponent', () => {
     post.flush({ from: 'README.md', to: 'concepts/README.md', sha: 'abc1234' });
 
     http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
+    flushWikiRecent(http);
     fixture.detectChanges();
     http.verify();
   });
@@ -696,6 +710,150 @@ describe('ProjectWikiSectionComponent', () => {
 
     expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
       .toContain('concepts/overview.md');
+    http.verify();
+  });
+
+  // ---- Engineering Workstream frame (immutable) ----
+
+  const FRAME_TREE: WikiTree = {
+    projectName: 'Demo',
+    baseDir: '/repo/docs',
+    exists: true,
+    root: [
+      {
+        name: 'engineering-workstream', title: 'engineering-workstream',
+        relPath: 'engineering-workstream', type: 'folder', immutable: true, children: [
+          {
+            name: '40-decision-log', title: 'decision-log',
+            relPath: 'engineering-workstream/40-decision-log', type: 'folder', immutable: true, children: [
+              {
+                name: 'index.html', title: 'Decision Log',
+                relPath: 'engineering-workstream/40-decision-log/index.html', type: 'html', immutable: true, children: [],
+              },
+              {
+                name: 'adr-0001.md', title: 'ADR 1',
+                relPath: 'engineering-workstream/40-decision-log/adr-0001.md', type: 'md', immutable: false, children: [],
+              },
+            ],
+          },
+          {
+            name: '00-overview.html', title: 'Engineering Workstream',
+            relPath: 'engineering-workstream/00-overview.html', type: 'html', immutable: true, children: [],
+          },
+        ],
+      },
+    ],
+  };
+
+  function expandFrame(fixture: { componentInstance: ProjectWikiSectionComponent; detectChanges: () => void }): void {
+    fixture.componentInstance.toggleExpand('engineering-workstream');
+    fixture.componentInstance.toggleExpand('engineering-workstream/40-decision-log');
+    fixture.detectChanges();
+  }
+
+  it('marks frame folders and shells with a lock affordance, subpages without', async () => {
+    const { fixture, http } = await setup(FRAME_TREE);
+    expandFrame(fixture);
+    const root = el(fixture);
+
+    expect(root.querySelector('[data-testid="project-wiki-lock-engineering-workstream"]'), 'frame root lock').toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-lock-engineering-workstream/40-decision-log"]'), 'area lock').toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-lock-engineering-workstream/40-decision-log/index.html"]'), 'shell lock').toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-lock-engineering-workstream/40-decision-log/adr-0001.md"]'), 'subpage lock absent').toBeNull();
+    http.verify();
+  });
+
+  it('offers subpage creation on a frame area but hides rename/delete; a frame shell is history-only', async () => {
+    const { fixture, http } = await setup(FRAME_TREE);
+    expandFrame(fixture);
+    const root = el(fixture);
+
+    const openCtx = (id: string) => {
+      const rowEl = root.querySelector<HTMLElement>(`[data-testid="project-wiki-node-${id}"]`);
+      expect(rowEl, `row ${id}`).toBeTruthy();
+      rowEl!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+      fixture.detectChanges();
+    };
+
+    // Frame area folder: subpages allowed, structure locked.
+    openCtx('engineering-workstream/40-decision-log');
+    expect(document.querySelector('[data-testid="wiki-ctx-item-new-page"]'), 'new page').toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-new-folder"]'), 'new folder').toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]'), 'no rename').toBeNull();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-delete"]'), 'no delete').toBeNull();
+
+    fixture.componentInstance.closeMenu();
+    fixture.detectChanges();
+
+    // Frame landing shell: read-only, history only.
+    openCtx('engineering-workstream/40-decision-log/index.html');
+    expect(document.querySelector('[data-testid="wiki-ctx-item-history"]'), 'history').toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]'), 'no rename').toBeNull();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-delete"]'), 'no delete').toBeNull();
+
+    fixture.componentInstance.closeMenu();
+    fixture.detectChanges();
+
+    // A regular subpage under the area keeps the full menu.
+    openCtx('engineering-workstream/40-decision-log/adr-0001.md');
+    expect(document.querySelector('[data-testid="wiki-ctx-item-rename"]'), 'subpage rename').toBeTruthy();
+    expect(document.querySelector('[data-testid="wiki-ctx-item-delete"]'), 'subpage delete').toBeTruthy();
+    http.verify();
+  });
+
+  /** History payload for a frame shell (no git metadata, no commits). */
+  function flushFrameHistory(http: HttpTestingController, rel: string): void {
+    http.expectOne(`/api/projects/Demo/wiki/history/${rel}`).flush({
+      relPath: rel, model: null,
+      metadata: { model: null, updatedAt: null, reason: null, taskKey: null, status: null, runCount: null, hasFrontmatter: false },
+      commits: [],
+    });
+  }
+
+  it('navigates between frame landing shells, rendering each in the script-disabled iframe', async () => {
+    const { fixture, http } = await setup(FRAME_TREE);
+    expandFrame(fixture);
+    const root = el(fixture);
+
+    // Open the frame overview shell.
+    root.querySelector<HTMLButtonElement>(
+      '[data-testid="project-wiki-file-engineering-workstream/00-overview.html"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/engineering-workstream/00-overview.html')
+      .flush({
+        relPath: 'engineering-workstream/00-overview.html',
+        content: '<!doctype html><html><body><h1>The development story</h1>'
+          + '<section class="ew-grid">Current Development State</section></body></html>',
+      });
+    flushFrameHistory(http, 'engineering-workstream/00-overview.html');
+    fixture.detectChanges();
+
+    let frame = root.querySelector<HTMLIFrameElement>('[data-testid="project-wiki-html-frame"]');
+    expect(frame, 'overview iframe').toBeTruthy();
+    expect(frame!.getAttribute('sandbox')).toBe(''); // no allow-scripts token
+    expect(frame!.getAttribute('srcdoc') ?? frame!.srcdoc).toContain('The development story');
+    expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
+      .toContain('engineering-workstream/00-overview.html');
+
+    // Navigate on to the Decision Log area landing shell — the viewer switches
+    // to the new frame page and re-renders the sandboxed iframe with its content.
+    root.querySelector<HTMLButtonElement>(
+      '[data-testid="project-wiki-file-engineering-workstream/40-decision-log/index.html"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/engineering-workstream/40-decision-log/index.html')
+      .flush({
+        relPath: 'engineering-workstream/40-decision-log/index.html',
+        content: '<!doctype html><html><body><h1>Decision Log</h1>'
+          + '<div class="ew-rail"><span class="ew-pill ew-pill--here">04</span></div></body></html>',
+      });
+    flushFrameHistory(http, 'engineering-workstream/40-decision-log/index.html');
+    fixture.detectChanges();
+
+    frame = root.querySelector<HTMLIFrameElement>('[data-testid="project-wiki-html-frame"]');
+    expect(frame!.getAttribute('srcdoc') ?? frame!.srcdoc).toContain('Decision Log');
+    expect(frame!.getAttribute('srcdoc') ?? frame!.srcdoc).toContain('ew-pill--here');
+    expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
+      .toContain('engineering-workstream/40-decision-log/index.html');
     http.verify();
   });
 });

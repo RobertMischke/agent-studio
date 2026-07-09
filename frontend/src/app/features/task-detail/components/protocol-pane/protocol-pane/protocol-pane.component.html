@@ -105,8 +105,8 @@
                 data-testid="pane-meta-toggle"
                 (click)="toggleVsCodeMeta()"
                 [class.pane-header__btn--active]="featureFlags.vsCodeMetaOpen()"
-                [cacTooltip]="featureFlags.vsCodeMetaOpen() ? 'Hide meta panel' : 'Show meta panel'"
-                aria-label="Toggle meta panel">
+                [cacTooltip]="featureFlags.vsCodeMetaOpen() ? 'Hide telemetry chips' : 'Show telemetry chips'"
+                aria-label="Toggle telemetry chips">
           i
         </button>
       }
@@ -114,23 +114,10 @@
   </app-pane-header>
   <div class="pane__body">
     @if (protocolVerdict(); as v) {
-      <div class="protocol-verdict"
-           [attr.data-kind]="v.kind"
-           [attr.data-testid]="'protocol-verdict-' + v.kind"
-           role="status">
-        <span class="protocol-verdict__emoji" aria-hidden="true">{{ v.emoji }}</span>
-        <span class="protocol-verdict__label">{{ v.label }}</span>
-        <span class="protocol-verdict__detail">{{ v.detail }}</span>
-        @if (v.duration) {
-          <span class="protocol-verdict__duration"
-                [cacTooltip]="'Run duration: ' + v.duration"
-                data-testid="protocol-verdict-duration"
-                aria-label="Run duration">
-            <span class="protocol-verdict__duration-icon" aria-hidden="true">⏱</span>
-            <span class="protocol-verdict__duration-value">{{ v.duration }}</span>
-          </span>
-        }
-      </div>
+      <app-protocol-verdict-banner
+        [verdict]="v"
+        [chain]="verdictChain()"
+        (openEvidence)="onVerdictChainEvidence($event)" />
     }
     @if (interimSummary(); as s) {
       @if (s.status === 'pending' || s.status === 'ready' || s.status === 'failed') {

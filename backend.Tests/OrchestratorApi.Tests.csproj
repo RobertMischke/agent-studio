@@ -74,6 +74,7 @@
     <Using Include="AgentStudio.GeneratedFiles" />
     <Using Include="AgentStudio.Git" />
     <Using Include="AgentStudio.Host" />
+    <Using Include="AgentStudio.Orchestrator" />
     <Using Include="AgentStudio.Persistence" />
     <Using Include="AgentStudio.Pipeline" />
     <Using Include="AgentStudio.ProjectChat" />

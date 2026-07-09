@@ -67,9 +67,7 @@ public sealed class MergeIntoDevelopRunner
                 return unresolved;
             }
 
-            var branch = string.IsNullOrWhiteSpace(integrationBranch)
-                ? new ProjectSettings().IntegrationBranch
-                : integrationBranch;
+            var branch = _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
             var taskBranch = WorktreeTaskLifecycle.BranchFor(jobId);
 
             var result = _git.MergeBranchIntoIntegration(repoRoot, taskBranch, branch);

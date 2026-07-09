@@ -119,7 +119,34 @@ public enum RunIssueKind
     /// <see cref="AgentOutcomeAnalyzer"/> - so autonomous agent commits are
     /// surfaced as process violations instead of clean completions.
     /// </summary>
-    AgentGitViolation
+    AgentGitViolation,
+    /// <summary>
+    /// The agent CLI rejected the run because the requested MODEL is invalid
+    /// for this account/CLI: an <c>invalid_request_error</c> / HTTP 400 whose
+    /// message says the model is not supported / does not exist (e.g. codex-cli
+    /// with a ChatGPT account rejecting <c>gpt-5-codex</c>: "The 'gpt-5-codex'
+    /// model is not supported when using Codex with a ChatGPT account"). This
+    /// is NON-RETRYABLE by re-issue - resending the same model spawns straight
+    /// back into the same 400 - and it is NOT an unclassifiable agent reply
+    /// (the old orchestrator-inconclusive mislabel). The orchestrator routes it
+    /// to human review with a <c>model-invalid</c> reason so the card clearly
+    /// says the configured model must be changed. See AGT-1941 / the codex
+    /// spawn-failure signature (AGT-1928/1929/1930/1936).
+    /// </summary>
+    ModelInvalid,
+    /// <summary>
+    /// The agent CLI rejected the run because the account's usage / session /
+    /// rate-limit budget is exhausted ("You've hit your session limit", a
+    /// <c>Rate limit · … · rejected</c> marker, "usage limit reached"). This is
+    /// a TRANSIENT provider condition, not an agent decision and not an
+    /// unclassifiable reply: it clears when the quota window resets. Typed
+    /// distinctly so the escalation reason is an honest <c>quota-exhausted</c>
+    /// (with the reset time when the CLI reported it) instead of the misleading
+    /// <c>orchestrator-inconclusive</c>, and so the runner exempts it from the
+    /// per-task no-progress quarantine streak. This is the AGT-1918/1919/1920
+    /// signature (claude-sonnet-5 five-hour session limit on 2026-07-07).
+    /// </summary>
+    QuotaExhausted
 }
 
 /// <summary>
@@ -325,6 +352,56 @@ public static class AgentOutcomeAnalyzer
                 OutputLineCount: lineCount,
                 DurationSeconds: durationSeconds)
             { IssueKind = RunIssueKind.ContextOverflow };
+        }
+
+        // 1.42) Model-invalid. A failed run whose output carries a provider
+        //    model-rejection (invalid_request_error / HTTP 400 "model is not
+        //    supported / does not exist") is NON-RETRYABLE: the requested model
+        //    is wrong for this account/CLI, so re-issuing spawns into the same
+        //    400. This is the codex ChatGPT-account signature (gpt-5-codex
+        //    rejected). Typed so the escalation reason is a clear "model-invalid"
+        //    instead of the catch-all orchestrator-inconclusive, and checked
+        //    BEFORE the CLI-launch / heuristic paths so it wins. Gated on
+        //    `failed` so an agent quoting one of these phrases mid-success is
+        //    unaffected.
+        if (failed && IsModelInvalid(rawText))
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: BuildModelInvalidSummary(rawText),
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "model rejected by the provider (invalid_request / model not supported)",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.ModelInvalid };
+        }
+
+        // 1.45) Quota / session-limit exhaustion. A failed run whose output
+        //    carries a usage/session/rate-limit-exhausted signal ("You've hit
+        //    your session limit", a `Rate limit · … · rejected` marker) is a
+        //    TRANSIENT provider condition that clears when the quota window
+        //    resets - not an unclassifiable agent reply. Typed so the escalation
+        //    reason is an honest "quota-exhausted" (carrying the reported reset
+        //    time) instead of orchestrator-inconclusive, and so the runner's
+        //    rate-limit cooldown / quarantine exemption treat it as transient.
+        //    Gated on `failed`, and checked BEFORE the CLI-launch / heuristic
+        //    paths so it is not swallowed by them. NOTE: claude emits a benign
+        //    `● Rate limit · … · allowed` telemetry marker on healthy runs too,
+        //    so the needles below match only the EXHAUSTED shapes.
+        if (failed && IsQuotaExhausted(rawText))
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: BuildQuotaExhaustedSummary(rawText),
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "provider usage/session/rate limit exhausted",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.QuotaExhausted };
         }
 
         // 1.5) CLI launch / resume failure. A failed run that produced no
@@ -672,6 +749,119 @@ public static class AgentOutcomeAnalyzer
             if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Phrases a CLI / provider emits when the requested MODEL is rejected as
+    /// invalid for the account or CLI. Kept specific so a match (combined with a
+    /// <c>failed</c> status) is an unambiguous model-rejection rather than
+    /// incidental prose. The canonical codex ChatGPT-account form is
+    /// <c>invalid_request_error</c> + "model is not supported when using Codex";
+    /// the others cover the OpenAI/Anthropic "model does not exist / not found"
+    /// and generic unsupported-model API messages.
+    /// </summary>
+    private static readonly string[] ModelInvalidNeedles =
+    {
+        "is not supported when using",
+        "model is not supported",
+        "not a supported model",
+        "unsupported model",
+        "model_not_found",
+        "does not exist or you do not have access",
+        "invalid model",
+        "unknown model",
+    };
+
+    /// <summary>
+    /// True when the run output carries a recognised model-rejection signal.
+    /// Callers must only invoke this for a <c>failed</c> run so an agent that
+    /// merely discusses model names in a healthy turn does not trip it. The
+    /// bare <c>invalid_request_error</c> token also counts, but only when it
+    /// co-occurs with a "model" mention, so an unrelated 400 (bad param) is not
+    /// mislabelled as a model problem.
+    /// </summary>
+    private static bool IsModelInvalid(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return false;
+        foreach (var needle in ModelInvalidNeedles)
+        {
+            if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return rawText.Contains("invalid_request_error", StringComparison.OrdinalIgnoreCase)
+            && rawText.Contains("model", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BuildModelInvalidSummary(string rawText)
+    {
+        var detail = ExtractProviderErrorMessage(rawText);
+        return detail != null
+            ? $"The agent CLI rejected the run: the configured model is invalid for this account/CLI. {detail} Change the model on the task; re-issuing the same model will fail identically."
+            : "The agent CLI rejected the run because the configured model is invalid/unsupported for this account or CLI. Change the model on the task; re-issuing the same model will fail identically.";
+    }
+
+    /// <summary>
+    /// Phrases a CLI / provider emits when the account's usage / session /
+    /// rate-limit budget is exhausted. Kept to the EXHAUSTED shapes so the
+    /// benign per-run <c>● Rate limit · … · allowed</c> telemetry claude prints
+    /// on healthy runs does not trip it. Callers must only invoke this for a
+    /// <c>failed</c> run.
+    /// </summary>
+    private static readonly string[] QuotaExhaustedNeedles =
+    {
+        "hit your session limit",
+        "session limit reached",
+        "usage limit reached",
+        "you've reached your usage limit",
+        "quota exceeded",
+        "rate limit exceeded",
+        "rate_limit_exceeded",
+        "· rejected ·",
+        "status=rejected",
+        "insufficient_quota",
+    };
+
+    private static bool IsQuotaExhausted(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return false;
+        foreach (var needle in QuotaExhaustedNeedles)
+        {
+            if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    private static string BuildQuotaExhaustedSummary(string rawText)
+    {
+        var reset = ExtractFirstMatchingLine(rawText, "session limit")
+                    ?? ExtractFirstMatchingLine(rawText, "usage limit")
+                    ?? ExtractFirstMatchingLine(rawText, "rate limit");
+        return reset != null
+            ? $"The agent CLI rejected the run: the account's usage/session budget is exhausted. \"{reset}\" This is transient - re-queue after the quota window resets."
+            : "The agent CLI rejected the run because the account's usage/session/rate-limit budget is exhausted. This is transient - re-queue after the quota window resets.";
+    }
+
+    /// <summary>Pull a provider error <c>message</c> value out of a JSON-ish
+    /// error frame (<c>"message":"…"</c>), for the human-readable summary.</summary>
+    private static string? ExtractProviderErrorMessage(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return null;
+        var m = System.Text.RegularExpressions.Regex.Match(
+            rawText, "\"message\"\\s*:\\s*\"(?<msg>[^\"]{1,300})\"");
+        return m.Success ? m.Groups["msg"].Value.Trim() : null;
+    }
+
+    private static string? ExtractFirstMatchingLine(string text, string needle)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        foreach (var line in text.Split('\n'))
+        {
+            if (line.Contains(needle, StringComparison.OrdinalIgnoreCase))
+            {
+                var trimmed = line.Trim();
+                return trimmed.Length <= 200 ? trimmed : trimmed[..200] + "...";
+            }
+        }
+        return null;
     }
 
     private static string BuildCliLaunchFailureSummary(string rawText)

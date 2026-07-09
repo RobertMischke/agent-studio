@@ -34,6 +34,76 @@ public sealed class WorkspaceArtifactCommitService
         string? beforeMoveFolderPath,
         string? afterMoveFolderPath,
         ReviewDecisionKind verdict)
+        => TryCommitJobFolder(
+            workspaceRoot,
+            jobId,
+            beforeMoveFolderPath,
+            afterMoveFolderPath,
+            logLabel: $"verdict={NormalizeVerdict(verdict)}",
+            failLabel: verdict.ToString(),
+            planMessage: (gitRoot, pathspecs, afterFolder) =>
+            {
+                var runIndex = ResolveRunIndex(gitRoot, pathspecs, afterFolder);
+                var steps = ResolveStepsTrailer(afterFolder);
+                return new ArtifactCommitPlan(BuildCommitMessage(jobId, runIndex, verdict, steps), runIndex, steps);
+            });
+
+    /// <summary>
+    /// Commits the job-folder evidence at an out-of-band completion boundary
+    /// (<c>docs/concepts/out-of-band-task-completion.md</c> §3). Shares the
+    /// add/diff/commit plumbing with <see cref="TryCommitRunBoundary"/>; only
+    /// the commit message differs, recording the external source instead of an
+    /// orchestrator verdict + run index.
+    /// </summary>
+    public WorkspaceArtifactCommitResult TryCommitExternalCompletion(
+        string? workspaceRoot,
+        string jobId,
+        string? beforeMoveFolderPath,
+        string? afterMoveFolderPath,
+        string source)
+    {
+        var normalizedSource = string.IsNullOrWhiteSpace(source) ? "external" : source.Trim();
+        return TryCommitJobFolder(
+            workspaceRoot,
+            jobId,
+            beforeMoveFolderPath,
+            afterMoveFolderPath,
+            logLabel: $"external-completion source={normalizedSource}",
+            failLabel: "external-completion",
+            planMessage: (_, _, _) =>
+                new ArtifactCommitPlan(BuildExternalCompletionMessage(jobId, normalizedSource), 0, null));
+    }
+
+    public WorkspaceArtifactCommitResult TryCommitArtifactUpload(
+        string? workspaceRoot,
+        string jobId,
+        string jobFolderPath,
+        IReadOnlyList<string> files)
+        => TryCommitJobFolder(
+            workspaceRoot,
+            jobId,
+            beforeMoveFolderPath: null,
+            afterMoveFolderPath: jobFolderPath,
+            logLabel: $"artifact-upload files={files.Count}",
+            failLabel: "artifact-upload",
+            planMessage: (_, _, _) =>
+                new ArtifactCommitPlan(BuildArtifactUploadMessage(jobId, files), 0, null));
+
+    /// <summary>
+    /// Shared add/diff/commit core for the workspace evidence commits. The
+    /// caller supplies the commit message (and the run-index/steps it wants
+    /// echoed in the result) via <paramref name="planMessage"/>, which runs only
+    /// after the tree is confirmed dirty, so the message builders never pay for
+    /// a no-op commit.
+    /// </summary>
+    private WorkspaceArtifactCommitResult TryCommitJobFolder(
+        string? workspaceRoot,
+        string jobId,
+        string? beforeMoveFolderPath,
+        string? afterMoveFolderPath,
+        string logLabel,
+        string failLabel,
+        Func<string, IReadOnlyList<string>, string, ArtifactCommitPlan> planMessage)
     {
         try
         {
@@ -66,9 +136,7 @@ public sealed class WorkspaceArtifactCommitService
             var afterFolder = !string.IsNullOrWhiteSpace(afterMoveFolderPath)
                 ? afterMoveFolderPath!
                 : beforeMoveFolderPath ?? string.Empty;
-            var runIndex = ResolveRunIndex(gitRoot, pathspecs, afterFolder);
-            var steps = ResolveStepsTrailer(afterFolder);
-            var message = BuildCommitMessage(jobId, runIndex, verdict, steps);
+            var plan = planMessage(gitRoot, pathspecs, afterFolder);
 
             var commitArgs = new List<string>
             {
@@ -77,7 +145,7 @@ public sealed class WorkspaceArtifactCommitService
                 "commit", "-F", "-", "--"
             };
             commitArgs.AddRange(pathspecs);
-            var commit = RunGit(gitRoot, commitArgs, message);
+            var commit = RunGit(gitRoot, commitArgs, plan.Message);
             if (commit.Code != 0)
             {
                 if (commit.ErrorText.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
@@ -88,18 +156,41 @@ public sealed class WorkspaceArtifactCommitService
             var sha = RunGit(gitRoot, ["rev-parse", "--short", "HEAD"]);
             var shortSha = sha.Code == 0 ? sha.Out.Trim() : null;
             _logger.LogInformation(
-                "workspace-artifact-commit jobId={JobId} verdict={Verdict} runIndex={RunIndex} sha={Sha} paths={Paths}",
-                jobId, verdict, runIndex, shortSha ?? "", string.Join(",", pathspecs));
-            return WorkspaceArtifactCommitResult.Committed(shortSha, runIndex, steps);
+                "workspace-artifact-commit jobId={JobId} {LogLabel} runIndex={RunIndex} sha={Sha} paths={Paths}",
+                jobId, logLabel, plan.RunIndex, shortSha ?? "", string.Join(",", pathspecs));
+            return WorkspaceArtifactCommitResult.Committed(shortSha, plan.RunIndex, plan.Steps ?? "none");
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "workspace-artifact-commit failed for {JobId} ({Verdict})",
-                jobId, verdict);
+                "workspace-artifact-commit failed for {JobId} ({Label})",
+                jobId, failLabel);
             return WorkspaceArtifactCommitResult.Failed("exception", ex.Message);
         }
     }
+
+    internal static string BuildExternalCompletionMessage(string jobId, string source)
+    {
+        var normalizedJob = string.IsNullOrWhiteSpace(jobId) ? "job" : jobId.Trim();
+        var normalizedSource = string.IsNullOrWhiteSpace(source) ? "external" : source.Trim();
+        return
+            $"chore(workspace): record external completion for {normalizedJob}\n\n" +
+            $"Completed-Externally-By: {normalizedSource}\n";
+    }
+
+    internal static string BuildArtifactUploadMessage(string jobId, IReadOnlyList<string> files)
+    {
+        var normalizedJob = string.IsNullOrWhiteSpace(jobId) ? "job" : jobId.Trim();
+        var normalizedFiles = files.Count == 0
+            ? "none"
+            : string.Join(",", files.Select(f => string.IsNullOrWhiteSpace(f) ? "unknown" : f.Trim()));
+        return
+            $"chore(workspace): record uploaded artifacts for {normalizedJob}\n\n" +
+            $"Artifact-Upload-Files: {normalizedFiles}\n";
+    }
+
+    /// <summary>Message plan produced once the tree is known dirty: the commit body plus the run-index/steps echoed in the result.</summary>
+    private sealed record ArtifactCommitPlan(string Message, int RunIndex, string? Steps);
 
     internal static string BuildCommitMessage(
         string jobId,

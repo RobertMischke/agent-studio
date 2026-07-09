@@ -131,6 +131,11 @@ public class CodePatternDriftAnalysisServiceTests : IDisposable
         Assert.Equal(0, cliFinding.DriftSites);
     }
 
+    // Machine-bound: scans the actual on-disk dev checkout and asserts it is
+    // drift-free, so its result depends on the exact checkout state and OS path
+    // handling rather than a hermetic fixture. Excluded from the CI gate via
+    // `--filter Category!=MachineBound`; still runs on the dev machine.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public void Analyze_AgainstLiveDevCheckout_ReportsZeroCliDriftAfterFix()
     {
@@ -207,6 +212,7 @@ public class CodePatternDriftAnalysisServiceTests : IDisposable
         Assert.Equal(DriftSeverity.High, finding.OverallSeverity);
     }
 
+    [Trait("Category", "MachineBound")]
     [Fact]
     public void Analyze_AgainstLiveDevCheckout_ReportsZeroLaneWriteDriftAfterFix()
     {
@@ -287,6 +293,7 @@ public class CodePatternDriftAnalysisServiceTests : IDisposable
         Assert.Equal(DriftSeverity.High, finding.OverallSeverity);
     }
 
+    [Trait("Category", "MachineBound")]
     [Fact]
     public void Analyze_AgainstLiveDevCheckout_ReportsZeroCommitSourceDriftAfterFix()
     {
@@ -359,6 +366,7 @@ public class CodePatternDriftAnalysisServiceTests : IDisposable
         Assert.DoesNotContain(finding.Hits, h => h.IsDrift && h.FilePath.EndsWith("clean.component.html"));
     }
 
+    [Trait("Category", "MachineBound")]
     [Fact]
     public void Analyze_AgainstLiveDevCheckout_ReportsZeroTooltipDirectiveDrift()
     {

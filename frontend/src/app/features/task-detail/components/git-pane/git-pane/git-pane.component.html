@@ -22,12 +22,12 @@
     @if (git.viewMode() === 'commit') {
       @if (git.provenance(); as prov) {
         <section class="git-view__landed" data-testid="git-landed-ladder">
-          <div class="git-view__landed-head">
-            <span class="git-view__landed-state"
-                  data-testid="git-landed-state"
-                  [attr.data-state]="prov.landedState"
-                  [cacTooltip]="landedStateTooltip(prov)">{{ landedStateLabel(prov.landedState) }}</span>
-          </div>
+          <!--
+            Single on-develop status line for the task (UI-feedback 2026-07-09).
+            The former "Merged to develop" pill above the ladder and the
+            per-commit "on develop" membership chips below it were redundant
+            with these rungs, so both were removed; the ladder is now the one
+            place the develop-merged / main-pending state is shown. -->
           <ol class="git-view__ladder" role="list" aria-label="Landed ladder (task branch to develop to main)">
             <li class="git-view__ladder-rung git-view__ladder-rung--reached"
                 data-testid="git-ladder-branch">
@@ -57,24 +57,6 @@
               <span class="git-view__ladder-flag">{{ prov.ladder.releasedToRelease ? 'released' : 'pending' }}</span>
             </li>
           </ol>
-          @if (prov.commits.length) {
-            <ul class="git-view__membership"
-                data-testid="git-commit-membership"
-                role="list"
-                aria-label="Per-commit branch membership">
-              @for (m of prov.commits; track m.sha) {
-                <li class="git-view__membership-item"
-                    [attr.data-sha]="m.sha"
-                    [attr.data-membership]="membershipLabel(m)">
-                  <span class="git-view__membership-sha"
-                        [cacTooltip]="membershipTooltip(m, prov)">{{ m.shortSha }}</span>
-                  <span class="git-view__membership-where"
-                        [attr.data-membership]="membershipLabel(m)">{{ membershipLabel(m) }}</span>
-                  <span class="git-view__membership-subject">{{ m.message.split('\n')[0] }}</span>
-                </li>
-              }
-            </ul>
-          }
         </section>
       }
       @if (git.commitChain().length > 1) {
@@ -121,11 +103,6 @@
                     <span class="git-view__commit-chain-step">#{{ i + 1 }}</span>
                     <span class="git-view__commit-chain-sha">{{ entry.shortSha }}</span>
                     <span class="git-view__commit-chain-subject">{{ entry.message.split('\n')[0] }}</span>
-                    @if (confidencePercent(entry); as pct) {
-                      <span class="git-view__commit-confidence"
-                            data-testid="git-commit-confidence"
-                            [cacTooltip]="attributionTooltip(entry)">{{ pct }}</span>
-                    }
                     <span class="git-view__commit-chain-meta"
                           data-testid="git-commit-chain-meta">{{ entry.filesChanged }}f · {{ commitChainTimestamp(entry) }}</span>
                   </button>
@@ -148,11 +125,6 @@
               <span class="git-view__commit-files">{{ c.filesChanged }} {{ c.filesChanged === 1 ? 'file' : 'files' }}</span>
             }
             <span class="git-view__commit-when">{{ c.at | date:'medium' }}</span>
-            @if (confidencePercent(c); as pct) {
-              <span class="git-view__commit-confidence"
-                    data-testid="git-commit-header-confidence"
-                    [cacTooltip]="attributionTooltip(c)">{{ pct }}</span>
-            }
             <button type="button"
                     class="git-view__commit-collapse"
                     data-testid="git-commit-collapse-toggle"

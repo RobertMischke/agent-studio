@@ -90,7 +90,10 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
       `/?job=${encodeURIComponent(first.id)}&watchPath=${encodeURIComponent(first.watchPath)}`
     );
 
-    const chip = page.locator('[data-testid^="protocol-verdict-"]');
+    // The banner root carries `role="status"`; scope to it so the newer
+    // sub-element testids (protocol-verdict-detail / -duration / -superseded)
+    // do not turn this into a multi-match locator.
+    const chip = page.locator('[data-testid^="protocol-verdict-"][role="status"]');
     await expect(chip).toBeVisible({ timeout: 15_000 });
 
     // One of the three kinds must be present. The exact one depends on the

@@ -20,6 +20,11 @@ public class CodePatternDriftLiveReportTests
         _out = output;
     }
 
+    // Machine-bound: sweeps the live dev checkout for drift, so the outcome
+    // tracks the checkout's actual contents and OS path handling, not a
+    // hermetic fixture. Excluded from the CI gate via
+    // `--filter Category!=MachineBound`; still runs on the dev machine.
+    [Trait("Category", "MachineBound")]
     [Fact]
     public void LiveDriftReport_AcrossAllRules_IsClean()
     {

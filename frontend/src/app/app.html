@@ -217,16 +217,12 @@
             @if (studioTriageHasActions()) {
               <span class="studio-tab-actions-sep" aria-hidden="true"></span>
               <div class="studio-tab-action__triage" data-testid="studio-triage-panel" data-triage-root>
-                @if (studioMergeAcceptView()?.statusLabel; as mergeStatus) {
-                  <span class="studio-tab-action__merge-status"
-                        [class.studio-tab-action__merge-status--released]="studioMergeAcceptView()?.landedState === 'released-to-main'"
-                        data-testid="studio-triage-merge-status"
-                        [attr.data-landed-state]="studioMergeAcceptView()?.landedState"
-                        [cacTooltip]="studioMergeAcceptView()?.statusTooltip || ''">
-                    <span class="studio-tab-action__merge-status-glyph" aria-hidden="true">⬇</span>
-                    {{ mergeStatus }}
-                  </span>
-                }
+                <!--
+                  The landed-status ("Merged to develop") is intentionally NOT
+                  shown here. The task's on-develop state lives once, at the task
+                  commit (git pane landed ladder). This cluster only offers the
+                  acceptance action; when the work has already landed the primary
+                  relabels to "Accept" and its hover tooltip explains why. -->
                 @if (studioTriagePrimary(); as primary) {
                   <button type="button"
                           class="studio-tab-action studio-tab-action--primary"

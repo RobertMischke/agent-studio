@@ -39,8 +39,11 @@ namespace AgentStudio.Tests;
 ///   - DoneLinger: after a happy-path run, lastRunFinishedAt stays
 ///     populated past the (shortened) linger window.
 ///
-/// Skipped when bash or git aren't reachable on PATH (e.g. Linux CI without
-/// Git installed); the fake stable checkout needs both.
+/// Gated to the Windows host: this suite drives the Windows-native same-disk
+/// deploy machinery (stop/start scripts + npm install; ADR-0021/0031). The
+/// Linux deploy story is deferred (remote-ready kickoff D6), so on non-Windows
+/// every case is skipped rather than exercised. Also skipped when bash or git
+/// aren't reachable on PATH; the fake stable checkout needs both.
 /// </summary>
 public class UpdateServiceIntegrationTests
 {
@@ -106,6 +109,10 @@ public class UpdateServiceIntegrationTests
     [SkippableFact]
     public async Task HappyPath_NinePhasesObserved_RunFolderArtefactsWritten_LastRunFinishedAtPopulated()
     {
+        Skip.If(!OperatingSystem.IsWindows(),
+            "Update Service integration suite exercises the Windows-native same-disk deploy machinery " +
+            "(stop/start scripts + npm install); the Linux deploy story is deferred (remote-ready kickoff D6, " +
+            "ADR-0021/0031). Gated to the Windows host until that lands.");
         using var checkout = FakeStableCheckout.TryCreate();
         Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
 
@@ -162,6 +169,10 @@ public class UpdateServiceIntegrationTests
     [SkippableFact]
     public async Task Trigger_WhenStableIsNotBehind_DoesNotPauseOrStartRun()
     {
+        Skip.If(!OperatingSystem.IsWindows(),
+            "Update Service integration suite exercises the Windows-native same-disk deploy machinery " +
+            "(stop/start scripts + npm install); the Linux deploy story is deferred (remote-ready kickoff D6, " +
+            "ADR-0021/0031). Gated to the Windows host until that lands.");
         using var checkout = FakeStableCheckout.TryCreate();
         Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
 
@@ -189,6 +200,10 @@ public class UpdateServiceIntegrationTests
     [SkippableFact]
     public async Task ScheduledTrigger_WhenApplyModeManual_DoesNotPauseOrStartRun()
     {
+        Skip.If(!OperatingSystem.IsWindows(),
+            "Update Service integration suite exercises the Windows-native same-disk deploy machinery " +
+            "(stop/start scripts + npm install); the Linux deploy story is deferred (remote-ready kickoff D6, " +
+            "ADR-0021/0031). Gated to the Windows host until that lands.");
         using var checkout = FakeStableCheckout.TryCreate();
         Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
 
@@ -218,6 +233,10 @@ public class UpdateServiceIntegrationTests
     [SkippableFact]
     public async Task ManualTrigger_WhenApplyModeManual_AppliesWithoutRunnerModeWrites()
     {
+        Skip.If(!OperatingSystem.IsWindows(),
+            "Update Service integration suite exercises the Windows-native same-disk deploy machinery " +
+            "(stop/start scripts + npm install); the Linux deploy story is deferred (remote-ready kickoff D6, " +
+            "ADR-0021/0031). Gated to the Windows host until that lands.");
         using var checkout = FakeStableCheckout.TryCreate();
         Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
 
@@ -245,6 +264,10 @@ public class UpdateServiceIntegrationTests
     [SkippableFact]
     public async Task PullFailure_AfterPause_RestoresPreRunModeInFinally()
     {
+        Skip.If(!OperatingSystem.IsWindows(),
+            "Update Service integration suite exercises the Windows-native same-disk deploy machinery " +
+            "(stop/start scripts + npm install); the Linux deploy story is deferred (remote-ready kickoff D6, " +
+            "ADR-0021/0031). Gated to the Windows host until that lands.");
         using var checkout = FakeStableCheckout.TryCreate();
         Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
 
@@ -270,6 +293,10 @@ public class UpdateServiceIntegrationTests
     [SkippableFact]
     public async Task FailureInjection_PhaseFailed_VerificationFailuresContainsDbTouch_NoRollback()
     {
+        Skip.If(!OperatingSystem.IsWindows(),
+            "Update Service integration suite exercises the Windows-native same-disk deploy machinery " +
+            "(stop/start scripts + npm install); the Linux deploy story is deferred (remote-ready kickoff D6, " +
+            "ADR-0021/0031). Gated to the Windows host until that lands.");
         using var checkout = FakeStableCheckout.TryCreate();
         Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
 
@@ -309,6 +336,10 @@ public class UpdateServiceIntegrationTests
     [SkippableFact]
     public async Task AutoRollback_OnVerificationFailure_RollbackRunsVerification_HistoryCarriesOkRow()
     {
+        Skip.If(!OperatingSystem.IsWindows(),
+            "Update Service integration suite exercises the Windows-native same-disk deploy machinery " +
+            "(stop/start scripts + npm install); the Linux deploy story is deferred (remote-ready kickoff D6, " +
+            "ADR-0021/0031). Gated to the Windows host until that lands.");
         using var checkout = FakeStableCheckout.TryCreate();
         Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
 
@@ -347,6 +378,10 @@ public class UpdateServiceIntegrationTests
     [SkippableFact]
     public async Task AutoRollback_HealthzStays503_RollbackResultFailed_VerificationFailuresPopulated()
     {
+        Skip.If(!OperatingSystem.IsWindows(),
+            "Update Service integration suite exercises the Windows-native same-disk deploy machinery " +
+            "(stop/start scripts + npm install); the Linux deploy story is deferred (remote-ready kickoff D6, " +
+            "ADR-0021/0031). Gated to the Windows host until that lands.");
         using var checkout = FakeStableCheckout.TryCreate();
         Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
 
@@ -381,6 +416,10 @@ public class UpdateServiceIntegrationTests
     [SkippableFact]
     public async Task ManualRollback_AfterFailedForwardRun_WritesRollbackVerification()
     {
+        Skip.If(!OperatingSystem.IsWindows(),
+            "Update Service integration suite exercises the Windows-native same-disk deploy machinery " +
+            "(stop/start scripts + npm install); the Linux deploy story is deferred (remote-ready kickoff D6, " +
+            "ADR-0021/0031). Gated to the Windows host until that lands.");
         using var checkout = FakeStableCheckout.TryCreate();
         Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
 
@@ -415,6 +454,10 @@ public class UpdateServiceIntegrationTests
     [SkippableFact]
     public async Task JobsGroupedRetry_FirstAttemptFails_SecondSucceeds_RunCompletes()
     {
+        Skip.If(!OperatingSystem.IsWindows(),
+            "Update Service integration suite exercises the Windows-native same-disk deploy machinery " +
+            "(stop/start scripts + npm install); the Linux deploy story is deferred (remote-ready kickoff D6, " +
+            "ADR-0021/0031). Gated to the Windows host until that lands.");
         using var checkout = FakeStableCheckout.TryCreate();
         Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
 
@@ -447,6 +490,10 @@ public class UpdateServiceIntegrationTests
     [SkippableFact]
     public async Task DoneLinger_LastRunFinishedAtSurvivesPastLingerWindow()
     {
+        Skip.If(!OperatingSystem.IsWindows(),
+            "Update Service integration suite exercises the Windows-native same-disk deploy machinery " +
+            "(stop/start scripts + npm install); the Linux deploy story is deferred (remote-ready kickoff D6, " +
+            "ADR-0021/0031). Gated to the Windows host until that lands.");
         using var checkout = FakeStableCheckout.TryCreate();
         Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
 

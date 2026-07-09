@@ -115,6 +115,12 @@ public static class ModelIds
     public const string ClaudeSonnet46 = "claude-sonnet-4-6";
     public const string ClaudeSonnet45 = "claude-sonnet-4-5";
     public const string ClaudeHaiku45 = "claude-haiku-4-5";
+    /// <summary>Current default Codex/OpenAI model. codex-cli 0.143 on a
+    /// ChatGPT account rejects the older <c>gpt-5-codex</c> with a 400
+    /// invalid_request ("model not supported when using Codex with a ChatGPT
+    /// account"); <c>gpt-5.5</c> is the account-valid model per
+    /// <c>~/.codex/config.toml</c> and live test (AGT-1941).</summary>
+    public const string Gpt55 = "gpt-5.5";
     public const string Gpt5Codex = "gpt-5-codex";
     public const string Gpt41 = "gpt-4.1";
     public const string Gpt4o = "gpt-4o";
@@ -152,7 +158,16 @@ public static class ModelMetadataRegistry
         Claude(ModelIds.ClaudeSonnet46, "Claude Sonnet 4.6", input: 3.00m, output: 15.00m, context: 200_000, aliases: ["claude-sonnet-4.6"]),
         Claude(ModelIds.ClaudeSonnet45, "Claude Sonnet 4.5", input: 3.00m, output: 15.00m, context: 200_000, aliases: ["claude-sonnet-4.5"]),
         Claude(ModelIds.ClaudeHaiku45, "Claude Haiku 4.5", input: 1.00m, output: 5.00m, context: 200_000, aliases: ["claude-haiku-4.5"]),
-        new(ModelIds.Gpt5Codex, "GPT-5 Codex", "openai", IsDefault: true, Deprecated: false, Available: true,
+        // gpt-5.5 is the current Codex/OpenAI default. codex-cli 0.143 on a
+        // ChatGPT account rejects gpt-5-codex with a 400 invalid_request, so
+        // the default must be the account-valid model (AGT-1941). Pricing is
+        // left null until authoritative numbers are confirmed (same posture as
+        // the GPT-4.1 / GPT-4o entries) so no invented cost is asserted.
+        new(ModelIds.Gpt55, "GPT-5.5", "openai", IsDefault: true, Deprecated: false, Available: true,
+            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 400_000),
+        // gpt-5-codex is retained (API-key accounts still accept it) but is no
+        // longer the default: a ChatGPT-account spawn rejects it outright.
+        new(ModelIds.Gpt5Codex, "GPT-5 Codex", "openai", IsDefault: false, Deprecated: false, Available: true,
             InputPricePerMillion: 1.25m, OutputPricePerMillion: 10.00m, ContextWindow: 272_000,
             CacheReadPerMillionOverride: 0.125m, CacheWritePerMillionOverride: 1.25m),
         new(ModelIds.Gpt41, "GPT-4.1", "openai", IsDefault: false, Deprecated: false, Available: true,

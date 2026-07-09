@@ -265,6 +265,20 @@ async function dismissErrorDialog(page: Page): Promise<void> {
   }
 }
 
+/**
+ * Expand every collapsible pipeline section (ASS-1914). Before any run the
+ * Empty scenario collapses every section, so a test that inspects per-step
+ * cells must first open them. Each header is a toggle button carrying
+ * `aria-expanded`; clicking a collapsed one reduces the count.
+ */
+async function expandAllPipelineSections(page: Page): Promise<void> {
+  const collapsed = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="false"]');
+  for (let i = 0; i < 20; i++) {
+    if ((await collapsed.count()) === 0) break;
+    await collapsed.first().click();
+  }
+}
+
 test.describe('Pipeline: pre-run resolved model', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -286,6 +300,9 @@ test.describe('Pipeline: pre-run resolved model', () => {
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    // Nothing has run yet (Empty scenario), so every section starts collapsed;
+    // open them to inspect the pre-run per-step model chips.
+    await expandAllPipelineSections(page);
 
     // The aspect rows render the resolved model even though nothing has run.
     const cqRow = page.locator('[data-step-id="aspect-code-quality"]');
@@ -298,16 +315,15 @@ test.describe('Pipeline: pre-run resolved model', () => {
     await expect(rfModel).toHaveText('claude-sonnet-4-6');
     await expect(rfModel).toHaveAttribute('data-model-resolved', 'true');
 
-    // Each aspect row also carries an inline selector reflecting its stored
-    // override: code-quality has a per-step override (opus), requirement-fit
-    // inherits the project model (empty = Inherit).
-    await expect(cqRow.getByTestId('overview-pipeline-step-model-select')).toHaveValue('claude-opus-4-7');
-    await expect(rfRow.getByTestId('overview-pipeline-step-model-select')).toHaveValue('');
+    // The Overview is read-only for step configuration (handoff non-goal: no
+    // pipeline configuration editor here — that lives in project settings), so
+    // the resolved model is shown as a chip, not an inline editor.
+    await expect(cqRow.getByTestId('overview-pipeline-step-model-select')).toHaveCount(0);
+    await expect(rfRow.getByTestId('overview-pipeline-step-model-select')).toHaveCount(0);
 
-    // Deterministic steps resolve no model, so neither chip nor selector renders.
+    // Deterministic steps resolve no model, so no chip renders.
     const loopRow = page.locator('[data-step-id="pre-loop-guard"]');
     await expect(loopRow.getByTestId('overview-pipeline-step-model')).toHaveCount(0);
-    await expect(loopRow.getByTestId('overview-pipeline-step-model-select')).toHaveCount(0);
 
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
@@ -318,7 +334,12 @@ test.describe('Pipeline: pre-run resolved model', () => {
     }
   });
 
-  test('changing an aspect step model before the run persists the override and re-resolves the chip', async ({ page }) => {
+  test('the Overview shows the resolved step model read-only, with no inline model editor', async ({ page }) => {
+    // Regression guard for the handoff non-goal "Do not add a pipeline
+    // configuration editor to Overview." Per-step model configuration lives in
+    // project settings; the Overview only surfaces the resolved effective model
+    // as a read-only chip. (An earlier iteration briefly rendered an inline
+    // per-step model <select> on aspect rows; that affordance was retired.)
     const mock = makeMockState();
     await installRoutes(page, '2-ready', mock);
     await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
@@ -326,38 +347,22 @@ test.describe('Pipeline: pre-run resolved model', () => {
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
 
     const rfRow = page.locator('[data-step-id="aspect-requirement-fit"]');
-    const rfModel = rfRow.getByTestId('overview-pipeline-step-model');
-    const rfSelect = rfRow.getByTestId('overview-pipeline-step-model-select');
+    // The resolved model is shown as a read-only chip (inherited project model).
+    await expect(rfRow.getByTestId('overview-pipeline-step-model')).toHaveText('claude-sonnet-4-6');
 
-    // Starts on the inherited project model (sonnet, source project).
-    await expect(rfModel).toHaveText('claude-sonnet-4-6');
-    await expect(rfSelect).toHaveValue('');
-
-    // Pin the step to Opus before the run.
-    await rfSelect.selectOption('claude-opus-4-7');
-
-    // The write hit the project pipeline-step endpoint with the new model and
-    // the model's default thinking level, leaving the other facets cleared.
-    await expect.poll(() => mock.pipelineStepPuts.length).toBeGreaterThan(0);
-    const put = mock.pipelineStepPuts.at(-1)!;
-    expect(put.stepId).toBe('aspect-requirement-fit');
-    expect(put.model).toBe('claude-opus-4-7');
-    expect(put.thinkingLevel).toBe('high');
-    expect(put.enabled).toBeNull();
-    expect(put.mode).toBeNull();
-
-    // After the re-resolve, the chip reflects the pinned model and now reads as
-    // a per-step override (still pre-run, so still the dashed "will run on").
-    await expect(rfModel).toHaveText('claude-opus-4-7');
-    await expect(rfModel).toHaveAttribute('data-model-resolved', 'true');
-    await expect(rfSelect).toHaveValue('claude-opus-4-7');
+    // No inline model editor is offered anywhere in the pipeline, and no
+    // per-step configuration write can be triggered from the Overview.
+    await expect(page.getByTestId('overview-pipeline-step-model-select')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="overview-pipeline-step-agent-"]')).toHaveCount(0);
+    expect(mock.pipelineStepPuts.length).toBe(0);
 
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-prerun-model-edited.png'),
+        path: path.join(RESULTS_DIR, 'pipeline-prerun-model-readonly.png'),
         fullPage: true,
       });
     }

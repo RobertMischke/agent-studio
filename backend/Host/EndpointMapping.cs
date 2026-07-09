@@ -22,6 +22,7 @@ public static class EndpointMapping
         tasks.MapTaskGitEndpoints();
         tasks.MapTaskClaudeEndpoints();
         tasks.MapTaskReviewEvidenceEndpoints();
+        tasks.MapTaskExternalCompletionEndpoints();
         tasks.MapTaskCodeReviewEndpoints();
         tasks.MapTaskRegressionRadarEndpoints();
         tasks.MapTaskPipelineEndpoints();
@@ -30,9 +31,11 @@ public static class EndpointMapping
         app.MapEpicEndpoints();
         app.MapCompletedLaneAuditEndpoints();
         app.MapRunnerEndpoints();
+        app.MapOrchestratorSessionEndpoints();
         app.MapLeaseEndpoints();
         app.MapIntegrationLeaseEndpoints();
         app.MapLogIngestionEndpoints();
+        app.MapArtifactIngestionEndpoints();
         app.MapRegistryEndpoints();
         app.MapWorkspaceEndpoints();
         app.MapWorkspaceSettingsEndpoints();

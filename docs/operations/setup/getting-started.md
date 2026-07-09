@@ -1,56 +1,164 @@
 # Getting started
 
-Manual install and configuration for agent-orchestrator. Most users do not need to read this — see the README for the recommended path of letting your coding agent install and run it from the AGENTS.md instructions.
+This is the step-by-step path from a clean Windows machine to a running agent-orchestrator instance with one project attached and one task completed end to end. If you would rather have a coding agent do all of this for you, see the README's ["How to get started"](../../../README.md#how-to-get-started) - tell it to clone the repo and follow [AGENTS.md](../../../AGENTS.md). This page is for doing it yourself, or for checking what the agent actually did.
 
-## Running
+Everything below was verified against this repository's actual scripts and source on 2026-07-08. All commands are Git Bash (`sh`), not PowerShell.
 
-Backend on `http://localhost:5030`, frontend on `http://localhost:4010`. Agents must use the `sh` variant.
+## 1. Prerequisites
+
+| Requirement | Check | Notes |
+|---|---|---|
+| Windows | - | The only tested target today. `api.sh` and the other repo scripts are `sh`, run under Git Bash. |
+| Git Bash | `bash --version` | Ships with [Git for Windows](https://git-scm.com/download/win). Agents and the repo's own scripts never use PowerShell for these tasks - see [AGENTS.md](../../../AGENTS.md) "Agent shell policy". `api.ps1` exists for manual, human, interactive use only. |
+| .NET SDK 10 | `dotnet --version` -> `10.x` | Backend is `backend/OrchestratorApi.csproj`. |
+| Node.js 22 | `node --version` -> `v22.x` | Pinned in CI ([.github/workflows/frontend-lint.yml](../../../.github/workflows/frontend-lint.yml)). A newer LTS will often work but isn't the tested baseline. |
+| Claude Code CLI | `claude --version` | `npm install -g @anthropic-ai/claude-code`. See "Claude Code login" below - this step has a real gotcha. |
+| Codex / Copilot / Gemini CLI (optional) | - | Only needed if you plan to run tasks through that CLI. Full install + quirks per CLI: [onboard-an-agent-cli.md](./onboard-an-agent-cli.md) (includes the load-bearing **Codex-on-Windows sandbox** setting). |
+
+### Claude Code login and onboarding (read this before your first run)
 
 ```sh
-./api.sh start                       # backend
-npm start --prefix frontend          # or VS Code task "Frontend: Start"
+claude
 ```
 
-## Dev vs. stable checkout
+Run `claude` once, interactively, in any folder. Log in when prompted, and then **click all the way through the first-run screens** (folder-trust prompt, theme picker, any "try the new renderer" upsell) until you reach the normal `? for shortcuts` prompt. Don't just Ctrl-C out once you're logged in.
 
-All code edits happen in the **dev** checkout. The stable checkout exists for reference and gets changes via `git pull` from `main`, never via direct edits. The dev checkout marks itself visually so the two never get confused:
+Why this matters: the backend's quota probe drives `claude` headlessly and sends `/usage` to read your plan and quota. If the CLI is still sitting on the onboarding wizard the first time the probe runs, `/usage` never reaches the ready prompt and the probe comes back empty. The backend log will say:
 
-- An orange "DEV" stripe is pinned to the top of the window.
-- The PWA install icon and favicon use an orange variant with a "DEV" corner ribbon.
-- The window title becomes `agent-orchestrator (DEV)`.
-
-These markers activate when the backend serves `/api/environment` with `{ isDev: true }`, which it does iff a local-only `backend/appsettings.Local.json` file is present:
-
-```json
-// backend/appsettings.Local.json, gitignored, dev checkout only
-{
-  "Environment": {
-    "IsDev": true
-  }
-}
+```
+Claude /usage probe returned 0 windows because the CLI is stuck on a first-run onboarding /
+feature-upsell wizard (theme picker or a "Try the new ..." dialog) ...
 ```
 
-The file is gitignored so it stays per-checkout. Stable lacks the file, so the same code produces the un-marked appearance there.
+Fix: finish the onboarding wizard once by running `claude` interactively yourself, exactly as above. See [ClaudeQuotaProbe.cs](../../../backend/Features/Cli/Quota/ClaudeQuotaProbe.cs) for the detection logic if you want the details.
 
-## Configuration
+## 2. Install and start
 
-```json
-// backend/appsettings.json
-{
-  "WatchPaths": [
-    {
-      "Name": "Runbook",
-      "RootPath": "C:\\Projects\\Runbook\\App",
-      "RepositoryPath": "C:\\Projects\\Runbook"
-    },
-    { "Name": "My Other Project", "RootPath": "C:\\Projects\\OtherApp" }
-  ]
-}
+### 2.1 Clone this repo and the chat library
+
+```sh
+git clone https://github.com/RobertMischke/agent-studio.git agent-orchestrator
 ```
 
-`RootPath` is the CLI working directory and the place where the board reads `<RootPath>/.orchestrator.yml` for `projectKey`. Jobs then resolve under `agent-taskboard-workspace/projects/<projectKey>/`.
+The frontend depends on a sibling library, `coding-agent-chat`, via a relative `file:` path (`frontend/package.json`: `"@coding-agent/chat": "file:../../../coding-agent-chat/dist/coding-agent-chat"`). Three `../` means your checkout must sit **two folders deep under a common root**, with `coding-agent-chat` cloned as a sibling of that root. For example:
 
-`RepositoryPath` is optional. Use it when the Git repository root differs from the CLI working directory, for example a monorepo or a source app under a parent repository. Git status, diff, commits, and the VS Code handoff use `RepositoryPath`; when it is omitted, they fall back to `RootPath` and still ask Git for the work-tree top-level.
+```
+C:\Projects\
+├── coding-agent-chat\             <- build this first
+└── <any-folder>\
+    └── agent-orchestrator\        <- this repo (frontend/ is 2 levels below C:\Projects)
+```
+
+Build the library before you touch the frontend - `npm install` in `frontend/` will fail otherwise because `dist/coding-agent-chat` doesn't exist yet:
+
+```sh
+git clone https://github.com/RobertMischke/coding-agent-chat.git C:/Projects/coding-agent-chat
+cd C:/Projects/coding-agent-chat
+npm install
+npm run build
+```
+
+### 2.2 Backend config
+
+```sh
+cd agent-orchestrator/backend
+cp appsettings.Local.json.example appsettings.Local.json
+```
+
+Edit `appsettings.Local.json` (gitignored, per-checkout) and set at least:
+
+- **`TaskRepository`** - the workspace root where job folders and the project/workspace registry live (`<TaskRepository>/projects/...`, `<TaskRepository>/.metadata/{workspaces,projects}.json`). Point it at an empty folder you own, e.g. `C:\\Projects\\agent-orchestrator-workspace`.
+- **`WatchPaths`** - leave it `[]`. It's a bootstrap-only discovery list (ADR-0042); you add your first real project after boot with the in-app dialog, not by hand-editing this file (see step 3).
+- **`Environment.IsDev`** - set it to `false` (or delete the whole `Environment` block). This both turns off the orange "DEV" UI markers and matters functionally: the runner's pickup role infers from this flag when `Runner.Role` isn't set explicitly (`true` -> `test-subject`, which *disables* auto-pickup; anything else -> `orchestrator`, which runs it). You want `orchestrator` for a normal instance.
+- Delete the `Runner`, `DevTools`, and `//TaskRepository.dev-vs-stable` blocks entirely. Those exist for the maintainers' own **dev + stable** side-by-side setup (see "Reference: dev + stable" below) and aren't needed for a single instance.
+
+### 2.3 Frontend install
+
+```sh
+cd ../frontend   # agent-orchestrator/frontend
+npm install
+```
+
+`frontend/.npmrc` sets `install-links=true`, so the `@coding-agent/chat` dependency is installed as a **physical copy**, not a symlink. Remember this later if you rebuild `coding-agent-chat` - see the troubleshooting list.
+
+### 2.4 Start the backend
+
+```sh
+cd ../         # agent-orchestrator/
+ATP_ALLOW_DEV_BACKEND=1 ./api.sh start
+```
+
+The `ATP_ALLOW_DEV_BACKEND=1` flag is required. `api.sh` refuses to boot a checkout whose folder name doesn't end in `-stable` unless you pass it, or unless a Playwright fixture set `ATP_DEV_BACKEND_FROM_FIXTURE=1` (ADR-0044 - this gate exists to stop the maintainers' own `-dev` checkout from becoming a second, competing auto-pickup driver next to their always-on `-stable` seat). For a single, standalone instance this gate has nothing to protect you from; it's just a one-time acknowledgement.
+
+```sh
+./api.sh status     # confirm "running and healthy"
+```
+
+Other commands: `./api.sh stop`, `./api.sh restart`. Backend listens on `http://localhost:5030` by default (`PORT` env var overrides it; `api.sh` pins the default to 5031 automatically if your folder name ends in `-stable`, and refuses a mismatched inherited `PORT` unless you set `API_PORT_OVERRIDE=1`).
+
+### 2.5 Start the frontend
+
+```sh
+npm start --prefix frontend
+```
+
+(or the VS Code task "Frontend: Start"). Serves on `http://localhost:4010`, proxying `/api` and `/hubs` to the backend on `:5030` (`frontend/proxy.conf.json`). Open it in a browser - you should see the board, empty, with no projects yet.
+
+### 2.6 Optional: the self-update service
+
+Only needed if you want the in-app Update Center to work. `./update-service.sh start` runs a small standalone process on port 5039 that survives backend restarts during an update.
+
+## 3. Onboard your first project
+
+**Recommended: the in-app "Onboard Project" dialog**, not hand-editing config files.
+
+1. In the board, use the workspace "+" in the sidebar to create a workspace if you don't have one yet (`+ Workspace`, name it anything).
+2. Click "+" next to that workspace to open **Onboard Project**. Fill in a display name (a short code is auto-derived and editable), pick a default CLI + model, and - important - set **CLI working directory** (`rootPath`) to the target project's folder on disk. Without it the project has no auto-pickup runner and the mode toggle won't work later.
+3. Submit. This calls `POST /api/projects` and provisions the project's lane folders immediately - **no backend restart needed.**
+
+This is the current, working path (`RegistryEndpoints.cs`, ADR-0042/ADR-0046). Note on scope: the persistent **Orchestrator Chat** side panel (the chat window docked to a project) is great for asking the orchestrator questions about a project once it's onboarded, but it cannot create a project registration for you today - that capability is still on the roadmap (see [orchestrator-chat.md](../../product/orchestrator-chat.md)). Use the dialog above for the actual creation step.
+
+Two cases the dialog doesn't cover, still documented in [onboard-a-project.md](./onboard-a-project.md):
+
+- **Legacy `WatchPaths` bootstrap** (kept for reference / scripted setups) - editing `appsettings.Local.json` directly and restarting.
+- **Repo root differs from the CLI working directory** (monorepo, app nested under a parent repo) - set `RepositoryPath` via `PUT /api/projects/{id}` after creating the project, so Git status/diff/commits resolve from the right folder.
+
+## 4. Run your first task
+
+Full walkthrough, including what to queue and what to watch for: [your-first-task.md](./your-first-task.md). Short version:
+
+1. Create a small, scoped, read-then-write task (the "Project Overview Doc" pattern in that doc works well) in `2-ready`, targeting the CLI you configured.
+2. Set the project's runner mode. Modes are `manual` (you click Start), `auto-single` (picks up one job, then stops), `auto-continuous` (keeps draining `2-ready` on its own), and `paused`. Set it from the project switcher / header pause toggle, or `PUT /api/runner/<project>/mode`.
+3. Watch the card move `2-ready -> 3-progress -> 4-auto-review -> 5-human-review`. The Activity Log streams the CLI's tool calls live; the detail panel shows a live `git diff` once the agent starts writing.
+4. Logs and evidence live in the job folder: `logs/cli-output.log` (raw CLI stdout/stderr) and `results/` (screenshots and other evidence the run produced).
+
+Scripting task creation instead of clicking through the dialog: the Task API skill ([.agents/skills/task-api/SKILL.md](../../../.agents/skills/task-api/SKILL.md)) is the canonical, agent-neutral reference - read it before writing any script that creates or moves tasks; it covers the `watchPath` vs `rootPath` mixup that trips up everyone once.
+
+## 5. Troubleshooting quick list
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `./api.sh start` refuses with "refusing to start the dev backend" | ADR-0044 policy gate (see step 2.4) | `ATP_ALLOW_DEV_BACKEND=1 ./api.sh start` |
+| Claude quota panel is empty / plan shows unknown | Claude CLI never finished its first-run onboarding wizard | Run `claude` interactively once and click through to the ready prompt; see step 1. Full detail: [troubleshooting.md](./troubleshooting.md#claude-quota-panel-is-empty-plan-shows-unknown). |
+| `npm install` in `frontend/` fails looking for `../../../coding-agent-chat/dist/coding-agent-chat` | `coding-agent-chat` isn't built yet, or your checkout isn't at the expected folder depth | Build the library first (step 2.1), and check the folder-depth layout matches the diagram there. |
+| Frontend shows a stale chat UI after you rebuilt `coding-agent-chat` | `install-links=true` copies the library physically; it does not re-copy on its own when the source changes | `npm run build` in `coding-agent-chat`, then `npm install` again in `frontend/`. |
+| `claude` / `gemini` command is missing or broken on Windows after an interrupted npm update | Half-completed npm install left orphan shim files or a stub binary | `bash tools/check-cli-shims.sh` - self-heals and re-verifies with `claude --version`. |
+| Port 5030 / 4010 (or 5031 / 4011) already in use | A previous `dotnet run` or `ng serve` is still listening | `./api.sh stop` (kills anything on the pinned port, not just the tracked PID); for the frontend, stop the other `ng serve` or pass `--port <n>`. |
+| A newly-added project's mode toggle returns `400 Invalid project or mode` | Per-project runners are only created at backend startup | `./api.sh restart`. Full detail: [troubleshooting.md](./troubleshooting.md#put-apirunnerprojectmode-returns-400). |
+
+For anything not on this short list, the full FAQ is [troubleshooting.md](./troubleshooting.md), and CLI-specific quirks (Codex's Windows sandbox setting, Copilot's auth, Gemini's stdout buffering) are in [onboard-an-agent-cli.md](./onboard-an-agent-cli.md).
+
+---
+
+## Reference: dev + stable side-by-side (optional, advanced)
+
+Everything above gives you **one** working instance. The maintainers additionally run two checkouts side by side on the same machine - `-dev` for active development (backend `:5030` / frontend `:4010`) and `-stable` for the always-on orchestrator seat that actually manages projects (backend `:5031` / frontend `:4011`) - with small outer wrapper scripts (`start-dev.sh`, `start-stable.sh`, `stop-dev.sh`, `stop-stable.sh`, `update-stable.sh`) that live **one level above both checkouts**, not inside this repository. That pattern is only worth replicating if you are also developing agent-orchestrator itself against a live reference instance; it is not required to use the product. If you do want it, the shape is: two checkouts named so one ends in `-stable`, a shared workspace-root scripts folder that sets `PORT`/`--port` per checkout before delegating to each checkout's own `api.sh`, and the ADR-0044 gate described in step 2.4 left in place (the `-stable` checkout is exempt from it; the `-dev` one is not).
+
+## Reference: configuration knobs
+
+### Dev vs. stable checkout markers
+
+The frontend visually marks a checkout as "dev" (orange "DEV" stripe, orange PWA icon, `(DEV)` window title) whenever the backend serves `/api/environment` with `{ isDev: true }`, which happens iff `Environment.IsDev` is `true` in `appsettings.Local.json`. Leave it `false` (or omit the block) for a plain single-instance setup.
 
 ### Keep the system awake during runs
 
@@ -61,46 +169,20 @@ The file is gitignored so it stays per-checkout. Stable lacks the file, so the s
 }
 ```
 
-`KeepAwakeDuringRuns` (default `true`) makes the backend hold a Windows **power request** for as long as at least one agent run is active, so the host does not drop into idle sleep mid-run. The request is coupled to the live active-run count in one place (the runner loop): it is acquired when the first run starts and released when the count returns to zero. It asserts `PowerRequestSystemRequired` only, so the **display may still sleep** — only the system is kept awake. On Windows the request is named ("Agent Studio: N aktive Agent-Runs") and shows up under:
+Default `true`. Holds a Windows power request (`PowerRequestSystemRequired`, visible via `powercfg /requests`) for as long as at least one agent run is active, so the host doesn't idle-sleep mid-run; the display can still sleep. The runner is also sleep-aware: on wake it resets each active run's silence clock instead of the watchdog mistaking a nap for agent silence.
 
-```sh
-powercfg /requests
-```
+### Orchestrator + supervisor toggles
 
-On non-Windows hosts the setting is a harmless no-op. Set it to `false` to opt out entirely.
+The flags that gate the auto-review orchestrator, the orchestrator-prep lane, the Layer-2 supervisor passes, the Layer-2.5 meta-cycle, and the auto-intervention policy are reachable from the header `⋮` menu -> "Orchestrator config" (`GET`/`PUT /api/admin/config/orchestrator`). Changes land in `appsettings.Local.json` and need a backend restart.
 
-This is prevention, not a guarantee: a `PowerRequestSystemRequired` request stops the **idle** sleep timer but does **not** override a lid-close or a manual sleep (especially on Modern Standby machines). For those cases the runner is also **sleep-aware**: when the host wakes, the runner detects the suspend (the wall clock jumped forward while a monotonic clock stayed frozen) and **resets the silence clocks** of every active run instead of letting the watchdog mistake the nap for agent silence and kill the run. A wake is logged as `[power] system slept ~X min; reset silence clocks for N run(s)`.
+### Job organization through the API
 
-> Operator note (informational, not configured here): on battery (DC) you may additionally want to raise or disable the OS standby timeout. That is a host power-plan setting, separate from `KeepAwakeDuringRuns`.
+Agents and scripts must organize jobs through the application API, not by directly creating, moving, deleting, or reordering folders under `<TaskRepository>/projects/<projectKey>/`. See the Task API skill for the full endpoint list; the load-bearing ones are `GET /api/watch-paths`, `POST /api/tasks`, `POST /api/tasks/{jobId}/move`, `POST /api/tasks/reorder`, `DELETE /api/tasks/{jobId}`.
 
-### Orchestrator + supervisor toggles (UI-configurable)
+### Supported CLIs
 
-The hosted-service flags that gate the auto-review orchestrator, the orchestrator-prep lane, the Layer-2 supervisor passes, the Layer-2.5 meta-cycle, and the auto-intervention policy used to require hand-editing `backend/appsettings.Local.json`. These are now reachable from the header `⋮` menu under "Orchestrator config". The drawer reads `GET /api/admin/config/orchestrator`, writes via `PUT` (X-Client-Id required), and the changes land in `backend/appsettings.Local.json` for the running checkout. All flags require a backend restart to take effect; the drawer surfaces a "Restart required" banner after every successful save.
+Claude Code, Codex, GitHub Copilot, Gemini. The cross-CLI contract (process lifecycle, session model, model selection, quota probing, logging, cancellation) is in [supported-clis.md](../../cli/supported-clis.md).
 
-## Job organization through the API
+### Keeping target projects in sync
 
-Agents and scripts must organize jobs through the application API, not by directly creating, moving, deleting, or reordering folders under `agent-taskboard-workspace/projects/<projectKey>/`.
-
-Use the API for normal job operations:
-
-- `GET /api/watch-paths` to discover the correct `watchPath`.
-- `POST /api/tasks` with `CreateTaskRequest` to create a job. Set `targetState` when a job should land directly in `1-preparation` or `2-ready`.
-- `POST /api/tasks/{jobId}/move?watchPath=...` to move a job.
-- `POST /api/tasks/reorder` to reorder jobs.
-- `DELETE /api/tasks/{jobId}?watchPath=...` to delete a job.
-- `DELETE /api/tasks/orphan-folder` with body `{"watchPath":"...","lane":"7-archive","folder":"..."}` to delete a scanner-invisible terminal-lane residue folder that has no `job.json`. The route refuses non-terminal lanes and folders that contain `job.json`, and logs `task-orphan-folder-deleted` or `task-orphan-folder-delete-failed`.
-
-On create, `agent` and `cliType` must be valid CLI values (`claude`, `codex`,
-`copilot`, or `gemini`) and should match. Do not use `agent: "human"` to keep
-a card visible; choose a non-running lane such as `0-backlog` or
-`5-human-review`.
-
-Direct filesystem edits are reserved for backend implementation, migrations, recovery work, and tests that deliberately exercise the filesystem contract. They are not the normal operating path for agents. The API is the boundary that keeps ownership, client identity, validation, live updates, and future Task Access behavior in one place.
-
-## Supported CLIs
-
-Claude Code, Codex, GitHub Copilot, Gemini. The contract every CLI must satisfy, including process lifecycle, session model, model selection, quota probing, logging, and cancellation, is in [supported-clis.md](../../cli/supported-clis.md).
-
-## Keeping target projects in sync
-
-When the agent task contract or folder schema changes, run the `/sync-target-instructions` prompt against each target.
+When the agent task contract or folder schema changes, run the `/sync-target-instructions` prompt against each watched project.

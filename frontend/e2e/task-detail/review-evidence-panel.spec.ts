@@ -146,6 +146,18 @@ test.describe('Review evidence panel', () => {
       await expect(page.getByTestId('review-evidence-fileref-high-token-leak'))
         .toContainText('AuthService.cs:142');
 
+      // The PNG artifact renders inline as a thumbnail (not a bare path) and
+      // decodes from the served /api URL. Clicking it opens the shared media
+      // lightbox instead of the old text-only reference.
+      const thumb = page.getByTestId('review-evidence-thumb-high-token-leak').first();
+      await expect(thumb).toBeVisible();
+      const thumbImg = thumb.locator('img');
+      await expect(thumbImg).toHaveAttribute('loading', 'lazy');
+      await expect(thumbImg).toHaveJSProperty('naturalWidth', 1);
+      await thumb.click();
+      await expect(page.getByTestId('media-lightbox')).toBeVisible({ timeout: 5_000 });
+      await page.keyboard.press('Escape');
+
       // Info-severity row also renders.
       await expect(page.getByTestId('review-evidence-row-info-style-nit')).toBeVisible();
 

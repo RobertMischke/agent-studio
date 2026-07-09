@@ -556,12 +556,39 @@ public class TaskMutationService
         return Updated();
     }
 
+    /// <summary>
+    /// Application-owned write of the <c>externalCompletion</c> object on a
+    /// job's <c>task.json</c> (out-of-band task completion, §3 of
+    /// <c>docs/concepts/out-of-band-task-completion.md</c>). Replace-all write:
+    /// the external-completion endpoint owns the record and hands the finished
+    /// shape here. Invalidates the scanner cache so the "extern erledigt" badge
+    /// shows without waiting out the FileSystemWatcher debounce.
+    /// </summary>
+    public bool SetExternalCompletionOnFolder(string folderPath, ExternalCompletionInfo externalCompletion)
+    {
+        if (!Directory.Exists(folderPath)) return false;
+        TaskJsonFile.UpdateField(folderPath, "externalCompletion", externalCompletion, _logger);
+        return Updated();
+    }
+
     public string? CreateJob(CreateTaskRequest req)
     {
         var watchPaths = _scanner.GetWatchPaths();
-        var entry = string.IsNullOrEmpty(req.WatchPath)
+        // D1: a caller may address the target project by its stable PROJ-NNN id
+        // instead of a filesystem watchPath (the id survives a folder move that
+        // a hard-coded path would not). Resolve it to the project's storage
+        // location first; a plain path passes through unchanged.
+        var requestedPath = ResolveRequestedWatchPath(req.WatchPath);
+        // Path-aware project resolution. The previous ordinal, case-sensitive
+        // `w.Path == req.WatchPath` compared the client's watchPath byte-for-byte
+        // against the RESOLVED entry path (Path.GetFullPath, back-slashed on
+        // Windows), so a create that posted the same directory with forward
+        // slashes / a trailing separator / different drive-letter case matched
+        // no entry and returned null → 409 "already exists or invalid input".
+        // See WatchPathComparison (AGT-1940).
+        var entry = string.IsNullOrEmpty(requestedPath)
             ? watchPaths.FirstOrDefault()
-            : watchPaths.FirstOrDefault(w => w.Path == req.WatchPath);
+            : watchPaths.FirstOrDefault(w => WatchPathComparison.PathsEqual(w.Path, requestedPath));
 
         if (entry == null) return null;
 
@@ -621,7 +648,7 @@ public class TaskMutationService
         // the same key, so tie-break would depend on filesystem scan order and
         // the user has no way to predict which one runs next.
         var existingMaxOrder = _scanner.ScanAllJobs()
-            .Where(j => j.WatchPath == entry.Path && j.State == targetState)
+            .Where(j => WatchPathComparison.PathsEqual(j.WatchPath, entry.Path) && j.State == targetState)
             .Select(j => (int?)j.Order)
             .Max();
         var resolvedOrder = req.Order != 999 ? req.Order : (existingMaxOrder ?? 0) + 10;
@@ -744,10 +771,38 @@ public class TaskMutationService
         return jobId;
     }
 
+    /// <summary>
+    /// D1: translate a project reference on <c>CreateTaskRequest.WatchPath</c>
+    /// into a filesystem watch path. A <c>PROJ-NNN</c> id is resolved through
+    /// the <see cref="ProjectRegistry"/> to the project's storage location so
+    /// the create survives a later folder move that a hard-coded path would
+    /// not. Anything that is not a PROJ id (a real path, or empty) is returned
+    /// unchanged; an unknown PROJ id is passed through verbatim so the caller
+    /// still lands on the no-matching-entry → null path (409) rather than
+    /// silently defaulting to the first project.
+    /// </summary>
+    private string? ResolveRequestedWatchPath(string? requested)
+    {
+        if (string.IsNullOrWhiteSpace(requested)) return requested;
+        if (!requested.StartsWith("PROJ-", StringComparison.OrdinalIgnoreCase)) return requested;
+
+        var project = _projectRegistry.FindById(requested.Trim());
+        if (project is { StorageLocation: { Length: > 0 } storage })
+        {
+            _logger.LogInformation(
+                "create-by-project-id projectId={ProjectId} resolvedWatchPath={WatchPath}",
+                requested, storage);
+            return storage;
+        }
+
+        _logger.LogWarning("create-by-project-id-unresolved projectId={ProjectId}", requested);
+        return requested;
+    }
+
     private string EnsureUniqueJobId(string watchPath, string baseSlug)
     {
         var used = _scanner.ScanAllJobs()
-            .Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase))
+            .Where(j => WatchPathComparison.PathsEqual(j.WatchPath, watchPath))
             .Select(j => j.Id)
             .ToHashSet(StringComparer.Ordinal);
         if (!used.Contains(baseSlug)) return baseSlug;
