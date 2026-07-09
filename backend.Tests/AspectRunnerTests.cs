@@ -56,6 +56,55 @@ public class AspectRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task EachAspect_WritesStructuredJsonTwin_AlongsideMarkdown()
+    {
+        // Concept doc §5: the aspect runner now writes a structured
+        // `aspect-{id}.json` source of truth next to the human-readable
+        // `.md`. The JSON must carry the load-bearing fields the Files tab
+        // and Result head read; the markdown twin stays for existing readers.
+        var runner = BuildRunner(aspect => aspect switch
+        {
+            "code-quality" => "The helper duplicates foo().\n[[ASPECT_VERDICT: status=concerns; summary=Dead helper left behind.]]\n[[TASK_DONE]]",
+            _ => "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]"
+        });
+
+        await runner.RunAsync(BuildInputs(),
+            new[] { "code-quality" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        var mdPath = Path.Combine(_jobFolder, "aspect-code-quality.md");
+        var jsonPath = Path.Combine(_jobFolder, "aspect-code-quality.json");
+        Assert.True(File.Exists(mdPath), "markdown twin must still be written");
+        Assert.True(File.Exists(jsonPath), "structured JSON source of truth must be written");
+
+        var doc = AspectVerdictParsing.TryParseJson(File.ReadAllText(jsonPath));
+        Assert.NotNull(doc);
+        Assert.Equal("code-quality", doc!.Aspect);
+        Assert.Equal("concerns", doc.Status);
+        Assert.Equal("Dead helper left behind.", doc.Summary);
+        Assert.Equal("quality:concerns", doc.Tag);
+        Assert.Equal("claude-haiku-4-5", doc.Model);
+        Assert.Contains("duplicates foo()", doc.Details);
+        Assert.Equal(AspectVerdictParsing.AspectDocumentSchemaVersion, doc.SchemaVersion);
+    }
+
+    [Fact]
+    public async Task PassAspect_JsonTwin_HasNullTag()
+    {
+        var runner = BuildRunner(_ => "[[ASPECT_VERDICT: status=pass; summary=Looks fine.]]\n[[TASK_DONE]]");
+
+        await runner.RunAsync(BuildInputs(),
+            new[] { "requirement-fit" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        var doc = AspectVerdictParsing.TryParseJson(
+            File.ReadAllText(Path.Combine(_jobFolder, "aspect-requirement-fit.json")));
+        Assert.NotNull(doc);
+        Assert.Equal("pass", doc!.Status);
+        Assert.Null(doc.Tag);
+    }
+
+    [Fact]
     public async Task OneConcernsThreePasses_OverallIsConcerns_ConcernTagAddedForThatNamespace()
     {
         var runner = BuildRunner(aspect => aspect switch
@@ -340,6 +389,61 @@ public class AspectRunnerTests : IDisposable
     public void SerializeFindings_EmptyInput_YieldsEmptyArray()
     {
         Assert.Equal("[]", AspectVerdictParsing.SerializeFindings(Array.Empty<AspectVerdict>()));
+    }
+
+    [Fact]
+    public void RenderJson_EmitsCamelCaseStructuredDocument_AndRoundTrips()
+    {
+        var verdict = new AspectVerdict(
+            "code-quality", AspectStatus.Concerns, "Dead helper.",
+            "## Model reply\n\n```\nnarrative\n```\n", "quality:concerns");
+        var now = new DateTime(2026, 7, 9, 19, 21, 3, DateTimeKind.Utc);
+
+        var json = AspectVerdictParsing.RenderJson(verdict, "claude-haiku-4-5", now);
+
+        using (var probe = System.Text.Json.JsonDocument.Parse(json))
+        {
+            var root = probe.RootElement;
+            Assert.Equal("code-quality", root.GetProperty("aspect").GetString());
+            Assert.Equal("concerns", root.GetProperty("status").GetString());
+            Assert.Equal("Dead helper.", root.GetProperty("summary").GetString());
+            Assert.Equal("quality:concerns", root.GetProperty("tag").GetString());
+            Assert.Equal("claude-haiku-4-5", root.GetProperty("model").GetString());
+            // Empty metrics is dropped from the wire, not emitted as {}.
+            Assert.False(root.TryGetProperty("metrics", out _));
+        }
+
+        var parsed = AspectVerdictParsing.TryParseJson(json);
+        Assert.NotNull(parsed);
+        Assert.Equal("code-quality", parsed!.Aspect);
+        Assert.Equal("concerns", parsed.Status);
+        Assert.Equal("quality:concerns", parsed.Tag);
+    }
+
+    [Fact]
+    public void RenderJson_PassVerdict_OmitsTag_AndKeepsMetricsWhenProvided()
+    {
+        var verdict = new AspectVerdict("tests-and-evidence", AspectStatus.Pass, "ok", "body", null);
+        var metrics = new Dictionary<string, string> { ["filesChanged"] = "3", ["testsPassed"] = "157" };
+
+        var json = AspectVerdictParsing.RenderJson(verdict, "claude-haiku-4-5", DateTime.UtcNow, metrics);
+
+        using var probe = System.Text.Json.JsonDocument.Parse(json);
+        var root = probe.RootElement;
+        Assert.False(root.TryGetProperty("tag", out _)); // null tag dropped
+        Assert.Equal("3", root.GetProperty("metrics").GetProperty("filesChanged").GetString());
+        Assert.Equal("157", root.GetProperty("metrics").GetProperty("testsPassed").GetString());
+    }
+
+    [Fact]
+    public void TryParseJson_RejectsMarkdownTwin_AndBlankInput()
+    {
+        var md = AspectVerdictParsing.RenderReport(
+            new AspectVerdict("code-quality", AspectStatus.Pass, "ok", "body", null), DateTime.UtcNow);
+        Assert.Null(AspectVerdictParsing.TryParseJson(md));
+        Assert.Null(AspectVerdictParsing.TryParseJson(""));
+        Assert.Null(AspectVerdictParsing.TryParseJson("   "));
+        Assert.Null(AspectVerdictParsing.TryParseJson("{ not valid json"));
     }
 
     private AspectRunInputs BuildInputs() => new(

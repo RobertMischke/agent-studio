@@ -289,16 +289,13 @@ public sealed class AspectRunnerService
 
             try
             {
-                var report = AspectVerdictParsing.RenderReport(verdict, now);
-                var fileName = $"aspect-{def.Id}.md";
-                var path = Path.Combine(inputs.JobFolderPath, fileName);
-                await File.WriteAllTextAsync(path, report, ct);
+                var resolvedModel = callUsage?.Model ?? model;
                 var endedAt = DateTime.UtcNow;
-                _fileGenerationIndex?.Upsert(inputs.JobFolderPath, new FileGenerationMeta
+                var genMeta = new FileGenerationMeta
                 {
-                    File = fileName,
+                    File = string.Empty, // set per artefact below
                     Kind = "aspect",
-                    Model = callUsage?.Model ?? model,
+                    Model = resolvedModel,
                     Cli = cliBinary,
                     TokensIn = callUsage?.InputTokens ?? 0,
                     TokensOut = callUsage?.OutputTokens ?? 0,
@@ -310,12 +307,29 @@ public sealed class AspectRunnerService
                     EndedAt = endedAt,
                     DurationMs = durationMs > 0 ? durationMs : (long)(endedAt - startedAt).TotalMilliseconds,
                     StepId = pipelineStepId,
-                });
+                };
+
+                // Human-readable markdown twin: unchanged, so every existing
+                // reader (AspectConcernReader, orchestrator tag routing, the
+                // legacy Files-tab markdown path) keeps working untouched.
+                var report = AspectVerdictParsing.RenderReport(verdict, now);
+                var mdName = $"aspect-{def.Id}.md";
+                await File.WriteAllTextAsync(Path.Combine(inputs.JobFolderPath, mdName), report, ct);
+                _fileGenerationIndex?.Upsert(inputs.JobFolderPath, genMeta with { File = mdName });
+
+                // Structured JSON source of truth (one source, two renderings —
+                // concept doc §5). Strictly additive: the Files tab prefers it
+                // and suppresses the markdown twin from the list, but the twin
+                // stays on disk for backend readers and older UIs.
+                var jsonBody = AspectVerdictParsing.RenderJson(verdict, resolvedModel, now);
+                var jsonName = $"aspect-{def.Id}.json";
+                await File.WriteAllTextAsync(Path.Combine(inputs.JobFolderPath, jsonName), jsonBody, ct);
+                _fileGenerationIndex?.Upsert(inputs.JobFolderPath, genMeta with { File = jsonName });
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex,
-                    "Aspect runner '{AspectId}' failed to write aspect MD for {JobId}",
+                    "Aspect runner '{AspectId}' failed to write aspect artefacts for {JobId}",
                     def.Id, inputs.JobId);
             }
 

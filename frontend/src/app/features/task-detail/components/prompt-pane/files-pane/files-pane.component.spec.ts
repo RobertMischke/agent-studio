@@ -92,6 +92,90 @@ describe('FilesPaneComponent (smoke)', () => {
     expect(provenance?.textContent).toContain('2s');
     http.verify();
   });
+
+  it('renders a structured card for an aspect-*.json artefact instead of raw JSON', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FilesPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FilesPaneComponent);
+    fixture.componentRef.setInput('jobId', 'demo-job');
+    fixture.componentRef.setInput('artifacts', [
+      {
+        name: 'aspect-code-quality.json',
+        sizeBytes: 512,
+        mtime: '2026-07-09T19:21:03Z',
+        kind: 'aspect',
+        aspectName: 'code-quality',
+      },
+    ]);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    const body = JSON.stringify({
+      schemaVersion: 1,
+      aspect: 'code-quality',
+      status: 'concerns',
+      summary: 'Dead helper left behind.',
+      details: 'The new file duplicates `foo()`.',
+      model: 'claude-haiku-4-5',
+      tag: 'quality:concerns',
+    });
+    http.expectOne((r) => r.url.includes('/api/tasks/demo-job/files/aspect-code-quality.json'))
+      .flush(utf8Buffer(body));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    // Structured card is rendered (single artefact auto-expands).
+    const card = root.querySelector('[data-testid="aspect-json-card"]');
+    expect(card).not.toBeNull();
+    const badge = root.querySelector('[data-testid="aspect-json-status"]');
+    expect(badge?.textContent?.trim()).toBe('concerns');
+    expect(root.querySelector('[data-testid="aspect-json-summary"]')?.textContent)
+      .toContain('Dead helper left behind.');
+    // The raw JSON braces must NOT leak into the rendered card surface.
+    expect(card?.textContent).not.toContain('"schemaVersion"');
+    http.verify();
+  });
+
+  it('falls back to markdown rendering for a legacy aspect-*.md file', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FilesPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FilesPaneComponent);
+    fixture.componentRef.setInput('jobId', 'demo-job');
+    fixture.componentRef.setInput('artifacts', [
+      {
+        name: 'aspect-code-quality.md',
+        sizeBytes: 256,
+        mtime: '2026-07-09T19:21:03Z',
+        kind: 'aspect',
+        aspectName: 'code-quality',
+      },
+    ]);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne((r) => r.url.includes('/api/tasks/demo-job/files/aspect-code-quality.md'))
+      .flush(utf8Buffer('---\naspect: code-quality\nstatus: pass\n---\n\n# Aspect'));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    // No structured card for a markdown twin — it renders through the markdown path.
+    expect(root.querySelector('[data-testid="aspect-json-card"]')).toBeNull();
+    http.verify();
+  });
 });
 
 function utf8Buffer(value: string): ArrayBuffer {

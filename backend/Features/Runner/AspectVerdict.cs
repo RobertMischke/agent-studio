@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace AgentStudio.Runner;
@@ -62,10 +63,49 @@ public sealed record AspectVerdict(
     string? ConcernTagId);
 
 /// <summary>
+/// Structured, machine-readable source of truth for one aspect verdict,
+/// written as <c>aspect-{id}.json</c> next to the human-readable
+/// <c>aspect-{id}.md</c>. This is the "one JSON source, two renderings"
+/// contract from <c>docs/concepts/result-view-and-case-templates.md</c> §5:
+/// the Files tab renders it structurally (meta header + status badge +
+/// collapsible details) instead of dumping frontmatter-laden markdown, and
+/// the same payload can feed the Result view's metric head.
+///
+/// <para>
+/// The <c>.md</c> twin is still written unchanged so every existing reader
+/// (<see cref="AgentStudio.Pipeline.AspectConcernReader"/>, the orchestrator's
+/// tag routing, legacy Files-tab rendering) keeps working with zero change -
+/// the JSON is strictly additive. <c>metrics</c> is an open, forward-compat
+/// map (empty today) reserved for files-changed / tests-passed once those
+/// counts are plumbed to the aspect writer.
+/// </para>
+/// </summary>
+/// <param name="SchemaVersion">Wire-format version; bump on breaking shape changes.</param>
+/// <param name="Aspect">Aspect identifier, e.g. <c>code-quality</c>.</param>
+/// <param name="Status">Normalised status token: <c>pass|concerns|block</c>.</param>
+/// <param name="Summary">One-line summary the aspect produced.</param>
+/// <param name="Details">The model's narrative reply (freetext / light markdown).</param>
+/// <param name="CreatedAt">UTC write time (round-trip "O" format on the wire).</param>
+/// <param name="Model">Model id that produced the verdict, when known.</param>
+/// <param name="Tag">Concern tag id (<c>{namespace}:concerns</c>) or null on pass.</param>
+/// <param name="Metrics">Optional extensible metric map; omitted when empty.</param>
+public sealed record AspectDocument(
+    int SchemaVersion,
+    string Aspect,
+    string Status,
+    string Summary,
+    string Details,
+    DateTime CreatedAt,
+    string? Model,
+    string? Tag,
+    IReadOnlyDictionary<string, string>? Metrics);
+
+/// <summary>
 /// Pure helpers for the aspect-runner pipeline: parsing the fast-model
 /// reply for an <c>[[ASPECT_VERDICT]]</c> sentinel, rendering the
-/// per-aspect markdown report (frontmatter + body), and parsing it back
-/// when tests / future reviewers want to read the same files.
+/// per-aspect markdown report (frontmatter + body), rendering the
+/// structured JSON twin, and parsing either back when tests / future
+/// reviewers want to read the same files.
 /// </summary>
 public static class AspectVerdictParsing
 {
@@ -214,6 +254,67 @@ public static class AspectVerdictParsing
         AspectStatus.Block => "block",
         _ => "pass"
     };
+
+    /// <summary>Current wire-format version for <see cref="AspectDocument"/>.</summary>
+    public const int AspectDocumentSchemaVersion = 1;
+
+    private static readonly JsonSerializerOptions AspectJsonOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = true,
+    };
+
+    /// <summary>
+    /// Render the structured <c>aspect-{id}.json</c> source-of-truth twin.
+    /// The <paramref name="rawReply"/> (the model's narrative) becomes
+    /// <c>details</c>; when it is blank the summary is reused so the
+    /// document never carries an empty body. Empty <paramref name="metrics"/>
+    /// is dropped from the wire (the field is forward-compat, not required).
+    /// A trailing newline keeps the file tidy in a text editor / git diff.
+    /// </summary>
+    public static string RenderJson(
+        AspectVerdict verdict,
+        string? model,
+        DateTime now,
+        IReadOnlyDictionary<string, string>? metrics = null)
+    {
+        var details = string.IsNullOrWhiteSpace(verdict.Body)
+            ? verdict.Summary
+            : verdict.Body.Trim();
+        var doc = new AspectDocument(
+            SchemaVersion: AspectDocumentSchemaVersion,
+            Aspect: verdict.Aspect,
+            Status: StatusToken(verdict.Status),
+            Summary: verdict.Summary ?? string.Empty,
+            Details: details,
+            CreatedAt: now,
+            Model: string.IsNullOrWhiteSpace(model) ? null : model,
+            Tag: verdict.ConcernTagId,
+            Metrics: metrics is { Count: > 0 } ? metrics : null);
+        return JsonSerializer.Serialize(doc, AspectJsonOpts) + "\n";
+    }
+
+    /// <summary>
+    /// Parse a previously written <c>aspect-{id}.json</c> back into an
+    /// <see cref="AspectDocument"/>. Returns null on empty / malformed input
+    /// or when the payload is not a JSON object (e.g. a legacy markdown file
+    /// handed here by mistake) so callers can fall back to the markdown path.
+    /// </summary>
+    public static AspectDocument? TryParseJson(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return null;
+        var trimmed = content.TrimStart();
+        if (trimmed.Length == 0 || trimmed[0] != '{') return null;
+        try
+        {
+            return JsonSerializer.Deserialize<AspectDocument>(content, AspectJsonOpts);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     private static readonly JsonSerializerOptions FindingsJsonOpts = new()
     {
