@@ -26,7 +26,7 @@ import { CliModelSelectorComponent } from '../../../../../components/cli-model-s
 import type { RunRecord } from '../../../../../features/run-timeline';
 import { deriveWatchdogPill } from '../watchdog-state';
 import { ActivityLogViewComponent } from '../../activity-log-view/activity-log-view';
-import { buildConversationTurns, parseActivityLog } from '../../activity-log.parser';
+import { buildConversationTurns, parseActivityLog, sanitizeProjectionLines } from '../../activity-log.parser';
 import { classifyOutcome, OutcomeAssessment, QuickReply } from '../../agent-outcome.util';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
 import { ClaudeSessionPollService } from '../../../../polling/services/claude-session-poll.service';
@@ -1033,7 +1033,10 @@ export class ProtocolPaneComponent implements OnDestroy {
     }));
     return projectConversation({
       source: info.id,
-      lines: filtered,
+      // Guard the next-gen projection the same way the legacy path is guarded:
+      // strip raw stream-json transport frames before the library classifies
+      // them, so no raw JSON reaches the chat. See sanitizeProjectionLines.
+      lines: sanitizeProjectionLines(filtered),
       task: info,
       runTimeline: this.runTimeline(),
       tokenSummary: info.tokenSummary ?? null,

@@ -4,9 +4,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   binToolBurstByKind,
+  buildConversationTurns,
   deriveLiveStatus,
   formatBurstDuration,
   formatLiveSince,
+  INTERNAL_EVENT_MARKER,
   parseActivityLog,
   summarizeToolBurst
 } from './activity-log.parser';
@@ -176,6 +178,57 @@ describe('formatLiveSince', () => {
     expect(formatLiveSince(72_000)).toBe('1m 12s');
     expect(formatLiveSince(3_600_000)).toBe('1h');
     expect(formatLiveSince(3_900_000)).toBe('1h 5m');
+  });
+});
+
+describe('parseActivityLog raw-JSON guard (host wrapper)', () => {
+  // These frames used to leak through the library's fallback branch, which
+  // turns any unrecognised stdout line into a `message` group whose title is
+  // the raw text. The host wrapper redacts them before the library sees them.
+  const rawFrames = [
+    '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]}}',
+    '{"type":"thinking","thinking":"reasoning","signature":"Er8BCkg=="}',
+    '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"body"}]}}',
+    '{"type":"some_new_frame_type","message":{"role":"assistant","content":[]}}',
+  ];
+
+  it('never surfaces raw stream-json in any group title, subtitle, or line text', () => {
+    const groups = parseActivityLog(rawFrames.map((raw) => line(raw)));
+    for (const group of groups) {
+      expect(group.title).not.toContain('"type"');
+      expect(group.subtitle).not.toContain('"type"');
+      for (const l of group.lines) {
+        expect(l.text).not.toContain('"type"');
+      }
+    }
+    // The redaction is visible as the compact marker, and the original frame is
+    // still recoverable for the Trace / debug disclosure.
+    // The library's `ActivityLogGroup.lines` element type is structurally the
+    // same as the app model but does not declare the host-only `internalDetail`
+    // field the projection guard attaches, so read it through the app shape.
+    const markerLine = groups
+      .flatMap((g) => g.lines as CliOutputLine[])
+      .find((l) => l.text === INTERNAL_EVENT_MARKER);
+    expect(markerLine).toBeTruthy();
+    expect(markerLine?.internalDetail).toContain('"type"');
+  });
+
+  it('never surfaces raw stream-json in the conversation turns', () => {
+    const turns = buildConversationTurns(parseActivityLog(rawFrames.map((raw) => line(raw))));
+    for (const turn of turns) {
+      expect(turn.text ?? '').not.toContain('"type"');
+    }
+  });
+
+  it('leaves genuine agent prose and tool actions untouched', () => {
+    const groups = parseActivityLog([
+      line('Here is my plan for the change.'),
+      line('* Read prompt.md'),
+      line('  | prompt.md'),
+    ]);
+    const titles = groups.map((g) => g.title);
+    expect(titles.some((t) => t.includes('Here is my plan'))).toBe(true);
+    expect(groups.every((g) => g.title !== INTERNAL_EVENT_MARKER)).toBe(true);
   });
 });
 

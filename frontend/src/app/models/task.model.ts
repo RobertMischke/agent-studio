@@ -942,6 +942,15 @@ export interface CliOutputLine {
   timestamp: string;
   stream: string;
   text: string;
+  /**
+   * Set by the host conversation-projection guard
+   * (`features/task-detail/components/conversation-projection.ts`) when `text`
+   * was redacted to the `[internal event]` marker because the original line was
+   * a raw stream-json transport frame. Holds the original raw JSON so Trace /
+   * Verbose-Debug can disclose it on demand; the readable chat only ever shows
+   * the marker.
+   */
+  internalDetail?: string;
 }
 
 export interface ProjectRunnerStatus {

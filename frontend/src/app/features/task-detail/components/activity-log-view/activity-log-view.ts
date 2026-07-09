@@ -394,6 +394,17 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
     return 'OUT';
   }
 
+  /**
+   * The raw stream-json a redacted `[internal event]` line stands in for, or
+   * undefined for an ordinary line. Read through the app-side {@link
+   * CliOutputLine} shape because the library's `ActivityLogGroup.lines` type
+   * (structurally identical) does not declare the host-only `internalDetail`
+   * field the projection guard attaches.
+   */
+  internalDetailOf(line: CliOutputLine): string | undefined {
+    return line.internalDetail;
+  }
+
   isExpanded(group: ActivityLogGroup): boolean {
     return this.expandedGroups()[group.id] ?? !group.collapsedByDefault;
   }

@@ -595,6 +595,23 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
+    /* Redacted stream-json transport frame: a compact "[internal event]"
+       summary that discloses the original raw JSON on click. The raw frame
+       is deliberately never shown inline as chat/trace content. */
+    .trace-line--internal .trace-line__text { color: var(--studio-fg-muted); font-style: italic; }
+    .trace-line__internal { min-width: 0; }
+    .trace-line__internal > summary { cursor: pointer; }
+    .trace-line__internal-detail {
+      margin: 4px 0 0;
+      padding: 6px 8px;
+      background: var(--studio-bg-hover);
+      border-radius: 4px;
+      color: var(--studio-fg-muted);
+      font-size: 11px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-x: auto;
+    }
 
     /* ===== Live status (the "agent is alive" row) ===== */
     /* The row sits at the bottom of the body in both Conversation and
