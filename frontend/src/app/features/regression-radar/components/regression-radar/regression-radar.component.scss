@@ -197,10 +197,6 @@
   &__entry {
     border-radius: 6px;
     overflow: hidden;
-
-    &--intended { border-left: 3px solid var(--severity-pass); }
-    &--at-risk  { border-left: 3px solid var(--severity-warn); }
-    &--drift    { border-left: 3px solid var(--severity-high); }
   }
 
   &__entry-header {

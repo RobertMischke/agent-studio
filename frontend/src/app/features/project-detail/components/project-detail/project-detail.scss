@@ -9,7 +9,6 @@
   margin: 0 0 16px;
   padding: 10px 12px;
   border: 1px solid rgba(249, 226, 175, 0.40);
-  border-left-width: 3px;
   background: rgba(249, 226, 175, 0.10);
   border-radius: 6px;
   color: var(--studio-fg);
@@ -51,7 +50,6 @@
   margin: 0 0 16px;
   padding: 14px 16px;
   border: 1px solid rgba(248, 113, 113, 0.55);
-  border-left-width: 4px;
   border-radius: 10px;
   background: linear-gradient(180deg, rgba(248,113,113,0.18) 0%, rgba(248,113,113,0.08) 100%);
   box-shadow: 0 6px 18px rgba(248,113,113,0.12);
@@ -516,14 +514,9 @@
 .proj-detail__entry {
   padding: 0;
   border: none;
-  border-left: 2px solid rgba(255,255,255,0.10);
   padding-left: 12px;
   background: none;
 }
-.proj-detail__entry--decision { border-left-color: rgba(196,181,253,0.50); }
-.proj-detail__entry--action { border-left-color: rgba(125,211,252,0.50); }
-.proj-detail__entry--observation { border-left-color: rgba(148,163,184,0.40); }
-.proj-detail__entry--intervention { border-left-color: rgba(249,226,175,0.55); }
 .proj-detail__entry p { margin: 0 0 6px; color: var(--studio-fg, #e2e8f0); font-size: 0.92rem; line-height: 1.5; }
 .proj-detail__entry header {
   display: flex;

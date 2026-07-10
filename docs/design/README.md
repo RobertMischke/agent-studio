@@ -1,0 +1,16 @@
+# Design
+
+Product-wide, prompt-known design hard rules. These are the rules that every
+coding card touching the UI is expected to already know, so they live at the top
+level and are referenced from `AGENTS.md`.
+
+| Page | What lives there |
+|---|---|
+| [style-guide-hard-rules.md](style-guide-hard-rules.md) | The hard, non-negotiable design rules (no left accent bars, full-bleed views, aggregate = sum of visible children, acute-only signals, both themes). |
+
+The concrete component vocabulary (tokens, primitives, canonical components) and
+the "why" behind the shell look live under
+[frontend/design-system.md](../frontend/design-system.md),
+[frontend/style-guide/](../frontend/style-guide/README.md), and
+[product/design-principles.md](../product/design-principles.md). This folder is
+only the short, hard-rule layer above them.

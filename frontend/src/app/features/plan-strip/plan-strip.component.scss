@@ -60,11 +60,9 @@
 .plan-item {
   padding: 0.25rem 0.3rem;
   border-radius: 5px;
-  border-left: 2px solid transparent;
 
   &--active {
     background: var(--studio-bg-hover);
-    border-left-color: var(--studio-accent);
   }
 
   &--pending {

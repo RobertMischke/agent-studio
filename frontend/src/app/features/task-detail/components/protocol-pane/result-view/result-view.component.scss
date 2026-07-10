@@ -90,7 +90,6 @@
   padding: 10px 12px;
   border-radius: 6px;
   border: 1px solid var(--studio-border, rgba(255, 255, 255, 0.1));
-  border-left: 3px solid var(--result-tone);
   background: color-mix(in srgb, var(--result-tone) 6%, var(--studio-bg-elevated, transparent));
 
   &[data-tone="accent"]  { --result-tone: var(--studio-accent); }
@@ -181,7 +180,6 @@
   .result__overview-row--solution {
     padding: 6px 8px;
     border-radius: 5px;
-    border-left: 2px solid var(--result-tone);
     background: color-mix(in srgb, var(--result-tone) 12%, transparent);
   }
 }

@@ -62,14 +62,13 @@
 .parch__date { grid-area: date; color: var(--studio-fg-muted); font-size: 0.74rem; font-variant-numeric: tabular-nums; }
 
 // Full-width second line for long, free-form status prose. Wraps within the
-// row instead of clipping; a tinted left border carries the status colour.
+// row instead of clipping.
 .parch__note {
   grid-area: note;
   min-width: 0;
   overflow-wrap: anywhere;
   padding: 6px 10px;
-  border-left: 3px solid var(--studio-fg-muted);
-  border-radius: 0 4px 4px 0;
+  border-radius: 4px;
   background: rgba(255,255,255,0.04);
   color: var(--studio-fg-dim);
   font-size: 0.78rem;
@@ -77,9 +76,6 @@
   line-height: 1.5;
   white-space: normal;
 }
-.parch__note--accepted { border-left-color: var(--severity-pass); }
-.parch__note--super    { border-left-color: var(--studio-accent-warn); }
-.parch__note--depr     { border-left-color: var(--severity-high); }
 
 .parch__viewer {
   margin-top: 4px;

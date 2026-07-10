@@ -15,19 +15,6 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-
-  &--prompt {
-    border-left: 3px solid var(--severity-pass, var(--studio-accent));
-  }
-  &--aspect {
-    border-left: 3px solid var(--accent-3, var(--studio-accent));
-  }
-  &--code-review {
-    border-left: 3px solid var(--severity-info, var(--studio-accent));
-  }
-  &--note {
-    border-left: 3px solid var(--accent-warn, var(--studio-accent));
-  }
 }
 
 .file-card__head {

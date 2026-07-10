@@ -26,7 +26,6 @@
   margin: 0 0 14px;
   padding: 8px 10px;
   border: 1px solid rgba(249,226,175,0.40);
-  border-left-width: 3px;
   background: rgba(249,226,175,0.10);
   border-radius: 4px;
   font-size: 0.85rem;
@@ -61,10 +60,7 @@
 }
 
 .ard__findings, .ard__followups, .ard__refs { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
-.ard__finding { display: grid; grid-template-columns: 70px 160px 1fr; gap: 8px; padding: 6px 8px; background: rgba(255,255,255,0.03); border-left: 2px solid rgba(255,255,255,0.10); border-radius: 0 4px 4px 0; font-size: 0.82rem; }
-.ard__finding--info { border-left-color: rgba(148,163,184,0.45); }
-.ard__finding--warn { border-left-color: var(--severity-warn); }
-.ard__finding--high { border-left-color: var(--studio-accent-strong); }
+.ard__finding { display: grid; grid-template-columns: 70px 160px 1fr; gap: 8px; padding: 6px 8px; background: rgba(255,255,255,0.03); border-radius: 4px; font-size: 0.82rem; }
 .ard__finding-sev { color: var(--studio-fg-dim); font-weight: 600; text-transform: uppercase; font-size: 0.70rem; }
 .ard__finding-topic { color: var(--studio-accent-3-strong); font-family: ui-monospace, monospace; }
 .ard__finding-msg { color: var(--studio-fg); }

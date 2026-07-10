@@ -189,7 +189,6 @@
       padding: 12px 14px 14px 16px;
       border-radius: 12px;
       border: 1px solid color-mix(in srgb, var(--severity-warn) 55%, transparent);
-      border-left: 4px solid var(--severity-warn);
       background: color-mix(in srgb, var(--severity-warn) 12%, transparent);
       box-shadow: 0 0 0 1px color-mix(in srgb, var(--severity-warn) 10%, transparent) inset;
     }
@@ -504,17 +503,14 @@
     }
     .trace-group {
       border: 1px solid var(--studio-border);
-      border-left: 3px solid var(--severity-info);
       border-radius: 8px;
       background: var(--studio-bg-hover);
       overflow: hidden;
     }
     .trace-group--error {
-      border-left-color: var(--severity-high);
       background: color-mix(in srgb, var(--severity-high) 12%, transparent);
     }
     .trace-group--user {
-      border-left-color: var(--severity-pass);
       background: color-mix(in srgb, var(--severity-pass) 10%, transparent);
     }
     .trace-group__header {
