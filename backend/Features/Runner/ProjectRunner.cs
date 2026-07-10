@@ -128,6 +128,7 @@ public class ProjectRunner
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
     private readonly CliQuotaFallbackService? _quotaFallback;
+    private readonly ILoadThrottleGate? _loadThrottle;
     private readonly GitService _git;
     private readonly PickupFailureLog _pickupFailures;
     private readonly CrossSlugInfraCircuitBreaker _infraBreaker;
@@ -410,7 +411,8 @@ public class ProjectRunner
         PostAbortReviewStepService? postAbortReview = null,
         AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null,
         AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null,
-        CliQuotaFallbackService? quotaFallback = null)
+        CliQuotaFallbackService? quotaFallback = null,
+        ILoadThrottleGate? loadThrottle = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -432,6 +434,7 @@ public class ProjectRunner
         _quotaService = quotaService;
         _quotaCaps = quotaCaps;
         _quotaFallback = quotaFallback;
+        _loadThrottle = loadThrottle;
         _git = git;
         _pickupFailures = pickupFailures;
         _infraBreaker = infraBreaker;
@@ -993,6 +996,16 @@ public class ProjectRunner
             // Never double-claim a folder already occupying a slot. This is not
             // a visible-order deviation; the card is already running.
             if (_activeRuns.Contains(candidate.Info.Id)) continue;
+
+            // CPU-Lastwaechter: do not add another build/install workload while
+            // the host has been saturated for a full minute. Existing runs are
+            // left alone; the next scheduler tick naturally retries admission.
+            if (_loadThrottle?.Current.Throttle == true)
+            {
+                EmitLoadThrottleDecision(candidate.Info, _loadThrottle.Current);
+                _lastPickReason = $"load-throttle: {candidate.Info.Id}: {_loadThrottle.Current.Reason}";
+                continue;
+            }
 
             // AGT-2055 pre-launch quota gate: an algorithmic check against the
             // cached quota snapshots BEFORE any launch is attempted. A card whose
@@ -5433,6 +5446,36 @@ public class ProjectRunner
     {
         var used = _completionRetriggerUsed.TryGetValue(jobId, out var c) ? c : 0;
         return Math.Max(0, CompletionRetriggerDecider.BudgetFor(issueKind) - used);
+    }
+
+    private void EmitLoadThrottleDecision(TaskInfo info, LoadThrottleDecision decision)
+    {
+        var key = $"load-throttle|{decision.CurrentPercent:0}";
+        lock (_lastAdmissionDecisionByJob)
+        {
+            if (_lastAdmissionDecisionByJob.TryGetValue(info.Id, out var previous) && previous == key) return;
+            _lastAdmissionDecisionByJob[info.Id] = key;
+        }
+
+        _logger.LogWarning("load_throttle_pick_deferred jobId={JobId} project={Project} cpuPercent={CpuPercent:0.#} sustainedSeconds={SustainedSeconds:0}",
+            info.Id, ProjectName, decision.CurrentPercent, decision.SustainedFor.TotalSeconds);
+        _chatLog.Append(info, OrchestratorMessageKind.Decision, "[load-throttle] " + decision.Reason);
+        _timeline?.Append(info.FolderPath, TimelineEventKinds.LoadThrottleDecision, TimelineActors.System,
+            summary: decision.Reason,
+            details: new()
+            {
+                ["cpuPercent"] = decision.CurrentPercent.ToString("0.#", CultureInfo.InvariantCulture),
+                ["sustainedSeconds"] = decision.SustainedFor.TotalSeconds.ToString("0", CultureInfo.InvariantCulture),
+                ["category"] = "environmental-load",
+            });
+        _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
+        {
+            Kind = OrchestratorLogKinds.Decision,
+            Topic = OrchestratorLogTopics.LoadDistribution,
+            JobId = info.Id,
+            Summary = "load-throttle: new slot admission deferred",
+            Reasoning = decision.Reason,
+        });
     }
 
     /// <summary>

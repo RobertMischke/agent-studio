@@ -499,6 +499,26 @@
             suppression count. The terminal is <span class="lane">5e-escalated</span>, never an endless ready/progress loop.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-11</td>
+           <td><code>AGT-2077</code><br><span class="small">CPU-Lastwaechter: review OneShots and slot admission under saturation</span></td>
+          <td>
+            Eight parallel worktree installs and Angular builds saturated all 16 cores. Thirty-nine node/esbuild processes
+            left review-decision, post-abort-review, summary-generation, and one main agent call with no CPU time before their
+            60 second deadlines. Empty replies were treated as work-quality failures and ten completed cards reached escalated
+            review within minutes.
+          </td>
+          <td>
+            CLI quota admission knew nothing about local host resources, and the central OneShot path had a fixed timeout with
+            no load-aware queue or retry. Starting more slots amplified the same condition.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> total system CPU is sampled every 15 seconds. One sustained minute above 90
+            percent closes new-slot admission with visible <code>load-throttle</code> events and queues support OneShots until
+             cooling. Calls after saturation get a 3x timeout and one timeout retry; the cause is classified
+             <code>environmental-load</code>, not orchestrator inconclusive. Existing agent runs are not killed.
+          </td>
+        </tr>
       </tbody>
     </table>
 

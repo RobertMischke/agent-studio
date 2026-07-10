@@ -75,6 +75,7 @@ public class TaskRunnerService : BackgroundService
     // surfaced (the card falls back to the plain local-run presentation).
     private readonly RunLeaseService? _runLeases;
     private readonly RunnerIdentity? _runnerIdentity;
+    private readonly ILoadThrottleGate? _loadThrottle;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -132,7 +133,8 @@ public class TaskRunnerService : BackgroundService
         AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null,
         RunLeaseService? runLeases = null,
         RunnerIdentity? runnerIdentity = null,
-        CliQuotaFallbackService? quotaFallback = null)
+        CliQuotaFallbackService? quotaFallback = null,
+        ILoadThrottleGate? loadThrottle = null)
     {
         _config = config;
         _logger = logger;
@@ -149,6 +151,7 @@ public class TaskRunnerService : BackgroundService
         _quotaService = quotaService;
         _quotaCaps = quotaCaps;
         _quotaFallback = quotaFallback;
+        _loadThrottle = loadThrottle;
         _chatLog = chatLog;
         _orchestratorLog = orchestratorLog;
         _orchestratorRunner = orchestratorRunner;
@@ -336,7 +339,8 @@ public class TaskRunnerService : BackgroundService
                 postAbortReview: _postAbortReview,
                 sessionInspector: _sessionInspector,
                 orchestratorDefaults: _orchestratorDefaults,
-                quotaFallback: _quotaFallback);
+                quotaFallback: _quotaFallback,
+                loadThrottle: _loadThrottle);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);

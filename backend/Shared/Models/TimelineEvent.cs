@@ -89,6 +89,8 @@ public static class TimelineEventKinds
     /// has a stable data source.
     /// </summary>
     public const string QuotaAdmissionDecision = "quota_admission_decision";
+    /// <summary>Sustained host CPU saturation deferred a new runner slot.</summary>
+    public const string LoadThrottleDecision = "load_throttle_decision";
     /// <summary>
     /// ADR-0052: the parallel pick-gate admitted this task into a runner slot.
     /// <see cref="TimelineEvent.Summary"/> carries the occupancy

@@ -377,10 +377,17 @@ builder.Services.AddSingleton<AgentStudio.Tokens.ITokenAggregator, AgentStudio.T
 // the task's .metadata/prompts.jsonl when the call site sets JobFolderPath +
 // StepId. ICliOneShot resolves to the decorator; the registry enumerates it.
 builder.Services.AddSingleton<AgentStudio.Cli.StepPromptLog>();
+builder.Services.AddSingleton<AgentStudio.Runner.SystemLoadThrottle>();
+builder.Services.AddSingleton<AgentStudio.Runner.ILoadThrottleGate>(sp =>
+    sp.GetRequiredService<AgentStudio.Runner.SystemLoadThrottle>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentStudio.Runner.SystemLoadThrottle>());
 builder.Services.AddSingleton<AgentStudio.Cli.ClaudeOneShot>();
 builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot>(sp =>
     new AgentStudio.Cli.PromptLoggingCliOneShot(
-        sp.GetRequiredService<AgentStudio.Cli.ClaudeOneShot>(),
+        new AgentStudio.Cli.LoadAwareCliOneShot(
+            sp.GetRequiredService<AgentStudio.Cli.ClaudeOneShot>(),
+            sp.GetRequiredService<AgentStudio.Runner.ILoadThrottleGate>(),
+            sp.GetRequiredService<ILogger<AgentStudio.Cli.LoadAwareCliOneShot>>()),
         sp.GetRequiredService<AgentStudio.Cli.StepPromptLog>()));
 builder.Services.AddSingleton<AgentStudio.Cli.CliOneShotRegistry>();
 builder.Services.AddSingleton<CodePatternDriftAnalysisService>();

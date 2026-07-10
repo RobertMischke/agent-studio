@@ -100,6 +100,12 @@ existing set; an inconclusive run picks `inconclusive-with-results` over the bar
 `orchestrator-inconclusive` / `infra-crash` category when its `results/` dir is
 non-empty.
 
+`environmental-load` is reserved for support-agent calls affected by sustained
+host CPU saturation. It is handled before a reviewing OneShot can become a gate
+verdict: dispatch queues until cooling, uses a 3x timeout after the load phase,
+and retries one timeout. It must not be reported as
+`orchestrator-inconclusive` or charged to the card's reissue budget.
+
 ## Regression cover
 
 `backend.Tests/RunOutcomeContractTests.cs` locks the contract end to end: each terminal sentinel drives lane, `status.md` `ProtocolResult`, and the failure toast from one classification, and `CodexExitMinusOne_WithSentinel_ClassifiesIdenticallyAcrossAllConsumers` feeds a rendered `cli-output.log` whose exit line reports the Windows kill artifact (`status=failed, exitCode=-1`) and asserts the sentinel still wins for every consumer. This is the case the divergence bug was named after. `FailedRunThatCommitted_RoutesToReviewAsCommittedPartial` and `FailedRunWithZeroCommits_StaysHardFailure` pin the commit-aware branch: a failed, sentinel-less run routes to review as `committed-partial` only when `commitsDuringRun > 0`, and still hard-fails at zero commits.
