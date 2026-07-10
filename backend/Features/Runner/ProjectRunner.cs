@@ -4982,12 +4982,13 @@ public class ProjectRunner
                 // needs a human, so both still fall through to review below.
                 if (action.Kind == OutcomeActionKind.NotifyUserAndStop
                     && activeInfo != null
-                    && CompletionRetriggerDecider.ShouldRetrigger(action.IssueKind, RemainingCompletionRetriggerBudget(jobId)))
+                    && CompletionRetriggerDecider.ShouldRetrigger(action.IssueKind, RemainingCompletionRetriggerBudget(jobId, action.IssueKind)))
                 {
                     var used = _completionRetriggerUsed.TryGetValue(jobId, out var spent) ? spent : 0;
                     _completionRetriggerUsed[jobId] = used + 1;
                     var attemptNo = used + 1;
                     var issueTopic = ToIssueTopic(action.IssueKind);
+                    var maxAttempts = CompletionRetriggerDecider.BudgetFor(action.IssueKind);
 
                     _chatLog.Append(activeInfo, OrchestratorMessageKind.Recovery,
                         RecoveryChatLine.Format(
@@ -4995,15 +4996,15 @@ public class ProjectRunner
                             "silence timeout",
                             "reissue",
                             attempt: attemptNo,
-                            maxAttempts: CompletionRetriggerDecider.DefaultBudget,
+                            maxAttempts: maxAttempts,
                             sessionResumed: true));
                     _orchestratorLog.Append(activeInfo.WatchPath, new OrchestratorLogEntry
                     {
                         Kind = OrchestratorLogKinds.Action,
                         Topic = OrchestratorLogTopics.Watchdog,
                         JobId = jobId,
-                        Summary = $"Completion-loop re-triggered \"{activeInfo.Title}\" after {issueTopic} (attempt {attemptNo}/{CompletionRetriggerDecider.DefaultBudget}).",
-                        Reasoning = "Transient process abort (watchdog/timeout) is a runner outcome, not an agent decision. Re-spawning the same job instead of escalating to human review; the budget converges to escalation."
+                        Summary = $"Completion-loop re-triggered \"{activeInfo.Title}\" after {issueTopic} (attempt {attemptNo}/{maxAttempts}).",
+                        Reasoning = "Transient process abort (watchdog/timeout/infra crash) is a runner outcome, not an agent decision. Re-spawning the same job with its unchanged model instead of escalating to human review; the bounded budget converges to escalation."
                     });
 
                     // Release the active-job latch so the re-issue can claim
@@ -5428,10 +5429,10 @@ public class ProjectRunner
     /// from <see cref="CompletionRetriggerDecider.DefaultBudget"/> as
     /// transient aborts are re-triggered; reset when the job leaves the run
     /// loop.</summary>
-    private int RemainingCompletionRetriggerBudget(string jobId)
+    private int RemainingCompletionRetriggerBudget(string jobId, RunIssueKind issueKind)
     {
         var used = _completionRetriggerUsed.TryGetValue(jobId, out var c) ? c : 0;
-        return Math.Max(0, CompletionRetriggerDecider.DefaultBudget - used);
+        return Math.Max(0, CompletionRetriggerDecider.BudgetFor(issueKind) - used);
     }
 
     /// <summary>

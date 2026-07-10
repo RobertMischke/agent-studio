@@ -18,8 +18,10 @@ namespace AgentStudio.Runner;
 /// </para>
 ///
 /// <para>
-/// <b>Scope.</b> Only <see cref="RunIssueKind.WatchdogTimeout"/> is
-/// transient and therefore re-triggerable. <see cref="RunIssueKind.EnvironmentBlocker"/>
+/// <b>Scope.</b> <see cref="RunIssueKind.WatchdogTimeout"/> and
+/// <see cref="RunIssueKind.InfraCrash"/> are transient and therefore
+/// re-triggerable. Infra crashes get exactly one same-model retry before the
+/// normal escalation/model-switch path. <see cref="RunIssueKind.EnvironmentBlocker"/>
 /// is unrecoverable by the agent and <see cref="RunIssueKind.PermissionBlocked"/>
 /// needs a human, so both still fall through to human review. The decider is
 /// pure (ADR-0032): it only answers "may this abort be retried?"; the runner
@@ -45,6 +47,13 @@ public static class CompletionRetriggerDecider
     /// </summary>
     public const int DefaultBudget = 2;
 
+    /// <summary>Maximum same-model retries after a hard CLI death.</summary>
+    public const int InfraCrashBudget = 1;
+
+    /// <summary>Maximum automatic re-triggers for the supplied issue kind.</summary>
+    public static int BudgetFor(RunIssueKind issueKind)
+        => issueKind == RunIssueKind.InfraCrash ? InfraCrashBudget : DefaultBudget;
+
     /// <summary>
     /// True when a finished run's issue is a transient process abort that may
     /// be automatically re-triggered, given the remaining budget. False for
@@ -59,5 +68,5 @@ public static class CompletionRetriggerDecider
     /// outcome, not an agent decision) that is safe to retry.
     /// </summary>
     public static bool IsTransientAbort(RunIssueKind issueKind)
-        => issueKind == RunIssueKind.WatchdogTimeout;
+        => issueKind is RunIssueKind.WatchdogTimeout or RunIssueKind.InfraCrash;
 }
