@@ -119,6 +119,10 @@ public static class PostProcessingOutcomeTaxonomy
         RunIssueKind.EmptyFastExit          => true,
         RunIssueKind.QuotaExhausted         => true,
         RunIssueKind.ModelInvalid           => true,
+        // A failed OAuth-session refresh is a shared credential/host fault, not
+        // the change: escalate flagged environmental so a reviewer reads it as a
+        // re-auth chore, not a code defect (AGT-2066).
+        RunIssueKind.AuthRefreshFailed      => true,
         RunIssueKind.ContextOverflow        => true,
         RunIssueKind.PermissionBlocked      => true,
         RunIssueKind.WatchdogTimeout        => true,

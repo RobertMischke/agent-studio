@@ -74,8 +74,20 @@ escalating instead of parking it on first detection:
   launch failure.
 
 Non-retryable environmental members (`ModelInvalid`, `ContextOverflow`,
-`QuotaExhausted`, `EnvironmentBlocker`) still escalate on first detection with
-their own honest categories (AGT-1941) - re-running would hit the same wall.
+`QuotaExhausted`, `EnvironmentBlocker`, `AuthRefreshFailed`) still escalate on
+first detection with their own honest categories (AGT-1941) - re-running would
+hit the same wall.
+
+- `AuthRefreshFailed` (AGT-2066 WÄCHTER / breaker) - the agent CLI could not
+  launch because its OAuth session expired and the token refresh failed ("OAuth
+  session expired and could not be refreshed"). Because every parallel clean-
+  context run shares the one operator credential, this fails *every* launch
+  identically until the credential is re-authenticated centrally - the incident
+  that drained 17 cards in minutes on 2026-07-10. Classified *before* the generic
+  `CliLaunchFailed` so it is NOT retried; escalates on first detection with the
+  `auth-refresh-failed` category and a re-auth instruction. Pairs with the
+  primary fix (credentials shared by link, not copied - see
+  `docs/cli/supported-clis.md`).
 
 Environmental cycles never accrue toward the per-task no-progress quarantine
 streak (`RunQuarantineBreaker.CountsAsNoProgressFailure`), and a transient
@@ -96,7 +108,8 @@ with no chain-ender in between, the per-chain count equals the old lifetime tota
 **Escalation categories.** The system-initiated escalation funnel
 (`HumanReviewEscalationCategories`) records WHY a card was parked. AGT-1944 adds
 `environmental`, `cli-launch-failed`, and `inconclusive-with-results` to the
-existing set; an inconclusive run picks `inconclusive-with-results` over the bare
+existing set; AGT-2066 adds `auth-refresh-failed` (a failed OAuth-session refresh
+breaker); an inconclusive run picks `inconclusive-with-results` over the bare
 `orchestrator-inconclusive` / `infra-crash` category when its `results/` dir is
 non-empty.
 
