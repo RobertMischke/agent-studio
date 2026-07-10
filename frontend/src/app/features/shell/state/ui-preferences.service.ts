@@ -29,6 +29,8 @@ import { Injectable, signal } from '@angular/core';
  * way one tab finds out the other one wrote.
  */
 const STORAGE_KEY_TASK_NAV = 'taskNavCollapsed';
+// AGT-2035: the card-density feature was abolished. `compactCards` is no longer
+// a live preference; the key is proactively cleared on boot (see constructor).
 const STORAGE_KEY_COMPACT_CARDS = 'compactCards';
 const STORAGE_KEY_SIDE_SHEET_WIDTH = 'sideSheetWidth';
 const STORAGE_KEY_GROUP_BY_EPIC = 'boardGroupByEpic';
@@ -37,7 +39,6 @@ const STORAGE_KEY_ORCHESTRATOR_SETTINGS_OPEN = 'orchestratorSettingsOpen';
 @Injectable({ providedIn: 'root' })
 export class UiPreferencesService {
   readonly taskNavCollapsed = signal<boolean>(localStorage.getItem(STORAGE_KEY_TASK_NAV) === '1');
-  readonly compactCards = signal<boolean>(localStorage.getItem(STORAGE_KEY_COMPACT_CARDS) === '1');
   readonly sideSheetWidth = signal<number>(
     parseInt(localStorage.getItem(STORAGE_KEY_SIDE_SHEET_WIDTH) ?? '280'),
   );
@@ -62,20 +63,12 @@ export class UiPreferencesService {
     localStorage.getItem(STORAGE_KEY_ORCHESTRATOR_SETTINGS_OPEN) === '1',
   );
 
-  /**
-   * F43: per-tab override that beats the rail-open auto-compact rule
-   * inside `effectiveCompactCards` (lives in `app.ts`). Set when the
-   * user explicitly toggles to "Full" while the orchestrator rail is
-   * open; cleared the next time the rail closes (handled by the shell).
-   * Not persisted: a fresh tab/reload should re-engage the rail rule.
-   * Not cross-tab synced (would surprise the second tab whose rail is
-   * still closed).
-   */
-  readonly userOverridesCompactWhileRail = signal<boolean>(false);
-
   private resizing = false;
 
   constructor() {
+    // AGT-2035 migration: drop the abolished card-density preference so a stale
+    // value can never resurrect compact rendering.
+    try { localStorage.removeItem(STORAGE_KEY_COMPACT_CARDS); } catch { /* ignore */ }
     if (typeof window !== 'undefined') {
       window.addEventListener('storage', this.onStorageEvent);
     }
@@ -95,9 +88,6 @@ export class UiPreferencesService {
       case STORAGE_KEY_TASK_NAV:
         this.taskNavCollapsed.set(e.newValue === '1');
         return;
-      case STORAGE_KEY_COMPACT_CARDS:
-        this.compactCards.set(e.newValue === '1');
-        return;
       case STORAGE_KEY_SIDE_SHEET_WIDTH: {
         const parsed = parseInt(e.newValue ?? '280');
         this.sideSheetWidth.set(Number.isFinite(parsed) ? parsed : 280);
@@ -114,21 +104,6 @@ export class UiPreferencesService {
   setTaskNavCollapsed(collapsed: boolean): void {
     this.taskNavCollapsed.set(collapsed);
     localStorage.setItem(STORAGE_KEY_TASK_NAV, collapsed ? '1' : '0');
-  }
-
-  toggleCompactCards(): void {
-    this.setCompactCards(!this.compactCards());
-  }
-
-  /**
-   * F43: explicit setter so callers that already know the intended
-   * next value (e.g. the shell's rail-aware toggle that has to set the
-   * pref to the user's intended effective state, not just flip the
-   * current pref) don't have to read-then-toggle.
-   */
-  setCompactCards(value: boolean): void {
-    this.compactCards.set(value);
-    localStorage.setItem(STORAGE_KEY_COMPACT_CARDS, value ? '1' : '0');
   }
 
   toggleGroupByEpic(): void {

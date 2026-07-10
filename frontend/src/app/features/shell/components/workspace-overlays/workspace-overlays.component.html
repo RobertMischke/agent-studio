@@ -31,8 +31,8 @@
     <div class="ws-settings__title-row">
       <h1 id="ws-settings-title"
           class="ws-settings__title"
-          data-testid="workspace-settings-title">Workspace settings</h1>
-      <span class="ws-settings__chip">global</span>
+          data-testid="workspace-settings-title">Settings</h1>
+      <span class="ws-settings__chip">global &amp; workspace</span>
       <span class="ws-settings__spacer"></span>
       @if (!inline()) {
         <button class="ws-settings__close"
@@ -47,9 +47,11 @@
   <div class="ws-settings__body">
     <aside class="ws-settings__rail"
            data-testid="workspace-settings-rail"
-           aria-label="Workspace settings sections">
-      <div class="ws-settings__rail-group">Workspace</div>
-      @for (item of railItems; track item.key) {
+           aria-label="Settings sections">
+      @for (item of railItems; track item.key; let i = $index) {
+        @if (isGroupStart(i)) {
+          <div class="ws-settings__rail-group">{{ groupLabels[item.group] }}</div>
+        }
         <button class="ws-settings__rail-item"
                 type="button"
                 [class.ws-settings__rail-item--active]="item.key === overlays.section()"
@@ -69,10 +71,11 @@
       @switch (overlays.section()) {
         @case ('overview') {
           <header class="ws-settings__panel-head">
-            <h2 class="ws-settings__panel-title">Workspace settings</h2>
+            <h2 class="ws-settings__panel-title">Settings</h2>
             <p class="ws-settings__panel-desc">
-              Global defaults and usage surfaces, in one place. Each card opens a
-              section; project-level views can override these defaults.
+              Everything in one place. <strong>Global</strong> preferences apply
+              to you across every workspace; <strong>Workspace</strong> sections
+              are defaults applied across the workspace's projects.
             </p>
           </header>
           <div class="ws-settings__cards" data-testid="workspace-settings-overview">
@@ -88,21 +91,38 @@
             }
           </div>
         }
+        @case ('appearance') {
+          <app-appearance-settings />
+        }
+        @case ('updates') {
+          <app-updates-settings />
+        }
+        @case ('workspaces') {
+          <app-workspace-management />
+        }
         @case ('caps') {
-          <app-cli-admin-panel (openProjectSettings)="openProjectSettings.emit($event)"
-                               (openJobDetail)="openJobDetail.emit($event)" />
+          <app-cli-admin-panel (openJobDetail)="openJobDetail.emit($event)" />
+        }
+        @case ('working-memory') {
+          <section class="ws-settings__section" data-testid="workspace-working-memory">
+            <header class="ws-settings__section-head">
+              <h2 class="ws-settings__panel-title">Working memory</h2>
+              <p class="ws-settings__panel-desc">
+                Per-CLI memory and session state you can inspect and clear. Auth
+                and config are protected and never listed as deletable.
+              </p>
+            </header>
+            <app-cli-working-memory-panel />
+          </section>
         }
         @case ('prompts') {
           <app-prompt-admin-panel />
         }
         @case ('tokens') {
-          <app-workspace-token-timeline />
+          <app-token-usage-section (openProjectSettings)="openProjectSettings.emit($event)" />
         }
         @case ('screenshots') {
           <app-workspace-screenshots (openTask)="openTask.emit($event)" />
-        }
-        @case ('summary') {
-          <app-workspace-summary />
         }
       }
     </main>

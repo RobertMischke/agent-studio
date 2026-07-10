@@ -1,0 +1,22 @@
+<section class="token-usage" data-testid="token-usage-section">
+  <app-workspace-token-timeline />
+
+  <section class="token-usage__detail" data-testid="token-usage-detail">
+    <header class="token-usage__detail-head">
+      <h3>Usage detail</h3>
+      <span class="token-usage__hint">quota · tokens · model spend</span>
+    </header>
+    <app-cli-usage-detail
+      [quotaRows]="usage.quotaRows()"
+      [tokens]="usage.tokens()"
+      [adhoc]="usage.adhoc()"
+      [timeline24h]="usage.timeline24h()"
+      [timeline7d]="usage.timeline7d()"
+      [expensiveJobs]="usage.expensiveJobs()"
+      [refreshing]="usage.refreshing()"
+      [refreshingAll]="usage.refreshingAll()"
+      (refreshAll)="usage.refreshAll()"
+      (refreshOne)="refreshOne($event)"
+      (openProjectSettings)="openProjectSettings.emit($event)" />
+  </section>
+</section>

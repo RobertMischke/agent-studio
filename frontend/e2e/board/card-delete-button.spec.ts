@@ -125,7 +125,7 @@ test.describe('Card delete button', () => {
     await page.screenshot({ path: 'test-results/card-delete-after-confirm.png' });
   });
 
-  test('Delete via context menu works in compact mode', async ({ page }) => {
+  test('Delete via context menu works from a board card', async ({ page }) => {
     const wp = await firstWatchPath();
     const jobId = PREFIX + 'compact-' + Date.now();
     await createJob({
@@ -139,14 +139,7 @@ test.describe('Card delete button', () => {
     try {
       await navigateToBoard(page, wp.name);
 
-      const compactToggle =
-        page.getByTestId('studio-board-compact-toggle').or(
-          page.getByTestId('compact-cards-toggle'));
-      await expect(compactToggle).toBeVisible({ timeout: 3_000 });
-      const pressed = await compactToggle.getAttribute('aria-pressed');
-      if (pressed !== 'true') await compactToggle.click();
-      await page.waitForTimeout(500);
-
+      // AGT-2035: card density was abolished; cards always render full.
       const card = page.locator('app-job-card')
         .filter({ hasText: 'Compact delete test' });
       await expect(card).toBeVisible({ timeout: 10_000 });

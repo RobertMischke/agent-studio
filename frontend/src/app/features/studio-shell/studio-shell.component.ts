@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   HostListener,
   ViewEncapsulation,
   computed,
@@ -11,7 +10,6 @@ import {
   output,
   signal,
   untracked,
-  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { TaskInfo, RegistryWorkspaceListItem, WatchPathEntry } from '../../models/task.model';
@@ -23,7 +21,6 @@ import { StudioEmptyStateComponent } from './components/studio-empty-state/studi
 import { SectionHeaderComponent } from '../../components/section-header/section-header.component';
 import { CountBadgeComponent } from '../../components/count-badge/count-badge.component';
 import { ListRowComponent } from '../../components/list-row/list-row.component';
-import { SegmentedControlComponent, SegmentedOption } from '../../components/segmented-control/segmented-control.component';
 import { ClientService } from '../../services/client.service';
 import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
@@ -36,15 +33,13 @@ import {
   type ProjectRailItem,
 } from '../project-detail/components/project-shell/project-shell.config';
 import type { StudioIconName } from '../../components/studio-icon/studio-icon.component';
-import { UiPreferencesService } from '../shell';
 import { BoardFiltersService, flattenGrouped } from '../board';
-import { UpdateClientService } from '../../services/update.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { NotificationService } from '../../services/notification.service';
 import { copyTextToClipboard } from '../../services/clipboard.util';
 import { WorkspaceManagerService, ProjectDragDropService, WorkspaceOverlaysService } from '../shell';
-import { WorkspaceSettingsService } from '../shell/state/workspace-settings.service';
 import { ProjectLookupService } from '../../services/project-lookup.service';
+import { ThemeService } from './services/theme.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
 import { resolveActiveActivityKey } from './components/studio-activity-bar/studio-activity-bar.active-key';
 import { ExplorerWorkspaceTreeComponent, type ExplorerProjectSurface } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
@@ -78,7 +73,6 @@ function cliColorFor(cli: string): string {
   }
 }
 
-const SETTINGS_WORKSPACES_COLLAPSED_KEY = 'atp.studio.settingsWorkspacesCollapsed';
 
 /**
  * Top-level "Agent Software Studio" shell — the VS-Code-inspired chrome
@@ -95,7 +89,7 @@ const SETTINGS_WORKSPACES_COLLAPSED_KEY = 'atp.studio.settingsWorkspacesCollapse
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, StudioSidebarHeaderComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, SegmentedControlComponent, ProjectDetailComponent, GlobalSearchComponent],
+  imports: [FormsModule, StudioIconComponent, StudioSidebarHeaderComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, ProjectDetailComponent, GlobalSearchComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -131,16 +125,14 @@ export class StudioShellComponent {
   private readonly tabState = inject(StudioTabStateService);
   private readonly panelState = inject(StudioPanelStateService);
   private readonly jobSelection = inject(TaskSelectionService);
-  readonly uiPrefs = inject(UiPreferencesService);
   readonly boardFilters = inject(BoardFiltersService);
-  readonly updateClient = inject(UpdateClientService);
   readonly explorerSections = inject(ExplorerSectionsService);
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly notifications = inject(NotificationService);
   private readonly workspaceManager = inject(WorkspaceManagerService);
   private readonly workspaceOverlays = inject(WorkspaceOverlaysService);
   private readonly projectLookup = inject(ProjectLookupService);
-  readonly wsSettings = inject(WorkspaceSettingsService);
+  private readonly themeService = inject(ThemeService);
 
   /** Tab list + active selection re-exposed for the template. */
   readonly tabs = this.tabState.tabs;
@@ -153,19 +145,7 @@ export class StudioShellComponent {
   readonly sidebarVisible = this.panelState.visible;
   readonly sidebarWidth = this.panelState.sidebarWidth;
   readonly activityBarSide = this.panelState.activityBarSide;
-  readonly chatRailOpen = this.panelState.chatRailOpen;
-  readonly settingsWorkspacesCollapsed = signal(this.readSettingsWorkspacesCollapsed());
   readonly globalSearchOpen = signal(false);
-
-  /** Settings segmented-control option sets (label/value pairs). */
-  readonly themeOptions: readonly SegmentedOption<'dark' | 'light'>[] = [
-    { value: 'dark', label: 'Dark', testid: 'settings-theme-dark' },
-    { value: 'light', label: 'Light', testid: 'settings-theme-light' },
-  ];
-  readonly activityBarSideOptions: readonly SegmentedOption<'left' | 'right'>[] = [
-    { value: 'left', label: 'Left', testid: 'settings-activitybar-left' },
-    { value: 'right', label: 'Right', testid: 'settings-activitybar-right' },
-  ];
 
   /**
    * Which Explorer-tree project rows are expanded (showing Board / Project
@@ -211,13 +191,11 @@ export class StudioShellComponent {
   }
 
   /**
-   * Drives the "moon / sun" icon in the titlebar. Default is Light per the
-   * reference design — a missing storage key counts as "use the default";
-   * explicit user choice persists.
+   * Drives the "moon / sun" icon in the titlebar. Theme is owned by the global
+   * {@link ThemeService} (AGT-2035) so this quick-toggle and the Appearance
+   * settings row stay in sync; the shell just re-exposes the read signal.
    */
-  readonly theme = signal<'dark' | 'light'>(
-    (localStorage.getItem('atp.studio.theme') as 'dark' | 'light' | null) ?? 'light',
-  );
+  readonly theme = this.themeService.theme;
 
   /** Bubbles to app.ts so the parent can flip the orchestrator side
    *  sheet open without the shell needing a reference to it. */
@@ -325,12 +303,6 @@ export class StudioShellComponent {
     return `Auto-pickup is paused for ${name} — click to enable.`;
   }
 
-  /** Reflects the theme onto the document root so the design tokens flip. */
-  private readonly themeFx = effect(() => {
-    const t = this.theme();
-    document.documentElement.dataset['studioTheme'] = t;
-    localStorage.setItem('atp.studio.theme', t);
-  });
 
   /**
    * F47 / ADR-0042 — registry-backed workspace list rendered by the
@@ -342,22 +314,26 @@ export class StudioShellComponent {
   readonly registryWorkspaces = signal<readonly RegistryWorkspaceListItem[]>([]);
   readonly registryWorkspacesLoading = signal(false);
   readonly registryWorkspacesError = signal<string | null>(null);
-  /** Workspace id currently waiting for a mutation response (disables its row buttons). */
+  /** Ids waiting on an Explorer-tree registry mutation (rename / delete), used
+   *  to disable the affected row while the request is in flight. Registry
+   *  *management* moved to the settings view; these stay for the tree's own
+   *  inline rename + delete handlers below. */
   readonly registryWorkspaceBusyId = signal<string | null>(null);
+  readonly registryProjectBusyId = signal<string | null>(null);
 
   /**
-   * Lazy-load the registry workspaces whenever a panel that renders them is
-   * visible, then re-pull on every re-open so a mutation from another tab is
-   * reflected without a full reload. Both the Settings panel (management) and
-   * the Explorer panel (F46 two-level workspace tree) need the registry; the
-   * Explorer is the default panel, so this also primes the tree on boot —
-   * without it the tree would fall back to the single legacy "Workspace"
-   * folder because `registryWorkspaces()` would stay empty.
+   * Lazy-load the registry workspaces whenever the Explorer panel (F46
+   * two-level workspace tree) is visible, then re-pull on every re-open so a
+   * mutation from another tab is reflected without a full reload. The Explorer
+   * is the default panel, so this also primes the tree on boot — without it the
+   * tree would fall back to the single legacy "Workspace" folder because
+   * `registryWorkspaces()` would stay empty. Registry *management* now lives in
+   * the consolidated settings view (AGT-2035), which loads its own copy.
    */
   private readonly loadRegistryWorkspacesFx = effect(() => {
     const panel = this.activePanel();
     const visible = this.sidebarVisible();
-    if (!visible || (panel !== 'settings' && panel !== 'explorer')) return;
+    if (!visible || panel !== 'explorer') return;
     this.reloadRegistryWorkspaces();
   });
 
@@ -372,7 +348,7 @@ export class StudioShellComponent {
   reloadRegistryWorkspaces(): void {
     this.registryWorkspacesLoading.set(true);
     this.registryWorkspacesError.set(null);
-    this.jobService.getRegistryWorkspaces({ includeArchived: this.showArchivedProjects() }).subscribe({
+    this.jobService.getRegistryWorkspaces({ includeArchived: false }).subscribe({
       next: (ws) => {
         this.registryWorkspaces.set(ws ?? []);
         this.projectLookup.setWorkspaces(ws ?? []);
@@ -385,172 +361,9 @@ export class StudioShellComponent {
     });
   }
 
-  /** F45b — prompt for a new workspace name and create it. */
-  createRegistryWorkspace(): void {
-    const name = window.prompt('New workspace name')?.trim();
-    if (!name) return;
-    this.jobService.createRegistryWorkspace(name).subscribe({
-      next: () => this.reloadRegistryWorkspaces(),
-      error: (err: unknown) => this.registryWorkspacesError.set(this.errMsg(err)),
-    });
-  }
-
-  /**
-   * F66 / ADR-0048 — click-to-edit rename. The settings service owns the
-   * inline-edit state, validation, and PUT call; this shell method exists
-   * only as the click handler on the workspace-name button so the template
-   * binding does not have to know about the service.
-   */
-  renameRegistryWorkspace(ws: RegistryWorkspaceListItem): void {
-    this.wsSettings.startRename(ws.id, ws.displayName);
-  }
-
-  /** ViewChild on the inline rename input — focus it the moment a row
-   *  enters edit mode. Avoids needing an autofocus directive. */
-  private readonly renameInputRef = viewChild<ElementRef<HTMLInputElement>>('renameInput');
-
-  private readonly focusRenameInputFx = effect(() => {
-    if (this.wsSettings.renamingId() === null) return;
-    const el = this.renameInputRef()?.nativeElement;
-    if (!el) return;
-    queueMicrotask(() => { el.focus(); el.select(); });
-  });
-
-  /** F45b — prompt for an accent color hex string. Empty input clears the color. */
-  editRegistryWorkspaceColor(ws: RegistryWorkspaceListItem): void {
-    const input = window.prompt(
-      `Workspace "${ws.displayName}" color (hex like #a78bfa, blank to clear)`,
-      ws.color ?? '');
-    if (input === null) return;
-    const color = input.trim();
-    const patch = color ? { color } : { clearColor: true };
-    this.registryWorkspaceBusyId.set(ws.id);
-    this.jobService.updateRegistryWorkspace(ws.id, patch).subscribe({
-      next: () => { this.registryWorkspaceBusyId.set(null); this.reloadRegistryWorkspaces(); },
-      error: (err: unknown) => {
-        this.registryWorkspaceBusyId.set(null);
-        this.registryWorkspacesError.set(this.errMsg(err));
-      },
-    });
-  }
-
-  /** F45b — move a workspace one slot up or down. */
-  moveRegistryWorkspace(ws: RegistryWorkspaceListItem, direction: -1 | 1): void {
-    this.registryWorkspaceBusyId.set(ws.id);
-    this.jobService.reorderRegistryWorkspace(ws.id, direction).subscribe({
-      next: () => { this.registryWorkspaceBusyId.set(null); this.reloadRegistryWorkspaces(); },
-      error: (err: unknown) => {
-        this.registryWorkspaceBusyId.set(null);
-        this.registryWorkspacesError.set(this.errMsg(err));
-      },
-    });
-  }
-
-  /**
-   * F66 — delete a workspace after a confirm dialog. Delete is only allowed
-   * once the workspace is empty: per ADR-0048 the operator must move every
-   * project out first (no auto-rehome). The button is disabled while projects
-   * remain, and the backend rejects a populated delete with a 409; this guard
-   * is the matching client-side defence.
-   */
-  deleteRegistryWorkspace(ws: RegistryWorkspaceListItem): void {
-    if (!this.canDeleteWorkspace(ws)) return;
-    const ok = window.confirm(`Delete workspace "${ws.displayName}"?`);
-    if (!ok) return;
-    this.registryWorkspaceBusyId.set(ws.id);
-    this.jobService.deleteRegistryWorkspace(ws.id).subscribe({
-      next: () => {
-        this.registryWorkspaceBusyId.set(null);
-        this.reloadRegistryWorkspaces();
-      },
-      error: (err: unknown) => {
-        this.registryWorkspaceBusyId.set(null);
-        this.registryWorkspacesError.set(this.errMsg(err));
-      },
-    });
-  }
-
-  /** A workspace is deletable only when it is non-default and holds no
-   *  projects; the operator moves projects out first (no auto-rehome). */
-  canDeleteWorkspace(ws: RegistryWorkspaceListItem): boolean {
-    return !ws.isDefault && ws.projects.length === 0;
-  }
-
-  /** Tooltip explaining the delete button's enabled/disabled reason:
-   *  default workspace is never deletable, a populated one must be emptied
-   *  first, an empty non-default one is ready to delete. */
-  workspaceDeleteTooltip(ws: RegistryWorkspaceListItem): string {
-    if (ws.isDefault) return 'Default workspace cannot be deleted';
-    const count = ws.projects.length;
-    if (count > 0) {
-      return `Move all ${count} project${count === 1 ? '' : 's'} out of this workspace before it can be deleted.`;
-    }
-    return 'Delete this workspace';
-  }
-
-  /** Up arrow is disabled when the workspace is already at the top of the list. */
-  canMoveWorkspaceUp(ws: RegistryWorkspaceListItem): boolean {
-    const list = this.registryWorkspaces();
-    return list.length > 0 && list[0].id !== ws.id;
-  }
-
-  /** Down arrow is disabled when the workspace is already at the bottom of the list. */
-  canMoveWorkspaceDown(ws: RegistryWorkspaceListItem): boolean {
-    const list = this.registryWorkspaces();
-    return list.length > 0 && list[list.length - 1].id !== ws.id;
-  }
-
-  /** F45b — id of the project currently waiting for a mutation response. */
-  readonly registryProjectBusyId = signal<string | null>(null);
-
-  /** F45b — rename a project by prompt. */
-  renameRegistryProject(projId: string, currentDisplayName: string): void {
-    const name = window.prompt(`Rename project "${currentDisplayName}"`, currentDisplayName)?.trim();
-    if (!name || name === currentDisplayName) return;
-    this.runProjectPatch(projId, { displayName: name });
-  }
-
-  /** F45b — change the short code (2-6 chars A-Z 0-9). */
-  editRegistryProjectShortCode(projId: string, currentShortCode: string): void {
-    const code = window.prompt(
-      `Project ${projId} short code (2-6 chars, A-Z and 0-9)`, currentShortCode)?.trim();
-    if (!code || code.toUpperCase() === currentShortCode) return;
-    this.runProjectPatch(projId, { shortCode: code });
-  }
-
-  /** F45b — set or clear the project color. */
-  editRegistryProjectColor(projId: string, currentColor: string | null): void {
-    const input = window.prompt(
-      `Project ${projId} color (hex like #a78bfa, blank to clear)`, currentColor ?? '');
-    if (input === null) return;
-    const color = input.trim();
-    this.runProjectPatch(projId, color ? { color } : { clearColor: true });
-  }
-
-  /** F45b — reassign project to a different workspace via dropdown prompt. */
-  changeRegistryProjectWorkspace(projId: string, currentWorkspaceId: string): void {
-    const options = this.registryWorkspaces();
-    if (options.length < 2) {
-      window.alert('Create another workspace first via "+ New workspace" above.');
-      return;
-    }
-    const list = options
-      .map(w => `  ${w.id} — ${w.displayName}${w.id === currentWorkspaceId ? ' (current)' : ''}`)
-      .join('\n');
-    const choice = window.prompt(
-      `Move project ${projId} to which workspace? Enter id:\n\n${list}`, currentWorkspaceId)?.trim();
-    if (!choice || choice === currentWorkspaceId) return;
-    this.runProjectPatch(projId, { workspaceId: choice });
-  }
-
-  /** F45b — archive (or un-archive) a project. */
-  toggleRegistryProjectArchived(projId: string, archived: boolean): void {
-    const verb = archived ? 'Un-archive' : 'Archive';
-    const ok = window.confirm(`${verb} project ${projId}? Archived projects are hidden from the tree by default.`);
-    if (!ok) return;
-    this.runProjectPatch(projId, { archived: !archived });
-  }
-
+  /** Registry-only project patch used by the Explorer tree's inline handlers
+   *  (rename / short-code). Registry *management* lives in the settings view;
+   *  this stays for the tree's own edit affordances. */
   private runProjectPatch(projId: string, patch: {
     displayName?: string;
     shortCode?: string;
@@ -567,13 +380,6 @@ export class StudioShellComponent {
         this.registryWorkspacesError.set(this.errMsg(err));
       },
     });
-  }
-
-  /** Toggle whether archived projects are shown in the Settings panel. Off by default. */
-  readonly showArchivedProjects = signal(false);
-  toggleShowArchivedProjects(): void {
-    this.showArchivedProjects.update(v => !v);
-    this.reloadRegistryWorkspaces();
   }
 
   private errMsg(err: unknown): string {
@@ -1084,10 +890,25 @@ export class StudioShellComponent {
   }
 
   togglePanel(panel: StudioActivityPanelKey | 'settings' | 'admin'): void {
-    const visible = this.panelState.toggle(panel);
-    if (panel === 'settings' && visible) {
-      this.openWorkspaceSettingsTab();
+    // The gear ('settings') no longer toggles a sidebar panel — it opens the
+    // one consolidated Settings view as an editor tab (AGT-2035).
+    if (panel === 'settings') {
+      this.toggleWorkspaceSettingsTab();
+      return;
     }
+    this.panelState.toggle(panel);
+  }
+
+  /** Open the consolidated Settings view, or close it if it is already the
+   *  active editor tab (mirrors the status-bar "Settings" pill toggle). */
+  toggleWorkspaceSettingsTab(): void {
+    const active = this.tabState.activeTab()?.kind === 'workspace-settings';
+    if (active) {
+      this.tabState.close(studioTabKey({ kind: 'workspace-settings' }));
+      this.workspaceOverlays.close();
+      return;
+    }
+    this.openWorkspaceSettingsTab();
   }
 
   openWorkspaceSettingsTab(): void {
@@ -1096,42 +917,7 @@ export class StudioShellComponent {
   }
 
   toggleTheme(): void {
-    this.theme.update(t => (t === 'dark' ? 'light' : 'dark'));
-  }
-
-  setTheme(value: 'dark' | 'light'): void {
-    this.theme.set(value);
-  }
-
-  setActivityBarSide(side: 'left' | 'right'): void {
-    this.panelState.setActivityBarSide(side);
-  }
-
-  toggleChatRail(): void {
-    this.panelState.toggleChatRail();
-  }
-
-  toggleCompactCards(): void {
-    this.uiPrefs.toggleCompactCards();
-  }
-
-  setSettingsWorkspacesCollapsed(collapsed: boolean): void {
-    this.settingsWorkspacesCollapsed.set(collapsed);
-    if (typeof window === 'undefined') return;
-    try {
-      window.localStorage?.setItem(SETTINGS_WORKSPACES_COLLAPSED_KEY, collapsed ? '1' : '0');
-    } catch {
-      /* storage may be full / blocked */
-    }
-  }
-
-  private readSettingsWorkspacesCollapsed(): boolean {
-    if (typeof window === 'undefined') return true;
-    try {
-      return window.localStorage?.getItem(SETTINGS_WORKSPACES_COLLAPSED_KEY) !== '0';
-    } catch {
-      return true;
-    }
+    this.themeService.toggle();
   }
 
   clearAllFilters(): void {
@@ -1162,33 +948,6 @@ export class StudioShellComponent {
     this.writeExpandedProjects(new Set<string>());
   }
 
-  /**
-   * Click handler for the Settings panel "Update stable now" /
-   * "Check for updates" button. The label flips based on `behindBy()`:
-   *
-   *   - behindBy > 0   → "Update stable now"  → actually run the update
-   *   - behindBy === 0 → "Check for updates"  → only POLL origin/main,
-   *                                              don't kick off a stable
-   *                                              re-checkout / restart.
-   *
-   * Previously this always called `trigger()`, so clicking "Check for
-   * updates" immediately ran the full stable update pipeline — a
-   * destructive action triggered by a button label that read like a
-   * safe poll.
-   */
-  triggerUpdate(force = false): void {
-    this.updateClient.openCenter();
-    if (force || this.updateClient.behindBy() > 0) {
-      void this.updateClient.trigger(null, force);
-    } else {
-      void this.updateClient.refreshNow();
-    }
-  }
-
-  openUpdateCenter(): void {
-    this.updateClient.openCenter();
-    void this.updateClient.refreshNow();
-  }
 
   /** Visible CLI types observed across the loaded jobs (for the CLI sidebar panel). */
   readonly cliRows = computed(() => {

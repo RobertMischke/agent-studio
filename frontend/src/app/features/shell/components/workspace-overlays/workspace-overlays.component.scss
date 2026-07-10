@@ -159,6 +159,15 @@
   max-width: 64ch;
 }
 
+// Section wrapper used by simple sections that just need a heading + body
+// (e.g. Working memory) rendered inline in the panel.
+.ws-settings__section {
+  display: block;
+}
+.ws-settings__section-head {
+  margin-bottom: var(--studio-spacing-3);
+}
+
 .ws-settings__cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

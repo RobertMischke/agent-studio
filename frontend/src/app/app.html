@@ -83,7 +83,6 @@
           [activeTagIds]="activeTagFilter()"
           [owners]="clientService.clients()"
           [activeOwnerId]="activeClientFilter()"
-          [compactCards]="effectiveCompactCards()"
           [hitCount]="filteredTaskCount()"
           [totalCount]="totalTaskCount()"
           [hasAnyFilter]="hasActiveFiltersOrSearch()"
@@ -91,7 +90,6 @@
           (setType)="onSetType($event)"
           (toggleTag)="toggleTagFilter($event)"
           (setOwner)="setClientFilter($event)"
-          (toggleCompactCards)="toggleCompactCards()"
           (clearAll)="onSidesheetClearAll()" />
         <!-- Per-tab actions land in the tab bar via this slot. The board
              tab gets filter + compact + add-task; task tabs reuse the
@@ -108,16 +106,6 @@
                       (click)="toggleGroupByEpic()">
                 <app-studio-icon [name]="groupByEpic() ? 'epic' : 'grid'" [size]="14"></app-studio-icon>
                 <span>{{ groupByEpic() ? 'Epics' : 'Lanes' }}</span>
-              </button>
-              <button type="button"
-                      class="studio-tab-action studio-tab-action--toggle"
-                      [class.studio-tab-action--active]="effectiveCompactCards()"
-                      [attr.aria-pressed]="effectiveCompactCards()"
-                      data-testid="studio-board-compact-toggle"
-                      [cacTooltip]="compactToggleTooltip()"
-                      (click)="toggleCompactCards()">
-                <span aria-hidden="true">{{ effectiveCompactCards() ? '▤' : '▥' }}</span>
-                <span>{{ effectiveCompactCards() ? 'Compact' : 'Full' }}</span>
               </button>
               <span class="studio-tab-actions-sep" aria-hidden="true"></span>
               <button type="button"
@@ -593,15 +581,6 @@
             [activeTagIds]="activeTagFilter()"
             (setType)="onSetType($event)"
             (toggleTag)="toggleTagFilter($event)" />
-          <button class="btn btn--compact-toggle"
-                  data-testid="compact-cards-toggle"
-                  [class.btn--compact-toggle--active]="effectiveCompactCards()"
-                  [attr.aria-pressed]="effectiveCompactCards()"
-                  [cacTooltip]="compactToggleTooltip()"
-                  (click)="toggleCompactCards()">
-            <span aria-hidden="true">{{ effectiveCompactCards() ? '▤' : '▥' }}</span>
-            <span class="btn--compact-toggle__label">{{ effectiveCompactCards() ? 'Compact' : 'Full' }}</span>
-          </button>
           <button class="btn btn--create" (click)="openCreate()">
             ＋ Add Task
           </button>

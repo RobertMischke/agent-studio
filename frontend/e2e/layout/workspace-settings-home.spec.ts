@@ -99,27 +99,34 @@ async function stubBackgroundApis(page: Page) {
   }));
   await page.route('**/api/workspace/tokens/expensive-jobs*', json({ jobs: [] }));
   await page.route('**/api/workspace/screenshots*', json({ windowHours: 72, projectFilter: null, screenshots: [] }));
-  await page.route('**/api/workspace/summary*', json({
-    windowStart: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-    windowEnd: new Date().toISOString(),
-    headline: 'Nothing notable in the last 24 hours.',
-    byProject: [], crashes: [], topDecisions: [], openHumanDecisions: [],
-    schemaVersion: '1',
-  }));
+  await page.route('**/api/workspaces*', json([]));
+  await page.route('**/api/cli/working-memory*', json({ available: false, root: null, capturedAt: new Date().toISOString(), entries: [] }));
+  await page.route('**/api/cli/sessions*', json({ sessions: [] }));
+  await page.route('**/api/cli/models*', json({ types: [] }));
 }
 
+// AGT-2035 — the consolidated Settings view. Summary was removed; Appearance,
+// Updates, Workspaces (Global) and Working memory (Workspace) were added. Each
+// section keeps a stable outer overlay test id + an inner component test id.
 const SECTIONS: { key: string; overlayTestid: string; innerTestid: string }[] = [
+  { key: 'appearance', overlayTestid: 'workspace-appearance-overlay', innerTestid: 'appearance-settings' },
+  { key: 'updates', overlayTestid: 'workspace-updates-overlay', innerTestid: 'updates-settings' },
+  { key: 'workspaces', overlayTestid: 'workspace-management-overlay', innerTestid: 'workspace-management' },
   { key: 'caps', overlayTestid: 'cli-admin-overlay', innerTestid: 'cli-admin-panel' },
+  { key: 'working-memory', overlayTestid: 'workspace-working-memory-overlay', innerTestid: 'workspace-working-memory' },
   { key: 'prompts', overlayTestid: 'prompt-admin-overlay', innerTestid: 'prompt-admin-panel' },
-  { key: 'tokens', overlayTestid: 'workspace-tokens-overlay', innerTestid: 'workspace-token-timeline' },
+  { key: 'tokens', overlayTestid: 'workspace-tokens-overlay', innerTestid: 'token-usage-section' },
   { key: 'screenshots', overlayTestid: 'workspace-screenshots-overlay', innerTestid: 'workspace-screenshots' },
-  { key: 'summary', overlayTestid: 'workspace-summary-overlay', innerTestid: 'workspace-summary' },
 ];
 
 test.describe('Workspace settings home (Dach)', () => {
   test.beforeEach(async ({ page }) => {
     mkdirSync(SHOT_DIR, { recursive: true });
     await page.setViewportSize({ width: 1600, height: 950 });
+    // Force the legacy (modal) layout so this spec exercises the modal-backed
+    // `workspace-settings-overlay` path; the studio (vsCode) layout renders the
+    // same view as an editor tab and is covered by settings-consolidation.spec.
+    await page.addInitScript(() => { try { localStorage.setItem('atp.flag.vsCodeLayout', '0'); } catch { /* ignore */ } });
     await stubBackgroundApis(page);
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
@@ -150,6 +157,10 @@ test.describe('Workspace settings home (Dach)', () => {
     await expect(settingsHome(page)).toBeVisible();
 
     for (const { key, overlayTestid, innerTestid } of SECTIONS) {
+      // A dev-only global error dialog (NG0919 under `ng serve`) can paint over
+      // the rail and intercept the click; brush it aside before navigating.
+      await dismissDevErrorDialog(page);
+      await page.evaluate(() => document.querySelectorAll('[data-testid="error-dialog-overlay"]').forEach((n) => n.remove()));
       await page.getByTestId(`workspace-settings-rail-${key}`).click();
       await expect(page.getByTestId(overlayTestid)).toBeVisible();
       await expect(page.getByTestId(innerTestid)).toBeVisible({ timeout: 5_000 });

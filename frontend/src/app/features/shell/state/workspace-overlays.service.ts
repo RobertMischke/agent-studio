@@ -1,77 +1,79 @@
 import { Injectable, computed, signal } from '@angular/core';
 
 /**
- * Sections of the global Workspace-settings home ("Dach"). Several sections
- * were previously independent, scattered overlays (token timeline,
- * visual-evidence reel, executive summary, CLI usage caps). ASS-695 folds
- * those into one rail+panel home so they are centrally findable instead of
- * strewn across the status bar, mirroring the project-level settings layout.
+ * Sections of the single, consolidated Workspace-settings view.
+ *
+ * AGT-2035 folded the formerly scattered surfaces into one view with a clean
+ * Global-vs-Workspace split:
+ *   - Global (per-user / app-wide): `appearance` (Theme + Activity bar),
+ *     `updates`, `workspaces` (registry management, moved off the sidebar).
+ *   - Workspace defaults: `caps`, `working-memory` (extracted from caps),
+ *     `prompts`, `tokens` (now the single usage area), `screenshots`.
  * `overview` is the landing rail item that links into each section.
+ *
+ * The `summary` section was removed (executive summary is a project-level
+ * concern); its old deep-links now resolve to `overview` instead of crashing.
  */
 export type WorkspaceSettingsSection =
   | 'overview'
+  | 'appearance'
+  | 'updates'
+  | 'workspaces'
   | 'caps'
+  | 'working-memory'
   | 'prompts'
   | 'tokens'
-  | 'screenshots'
-  | 'summary';
+  | 'screenshots';
 
 /**
- * Shell-feature service: open/close state + URL-hash sync for the global
- * Workspace-settings home. One modal, one open flag, one active section.
+ * Shell-feature service: open/close state + URL-hash sync for the consolidated
+ * Workspace-settings view. One view, one open flag, one active section.
  *
- * The home is deep-linkable so a bookmark or copy-pasted address
- * reproduces the open section. The legacy per-overlay hashes
- * (`#/workspace/tokens`, `#/workspace/screenshots`, `#/workspace/summary`
- * and its `#/summary` alias) are preserved so existing links and specs
- * keep resolving to the right section.
+ * The view is deep-linkable so a bookmark or copy-pasted address reproduces the
+ * open section. Legacy per-overlay hashes (`#/workspace/tokens`,
+ * `#/workspace/screenshots`) are preserved; the retired `#/workspace/summary` /
+ * `#/summary` aliases now resolve to the overview.
  *
- * Lifted out of `app.ts` per ADR-0034 so the shell is a thin coordinator
- * and the overlay state machine has a single grep target. Rendering lives
- * in `WorkspaceOverlaysComponent`; the shell just mounts that component
- * once.
+ * Rendering lives in `WorkspaceOverlaysComponent`; the shell just mounts that
+ * component once (modal in legacy layout, inline editor tab in the studio
+ * shell).
  */
 @Injectable({ providedIn: 'root' })
 export class WorkspaceOverlaysService {
-  /** Whether the global Workspace-settings home is open. */
+  /** Whether the consolidated Workspace-settings view is open. */
   readonly settingsOpen = signal<boolean>(false);
-  /** The active section inside the home. */
+  /** The active section inside the view. */
   readonly section = signal<WorkspaceSettingsSection>('overview');
 
   /**
-   * Back-compat read signals. Each loose overlay is now a section of the
-   * one home; the shell and existing template guards keep reading these
-   * without caring that the underlying state collapsed into one modal.
+   * Back-compat read signals. Each loose overlay is now a section of the one
+   * view; the shell and existing template guards keep reading these without
+   * caring that the underlying state collapsed into one surface.
    */
   readonly tokensOpen = computed(() => this.settingsOpen() && this.section() === 'tokens');
   readonly screenshotsOpen = computed(() => this.settingsOpen() && this.section() === 'screenshots');
-  readonly summaryOpen = computed(() => this.settingsOpen() && this.section() === 'summary');
   readonly cliAdminOpen = computed(() => this.settingsOpen() && this.section() === 'caps');
   readonly promptAdminOpen = computed(() => this.settingsOpen() && this.section() === 'prompts');
 
-  /** True iff the home is open in any section. */
+  /** True iff the view is open in any section. */
   readonly anyOpen = computed(() => this.settingsOpen());
 
   /**
-   * True iff the home is open on a section OTHER than 'caps'. The 'caps'
-   * (CLI usage) section has its own dedicated "Usage" status-bar pill, so
-   * the "Settings" pill must not also light up while Usage is showing —
-   * otherwise both pills carry the single `--studio-accent` active fill at
-   * once (see docs/frontend/design-system.md, "one accent per rail"). This
-   * is the Settings pill's `active` source; `anyOpen` stays the general
-   * "is the home open at all" read for everything else.
+   * True iff the view is open on a section OTHER than 'caps'. The 'caps'
+   * (CLI usage) section has its own dedicated "Usage" status-bar pill, so the
+   * "Settings" pill must not also light up while Usage is showing — otherwise
+   * both pills carry the single `--studio-accent` active fill at once (see
+   * docs/frontend/design-system.md, "one accent per rail").
    */
   readonly anyOpenExceptUsage = computed(() => this.settingsOpen() && this.section() !== 'caps');
 
   /**
-   * True when the current visible state was reached by a deep-link hash,
-   * so a back/forward navigation that drops the hash closes the home.
-   * Button-triggered opens survive unrelated hash churn (mirrors the old
-   * menu-only CLI-admin overlay, which carried no URL contract).
+   * True when the current visible state was reached by a deep-link hash, so a
+   * back/forward navigation that drops the hash closes the view.
    */
   private openedViaHash = false;
 
-  // ---------- generic home control ----------
+  // ---------- generic view control ----------
 
   open(section: WorkspaceSettingsSection): void {
     this.section.set(section);
@@ -80,7 +82,7 @@ export class WorkspaceOverlaysService {
     this.writeHash(this.hashForSection(section));
   }
 
-  /** Switch the active section, opening the home first if it is closed. */
+  /** Switch the active section, opening the view first if it is closed. */
   select(section: WorkspaceSettingsSection): void {
     if (!this.settingsOpen()) {
       this.open(section);
@@ -103,14 +105,14 @@ export class WorkspaceOverlaysService {
     else this.open(section);
   }
 
-  // ---------- home landing ----------
+  // ---------- view landing ----------
 
   openSettings(): void { this.open('overview'); }
   toggleSettings(): void { this.toggle('overview'); }
 
   // ---------- back-compat wrappers ----------
   // External call sites (status bar, usage hover panel, studio shell,
-  // screenshot reel) still call these; they now route into the home.
+  // screenshot reel) still call these; they now route into the view.
 
   openTokens(): void { this.open('tokens'); }
   closeTokens(): void { this.close(); }
@@ -119,10 +121,6 @@ export class WorkspaceOverlaysService {
   openScreenshots(): void { this.open('screenshots'); }
   closeScreenshots(): void { this.close(); }
   toggleScreenshots(): void { this.toggle('screenshots'); }
-
-  openSummary(): void { this.open('summary'); }
-  closeSummary(): void { this.close(); }
-  toggleSummary(): void { this.toggle('summary'); }
 
   openCliAdmin(): void { this.open('caps'); }
   closeCliAdmin(): void { this.close(); }
@@ -133,10 +131,9 @@ export class WorkspaceOverlaysService {
   togglePromptAdmin(): void { this.toggle('prompts'); }
 
   /**
-   * Reconcile open state with the current URL hash. Call once on app boot
-   * and on every `hashchange` event. A recognised section hash opens (or
-   * switches) the home; dropping a hash that opened the home closes it.
-   * Project-shell hash sync is separate and lives on the shell component.
+   * Reconcile open state with the current URL hash. Call once on app boot and
+   * on every `hashchange` event. A recognised section hash opens (or switches)
+   * the view; dropping a hash that opened the view closes it.
    */
   syncFromHash(): void {
     const section = this.sectionForHash(window.location.hash);
@@ -154,12 +151,17 @@ export class WorkspaceOverlaysService {
     switch (hash) {
       case '#/workspace/tokens': return 'tokens';
       case '#/workspace/screenshots': return 'screenshots';
-      case '#/workspace/summary':
-      case '#/summary': return 'summary';
       case '#/workspace/settings/caps':
       case '#/workspace/caps': return 'caps';
       case '#/workspace/settings/prompts':
       case '#/workspace/prompts': return 'prompts';
+      case '#/workspace/settings/appearance': return 'appearance';
+      case '#/workspace/settings/updates': return 'updates';
+      case '#/workspace/settings/workspaces': return 'workspaces';
+      case '#/workspace/settings/working-memory': return 'working-memory';
+      // Retired 'summary' aliases resolve to the overview (migration: no crash).
+      case '#/workspace/summary':
+      case '#/summary':
       case '#/workspace/settings': return 'overview';
       default: return null;
     }
@@ -169,9 +171,12 @@ export class WorkspaceOverlaysService {
     switch (section) {
       case 'tokens': return '#/workspace/tokens';
       case 'screenshots': return '#/workspace/screenshots';
-      case 'summary': return '#/workspace/summary';
       case 'caps': return '#/workspace/settings/caps';
       case 'prompts': return '#/workspace/settings/prompts';
+      case 'appearance': return '#/workspace/settings/appearance';
+      case 'updates': return '#/workspace/settings/updates';
+      case 'workspaces': return '#/workspace/settings/workspaces';
+      case 'working-memory': return '#/workspace/settings/working-memory';
       case 'overview': return '#/workspace/settings';
     }
   }
@@ -180,10 +185,15 @@ export class WorkspaceOverlaysService {
     '#/workspace/settings',
     '#/workspace/settings/caps',
     '#/workspace/settings/prompts',
+    '#/workspace/settings/appearance',
+    '#/workspace/settings/updates',
+    '#/workspace/settings/workspaces',
+    '#/workspace/settings/working-memory',
     '#/workspace/caps',
     '#/workspace/prompts',
     '#/workspace/tokens',
     '#/workspace/screenshots',
+    // Retired aliases stay here so a stale summary hash still clears on close.
     '#/workspace/summary',
     '#/summary',
   ]);

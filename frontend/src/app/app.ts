@@ -342,7 +342,6 @@ export class App implements OnInit, OnDestroy {
   readonly workspaceManager = inject(WorkspaceManagerService);
   readonly workspaceTokensOpen = this.workspaceOverlays.tokensOpen;
   readonly workspaceScreenshotsOpen = this.workspaceOverlays.screenshotsOpen;
-  readonly workspaceSummaryOpen = this.workspaceOverlays.summaryOpen;
   readonly cliAdminOpen = this.workspaceOverlays.cliAdminOpen;
   /**
    * Drives the status-bar Settings button's pressed/active state. Excludes
@@ -403,14 +402,6 @@ export class App implements OnInit, OnDestroy {
   readonly collapsedLanes = this.laneCollapse.collapsedLanes;
   readonly focusedContainer = this.laneCollapse.focusedContainer;
   readonly taskNavCollapsed = this.uiPrefs.taskNavCollapsed;
-  /**
-   * Compact-card mode trades the full per-card metadata (model badge,
-   * agent line, git pill, commit pill, last-activity line) for a dense
-   * one-row title with a small CLI icon and a relative timestamp. Lets
-   * the user fit many more cards on screen when they're scanning for a
-   * task by name. Persisted across reloads.
-   */
-  readonly compactCards = this.uiPrefs.compactCards;
 
   /**
    * Board "Gruppieren nach Epic" toggle. When on, the board case renders the
@@ -431,35 +422,11 @@ export class App implements OnInit, OnDestroy {
   readonly epicBoardTasks = computed(() => flattenGrouped(this.filteredGrouped()));
 
   /**
-   * F4: effective compact mode for board cards. The user's persisted
-   * `compactCards` preference still controls the default; when the
-   * orchestrator rail is open, we force-engage compact rendering so
-   * the lanes don't clip behind the 640 px panel. Closing the rail
-   * reverts to the persisted preference automatically.
-   *
-   * F43: the rail-forced compact rule yields when the user explicitly
-   * toggles to "Full" while the rail is open (`userOverridesCompactWhileRail`).
-   * The override clears the next time the rail closes (see the
-   * `clearCompactOverrideOnRailClose` effect below) so re-opening the
-   * rail re-engages the auto-compact rule.
+   * Card density was abolished (AGT-2035): job cards always render full. This
+   * stays as a constant `false` so the remaining `[compact]` bindings resolve
+   * to full rendering without threading the removed preference everywhere.
    */
-  readonly effectiveCompactCards = computed<boolean>(() => {
-    if (this.compactCards()) return true;
-    const railOpen = this.orchSideSheetSig()?.open() ?? false;
-    if (!railOpen) return false;
-    return !this.uiPrefs.userOverridesCompactWhileRail();
-  });
-
-  /**
-   * F43: tooltip text for the toolbar compact toggle. Derived from
-   * `effectiveCompactCards` (not the persisted pref) so the hover text
-   * always matches what the user actually sees on the cards: when the
-   * rail forces compact, the tooltip still says "Show full cards"
-   * because the next click will actually flip the cards to Full.
-   */
-  readonly compactToggleTooltip = computed<string>(() =>
-    this.effectiveCompactCards() ? 'Show full cards' : 'Show compact cards (titles only)',
-  );
+  readonly effectiveCompactCards = computed<boolean>(() => false);
   readonly showE2ECleanup = signal(false);
   readonly showTagManager = signal(false);
   readonly devToolsMenuOpen = signal(false);
@@ -1070,7 +1037,6 @@ export class App implements OnInit, OnDestroy {
       const open = this.workspaceOverlays.settingsOpen();
       untracked(() => {
         if (tab?.kind === 'workspace-settings') {
-          this.studioPanelState.open('settings');
           if (!open) this.workspaceOverlays.open(this.workspaceOverlays.section());
         } else if (open) {
           this.workspaceOverlays.close();
@@ -1117,22 +1083,6 @@ export class App implements OnInit, OnDestroy {
         this.jobService.getDetail(latest.id, latest.watchPath).subscribe({
           next: (detail) => this.jobSelection.setSelectedFromAdvance(detail, token),
         });
-      });
-    });
-
-    // F43: clear the user's rail-open compact override the moment the
-    // rail closes. Without this, opening the rail a second time would
-    // skip the auto-compact rule because the override flag from the
-    // previous rail-open session was still latched. The override is
-    // intentionally per-tab and ephemeral.
-    effect(() => {
-      const ref = this.orchSideSheetSig();
-      const railOpen = ref?.open() ?? false;
-      if (railOpen) return;
-      untracked(() => {
-        if (this.uiPrefs.userOverridesCompactWhileRail()) {
-          this.uiPrefs.userOverridesCompactWhileRail.set(false);
-        }
       });
     });
 
@@ -2084,19 +2034,19 @@ export class App implements OnInit, OnDestroy {
   }
 
   private openWorkspaceSettingsInStudio(section: WorkspaceSettingsSection): void {
+    // AGT-2035: settings is now purely an editor tab; it no longer also opens a
+    // sidebar "Settings" panel (that panel was removed and folded into here).
     this.workspaceOverlays.open(section);
-    this.studioPanelState.open('settings');
     this.studioTabState.open({ kind: 'workspace-settings' });
   }
 
   private toggleWorkspaceSettingsInStudio(section: WorkspaceSettingsSection): void {
     const alreadyActive =
       this.studioTabState.activeTab()?.kind === 'workspace-settings' &&
-      this.workspaceOverlays.section() === section &&
-      this.studioPanelState.active() === 'settings' &&
-      this.studioPanelState.visible();
+      this.workspaceOverlays.section() === section;
     if (alreadyActive) {
-      this.studioPanelState.setVisible(false);
+      this.studioTabState.close(studioTabKey({ kind: 'workspace-settings' }));
+      this.workspaceOverlays.close();
       return;
     }
     this.openWorkspaceSettingsInStudio(section);
@@ -2145,23 +2095,6 @@ export class App implements OnInit, OnDestroy {
       return;
     }
     this.workspaceOverlays.toggleScreenshots();
-  }
-  openWorkspaceSummary(): void {
-    if (this.featureFlags.vsCodeLayout()) {
-      this.openWorkspaceSettingsInStudio('summary');
-      return;
-    }
-    this.workspaceOverlays.openSummary();
-  }
-  closeWorkspaceSummary(): void {
-    this.workspaceOverlays.closeSummary();
-  }
-  toggleWorkspaceSummary(): void {
-    if (this.featureFlags.vsCodeLayout()) {
-      this.toggleWorkspaceSettingsInStudio('summary');
-      return;
-    }
-    this.workspaceOverlays.toggleSummary();
   }
   openCliAdmin(): void {
     if (this.featureFlags.vsCodeLayout()) {
@@ -2472,31 +2405,6 @@ export class App implements OnInit, OnDestroy {
   // Cycle 9: UI-pref methods delegate to UiPreferencesService.
   setTaskNavCollapsed(collapsed: boolean): void {
     this.uiPrefs.setTaskNavCollapsed(collapsed);
-  }
-  /**
-   * F43: toggle the card-density preference, honouring the user's
-   * intent even when the orchestrator rail is auto-forcing compact.
-   *
-   * Pre-F43 the toolbar toggle just flipped the persisted pref. With
-   * the rail open the pref no longer drove the effective density, so
-   * "Use full cards" felt broken: pref flipped to false, cards stayed
-   * compact, only a toast hinted that the click had landed somewhere.
-   *
-   * Now: write the pref to the value the user *intends* to see
-   * (`nextEffective`), and register a per-tab override that overrides
-   * the rail-forced compact rule for the rest of this rail-open
-   * session. The override is cleared by the effect below when the
-   * rail closes so re-opening it re-engages the auto-compact rule.
-   */
-  toggleCompactCards(): void {
-    const railOpen = this.orchSideSheetSig()?.open() ?? false;
-    const nextEffective = !this.effectiveCompactCards();
-    this.uiPrefs.setCompactCards(nextEffective);
-    if (railOpen && !nextEffective) {
-      this.uiPrefs.userOverridesCompactWhileRail.set(true);
-    } else if (!railOpen) {
-      this.uiPrefs.userOverridesCompactWhileRail.set(false);
-    }
   }
   startResize(event: MouseEvent): void {
     this.uiPrefs.startResize(event);

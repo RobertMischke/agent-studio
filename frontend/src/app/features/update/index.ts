@@ -3,3 +3,4 @@
 export { UpdateBlockModalComponent } from './components/update-block-modal/update-block-modal.component';
 export { UpdateCenterComponent } from './components/update-center/update-center.component';
 export { UpdateVersionBadgeComponent } from './components/update-version-badge/update-version-badge.component';
+export { UpdatesSettingsComponent } from './components/updates-settings/updates-settings.component';
