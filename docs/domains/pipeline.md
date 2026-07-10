@@ -19,6 +19,9 @@ pipeline view.
   per-step telemetry rows.
 - [docs/domains/token-pricing.md](./token-pricing.md) is the single source for pipeline
   cost derivation.
+- [docs/wiki/concepts/bounded-workflow-fan-out.md](../wiki/concepts/bounded-workflow-fan-out.md)
+  explains the input-validation and resource-cap boundary for automation that
+  turns workflow arguments into parallel work.
 
 ## Key Code
 

@@ -21,6 +21,7 @@ contract; the concept page owns the explanation and the running knowledge log.
 |---|---|---|
 | [docs-structure-migration.md](docs-structure-migration.md) | Record of the real `docs/` folder migration into clearer domains, reports, architecture, frontend, CLI, and Wiki areas while keeping Markdown as default and HTML for visual maps. | [`docs/contracts/wiki-tree.md`](../../contracts/wiki-tree.md) |
 | [token-aggregation.md](token-aggregation.md) | Token aggregators -> bus-backed shims (ASS-881): one canonical `ITokenAggregator` over the Agent Message Bus, the legacy shims, and the architecture guard test. | [`docs/domains/tokens.md`](../../domains/tokens.md) |
+<<<<<<< HEAD
 
 ## Designated topics (AGENTS/wiki-sync)
 
@@ -32,3 +33,7 @@ topic instead of re-discovering it. The operator-owned topic list is
 pins an AGENTS-surface pointer to one of the concept pages below plus a
 `<slug>.md` state page. Unlike the concept pages, the state pages and the
 `designated-topics/README.md` index are generated - do not hand-edit them.
+=======
+| [bounded-workflow-fan-out.md](bounded-workflow-fan-out.md) | Validate serialized workflow inputs and cap parallel fan-out before work starts. | [`docs/domains/pipeline.md`](../../domains/pipeline.md) |
+| [persistent-service-lifecycle.md](persistent-service-lifecycle.md) | Separate session-owned finite commands from operator or OS-owned persistent services. | [`docs/domains/runner.md`](../../domains/runner.md) |
+>>>>>>> 8b3aca52 (Memory -> DEV-Wiki migrieren: Projekt-Wissen aus Agent-Memory in docs/wiki berfhren)

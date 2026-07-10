@@ -11,6 +11,9 @@ state.
 
 - Start with [docs/wiki/common-problems/](../wiki/common-problems) for recurring
   runner, CLI, permission, filesystem, and state-machine failures.
+- Use [docs/wiki/concepts/persistent-service-lifecycle.md](../wiki/concepts/persistent-service-lifecycle.md)
+  to choose whether a command is session-owned, OS-owned, or a child process
+  that must remain owned by one coding run.
 - Use [docs/contracts/run-outcome.md](../contracts/run-outcome.md) for the shared
   classification that drives lane routing, `status.md`, and frontend failure
   surfacing.
