@@ -3009,13 +3009,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // no commits and the working tree is clean, so the grade would review
             // an empty diff and mis-grade a real, landed change. Fall back to the
             // task-branch-vs-base range so the grade sees the actual change set.
-            if (string.IsNullOrWhiteSpace(diff))
-            {
-                var branchSummary = TryBuildBranchDiffSummary(entry, job);
-                if (branchSummary != null)
-                    return (branchSummary, $"{scope.Label} (branch range vs base)");
-            }
-            return (diff, scope.Label);
+            // The branch range is resolved lazily so a normal run (non-empty diff)
+            // never touches git for a fallback it does not need.
+            return SelectGradeDiff(diff, scope.Label, () => TryBuildBranchDiffSummary(entry, job));
         }
         catch (Exception ex)
         {
@@ -3024,6 +3020,41 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 project, job.Id);
             return (string.Empty, null);
         }
+    }
+
+    /// <summary>
+    /// Pure selection for the code-review grade diff (AGT-2022): grade the
+    /// run-window <paramref name="workingDiff"/> whenever it is non-empty, but
+    /// fall back to the task-branch-vs-base range when it is blank - the
+    /// post-squash/merge or steer-follow-up case where the working tree is clean
+    /// yet the branch still carries the real, landed change set. The branch range
+    /// is produced by <paramref name="branchDiffFactory"/> and consulted ONLY on
+    /// the empty-working-diff path, so a normal run is graded on exactly what it
+    /// changed and never pays for a git range it does not need. When the fallback
+    /// fires, the label is annotated <c>(branch range vs base)</c> so the grade
+    /// record makes the source of the diff explicit. A genuinely empty
+    /// deliverable (blank working diff AND no branch range) stays empty here - the
+    /// results/ inventory and card-mode framing carry the read-only case in the
+    /// prompt, not this diff selection.
+    ///
+    /// <para>
+    /// Pure aside from the injected factory so a unit test can pin all three
+    /// branches (fallback fires / working diff wins / no branch available)
+    /// without a live repository.
+    /// </para>
+    /// </summary>
+    internal static (string Diff, string? CommitLabel) SelectGradeDiff(
+        string workingDiff, string? scopeLabel, Func<string?> branchDiffFactory)
+    {
+        if (string.IsNullOrWhiteSpace(workingDiff))
+        {
+            var branchSummary = branchDiffFactory();
+            if (!string.IsNullOrWhiteSpace(branchSummary))
+                return (branchSummary!, string.IsNullOrWhiteSpace(scopeLabel)
+                    ? "(branch range vs base)"
+                    : $"{scopeLabel} (branch range vs base)");
+        }
+        return (workingDiff, scopeLabel);
     }
 
     private void WritePostProcessingOutcome(
@@ -3827,10 +3858,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// runs never create one), or the range is empty.
     /// </summary>
     private string AppendBranchDiffSummary(string baseSummary, WatchPathEntry entry, TaskInfo job)
-    {
-        var branch = TryBuildBranchDiffSummary(entry, job);
-        return branch == null ? baseSummary : baseSummary + "\n\n" + branch;
-    }
+        => ComposeAspectDiffSummary(baseSummary, TryBuildBranchDiffSummary(entry, job));
+
+    /// <summary>
+    /// Pure composition of the aspect diff summary (AGT-2022): the run-window
+    /// summary always carries the task-branch-vs-base range appended when one is
+    /// available, so an empty run-window diff never reads as "deliverables
+    /// missing" while the branch holds the real commits (squash/merge or steer
+    /// follow-up). Returns <paramref name="baseSummary"/> unchanged when no branch
+    /// range is available (git unwired, no task branch, or an empty range). Pure
+    /// so a unit test can pin the append / passthrough shapes without a live repo.
+    /// </summary>
+    internal static string ComposeAspectDiffSummary(string baseSummary, string? branchSummary)
+        => string.IsNullOrWhiteSpace(branchSummary) ? baseSummary : baseSummary + "\n\n" + branchSummary;
 
     private string? TryBuildBranchDiffSummary(WatchPathEntry entry, TaskInfo job)
     {

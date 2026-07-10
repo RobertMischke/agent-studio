@@ -71,6 +71,52 @@ public class ReviewEvidenceContextTests : IDisposable
         Assert.Contains("nested deliverable", inventory);
     }
 
+    [Fact]
+    public void ResultsInventory_BlankJobFolderPath_ReportsUnavailableInsteadOfThrowing()
+    {
+        // Fallback path: a caller with no resolved job-folder path must get a
+        // stable "unavailable" line, never a thrown exception that would break the
+        // review pass.
+        Assert.Equal(
+            "No results/ folder (job folder path unavailable).",
+            ResultsInventory.Render("   "));
+    }
+
+    [Fact]
+    public void ResultsInventory_LargeTextArtifact_ExcerptIsTruncatedNotDumped()
+    {
+        // Fallback path: a big text deliverable must be excerpted, not dumped
+        // whole, so the review prompt stays bounded. The truncation marker proves
+        // the cap fired.
+        var results = Path.Combine(_jobFolder, "results");
+        Directory.CreateDirectory(results);
+        var body = new string('x', 5000);
+        File.WriteAllText(Path.Combine(results, "big.md"), body);
+
+        var inventory = ResultsInventory.Render(_jobFolder, maxExcerptChars: 200);
+
+        Assert.Contains("big.md", inventory);
+        Assert.Contains("... (truncated)", inventory);
+        // The full 5000-char body must not be inlined.
+        Assert.DoesNotContain(body, inventory);
+    }
+
+    [Fact]
+    public void ResultsInventory_MoreFilesThanCap_ListsCapThenSummarisesRemainder()
+    {
+        // Fallback path: a results/ folder with many artefacts lists up to the cap
+        // and then states how many more exist, rather than flooding the prompt.
+        var results = Path.Combine(_jobFolder, "results");
+        Directory.CreateDirectory(results);
+        for (var i = 0; i < 5; i++)
+            File.WriteAllBytes(Path.Combine(results, $"shot-{i}--real.png"), new byte[] { 1 });
+
+        var inventory = ResultsInventory.Render(_jobFolder, maxFiles: 2);
+
+        Assert.Contains("results/ folder contains 5 file(s)", inventory);
+        Assert.Contains("and 3 more file(s).", inventory);
+    }
+
     [Theory]
     [InlineData("planning")]
     [InlineData("research")]
