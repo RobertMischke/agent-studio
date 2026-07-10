@@ -144,7 +144,6 @@ export class ProjectWikiSectionComponent {
   private readonly catalog = inject(CliCatalogStore);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly sanitizer = inject(DomSanitizer);
-  private readonly tabs = inject(StudioTabStateService);
 
   readonly cliTypes = CLI_TYPES;
 
@@ -237,12 +236,6 @@ export class ProjectWikiSectionComponent {
   private resizeState: WikiResizeState | null = null;
 
   protected readonly nodeId = nodeId;
-
-  openRelatedTask(key: string): void {
-    const target = this.tasks.jobs().find(task =>
-      (task.key ?? task.id).toUpperCase() === key.toUpperCase());
-    if (target) this.tabs.open({ kind: 'task', taskKey: target.taskKey });
-  }
 
   constructor() {
     effect(() => {
