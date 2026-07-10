@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project relationship model and branch-aware Wiki</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1018;
+      --shell: #101722;
+      --panel: #151e2b;
+      --panel-2: #1a2534;
+      --panel-3: #202d3e;
+      --text: #eef4fb;
+      --muted: #91a0b4;
+      --line: #293749;
+      --line-strong: #405269;
+      --blue: #72a7ff;
+      --blue-soft: rgba(83, 139, 235, .16);
+      --green: #69d5ad;
+      --green-soft: rgba(70, 190, 145, .14);
+      --amber: #e8bd6d;
+      --amber-soft: rgba(216, 158, 50, .15);
+      --purple: #b99cff;
+      --shadow: 0 18px 60px rgba(0, 0, 0, .3);
+      --radius: 14px;
+    }
+
+    html[data-theme="light"] {
+      color-scheme: light;
+      --bg: #edf2f7;
+      --shell: #f7f9fc;
+      --panel: #ffffff;
+      --panel-2: #f4f7fb;
+      --panel-3: #eaf0f7;
+      --text: #172131;
+      --muted: #627086;
+      --line: #d7e0ea;
+      --line-strong: #b9c7d8;
+      --blue: #276ed2;
+      --blue-soft: rgba(39, 110, 210, .11);
+      --green: #188963;
+      --green-soft: rgba(24, 137, 99, .11);
+      --amber: #9c680d;
+      --amber-soft: rgba(190, 128, 22, .12);
+      --purple: #7051ba;
+      --shadow: 0 18px 55px rgba(33, 52, 76, .14);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, select { font: inherit; }
+    button { color: inherit; }
+    .app { min-height: 100vh; display: grid; grid-template-columns: 240px minmax(0, 1fr); }
+    .sidebar {
+      background: var(--shell);
+      border-right: 1px solid var(--line);
+      padding: 18px 14px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+    }
+    .brand { display: flex; gap: 10px; align-items: center; margin: 0 8px 24px; font-weight: 720; letter-spacing: -.01em; }
+    .brand-mark { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--blue-soft); color: var(--blue); }
+    .nav-label { margin: 18px 9px 7px; color: var(--muted); text-transform: uppercase; font-size: 10px; font-weight: 750; letter-spacing: .12em; }
+    .nav-item { width: 100%; border: 0; background: transparent; display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; color: var(--muted); text-align: left; }
+    .nav-item:hover, .nav-item:focus-visible { background: var(--panel-2); color: var(--text); outline: none; }
+    .nav-item.active { background: var(--blue-soft); color: var(--text); }
+    .nav-icon { width: 18px; text-align: center; color: var(--blue); }
+    .nav-indent { padding-left: 37px; }
+    .url-branch { margin-left: auto; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px; color: var(--muted); }
+    .url-branch:hover, .url-branch:focus-visible { color: var(--blue); background: var(--panel-3); outline: 2px solid var(--blue); outline-offset: 1px; }
+    .main { min-width: 0; }
+    .topbar { min-height: 58px; background: color-mix(in srgb, var(--shell) 88%, transparent); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; position: sticky; top: 0; z-index: 20; backdrop-filter: blur(14px); }
+    .crumb { display: flex; gap: 8px; align-items: center; color: var(--muted); }
+    .crumb strong { color: var(--text); }
+    .top-actions { display: flex; gap: 8px; }
+    .icon-btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; min-width: 34px; height: 34px; cursor: pointer; }
+    .icon-btn:hover, .icon-btn:focus-visible { border-color: var(--blue); outline: none; }
+    .content { padding: 28px; max-width: 1500px; margin: 0 auto; }
+    .eyebrow { color: var(--blue); text-transform: uppercase; font-size: 11px; font-weight: 760; letter-spacing: .13em; }
+    h1 { font-size: clamp(27px, 3vw, 42px); line-height: 1.08; letter-spacing: -.035em; margin: 7px 0 10px; }
+    .lead { color: var(--muted); font-size: 16px; max-width: 840px; margin: 0; }
+    .title-row { display: flex; justify-content: space-between; gap: 22px; align-items: flex-start; }
+    .branch-wrap { position: relative; flex: 0 0 auto; }
+    .branch-control { border: 1px solid var(--line-strong); background: var(--blue-soft); min-height: 38px; border-radius: 9px; padding: 0 11px; display: inline-flex; gap: 8px; align-items: center; cursor: pointer; white-space: nowrap; }
+    .branch-control:hover, .branch-control[aria-expanded="true"], .branch-control:focus-visible { border-color: var(--blue); outline: none; }
+    .branch-icon { color: var(--blue); font-size: 17px; }
+    .branch-role { color: var(--muted); font-size: 11px; }
+    .popover { position: absolute; z-index: 30; right: 0; top: 46px; width: min(370px, calc(100vw - 40px)); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: var(--shadow); padding: 14px; }
+    .popover[hidden] { display: none; }
+    .popover h3 { font-size: 13px; margin: 0 0 10px; }
+    .context-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .context-box { background: var(--panel-2); border-radius: 8px; padding: 9px; }
+    .context-box span { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+    .context-box strong { display: block; margin-top: 3px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .context-box.info { background: var(--amber-soft); }
+    .meta-list { margin: 12px 0 0; display: grid; grid-template-columns: 92px 1fr; gap: 6px; font-size: 12px; }
+    .meta-list dt { color: var(--muted); }
+    .meta-list dd { margin: 0; word-break: break-word; }
+    .tabbar { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 24px 0 20px; overflow-x: auto; }
+    .tab { border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; padding: 10px 12px; cursor: pointer; white-space: nowrap; }
+    .tab.active { color: var(--text); border-bottom-color: var(--blue); }
+    .tab:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+    .view[hidden] { display: none; }
+    .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 22px 0 12px; }
+    .section-heading h2 { font-size: 17px; margin: 0; }
+    .section-heading p { color: var(--muted); margin: 3px 0 0; }
+    .legend { display: flex; gap: 12px; color: var(--muted); font-size: 11px; flex-wrap: wrap; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 5px; background: var(--green); }
+    .dot.blue { background: var(--blue); }
+    .dot.amber { background: var(--amber); }
+    .relationship-canvas { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); overflow: hidden; }
+    .relationship-flow { display: grid; grid-template-columns: minmax(150px, .8fr) 40px minmax(180px, 1fr) 40px minmax(250px, 1.5fr); align-items: stretch; gap: 8px; }
+    .entity { border: 1px solid var(--line); border-radius: 12px; padding: 15px; background: var(--panel-2); min-height: 150px; }
+    .entity.focus { background: var(--blue-soft); border-color: color-mix(in srgb, var(--blue) 45%, var(--line)); }
+    .entity-kicker { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
+    .entity h3 { margin: 5px 0 8px; font-size: 16px; }
+    .entity p { color: var(--muted); margin: 0; font-size: 12px; }
+    .entity-code { display: inline-block; margin-top: 12px; color: var(--blue); font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .arrow { display: grid; place-items: center; color: var(--line-strong); font-size: 24px; }
+    .repo-layers { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 11px; }
+    .mini { border: 1px solid var(--line); border-radius: 8px; padding: 9px; background: color-mix(in srgb, var(--panel) 70%, transparent); }
+    .mini strong { display: block; font-size: 11px; }
+    .mini span { color: var(--muted); font-size: 10px; }
+    .branch-band { margin-top: 16px; border: 1px solid var(--line); background: var(--panel-2); border-radius: 12px; padding: 14px; }
+    .branch-line { display: grid; grid-template-columns: 120px repeat(4, minmax(100px, 1fr)); gap: 8px; align-items: center; }
+    .branch-line + .branch-line { margin-top: 8px; }
+    .branch-name { font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--blue); }
+    .surface-chip { padding: 8px; border-radius: 8px; background: var(--green-soft); color: var(--text); text-align: center; font-size: 11px; }
+    .surface-chip.running { background: var(--amber-soft); }
+    .surface-chip.quiet { background: var(--panel-3); color: var(--muted); }
+    .callout { margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: var(--amber-soft); display: flex; gap: 10px; align-items: flex-start; }
+    .callout strong { display: block; font-size: 12px; }
+    .callout p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+    .card h3 { margin: 0 0 3px; font-size: 14px; }
+    .card > p { margin: 0 0 14px; color: var(--muted); font-size: 12px; }
+    .checkout-stack { display: grid; gap: 8px; }
+    .checkout-row { display: grid; grid-template-columns: 120px 1fr auto; gap: 10px; align-items: center; background: var(--panel-2); border-radius: 9px; padding: 10px; }
+    .checkout-row .label { color: var(--muted); font-size: 11px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+    .pill { border-radius: 999px; padding: 3px 7px; font-size: 10px; background: var(--green-soft); color: var(--green); white-space: nowrap; }
+    .pill.info { background: var(--blue-soft); color: var(--blue); }
+    .source-line { display: grid; grid-template-columns: 85px 1fr; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+    .source-line:last-child { border: 0; }
+    .source-line span { color: var(--muted); font-size: 11px; }
+    .source-line strong { font-size: 11px; font-weight: 600; }
+    .refresh-flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 14px; }
+    .step { background: var(--panel-2); border-radius: 8px; padding: 9px; text-align: center; font-size: 10px; }
+    .step b { color: var(--blue); display: block; margin-bottom: 3px; }
+    .signal-list { display: grid; gap: 8px; }
+    .signal-demo { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; background: var(--panel-2); border-radius: 9px; }
+    .signal-demo > span:first-child { color: var(--muted); font-size: 11px; }
+    .branch-demo { border: 1px solid var(--line); padding: 6px 8px; border-radius: 7px; display: inline-flex; gap: 6px; align-items: center; font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .branch-demo.viewing { background: var(--blue-soft); }
+    .branch-demo.divergent { background: var(--amber-soft); }
+    .url-demo { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; }
+    .url-demo i { font-style: normal; color: var(--blue); border-radius: 6px; padding: 3px 5px; background: var(--panel-3); }
+    .tree { margin: 0; padding: 12px; list-style: none; background: var(--panel-2); border-radius: 10px; font: 11px/1.75 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .tree .folder { color: var(--blue); }
+    .tree .file { color: var(--text); }
+    .tree .note { color: var(--muted); font-family: inherit; }
+    .rule-list { display: grid; gap: 8px; }
+    .rule { display: grid; grid-template-columns: 26px 1fr; gap: 9px; align-items: start; }
+    .rule-num { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; background: var(--blue-soft); color: var(--blue); font-size: 10px; font-weight: 750; }
+    .rule strong { display: block; font-size: 11px; }
+    .rule span { color: var(--muted); font-size: 10px; }
+    .mock-note { margin-top: 20px; color: var(--muted); font-size: 11px; text-align: center; }
+    .tooltip { position: fixed; z-index: 50; max-width: 280px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel); box-shadow: var(--shadow); font-size: 11px; pointer-events: none; }
+    .tooltip strong { display: block; color: var(--text); }
+    .tooltip span { color: var(--muted); }
+
+    @media (max-width: 1040px) {
+      .relationship-flow { grid-template-columns: 1fr; }
+      .arrow { transform: rotate(90deg); min-height: 28px; }
+      .branch-line { grid-template-columns: 100px repeat(2, 1fr); }
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 760px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .sidebar .nav-label, .sidebar .nav-item:not(.active) { display: none; }
+      .brand { margin-bottom: 10px; }
+      .content { padding: 20px 14px; }
+      .topbar { padding: 10px 14px; }
+      .title-row { display: block; }
+      .branch-wrap { margin-top: 16px; display: inline-block; }
+      .branch-line { grid-template-columns: 1fr 1fr; }
+      .branch-name { grid-column: 1 / -1; }
+      .refresh-flow { grid-template-columns: 1fr 1fr; }
+      .checkout-row { grid-template-columns: 90px 1fr; }
+      .checkout-row .pill { grid-column: 2; justify-self: start; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="Project navigation">
+      <div class="brand"><span class="brand-mark">AS</span> Agent Studio</div>
+      <div class="nav-label">Workspace</div>
+      <button class="nav-item"><span class="nav-icon">⌂</span> Product Engineering</button>
+      <div class="nav-label">Agent Studio</div>
+      <button class="nav-item"><span class="nav-icon">▦</span> Board</button>
+      <button class="nav-item active"><span class="nav-icon">◇</span> Project Hub</button>
+      <button class="nav-item"><span class="nav-icon">◇</span> Wiki</button>
+      <button class="nav-item"><span class="nav-icon">›_</span> Prompts</button>
+      <button class="nav-item nav-indent"><span class="nav-icon">↗</span> Stable app <span class="url-branch" tabindex="0" data-tip="URL branch|This preview represents stable. Working branch is develop.">⑂</span></button>
+      <button class="nav-item nav-indent"><span class="nav-icon">↗</span> Dev preview <span class="url-branch" tabindex="0" data-tip="URL branch|This preview represents develop and matches the working branch.">⑂</span></button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="crumb"><span>Product Engineering</span><span>/</span><strong>Agent Studio</strong></div>
+        <div class="top-actions"><button class="icon-btn" id="themeButton" aria-label="Toggle color theme">◐</button></div>
+      </header>
+
+      <div class="content">
+        <div class="title-row">
+          <div>
+            <div class="eyebrow">Discovery concept · relationship layer</div>
+            <h1>One project, one repository,<br>visible branch context.</h1>
+            <p class="lead">Workspaces organize projects. Git branches supply Wiki, Prompts, Tasks, URLs, and the Project Hub. An isolated Wiki checkout keeps knowledge on the working branch even when the product runs elsewhere.</p>
+          </div>
+          <div class="branch-wrap">
+            <button class="branch-control" id="branchButton" aria-expanded="false" aria-controls="branchPopover" aria-label="Branch context: develop">
+              <span class="branch-icon">⑂</span><span><span class="branch-role">Working</span> <strong>develop</strong></span><span>⌄</span>
+            </button>
+            <div class="popover" id="branchPopover" hidden>
+              <h3>Branch context</h3>
+              <div class="context-pair">
+                <div class="context-box"><span>Viewing / working</span><strong>develop</strong></div>
+                <div class="context-box info"><span>Running</span><strong>stable</strong></div>
+              </div>
+              <dl class="meta-list">
+                <dt>Repository</dt><dd>Agent Studio</dd>
+                <dt>Revision</dt><dd><code>8f21c4a</code></dd>
+                <dt>Checkout</dt><dd>Wiki checkout</dd>
+                <dt>Freshness</dt><dd><span class="dot"></span>Refreshed 4 min ago</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <nav class="tabbar" aria-label="Concept views">
+          <button class="tab active" data-view="model">Relationship map</button>
+          <button class="tab" data-view="checkout">Wiki checkout</button>
+          <button class="tab" data-view="signal">Branch signal</button>
+          <button class="tab" data-view="starter">Starter structure</button>
+        </nav>
+
+        <section class="view" id="view-model">
+          <div class="section-heading"><div><h2>Canonical relationship spine</h2><p>Identity flows left to right; checkouts are projections, never identities.</p></div><div class="legend"><span><i class="dot blue"></i>identity</span><span><i class="dot"></i>working context</span><span><i class="dot amber"></i>running context</span></div></div>
+          <div class="relationship-canvas">
+            <div class="relationship-flow">
+              <article class="entity"><div class="entity-kicker">Top-level surface</div><h3>Workspace</h3><p>Contains related projects and provides navigation and ordering.</p><span class="entity-code">Product Engineering</span></article>
+              <div class="arrow" aria-hidden="true">→</div>
+              <article class="entity focus"><div class="entity-kicker">Exactly one owner</div><h3>Project</h3><p>Represents one canonical Git repository and declares branch roles.</p><span class="entity-code">PROJ-001 · Agent Studio</span></article>
+              <div class="arrow" aria-hidden="true">→</div>
+              <article class="entity"><div class="entity-kicker">Canonical content and history</div><h3>Git repository</h3><p>Source of Docs, Wiki content, Prompts, branches, and revisions.</p><div class="repo-layers"><div class="mini"><strong>Repository layer</strong><span>Files · branches · commits</span></div><div class="mini"><strong>Presentation layer</strong><span>Wiki · render · search</span></div></div></article>
+            </div>
+
+            <div class="branch-band">
+              <div class="branch-line"><span class="branch-name">⑂ develop</span><span class="surface-chip">Wiki</span><span class="surface-chip">Prompts</span><span class="surface-chip">New task base</span><span class="surface-chip">Project Hub</span></div>
+              <div class="branch-line"><span class="branch-name">⑂ stable</span><span class="surface-chip running">Running app</span><span class="surface-chip running">Stable URL</span><span class="surface-chip quiet">Release history</span><span class="surface-chip quiet">Not Wiki source</span></div>
+            </div>
+
+            <div class="callout"><span>↯</span><div><strong>Intentional divergence</strong><p>Agent Studio runs from <code>stable</code>, while knowledge and new work come from <code>develop</code>. The shared branch control makes that distinction inspectable without turning it into a warning.</p></div></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-checkout" hidden>
+          <div class="section-heading"><div><h2>Wiki gets its own checkout</h2><p>A refresh cannot switch or modify the running checkout, working folder, or task worktrees.</p></div></div>
+          <div class="grid-2">
+            <article class="card"><h3>Checkout isolation</h3><p>Three filesystem roles point into one repository history.</p><div class="checkout-stack">
+              <div class="checkout-row"><span class="label">Running</span><span class="mono">C:/agent-studio-stable · stable</span><span class="pill info">serving</span></div>
+              <div class="checkout-row"><span class="label">Working</span><span class="mono">C:/agent-studio-dev · develop</span><span class="pill">default</span></div>
+              <div class="checkout-row"><span class="label">Wiki</span><span class="mono">C:/agent-studio-wiki · develop</span><span class="pill">fresh</span></div>
+              <div class="checkout-row"><span class="label">Task</span><span class="mono">.../AGT-1984 · task/AGT-1984</span><span class="pill info">isolated</span></div>
+            </div></article>
+            <article class="card"><h3>Source status</h3><p>The compact header is backed by complete, reviewable provenance.</p>
+              <div class="source-line"><span>Origin</span><strong>github.com/acme/agent-studio.git</strong></div>
+              <div class="source-line"><span>Branch</span><strong><code>develop</code> · working role</strong></div>
+              <div class="source-line"><span>Revision</span><strong><code>8f21c4a</code></strong></div>
+              <div class="source-line"><span>Freshness</span><strong><i class="dot"></i>Refreshed 4 min ago</strong></div>
+              <div class="source-line"><span>Policy</span><strong>Every 15 minutes + manual</strong></div>
+            </article>
+          </div>
+          <article class="card" style="margin-top:14px"><h3>Atomic refresh</h3><p>Branch label, content, revision, and search index move together.</p><div class="refresh-flow"><div class="step"><b>01</b>Fetch origin</div><div class="step"><b>02</b>Resolve branch SHA</div><div class="step"><b>03</b>Materialize safely</div><div class="step"><b>04</b>Publish + reindex</div></div></article>
+        </section>
+
+        <section class="view" id="view-signal" hidden>
+          <div class="section-heading"><div><h2>One signal, five surfaces</h2><p>Same glyph, vocabulary, placement rule, and disclosure behavior everywhere.</p></div></div>
+          <div class="grid-2">
+            <article class="card"><h3>Shared Branch Context Control</h3><p>Full surfaces place it in the header. Dense URL rows reveal it on hover, focus, or detail.</p><div class="signal-list">
+              <div class="signal-demo"><span>Wiki · matching</span><span class="branch-demo">⑂ develop</span></div>
+              <div class="signal-demo"><span>Wiki · browsing another</span><span class="branch-demo viewing">⑂ Viewing stable</span></div>
+              <div class="signal-demo"><span>Project Hub · divergence</span><span class="branch-demo divergent">⑂ develop · runs stable</span></div>
+              <div class="signal-demo"><span>Task · execution</span><span class="branch-demo">⑂ task/AGT-1984</span></div>
+              <div class="signal-demo"><span>URL · compact</span><span class="url-demo">Stable app <i title="Represents stable; working branch develop">⑂</i></span></div>
+            </div></article>
+            <article class="card"><h3>Disclosure contract</h3><p>Expanded details always answer the same questions in the same order.</p><div class="rule-list">
+              <div class="rule"><span class="rule-num">1</span><div><strong>What am I viewing?</strong><span>Viewed branch and exact revision.</span></div></div>
+              <div class="rule"><span class="rule-num">2</span><div><strong>Where does new work start?</strong><span>Project working branch.</span></div></div>
+              <div class="rule"><span class="rule-num">3</span><div><strong>What is currently running?</strong><span>Running branch when configured.</span></div></div>
+              <div class="rule"><span class="rule-num">4</span><div><strong>How fresh is it?</strong><span>Checkout role, origin, last refresh, and failure detail.</span></div></div>
+            </div></article>
+          </div>
+        </section>
+
+        <section class="view" id="view-starter" hidden>
+          <div class="section-heading"><div><h2>Every project starts ready for knowledge</h2><p>Docs are canonical repository files. Wiki is their presentation, not a competing folder.</p></div></div>
+          <div class="grid-2">
+            <article class="card"><h3>Repository scaffold</h3><p>Created for new projects; opt-in and non-overwriting for existing repositories.</p>
+              <ul class="tree"><li><span class="folder">repository/</span></li><li>├── <span class="file">README.md</span></li><li>├── <span class="folder">docs/</span></li><li>│&nbsp;&nbsp;├── <span class="file">README.md</span> <span class="note"># Wiki landing</span></li><li>│&nbsp;&nbsp;├── <span class="folder">concepts/</span><span class="file">README.md</span></li><li>│&nbsp;&nbsp;└── <span class="folder">operations/</span><span class="file">README.md</span></li><li>├── <span class="folder">prompts/</span><span class="file">README.md</span></li><li>└── <span class="folder">.agent-studio/</span><span class="file">project.json</span></li></ul>
+            </article>
+            <article class="card"><h3>Ownership boundaries</h3><p>The scaffold is deliberately small and machine-portable.</p><div class="rule-list">
+              <div class="rule"><span class="rule-num">G</span><div><strong>Git owns content</strong><span>Docs, prompt files, history, and branch provenance.</span></div></div>
+              <div class="rule"><span class="rule-num">W</span><div><strong>Wiki owns presentation</strong><span>Tree, rendering, search, metadata, and explicit editing.</span></div></div>
+              <div class="rule"><span class="rule-num">A</span><div><strong>Application owns tasks</strong><span>Lifecycle records linked to repository, base branch, revision, and task branch.</span></div></div>
+              <div class="rule"><span class="rule-num">L</span><div><strong>Registry owns local state</strong><span>Absolute paths, refresh timestamps, checkout status, and credentials.</span></div></div>
+            </div></article>
+          </div>
+        </section>
+
+        <p class="mock-note">Interactive discovery mockup. Use the tabs, branch control, URL branch icons, and theme toggle. No product behavior is implemented by this file.</p>
+      </div>
+    </main>
+  </div>
+
+  <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+  <script>
+    const root = document.documentElement;
+    const themeButton = document.getElementById('themeButton');
+    const branchButton = document.getElementById('branchButton');
+    const branchPopover = document.getElementById('branchPopover');
+    const tooltip = document.getElementById('tooltip');
+
+    themeButton.addEventListener('click', () => {
+      root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    });
+
+    function setBranchOpen(open) {
+      branchButton.setAttribute('aria-expanded', String(open));
+      branchPopover.hidden = !open;
+    }
+    branchButton.addEventListener('click', event => {
+      event.stopPropagation();
+      setBranchOpen(branchButton.getAttribute('aria-expanded') !== 'true');
+    });
+    document.addEventListener('click', event => {
+      if (!branchPopover.contains(event.target)) setBranchOpen(false);
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { setBranchOpen(false); branchButton.focus(); hideTip(); }
+    });
+
+    document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(item => item.classList.toggle('active', item === tab));
+      document.querySelectorAll('.view').forEach(view => { view.hidden = view.id !== `view-${tab.dataset.view}`; });
+    }));
+
+    function showTip(target) {
+      const [title, detail] = target.dataset.tip.split('|');
+      tooltip.innerHTML = `<strong>${title}</strong><span>${detail}</span>`;
+      tooltip.hidden = false;
+      const rect = target.getBoundingClientRect();
+      const left = Math.min(rect.right + 8, window.innerWidth - tooltip.offsetWidth - 10);
+      const top = Math.min(rect.top, window.innerHeight - tooltip.offsetHeight - 10);
+      tooltip.style.left = `${Math.max(10, left)}px`;
+      tooltip.style.top = `${Math.max(10, top)}px`;
+    }
+    function hideTip() { tooltip.hidden = true; }
+    document.querySelectorAll('[data-tip]').forEach(target => {
+      target.addEventListener('mouseenter', () => showTip(target));
+      target.addEventListener('mouseleave', hideTip);
+      target.addEventListener('focus', () => showTip(target));
+      target.addEventListener('blur', hideTip);
+    });
+  </script>
+</body>
+</html>
