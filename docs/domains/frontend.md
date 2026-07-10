@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-06-09
+Version: 2026-07-10
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -93,6 +93,11 @@ groups, and a failed domain reports an error without hiding successful domains.
 - Workspace-level CLI administration is not a separate sheet. Model and
   environment management, completion contracts, sessions, usage caps, and
   token spend belong to Workspace Settings under CLI Management.
+- Backlog Triage is not a project navigation surface. Do not add a project
+  Backlog tab, Explorer entry, activity-bar entry, or project-scoped board
+  filter coupling. Persisted legacy `backlog` studio tabs are discarded during
+  tab-state restoration. This does not affect the Board's `0-backlog` lane,
+  which remains the lifecycle landing lane for new tasks.
 
 ## Verification
 

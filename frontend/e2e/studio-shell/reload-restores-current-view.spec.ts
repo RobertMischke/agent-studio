@@ -204,6 +204,9 @@ test.describe('studio-shell · reload restores the current view (F5 bug)', () =>
   });
 
   test('drops a persisted legacy Backlog tab and keeps the 0-backlog board lane', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+
     await stubApi(page, { resolveDetail: false });
     await page.goto('/');
     await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
@@ -221,12 +224,16 @@ test.describe('studio-shell · reload restores the current view (F5 bug)', () =>
 
     const persisted = await page.evaluate(() => localStorage.getItem('atp.studio.tabs.v1'));
     expect(persisted).not.toContain('backlog');
+    expect(pageErrors).toEqual([]);
 
     const resultsDir = process.env.JOB_RESULTS_DIR;
     if (resultsDir) {
       await page.screenshot({
         path: `${resultsDir}/legacy-backlog-tab-discarded-board-lane-retained--mocked.png`,
         fullPage: false,
+      });
+      await page.getByTestId('lane-0-backlog').screenshot({
+        path: `${resultsDir}/board-0-backlog-lane-retained--mocked.png`,
       });
     }
   });
