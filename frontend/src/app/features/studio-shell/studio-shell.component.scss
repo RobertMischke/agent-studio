@@ -1900,9 +1900,24 @@
   }
 
   &__num {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
     font-family: var(--font-mono);
     font-size: 10px;
+    line-height: 1;
     color: var(--studio-fg-muted);
+  }
+
+  // Angular component hosts participate in the flex row themselves. Making
+  // the host a centred flex item keeps the SVG glyph on the same optical axis
+  // as the project/task abbreviation and title.
+  app-studio-icon {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    flex: 0 0 auto;
+    line-height: 1;
   }
 
   &__title {

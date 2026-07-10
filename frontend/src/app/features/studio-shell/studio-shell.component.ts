@@ -1018,11 +1018,11 @@ export class StudioShellComponent {
       case 'epic': {
         const labelKey = tab.viewTaskKey ?? tab.epicKey;
         const job = this.findJob(labelKey);
-        return job?.title || job?.id || labelKey;
+        return job?.title || job?.key || job?.id || this.taskIdFromKey(labelKey);
       }
       case 'task': {
         const job = this.findJob(tab.taskKey);
-        return job?.title || job?.id || tab.taskKey;
+        return job?.title || job?.key || job?.id || this.taskIdFromKey(tab.taskKey);
       }
       case 'hub':
         return `${this.projectShortLabel(tab.projectName)} · ${this.railItemForSection(tab.section).label}`;
@@ -1030,7 +1030,7 @@ export class StudioShellComponent {
         return tab.commitSha;
       case 'activity': {
         const job = this.findJob(tab.taskKey);
-        return `Activity · ${job?.title || tab.taskKey}`;
+        return `Activity · ${job?.title || job?.key || job?.id || this.taskIdFromKey(tab.taskKey)}`;
       }
       case 'url-preview':
         return this.findProjectUrl(tab.projectName, tab.urlId)?.label || tab.urlId;
@@ -1041,6 +1041,14 @@ export class StudioShellComponent {
       default:
         return '';
     }
+  }
+
+  /** A task key is persisted as `<watchPath>::<jobId>`. During shell restore
+   * the tab can render before board data resolves, so its safe fallback must
+   * be the user-facing job id rather than the filesystem-bearing key. */
+  private taskIdFromKey(taskKey: string): string {
+    const separator = taskKey.lastIndexOf('::');
+    return separator >= 0 ? taskKey.slice(separator + 2) : taskKey;
   }
 
   /** Marker for the tab list — used for the small chip on the left

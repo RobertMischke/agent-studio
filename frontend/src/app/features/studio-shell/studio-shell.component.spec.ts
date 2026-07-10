@@ -502,6 +502,29 @@ describe('StudioShellComponent epic tabs', () => {
     })).toBe('Task One');
   });
 
+  it('never exposes a watch path when task data has not resolved yet', () => {
+    const { component } = configure();
+    const taskKey = 'C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard::ASS-1766';
+
+    expect(component.tabLabel({ kind: 'task', taskKey })).toBe('ASS-1766');
+    expect(component.tabLabel({ kind: 'activity', taskKey })).toBe('Activity · ASS-1766');
+    expect(component.tabLabel({ kind: 'epic', epicKey: taskKey })).toBe('ASS-1766');
+  });
+
+  it('puts the complete tab name on the tab and truncated title hover targets', () => {
+    const { fixture, taskService, tabState } = configure();
+    seedJobs(taskService);
+    tabState.open({ kind: 'task', taskKey: 'watch::task-a' });
+
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const tab = root.querySelector<HTMLElement>('[data-tab-key="task:watch::task-a"]');
+    const title = tab?.querySelector<HTMLElement>('.studio-tab__title');
+    expect(tab?.getAttribute('title')).toContain('Task One');
+    expect(title?.getAttribute('title')).toContain('Task One');
+  });
+
   it('renders the Epic icon inside an epic detail tab', () => {
     const { fixture, taskService, tabState } = configure();
     seedJobs(taskService);
