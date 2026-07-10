@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TaskCardComponent } from './task-card.component';
+import { MODEL_IDS } from '../../../cli';
 import type { TaskInfo, ClientSummary, TagRegistryEntry } from '../../../../models/task.model';
 import {
   buildEffectiveModelChip,
@@ -1064,6 +1065,17 @@ describe('buildEffectiveModelChip', () => {
     expect(chip.source).toBe('explicit');
     expect(chip.isDefault).toBe(false);
     expect(chip.label).toBe('o3');
+  });
+
+  it('renders the codex gpt-5.6 default on the card (AGT-2025)', () => {
+    // A codex task created after gpt-5.6 detection carries the gpt-5.6-sol id;
+    // the card must surface it verbatim, never the literal agent field.
+    const job = makeJob({ cliType: 'codex', model: MODEL_IDS.gpt56Sol, ownerClientId: 'local-default' });
+    const owner = makeOwner({ defaultCliType: 'claude', defaultModel: 'claude-opus-4-7' });
+    const chip = buildEffectiveModelChip(job, owner);
+    expect(chip.source).toBe('explicit');
+    expect(chip.label).toBe('gpt-5.6-sol');
+    expect(chip.cliLabel).toBe('Codex');
   });
 
   it('shows running execution model for in-progress jobs', () => {

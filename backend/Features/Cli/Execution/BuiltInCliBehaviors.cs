@@ -882,7 +882,15 @@ internal static class BuiltInCliBehaviors
         if (!string.IsNullOrWhiteSpace(configured)) return configured;
 
         configured = configuration["CodexCli:DefaultModel"]?.Trim();
-        return string.IsNullOrWhiteSpace(configured) ? CodexFallbackModel : configured;
+        if (!string.IsNullOrWhiteSpace(configured)) return configured;
+
+        // Follow the installed CLI: when discovery has detected a newer top
+        // model (gpt-5.6-*) it is the invocation default too, so a codex task
+        // that reaches spawn with no/foreign model runs on the current model
+        // rather than the gpt-5.5 floor (AGT-2025). Null => the account-valid
+        // gpt-5.5 baseline (AGT-1941).
+        var detected = ModelMetadataRegistry.DetectedCodexDefault;
+        return string.IsNullOrWhiteSpace(detected) ? CodexFallbackModel : detected;
     }
 
     private static bool IsForeignModelId(string? model)

@@ -823,6 +823,40 @@ _ = app.Services.GetRequiredService<AgentStudio.TaskAccess.ITaskAccessHost>()
     }
 }
 
+// Best-effort Codex model-catalog warm-up (AGT-2025). Publishing the detected
+// default (gpt-5.6-* when the installed CLI advertises it) into
+// ModelMetadataRegistry makes new-task creation resolve the current default
+// before the first UI catalog fetch. Fire-and-forget so a slow or absent codex
+// CLI never delays boot; discovery's own disk-cache TTL means a warm cache
+// skips the PTY spawn, and any failure just leaves the gpt-5.5 baseline in
+// place. Skipped under the test host and when explicitly opted out so the
+// integration suite never spawns a real codex process.
+if (!app.Environment.IsEnvironment("Test")
+    && !app.Environment.IsEnvironment("Testing")
+    && app.Configuration.GetValue("CodexModels:WarmupOnBoot", true))
+{
+    _ = Task.Run(async () =>
+    {
+        var codexWarmupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var router = app.Services.GetRequiredService<CliRouter>();
+            var catalog = await router.Get(CliTypes.Codex).GetModelCatalogAsync(false, cts.Token);
+            codexWarmupLogger.LogInformation(
+                "codex-model-warmup-complete models={ModelCount} detectedDefault={DetectedDefault} source={Source}",
+                catalog.Models?.Count ?? 0,
+                ModelMetadataRegistry.DetectedCodexDefault ?? "<none>",
+                catalog.Source);
+        }
+        catch (Exception ex)
+        {
+            codexWarmupLogger.LogInformation(
+                "codex-model-warmup-skipped reason={Reason}", ex.GetType().Name + ": " + ex.Message);
+        }
+    });
+}
+
 // Wire TaskTransitionService move events to atomically clear the per-project
 // runner's _activeJobId when the active job is moved out of 3-progress.
 // Without this, an external move (API or otherwise) leaves the runner pinned
