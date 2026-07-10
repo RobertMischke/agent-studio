@@ -20,7 +20,7 @@
 }
 .git-view__summary {
   display: flex;
-  gap: 12px;
+  gap: var(--studio-spacing-2);
   align-items: center;
   font-size: 12px;
   color: var(--studio-fg);
@@ -128,8 +128,8 @@
 .git-view__diff-toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
+  gap: var(--studio-spacing-2);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2); // AGT-2011: slimmer toolbar -> more diff height
   font-size: 11px;
   color: var(--studio-fg-dim);
   border-bottom: 1px solid var(--studio-border);
@@ -488,7 +488,7 @@
   flex: 1;
   flex-direction: row;
   align-items: stretch;
-  gap: 12px;
+  gap: var(--studio-spacing-2);
   min-height: 0;
 }
 .git-view--split .git-view__tree-col {
