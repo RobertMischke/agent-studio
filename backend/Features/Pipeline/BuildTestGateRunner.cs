@@ -25,15 +25,28 @@ public interface IBuildTestGateRunner
     Task<BuildTestGateResult> RunAsync(
         string repositoryPath,
         IReadOnlyList<string>? changedFiles,
+        BuildProfile? profile,
         PostStepMode mode,
         TimeSpan timeout,
         CancellationToken ct);
 }
 
 /// <summary>
-/// Deterministic build post-step. It compiles the repository itself, so the
-/// orchestrator never accepts a self-reported Success while the committed code
-/// is broken.
+/// Deterministic build/test post-step. It verifies the repository itself, so the
+/// orchestrator never accepts a self-reported Success while the committed code is
+/// broken.
+///
+/// <para>
+/// The verify commands are <b>derived per project</b> by
+/// <see cref="VerifyCommandPlanner"/> instead of hardcoded: an explicit build
+/// profile is the override, otherwise the commands come from the repo layout
+/// (bare <c>dotnet build</c>/<c>dotnet test</c> for a root <c>.sln</c>/<c>.csproj</c>,
+/// <c>npm</c> scripts for a <c>package.json</c>). When nothing is derivable the
+/// gate runs without a build check and says so in the verdict, rather than fail
+/// against a path that does not exist (the TE-2 / AGT-2065 lesson: the old
+/// hardcoded <c>backend/OrchestratorApi.csproj</c> broke on every project with a
+/// different layout).
+/// </para>
 /// </summary>
 public sealed class BuildTestGateRunner : IBuildTestGateRunner
 {
@@ -55,73 +68,118 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     public async Task<BuildTestGateResult> RunAsync(
         string repositoryPath,
         IReadOnlyList<string>? changedFiles,
+        BuildProfile? profile,
         PostStepMode mode,
         TimeSpan timeout,
         CancellationToken ct)
     {
         if (mode == PostStepMode.Off)
-        {
-            return new BuildTestGateResult(
-                BuildTestGateVerdict.Skipped, null, 0, "", "mode=off",
-                RanBackendBuild: false, RanFrontendBuild: false);
-        }
+            return Skipped("mode=off");
 
         if (!Directory.Exists(repositoryPath))
+            return Skipped($"repository not found: {repositoryPath}");
+
+        if (changedFiles is { Count: > 0 } && !HasCodeDiff(changedFiles))
+            return Skipped("no code diff");
+
+        // Derive the verify set per project rather than hardcoding a command.
+        var plan = VerifyCommandPlanner.Plan(repositoryPath, profile);
+        if (plan.IsEmpty)
         {
+            // Honest fallback: no build profile, no root .sln/.csproj, no usable
+            // package.json scripts. Run the gate without a build check and say so,
+            // instead of failing against a path that does not exist.
+            _logger.LogInformation(
+                "BuildTestGateRunner: no verify commands derivable for {Repo}; gate runs without a build check",
+                repositoryPath);
             return new BuildTestGateResult(
-                BuildTestGateVerdict.Skipped, null, 0, "", $"repository not found: {repositoryPath}",
+                BuildTestGateVerdict.Skipped, null, 0, "", "no verify commands derivable",
                 RanBackendBuild: false, RanFrontendBuild: false);
         }
 
-        if (changedFiles is { Count: > 0 } && !HasCodeDiff(changedFiles))
-        {
-            return new BuildTestGateResult(
-                BuildTestGateVerdict.Skipped, null, 0, "", "no code diff",
-                RanBackendBuild: false, RanFrontendBuild: false);
-        }
+        // Node commands scoped to a subdir only run when a changed file touches
+        // that subdir (preserves the old "frontend build only if frontend
+        // changed" optimization); root-level commands run once past the diff gate.
+        var toRun = plan.Commands.Where(c => ShouldRunForChange(c, changedFiles)).ToList();
+        if (toRun.Count == 0)
+            return Skipped($"no verify commands apply to the changed files ({plan.Source})");
 
         var sw = Stopwatch.StartNew();
         var output = new BoundedOutput(MaxOutputLines);
-        var backendExitCode = await RunProcessAsync(
-            repositoryPath,
-            "dotnet",
-            ["build", Path.Combine("backend", "OrchestratorApi.csproj")],
-            timeout,
-            output,
-            ct);
-        if (backendExitCode != 0)
-        {
-            sw.Stop();
-            var verdict = mode == PostStepMode.Fail ? BuildTestGateVerdict.Fail : BuildTestGateVerdict.Warn;
-            return new BuildTestGateResult(verdict, backendExitCode, sw.ElapsedMilliseconds,
-                output.Text, $"dotnet build exit {backendExitCode?.ToString() ?? "n/a"}", true, false);
-        }
+        output.AppendLine($"# verify plan: {plan.Source} ({toRun.Count} command(s))");
 
-        var shouldRunFrontend = changedFiles == null || changedFiles.Any(IsFrontendPath);
-        if (shouldRunFrontend && Directory.Exists(Path.Combine(repositoryPath, "frontend")))
+        var ranBackend = false;
+        var ranFrontend = false;
+
+        foreach (var cmd in toRun)
         {
-            var frontendRemaining = Remaining(timeout, sw.Elapsed);
-            var frontendExitCode = await RunProcessAsync(
-                Path.Combine(repositoryPath, "frontend"),
-                OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh",
-                OperatingSystem.IsWindows()
-                    ? ["/c", "npm run build"]
-                    : ["-c", "npm run build"],
-                frontendRemaining,
-                output,
-                ct);
-            if (frontendExitCode != 0)
+            var workingDir = string.IsNullOrEmpty(cmd.WorkingSubdir)
+                ? repositoryPath
+                : Path.Combine(repositoryPath, cmd.WorkingSubdir);
+            if (!Directory.Exists(workingDir))
+            {
+                output.AppendLine($"! skipped {Describe(cmd)} (missing directory)");
+                continue;
+            }
+
+            // Node -> frontend flag; dotnet and verbatim build-profile commands
+            // -> backend flag, so the log line still shows the gate did real work.
+            if (cmd.Ecosystem == VerifyEcosystem.Node) ranFrontend = true;
+            else ranBackend = true;
+
+            var exit = await RunShellAsync(workingDir, cmd.Command, Remaining(timeout, sw.Elapsed), output, ct);
+            if (exit != 0)
             {
                 sw.Stop();
                 var verdict = mode == PostStepMode.Fail ? BuildTestGateVerdict.Fail : BuildTestGateVerdict.Warn;
-                return new BuildTestGateResult(verdict, frontendExitCode, sw.ElapsedMilliseconds,
-                    output.Text, $"frontend build exit {frontendExitCode?.ToString() ?? "n/a"}", true, true);
+                return new BuildTestGateResult(verdict, exit, sw.ElapsedMilliseconds,
+                    output.Text, $"{Describe(cmd)} exit {exit?.ToString() ?? "n/a"}", ranBackend, ranFrontend);
             }
         }
 
         sw.Stop();
         return new BuildTestGateResult(BuildTestGateVerdict.Ok, 0, sw.ElapsedMilliseconds,
-            output.Text, "build gate passed", true, shouldRunFrontend);
+            output.Text, $"verify gate passed ({plan.Source})", ranBackend, ranFrontend);
+    }
+
+    private static BuildTestGateResult Skipped(string reason) =>
+        new(BuildTestGateVerdict.Skipped, null, 0, "", reason,
+            RanBackendBuild: false, RanFrontendBuild: false);
+
+    /// <summary>
+    /// Whether a derived command applies to this change set. A null change list is
+    /// conservative (run everything). A node command scoped to a subdir runs only
+    /// when a changed file lives under that subdir; every other command runs once
+    /// the top-level code-diff gate has passed.
+    /// </summary>
+    private static bool ShouldRunForChange(VerifyCommand cmd, IReadOnlyList<string>? changedFiles)
+    {
+        if (changedFiles is null) return true;
+        if (cmd.Ecosystem != VerifyEcosystem.Node || string.IsNullOrEmpty(cmd.WorkingSubdir))
+            return true;
+
+        var prefix = cmd.WorkingSubdir.Replace('\\', '/').TrimEnd('/') + "/";
+        return changedFiles.Any(f =>
+            f.Replace('\\', '/').StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string Describe(VerifyCommand cmd)
+    {
+        var where = string.IsNullOrEmpty(cmd.WorkingSubdir) ? "" : $" ({cmd.WorkingSubdir})";
+        return $"`{cmd.Command}`{where}";
+    }
+
+    private Task<int?> RunShellAsync(
+        string workingDirectory,
+        string command,
+        TimeSpan timeout,
+        BoundedOutput output,
+        CancellationToken ct)
+    {
+        var (fileName, args) = OperatingSystem.IsWindows()
+            ? ("cmd.exe", (IReadOnlyList<string>)["/c", command])
+            : ("/bin/sh", (IReadOnlyList<string>)["-c", command]);
+        return RunProcessAsync(workingDirectory, fileName, args, timeout, output, ct);
     }
 
     internal static bool HasCodeDiff(IReadOnlyList<string> changedFiles)
@@ -142,9 +200,6 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         var ext = Path.GetExtension(normalized);
         return CodeExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase);
     }
-
-    private static bool IsFrontendPath(string path)
-        => path.Replace('\\', '/').StartsWith("frontend/", StringComparison.OrdinalIgnoreCase);
 
     private async Task<int?> RunProcessAsync(
         string workingDirectory,

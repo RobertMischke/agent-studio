@@ -125,6 +125,19 @@ Two cases the dialog doesn't cover, still documented in [onboard-a-project.md](.
 
 That's the whole onboarding step: **register the project, and (if you want the project wiki) enable a wiki-writing pipeline step.** There is no separate "bootstrap the wiki" action and no "not-onboarded" state to clear. The fixed **Workstream** frame (the five immutable areas plus their landing pages, under the project's `docs/engineering-workstream/`) is *self-provisioned* - it is materialized automatically the first time a wiki-writing step (`post-wiki-maintenance` or `post-wiki-learnings`) runs for the project, then completed idempotently on later runs and never overwritten. Frame pages default to English for public / open-source repos; set `WorkstreamFramePublic` to `false` in `project-settings.json` to seed a localized frame. Details: [onboard-a-project.md](./onboard-a-project.md#the-workstream-wiki-frame-is-self-provisioned) and the frame itself in [engineering-workstream.md](../../concepts/engineering-workstream.md).
 
+### Onboarding checklist: registry + working directory + build profile belong together
+
+Three things describe one project and should be decided in the same sitting. Skipping the third is the trap that broke a real onboarding (a fresh repo escalated its review because the gate ran a Studio-specific build command that did not exist there - AGT-1919 / TE-2):
+
+1. **Registry entry** - the project registration itself (`POST /api/projects`). Without it there is no board column and no runner.
+2. **Working directory** (`rootPath`, and `RepositoryPath` when the repo root differs from the CLI working dir) - where the CLI runs and where Git status/diff resolve. Without it the project has no auto-pickup runner and the mode toggle won't work.
+3. **Build profile / verify gate** - *how this project is verified*. You usually get this for free: the deterministic build/test gate (`post-build-test-gate`) **derives** its verify commands from the repo layout, so there is nothing to configure for a conventional stack:
+   - a `.sln`, `.slnx`, or `.csproj` at the **repo root** -> bare `dotnet build` + `dotnet test` (auto-discovery, no hardcoded project path);
+   - a `package.json` (repo root or one level down, e.g. `frontend/`) -> `npm run build` / `npm test` / `npm run lint`, but only for the scripts that manifest actually declares;
+   - a repo with both -> both.
+
+   If nothing is derivable (no root solution/project, no usable npm scripts), the gate **runs without a build check and records `no verify commands derivable`** in its verdict - it does not fail against a path that does not exist. When your project needs a non-conventional command (a `make` target, a monorepo build, a nested solution), declare an explicit **build profile** with `PUT /api/projects/{project}/build-profile` (`buildCmds` / `testCmds`); those commands are the override and take precedence over the derivation. See [onboard-a-project.md](./onboard-a-project.md) for the build-profile fields.
+
 ## 4. Run your first task
 
 Full walkthrough, including what to queue and what to watch for: [your-first-task.md](./your-first-task.md). Short version:

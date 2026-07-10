@@ -2566,8 +2566,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         BuildTestGateResult result;
         try
         {
+            // The declared build profile (if any) is the verify-command override;
+            // otherwise the runner derives the commands from the repo layout.
             result = await _buildTestGateRunner.RunAsync(
-                repoPath, changedFiles, mode, TimeSpan.FromSeconds(timeoutSeconds), ct);
+                repoPath, changedFiles, settings?.BuildProfile, mode, TimeSpan.FromSeconds(timeoutSeconds), ct);
         }
         catch (Exception ex)
         {

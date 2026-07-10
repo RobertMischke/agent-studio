@@ -208,6 +208,7 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
         public Task<BuildTestGateResult> RunAsync(
             string repositoryPath,
             IReadOnlyList<string>? changedFiles,
+            BuildProfile? profile,
             PostStepMode mode,
             TimeSpan timeout,
             CancellationToken ct) => Task.FromResult(_result);
