@@ -63,6 +63,15 @@
               <span aria-hidden="true">{{ mb.icon }}</span> {{ mb.label }}
             </span>
           }
+          @if (headerModel(); as model) {
+            <span class="detail__model-chip"
+                  data-testid="detail-model-chip"
+                  [cacTooltip]="model">{{ headerModelLabel() }}
+              @if (thinkingLevelIndicator(); as level) {
+                <app-thinking-level-indicator [indicator]="level" testId="detail-thinking-level" />
+              }
+            </span>
+          }
           <span class="detail__meta-item"
                 data-testid="detail-created-at"
                 [cacTooltip]="createdAtTooltip()">⏱ erstellt {{ relativeCreated() }}</span>

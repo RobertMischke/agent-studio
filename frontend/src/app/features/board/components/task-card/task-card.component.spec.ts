@@ -1131,6 +1131,39 @@ describe('TaskCardComponent (smoke)', () => {
 });
 
 describe('buildEffectiveModelChip', () => {
+  it('shows the effective run thinking level and strengthens a configured mismatch', () => {
+    const job = makeJob({
+      cliType: 'codex',
+      model: 'gpt-5.6-sol',
+      thinkingLevel: 'ultra',
+      execution: {
+        jobId: 'task-1', taskKey: 'test::task-1', processId: 1, startedAt: '2026-07-11T00:00:00Z',
+        status: 'completed', exitCode: 0, durationSeconds: 12,
+        model: 'gpt-5.6-sol', thinkingLevel: 'medium', runOutcome: 'success',
+      },
+    });
+
+    const chip = buildEffectiveModelChip(job, makeOwner());
+
+    expect(chip.thinkingLevel).toMatchObject({
+      short: 'm',
+      effective: 'medium',
+      configured: 'ultra',
+      differsFromConfigured: true,
+    });
+    expect(chip.tooltip.body).toContain('Thinking level:</b> medium');
+    expect(chip.tooltip.body).toContain('Configured thinking level:</b> ultra');
+  });
+
+  it('keeps a configured/default thinking level quiet before the first run', () => {
+    const chip = buildEffectiveModelChip(
+      makeJob({ cliType: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'high', execution: null }),
+      makeOwner(),
+    );
+
+    expect(chip.thinkingLevel).toMatchObject({ short: 'h', effective: 'high', differsFromConfigured: false });
+  });
+
   it('shows a visible quota-fallback badge with model and reason', () => {
     const job = makeJob({
       cliType: 'claude',

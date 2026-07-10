@@ -51,6 +51,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 import { TaskStatusPopoverDirective } from '../../../../components/task-status-card';
 import { MenuComponent, MenuItemClickEvent } from '../../../../components/menu';
 import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
+import { ThinkingLevelIndicatorComponent } from '../../../../components/thinking-level-indicator/thinking-level-indicator.component';
 import { TokenPopoverDirective } from './token-popover.directive';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
@@ -69,7 +70,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ThinkingLevelIndicatorComponent],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's

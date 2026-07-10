@@ -1,0 +1,27 @@
+:host {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.thinking-level {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: var(--studio-card-pill-height);
+  padding: 0 var(--studio-spacing-1);
+  border: 1px solid var(--studio-border);
+  border-radius: 999px;
+  color: var(--studio-fg-dim);
+  background: transparent;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.thinking-level--override {
+  color: var(--studio-on-accent);
+  border-color: var(--studio-accent);
+  background: var(--studio-accent);
+}

@@ -26,6 +26,9 @@ import {
   primaryActionFor,
 } from '../../state/triage-actions.model';
 import type { LandedState } from '../../../git';
+import { buildThinkingLevelIndicator } from '../../../../services/thinking-level.util';
+import { shortModelName } from '../../../../services/format.util';
+import { ThinkingLevelIndicatorComponent } from '../../../../components/thinking-level-indicator/thinking-level-indicator.component';
 /**
  * Top header of the job-detail view: back button, editable title,
  * state pill, and — top-right — the lane's primary triage action plus
@@ -39,12 +42,20 @@ import type { LandedState } from '../../../git';
   selector: 'app-detail-header',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent],
+  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent, ThinkingLevelIndicatorComponent],
   templateUrl: './detail-header.component.html',
   styleUrl: './detail-header.component.scss'
 })
 export class DetailHeaderComponent {
   readonly info = input.required<TaskInfo>();
+  readonly headerModel = computed(() => {
+    const info = this.info();
+    return info.execution?.model ?? info.model ?? null;
+  });
+  readonly headerModelLabel = computed(() => shortModelName(this.headerModel()));
+  readonly thinkingLevelIndicator = computed(() =>
+    buildThinkingLevelIndicator(this.info().execution, this.info().thinkingLevel, this.headerModel())
+  );
   readonly editingTitle = input(false);
   readonly titleDraft = input<string>('');
   readonly savingTitle = input(false);

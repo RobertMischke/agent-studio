@@ -6,6 +6,7 @@ import type { MenuItem } from '../../../../components/menu';
 import type { AutoReviewStatusView } from '../../../../services/auto-review-status.store';
 import { cliTypeIcon, cliTypeLabel, shortModelName, taskModeIcon, taskModeLabel } from '../../../../services/format.util';
 import { shouldShowFailureToast } from '../../../task-detail/services/run-outcome.util';
+import { buildThinkingLevelIndicator, type ThinkingLevelIndicator } from '../../../../services/thinking-level.util';
 
 export interface TaskTypeChip {
   kind: string;
@@ -292,6 +293,7 @@ export interface EffectiveModelChip {
   source: EffectiveModelSource;
   isDefault: boolean;
   tooltip: StructuredTooltip;
+  thinkingLevel: ThinkingLevelIndicator | null;
 }
 
 const CLI_TYPES_SET = new Set(['claude', 'codex', 'gemini']);
@@ -360,9 +362,14 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
     isDefault = false;
   }
 
-  const tooltip = buildModelTooltip(job, owner, source, ownerCli, ownerModel);
+  const thinkingLevel = buildThinkingLevelIndicator(
+    job.execution,
+    job.thinkingLevel ?? owner.defaultThinkingLevel,
+    fullModel,
+  );
+  const tooltip = buildModelTooltip(job, owner, source, ownerCli, ownerModel, thinkingLevel);
 
-  return { icon, label, fullModel, cliLabel: cliLbl, source, isDefault, tooltip };
+  return { icon, label, fullModel, cliLabel: cliLbl, source, isDefault, tooltip, thinkingLevel };
 }
 
 function buildModelTooltip(
@@ -371,6 +378,7 @@ function buildModelTooltip(
   source: EffectiveModelSource,
   ownerCli: CliType | null,
   ownerModel: string | null,
+  thinkingLevel: ThinkingLevelIndicator | null,
 ): StructuredTooltip {
   const lines: string[] = [];
 
@@ -385,6 +393,12 @@ function buildModelTooltip(
 
   lines.push(`<b>Model:</b> ${escapeHtml(effectiveModel ?? 'none')}${source === 'default' ? ' <i>(client default)</i>' : source === 'run' ? ' <i>(running)</i>' : ''}`);
   lines.push(`<b>CLI:</b> ${effectiveCli ? escapeHtml(cliTypeLabel(effectiveCli)) : 'none'}${!jobCli && ownerCli ? ' <i>(client default)</i>' : ''}`);
+  if (thinkingLevel) {
+    lines.push(`<b>Thinking level:</b> ${escapeHtml(thinkingLevel.effective)}${thinkingLevel.differsFromConfigured ? ' <i>(effective)</i>' : ''}`);
+    if (thinkingLevel.differsFromConfigured) {
+      lines.push(`<b>Configured thinking level:</b> ${escapeHtml(thinkingLevel.configured ?? 'none')}`);
+    }
+  }
   lines.push(`<b>Agent:</b> ${escapeHtml(job.agent || 'none')} <i>(pickup permission)</i>`);
   if (source === 'fallback') lines.push(`<b>Reason:</b> quota (${escapeHtml(job.quotaFallback?.reason ?? 'cap reached')})`);
 

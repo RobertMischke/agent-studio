@@ -43,6 +43,31 @@ const taskInfo: TaskInfo = {
  * stable across template tweaks.
  */
 describe('DetailHeaderComponent (smoke)', () => {
+  it('renders the last run effective thinking level beside the model', async () => {
+    await TestBed.configureTestingModule({
+      imports: [DetailHeaderComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(DetailHeaderComponent);
+    fixture.componentRef.setInput('info', {
+      ...taskInfo,
+      model: 'gpt-5.6-sol',
+      thinkingLevel: 'ultra',
+      execution: {
+        jobId: taskInfo.id, taskKey: taskInfo.taskKey, processId: 7, startedAt: '2026-07-11T00:00:00Z',
+        status: 'completed', exitCode: 0, durationSeconds: 10,
+        model: 'gpt-5.6-sol', thinkingLevel: 'medium', runOutcome: 'success',
+      },
+    });
+    fixture.detectChanges();
+
+    const level = fixture.nativeElement.querySelector('[data-testid="detail-thinking-level"]') as HTMLElement;
+    expect(level.textContent?.trim()).toBe('m');
+    expect(level.dataset['thinkingLevel']).toBe('medium');
+    expect(level.dataset['thinkingLevelOverride']).toBe('true');
+    expect(fixture.nativeElement.querySelector('[data-testid="detail-model-chip"]')?.textContent).toContain('gpt-5.6-sol');
+  });
+
   it('compiles + instantiates without throwing', async () => {
     await TestBed.configureTestingModule({
       imports: [DetailHeaderComponent],
