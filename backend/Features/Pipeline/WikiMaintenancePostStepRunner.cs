@@ -37,20 +37,29 @@ public sealed partial class WikiMaintenancePostStepRunner
         _logger = logger;
     }
 
-    public WikiMaintenanceResult Run(TaskInfo task, WatchPathEntry entry, DateTime? nowUtc = null)
+    public WikiMaintenanceResult Run(
+        TaskInfo task,
+        WatchPathEntry entry,
+        DateTime? nowUtc = null,
+        EngineeringWorkstreamFrameLanguage? frameLanguage = null)
     {
         var now = nowUtc ?? DateTime.UtcNow;
         if (string.IsNullOrWhiteSpace(entry.RootPath))
             return new WikiMaintenanceResult(WikiMaintenanceVerdict.Skipped, "project root is not configured");
 
-        var wikiRoot = Path.Combine(entry.RootPath, "docs", "wiki", "common-problems");
-        if (!Directory.Exists(wikiRoot))
-            return new WikiMaintenanceResult(WikiMaintenanceVerdict.Skipped, "project common-problems wiki is missing");
+        // Self-provisioning (AGT-2024): ensure the Workstream frame exists before
+        // this step writes. Activating the step for a project is what creates the
+        // frame - there is no separate onboarding gate. Idempotent and never
+        // overwriting, so it is safe to call on every run.
+        var docsRoot = Path.Combine(entry.RootPath, "docs");
+        var language = frameLanguage ?? WorkstreamFrameLanguageResolver.Resolve(entry.Name, isPublicOverride: null);
+        EnsureWorkstreamFrame(docsRoot, language, task, entry);
 
         var signal = DetectSignal(task);
         if (signal == null)
             return new WikiMaintenanceResult(WikiMaintenanceVerdict.Skipped, "no recurring-problem signal found");
 
+        var wikiRoot = Path.Combine(docsRoot, "wiki", "common-problems");
         try
         {
             var problemDir = Path.Combine(wikiRoot, signal.Slug);
@@ -76,6 +85,23 @@ public sealed partial class WikiMaintenancePostStepRunner
                 "Wiki maintenance failed for {Project}/{JobId} slug={Slug}",
                 entry.Name, task.Id, signal.Slug);
             return new WikiMaintenanceResult(WikiMaintenanceVerdict.Error, ex.Message, signal.Slug);
+        }
+    }
+
+    /// <summary>
+    /// Runs the shared ensure-frame primitive and logs only when it actually
+    /// materialized (or failed to materialize) frame shells, so a warm project
+    /// where the frame already exists stays quiet.
+    /// </summary>
+    private void EnsureWorkstreamFrame(
+        string docsRoot, EngineeringWorkstreamFrameLanguage language, TaskInfo task, WatchPathEntry entry)
+    {
+        var result = EngineeringWorkstreamFrameSeeder.EnsureFrame(docsRoot, language);
+        if (result.CreatedAnything || result.Failed.Count > 0)
+        {
+            _logger.LogInformation(
+                "Workstream frame ensured for {Project}/{JobId} lang={Language} {Summary} created=[{Created}]",
+                entry.Name, task.Id, language, result.Summary, string.Join(", ", result.Created));
         }
     }
 

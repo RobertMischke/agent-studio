@@ -99,16 +99,38 @@ public sealed class WikiLearningsPostStepRunnerTests : IDisposable
     }
 
     [Fact]
-    public void Run_WhenProjectHasNoWiki_Skips()
+    public void Run_WhenDocsEmpty_SelfProvisionsFrameThenWritesLearnings()
     {
-        var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "no-wiki")).FullName;
+        // Self-provisioning (AGT-2024): an enabled step no longer skips because
+        // docs/wiki is missing. It seeds the Workstream frame and then writes
+        // normally, bootstrapping its own docs/wiki/learnings home.
+        var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "empty-docs")).FullName;
         var runner = NewRunner();
 
         var result = runner.Run(Task(), Entry(projectRoot), SimpleRun("accept"),
             new DateTime(2026, 06, 08, 10, 0, 0, DateTimeKind.Utc));
 
-        Assert.Equal(WikiLearningsVerdict.Skipped, result.Verdict);
-        Assert.False(Directory.Exists(LearningsRoot(projectRoot)));
+        Assert.Equal(WikiLearningsVerdict.Created, result.Verdict);
+        Assert.True(
+            File.Exists(Path.Combine(projectRoot, "docs", "engineering-workstream", "00-overview.html")),
+            "frame overview shell was not seeded");
+        Assert.True(File.Exists(Path.Combine(LearningsRoot(projectRoot), "ass-1694.md")),
+            "learnings page was not written");
+    }
+
+    [Fact]
+    public void Run_HonoursLocalizedFrameLanguage()
+    {
+        var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "localized")).FullName;
+        var runner = NewRunner();
+
+        runner.Run(Task(), Entry(projectRoot), SimpleRun("accept"),
+            new DateTime(2026, 06, 08, 10, 0, 0, DateTimeKind.Utc),
+            frameLanguage: EngineeringWorkstreamFrameLanguage.German);
+
+        var overview = File.ReadAllText(
+            Path.Combine(projectRoot, "docs", "engineering-workstream", "00-overview.html"));
+        Assert.Contains("Fester Rahmen", overview);
     }
 
     private static WikiLearningsRun SimpleRun(string verdict) => new(

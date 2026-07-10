@@ -107,13 +107,18 @@ relative paths plus rules over them, which is exactly what survives a relocation
 
 ## 7. Slices
 
-- **EW-1 (this slice):** the fixed five-area frame — immutable folders and
+- **EW-1:** the fixed five-area frame - immutable folders and
   landing shells, the self-contained HTML orientation shells, the tree
   `immutable` flag, server-side move/delete/save enforcement, and navigation. No
   automated authoring of subpage content yet.
-- **Later:** seeding the frame into other project wikis, subpage authoring
-  conventions per area, and wiring signals/decisions/log entries from pipeline
-  output.
+- **AGT-2024 (this slice): self-provisioning the frame into target projects.**
+  The frame is materialized into a watched project's `docs/` automatically, the
+  first time a wiki-writing pipeline step runs for it. There is no manual
+  bootstrap action and no "onboarded" flag (operator decision 2026-07-10):
+  activating a wiki-writing step is what creates the structure. See
+  [§9](#9-self-provisioning-agt-2024).
+- **Later:** subpage authoring conventions per area, and wiring
+  signals/decisions/log entries from pipeline output (EW-2 collector, curator).
 
 ## 8. Display name and tree position
 
@@ -133,3 +138,35 @@ frame's identity so it stays relocatable (see [§6](#6-agt-1984--relocation-into
   `ProjectDocsService.CompareTreeNodes` (`EngineeringWorkstreamFrame.IsFrameRoot`
   sorts ahead of all other `docs/` siblings), so the Workstream always leads the
   wiki content tree regardless of alphabetical order.
+
+## 9. Self-provisioning (AGT-2024)
+
+The frame is not something an operator bootstraps by hand, and there is no
+"not onboarded" state to leave. Instead the frame is **self-provisioned**: when a
+wiki-writing pipeline step is active for a project, that step creates the frame
+structure the first time it runs (operator decision 2026-07-10).
+
+- **The ensure-frame primitive.** `EngineeringWorkstreamFrameSeeder.EnsureFrame`
+  idempotently materializes the whole frame (the five area folders, their landing
+  shells, and the overview shell) into a target project's `docs/`. It only ever
+  creates the six known shells and their folders, so foreign files are always
+  untouched; it never overwrites an existing shell, so a partial frame is
+  completed and a full frame is a no-op; and it never throws, so a seed hiccup can
+  never break the step that called it.
+- **Wired into the steps.** Every wiki-writing step calls the primitive before its
+  own writes: today `WikiMaintenancePostStepRunner` and
+  `WikiLearningsPostStepRunner`, later the EW-2 collector and curator. Because the
+  step being enabled is the provisioning trigger, the old "skip when the project
+  has no wiki" guard is gone: an enabled step now bootstraps its own home under
+  `docs/`.
+- **Content source.** The seeded shells are rendered by
+  `EngineeringWorkstreamFrameContent` from `EngineeringWorkstreamFrame.Areas`, so
+  the seeded frame can never drift from the declared frame identity and meets the
+  same self-contained / both-themes / orientation-layout invariants as the
+  hand-authored EW-1 shells (`EngineeringWorkstreamFrameContentTests`).
+- **Language.** Frame pages for public / open-source repos are English throughout;
+  an internal project may opt into a localized frame. The choice is the
+  `ProjectSettings.WorkstreamFramePublic` setting with a heuristic default
+  (English), resolved by `WorkstreamFrameLanguageResolver`. The five area
+  identities (folder slugs and titles) stay a fixed English vocabulary in every
+  language; only the orientation copy is localized.

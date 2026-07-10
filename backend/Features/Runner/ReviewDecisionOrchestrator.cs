@@ -3276,7 +3276,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         WikiMaintenanceResult result;
         try
         {
-            result = _wikiMaintenance.Run(current, entry);
+            var frameLanguage = WorkstreamFrameLanguageResolver.Resolve(entry.Name, settings?.WorkstreamFramePublic);
+            result = _wikiMaintenance.Run(current, entry, frameLanguage: frameLanguage);
         }
         catch (Exception ex)
         {
@@ -3365,7 +3366,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         try
         {
             var run = BuildWikiLearningsRun(report, current, statusSummary, diffSummary);
-            result = _wikiLearnings.Run(current, entry, run);
+            var frameLanguage = WorkstreamFrameLanguageResolver.Resolve(entry.Name, settings?.WorkstreamFramePublic);
+            result = _wikiLearnings.Run(current, entry, run, frameLanguage: frameLanguage);
         }
         catch (Exception ex)
         {

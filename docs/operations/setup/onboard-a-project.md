@@ -80,8 +80,13 @@ Per-project preferences are persisted in `<TaskRepository>/project-settings.json
 | `AutoCommit` | Project settings drawer | `true` | Stamps the lane-transition commit when a run moves `3-progress -> 4-auto-review`. |
 | `OrchestratorModel` | Project settings drawer | `claude-opus-*` | Model the orchestrator uses when it decides on the user's behalf (re-issue / accept / escalate). |
 | `AutonomyLevel` | Project settings drawer | `2` (balanced) | ADR-0026 autonomy scale for the orchestrator-prep loop. |
+| `WorkstreamFramePublic` | `project-settings.json` | heuristic (English) | Language of the self-provisioned Workstream wiki frame (see below). `false` seeds a localized frame for an internal project. |
 
 `DefaultAgent` is **not** persisted per project today; the agent / CLI / model is chosen per job at create time. If you find yourself setting the same `cliType` on every task for a given project, raise that as a feature request rather than working around it in scripts.
+
+## The Workstream wiki frame is self-provisioned
+
+There is nothing to bootstrap by hand and no "onboard the wiki" step. The fixed **Workstream** frame (the five immutable areas plus their landing pages, under the project's `docs/engineering-workstream/`) is created automatically the first time a wiki-writing pipeline step runs for the project. Onboarding a project's wiki is therefore just: register the project (above) and enable a wiki-writing step (`post-wiki-maintenance` or `post-wiki-learnings` in the pipeline-step settings). On that step's first run the frame is materialized; later runs complete it idempotently and never overwrite existing pages. See [../../concepts/engineering-workstream.md](../../concepts/engineering-workstream.md) for the frame itself. Frame pages default to English for public / open-source repos; set `WorkstreamFramePublic` to `false` in `project-settings.json` to seed a localized frame.
 
 For the first task, follow [your-first-task.md](./your-first-task.md). The Task API skill ([../../.agents/skills/task-api/SKILL.md](../../../.agents/skills/task-api/SKILL.md)) is the right path when you script the creation rather than clicking through the dialog.
 
