@@ -30,6 +30,7 @@ import {
   buildPhaseBadge,
   buildPipelineDots,
   buildReviewBadge,
+  buildRunnerBadge,
   buildTagChips,
   buildTaskTypeChip,
   buildTokenBubble,
@@ -329,6 +330,13 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   readonly effectiveModelChip = computed(() =>
     buildEffectiveModelChip(this.job(), this.clients.resolve(this.job().ownerClientId))
   );
+
+  /**
+   * AGT-2003 runner badge next to the CLI badge: "→ <runner>" when a remote
+   * runner holds the run lease, a quiet "lokal" chip for an in-process run,
+   * null otherwise. See {@link buildRunnerBadge}.
+   */
+  readonly runnerBadge = computed(() => buildRunnerBadge(this.job()));
 
   readonly identity = computed(() => projectIdentity(this.job().projectName));
 

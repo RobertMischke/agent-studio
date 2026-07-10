@@ -991,6 +991,58 @@ describe('TaskCardComponent (smoke)', () => {
 
     fixture.destroy();
   });
+
+  // ── Runner badge (AGT-2003 — lokal vs remote next to the CLI badge) ─────
+
+  it('renders a remote runner badge next to the CLI badge for a leased run', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '3-progress',
+      execution: {
+        jobId: 'task-1', taskKey: 'test::task-1', processId: 4242,
+        startedAt: '2026-07-09T10:00:00Z', status: 'running',
+        exitCode: null, durationSeconds: null, model: 'claude-sonnet-4.5', runOutcome: null,
+      },
+      runner: {
+        runnerId: 'agent-runner-01@linux-host',
+        runnerName: 'agent-runner-01',
+        hostname: 'linux-host',
+        backendName: 'remote',
+        isRemote: true,
+        leaseId: 'lease-abc',
+        fencingToken: 7,
+        acquiredAt: '2026-07-09T10:00:00Z',
+      },
+    }));
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-runner"]') as HTMLElement | null;
+    expect(pill).not.toBeNull();
+    expect(pill?.getAttribute('data-runner-kind')).toBe('remote');
+    expect(pill?.className).toContain('task-card__runner-pill--remote');
+    expect(pill?.textContent).toContain('agent-runner-01');
+    expect(pill?.textContent).toContain('⇥');
+  });
+
+  it('renders a quiet "lokal" runner chip for an in-process run with no remote lease', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '3-progress',
+      execution: {
+        jobId: 'task-1', taskKey: 'test::task-1', processId: 4242,
+        startedAt: '2026-07-09T10:00:00Z', status: 'running',
+        exitCode: null, durationSeconds: null, model: null, runOutcome: null,
+      },
+      runner: null,
+    }));
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-runner"]') as HTMLElement | null;
+    expect(pill).not.toBeNull();
+    expect(pill?.getAttribute('data-runner-kind')).toBe('local');
+    expect(pill?.textContent?.trim()).toBe('lokal');
+  });
+
+  it('shows no runner chip on an idle (not-running) card', async () => {
+    const fixture = await renderCard(makeJob({ state: '2-ready', execution: null, runner: null }));
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-runner"]')).toBeNull();
+  });
 });
 
 describe('buildEffectiveModelChip', () => {

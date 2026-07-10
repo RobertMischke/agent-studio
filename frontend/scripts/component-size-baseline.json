@@ -19,10 +19,10 @@
       "total": 750
     },
     "src/app/features/board/components/task-card/task-card.component.ts": {
-      "typeScript": 442,
-      "template": 382,
-      "styles": 1242,
-      "total": 2066
+      "typeScript": 533,
+      "template": 435,
+      "styles": 1608,
+      "total": 2576
     },
     "src/app/features/board/components/task-column/task-column.ts": {
       "typeScript": 729,
@@ -107,6 +107,12 @@
       "template": 579,
       "styles": 1035,
       "total": 2812
+    },
+    "src/app/features/task-detail/components/protocol-pane/run-timeline/run-timeline.component.ts": {
+      "typeScript": 488,
+      "template": 264,
+      "styles": 224,
+      "total": 976
     },
     "src/app/features/task-detail/task-detail.ts": {
       "typeScript": 1510,

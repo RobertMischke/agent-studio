@@ -216,6 +216,15 @@
         }
         <span class="task-card__effective-model-name">{{ effectiveModelChip().label }}</span>
       </span>
+      @if (runnerBadge(); as rn) {
+        <span class="task-card__runner-pill"
+              [class]="'task-card__runner-pill--' + rn.kind"
+              data-testid="task-card-runner"
+              [attr.data-runner-kind]="rn.kind"
+              [cacTooltip]="rn.tooltip">
+          @if (rn.glyph) { <span class="task-card__runner-glyph" aria-hidden="true">{{ rn.glyph }}</span> }{{ rn.label }}
+        </span>
+      }
       @if (externalDoneBadge(); as edb) {
         <span class="task-card__external-pill"
               [cacTooltip]="edb.tooltip"

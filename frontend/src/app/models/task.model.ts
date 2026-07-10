@@ -320,6 +320,36 @@ export interface TaskInfo {
    * docs/concepts/out-of-band-task-completion.md §3.
    */
   externalCompletion?: ExternalCompletionInfo | null;
+
+  /**
+   * AGT-2003: runner holding this task's active run lease, folded on by the
+   * read overlay only while the task is `3-progress` and a lease is held; null
+   * otherwise. Mirrors backend `TaskInfo.Runner`. A remote runner acquires the
+   * run lease before it spawns its CLI (a local in-process run holds none), so
+   * a non-null value with `isRemote` is the signal the board card uses to show
+   * "→ <runner>" next to the CLI badge instead of the quiet local presentation.
+   */
+  runner?: TaskRunnerInfo | null;
+}
+
+/**
+ * Card-renderable projection of the runner that holds a task's active run lease
+ * (AGT-2003). Mirrors backend `TaskRunnerInfo`. Sourced from the in-memory
+ * run-lease record; `runnerName` + `isRemote` drive the badge, the lease id /
+ * fencing token ride along for the tooltip.
+ */
+export interface TaskRunnerInfo {
+  runnerId: string;
+  /** Human-facing runner name shown on the badge (e.g. `agent-runner-01`). */
+  runnerName: string;
+  hostname: string;
+  backendName: string;
+  /** True when the lease owner is a different runner than this backend — a remote host. */
+  isRemote: boolean;
+  leaseId: string;
+  fencingToken: number;
+  /** UTC ISO instant the active lease was acquired. */
+  acquiredAt: string;
 }
 
 /**

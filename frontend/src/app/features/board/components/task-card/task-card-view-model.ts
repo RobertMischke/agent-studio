@@ -998,6 +998,52 @@ export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
   }
 }
 
+export interface RunnerBadge {
+  /** `remote` renders the arrow + runner name; `local` renders the quiet "lokal" chip. */
+  kind: 'remote' | 'local';
+  /** Arrow glyph for the remote case; empty for local. */
+  glyph: string;
+  label: string;
+  tooltip: string;
+}
+
+/**
+ * AGT-2003 runner badge shown next to the CLI badge on a running card. A remote
+ * runner acquires the task's run lease (ADR-0060) before it spawns its CLI, so
+ * `job.runner.isRemote` means the work is executing on another host: render
+ * "→ <runner-name>". A local in-process run holds no run lease (it uses the disk
+ * pickup-lock), so a running Progress card with no remote lease renders a quiet
+ * "lokal" chip — the operator's "Abgleich im Stable Board" (lokal vs remote).
+ * Returns null on non-running cards so the board stays quiet everywhere else.
+ *
+ * Recognizable-pattern sibling of the git-state / branch-context signal
+ * (AGT-1984): a glyph + short label chip that reads at a glance.
+ */
+export function buildRunnerBadge(job: TaskInfo): RunnerBadge | null {
+  const running = job.state === TaskState.Progress && job.execution?.status === 'running';
+  const runner = job.runner ?? null;
+
+  if (runner && runner.isRemote) {
+    const name = (runner.runnerName || runner.runnerId || 'remote runner').trim();
+    const host = (runner.hostname || '').trim();
+    const parts = [`Executed by remote runner ${name}${host ? ` on ${host}` : ''}.`];
+    parts.push('This task is running on another host, not in-process (holds the run lease).');
+    return { kind: 'remote', glyph: '⇥', label: name, tooltip: parts.join('\n') };
+  }
+
+  // Local: only assert "lokal" while the card is genuinely running in-process
+  // (or a same-backend lease is held). Nothing to show once it stops.
+  if (running || runner) {
+    return {
+      kind: 'local',
+      glyph: '',
+      label: 'lokal',
+      tooltip: 'Running in-process on the local backend (no remote run lease held).',
+    };
+  }
+  return null;
+}
+
 export interface ExternalDoneBadge { label: string; tooltip: string; }
 
 /**

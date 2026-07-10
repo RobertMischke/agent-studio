@@ -283,6 +283,56 @@ export class RunTimelineComponent {
     this.runFilter.emit(r);
   }
 
+  /**
+   * AGT-2003 — which runner executed a run, for the run-detail header. The
+   * reliable signals are the live run lease (a remote runner holds it while it
+   * works; ADR-0060) and, historically, the out-of-band completion source a
+   * remote runner records when it hands a finished task back. Both attribute to
+   * the task's latest run, so earlier runs return null rather than guess. A
+   * local in-process run holds no lease and posts no external completion -> the
+   * latest still-running/just-finished run reads as "lokal".
+   */
+  runnerAttribution(r: RunRecord): { kind: 'remote' | 'local'; glyph: string; label: string; tooltip: string } | null {
+    const job = this.job();
+    if (!job) return null;
+    const runs = this.visibleRuns();
+    const isLatest = runs.length > 0 && runs[runs.length - 1].index === r.index;
+    if (!isLatest) return null;
+
+    const runner = job.runner ?? null;
+    if (runner && runner.isRemote) {
+      const name = (runner.runnerName || runner.runnerId || 'remote runner').trim();
+      const host = (runner.hostname || '').trim();
+      return {
+        kind: 'remote',
+        glyph: '⇥',
+        label: name,
+        tooltip: `Executed by remote runner ${name}${host ? ` on ${host}` : ''} (holds the run lease).`,
+      };
+    }
+
+    const ext = job.externalCompletion ?? null;
+    if (!runner && ext && (ext.source ?? '').trim()) {
+      const source = ext.source.trim();
+      return {
+        kind: 'remote',
+        glyph: '⇥',
+        label: source,
+        tooltip: `Handed back out-of-band by ${source} (remote runner / external source).`,
+      };
+    }
+
+    if (r.status === 'running' || runner) {
+      return {
+        kind: 'local',
+        glyph: '',
+        label: 'lokal',
+        tooltip: 'Executed in-process on the local backend (no remote run lease held).',
+      };
+    }
+    return null;
+  }
+
   intentLabel(intent: string): string {
     switch (intent) {
       case 'start': return 'start';

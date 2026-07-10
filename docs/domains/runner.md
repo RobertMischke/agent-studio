@@ -61,6 +61,12 @@ state.
   API only (fenced lease + heartbeat, git-origin checkout, log + artifact upload,
   external-completion). Owns no task state and never pushes git. Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../operations/setup/linux-runner-host.md).
+- `TaskRunnerService.ProjectRunnerBadge` + `TaskEndpointHelpers.WithRuntime`
+  (AGT-2003): read-time projection of the active run lease onto `TaskInfo.Runner`
+  for `3-progress` cards, so the board can show which runner executes a card
+  (remote `⇥ <runner>` from the lease owner vs a quiet `lokal` in-process run).
+  A remote runner acquires the run lease; the local in-process runner uses the
+  disk pickup-lock and holds none, which is exactly the lokal-vs-remote signal.
 
 ## Invariants
 

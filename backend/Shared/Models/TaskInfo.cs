@@ -292,6 +292,50 @@ public record TaskInfo
     /// <c>docs/concepts/out-of-band-task-completion.md</c> §3.
     /// </summary>
     public ExternalCompletionInfo? ExternalCompletion { get; init; }
+
+    /// <summary>
+    /// AGT-2003 — read-time projection of the runner holding this task's active
+    /// <b>run lease</b> (ADR-0060, <see cref="AgentStudio.Runner.RunLeaseService"/>).
+    /// Folded on by <c>TaskEndpointHelpers.WithRuntime</c> only while the task is
+    /// in <see cref="TaskStates.Progress"/> and a lease is held; null otherwise.
+    /// Never persisted to <c>task.json</c>. A remote runner acquires the run
+    /// lease before it spawns a CLI (the local in-process runner still uses the
+    /// disk pickup-lock and holds no run lease), so a non-null value with
+    /// <see cref="TaskRunnerInfo.IsRemote"/> is the signal the board card uses to
+    /// show "executed by &lt;runner&gt;" instead of a plain local run. Drives the
+    /// runner badge next to the CLI badge and the task-detail run header.
+    /// </summary>
+    public TaskRunnerInfo? Runner { get; init; }
+}
+
+/// <summary>
+/// Card-renderable projection of the runner that holds a task's active run lease
+/// (AGT-2003). Sourced from the in-memory run-lease record; the fencing token and
+/// lease id ride along for the tooltip / audit trail but the card only needs
+/// <see cref="RunnerName"/> and <see cref="IsRemote"/>.
+/// </summary>
+public record TaskRunnerInfo
+{
+    /// <summary>Stable runner id that acquired the lease (e.g. <c>dev@host</c> or a remote runner id).</summary>
+    public string RunnerId { get; init; } = "";
+    /// <summary>Human-facing runner name shown on the badge (e.g. <c>agent-runner-01</c>). Falls back to the id when unset.</summary>
+    public string RunnerName { get; init; } = "";
+    /// <summary>Host the runner runs on. Empty when the lease did not carry one.</summary>
+    public string Hostname { get; init; } = "";
+    /// <summary>Backend-name the lease owner reported (dev / stable / a remote backend name).</summary>
+    public string BackendName { get; init; } = "";
+    /// <summary>
+    /// True when the lease owner is a different runner than this backend's own
+    /// identity — i.e. the task is executing on a remote host, not in-process.
+    /// The card shows the remote runner name only when this is true.
+    /// </summary>
+    public bool IsRemote { get; init; }
+    /// <summary>Opaque lease id of the active grant (audit / tooltip only).</summary>
+    public string LeaseId { get; init; } = "";
+    /// <summary>Monotonic fencing token of the active grant (audit / tooltip only).</summary>
+    public long FencingToken { get; init; }
+    /// <summary>UTC instant the active lease was acquired.</summary>
+    public DateTime AcquiredAt { get; init; }
 }
 
 /// <summary>

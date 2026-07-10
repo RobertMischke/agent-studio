@@ -115,11 +115,20 @@ internal static class TaskEndpointHelpers
                 outcomeIssue,
                 DateTime.UtcNow)
             : null;
+        // AGT-2003: project the active run-lease owner onto the card while the
+        // task is in-progress. Same Progress-lane gate + O(1) in-memory peek as
+        // RunActivity above, so the JobsEndpointPerfTests contract still holds. A
+        // remote runner acquires this lease; a plain local in-process run holds
+        // none, so this stays null and the card shows the quiet local presentation.
+        TaskRunnerInfo? runner = job.State == TaskStates.Progress
+            ? runners.ResolveRunnerBadge(job.TaskKey)
+            : null;
         return job with
         {
             Execution = exec,
             OutcomeIssue = outcomeIssue,
             RunActivity = runActivity,
+            Runner = runner,
             AutoLoop = loop == null ? null : new AutoLoopSnapshot
             {
                 Iteration = loop.IterationCount,
