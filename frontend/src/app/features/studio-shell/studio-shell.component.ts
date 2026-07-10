@@ -58,6 +58,7 @@ import { StudioPanelStateService } from './services/studio-panel-state.service';
 import { ExplorerSectionsService } from './services/explorer-sections.service';
 import { buildProjectSidebarRows, type ProjectSidebarRow } from './studio-shell.project-rows';
 import { StudioTab, studioTabKey } from './studio-shell.types';
+import { GlobalSearchComponent } from './components/global-search/global-search.component';
 
 /** Canonicalise project storage paths so titlebar workspace lookup survives
  * slash style, trailing separator, and case differences. */
@@ -94,7 +95,7 @@ const SETTINGS_WORKSPACES_COLLAPSED_KEY = 'atp.studio.settingsWorkspacesCollapse
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, StudioSidebarHeaderComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, SegmentedControlComponent, ProjectDetailComponent],
+  imports: [FormsModule, StudioIconComponent, StudioSidebarHeaderComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, SegmentedControlComponent, ProjectDetailComponent, GlobalSearchComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -155,6 +156,7 @@ export class StudioShellComponent {
   readonly activityBarSide = this.panelState.activityBarSide;
   readonly chatRailOpen = this.panelState.chatRailOpen;
   readonly settingsWorkspacesCollapsed = signal(this.readSettingsWorkspacesCollapsed());
+  readonly globalSearchOpen = signal(false);
 
   /** Settings segmented-control option sets (label/value pairs). */
   readonly themeOptions: readonly SegmentedOption<'dark' | 'light'>[] = [
@@ -626,6 +628,7 @@ export class StudioShellComponent {
 
   /** All jobs, grouped under their project for the Explorer panel. */
   readonly grouped = this.jobService.grouped;
+  readonly globalSearchTasks = computed(() => flattenGrouped(this.grouped()));
 
   /**
    * Concrete workspace shown in the titlebar breadcrumb. The breadcrumb no

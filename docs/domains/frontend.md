@@ -7,6 +7,10 @@ Use this when a change touches Angular code, visual design, task-detail,
 kanban, project pages, frontend polling, model selectors, menus, or Playwright
 coverage.
 
+## Global Search
+
+The title-bar search opens a Ctrl+K command palette. Task matches are ranked immediately from the in-memory board snapshot; commit and working-branch file matches come from `GET /api/search?q=...&domains=tasks,commits,files`. Results are grouped by domain and carry project identity. Commit results open the diff surface, documentation files open the Wiki, and other files open the project Git view. Queries shorter than two characters do not search, and a failed domain reports an error without hiding successful domains.
+
 ## Entry Points
 
 - [frontend/AGENTS.md](../../frontend/AGENTS.md) contains frontend-scoped agent
