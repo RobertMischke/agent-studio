@@ -141,7 +141,9 @@
         defaults above.
       </p>
     </header>
-    <article class="ps-settings__card" data-testid="project-settings-parallel">
+    <div class="ps-settings__execution-grid">
+      <app-execution-assignment-card [projectName]="projectName()" />
+      <article class="ps-settings__card" data-testid="project-settings-parallel">
       <div class="ps-settings__card-head">
         <span class="ps-settings__card-icon" aria-hidden="true">⇉</span>
         <span class="ps-settings__card-title">Parallel execution</span>
@@ -161,7 +163,8 @@
           }
         </select>
       </label>
-    </article>
+      </article>
+    </div>
 
     <app-project-detail [projectName]="projectName()" view="settings" />
   </section>

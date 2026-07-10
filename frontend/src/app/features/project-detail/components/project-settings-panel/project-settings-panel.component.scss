@@ -66,6 +66,12 @@
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: var(--studio-spacing-3);
 }
+.ps-settings__execution-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--studio-spacing-3);
+  align-items: start;
+}
 .ps-settings__card {
   display: flex;
   flex-direction: column;

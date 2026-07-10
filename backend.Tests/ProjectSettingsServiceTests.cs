@@ -137,6 +137,7 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         var settings = svc.Get("new-project");
 
         Assert.Equal(1, settings.MaxParallelism);
+        Assert.Equal("local", settings.ExecutionHostId);
         Assert.Equal("develop", settings.IntegrationBranch);
         Assert.Equal(IntegrationStrategies.DirectMerge, settings.IntegrationStrategy);
     }
@@ -162,6 +163,26 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         svc.SetMaxParallelism("runbook", value);
 
         Assert.Equal(1, svc.Get("runbook").MaxParallelism);
+    }
+
+    [Fact]
+    public void SetExecutionHost_PersistsAcrossReload()
+    {
+        var svc = Build();
+        svc.SetExecutionHost("runbook", "hetzner-agent-runner");
+
+        var reloaded = Build();
+
+        Assert.Equal("hetzner-agent-runner", reloaded.Get("runbook").ExecutionHostId);
+    }
+
+    [Fact]
+    public void SetExecutionHost_BlankFallsBackToLocal()
+    {
+        var svc = Build();
+        svc.SetExecutionHost("runbook", "  ");
+
+        Assert.Equal("local", svc.Get("runbook").ExecutionHostId);
     }
 
     [Fact]

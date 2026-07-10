@@ -63,6 +63,12 @@ groups, and a failed domain reports an error without hiding successful domains.
   operations, and shows a per-doc History panel (model / when / why + git log);
   its endpoints and tree contract are documented in
   [docs/contracts/wiki-tree.md](../contracts/wiki-tree.md).
+- Project Settings owns the project-dedicated execution assignment. The
+  execution card selects `local` or a host-registry id, persists through
+  `PUT /api/projects/{projectName}/execution-host`, and presents the guided
+  code-channel / `develop` / toolchain / no-op readiness checklist. Board cards
+  show the actual live runner from the run lease, not merely this configured
+  target.
 - `frontend/src/app/services/task.service.ts`: task API integration, optimistic
   lane moves, reorder, and rollback.
 - `frontend/src/app/services/cli-catalog.store.ts`: boot-hydrated CLI model

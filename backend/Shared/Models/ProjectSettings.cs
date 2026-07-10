@@ -151,6 +151,14 @@ public record ProjectSettings
     public int MaxParallelism { get; init; } = 1;
 
     /// <summary>
+    /// Project-dedicated execution location. <c>local</c> keeps execution on
+    /// the task-server host; any other value is the stable id of a registered
+    /// remote runner host. Assignment is deliberately project-scoped so every
+    /// task in a project follows one predictable code/toolchain boundary.
+    /// </summary>
+    public string ExecutionHostId { get; init; } = "local";
+
+    /// <summary>
     /// ADR-0052: branch that parallel task worktrees branch off and merge back
     /// into (the project's integration line). Default <c>develop</c> so
     /// <c>main</c> stays the released line. When parallelism is off

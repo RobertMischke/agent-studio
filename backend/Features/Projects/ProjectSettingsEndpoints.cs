@@ -74,6 +74,9 @@ public static class ProjectSettingsEndpoints
                     // means the runner stays sequential; the branch/strategy
                     // pair only matters once it is raised above 1.
                     maxParallelism = kv.Value.MaxParallelism < 1 ? 1 : kv.Value.MaxParallelism,
+                    executionHostId = string.IsNullOrWhiteSpace(kv.Value.ExecutionHostId)
+                        ? "local"
+                        : kv.Value.ExecutionHostId,
                     integrationBranch = kv.Value.IntegrationBranch,
                     integrationStrategy = IntegrationStrategies.Normalize(kv.Value.IntegrationStrategy),
                     // Slice P (ASS-1663): per-project build profile + onboarding
@@ -456,6 +459,20 @@ public static class ProjectSettingsEndpoints
 
             settings.SetExecutionRunner(projectName, req.ExecutionRunner, req.RemoteExecutionEnabled);
             return Results.Ok(settings.Get(projectName));
+        });
+
+        // Project-dedicated execution assignment (remote integration D8).
+        // Host discovery is owned by the host registry; this endpoint stores
+        // its stable id and deliberately defaults blank/legacy values to local.
+        app.MapPut("/api/projects/{projectName}/execution-host", (string projectName, SetExecutionHostRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            if (!ExecutionHostIds.IsValid(req.HostId))
+                return Results.BadRequest(new { error = "hostId must be 'local' or a stable host id" });
+
+            settings.SetExecutionHost(projectName, req.HostId);
+            return Results.Ok(new { executionHostId = settings.Get(projectName).ExecutionHostId });
         });
 
         // ADR-0052: integration branch parallel task worktrees branch off and
