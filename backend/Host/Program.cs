@@ -341,6 +341,10 @@ builder.Services.AddSingleton<SystemKeepAwake>(sp =>
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<CrashRecoveryService>();
 builder.Services.AddSingleton<StaleProgressArchiver>();
+// Run-Liveness Slice A: the phase-aware "no zombie survives 60s" monitor
+// (boot adoption scan + uptime sweep). See
+// docs/concepts/run-liveness-and-slot-semantics.md.
+builder.Services.AddSingleton<RunLivenessMonitor>();
 builder.Services.AddSingleton<PickupFailureLog>();
 builder.Services.AddSingleton<InfraHaltLog>();
 builder.Services.AddSingleton<CrossSlugInfraCircuitBreaker>();
@@ -449,6 +453,10 @@ builder.Services.AddHostedService<OrphanReaperHostedService>();
 // 3-progress folders; this closes the gap where a folder crosses the resume
 // window while the backend stays up.
 builder.Services.AddHostedService<StaleProgressSweepHostedService>();
+// Runtime run-liveness sweep (Run-Liveness Slice A). Demotes a 3-progress card
+// within the 60s budget when its owning run dies while the backend stays up;
+// the boot adoption scan below handles zombies already present at startup.
+builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();
 builder.Services.AddSingleton<AgentDocsReadAnalyticsService>();
@@ -615,6 +623,25 @@ catch (Exception ex)
 // LaneMutexRegistry, so even an accidental reorder cannot produce a
 // concurrent rename against the same slug - the sequential ordering is
 // belt-and-braces.
+// Run-Liveness Slice A boot adoption scan (Rule 4, "no zombie survives 60s"):
+// every 3-progress card without a live run-heartbeat is acted on immediately.
+// This is the authoritative, PHASE-AWARE handler for the after-restart zombie
+// wave (belegt AGT-1811/1914/1941) and runs BEFORE CrashRecoveryService so the
+// blanket stale-lock requeue never mis-handles the AGT-1932 case (run finished
+// AND merged, only post-processing died): the adoption scan demotes an
+// interrupted execution run to 2-ready (clearing the resume pointer to break the
+// "No conversation found" launch-fail chain) but re-triggers post-processing for
+// a finished run instead of re-running the completed agent. Sync wait is
+// intentional: the runner must see the adopted state on its first scan.
+try
+{
+    app.Services.GetRequiredService<RunLivenessMonitor>().AdoptOnBootAsync().GetAwaiter().GetResult();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("RunLivenessMonitor.AdoptOnBoot", ex);
+}
+
 try
 {
     app.Services.GetRequiredService<CrashRecoveryService>().RecoverAsync().GetAwaiter().GetResult();

@@ -196,6 +196,25 @@ public sealed class PickupLockFile
         return Read(Path.Combine(jobFolder, LockFileName));
     }
 
+    /// <summary>
+    /// Run-liveness probe: true when a pickup lock exists on
+    /// <paramref name="jobFolder"/> AND its owner is still alive - the
+    /// heartbeat signal the run-liveness monitor keys "no zombie survives 60s"
+    /// off. Same-host owner: the recorded pid is still running. Remote owner:
+    /// the heartbeat-extended lease has not expired. A missing lock, a dead
+    /// same-host pid, or an expired remote lease all read as "no live owner",
+    /// i.e. the 3-progress card is a process-lost candidate. This is the read
+    /// side of <see cref="IsForeignLeaseLive"/> (which, despite its name,
+    /// already covers both the same-host pid and the remote-lease case), never
+    /// mutating the lock.
+    /// </summary>
+    public bool HasLiveOwner(string jobFolder)
+    {
+        if (string.IsNullOrEmpty(jobFolder)) return false;
+        var current = Read(Path.Combine(jobFolder, LockFileName));
+        return current != null && IsForeignLeaseLive(current);
+    }
+
     private static PickupLockInfo BuildInfo(PickupLockOwner owner)
     {
         var now = DateTime.UtcNow;
