@@ -1008,7 +1008,8 @@ export interface ProjectUrlSuggestion {
  * `ProjectSummary`.
  */
 export interface RegistryProjectSummary {
-  sourceType: ProjectSourceType;
+  /** Older persisted registry projections omit this and imply local-folder. */
+  sourceType?: ProjectSourceType;
   id: string;
   displayName: string;
   shortCode: string;
