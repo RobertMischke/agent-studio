@@ -66,8 +66,8 @@ Use this page as the first stop when you need the right document quickly.
 | Common problems | [wiki/common-problems/README.md](wiki/common-problems/README.md) |
 | Designated topics (AGENTS/wiki-sync current-state index; post-agents-wiki-sync) | [wiki/concepts/designated-topics/README.md](wiki/concepts/designated-topics/README.md) |
 | API project identity / watchPath | [wiki/concepts/api-project-identity-and-watchpath.md](wiki/concepts/api-project-identity-and-watchpath.md) |
-| Bounded workflow fan-out | [wiki/concepts/bounded-workflow-fan-out.md](wiki/concepts/bounded-workflow-fan-out.md) |
-| Persistent service lifecycle | [wiki/concepts/persistent-service-lifecycle.md](wiki/concepts/persistent-service-lifecycle.md) |
+| Workflow arguments become unbounded fan-out | [wiki/common-problems/workflow-args-json-string-fanout/](wiki/common-problems/workflow-args-json-string-fanout/) |
+| Services killed by a harness sweep | [wiki/common-problems/services-killed-by-harness-sweep/](wiki/common-problems/services-killed-by-harness-sweep/) |
 | Orchestrator drive-to-conclusion & CLI-crash resilience | [wiki/concepts/orchestrator-drive-to-conclusion.html](wiki/concepts/orchestrator-drive-to-conclusion.html) |
 | Task integration & worktree/merge workflow | [wiki/concepts/task-integration-and-merge-workflow.md](wiki/concepts/task-integration-and-merge-workflow.md) |
 | Merge config analysis (parallelism coupling) | [wiki/concepts/task-integration-merge-config-analysis.html](wiki/concepts/task-integration-merge-config-analysis.html) |
