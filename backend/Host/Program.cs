@@ -419,6 +419,8 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.IBuildTestGateRunner,
     AgentStudio.Pipeline.BuildTestGateRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiMaintenancePostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiLearningsPostStepRunner>();
+builder.Services.AddSingleton<AgentStudio.Docs.WorkstreamCurationService>();
+builder.Services.AddHostedService<AgentStudio.Docs.WorkstreamCuratorHostedService>();
 // Opt-in AGENTS.md <-> wiki designated-topics sync (AGT-1782): keeps the
 // designated-topic pointers consistent and collects each topic's current state.
 // Injected into the review orchestrator; default-OFF per project.

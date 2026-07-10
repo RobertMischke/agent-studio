@@ -119,6 +119,11 @@ relative paths plus rules over them, which is exactly what survives a relocation
   [§9](#9-self-provisioning-agt-2024).
 - **Later:** subpage authoring conventions per area, and wiring
   signals/decisions/log entries from pipeline output (EW-2 collector, curator).
+- **EW-3:** a gated, exactly-once retro pilot classifies existing task history
+  into an initial state, signal, knowledge, decision, and log baseline. A
+  default-off periodic curator then verifies collector-owned pages, merges
+  duplicate canonical keys, caps retained evidence, and prunes only empty,
+  low-confidence overflow. See [section 10](#10-retro-pilot-and-curator-ew-3).
 
 ## 8. Display name and tree position
 
@@ -170,3 +175,39 @@ structure the first time it runs (operator decision 2026-07-10).
   (English), resolved by `WorkstreamFrameLanguageResolver`. The five area
   identities (folder slugs and titles) stay a fixed English vocabulary in every
   language; only the orientation copy is localized.
+
+## 10. Retro pilot and curator (EW-3)
+
+`WorkstreamCurationService` supplies the history bootstrap and the bounded
+maintenance pass. `WorkstreamCuratorHostedService` owns the periodic schedule.
+The hosted service is disabled by default with `WorkstreamCurator:Enabled`; this
+is the EW-2 gate in deployments. Enabling it means collector-style Workstream
+authoring is active for that project set.
+
+The first enabled cycle scans historical task metadata and log tails once. A
+versioned marker at `engineering-workstream/.curator/retro-pilot-v1.json` makes
+the pass exactly-once and records its task count, taxonomy matches, and evidence
+task ids. The initial Agent Studio taxonomy validates three known incident
+families: `post-processing-robustness`, `restart-resume-orphans`, and
+`reissue-wipe`. Matches generate initial pages in all five frame areas. An empty
+history still records state and log pages, so repeated service restarts do not
+continually reinterpret the same baseline.
+
+The curator has a context separate from task and review-orchestrator state at
+`.curator/context.json`. Every cycle records its last run and action counts.
+Its mutation authority is deliberately narrow:
+
+- Only Markdown pages with `managed-by: workstream-collector` may be changed.
+  Operator pages and immutable HTML shells are never candidates.
+- Duplicate `canonical-key` values merge only within the same frame area.
+- Evidence is deduplicated and capped at 20 recent rows per page.
+- Every managed page receives a `last-verified` timestamp.
+- Each area is capped at 40 managed pages. Pruning applies only to overflow
+  pages that have confidence below `0.5` and no evidence rows.
+
+These limits are the anti-overgrowth contract. They ensure periodic maintenance
+can compact accumulated collector output without turning the curator into a
+general wiki deletion mechanism. Stable structured event names
+`workstream-retro-pilot-completed`, `workstream-retro-pilot-failed`,
+`workstream-curation-completed`, and `workstream-curator-cycle-failed` expose
+the expensive history pass and every subsequent maintenance cycle.
