@@ -39,7 +39,7 @@ test('Wiki task keys become compact reference controls in one batch', async ({ p
         <div style="color:var(--studio-fg-muted);font-size:12px;margin-bottom:12px">PROJECT WIKI / ENGINEERING / REFERENCES</div>
         <h1 style="margin:0 0 20px">Living task references</h1>
         <cac-markdown><p>The microcard work <b>AGT-2050</b> reuses merge semantics from AGT-2046 and preserves deleted AGT-9999.</p></cac-markdown>
-        <section style="margin-top:28px;padding:20px;border-left:3px solid var(--studio-accent);background:var(--studio-bg)">
+        <section style="margin-top:28px;padding:20px;border:1px solid var(--studio-border);border-radius:8px;background:var(--studio-bg)">
           References stay compact inside prose, carry status at a glance, and open the existing task tab.
         </section>
       </main>`;

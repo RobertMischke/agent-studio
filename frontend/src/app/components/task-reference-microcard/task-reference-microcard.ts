@@ -37,6 +37,11 @@ export class TaskReferenceMicrocardComponent {
   readonly laneIcon = computed(() => lanePresentation(this.status().lane).icon);
   readonly laneLabel = computed(() => lanePresentation(this.status().lane).label);
   readonly laneTone = computed(() => lanePresentation(this.status().lane).tone);
+  readonly mergeLabel = computed(() => {
+    const merge = this.status().merge;
+    if (!merge) return null;
+    return `${merge.integrationBranch} ${merge.inIntegration ? 'merged' : 'not merged'}, ${merge.releaseBranch} ${merge.inRelease ? 'merged' : 'not merged'}`;
+  });
 
   open(event: MouseEvent): void {
     event.preventDefault();

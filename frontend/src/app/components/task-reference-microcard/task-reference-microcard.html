@@ -8,7 +8,7 @@
       <span class="task-ref__lane" [attr.data-tone]="laneTone()" aria-hidden="true">{{ laneIcon() }}</span>
       @if (status().merge; as merge) {
         <span class="task-ref__merge" role="img"
-              [attr.aria-label]="merge.integrationBranch + (merge.inIntegration ? ' merged' : ' not merged') + ', ' + merge.releaseBranch + (merge.inRelease ? ' merged' : ' not merged')">
+              [attr.aria-label]="mergeLabel()">
           <i [class.task-ref__merge-on]="merge.inIntegration" aria-hidden="true">d</i>
           <i [class.task-ref__merge-on]="merge.inRelease" aria-hidden="true">m</i>
         </span>
