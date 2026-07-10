@@ -1,0 +1,282 @@
+using System.Diagnostics;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+
+using AgentStudio.Shared;
+using AgentStudio.Tasks;
+
+using Xunit;
+
+namespace AgentStudio.Tests;
+
+/// <summary>
+/// AGT-2046: the board merge signal must read the same worktree -> develop -> main
+/// ground truth the detail landed-state uses, but batched per repository so a big
+/// board never pays a per-card <c>merge-base --is-ancestor</c> fan-out. Every test
+/// drives real git against a throwaway repo so the four states the card renders are
+/// exercised end to end:
+///   - on the task branch only (neither develop nor main),
+///   - merged into develop but not main,
+///   - released to main (both),
+///   - a recorded develop-merge fact standing in for the anchor.
+/// </summary>
+public sealed class BoardMergeStatusServiceTests : IDisposable
+{
+    private readonly string _tempDir;
+
+    public BoardMergeStatusServiceTests()
+    {
+        _tempDir = Path.Combine(Path.GetTempPath(), "board-merge-status-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_tempDir);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(_tempDir, "*", SearchOption.AllDirectories))
+            {
+                try { File.SetAttributes(f, FileAttributes.Normal); } catch { }
+            }
+            Directory.Delete(_tempDir, recursive: true);
+        }
+        catch { /* best-effort */ }
+    }
+
+    [Fact]
+    public void AnchorFor_PrefersMergeCommit_ThenBranchTip_ThenLatestCommit()
+    {
+        // Merge commit wins.
+        var merged = Job("m", prov: Prov(merge: "mergesha"));
+        Assert.Equal("mergesha", BoardMergeStatusService.AnchorFor(merged));
+
+        // No merge -> newest recorded branch tip (walking from the end).
+        var branchTip = Job("b", prov: Prov(transitions: new[]
+        {
+            new TaskProvenanceTransition { Lane = "3-progress", BranchTip = "tip1" },
+            new TaskProvenanceTransition { Lane = "4-auto-review", BranchTip = "tip2" },
+        }));
+        Assert.Equal("tip2", BoardMergeStatusService.AnchorFor(branchTip));
+
+        // No provenance branch data -> latest attributed commit.
+        var commitOnly = Job("c", commits: new[] { Commit("oldc"), Commit("newc") });
+        Assert.Equal("newc", BoardMergeStatusService.AnchorFor(commitOnly));
+
+        // Nothing committed -> no anchor, so no signal is produced.
+        Assert.Null(BoardMergeStatusService.AnchorFor(Job("empty")));
+    }
+
+    [Fact]
+    public void BuildLookup_OnBranchOnly_ReportsNeitherIntegrationNorRelease()
+    {
+        var repo = SeedDevelopMainRepo(out _, out _);
+        // A task branch with its own commit, never merged anywhere.
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/onbranch");
+        File.WriteAllText(Path.Combine(repo, "onbranch.txt"), "wip");
+        Commit(repo, "feat: wip");
+        var tip = RunGit(repo, "rev-parse task/onbranch").Out.Trim();
+
+        var svc = BuildService(repo, out var project);
+        var job = Job("onbranch", project: project, repo: repo,
+            prov: Prov(branch: "task/onbranch", transitions: new[]
+            {
+                new TaskProvenanceTransition { Lane = "3-progress", BranchTip = tip },
+            }));
+
+        var signal = svc.BuildLookup(new[] { job })[job.TaskKey];
+
+        Assert.False(signal.InIntegration);
+        Assert.False(signal.InRelease);
+        Assert.Equal("task/onbranch", signal.Branch);
+        Assert.Null(signal.IntegrationSha);
+        Assert.Null(signal.ReleaseSha);
+    }
+
+    [Fact]
+    public void BuildLookup_MergedToDevelopNotMain_LightsDevelopOnly()
+    {
+        var repo = SeedDevelopMainRepo(out _, out _);
+        // task/dev is merged into develop with a --no-ff merge commit; main stays put.
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/dev");
+        File.WriteAllText(Path.Combine(repo, "dev.txt"), "dev work");
+        Commit(repo, "feat: dev work");
+        var tip = RunGit(repo, "rev-parse task/dev").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge --no-ff --no-edit task/dev");
+        var mergeSha = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var svc = BuildService(repo, out var project);
+        var job = Job("dev", project: project, repo: repo,
+            prov: Prov(branch: "task/dev", merge: mergeSha, transitions: new[]
+            {
+                new TaskProvenanceTransition { Lane = "3-progress", BranchTip = tip },
+            }));
+
+        var signal = svc.BuildLookup(new[] { job })[job.TaskKey];
+
+        Assert.True(signal.InIntegration);
+        Assert.False(signal.InRelease);
+        // The develop segment is proven by the recorded merge commit.
+        Assert.Equal(mergeSha[..7], signal.IntegrationSha);
+    }
+
+    [Fact]
+    public void BuildLookup_ReleasedToMain_LightsBothSegments()
+    {
+        var repo = SeedDevelopMainRepo(out _, out _);
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/rel");
+        File.WriteAllText(Path.Combine(repo, "rel.txt"), "release work");
+        Commit(repo, "feat: release work");
+        var tip = RunGit(repo, "rev-parse task/rel").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge --no-ff --no-edit task/rel");
+        var mergeSha = RunGit(repo, "rev-parse develop").Out.Trim();
+        // Ship develop to main.
+        RunGit(repo, "checkout -q main");
+        RunGit(repo, "merge --no-ff --no-edit develop");
+
+        var svc = BuildService(repo, out var project);
+        var job = Job("rel", project: project, repo: repo,
+            prov: Prov(branch: "task/rel", merge: mergeSha, transitions: new[]
+            {
+                new TaskProvenanceTransition { Lane = "3-progress", BranchTip = tip },
+            }));
+
+        var signal = svc.BuildLookup(new[] { job })[job.TaskKey];
+
+        Assert.True(signal.InIntegration);
+        Assert.True(signal.InRelease);
+        Assert.NotNull(signal.ReleaseSha);
+    }
+
+    [Fact]
+    public void BuildLookup_SequentialCommitOnDevelop_LightsDevelopWithoutMergeFact()
+    {
+        var repo = SeedDevelopMainRepo(out _, out _);
+        // A sequential run with no task branch: the commit lands directly on develop.
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "seq.txt"), "sequential");
+        Commit(repo, "feat: sequential work");
+        var sha = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var svc = BuildService(repo, out var project);
+        // No provenance branch/merge; only the attributed commit SHA.
+        var job = Job("seq", project: project, repo: repo, commits: new[] { Commit(sha) });
+
+        var signal = svc.BuildLookup(new[] { job })[job.TaskKey];
+
+        Assert.True(signal.InIntegration);
+        Assert.False(signal.InRelease);
+    }
+
+    [Fact]
+    public void BuildLookup_SkipsCardsWithoutAnchor()
+    {
+        var repo = SeedDevelopMainRepo(out _, out _);
+        var svc = BuildService(repo, out var project);
+        var job = Job("noanchor", project: project, repo: repo);
+
+        var lookup = svc.BuildLookup(new[] { job });
+
+        Assert.False(lookup.ContainsKey(job.TaskKey));
+    }
+
+    // --- helpers -----------------------------------------------------------
+
+    private BoardMergeStatusService BuildService(string repo, out string projectName)
+    {
+        projectName = "Fixture";
+        var dict = new Dictionary<string, string?>
+        {
+            ["WatchPaths:0:Name"] = projectName,
+            ["WatchPaths:0:RootPath"] = repo,
+            ["WatchPaths:0:RepositoryPath"] = repo,
+            ["WatchPaths:0:Path"] = Path.Combine(repo, ".orchestrator", "jobs"),
+        };
+        var config = new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
+        var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        return new BoardMergeStatusService(git, settings, NullLogger<BoardMergeStatusService>.Instance);
+    }
+
+    /// <summary>main + a develop branched off it, both with one seed commit.</summary>
+    private string SeedDevelopMainRepo(out string mainTip, out string developTip)
+    {
+        var repo = Path.Combine(_tempDir, "repo-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(repo);
+        RunGit(repo, "init -q -b main");
+        RunGit(repo, "config user.email test@example.com");
+        RunGit(repo, "config user.name test");
+        File.WriteAllText(Path.Combine(repo, "README.md"), "seed");
+        RunGit(repo, "add -A");
+        RunGit(repo, "commit -q -m seed");
+        mainTip = RunGit(repo, "rev-parse main").Out.Trim();
+        RunGit(repo, "checkout -q -b develop");
+        developTip = RunGit(repo, "rev-parse develop").Out.Trim();
+        RunGit(repo, "checkout -q main");
+        return repo;
+    }
+
+    private static TaskProvenance Prov(
+        string branch = "task/x",
+        string? merge = null,
+        string? @base = "base000",
+        TaskProvenanceTransition[]? transitions = null)
+        => new()
+        {
+            Branch = branch,
+            Base = @base,
+            Transitions = (transitions ?? Array.Empty<TaskProvenanceTransition>()).ToList(),
+            Merge = merge is null ? null : new TaskProvenanceMerge { MergeCommit = merge },
+        };
+
+    private static TaskCommitInfo Commit(string sha)
+        => new() { Sha = sha, ShortSha = sha.Length > 7 ? sha[..7] : sha, Message = "commit " + sha };
+
+    private static TaskInfo Job(
+        string id,
+        string project = "Fixture",
+        string? repo = null,
+        TaskProvenance? prov = null,
+        TaskCommitInfo[]? commits = null)
+        => new()
+        {
+            Id = id,
+            TaskKey = (repo ?? "watch") + "::" + id,
+            State = "6-completed",
+            ProjectName = project,
+            WatchPath = repo ?? "watch",
+            Provenance = prov,
+            Commits = (commits ?? Array.Empty<TaskCommitInfo>()).ToList(),
+        };
+
+    private static (string Out, string Err, int Code) RunGit(string cwd, string args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            Arguments = args,
+            WorkingDirectory = cwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        using var p = Process.Start(psi)!;
+        var so = p.StandardOutput.ReadToEnd();
+        var se = p.StandardError.ReadToEnd();
+        p.WaitForExit(15_000);
+        return (so, se, p.ExitCode);
+    }
+
+    private static void Commit(string cwd, string message)
+    {
+        RunGit(cwd, "add -A");
+        RunGit(cwd, $"commit -q -m \"{message}\"");
+    }
+}

@@ -3977,4 +3977,32 @@ public class GitService
         return set;
     }
 
+    /// <summary>
+    /// The full set of commit SHAs reachable from <paramref name="tipRef"/>
+    /// (<c>git rev-list &lt;tip&gt;</c>) - i.e. every ancestor of the ref, tip
+    /// included. ONE git call regardless of history length. Membership in this
+    /// set is exactly "<c>sha</c> is an ancestor of (or equal to)
+    /// <paramref name="tipRef"/>", so the board can answer "is this task's anchor
+    /// in develop / main?" for MANY cards with an in-memory lookup instead of a
+    /// <c>merge-base --is-ancestor</c> spawn per card - the O(repos) batch that
+    /// keeps the board merge signal off the per-card spawn path (AGT-2046, same
+    /// spirit as <see cref="GetReachableShaSet"/> / AGT-2007). Empty on any
+    /// failure or when the ref does not exist, matching the conservative
+    /// "unknown -&gt; not contained" behaviour elsewhere.
+    /// </summary>
+    public HashSet<string> GetAncestorShaSet(string repoRoot, string tipRef)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return set;
+        if (!IsLikelyBranchName(tipRef)) return set;
+        var (output, _, code) = RunGitArgs(repoRoot, "rev-list", tipRef);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return set;
+        foreach (var line in output.Split('\n'))
+        {
+            var sha = line.Trim();
+            if (sha.Length > 0) set.Add(sha);
+        }
+        return set;
+    }
+
 }

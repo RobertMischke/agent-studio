@@ -363,10 +363,31 @@
          [cacTooltip]="ch.tooltip"
          data-testid="task-card-change-context">
       <div class="task-card__change-head">
+        @if (mergeSignal(); as ms) {
+          <span class="task-card__merge-signal"
+                data-testid="task-card-merge-signal"
+                [attr.data-develop]="ms.develop.merged ? 'true' : 'false'"
+                [attr.data-main]="ms.main.merged ? 'true' : 'false'"
+                role="img"
+                [attr.aria-label]="ms.ariaLabel"
+                [cacTooltip]="ms.tooltip">
+            <span class="task-card__merge-seg task-card__merge-seg--develop"
+                  [class.task-card__merge-seg--on]="ms.develop.merged"
+                  data-seg="develop"
+                  aria-hidden="true">{{ ms.develop.short }}</span>
+            <span class="task-card__merge-seg task-card__merge-seg--main"
+                  [class.task-card__merge-seg--on]="ms.main.merged"
+                  data-seg="main"
+                  aria-hidden="true">{{ ms.main.short }}</span>
+          </span>
+        }
         <span class="task-card__change-ref"
               [attr.data-testid]="ch.kind === 'worktree' ? 'task-card-git' : 'task-card-git-state'"
               [attr.data-git-state]="gitStateBadge()?.kind">
-          <span class="task-card__change-ref-label">{{ ch.label }}</span>
+          <span class="task-card__change-ref-icon"
+                [cacTooltip]="ch.refTooltip"
+                role="img"
+                [attr.aria-label]="ch.refTooltip">{{ ch.refIcon }}</span>
           @if (ch.value) {
             <span class="task-card__change-ref-value" data-truncatable>{{ ch.value }}</span>
           }

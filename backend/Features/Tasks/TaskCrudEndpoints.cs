@@ -13,14 +13,17 @@ public static class TaskCrudEndpoints
 {
     public static void MapTaskCrudEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration) =>
+        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus) =>
         {
             var raw = scanner.ScanAllJobs();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
-            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup)).ToList();
+            var mergeLookup = mergeStatus.BuildLookup(raw);
+            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup))
+                          .WithMergeSignal(mergeLookup)
+                          .ToList();
             if (TaskQueryRequest.FromQuery(ctx.Request.Query) is { IsActive: true } query)
             {
                 var response = TaskQueryEngine.Execute(jobs, query);
@@ -31,14 +34,17 @@ public static class TaskCrudEndpoints
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (bool? includeFixtures, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings) =>
+        group.MapGet("/grouped", (bool? includeFixtures, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, BoardMergeStatusService mergeStatus) =>
         {
             var raw = scanner.ScanAllJobs();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
-            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup)).ToList();
+            var mergeLookup = mergeStatus.BuildLookup(raw);
+            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup))
+                          .WithMergeSignal(mergeLookup)
+                          .ToList();
             // F35: each lane is sorted using a per-project strategy. The kanban
             // mixes projects inside one lane, so the sort groups by project,
             // applies that project's resolved strategy, then concatenates the
@@ -177,7 +183,7 @@ public static class TaskCrudEndpoints
             });
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? watchPath, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions) =>
+        group.MapGet("/{jobId}", (string jobId, string? watchPath, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions, BoardMergeStatusService mergeStatus) =>
         {
             var detail = scanner.GetJobDetail(jobId, watchPath);
             if (detail is null) return Results.NotFound();
@@ -191,7 +197,13 @@ public static class TaskCrudEndpoints
             var tokenLookup = BuildTokenLookup(new[] { detail.Info }, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(new[] { detail.Info }, configuration);
             var waitsOnLookup = BuildWaitsOnLookup(new[] { detail.Info }, scanner);
-            return Results.Ok(WithRuntime(detail, router, runners, tokenLookup, verdictLookup, waitsOnLookup));
+            var withRuntime = WithRuntime(detail, router, runners, tokenLookup, verdictLookup, waitsOnLookup);
+            // AGT-2046: fold the batched merge signal onto the detail's info too, so
+            // a card opened from the board keeps the same [develop|main] indicator.
+            var mergeLookup = mergeStatus.BuildLookup(new[] { withRuntime.Info });
+            if (mergeLookup.TryGetValue(withRuntime.Info.TaskKey, out var signal))
+                withRuntime = withRuntime with { Info = withRuntime.Info with { MergeSignal = signal } };
+            return Results.Ok(withRuntime);
         });
 
         // Promote a finished planning task to a pre-filled coding task. Returns

@@ -721,6 +721,143 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
   };
 }
 
+/**
+ * AGT-2046 — the always-on two-segment merge signal shown on every board card
+ * that carries git work: "gemerged in develop / gemerged in main". The operator
+ * scans the board for these two facts, so the card renders a compact
+ * `[d|m]` indicator whose segments read filled/green when merged and muted/empty
+ * when not.
+ *
+ * Primary source is the backend-computed {@link TaskInfo.mergeSignal} (batched +
+ * cached per repo, so no per-card graph query). When that is absent (an older
+ * payload, or a surface that doesn't compute it) the develop segment degrades
+ * gracefully from the persisted merge fact / terminal lane; main needs the graph
+ * and stays "unknown" (shown as not-merged) until the signal arrives.
+ *
+ * Semantics + colours match the detail-header landed-state (ASS-1724 / AGT-1989):
+ * develop and main are the same worktree -> develop -> main ladder rungs.
+ */
+export interface MergeSignalSegment {
+  key: 'develop' | 'main';
+  /** One-letter scan glyph: `d` (develop) / `m` (main). */
+  short: 'd' | 'm';
+  /** Full branch label for the tooltip ("develop" / "main"). */
+  label: string;
+  merged: boolean;
+  /** Short SHA that proves the membership, when known. */
+  sha: string | null;
+}
+
+export interface MergeSignalView {
+  branch: string | null;
+  develop: MergeSignalSegment;
+  main: MergeSignalSegment;
+  /** Plain-text tooltip: branch + merge-target status in Klartext. */
+  tooltip: string;
+  /** Compact aria label for screen readers ("in develop, not in main"). */
+  ariaLabel: string;
+}
+
+function shortShaOf(sha: string | null | undefined): string | null {
+  if (!sha) return null;
+  const s = sha.trim();
+  if (s.length === 0) return null;
+  return s.length > 7 ? s.slice(0, 7) : s;
+}
+
+/**
+ * True when the card carries any git anchor at all (a backend signal, a recorded
+ * merge, a task-branch tip, or an attributed commit). Cards with nothing
+ * committed yet get no merge signal so the pre-work lanes stay quiet.
+ */
+function hasGitAnchor(job: TaskInfo): boolean {
+  if (job.mergeSignal) return true;
+  const prov = job.provenance ?? null;
+  if (prov?.merge?.mergeCommit) return true;
+  if (prov?.transitions?.some((t) => !!t.branchTip)) return true;
+  if ((job.commits?.length ?? 0) > 0) return true;
+  return !!job.commit;
+}
+
+/**
+ * Build the two-segment merge signal for a card. Returns null when the card has
+ * no git anchor to describe (pre-work lanes with nothing committed).
+ */
+export function buildMergeSignal(job: TaskInfo): MergeSignalView | null {
+  if (!hasGitAnchor(job)) return null;
+
+  const sig = job.mergeSignal ?? null;
+  const prov = job.provenance ?? null;
+  const mergeSha = prov?.merge?.mergeCommit ?? null;
+
+  let inDevelop: boolean;
+  let inMain: boolean;
+  let developSha: string | null;
+  let mainSha: string | null;
+  let branch: string | null;
+  let integrationLabel: string;
+  let releaseLabel: string;
+
+  if (sig) {
+    inDevelop = sig.inIntegration;
+    inMain = sig.inRelease;
+    developSha = sig.integrationSha ?? null;
+    mainSha = sig.releaseSha ?? null;
+    branch = sig.branch || prov?.branch || null;
+    integrationLabel = sig.integrationBranch || 'develop';
+    releaseLabel = sig.releaseBranch || 'main';
+  } else {
+    // Graceful degradation: the persisted develop-merge fact and the terminal
+    // Completed lane both prove develop; main is unknown without the graph.
+    inDevelop = !!mergeSha || job.state === TaskState.Completed;
+    inMain = false;
+    developSha = shortShaOf(mergeSha);
+    mainSha = null;
+    branch = prov?.branch || null;
+    integrationLabel = 'develop';
+    releaseLabel = 'main';
+  }
+
+  const develop: MergeSignalSegment = {
+    key: 'develop',
+    short: 'd',
+    label: integrationLabel,
+    merged: inDevelop,
+    sha: developSha,
+  };
+  const main: MergeSignalSegment = {
+    key: 'main',
+    short: 'm',
+    label: releaseLabel,
+    merged: inMain,
+    sha: mainSha,
+  };
+
+  const developLine = inDevelop
+    ? developSha
+      ? `In ${integrationLabel} since ${developSha}`
+      : `In ${integrationLabel}`
+    : `Not yet in ${integrationLabel}`;
+  const mainLine = inMain
+    ? mainSha
+      ? `In ${releaseLabel} (${mainSha})`
+      : `In ${releaseLabel}`
+    : `Not in ${releaseLabel}`;
+
+  const tooltip = [
+    branch ? `Branch: ${branch}` : null,
+    'Merge status:',
+    `• ${developLine}`,
+    `• ${mainLine}`,
+  ].filter((l): l is string => l !== null).join('\n');
+
+  const ariaLabel =
+    `Merge status: ${inDevelop ? `in ${integrationLabel}` : `not in ${integrationLabel}`}, ` +
+    `${inMain ? `in ${releaseLabel}` : `not in ${releaseLabel}`}`;
+
+  return { branch, develop, main, tooltip, ariaLabel };
+}
+
 export type PipelineDotStatus = 'done' | 'active' | 'pending' | 'blocked';
 
 export interface PipelineDot {

@@ -1268,7 +1268,7 @@
     }
     .task-card__change-head {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto auto;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
       align-items: center;
       gap: var(--studio-spacing-2);
       min-width: 0;
@@ -1279,20 +1279,58 @@
       gap: var(--studio-spacing-1);
       min-width: 0;
     }
-    .task-card__change-ref-label {
+    /* AGT-2046: the cryptic "BR"/"WT"/"TAG" two-letter chip is gone (the operator
+       could not decode it). A quiet branch / archive glyph with a plain-text
+       tooltip replaces it; the branch NAME beside it now carries the meaning. */
+    .task-card__change-ref-icon {
       display: inline-grid;
       place-items: center;
-      min-width: 22px;
-      height: 18px;
-      padding: 0 4px;
-      border-radius: 6px;
+      width: 16px;
+      height: 16px;
       color: var(--studio-fg-muted);
+      font-size: 12px;
+      line-height: 1;
+      cursor: help;
+      flex: 0 0 auto;
+    }
+    /* AGT-2046: always-on two-segment merge signal [d|m]. develop | main, filled
+       green when the work has landed on that rung, muted/outlined when not. The
+       colours match the git-state post-merge green + pre-merge muted so the whole
+       card speaks one merge vocabulary. Leads the change-head so it is the first
+       thing the eye lands on when scanning the board. */
+    .task-card__merge-signal {
+      display: inline-flex;
+      align-items: stretch;
+      gap: 2px;
+      padding: 2px;
+      border-radius: 6px;
       background: var(--studio-card-muted-bg);
       border: 1px solid var(--studio-card-muted-border);
-      font-size: 9px;
-      font-weight: 800;
-      letter-spacing: 0.04em;
+      cursor: help;
       flex: 0 0 auto;
+      font-variant-numeric: tabular-nums;
+    }
+    .task-card__merge-seg {
+      display: inline-grid;
+      place-items: center;
+      width: 15px;
+      height: 15px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 1;
+      text-transform: lowercase;
+      /* NOT merged: a hollow, muted slot so it reads as "empty". */
+      color: var(--studio-fg-dim);
+      background: rgba(148, 163, 184, 0.10);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+    }
+    /* Merged: filled green, kräftig genug zum Scannen (operator: stärkeres Signal). */
+    .task-card__merge-seg--on {
+      color: #052e16;
+      background: #4ade80;
+      border-color: #22c55e;
+      box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35);
     }
     .task-card__change-ref-value {
       min-width: 0;

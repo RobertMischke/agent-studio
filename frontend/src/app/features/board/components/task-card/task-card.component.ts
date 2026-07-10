@@ -23,6 +23,7 @@ import {
   buildHumanReviewBadge,
   buildExternalDoneBadge,
   buildLoopTooltip,
+  buildMergeSignal,
   buildModeBadge,
   buildOutcomeIssueBadge,
   buildOwnerChip,
@@ -260,8 +261,18 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     const displayGitState = displayLive ? null : gitState;
     const sharedCheckout = displayGitState?.label === 'main checkout';
     const kind = displayLive || sharedCheckout ? 'worktree' : displayGitState?.kind === 'tagged' ? 'archive' : 'branch';
+    // `label` stays the compact semantic code ('WT' / 'BR' / 'TAG') consumed by
+    // the change-context specs, but it is NO LONGER rendered on the card: the
+    // operator could not decode "BR" (AGT-2046). The card now shows a branch /
+    // archive icon plus the branch name and a plain-text tooltip instead.
     const label = displayLive || sharedCheckout ? 'WT' : displayGitState?.kind === 'tagged' ? 'TAG' : 'BR';
+    const refIcon = kind === 'archive' ? '🏷' : '⎇';
     const value = displayLive?.branch || displayGitState?.label || '';
+    const refTooltip = kind === 'archive'
+      ? `Archived${value ? `: ${value}` : ''} — out of the active git flow.`
+      : kind === 'worktree'
+        ? `Working tree${value ? `: ${value}` : ''}`
+        : `Branch${value ? `: ${value}` : ''}`;
     const summary = displayLive
       ? displayLive.filesChanged === 0 ? 'clean' : `${displayLive.filesChanged} ${displayLive.filesChanged === 1 ? 'file' : 'files'}`
       : commits ? `${commits.totalCount} ${commits.totalCount === 1 ? 'commit' : 'commits'}`
@@ -275,8 +286,15 @@ export class TaskCardComponent implements OnInit, OnDestroy {
       empty?.tooltip ?? null,
     ].filter((part): part is string => !!part).join('\n\n');
 
-    return { kind, label, value, summary, stat, tooltip };
+    return { kind, label, refIcon, refTooltip, value, summary, stat, tooltip };
   });
+
+  /**
+   * AGT-2046 two-segment merge signal ([develop|main]). Always shown on cards
+   * that carry git work so the operator can scan "gemerged in develop / main" at
+   * a glance. Null on pre-work cards with no anchor. See {@link buildMergeSignal}.
+   */
+  readonly mergeSignal = computed(() => buildMergeSignal(this.job()));
 
   /**
    * Host-level "this card needs a human" flag. Drives the red uniform ring +

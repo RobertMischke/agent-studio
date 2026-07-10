@@ -36,7 +36,7 @@ export const ALL_TASK_STATES: readonly TaskStateKey[] = Object.values(TaskState)
 // live under their own `features/X/models/` and are accessed via the
 // feature barrel. The two `import type` lines below let TaskInfo's
 // own field types reference feature-owned shapes without copying them.
-import type { TaskCommitInfo, TaskProvenanceRecord } from '../features/git';
+import type { TaskCommitInfo, TaskProvenanceRecord, TaskMergeSignal } from '../features/git';
 import type { TaskTokenSummary } from '../features/tokens';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orchestrator';
 
@@ -301,6 +301,15 @@ export interface TaskInfo {
    * guessing from the lane. Null on legacy `task.json` that predate the field.
    */
   provenance?: TaskProvenanceRecord | null;
+
+  /**
+   * AGT-2046: compact, always-on merge signal (is the work in develop / main?).
+   * Mirrors backend `TaskInfo.MergeSignal`; computed batched + cached per repo
+   * on the backend and folded onto the board payload so the card can render a
+   * two-segment `[develop|main]` indicator without a per-task graph query. Null
+   * on cards with no committed/merged anchor yet.
+   */
+  mergeSignal?: TaskMergeSignal | null;
 
   /**
    * ASS-1751: read-time run-activity classification for `3-progress` cards,

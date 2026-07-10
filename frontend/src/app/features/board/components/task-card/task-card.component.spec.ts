@@ -801,6 +801,41 @@ describe('TaskCardComponent (smoke)', () => {
     expect(context?.summary).toBe('no commits yet');
   });
 
+  it('AGT-2046 renders the two-segment merge signal with develop lit, main muted', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      mergeSignal: {
+        branch: 'task/ATP-1',
+        inIntegration: true,
+        inRelease: false,
+        integrationBranch: 'develop',
+        releaseBranch: 'main',
+        integrationSha: 'a1b2c3d',
+        releaseSha: null,
+      },
+    }));
+
+    const signal = fixture.nativeElement.querySelector('[data-testid="task-card-merge-signal"]') as HTMLElement | null;
+    expect(signal).not.toBeNull();
+    expect(signal?.getAttribute('data-develop')).toBe('true');
+    expect(signal?.getAttribute('data-main')).toBe('false');
+    const dev = signal?.querySelector('[data-seg="develop"]') as HTMLElement | null;
+    const main = signal?.querySelector('[data-seg="main"]') as HTMLElement | null;
+    expect(dev?.className).toContain('task-card__merge-seg--on');
+    expect(main?.className).not.toContain('task-card__merge-seg--on');
+  });
+
+  it('AGT-2046 replaces the cryptic BR label chip with a branch icon', async () => {
+    const fixture = await renderCard(makeJob({ state: '5-human-review' }));
+
+    // The old two-letter code chip is no longer in the DOM ...
+    expect(fixture.nativeElement.querySelector('.task-card__change-ref-label')).toBeNull();
+    // ... a self-explanatory icon chip took its place.
+    const icon = fixture.nativeElement.querySelector('.task-card__change-ref-icon') as HTMLElement | null;
+    expect(icon).not.toBeNull();
+    expect(icon?.getAttribute('aria-label') ?? '').toMatch(/branch|working tree/i);
+  });
+
   it('AC#6 0-commit analysis-only card shows a calm "no code changes" badge, no pill', async () => {
     const fixture = await renderCard(makeJob({
       state: '5-human-review',

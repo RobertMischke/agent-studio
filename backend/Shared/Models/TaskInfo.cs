@@ -273,6 +273,17 @@ public record TaskInfo
     public TaskProvenance? Provenance { get; init; }
 
     /// <summary>
+    /// AGT-2046 — compact, always-on board merge signal: is this task's work
+    /// folded into the integration branch (develop) and/or the release branch
+    /// (main)? Computed batched + cached per repository by
+    /// <c>BoardMergeStatusService</c> (O(repos) git spawns, never per card) and
+    /// folded onto the board payload so the kanban card renders a two-segment
+    /// [develop|main] indicator without a per-card graph query. Never persisted
+    /// to <c>task.json</c>; null on cards with no committed/merged anchor yet.
+    /// </summary>
+    public TaskMergeSignal? MergeSignal { get; init; }
+
+    /// <summary>
     /// Read-time visibility projection (ASS-1751) for <c>3-progress</c> tasks
     /// that disambiguates a live run, a failed run waiting out the rapid-crash
     /// backoff, and an orphaned run killed by a backend restart. Folded on by

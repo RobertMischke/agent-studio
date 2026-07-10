@@ -312,3 +312,30 @@ export interface TaskProvenanceRecord {
   transitions: TaskProvenanceTransition[];
   merge: TaskProvenanceMerge | null;
 }
+
+/**
+ * Compact, always-on board-card merge signal (AGT-2046). Mirrors backend
+ * `TaskMergeSignal` and ships on every board card via `TaskInfo.mergeSignal`,
+ * so the card renders a two-segment `[develop|main]` indicator without the
+ * per-task graph query the detail header pays. Uses the same
+ * worktree -> develop -> main semantics as {@link LandedState}: `inIntegration`
+ * == the task's anchor is an ancestor of develop, `inRelease` == an ancestor of
+ * main. Computed batched + cached per repository on the backend (never per
+ * card). Null on cards with no committed/merged anchor yet.
+ */
+export interface TaskMergeSignal {
+  /** The task's worktree branch name, for the card's branch chip + tooltip. */
+  branch: string;
+  /** True when the work is folded into the integration branch (develop). */
+  inIntegration: boolean;
+  /** True when the work has reached the release branch (main). */
+  inRelease: boolean;
+  /** Integration branch the signal was computed against (usually "develop"). */
+  integrationBranch: string;
+  /** Release branch the signal was computed against (usually "main"). */
+  releaseBranch: string;
+  /** Short SHA proving develop membership (merge commit or anchor); null when not in develop. */
+  integrationSha: string | null;
+  /** Short SHA of the anchor that reached main; null when not in main. */
+  releaseSha: string | null;
+}

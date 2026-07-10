@@ -149,6 +149,21 @@ internal static class TaskEndpointHelpers
     }
 
     /// <summary>
+    /// AGT-2046 — folds the batched board merge signal onto each job. The lookup
+    /// is built ONCE per request by <see cref="BoardMergeStatusService"/> (O(repos)
+    /// git spawns, never per card), so this stays an O(1) dictionary hit per job,
+    /// preserving the <c>JobsEndpointPerfTests</c> contract. Jobs without a signal
+    /// (no committed/merged anchor) are passed through untouched.
+    /// </summary>
+    internal static IEnumerable<TaskInfo> WithMergeSignal(
+        this IEnumerable<TaskInfo> jobs,
+        IReadOnlyDictionary<string, TaskMergeSignal> mergeByJobKey)
+        => jobs.Select(job =>
+            mergeByJobKey.TryGetValue(job.TaskKey, out var signal)
+                ? job with { MergeSignal = signal }
+                : job);
+
+    /// <summary>
     /// AGT-2029 — builds a per-TaskKey lookup of waits-on status for the jobs
     /// that actually carry dependsOn edges. Resolution is <b>archive-inclusive</b>
     /// (a dependency is fulfilled when its target reaches 6-completed OR
