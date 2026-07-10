@@ -383,37 +383,140 @@ public class RunOutcomeContractTests
     [Fact]
     public void SummaryProtocolImages_AreAppendedFromLogWhenModelOmitsThem()
     {
-        var summary = """
-            # Status
+        var jobFolder = NewTempJobFolder();
+        try
+        {
+            WriteJobFile(jobFolder, "results/run-proof.png");
+            WriteJobFile(jobFolder, "results/playwright/spec-name/nested-proof.png");
+            WriteJobFile(jobFolder, "attachments/input-wireframe.png");
 
-            - Result: Failed
-            - Duration: 4 sec
+            var summary = """
+                # Status
 
-            ## What Was Done
-            - Captured screenshots and reviewed the supplied image.
+                - Result: Failed
+                - Duration: 4 sec
 
-            ## Open Items
-            - None.
-            """;
-        var log = string.Join('\n',
-            "Captured result screenshot at results/run-proof.png.",
-            "Captured duplicate result screenshot at results/run-proof.png.",
-            "Nested Playwright artifact: results/playwright/spec-name/nested-proof.png",
-            new string('x', 65_000),
-            "User supplied reference: attachments/input-wireframe.png",
-            "Ignore non-image artifact: results/review-evidence.jsonl");
+                ## What Was Done
+                - Captured screenshots and reviewed the supplied image.
 
-        var updated = AgentStudio.Review.SummaryGenerationService.ApplyOutcomeResultLine(summary, "Success");
-        updated = AgentStudio.Review.SummaryGenerationService.ApplyProtocolImageReferences(updated, log, out var appendedCount);
+                ## Open Items
+                - None.
+                """;
+            var log = string.Join('\n',
+                "Captured result screenshot at results/run-proof.png.",
+                "Captured duplicate result screenshot at results/run-proof.png.",
+                "Nested Playwright artifact: results/playwright/spec-name/nested-proof.png",
+                new string('x', 65_000),
+                "User supplied reference: attachments/input-wireframe.png",
+                "Ignore non-image artifact: results/review-evidence.jsonl");
 
-        Assert.Contains("- Result: Success", updated);
-        Assert.DoesNotContain("- Result: Failed", updated);
-        Assert.Contains("## Images", updated);
-        Assert.Contains("![](results/run-proof.png)", updated);
-        Assert.Contains("![](results/playwright/spec-name/nested-proof.png)", updated);
-        Assert.Contains("![](attachments/input-wireframe.png)", updated);
-        Assert.DoesNotContain("review-evidence", updated);
-        Assert.Equal(3, appendedCount);
-        Assert.Equal(1, updated.Split("![](results/run-proof.png)", StringSplitOptions.None).Length - 1);
+            var updated = AgentStudio.Review.SummaryGenerationService.ApplyOutcomeResultLine(summary, "Success");
+            updated = AgentStudio.Review.SummaryGenerationService.ApplyProtocolImageReferences(updated, log, jobFolder, out var appendedCount);
+
+            Assert.Contains("- Result: Success", updated);
+            Assert.DoesNotContain("- Result: Failed", updated);
+            Assert.Contains("## Images", updated);
+            Assert.Contains("![](results/run-proof.png)", updated);
+            Assert.Contains("![](results/playwright/spec-name/nested-proof.png)", updated);
+            Assert.Contains("![](attachments/input-wireframe.png)", updated);
+            Assert.DoesNotContain("review-evidence", updated);
+            Assert.Equal(3, appendedCount);
+            Assert.Equal(1, updated.Split("![](results/run-proof.png)", StringSplitOptions.None).Length - 1);
+        }
+        finally
+        {
+            Directory.Delete(jobFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SummaryProtocolImages_ExampleAndGlobPaths_AreNotInjected()
+    {
+        // Reproduces the AGT-1938 bug: the Artifact-Upload card's log is full of
+        // documentation/example image paths - including a literal glob - none of
+        // which exist under the job folder. Nothing must be injected, so the
+        // protocol never grows a run of empty image rows.
+        var jobFolder = NewTempJobFolder();
+        try
+        {
+            var summary = """
+                # Status
+
+                - Result: Success
+                - Duration: 4 sec
+
+                ## What Was Done
+                - Documented how artifact upload references screenshots.
+                """;
+            var log = string.Join('\n',
+                "e.g. results/playwright/auth-spec/screenshot.png",
+                "e.g. results/screenshots/compose-steer.png",
+                "e.g. results/foo.png",
+                "e.g. results/playwright/spec/file.png",
+                "glob example: results/*.png",
+                "e.g. results/proof.png");
+
+            var updated = AgentStudio.Review.SummaryGenerationService.ApplyProtocolImageReferences(summary, log, jobFolder, out var appendedCount);
+
+            Assert.Equal(0, appendedCount);
+            Assert.DoesNotContain("## Images", updated);
+            Assert.DoesNotContain("![]", updated);
+            Assert.Equal(summary, updated);
+        }
+        finally
+        {
+            Directory.Delete(jobFolder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SummaryProtocolImages_MixOfRealAndExamplePaths_InjectsOnlyExisting()
+    {
+        var jobFolder = NewTempJobFolder();
+        try
+        {
+            WriteJobFile(jobFolder, "results/run-proof.png");
+
+            var summary = """
+                # Status
+
+                - Result: Success
+                - Duration: 4 sec
+
+                ## What Was Done
+                - Captured one real screenshot; mentioned some examples.
+                """;
+            var log = string.Join('\n',
+                "Real screenshot saved to results/run-proof.png",
+                "e.g. results/foo.png",
+                "glob example: results/*.png",
+                "missing nested: results/playwright/spec/file.png");
+
+            var updated = AgentStudio.Review.SummaryGenerationService.ApplyProtocolImageReferences(summary, log, jobFolder, out var appendedCount);
+
+            Assert.Equal(1, appendedCount);
+            Assert.Contains("## Images", updated);
+            Assert.Contains("![](results/run-proof.png)", updated);
+            Assert.DoesNotContain("results/foo.png", updated);
+            Assert.DoesNotContain("results/playwright/spec/file.png", updated);
+        }
+        finally
+        {
+            Directory.Delete(jobFolder, recursive: true);
+        }
+    }
+
+    private static string NewTempJobFolder()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "agt-summary-images-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    private static void WriteJobFile(string jobFolder, string relativePath)
+    {
+        var full = Path.Combine(jobFolder, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllBytes(full, [0x89, 0x50, 0x4E, 0x47]); // PNG magic; content is irrelevant to existence checks
     }
 }

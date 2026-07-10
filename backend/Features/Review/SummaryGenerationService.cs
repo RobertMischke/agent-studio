@@ -124,7 +124,7 @@ public sealed class SummaryGenerationService
                 summary = ApplyOutcomeResultLine(summary, runOutcome.ProtocolResult);
             }
 
-            summary = ApplyProtocolImageReferences(summary, rawLog, out var appendedImageCount);
+            summary = ApplyProtocolImageReferences(summary, rawLog, info.FolderPath, out var appendedImageCount);
             if (appendedImageCount > 0)
             {
                 _logger.LogInformation("Summary protocol image references appended for {JobId}: {ImageCount} references",
@@ -206,7 +206,7 @@ public sealed class SummaryGenerationService
             return InterimSummaryResult.Failure(result.Error ?? "Empty Haiku response");
         }
 
-        var markdown = ApplyProtocolImageReferences(result.Summary, rawLog, out var appendedImageCount);
+        var markdown = ApplyProtocolImageReferences(result.Summary, rawLog, info.FolderPath, out var appendedImageCount);
         _logger.LogInformation("Interim summary produced for {JobId} ({Bytes} bytes, {ElapsedMs}ms, {ImageCount} appended images)",
             info.Id, markdown.Length, sw.ElapsedMilliseconds, appendedImageCount);
         return InterimSummaryResult.Success(markdown, sw.ElapsedMilliseconds);
@@ -463,15 +463,27 @@ public sealed class SummaryGenerationService
         return string.Join(Environment.NewLine, lines).TrimEnd() + Environment.NewLine;
     }
 
-    public static string ApplyProtocolImageReferences(string markdown, string log)
-        => ApplyProtocolImageReferences(markdown, log, out _);
+    public static string ApplyProtocolImageReferences(string markdown, string log, string taskFolder)
+        => ApplyProtocolImageReferences(markdown, log, taskFolder, out _);
 
-    public static string ApplyProtocolImageReferences(string markdown, string log, out int appendedCount)
+    /// <summary>
+    /// Injects a deterministic <c>## Images</c> section built from the image paths
+    /// mentioned in the run log. Every extracted path is resolved against
+    /// <paramref name="taskFolder"/> and kept only when it points at a file that
+    /// actually exists on disk (glob/wildcard patterns and paths that escape the
+    /// job folder are always dropped). This is what keeps example/glob paths that
+    /// litter a log - e.g. the Artifact-Upload card's <c>results/*.png</c> - out of
+    /// the protocol: with nothing left after filtering, no Images section is added
+    /// at all rather than a run of empty rows.
+    /// </summary>
+    public static string ApplyProtocolImageReferences(string markdown, string log, string taskFolder, out int appendedCount)
     {
         appendedCount = 0;
         if (string.IsNullOrWhiteSpace(markdown) || string.IsNullOrWhiteSpace(log)) return markdown;
 
-        var imageRefs = ExtractProtocolImageReferences(log);
+        var imageRefs = ExtractProtocolImageReferences(log)
+            .Where(path => ProtocolImageReferenceValidator.ResolvesToExistingFile(path, taskFolder))
+            .ToList();
         if (imageRefs.Count == 0) return markdown;
 
         var existing = new HashSet<string>(ExtractProtocolImageReferences(markdown), StringComparer.OrdinalIgnoreCase);
