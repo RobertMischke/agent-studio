@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
+import { setTheme, type Theme } from '../helpers/theme';
 
 /**
  * Regression evidence for "Taskbar quota shows Codex missing although the
@@ -18,6 +19,7 @@ import { mkdirSync } from 'node:fs';
  */
 
 const SHOT_DIR = process.env.CODEX_SHOT_DIR?.trim() || 'test-results';
+const THEMES: readonly Theme[] = ['dark', 'light'];
 
 function codexPercentQuotaReport() {
   return {
@@ -59,7 +61,7 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     await page.waitForLoadState('domcontentloaded');
   });
 
-  test('Codex card renders every %-only window and never drops out', async ({ page }) => {
+  test('Codex card renders every %-only window in both themes and never drops out', async ({ page }) => {
     const card = page.getByTestId('hquota-card-codex');
     await expect(card).toBeVisible();
 
@@ -71,10 +73,15 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     await expect(page.getByTestId('hquota-codex-spark-wk')).toContainText('4%');
 
     await card.scrollIntoViewIfNeeded();
-    await card.screenshot({ path: `${SHOT_DIR}/codex-strip-card--mocked.png` });
+    for (const theme of THEMES) {
+      await setTheme(page, theme);
+      await card.screenshot({
+        path: `${SHOT_DIR}/header-quota-strip-after--${theme}--playwright.png`,
+      });
+    }
   });
 
-  test('Codex modal shows the implied 100% cap, not "n/a"', async ({ page }) => {
+  test('Codex modal shows the implied 100% cap in both themes, not "n/a"', async ({ page }) => {
     // The backend-less worktree dev server can pop a startup "Failed to
     // load …" error dialog; let it settle and dismiss it so it does not
     // intercept the card click. (Against a live backend none of this fires.)
@@ -98,6 +105,11 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     // And no window falls back to the empty "n/a" placeholder.
     await expect(windowsList).not.toContainText('n/a');
 
-    await page.screenshot({ path: `${SHOT_DIR}/codex-usage-modal--mocked.png`, fullPage: false });
+    for (const theme of THEMES) {
+      await setTheme(page, theme);
+      await modal.screenshot({
+        path: `${SHOT_DIR}/cli-usage-modal-after--${theme}--playwright.png`,
+      });
+    }
   });
 });
