@@ -185,7 +185,6 @@
   gap: var(--studio-spacing-1);
   text-align: left;
   border: 1px solid var(--studio-border);
-  border-left: 3px solid var(--studio-fg-muted);
   border-radius: 5px;
   background: transparent;
   color: var(--studio-fg);
@@ -198,10 +197,15 @@
   background: var(--studio-bg-selected);
   border-color: var(--studio-border-strong);
 }
-.orch-feed__entry--decision { border-left-color: var(--severity-pending); }
-.orch-feed__entry--action { border-left-color: var(--studio-accent-3); }
-.orch-feed__entry--observation { border-left-color: var(--studio-fg-muted); }
-.orch-feed__entry--intervention { border-left-color: var(--studio-accent-warn); }
+.orch-feed__entry--decision {
+  background: color-mix(in srgb, var(--severity-pending) 7%, transparent);
+}
+.orch-feed__entry--action {
+  background: color-mix(in srgb, var(--studio-accent-3) 7%, transparent);
+}
+.orch-feed__entry--intervention {
+  background: color-mix(in srgb, var(--studio-accent-warn) 8%, transparent);
+}
 
 .orch-feed__entry-top {
   display: flex;

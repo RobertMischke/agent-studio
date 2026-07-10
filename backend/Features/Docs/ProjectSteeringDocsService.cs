@@ -243,6 +243,7 @@ public class ProjectSteeringDocsService
     {
         var name = Path.GetFileName(rel);
         if (string.Equals(name, "CLAUDE.md", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "GEMINI.md", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(NormalizeRel(rel), ".github/copilot-instructions.md", StringComparison.OrdinalIgnoreCase))
         {
             return SteeringDocsSourceKind.AgentCliShim;

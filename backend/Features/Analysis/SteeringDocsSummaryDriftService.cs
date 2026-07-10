@@ -327,6 +327,8 @@ public sealed class SteeringDocsSummaryDriftService
             "Single source of truth for agent instructions across CLIs."),
         new("claude-shim", "CLAUDE.md", "CLAUDE.md", SteeringSourceKind.AgentCliShim,
             "Compatibility shim that points Claude Code at AGENTS.md."),
+        new("gemini-shim", "GEMINI.md", "GEMINI.md", SteeringSourceKind.AgentCliShim,
+            "Compatibility shim that points Gemini CLI at AGENTS.md."),
         new("copilot-shim", ".github/copilot-instructions.md", ".github/copilot-instructions.md",
             SteeringSourceKind.AgentCliShim,
             "Compatibility shim for the GitHub Copilot coding agent."),

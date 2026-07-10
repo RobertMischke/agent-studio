@@ -210,7 +210,7 @@ export class PromptPaneComponent {
     return sections.filter(s => s.entries.length > 0);
   });
 
-  /** Maps severity → border-left class. */
+  /** Maps severity to its semantic treatment class. */
   severityClass(sev: ReviewEvidenceEntry['severity']): string {
     return sev === 'high' ? 'pass-fail' : sev === 'warn' ? 'pass-defer' : 'pass-info';
   }

@@ -1,6 +1,6 @@
 # Cards
 
-A bounded surface — title row + body + optional footer or hover-lift. Today there is **no `<app-card>` Angular component** because card surfaces tend to carry feature-specific slots (drag handles, run state inputs, severity stripes). The convergence target is the **shape**: every card reads the same tokens for background, border, padding, and elevation.
+A bounded surface with a title row, body, and optional footer or hover-lift. Today there is **no `<app-card>` Angular component** because card surfaces tend to carry feature-specific slots (drag handles and run state inputs). The convergence target is the **shape**: every card reads the same tokens for background, border, padding, and elevation.
 
 See [audit-cards.md](./audit-cards.md) for the inventory.
 
@@ -32,25 +32,24 @@ A card SCSS class should read all of:
   box-shadow: var(--elevation-card);
 }
 
-.my-feature-card--accent {
-  border-left: 3px solid var(--studio-accent);
-  padding-left: calc(var(--studio-spacing-3) - 3px);
+.my-feature-card--warning {
+  background: color-mix(in srgb, var(--severity-warn) 10%, var(--studio-bg-elevated));
 }
 ```
 
 ## Variants
 
-Today every card is "default" + an optional accent stripe + an optional shadow. Three conceptual variants emerge from the audit:
+Every card is "default" plus an optional full-surface tint or shadow. Three conceptual variants emerge from the audit:
 
 | Variant     | Background                | Border                          | Elevation        | Use it for                            |
 | ----------- | ------------------------- | ------------------------------- | ---------------- | ------------------------------------- |
 | `default`   | `--studio-bg-elevated`    | `1px solid --studio-border`      | none             | Hub section card, sidebar card        |
 | `elevated`  | `--studio-bg-elevated`    | `1px solid --studio-border-strong` | `--elevation-card` | Kanban card, run card                |
-| `accent`    | `--studio-bg-elevated`    | left-stripe in accent or severity | none           | Task status card, drift card, steer card |
+| `tinted`    | semantic `color-mix(...)` | `1px solid --studio-border`      | none           | Task status card, drift card, steer card |
 
 ## Open question — should we ship `<app-card>`?
 
-Extracting `<app-card variant="default|elevated|accent">` would absorb 12+ card classes onto a single component. The cost: the existing cards carry feature-specific slots that need to project through `<ng-content>`.
+Extracting `<app-card variant="default|elevated|tinted">` would absorb 12+ card classes onto a single component. The cost: the existing cards carry feature-specific slots that need to project through `<ng-content>`.
 
 **Decision deferred** — the realistic next step is the **shape-and-token convergence** (already documented above): every card reads the same tokens. That captures most of the visual consistency without committing to a shared Angular component.
 
@@ -60,9 +59,10 @@ Proposal in [migration-status.md](./migration-status.md) "F-Cards: Decide canoni
 
 - **Do not** use `--studio-bg-editor` for a card. Cards are *raised* surfaces; the editor is the body canvas.
 - **Do not** mix `border` and `box-shadow` to fake a thicker border. Use `--studio-border-strong` if the existing border is too soft.
+- **Do not** add a coloured left accent line. Use a full-surface tint, badge, or dot as required by [the hard rules](../../design/style-guide-hard-rules.md).
 - **Do not** introduce a new corner radius. Pick from the shape scale (`4 / 6 / 8 / 10 / 12 px`).
 - **Do not** raise the padding above `--studio-spacing-4` (16px) for a card body. If the contents need more breathing room, it is probably a panel, not a card.
 
 ## Light + dark
 
-Every card variant in the contract flips automatically because all four tokens have light + dark variants. The accent stripe also flips through `--studio-accent` / `--severity-*`.
+Every card variant in the contract flips automatically because the surface, border, elevation, and semantic colour tokens have light and dark variants.

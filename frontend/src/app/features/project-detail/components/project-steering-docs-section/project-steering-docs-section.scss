@@ -584,22 +584,19 @@
 .psd__warning {
   padding: var(--studio-spacing-2) var(--studio-spacing-3);
   border: 1px solid var(--psd-border);
-  border-left-width: 3px;
   border-radius: 6px;
   background: var(--psd-surface);
 }
 
 .psd__warning--info {
-  border-left-color: var(--psd-info-border);
+  background: color-mix(in srgb, var(--psd-info-border) 8%, var(--psd-surface));
 }
 
 .psd__warning--warn {
-  border-left-color: var(--severity-warn);
   background: var(--psd-warn-bg);
 }
 
 .psd__warning--high {
-  border-left-color: var(--severity-high);
   background: var(--psd-error-bg);
 }
 

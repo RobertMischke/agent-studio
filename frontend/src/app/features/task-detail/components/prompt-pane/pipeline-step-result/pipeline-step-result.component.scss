@@ -70,12 +70,11 @@
     background: color-mix(in srgb, var(--studio-bg-hover) 54%, var(--studio-bg-elevated));
     border-bottom: 1px solid var(--studio-border);
 
-    // Outcome tone is intentionally only a narrow rail. The expanded card is
-    // mostly for reading, so the header should identify the state without
-    // turning the whole popover into a badge cluster.
-    &[data-status='passed'] { box-shadow: inset 2px 0 0 var(--severity-pass); }
-    &[data-status='failed'] { box-shadow: inset 2px 0 0 var(--severity-high); }
-    &[data-status='skipped'] { box-shadow: inset 2px 0 0 var(--studio-border); }
+    // Outcome tone covers the header so state remains visible without a
+    // decorative edge stripe.
+    &[data-status='passed'] { background: color-mix(in srgb, var(--severity-pass) 8%, var(--studio-bg-elevated)); }
+    &[data-status='failed'] { background: color-mix(in srgb, var(--severity-high) 8%, var(--studio-bg-elevated)); }
+    &[data-status='skipped'] { background: var(--studio-bg-elevated); }
   }
 
   &__title {

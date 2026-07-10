@@ -4,10 +4,10 @@
 > and future agent surfaces. Keep this file short. Mandatory guardrails live
 > here; domain system-of-record maps live in `docs/`.
 
-Compatibility shims: [CLAUDE.md](CLAUDE.md) and
-[.github/copilot-instructions.md](.github/copilot-instructions.md). Frontend
-scoped rules live in [frontend/AGENTS.md](frontend/AGENTS.md) and apply only
-under `frontend/`.
+Compatibility shims: [CLAUDE.md](CLAUDE.md), [GEMINI.md](GEMINI.md), and
+[.github/copilot-instructions.md](.github/copilot-instructions.md).
+Frontend-scoped rules live in [frontend/AGENTS.md](frontend/AGENTS.md) and
+apply only under `frontend/`.
 
 ## Start Here
 
@@ -22,6 +22,10 @@ under `frontend/`.
 
 ## Non-Negotiable Rules
 
+- UI work obeys the style-guide hard rules in
+  [docs/design/style-guide-hard-rules.md](./docs/design/style-guide-hard-rules.md).
+  Most-cited: no coloured left accent line or bar on cards, panels, rows,
+  banners, or pill groups (encode status via background tint, badge, or dot).
 - Work only in the active dev checkout or assigned task worktree. Never edit
   `agent-taskboard-stable/`; stable updates only by the parent
   `update-stable.sh` after a verified dev batch.
@@ -37,10 +41,6 @@ under `frontend/`.
 - Written repo artifacts are English. Do not introduce em dashes. User-facing UI
   strings, backend errors shown to the UI, prompts, comments, docs, commits, and
   PR text are English.
-- UI work obeys the style-guide hard rules in
-  [docs/design/style-guide-hard-rules.md](./docs/design/style-guide-hard-rules.md).
-  Most-cited: no coloured left accent line or bar on cards, panels, rows,
-  banners, or pill groups (encode status via background tint, badge, or dot).
 - When adding a document under `docs/`, add one row to
   [docs/README.md](docs/README.md) in the same change.
 - CLI crashes, run-outcome classification, retries, or orchestrator

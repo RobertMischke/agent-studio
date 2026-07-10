@@ -628,7 +628,6 @@
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--ov-pl-phase-accent) 34%, transparent), transparent 72px),
     color-mix(in srgb, var(--studio-bg-hover) 62%, transparent);
-  box-shadow: inset 2px 0 0 var(--ov-pl-phase-accent);
   color: var(--studio-fg-dim);
   font: inherit;
   text-align: left;
@@ -821,7 +820,6 @@
   margin-left: var(--ov-pipeline-step-indent);
   border-radius: 6px;
   background: color-mix(in srgb, var(--ov-pl-phase-accent) 5%, transparent);
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--ov-pl-phase-accent) 38%, transparent);
   font-size: 12px;
 
   &[data-phase='core'] { --ov-pl-phase-accent: var(--studio-accent-3); }
@@ -853,7 +851,6 @@
     background:
       linear-gradient(90deg, color-mix(in srgb, var(--lane-progress) 16%, transparent), transparent 110px),
       var(--studio-bg-running);
-    box-shadow: inset 2px 0 0 var(--lane-progress);
 
     .ov-pl-step__status {
       animation: ov-pulse 1.3s ease-in-out infinite;
@@ -866,14 +863,12 @@
   }
 
   // Orchestrator final-verdict row: the single aggregated ruling after the
-  // parallel aspects. A top divider + accent rail sets it apart from the
-  // aspect rows above so the two phases (parallel aspects -> one verdict)
-  // read as clearly-separated steps.
+  // parallel aspects. A top divider sets it apart from the aspect rows above
+  // so the two phases (parallel aspects -> one verdict) read as separate steps.
   &--final-verdict {
     margin-top: 3px;
     padding-top: 5px;
     border-top: 1px solid var(--studio-border);
-    box-shadow: inset 2px 0 0 var(--studio-accent-4);
 
     .ov-pl-step__name {
       color: var(--studio-fg-strong);

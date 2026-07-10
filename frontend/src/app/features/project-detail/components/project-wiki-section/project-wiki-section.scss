@@ -1140,7 +1140,7 @@
 
 .pwiki__panel--active {
   border-color: color-mix(in srgb, var(--studio-accent) 42%, var(--studio-border));
-  box-shadow: inset 2px 0 0 var(--studio-accent);
+  background: color-mix(in srgb, var(--studio-accent) 6%, transparent);
 }
 
 .pwiki__panel-head {

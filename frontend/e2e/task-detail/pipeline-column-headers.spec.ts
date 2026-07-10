@@ -369,7 +369,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-column-headers.png'),
+        path: path.join(RESULTS_DIR, 'pipeline-column-headers--mocked.png'),
         fullPage: true,
       });
     }
@@ -451,14 +451,14 @@ test.describe('Pipeline: per-step metric column headers', () => {
     });
 
     expect(groupingStyle.phaseBackground).not.toBe('none');
-    expect(groupingStyle.phaseBoxShadow).toContain('inset');
+    expect(groupingStyle.phaseBoxShadow).not.toContain('inset');
     expect(groupingStyle.rowBackground).not.toBe('none');
-    expect(groupingStyle.rowBoxShadow).toContain('inset');
+    expect(groupingStyle.rowBoxShadow).not.toContain('inset');
 
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-phase-groups.png'),
+        path: path.join(RESULTS_DIR, 'pipeline-phase-groups--mocked.png'),
         fullPage: true,
       });
     }
@@ -564,7 +564,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-cross-row-alignment.png'),
+        path: path.join(RESULTS_DIR, 'pipeline-cross-row-alignment--mocked.png'),
         fullPage: true,
       });
     }
@@ -623,7 +623,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-narrow-degraded.png'),
+        path: path.join(RESULTS_DIR, 'pipeline-narrow-degraded--mocked.png'),
         fullPage: true,
       });
     }
@@ -714,7 +714,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
     if (RESULTS_DIR) {
       await overview.scrollIntoViewIfNeeded();
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'overview-content-measures-wide.png'),
+        path: path.join(RESULTS_DIR, 'overview-content-measures-wide--mocked.png'),
         fullPage: true,
       });
     }

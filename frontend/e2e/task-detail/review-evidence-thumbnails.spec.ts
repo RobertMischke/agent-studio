@@ -156,6 +156,13 @@ async function installRoutes(page: Page): Promise<void> {
       body: JSON.stringify({ isDev: false, devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false } }),
     }),
   );
+  await page.route('**/api/cli/quota**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ at: '2026-07-10T00:00:00Z', ttlSeconds: 600, snapshots: [] }),
+    }),
+  );
   await page.route(/\/api\/runner\/status(\?|$)/, (route) =>
     route.fulfill({
       status: 200,

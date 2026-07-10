@@ -32,20 +32,19 @@
 .wsm__note {
   margin: 4px 0 0;
   padding: 6px 8px;
-  background: var(--studio-bg-elevated);
-  border-left: 2px solid var(--studio-accent);
+  background: color-mix(in srgb, var(--studio-accent) 8%, var(--studio-bg-elevated));
   font-size: 11px;
   color: var(--studio-fg-dim);
   border-radius: 2px;
   line-height: 1.4;
 
   &--error {
-    border-left-color: var(--studio-error);
+    background: color-mix(in srgb, var(--studio-error) 9%, var(--studio-bg-elevated));
     color: var(--studio-error);
   }
 
   &--muted {
-    border-left-color: var(--studio-border-strong);
+    background: var(--studio-bg-elevated);
   }
 }
 

@@ -31,7 +31,6 @@
 .prompt-entry__button--active {
   border-color: color-mix(in srgb, var(--studio-accent) 70%, transparent);
   background: color-mix(in srgb, var(--studio-accent) 12%, var(--studio-bg-elevated));
-  box-shadow: inset 3px 0 0 var(--studio-accent);
 }
 .prompt-entry__top { display: flex; align-items: center; gap: var(--studio-spacing-1); min-width: 0; flex-wrap: wrap; }
 .prompt-entry__label { font-size: 12px; font-weight: 700; color: var(--studio-fg-strong); }

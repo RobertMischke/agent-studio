@@ -96,6 +96,29 @@ test.describe('AGT-2058 status-bar quota pills polish', () => {
     await expect(page.getByText('PRO', { exact: true })).toHaveCount(0);
   });
 
+  test('uses a uniform border instead of a coloured left accent in both themes', async ({ page }) => {
+    await loadStatusBar(page);
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      const borders = await page.locator('.hquota__card').evaluateAll((cards) =>
+        cards.map((card) => {
+          const style = getComputedStyle(card);
+          return {
+            widths: [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth],
+            colors: [style.borderTopColor, style.borderRightColor, style.borderBottomColor, style.borderLeftColor],
+          };
+        }),
+      );
+
+      expect(borders.length, `[${theme}] rendered quota cards`).toBeGreaterThanOrEqual(2);
+      for (const border of borders) {
+        expect(new Set(border.widths).size, `[${theme}] uniform border widths`).toBe(1);
+        expect(new Set(border.colors).size, `[${theme}] uniform border colours`).toBe(1);
+      }
+    }
+  });
+
   test('keeps every window chip: 5H / WK tag + percent + trend bar', async ({ page }) => {
     await loadStatusBar(page);
 
