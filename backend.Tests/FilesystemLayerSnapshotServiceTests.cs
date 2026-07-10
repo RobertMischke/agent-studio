@@ -44,6 +44,7 @@ public class FilesystemLayerSnapshotServiceTests : IDisposable
             "test1\ntest2\n");
         File.WriteAllText(Path.Combine(repo, "docs", "images", "board.png"), "not really an image");
         File.WriteAllText(Path.Combine(repo, "AGENTS.md"), "agent rules\n");
+        File.WriteAllText(Path.Combine(repo, "GEMINI.md"), "gemini compatibility shim\n");
         File.WriteAllText(Path.Combine(repo, "prompts", "runtime", "runner-fresh-start.md"), "prompt\n");
         File.WriteAllText(Path.Combine(repo, "coverage", "coverage.cobertura.xml"),
             """
@@ -89,7 +90,7 @@ public class FilesystemLayerSnapshotServiceTests : IDisposable
         Assert.Equal(5, root.CodeLoc);
         Assert.Equal(2, root.CodeFiles);
         Assert.Equal(1, root.VisualEvidenceCount);
-        Assert.Equal(2, root.AgentFileCount);
+        Assert.Equal(3, root.AgentFileCount);
         Assert.Equal(2, root.TestLoc);
         Assert.Equal(1, root.TestFiles);
         Assert.Equal(60, root.CoveragePercent);
