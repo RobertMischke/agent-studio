@@ -69,6 +69,10 @@ groups, and a failed domain reports an error without hiding successful domains.
   catalog cache.
 - `frontend/src/app/components/menu/`: text-only menu component.
 - `frontend/src/app/components/cli-model-selector/`: shared CLI/model picker.
+- `frontend/src/app/components/task-reference-microcard/`: compact, accessible
+  task reference control shared by Wiki and coding-agent-chat markdown. The
+  host hydrator batches bare registry-key candidates and owns task-tab
+  navigation; code blocks and unknown shortcodes remain plain text.
 - `frontend/src/app/features/polling/`: bounded polling services for detail
   panes and runtime data.
 - `frontend/src/app/features/shell/components/workspace-overlays/`: the global

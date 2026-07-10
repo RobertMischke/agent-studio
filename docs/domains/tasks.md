@@ -93,6 +93,10 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   ("waits-on") targets are unfulfilled (AGT-2029); see the waits-on gate in
   [runner.md](./runner.md) and the `references` field in
   [../contracts/filesystem.md](../contracts/filesystem.md).
+- Rendered task references resolve through `POST /api/tasks/reference-status`.
+  The endpoint accepts up to 200 keys, filters them by registry shortcode, and
+  returns one compact live or ghost projection. Merge reachability is computed
+  once for the batch through the existing cached board merge service.
 - Successful CLI runs move from `3-progress` to `4-auto-review` through
   application code. Failed or stopped runs remain inspectable.
 - Direct filesystem access by app code is restricted to the bounded service

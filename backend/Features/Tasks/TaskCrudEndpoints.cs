@@ -13,6 +13,59 @@ public static class TaskCrudEndpoints
 {
     public static void MapTaskCrudEndpoints(this RouteGroupBuilder group)
     {
+        // AGT-2050: one lightweight read for every task reference on a rendered
+        // document/chat turn. The scanner and merge reachability service are both
+        // cached, and merge membership is calculated once for the whole requested
+        // set, never once per key.
+        group.MapPost("/reference-status", (TaskReferenceStatusRequest req,
+            TaskScannerService scanner,
+            BoardMergeStatusService mergeStatus,
+            AgentStudio.Registry.ProjectRegistry projects,
+            ILoggerFactory loggerFactory) =>
+        {
+            var started = Stopwatch.GetTimestamp();
+            var requested = (req.Keys ?? [])
+                .Where(k => !string.IsNullOrWhiteSpace(k))
+                .Select(k => k.Trim().ToUpperInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(200)
+                .ToArray();
+
+            var registry = projects.List();
+            var knownCodes = registry
+                .Where(p => !string.IsNullOrWhiteSpace(p.ShortCode))
+                .ToDictionary(p => p.ShortCode, StringComparer.OrdinalIgnoreCase);
+            var jobs = scanner.ScanAllJobsWithArchive();
+            var byKey = jobs
+                .Where(j => !string.IsNullOrWhiteSpace(j.Key))
+                .GroupBy(j => j.Key!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+            var matched = requested.Where(byKey.ContainsKey).Select(k => byKey[k]).ToArray();
+            var merges = mergeStatus.BuildLookup(matched);
+
+            var items = requested.Select(key =>
+            {
+                var dash = key.LastIndexOf('-');
+                var code = dash > 0 ? key[..dash] : "";
+                if (!knownCodes.TryGetValue(code, out var project)) return null;
+                if (!byKey.TryGetValue(key, out var job))
+                    return TaskReferenceStatusItem.Ghost(key, project.Id, project.DisplayName, project.Color);
+
+                merges.TryGetValue(job.TaskKey, out var merge);
+                var grade = job.Tags
+                    .FirstOrDefault(t => t.StartsWith("code-review:grade-", StringComparison.OrdinalIgnoreCase))?
+                    .Split('-').LastOrDefault()?.ToUpperInvariant();
+                return new TaskReferenceStatusItem(
+                    key, true, job.TaskKey, job.Title, job.State,
+                    project.Id, project.DisplayName, project.Color, merge, grade);
+            }).Where(x => x is not null).ToArray();
+
+            loggerFactory.CreateLogger("TaskReferenceStatus")
+                .LogInformation("task-reference-status-batch requested={Requested} returned={Returned} elapsedMs={ElapsedMs}",
+                    requested.Length, items.Length, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            return Results.Ok(new TaskReferenceStatusResponse(items!));
+        });
+
         group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
         {
             var raw = scanner.ScanAllJobs();
@@ -565,4 +618,24 @@ public static class TaskCrudEndpoints
 
         return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", TaskStates.All)}");
     }
+}
+
+public sealed record TaskReferenceStatusRequest(IReadOnlyList<string>? Keys);
+
+public sealed record TaskReferenceStatusResponse(IReadOnlyList<TaskReferenceStatusItem> Items);
+
+public sealed record TaskReferenceStatusItem(
+    string Key,
+    bool Exists,
+    string? TaskKey,
+    string? Title,
+    string? Lane,
+    string ProjectId,
+    string ProjectName,
+    string? ProjectColor,
+    TaskMergeSignal? Merge,
+    string? ReviewGrade)
+{
+    public static TaskReferenceStatusItem Ghost(string key, string projectId, string projectName, string? projectColor) =>
+        new(key, false, null, null, null, projectId, projectName, projectColor, null, null);
 }
