@@ -1468,7 +1468,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
         var (taskBody, recentLog) = LoadTaskContext(pending);
         var statusSummary = LoadStatusSummary(current.FolderPath);
-        var diffSummary = LoadDiffSummary(entry.Name, entry.Path, current);
+        var diffSummary = LoadDiffSummary(entry, current);
+        var resultsInventory = ResultsInventory.Render(current.FolderPath);
+        var cardMode = ReviewCardMode.Describe(current.Mode);
         WritePostProcessingOutcome(current, PostProcessingOutcomes.FindingsAdded,
             summary: "Orchestrator post-processing started.",
             performerCliType: CliTypes.Claude,
@@ -1483,7 +1485,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             TaskBody: taskBody,
             RecentLog: recentLog,
             DiffSummary: diffSummary,
-            StatusSummary: statusSummary);
+            StatusSummary: statusSummary)
+        {
+            ResultsInventory = resultsInventory,
+            CardMode = cardMode,
+        };
 
         // Bracket the aspect run with a pipeline-execution record so the
         // Overview pipeline view can show "ran 4 aspects in N ms, used X
@@ -2759,7 +2765,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 ? null
                 : PipelineStepConfigResolver.ResolveThinkingLevel(projectSettings, catalogueStep, cli, model);
 
-            var (diff, commitLabel) = BuildGradeDiff(entry.Name, entry.Path, job);
+            var (diff, commitLabel) = BuildGradeDiff(entry, job);
 
             var request = new AgentStudio.Review.CodeReviewStepRequest(
                 Project: entry.Name,
@@ -2774,6 +2780,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 Mode = AgentStudio.Review.CodeReviewMode.Grade,
                 Commit = commitLabel,
                 ThinkingLevel = thinkingLevel,
+                ResultsInventory = ResultsInventory.Render(job.FolderPath),
+                CardMode = ReviewCardMode.Describe(job.Mode),
             };
 
             var report = await _codeReviewStep.RunAsync(request, ct);
@@ -2841,8 +2849,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// returns an empty diff with a "(no diff resolved)" label when git is not
     /// wired or resolution throws.
     /// </summary>
-    private (string Diff, string? CommitLabel) BuildGradeDiff(string project, string? watchPath, TaskInfo job)
+    private (string Diff, string? CommitLabel) BuildGradeDiff(WatchPathEntry entry, TaskInfo job)
     {
+        var project = entry.Name;
+        var watchPath = entry.Path;
         if (_git == null) return (string.Empty, null);
         try
         {
@@ -2873,6 +2883,17 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     _git.GetAggregateCommitDiff(job.Id, watchPath, scope.Shas, path: null),
                 _ => _git.GetCommitDiff(job.Id, watchPath, scope.Shas[0], path: null),
             };
+
+            // Post-squash/merge or steer follow-up: the run-window scope resolves
+            // no commits and the working tree is clean, so the grade would review
+            // an empty diff and mis-grade a real, landed change. Fall back to the
+            // task-branch-vs-base range so the grade sees the actual change set.
+            if (string.IsNullOrWhiteSpace(diff))
+            {
+                var branchSummary = TryBuildBranchDiffSummary(entry, job);
+                if (branchSummary != null)
+                    return (branchSummary, $"{scope.Label} (branch range vs base)");
+            }
             return (diff, scope.Label);
         }
         catch (Exception ex)
@@ -3640,11 +3661,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// both services from DI.
     /// </para>
     /// </summary>
-    private string LoadDiffSummary(string project, string? watchPath, TaskInfo job)
+    private string LoadDiffSummary(WatchPathEntry entry, TaskInfo job)
     {
+        var project = entry.Name;
+        var watchPath = entry.Path;
         if (_sessions == null || _git == null)
         {
-            return BuildDiffSummary(EmptyAggregate, job.Commit);
+            return AppendBranchDiffSummary(BuildDiffSummary(EmptyAggregate, job.Commit), entry, job);
         }
         try
         {
@@ -3660,15 +3683,81 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // (read as "corrupted / no work") for a genuine multi-line commit.
             aggregate = EnrichLineStats(aggregate,
                 sha => _git!.GetCommitStat(job.Id, watchPath, sha));
-            return BuildDiffSummary(aggregate, job.Commit);
+            return AppendBranchDiffSummary(BuildDiffSummary(aggregate, job.Commit), entry, job);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
                 "ReviewDecisionOrchestrator: full-range diff summary failed for {Project}/{JobId}; falling back to single-commit view",
                 project, job.Id);
-            return BuildDiffSummary(EmptyAggregate, job.Commit);
+            return AppendBranchDiffSummary(BuildDiffSummary(EmptyAggregate, job.Commit), entry, job);
         }
+    }
+
+    /// <summary>
+    /// Append the task-branch-vs-base commit range to the run-window diff summary.
+    /// The run-window aggregate can be empty even though the task changed the tree
+    /// - after a squash/merge or a steer follow-up run whose window produced no new
+    /// commits, the current run's working diff is empty. The branch range
+    /// (<c>base..task/&lt;id&gt;</c>) is the authoritative "what did this task change"
+    /// signal that survives those cases, so the aspect / review reviewers always
+    /// see the real change set (AGT-2022 / AGT-1915). Best-effort: returns the base
+    /// summary unchanged when git is unwired, the task branch is absent (sequential
+    /// runs never create one), or the range is empty.
+    /// </summary>
+    private string AppendBranchDiffSummary(string baseSummary, WatchPathEntry entry, TaskInfo job)
+    {
+        var branch = TryBuildBranchDiffSummary(entry, job);
+        return branch == null ? baseSummary : baseSummary + "\n\n" + branch;
+    }
+
+    private string? TryBuildBranchDiffSummary(WatchPathEntry entry, TaskInfo job)
+    {
+        if (_git == null) return null;
+        var repoRoot = !string.IsNullOrWhiteSpace(entry.RepositoryPath) ? entry.RepositoryPath : entry.RootPath;
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+
+        try
+        {
+            var taskBranch = $"task/{job.Id}";
+            if (!_git.BranchExists(repoRoot, taskBranch)) return null;
+
+            var configuredBase = _projectSettings?.Get(entry.Name)?.IntegrationBranch;
+            var baseBranch = _git.ResolveIntegrationBranch(repoRoot, configuredBase);
+            var commits = _git.GetCommitsInRangeAtRoot(repoRoot, baseBranch, taskBranch);
+            if (commits.Count == 0) return null;
+
+            return BuildBranchDiffSummary(baseBranch, taskBranch, commits);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: task-branch diff summary failed for {Project}/{JobId}",
+                entry.Name, job.Id);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Pure renderer for the task-branch-vs-base commit range. Pure so a unit test
+    /// can pin the "steer follow-up: empty working diff but branch commits" shape
+    /// without a live repo.
+    /// </summary>
+    internal static string BuildBranchDiffSummary(string baseBranch, string taskBranch, IReadOnlyList<GitCommitInfo> commits)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"Task branch `{taskBranch}` vs base `{baseBranch}`: {commits.Count} commit(s) ahead.");
+        sb.AppendLine($"Total files changed: {commits.Sum(c => c.FilesChanged)}; lines +{commits.Sum(c => c.Added)}/-{commits.Sum(c => c.Removed)}.");
+        sb.AppendLine();
+        sb.AppendLine("Per commit (newest first):");
+        foreach (var c in commits)
+        {
+            var subject = string.IsNullOrWhiteSpace(c.Subject) ? "(no subject)" : c.Subject;
+            sb.AppendLine($"- {c.ShortSha} {subject} ({c.FilesChanged} files, +{c.Added}, -{c.Removed})");
+        }
+        sb.AppendLine();
+        sb.AppendLine("These branch commits are attributed to the task even when the current run's working diff is empty (post-squash/merge or steer follow-up). Do NOT treat an empty working diff as missing work when this range is non-empty.");
+        return sb.ToString().TrimEnd();
     }
 
     private static readonly TaskCommitsAggregate EmptyAggregate = new() { Count = 0, Commits = [] };

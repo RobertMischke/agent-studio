@@ -90,6 +90,18 @@ pipeline view.
 
 ## Invariants
 
+- Aspect and code-review prompts carry a complete evidence set (AGT-2022): the
+  run-window diff summary is appended with the task-branch-vs-base commit range
+  (`base..task/<id>` via `GitService.GetCommitsInRangeAtRoot`) so a squash/merge
+  or steer follow-up with an empty working diff still shows the real change set;
+  the job's `results/` folder inventory (`ResultsInventory.Render`, file list +
+  short excerpts); and a one-line card-mode framing (`ReviewCardMode.Describe`)
+  so a read-only planning/research card is not read as missing work. The
+  "deliverables missing" verdict is legitimate ONLY when the branch diff is empty
+  AND `results/` has no artefacts AND no external deliverable (e.g. a `docs/`
+  commit) is documented. `AspectRunInputs` / `CodeReviewStepRequest` carry the
+  `ResultsInventory` + `CardMode` fields; the `{{results_inventory}}` and
+  `{{card_mode}}` slots render them in every aspect + code-review template.
 - `post-orchestrator-review` is an early completeness gate. It must never render
   as a final verdict.
 - `post-orchestrator-decision` is the single final orchestrator verdict.

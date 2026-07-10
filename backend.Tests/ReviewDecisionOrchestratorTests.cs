@@ -962,6 +962,31 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public void BuildBranchDiffSummary_SteerFollowupEmptyWorkingDiff_ShowsBranchCommits()
+    {
+        // AGT-2022 test 3: a steer follow-up run leaves an empty working diff, but
+        // the task branch still carries its commits vs the base branch. The aspect
+        // reviewers must see that branch range so they never false-BLOCK the task
+        // as "deliverables missing".
+        var commits = new List<GitCommitInfo>
+        {
+            new("sha2222222", "sha2", DateTime.UtcNow, "dev", "feat: wire the endpoint", 3, 40, 5),
+            new("sha1111111", "sha1", DateTime.UtcNow.AddMinutes(-10), "dev", "feat: add the service", 2, 120, 0),
+        };
+
+        var summary = ReviewDecisionOrchestrator.BuildBranchDiffSummary("develop", "task/AGT-2022", commits);
+
+        Assert.Contains("task/AGT-2022", summary);
+        Assert.Contains("develop", summary);
+        Assert.Contains("2 commit(s) ahead", summary);
+        Assert.Contains("Total files changed: 5", summary);
+        Assert.Contains("+160/-5", summary);
+        Assert.Contains("feat: wire the endpoint", summary);
+        Assert.Contains("feat: add the service", summary);
+        Assert.Contains("Do NOT treat an empty working diff as missing work", summary);
+    }
+
+    [Fact]
     public void BuildDiffSummary_AggregateEmptyButLegacyCommitPresent_FallsBackToLegacyView()
     {
         // Defensive fallback path: the aggregator could not be wired

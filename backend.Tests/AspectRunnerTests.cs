@@ -276,6 +276,47 @@ public class AspectRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task AspectPrompt_CarriesResultsInventoryAndCardMode_ForEvidenceCompleteness()
+    {
+        // AGT-2022: every aspect prompt must carry the results/ inventory and the
+        // card-mode framing so a read-only / concept card is never false-BLOCKed
+        // as "deliverables missing" when the deliverable lives outside the diff.
+        string? capturedPrompt = null;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        runner.CliRunner = (_, _, _, prompt, _, _) =>
+        {
+            capturedPrompt = prompt;
+            return Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+        };
+
+        var inputs = new AspectRunInputs(
+            Project: "demo",
+            JobId: "concept-job",
+            JobTitle: "Analyse the pipeline and propose next steps",
+            JobFolderPath: _jobFolder,
+            TaskBody: "# Task\n\nWrite a plan.",
+            RecentLog: "done",
+            DiffSummary: "No commits attributed to this task.",
+            StatusSummary: "Plan written to results/plan.md.")
+        {
+            ResultsInventory = "results/ folder contains 1 file(s):\n- plan.md (512 bytes)",
+            CardMode = ReviewCardMode.Describe("planning"),
+        };
+
+        await runner.RunAsync(inputs,
+            new[] { "requirement-fit" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.NotNull(capturedPrompt);
+        Assert.Contains("results/ folder inventory", capturedPrompt!);
+        Assert.Contains("plan.md", capturedPrompt);
+        Assert.Contains("read-only", capturedPrompt);
+        Assert.Contains("Deliverables rule", capturedPrompt);
+    }
+
+    [Fact]
     public async Task PerAspectModel_RoutesEachAspectsCliCallToItsConfiguredModel()
     {
         // The load-bearing per-step-model-selection acceptance: when the

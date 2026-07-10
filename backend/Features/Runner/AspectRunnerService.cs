@@ -378,7 +378,13 @@ public sealed class AspectRunnerService
             ["task_body"] = inputs.TaskBody,
             ["recent_log"] = inputs.RecentLog,
             ["diff_summary"] = inputs.DiffSummary,
-            ["status_summary"] = inputs.StatusSummary
+            ["status_summary"] = inputs.StatusSummary,
+            ["results_inventory"] = string.IsNullOrWhiteSpace(inputs.ResultsInventory)
+                ? "No results/ inventory available."
+                : inputs.ResultsInventory,
+            ["card_mode"] = string.IsNullOrWhiteSpace(inputs.CardMode)
+                ? ReviewCardMode.Describe(null)
+                : inputs.CardMode
         };
         try
         {
@@ -402,6 +408,8 @@ public sealed class AspectRunnerService
         sb.AppendLine();
         sb.AppendLine($"## Project / Job: {inputs.Project} / {inputs.JobId} - {inputs.JobTitle}");
         sb.AppendLine();
+        sb.AppendLine(string.IsNullOrWhiteSpace(inputs.CardMode) ? ReviewCardMode.Describe(null) : inputs.CardMode);
+        sb.AppendLine();
         sb.AppendLine("## Task body");
         sb.AppendLine("```");
         sb.AppendLine(inputs.TaskBody);
@@ -412,10 +420,17 @@ public sealed class AspectRunnerService
         sb.AppendLine(inputs.RecentLog);
         sb.AppendLine("```");
         sb.AppendLine();
-        sb.AppendLine("## Diff summary");
+        sb.AppendLine("## Diff summary (task branch vs base)");
         sb.AppendLine("```");
         sb.AppendLine(inputs.DiffSummary);
         sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine("## results/ folder inventory");
+        sb.AppendLine("```");
+        sb.AppendLine(string.IsNullOrWhiteSpace(inputs.ResultsInventory) ? "No results/ inventory available." : inputs.ResultsInventory);
+        sb.AppendLine("```");
+        sb.AppendLine();
+        sb.AppendLine("Only treat deliverables as missing when the diff summary shows no branch changes, the results/ inventory is empty, AND no external deliverable (e.g. a docs/ commit) is documented.");
         sb.AppendLine();
         sb.AppendLine("Reply with a short paragraph or two (under 200 words) plus EXACTLY one verdict sentinel on its own line.");
         sb.AppendLine();
@@ -555,7 +570,24 @@ public sealed record AspectRunInputs(
     string TaskBody,
     string RecentLog,
     string DiffSummary,
-    string StatusSummary);
+    string StatusSummary)
+{
+    /// <summary>
+    /// Inventory of the job's <c>results/</c> folder (file list + short
+    /// excerpts). Completes the evidence source so a reviewer never reads an
+    /// empty git diff as "deliverables missing" when the deliverable is a
+    /// results/ artefact (AGT-2022). Defaults to empty so existing callers /
+    /// tests that build inputs positionally keep compiling.
+    /// </summary>
+    public string ResultsInventory { get; init; } = string.Empty;
+
+    /// <summary>
+    /// One-line framing of the card's execution mode (coding vs read-only
+    /// planning / research) so an empty code diff on a concept / doc / research
+    /// card is read as legitimate rather than as missing work.
+    /// </summary>
+    public string CardMode { get; init; } = string.Empty;
+}
 
 /// <summary>
 /// Aggregated verdict for one job's full multi-aspect pass: the
