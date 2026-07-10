@@ -29,11 +29,19 @@ function uid() {
 
 /** Find the kanban card belonging to a specific job id. */
 function cardLocator(page: Page, jobId: string) {
-  return page.locator(`[data-testid="job-card"]`, { hasText: jobId });
+  return page.locator('app-job-card', { hasText: jobId });
+}
+
+/** AGT-2020: open a card's context menu and click its destructive Delete row. */
+async function deleteViaCardMenu(page: Page, card: ReturnType<typeof cardLocator>) {
+  await card.locator('[data-testid="task-card"]').click({ button: 'right' });
+  const deleteItem = page.locator('[data-testid="card-ctx-item-delete-task"]');
+  await expect(deleteItem).toBeVisible({ timeout: 3_000 });
+  await deleteItem.click();
 }
 
 test.describe('Delete task', () => {
-  test('hover-revealed delete button on a kanban card prompts and removes the job', async ({ page }) => {
+  test('context-menu Delete on a kanban card prompts and removes the job', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const watchPath = wp.path;
     await cleanupTestJobs(watchPath);
@@ -53,10 +61,7 @@ test.describe('Delete task', () => {
     const card = cardLocator(page, job.id);
     await expect(card).toBeVisible({ timeout: 10_000 });
 
-    await card.hover();
-    const trash = card.getByTestId('job-card-delete');
-    await expect(trash).toBeVisible();
-    await trash.click();
+    await deleteViaCardMenu(page, card);
 
     // Unified confirm dialog replaces window.confirm; click the danger
     // button to accept.
@@ -142,8 +147,7 @@ test.describe('Delete task', () => {
     await page.goto('/');
     const card = cardLocator(page, job.id);
     await expect(card).toBeVisible({ timeout: 10_000 });
-    await card.hover();
-    await card.getByTestId('job-card-delete').click();
+    await deleteViaCardMenu(page, card);
 
     const confirmDialog = page.getByTestId('confirm-dialog-panel');
     await expect(confirmDialog).toBeVisible({ timeout: 5_000 });
@@ -177,8 +181,7 @@ test.describe('Delete task', () => {
     await page.goto('/');
     const card = cardLocator(page, job.id);
     await expect(card).toBeVisible({ timeout: 10_000 });
-    await card.hover();
-    await card.getByTestId('job-card-delete').click();
+    await deleteViaCardMenu(page, card);
 
     const confirmDialog = page.getByTestId('confirm-dialog-panel');
     await expect(confirmDialog).toBeVisible({ timeout: 5_000 });

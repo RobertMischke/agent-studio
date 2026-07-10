@@ -71,11 +71,13 @@ test.describe('Card delete button', () => {
         .filter({ hasText: 'Delete test card' });
       await expect(card).toBeVisible({ timeout: 10_000 });
 
-      await card.hover();
-      const deleteBtn = card.locator('[data-testid="job-card-delete"]');
-      await expect(deleteBtn).toBeVisible({ timeout: 3_000 });
+      // AGT-2020: Delete now lives in the card context menu (right-click / Menu
+      // key), not on a hover trash button.
+      await card.locator('[data-testid="task-card"]').click({ button: 'right' });
+      const deleteItem = page.locator('[data-testid="card-ctx-item-delete-task"]');
+      await expect(deleteItem).toBeVisible({ timeout: 3_000 });
 
-      await deleteBtn.click();
+      await deleteItem.click();
 
       const dialog = page.locator('[data-testid="confirm-dialog"]');
       await expect(dialog).toBeVisible({ timeout: 3_000 });
@@ -109,9 +111,9 @@ test.describe('Card delete button', () => {
       .filter({ hasText: 'Delete confirm test' });
     await expect(card).toBeVisible({ timeout: 10_000 });
 
-    await card.hover();
-    const deleteBtn = card.locator('[data-testid="job-card-delete"]');
-    await deleteBtn.click();
+    await card.locator('[data-testid="task-card"]').click({ button: 'right' });
+    const deleteItem = page.locator('[data-testid="card-ctx-item-delete-task"]');
+    await deleteItem.click();
 
     const dialog = page.locator('[data-testid="confirm-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 3_000 });
@@ -123,7 +125,7 @@ test.describe('Card delete button', () => {
     await page.screenshot({ path: 'test-results/card-delete-after-confirm.png' });
   });
 
-  test('DELETE button works in compact mode', async ({ page }) => {
+  test('Delete via context menu works in compact mode', async ({ page }) => {
     const wp = await firstWatchPath();
     const jobId = PREFIX + 'compact-' + Date.now();
     await createJob({
@@ -149,13 +151,13 @@ test.describe('Card delete button', () => {
         .filter({ hasText: 'Compact delete test' });
       await expect(card).toBeVisible({ timeout: 10_000 });
 
-      await card.hover();
-      const deleteBtn = card.locator('[data-testid="job-card-delete"]');
-      await expect(deleteBtn).toBeVisible({ timeout: 3_000 });
+      await card.locator('[data-testid="task-card"]').click({ button: 'right' });
+      const deleteItem = page.locator('[data-testid="card-ctx-item-delete-task"]');
+      await expect(deleteItem).toBeVisible({ timeout: 3_000 });
 
-      await page.screenshot({ path: 'test-results/card-delete-compact-hover.png' });
+      await page.screenshot({ path: 'test-results/card-delete-compact-menu.png' });
 
-      await deleteBtn.click();
+      await deleteItem.click();
 
       const dialog = page.locator('[data-testid="confirm-dialog"]');
       await expect(dialog).toBeVisible({ timeout: 3_000 });

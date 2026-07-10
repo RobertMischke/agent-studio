@@ -14,7 +14,9 @@
      [attr.data-project]="job().projectName"
      [attr.data-running]="isRunning() ? 'true' : null"
      [attr.data-compact]="compact() ? 'true' : null"
-     (contextmenu)="openCardContextMenu($event)">
+     tabindex="0"
+     (contextmenu)="openCardContextMenu($event)"
+     (keydown)="onCardKeyDown($event)">
   <div class="task-card__header">
     <span class="task-card__key-chip" data-testid="task-card-key" [cacTooltip]="'Task key: ' + issueLabel()">
       {{ issueLabel() }}
@@ -54,12 +56,6 @@
       }
       </span>
   </div>
-  <button type="button"
-          class="task-card__delete"
-          data-testid="task-card-delete"
-          [cacTooltip]="'Delete task'"
-          aria-label="Delete task"
-          (click)="onDeleteClick($event)">🗑</button>
   <h3 class="task-card__title"
       [appTaskStatusPopover]="job()"
       data-testid="task-card-title">

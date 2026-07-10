@@ -41,6 +41,14 @@
         var(--task-card-ring),
         var(--studio-card-shadow);
     }
+    /* Keyboard focus: the card is tabbable (tabindex=0) so the context menu —
+       now the only place Delete lives — is reachable via the Menu key /
+       Shift+F10 without a mouse. Show a clear accent ring on keyboard focus,
+       suppressed for mouse clicks via :focus-visible. */
+    .task-card:focus-visible {
+      outline: 2px solid var(--studio-accent, #d97757);
+      outline-offset: 2px;
+    }
     /* Drag-source: while a card is being dragged, dim it to ~55% so the
        drag-image (browser-rendered ghost) reads as the active object.
        The transition above handles the smooth restore on release. */
@@ -243,44 +251,10 @@
       min-width: 0;
       letter-spacing: 0.02em;
     }
-    /* Delete affordance: positioned absolutely on the card so it survives
-       compact mode (the header is display:none in compact). Hidden until
-       card hover so the cards stay calm in the default board view. The
-       button stops propagation so clicking it never opens the detail panel.
-       The confirmation prompt itself lives in the parent component. */
-    .task-card__delete {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      z-index: 2;
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--studio-fg-muted);
-      width: 22px;
-      height: 22px;
-      padding: 0;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      line-height: 1;
-      display: grid;
-      place-items: center;
-      opacity: 0;
-      transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
-    }
-    .task-card--compact .task-card__delete {
-      top: 4px;
-      right: 4px;
-    }
-    .task-card:hover .task-card__delete,
-    .task-card__delete:focus-visible {
-      opacity: 1;
-    }
-    .task-card__delete:hover {
-      background: rgba(244, 63, 94, 0.15);
-      border-color: rgba(244, 63, 94, 0.40);
-      color: #fda4af;
-    }
+    /* Delete moved off the card into the right-click / Menu-key context menu
+       (destructive row) — the hover trash button was a fehlklick-risk right
+       where the operator clicks/drags. The confirm/undo prompt still lives in
+       the parent component. */
 
     // F5 + A5 (2026-05-21): "Pick next" affordance for 2-ready cards.
     // Idle: small icon-only pill. Hover/focus: text "Next" expands in

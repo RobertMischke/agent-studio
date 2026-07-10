@@ -40,6 +40,7 @@ import {
   EPIC_ASSIGN_PREFIX,
   EPIC_DETACH_ID,
   FILTER_DEPENDENTS_ID,
+  DELETE_ID,
   type CommitChainView,
   type CommitEmptyBadge,
 } from './task-card-view-model';
@@ -138,11 +139,6 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   readonly modeBadge = computed(() => buildModeBadge(this.job().mode));
 
   readonly tagChips = computed(() => buildTagChips(this.job().tags, this.tagRegistry.byId(), this.job().state));
-
-  onDeleteClick(event: Event) {
-    event.stopPropagation();
-    this.deleteRequested.emit(this.job());
-  }
 
   /** True for cards where "Pick next" makes sense (front-of-queue promotion). */
   readonly canPickNext = computed(() => this.job().state === TaskState.Ready);
@@ -438,7 +434,27 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   openCardContextMenu(event: MouseEvent): void {
     event.preventDefault();
     event.stopPropagation();
-    this.cardContextMenu.set({ x: event.clientX, y: event.clientY });
+    this.openCardMenuAt(event.clientX, event.clientY);
+  }
+
+  /**
+   * A11y: keep the card actions (incl. Delete) reachable without a mouse now
+   * that the hover trash button is gone. The Menu/Application key and Shift+F10
+   * are the platform convention for "open the context menu on the focused
+   * element"; we anchor the menu to the focused card's top-left corner.
+   */
+  onCardKeyDown(event: KeyboardEvent): void {
+    const isContextMenuKey = event.key === 'ContextMenu'
+      || (event.shiftKey && event.key === 'F10');
+    if (!isContextMenuKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = this.hostRef.nativeElement.getBoundingClientRect();
+    this.openCardMenuAt(rect.left + 12, rect.top + 12);
+  }
+
+  private openCardMenuAt(x: number, y: number): void {
+    this.cardContextMenu.set({ x, y });
     // Refresh the assign list each open (only for task cards). Best-effort:
     // the section just shows "No epics" on failure.
     if (!this.isEpic()) {
@@ -457,6 +473,12 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   onCardCtxMenuItemClick(ev: MenuItemClickEvent): void {
     const job = this.job();
 
+    if (ev.id === DELETE_ID) {
+      // Same flow as the old hover trash button: emit and let the parent own
+      // the confirm/undo prompt. Delete semantics are unchanged.
+      this.deleteRequested.emit(job);
+      return;
+    }
     if (ev.id.startsWith(EPIC_ASSIGN_PREFIX)) {
       const epicId = ev.id.slice(EPIC_ASSIGN_PREFIX.length);
       if (epicId === this.subTaskEpicId()) return; // already in this epic

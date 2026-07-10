@@ -1227,6 +1227,13 @@ export function buildPendingTooltip(pi: PendingIntent): string {
 export const EPIC_ASSIGN_PREFIX = 'epic-assign:';
 export const EPIC_DETACH_ID = 'epic-detach';
 export const FILTER_DEPENDENTS_ID = 'filter-dependents';
+/**
+ * Destructive "Delete task" context-menu row. Replaces the hover trash button
+ * that used to sit on every card (fehlklick-risk right where you click/drag).
+ * Clicking it drives the same `deleteRequested` flow — the parent still owns
+ * the confirm/undo semantics.
+ */
+export const DELETE_ID = 'delete-task';
 
 /**
  * Right-click context-menu rows for a card: copy actions + (for non-epic cards)
@@ -1273,5 +1280,16 @@ export function buildCardCtxMenuItems(
       }
     }
   }
+
+  // Destructive delete lives at the very end behind a separator so it never
+  // sits next to the everyday copy/assign rows. Present on every card — for an
+  // epic card it may be the only actionable row, which the operator accepted.
+  items.push({ kind: 'separator' });
+  items.push({
+    kind: 'row',
+    id: DELETE_ID,
+    label: isEpic ? 'Delete epic' : 'Delete task',
+    danger: true,
+  });
   return items;
 }

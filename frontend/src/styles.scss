@@ -167,12 +167,6 @@ html[data-studio-theme='light'] {
     border-color: rgba(0, 0, 0, 0.10);
     color: #3a3a3a;
   }
-  .task-card__delete { color: var(--studio-fg-muted); }
-  .task-card__delete:hover {
-    background: rgba(220, 38, 38, 0.08);
-    border-color: rgba(220, 38, 38, 0.30);
-    color: #b91c1c;
-  }
   // Card title now reads var(--studio-fg) component-side which already
   // resolves to dark in light theme — no bridge override needed.
   .dashboard,

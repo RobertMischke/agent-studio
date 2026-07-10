@@ -335,7 +335,32 @@ describe('TaskColumnComponent (smoke)', () => {
     expect(host.textContent ?? '').not.toContain('Last tick:');
   });
 
-  it('forwards card delete requests from regular lanes', async () => {
+  // AGT-2020: Delete moved off the hover trash button into the card context
+  // menu (destructive row). The card must carry NO standalone delete button,
+  // and the menu's "Delete task" row drives the same jobDeleteRequest flow.
+  it('no longer renders a hover delete button on the card', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskColumnComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskColumnComponent);
+    const job = makeJob();
+    fixture.componentRef.setInput('title', 'Ready');
+    fixture.componentRef.setInput('state', '2-ready');
+    fixture.componentRef.setInput('jobs', [job]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-delete"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.task-card__delete')).toBeNull();
+  });
+
+  it('forwards card delete requests from the context-menu Delete row', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskColumnComponent],
       providers: [
@@ -355,9 +380,21 @@ describe('TaskColumnComponent (smoke)', () => {
     fixture.componentRef.setInput('jobs', [job]);
     fixture.detectChanges();
 
-    const button = fixture.nativeElement.querySelector('[data-testid="task-card-delete"]') as HTMLButtonElement | null;
-    expect(button).toBeTruthy();
-    button!.click();
+    // Open the card context menu (same surface as right-click / Menu key).
+    const card = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement;
+    expect(card).toBeTruthy();
+    card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    fixture.detectChanges();
+
+    // The destructive Delete row lives at the end of the menu (testIdPrefix
+    // "card-ctx"). Clicking it must forward the job unchanged.
+    const deleteRow = document.querySelector('[data-testid="card-ctx-item-delete-task"]') as HTMLButtonElement | null;
+    expect(deleteRow).toBeTruthy();
+    expect(deleteRow!.classList.contains('app-menu__row--danger')).toBe(true);
+    deleteRow!.click();
+    fixture.detectChanges();
 
     expect(deleted).toEqual([job]);
   });
