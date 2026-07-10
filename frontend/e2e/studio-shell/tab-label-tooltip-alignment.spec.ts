@@ -35,7 +35,7 @@ test('restored task tab hides its watch path and centres its key', async ({ page
   await expect(taskTab).toHaveAttribute('title', 'ASS-1766');
   await expect(taskTab.locator('.studio-tab__title')).toHaveAttribute('title', 'ASS-1766');
 
-  const hubTab = page.getByTestId('studio-tab-hub:Agent Software Studio');
+  const hubTab = page.getByTestId(/studio-tab-hub:Agent Software Studio/);
   const icon = hubTab.locator('app-studio-icon');
   const hubBox = await hubTab.boundingBox();
   const iconBox = await icon.boundingBox();

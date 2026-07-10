@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -65,6 +65,7 @@ describe('StudioShellComponent titlebar breadcrumb', () => {
       modelDefault: null,
       sortOrder: 0,
       storageLocation: `C:/proj/${id}`,
+      sourceType: 'local-folder',
       urls: [],
       archived: false,
       createdAt: '2026-01-01T00:00:00Z',
@@ -555,6 +556,7 @@ describe('StudioShellComponent hub tab label + icon', () => {
       archived: false,
       createdAt: '2026-01-01T00:00:00Z',
       ...over,
+      sourceType: over.sourceType ?? 'local-folder',
     };
   }
 
