@@ -103,7 +103,7 @@ describe('StudioActivityBarComponent admin destination', () => {
    * that two items can never light up together — assert it on the DOM.
    */
   it('marks at most one button active for any active key', () => {
-    for (const key of ['explorer', 'filters', 'backlog', 'epics', 'admin', 'settings', null]) {
+    for (const key of ['explorer', 'filters', 'epics', 'admin', 'settings', null]) {
       const fixture = mount(key);
       fixture.componentRef.setInput('hasEpics', true);
       fixture.detectChanges();
@@ -123,13 +123,12 @@ describe('StudioActivityBarComponent admin destination', () => {
  */
 describe('resolveActiveActivityKey', () => {
   it('lets the editor destination win over an open sidebar panel', () => {
-    // Explorer sidebar open AND a Backlog tab active — the classic
-    // two-markers case. Only Backlog wins.
+    // Explorer sidebar open and an Epics tab active. Only Epics wins.
     expect(resolveActiveActivityKey({
-      activeTabKind: 'backlog',
+      activeTabKind: 'epics',
       activePanel: 'explorer',
       sidebarVisible: true,
-    })).toBe('backlog');
+    })).toBe('epics');
   });
 
   it('maps the workspace-settings tab to the settings item', () => {
@@ -166,9 +165,9 @@ describe('resolveActiveActivityKey', () => {
 
   it('keeps the destination marker even when the sidebar is hidden', () => {
     expect(resolveActiveActivityKey({
-      activeTabKind: 'backlog',
+      activeTabKind: 'epics',
       activePanel: 'explorer',
       sidebarVisible: false,
-    })).toBe('backlog');
+    })).toBe('epics');
   });
 });

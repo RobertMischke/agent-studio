@@ -170,8 +170,8 @@
               </app-tree-row>
             }
             @if (isExpanded(p.name)) {
-              <!-- ASS-658/ASS-597: five fixed per-project rows, all project-scoped — Board (kanban), Project Hub, Wiki, Backlog
-                   (triage), and Epics (overview) — followed by 0..N dynamic
+              <!-- Fixed project-scoped rows for Board (kanban), Project Hub,
+                   Wiki, and Epics (overview), followed by 0..N dynamic
                    Project URL rows (see the @for below). The workspace is the
                    first navigation level; project rows and their destinations
                    share the second-level inset. Per-lane children stay retired. -->
@@ -212,12 +212,6 @@
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'wiki' ? 'page' : null"
                               [testid]="'studio-explorer-project-wiki-' + p.name"
                               (selectRequest)="openWikiRequest.emit(p.name)" />
-                <app-tree-row level="root" glyph="list"
-                              label="Backlog"
-                              [active]="p.isActive && activeProjectSurface() === 'backlog'"
-                              [ariaCurrent]="p.isActive && activeProjectSurface() === 'backlog' ? 'page' : null"
-                              [testid]="'studio-explorer-project-backlog-' + p.name"
-                              (selectRequest)="openBacklogRequest.emit(p.name)" />
                 <app-tree-row level="root" glyph="book"
                               label="Epics"
                               [active]="p.isActive && activeProjectSurface() === 'epics'"

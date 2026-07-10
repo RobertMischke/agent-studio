@@ -15,8 +15,6 @@ import {
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import {
-  BacklogTriageScreenComponent,
-  BacklogTriageService,
   BoardFiltersService,
   CreateTaskDialogComponent,
   EpicGroupBoardComponent,
@@ -176,7 +174,6 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     KanbanFilterSidesheetComponent,
     TooltipDirective,
     MenuComponent,
-    BacklogTriageScreenComponent,
     EpicOverviewScreenComponent,
     StudioShellComponent,
     ProjectHubViewComponent,
@@ -359,9 +356,7 @@ export class App implements OnInit, OnDestroy {
       && this.workspaceOverlays.section() !== 'caps'
     : this.workspaceOverlays.anyOpenExceptUsage());
   private hashListener: (() => void) | null = null;
-  private initialHashSyncComplete = false;
   private kanbanKeyListener: ((ev: KeyboardEvent) => void) | null = null;
-  private boardShortcutListener: ((ev: KeyboardEvent) => void) | null = null;
   readonly watchPaths = signal<WatchPathEntry[]>([]);
   /**
    * Cycle 9 / ADR-0034: search query, four faceted filters, URL hash +
@@ -371,7 +366,6 @@ export class App implements OnInit, OnDestroy {
    * existing template bindings keep working unchanged.
    */
   private readonly boardFilters = inject(BoardFiltersService);
-  readonly backlogTriage = inject(BacklogTriageService);
   private readonly tagRegistryStore = inject(TagRegistryStore);
   private readonly cliCatalogStore = inject(CliCatalogStore);
   readonly activeProjects = this.boardFilters.activeProjects;
@@ -979,7 +973,6 @@ export class App implements OnInit, OnDestroy {
         case 'hub':
           project = tab.projectName;
           break;
-        case 'backlog':
         case 'epics':
           project = tab.projectName;
           break;
@@ -1158,18 +1151,6 @@ export class App implements OnInit, OnDestroy {
       );
     });
 
-    // Keep the backlog triage screen's scope in lock-step with the active
-    // backlog tab. Each backlog tab carries its own projectName (key
-    // `backlog:<project|__all__>`), so switching to a differently-scoped
-    // backlog tab re-narrows the triage list without going through the hash.
-    effect(() => {
-      const tab = this.studioTabState.activeTab();
-      if (tab?.kind === 'backlog') {
-        untracked(() => this.backlogTriage.scopedProject.set(tab.projectName));
-      }
-      untracked(() => this.reconcileBacklogHashForActiveTab(tab));
-    });
-
   }
 
   ngOnInit() {
@@ -1204,12 +1185,9 @@ export class App implements OnInit, OnDestroy {
         this.openWorkspaceSettingsInStudio(this.workspaceOverlays.section());
       }
       this.applyProjectShellHash();
-      this.syncBacklogTabFromHash();
       this.syncEpicsTabFromHash();
     };
     applyHash();
-    this.initialHashSyncComplete = true;
-    this.reconcileBacklogHashForActiveTab(this.studioTabState.activeTab());
     this.hashListener = applyHash;
     window.addEventListener('hashchange', this.hashListener);
 
@@ -1223,7 +1201,6 @@ export class App implements OnInit, OnDestroy {
       if (this.showCreate()) return;
       if (this.workspaceOverlays.settingsOpen()) return;
       if (this.projectShellName() !== null) return;
-      if (this.studioTabState.activeTab()?.kind === 'backlog') return;
       if (this.studioTabState.activeTab()?.kind === 'epics') return;
       const target = ev.target as HTMLElement | null;
       if (target) {
@@ -1263,25 +1240,6 @@ export class App implements OnInit, OnDestroy {
     };
     window.addEventListener('keydown', this.kanbanKeyListener);
 
-    // Global Ctrl+B (Cmd+B on macOS): toggle between the dedicated backlog
-    // triage screen at #/backlog and the kanban board. Suppressed inside
-    // text inputs so Ctrl+B keeps its bold behaviour in markdown editors.
-    this.boardShortcutListener = (ev: KeyboardEvent) => {
-      if (ev.defaultPrevented) return;
-      if (!this.featureFlags.vsCodeLayout()) return;
-      const mod = ev.ctrlKey || ev.metaKey;
-      if (!mod || ev.altKey || ev.shiftKey) return;
-      if (ev.key.toLowerCase() !== 'b') return;
-      const target = ev.target as HTMLElement | null;
-      if (target) {
-        const tag = target.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-        if (target.isContentEditable) return;
-      }
-      this.toggleBacklogTriage();
-      ev.preventDefault();
-    };
-    window.addEventListener('keydown', this.boardShortcutListener);
   }
 
   ngOnDestroy() {
@@ -1292,10 +1250,6 @@ export class App implements OnInit, OnDestroy {
     if (this.kanbanKeyListener) {
       window.removeEventListener('keydown', this.kanbanKeyListener);
       this.kanbanKeyListener = null;
-    }
-    if (this.boardShortcutListener) {
-      window.removeEventListener('keydown', this.boardShortcutListener);
-      this.boardShortcutListener = null;
     }
     if (this.nowMsTickHandle !== null) {
       clearInterval(this.nowMsTickHandle);
@@ -1548,39 +1502,6 @@ export class App implements OnInit, OnDestroy {
   }
   onArchiveAll() {
     this.boardMutations.archiveAllCompleted(this.filteredGrouped().completed);
-  }
-
-  private currentBacklogScopeProject(): string | null {
-    const tab = this.studioTabState.activeTab();
-    if (tab?.kind === 'board' && tab.projectName !== '__all__') return tab.projectName;
-    if (tab?.kind === 'hub') return tab.projectName;
-    if (tab?.kind === 'task' || tab?.kind === 'activity') {
-      const job = this.jobService.jobs().find((j) => j.taskKey === tab.taskKey);
-      if (job?.projectName) return job.projectName;
-    }
-    const active = [...this.activeProjects()];
-    return active.length === 1 ? active[0] : null;
-  }
-
-  onBacklogNewTask(): void { this.openCreate(TaskState.Backlog); }
-
-  /**
-   * Ctrl+B toggle between the kanban board and the dedicated backlog triage
-   * tab. The triage screen is a first-class editor tab (equivalent to Board
-   * / Epics), so opening it focuses a `backlog` tab rather than layering an
-   * overlay over the active tab; closing it falls back to the sticky board.
-   * The `#/backlog` deep-link hash is kept in sync via the triage service so
-   * a reload / shared URL reopens the tab.
-   */
-  toggleBacklogTriage(): void {
-    if (this.studioTabState.activeTab()?.kind === 'backlog') {
-      this.backlogTriage.closeTriage();
-      this.studioTabState.activateAllProjectsBoard();
-    } else {
-      const project = this.currentBacklogScopeProject();
-      this.backlogTriage.openTriage(project);
-      this.studioTabState.open({ kind: 'backlog', projectName: project });
-    }
   }
 
   /**
@@ -2150,36 +2071,6 @@ export class App implements OnInit, OnDestroy {
   private applyProjectShellHash(): void {
     this.projectOverlays.syncShellFromHash(this.watchPaths());
     this.projectOverlays.syncFeedFromHash(this.watchPaths());
-  }
-
-  /**
-   * Deep-link sync for `#/backlog`: when the URL is on the backlog hash,
-   * open (or focus) the backlog tab so a bookmark / shared link / reload
-   * lands on the triage screen with the tab bar showing Backlog active.
-   * Read-only with respect to closing — leaving the hash is driven by the
-   * explicit toggle, mirroring `syncEpicsTabFromHash`.
-   */
-  private syncBacklogTabFromHash(): void {
-    const onBacklog = this.backlogTriage.syncFromHash(this.currentBacklogScopeProject());
-    if (onBacklog) {
-      this.studioTabState.open({ kind: 'backlog', projectName: this.backlogTriage.scopedProject() });
-    }
-  }
-
-  /**
-   * Keep the Backlog deep-link hash aligned with the active editor tab after
-   * startup hash routes have had their chance to open explicit deep links.
-   * Without this, a stale `#/backlog` segment survives a Board / Hub / task
-   * navigation and wins the next F5 before tab persistence can restore the
-   * active surface.
-   */
-  private reconcileBacklogHashForActiveTab(tab: StudioTab | null): void {
-    if (!this.initialHashSyncComplete) return;
-    if (tab?.kind === 'backlog') {
-      this.backlogTriage.openTriage(tab.projectName);
-      return;
-    }
-    this.backlogTriage.closeTriage();
   }
 
   private syncEpicsTabFromHash(): void {

@@ -43,23 +43,6 @@
       }
     </button>
   }
-  <!-- Dedicated backlog triage destination. The triage screen (route
-       #/backlog) opens via Ctrl+B as a toggle. The badge counts 0-backlog
-       jobs under the active project filter. -->
-  <button type="button"
-          class="studio-ab__btn studio-ab__btn--backlog"
-          [class.studio-ab__btn--active]="activeKey() === 'backlog'"
-          cacTooltip="Open backlog triage (Ctrl+B)"
-          data-testid="studio-ab-backlog"
-          (click)="openBacklogRequest.emit()">
-    <app-studio-icon name="backlog" [size]="22"></app-studio-icon>
-    @if (backlogCount() > 0) {
-      <span class="studio-ab__badge studio-ab__badge--count"
-            data-testid="studio-ab-backlog-badge"
-            [cacTooltip]="backlogCount() + (backlogCount() === 1 ? ' backlog task' : ' backlog tasks')"
-            aria-hidden="true">{{ backlogCount() }}</span>
-    }
-  </button>
   <!-- Epic overview destination. Hidden when no epics exist (hide-when-empty),
        so it never adds clutter for projects that don't use epics. Opens the
        read-only rollup as a normal editor tab. -->

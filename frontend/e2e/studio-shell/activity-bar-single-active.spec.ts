@@ -6,8 +6,8 @@ import { test, expect, type Page } from '@playwright/test';
  *
  * Before the fix the active marker came from two independent sources: the
  * sidebar toggle (`activePanel` + `sidebarVisible`) lit Explorer, while the
- * editor route (`activeTab().kind`) independently lit Backlog / Epics /
- * Settings. Opening a Backlog tab while the Explorer sidebar stayed open lit
+ * editor route (`activeTab().kind`) independently lit editor destinations.
+ * Opening one while the Explorer sidebar stayed open lit
  * BOTH buttons. The shell now funnels both sources through one resolved key
  * (`resolveActiveActivityKey`), so `.studio-ab__btn--active` can appear on at
  * most one button.
@@ -45,7 +45,7 @@ const activeButtons = (page: Page) =>
 test.describe('studio-shell · Activity Bar marks exactly one active item', () => {
   test.setTimeout(45_000);
 
-  test('opening Backlog while Explorer sidebar is open leaves only ONE active marker', async ({ page }) => {
+  test('opening Settings while Explorer sidebar is open leaves only ONE active marker', async ({ page }) => {
     await bootStudio(page);
 
     // Baseline: Explorer sidebar is the default panel, so exactly one marker
@@ -53,13 +53,11 @@ test.describe('studio-shell · Activity Bar marks exactly one active item', () =
     await expect(activeButtons(page)).toHaveCount(1);
     await expect(page.getByTestId('studio-ab-explorer')).toHaveClass(/studio-ab__btn--active/);
 
-    // Open the Backlog editor tab. The sidebar stays on Explorer — this is the
-    // exact state that used to light up two buttons.
-    await page.getByTestId('studio-ab-backlog').click();
+    await page.getByTestId('studio-ab-settings').click();
 
-    // Still exactly one marker, and it moved to Backlog (the shown surface).
+    // Still exactly one marker, and it moved to Settings (the shown surface).
     await expect(activeButtons(page)).toHaveCount(1);
-    await expect(page.getByTestId('studio-ab-backlog')).toHaveClass(/studio-ab__btn--active/);
+    await expect(page.getByTestId('studio-ab-settings')).toHaveClass(/studio-ab__btn--active/);
     await expect(page.getByTestId('studio-ab-explorer')).not.toHaveClass(/studio-ab__btn--active/);
   });
 
@@ -86,9 +84,9 @@ test.describe('studio-shell · Activity Bar marks exactly one active item', () =
     await expect(page.getByTestId('studio-ab-explorer')).toHaveClass(/studio-ab__btn--active/);
   });
 
-  test('evidence screenshot — one active marker with Backlog open', async ({ page }, testInfo) => {
+  test('evidence screenshot — one active marker with Settings open', async ({ page }, testInfo) => {
     await bootStudio(page);
-    await page.getByTestId('studio-ab-backlog').click();
+    await page.getByTestId('studio-ab-settings').click();
     await expect(activeButtons(page)).toHaveCount(1);
 
     const bar = page.getByTestId('studio-activity-bar');

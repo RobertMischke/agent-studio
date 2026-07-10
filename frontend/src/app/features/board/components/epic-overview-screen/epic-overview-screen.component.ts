@@ -29,7 +29,7 @@ export interface EpicOverviewScope {
  * "where do my epics stand" surface, so the only mutation it surfaces is
  * navigation: clicking an epic or a sub-task opens that card's detail.
  *
- * Mirrors {@link BacklogTriageScreenComponent}: the host owns the route
+ * The host owns the route
  * (`EpicOverviewService`) and the detail-open flow; this component fetches,
  * renders, and emits navigation requests.
  */

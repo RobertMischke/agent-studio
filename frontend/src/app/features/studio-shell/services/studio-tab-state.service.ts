@@ -222,7 +222,6 @@ export class StudioTabStateService {
     const before = this._tabs();
     const after = before.filter(t => {
       if (t.kind === 'board' && t.projectName !== ALL_PROJECTS) return validNames.has(t.projectName);
-      if (t.kind === 'backlog' && t.projectName !== null) return validNames.has(t.projectName);
       if (t.kind === 'epics' && t.projectName !== null) return validNames.has(t.projectName);
       if (t.kind === 'hub') return validNames.has(t.projectName);
       return true;
@@ -251,9 +250,9 @@ export class StudioTabStateService {
       const parsed = JSON.parse(raw) as PersistedState;
       if (!parsed || parsed.v !== STORAGE_VERSION) return false;
       if (!Array.isArray(parsed.tabs)) return false;
-      // Drop any tab entries that don't round-trip through studioTabKey;
-      // a future StudioTabKind variant the running build doesn't recognise
-      // would otherwise live as a ghost row in the tab bar.
+      // Drop retired and future tab kinds that don't round-trip through
+      // studioTabKey. This is also the migration for persisted Backlog Triage
+      // tabs from builds that still exposed that feature.
       const safeTabs = parsed.tabs.filter(t => {
         try { return typeof studioTabKey(t) === 'string'; }
         catch { return false; }
@@ -292,8 +291,6 @@ export class StudioTabStateService {
     switch (tab.kind) {
       case 'board':
         return { kind: 'board', projectName: tab.projectName };
-      case 'backlog':
-        return { kind: 'backlog', projectName: tab.projectName };
       case 'epics':
         return { kind: 'epics', projectName: tab.projectName };
       case 'epic':

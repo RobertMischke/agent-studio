@@ -265,7 +265,6 @@ describe('ExplorerWorkspaceTreeComponent', () => {
       'studio-explorer-project-board-Alpha',
       'studio-explorer-project-hub-Alpha',
       'studio-explorer-project-wiki-Alpha',
-      'studio-explorer-project-backlog-Alpha',
       'studio-explorer-project-epics-Alpha',
     ]);
 

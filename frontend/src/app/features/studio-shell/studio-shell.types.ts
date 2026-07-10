@@ -9,16 +9,13 @@
  */
 
 /** Discrete tab kinds the editor area can host. */
-export type StudioTabKind = 'board' | 'backlog' | 'epics' | 'epic' | 'task' | 'hub' | 'diff' | 'activity' | 'workspace-settings' | 'welcome';
+export type StudioTabKind = 'board' | 'epics' | 'epic' | 'task' | 'hub' | 'diff' | 'activity' | 'workspace-settings' | 'welcome';
 
 /** Sidebar panel kinds reachable from the ActivityBar. */
 export type StudioPanelKind = 'explorer' | 'filters' | 'cli' | 'activity' | 'runbook' | 'admin' | 'settings';
 
 /** Board tab - one per project; key `board:<projectName>` or `board:__all__`. */
 export interface BoardTab { kind: 'board'; projectName: string; }
-
-/** Backlog triage tab - project-scoped or workspace-wide; key `backlog:<projectName|__all__>`. */
-export interface BacklogTab { kind: 'backlog'; projectName: string | null; }
 
 /** Epic overview tab - project-scoped or workspace-wide; key `epics:<projectName|__all__>`. */
 export interface EpicsTab { kind: 'epics'; projectName: string | null; }
@@ -44,13 +41,12 @@ export interface WorkspaceSettingsTab { kind: 'workspace-settings'; }
 /** Welcome screen — no real tab, no key. */
 export interface WelcomeTab { kind: 'welcome'; }
 
-export type StudioTab = BoardTab | BacklogTab | EpicsTab | EpicTab | TaskTab | HubTab | DiffTab | ActivityTab | WorkspaceSettingsTab | WelcomeTab;
+export type StudioTab = BoardTab | EpicsTab | EpicTab | TaskTab | HubTab | DiffTab | ActivityTab | WorkspaceSettingsTab | WelcomeTab;
 
 /** Build the stable string key for a tab; used for selection + persistence. */
 export function studioTabKey(tab: StudioTab): string {
   switch (tab.kind) {
     case 'board':    return `board:${tab.projectName}`;
-    case 'backlog':  return `backlog:${tab.projectName ?? '__all__'}`;
     case 'epics':    return `epics:${tab.projectName ?? '__all__'}`;
     case 'epic':     return `epic:${tab.epicKey}`;
     case 'task':     return `task:${tab.taskKey}`;

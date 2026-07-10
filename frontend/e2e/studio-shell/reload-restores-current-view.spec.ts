@@ -22,13 +22,11 @@ import { test, expect, type Page } from '@playwright/test';
  */
 
 const STICKY_TAB_KEY = 'board:__all__';
-const BACKLOG_TAB_KEY = 'backlog:__all__';
 
 // taskKey === `${watchPath}::${id}` (see TaskService). The studio task tab
 // is keyed `task:<taskKey>`.
 const TASK_ID = 'reload-fix-task';
 const WATCH_PATH = 'demo-project';
-const PROJECT_HUB_TAB_KEY = `hub:${WATCH_PATH}`;
 const TASK_KEY = `${WATCH_PATH}::${TASK_ID}`;
 const TASK_TAB_KEY = `task:${TASK_KEY}`;
 
@@ -205,7 +203,7 @@ test.describe('studio-shell · reload restores the current view (F5 bug)', () =>
     await expect(tabBy(page, TASK_TAB_KEY)).toHaveClass(/studio-tab--active/);
   });
 
-  test('leaving Backlog for All-projects Board strips #/backlog so reload stays on the board', async ({ page }) => {
+  test('drops a persisted legacy Backlog tab and keeps the 0-backlog board lane', async ({ page }) => {
     await stubApi(page, { resolveDetail: false });
     await page.goto('/');
     await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
@@ -213,52 +211,23 @@ test.describe('studio-shell · reload restores the current view (F5 bug)', () =>
     await seedStudioTabsAndReload(page, [
       { kind: 'board', projectName: '__all__' },
       { kind: 'backlog', projectName: null },
-    ], BACKLOG_TAB_KEY, '#/backlog');
-    await expect(tabBy(page, BACKLOG_TAB_KEY)).toHaveClass(/studio-tab--active/);
+    ], 'backlog:__all__');
 
-    await tabBy(page, STICKY_TAB_KEY).click();
     await expect(tabBy(page, STICKY_TAB_KEY)).toHaveClass(/studio-tab--active/);
-    await expect.poll(() => new URL(page.url()).hash.includes('/backlog')).toBe(false);
+    await expect(page.locator('[data-testid^="studio-tab-backlog:"]')).toHaveCount(0);
+    await expect(page.getByTestId('studio-ab-backlog')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="studio-explorer-project-backlog-"]')).toHaveCount(0);
+    await expect(page.getByTestId('lane-0-backlog')).toBeVisible();
 
-    await page.reload();
-    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
-    await expect(tabBy(page, STICKY_TAB_KEY)).toHaveClass(/studio-tab--active/);
-    await expect(tabBy(page, BACKLOG_TAB_KEY)).not.toHaveClass(/studio-tab--active/);
-  });
+    const persisted = await page.evaluate(() => localStorage.getItem('atp.studio.tabs.v1'));
+    expect(persisted).not.toContain('backlog');
 
-  test('reload on Backlog Triage restores Backlog Triage', async ({ page }) => {
-    await stubApi(page, { resolveDetail: false });
-    await page.goto('/');
-    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
-
-    await seedStudioTabsAndReload(page, [
-      { kind: 'board', projectName: '__all__' },
-      { kind: 'backlog', projectName: null },
-    ], BACKLOG_TAB_KEY, '#/backlog');
-
-    await expect(tabBy(page, BACKLOG_TAB_KEY)).toHaveClass(/studio-tab--active/);
-    await expect.poll(() => new URL(page.url()).hash).toBe('#/backlog');
-  });
-
-  test('leaving Backlog for Project Hub strips #/backlog so reload stays on the hub', async ({ page }) => {
-    await stubApi(page, { resolveDetail: false });
-    await page.goto('/');
-    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
-
-    await seedStudioTabsAndReload(page, [
-      { kind: 'board', projectName: '__all__' },
-      { kind: 'backlog', projectName: null },
-      { kind: 'hub', projectName: WATCH_PATH },
-    ], BACKLOG_TAB_KEY, '#/backlog');
-    await expect(tabBy(page, BACKLOG_TAB_KEY)).toHaveClass(/studio-tab--active/);
-
-    await tabBy(page, PROJECT_HUB_TAB_KEY).click();
-    await expect(tabBy(page, PROJECT_HUB_TAB_KEY)).toHaveClass(/studio-tab--active/);
-    await expect.poll(() => new URL(page.url()).hash.includes('/backlog')).toBe(false);
-
-    await page.reload();
-    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
-    await expect(tabBy(page, PROJECT_HUB_TAB_KEY)).toHaveClass(/studio-tab--active/);
-    await expect(tabBy(page, BACKLOG_TAB_KEY)).not.toHaveClass(/studio-tab--active/);
+    const resultsDir = process.env.JOB_RESULTS_DIR;
+    if (resultsDir) {
+      await page.screenshot({
+        path: `${resultsDir}/legacy-backlog-tab-discarded-board-lane-retained--mocked.png`,
+        fullPage: false,
+      });
+    }
   });
 });

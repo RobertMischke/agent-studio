@@ -37,7 +37,7 @@ import {
 } from '../project-detail/components/project-shell/project-shell.config';
 import type { StudioIconName } from '../../components/studio-icon/studio-icon.component';
 import { UiPreferencesService } from '../shell';
-import { BoardFiltersService, BacklogTriageService, flattenGrouped } from '../board';
+import { BoardFiltersService, flattenGrouped } from '../board';
 import { UpdateClientService } from '../../services/update.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { NotificationService } from '../../services/notification.service';
@@ -133,7 +133,6 @@ export class StudioShellComponent {
   private readonly jobSelection = inject(TaskSelectionService);
   readonly uiPrefs = inject(UiPreferencesService);
   readonly boardFilters = inject(BoardFiltersService);
-  readonly backlogTriage = inject(BacklogTriageService);
   readonly updateClient = inject(UpdateClientService);
   readonly explorerSections = inject(ExplorerSectionsService);
   private readonly confirmDialog = inject(ConfirmDialogService);
@@ -266,7 +265,7 @@ export class StudioShellComponent {
     const tab = this.activeTab();
     if (!tab) return null;
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
-    if (tab.kind === 'backlog' || tab.kind === 'epics') return tab.projectName;
+    if (tab.kind === 'epics') return tab.projectName;
     return this.currentProjectName();
   });
 
@@ -703,7 +702,6 @@ export class StudioShellComponent {
     if (!tab) return null;
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : 'board';
     if (tab.kind === 'hub') return tab.section === 'wiki' ? 'wiki' : 'hub';
-    if (tab.kind === 'backlog') return tab.projectName === null ? null : 'backlog';
     if (tab.kind === 'epics') return tab.projectName === null ? null : 'epics';
     return null;
   });
@@ -718,7 +716,7 @@ export class StudioShellComponent {
     const tab = this.activeTab();
     if (!tab) return null;
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
-    if (tab.kind === 'backlog' || tab.kind === 'epics') return tab.projectName;
+    if (tab.kind === 'epics') return tab.projectName;
     if (tab.kind === 'hub') return tab.projectName;
     if (tab.kind === 'task' || tab.kind === 'activity') {
       const job = this.findJob(tab.taskKey);
@@ -761,23 +759,6 @@ export class StudioShellComponent {
   }
 
   /**
-   * Activity-bar Backlog button click. Toggles the dedicated backlog triage
-   * tab (a first-class editor tab, equivalent to Board / Epics) and keeps
-   * the `#/backlog` deep-link hash in sync. Mirrors the Ctrl+B accelerator
-   * so the two entry points stay in lock-step.
-   */
-  onActivityBarOpenBacklog(): void {
-    if (this.activeTab()?.kind === 'backlog') {
-      this.backlogTriage.closeTriage();
-      this.tabState.activateAllProjectsBoard();
-    } else {
-      const project = this.activeProjectName();
-      this.backlogTriage.openTriage(project);
-      this.tabState.open({ kind: 'backlog', projectName: project });
-    }
-  }
-
-  /**
    * Activity-bar Epics button click. Opens or focuses the workspace-wide
    * epic overview as a normal editor tab.
    */
@@ -793,17 +774,6 @@ export class StudioShellComponent {
   readonly hasEpics = computed(() =>
     flattenGrouped(this.grouped()).some(t => t.kind === 'epic'),
   );
-
-  /**
-   * Backlog count under the contextual project (plus type + tag + owner).
-   * Drives the activity-bar Backlog badge so the operator can see at a
-   * glance how many tasks are waiting on triage.
-   */
-  readonly backlogCount = computed(() => {
-    const projectName = this.activeProjectName();
-    if (!projectName) return 0;
-    return this.boardFilters.filteredGroupedForProject(projectName).backlog?.length ?? 0;
-  });
 
   openTask(job: TaskInfo): void {
     this.tabState.open({ kind: 'task', taskKey: job.taskKey });
@@ -827,17 +797,6 @@ export class StudioShellComponent {
    */
   openWiki(projectName: string): void {
     this.tabState.open({ kind: 'hub', projectName, section: 'wiki' });
-  }
-
-  /**
-   * Explorer "Backlog" link for a single project (ASS-658). Scopes the
-   * board filter to that project so the triage list narrows to it, then
-   * opens the project-scoped backlog tab.
-   */
-  openProjectBacklog(projectName: string): void {
-    this.boardFilters.setSoleProject(projectName);
-    this.backlogTriage.openTriage(projectName);
-    this.tabState.open({ kind: 'backlog', projectName });
   }
 
   /**
@@ -1285,8 +1244,6 @@ export class StudioShellComponent {
     switch (tab.kind) {
       case 'board':
         return tab.projectName === '__all__' ? 'All projects · Board' : `${this.projectShortLabel(tab.projectName)} · Board`;
-      case 'backlog':
-        return tab.projectName === null ? 'All projects · Backlog' : `${this.projectShortLabel(tab.projectName)} · Backlog`;
       case 'epics':
         return tab.projectName === null ? 'All projects · Epics' : `${this.projectShortLabel(tab.projectName)} · Epics`;
       case 'epic': {
@@ -1343,14 +1300,13 @@ export class StudioShellComponent {
    * AGT-2034 — resolve the owning project name for a tab so the tab strip
    * can paint the project's colour dot and keep the full name in the
    * tooltip. Returns `null` for tabs that do not belong to a single project
-   * (All-projects board/backlog/epics, workspace settings, welcome, diff),
+   * (All-projects board/epics, workspace settings, welcome, diff),
    * so no dot renders there.
    */
   private tabProjectName(tab: StudioTab): string | null {
     switch (tab.kind) {
       case 'board':
         return tab.projectName === '__all__' ? null : tab.projectName;
-      case 'backlog':
       case 'epics':
       case 'hub':
         return tab.projectName;

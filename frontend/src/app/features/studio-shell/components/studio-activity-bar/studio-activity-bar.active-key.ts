@@ -3,16 +3,16 @@ import type { StudioPanelKind, StudioTabKind } from '../../studio-shell.types';
 /**
  * Every item the ActivityBar can mark as active. This is the union of the
  * sidebar-panel kinds (`explorer` … `settings`) and the editor destinations
- * that own their own rail button (`backlog`, `epics`). `settings` is shared:
+ * that own their own rail button (`epics`). `settings` is shared:
  * it is both a sidebar panel and the target of the workspace-settings tab.
  */
-export type StudioActivityItemKey = StudioPanelKind | 'backlog' | 'epics';
+export type StudioActivityItemKey = StudioPanelKind | 'epics';
 
 /**
  * The bug (AGT-2042): the ActivityBar drew its active marker from two
  * independent sources — the sidebar toggle (`activePanel` + `sidebarVisible`)
  * and the editor route (`activeTab().kind`). Both could be true at once
- * (e.g. Explorer sidebar open while a Backlog tab is active), so two buttons
+ * (e.g. Explorer sidebar open while an editor destination is active), so two buttons
  * lit up together.
  *
  * This resolver collapses those sources into exactly one key, so the marker
@@ -22,7 +22,7 @@ export type StudioActivityItemKey = StudioPanelKind | 'backlog' | 'epics';
  *
  * Priority — the surface the user is actually looking at wins:
  *  1. The active editor tab, when it is one of the ActivityBar destinations
- *     (Backlog / Epics / Workspace settings). The main pane is the shown
+ *     (Epics / Workspace settings). The main pane is the shown
  *     surface, so its marker takes precedence over a merely-open sidebar.
  *  2. Otherwise the open sidebar panel (only while the sidebar is visible).
  *  3. Otherwise nothing is active.
@@ -33,8 +33,6 @@ export function resolveActiveActivityKey(state: {
   sidebarVisible: boolean;
 }): StudioActivityItemKey | null {
   switch (state.activeTabKind) {
-    case 'backlog':
-      return 'backlog';
     case 'epics':
       return 'epics';
     case 'workspace-settings':

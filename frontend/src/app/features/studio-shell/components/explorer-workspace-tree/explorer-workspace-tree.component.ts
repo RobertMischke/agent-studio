@@ -69,7 +69,7 @@ export interface ExplorerWorkspaceGroup {
   projects: ExplorerProjectNode[];
 }
 
-export type ExplorerProjectSurface = 'board' | 'hub' | 'wiki' | 'backlog' | 'epics';
+export type ExplorerProjectSurface = 'board' | 'hub' | 'wiki' | 'epics';
 
 function folderTail(path: string): string {
   const parts = path.split(/[\\/]+/).filter(Boolean);
@@ -121,8 +121,6 @@ export class ExplorerWorkspaceTreeComponent {
   readonly openHubRequest = output<string>();
   /** Open the project's Project Hub deep-linked to its Wiki rail. */
   readonly openWikiRequest = output<string>();
-  /** Project-scoped backlog triage open for the named project (ASS-658). */
-  readonly openBacklogRequest = output<string>();
   /** Project-scoped epic overview open for the named project (ASS-658). */
   readonly openEpicsRequest = output<string>();
   /** Open the project onboarding modal preselected to this workspace. */

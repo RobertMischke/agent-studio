@@ -134,10 +134,8 @@
       [items]="activityBarItems"
       [activeKey]="activeActivityKey()"
       [badgeCounts]="activityBarBadgeCounts()"
-      [backlogCount]="backlogCount()"
       [hasEpics]="hasEpics()"
       (panelToggle)="togglePanel($event)"
-      (openBacklogRequest)="onActivityBarOpenBacklog()"
       (openEpicsRequest)="onActivityBarOpenEpics()" />
 
     <!-- Sidebar host -->
@@ -215,7 +213,6 @@
                   (openBoardRequest)="openBoard($event)"
                   (openHubRequest)="openHub($event)"
                   (openWikiRequest)="openWiki($event)"
-                  (openBacklogRequest)="openProjectBacklog($event)"
                   (openEpicsRequest)="openProjectEpics($event)"
                   (onboardProjectRequest)="onAddProjectToWorkspace($event)"
                   (onboardWorkspaceRequest)="onAddWorkspace()"
