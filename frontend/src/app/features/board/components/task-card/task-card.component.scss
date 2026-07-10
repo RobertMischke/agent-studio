@@ -1335,44 +1335,36 @@
       cursor: help;
       flex: 0 0 auto;
     }
-    /* AGT-2046: always-on two-segment merge signal [d|m]. develop | main, filled
-       green when the work has landed on that rung, muted/outlined when not. The
-       colours match the git-state post-merge green + pre-merge muted so the whole
-       card speaks one merge vocabulary. Leads the change-head so it is the first
-       thing the eye lands on when scanning the board. */
+    /* AGT-2046 / AGT-2063: always-on two-segment merge signal [d|m]. develop |
+       main. The old design boxed the whole pair in a bordered tile AND boxed each
+       letter in its own bordered slot, the boxed-in look the operator flagged. It
+       now reads as two NAKED mono letters (no frames, matching the card's other
+       bare glyphs): a strong success-green letter means the work has landed on
+       that rung, a quiet dimmed letter means it has not. Colour is the only
+       channel, read from theme tokens so it holds in both themes (R5). No left
+       accent bar or border box anywhere (R1). */
     .task-card__merge-signal {
       display: inline-flex;
-      align-items: stretch;
-      gap: 2px;
-      padding: 2px;
-      border-radius: 6px;
-      background: var(--studio-card-muted-bg);
-      border: 1px solid var(--studio-card-muted-border);
+      align-items: center;
+      gap: 3px;
       cursor: help;
       flex: 0 0 auto;
       font-variant-numeric: tabular-nums;
     }
     .task-card__merge-seg {
-      display: inline-grid;
-      place-items: center;
-      width: 15px;
-      height: 15px;
-      border-radius: 4px;
-      font-size: 10px;
-      font-weight: 800;
+      font-size: 11px;
+      font-weight: 700;
       line-height: 1;
       text-transform: lowercase;
-      /* NOT merged: a hollow, muted slot so it reads as "empty". */
+      /* NOT merged: a quiet, dimmed letter so it recedes. */
       color: var(--studio-fg-dim);
-      background: rgba(148, 163, 184, 0.10);
-      border: 1px solid rgba(148, 163, 184, 0.28);
     }
-    /* Merged: filled green, kräftig genug zum Scannen (operator: stärkeres Signal). */
+    /* Merged: strong success green so the landed rung catches the eye on a scan
+       (the operator asked for a stronger signal), carried by colour + weight,
+       not a box. */
     .task-card__merge-seg--on {
-      color: #052e16;
-      background: #4ade80;
-      border-color: #22c55e;
-      box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35);
+      color: var(--studio-success);
+      font-weight: 800;
     }
     .task-card__change-ref-value {
       min-width: 0;

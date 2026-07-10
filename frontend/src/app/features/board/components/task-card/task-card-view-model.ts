@@ -805,25 +805,26 @@ function shortShaOf(sha: string | null | undefined): string | null {
 }
 
 /**
- * True when the card carries any git anchor at all (a backend signal, a recorded
- * merge, a task-branch tip, or an attributed commit). Cards with nothing
- * committed yet get no merge signal so the pre-work lanes stay quiet.
+ * True when the card has at least one attributed TASK commit (the SSOT
+ * {@link commitChainOf}). The merge signal is a statement about the task's own
+ * commits, so this is the whole gate. AGT-2063: a card that committed nothing
+ * gets NO signal - not from the backend `mergeSignal`, not from a recorded
+ * branch tip, not from a merge fact. A `task/<id>` branch that was cut but never
+ * produced a commit has its base commit as the tip, and the base is trivially an
+ * ancestor of develop/main; keying off it painted commit-less cards as "in
+ * develop", the false statement the operator hit.
  */
-function hasGitAnchor(job: TaskInfo): boolean {
-  if (job.mergeSignal) return true;
-  const prov = job.provenance ?? null;
-  if (prov?.merge?.mergeCommit) return true;
-  if (prov?.transitions?.some((t) => !!t.branchTip)) return true;
-  if ((job.commits?.length ?? 0) > 0) return true;
-  return !!job.commit;
+function hasTaskCommits(job: TaskInfo): boolean {
+  return commitChainOf(job).length > 0;
 }
 
 /**
  * Build the two-segment merge signal for a card. Returns null when the card has
- * no git anchor to describe (pre-work lanes with nothing committed).
+ * no attributed task commit to describe: a card without commits shows no signal
+ * at all, not an empty or default one (AGT-2063).
  */
 export function buildMergeSignal(job: TaskInfo): MergeSignalView | null {
-  if (!hasGitAnchor(job)) return null;
+  if (!hasTaskCommits(job)) return null;
 
   const sig = job.mergeSignal ?? null;
   const prov = job.provenance ?? null;

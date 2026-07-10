@@ -827,6 +827,9 @@ describe('TaskCardComponent (smoke)', () => {
   it('AGT-2046 renders the two-segment merge signal with develop lit, main muted', async () => {
     const fixture = await renderCard(makeJob({
       state: '5-human-review',
+      // A merged card carries the task commit that landed; the signal is a fact
+      // about that commit (AGT-2063), so it must be present for the signal to show.
+      commits: [commit()],
       mergeSignal: {
         branch: 'task/ATP-1',
         inIntegration: true,
@@ -846,6 +849,28 @@ describe('TaskCardComponent (smoke)', () => {
     const main = signal?.querySelector('[data-seg="main"]') as HTMLElement | null;
     expect(dev?.className).toContain('task-card__merge-seg--on');
     expect(main?.className).not.toContain('task-card__merge-seg--on');
+  });
+
+  it('AGT-2063 renders NO merge signal on a card without a task commit', async () => {
+    // The operator bug: an empty card carried a backend mergeSignal (its branch
+    // base is trivially in develop/main) and showed a merge state. With no task
+    // commit the [d|m] indicator must not appear at all.
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      commit: null,
+      commits: [],
+      mergeSignal: {
+        branch: 'task/ATP-1',
+        inIntegration: true,
+        inRelease: false,
+        integrationBranch: 'develop',
+        releaseBranch: 'main',
+        integrationSha: 'a1b2c3d',
+        releaseSha: null,
+      },
+    }));
+
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-merge-signal"]')).toBeNull();
   });
 
   it('AGT-2046 replaces the cryptic BR label chip with a branch icon', async () => {
