@@ -64,6 +64,14 @@ One-time headless CLI auth (the known weak spot, kickoff D5): complete the OAuth
 + an onboarded `~/.claude.json`. Verify with `claude --version` and one throwaway
 `claude -p "say hi"` before wiring the runner.
 
+Parallel clean-context runs share this one credential file rather than copying
+it, so a token refresh during any run writes through to `~/.claude/.credentials.json`
+and every later launch keeps working (AGT-2066 "OAuth token roulette"; see the
+clean-context section of [`docs/cli/supported-clis.md`](../../cli/supported-clis.md)).
+On this Linux host the share is a **symlink**; the same fix applies here as on the
+Windows host, so keep `~/.claude/.credentials.json` a plain file the runner user
+can read and write in place, not itself a symlink into a per-run temp dir.
+
 ## 2. Build the runner
 
 ```bash

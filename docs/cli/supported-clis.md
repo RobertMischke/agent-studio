@@ -154,13 +154,15 @@ If the CLI emits plain text already in a parser-friendly shape, `TransformReadLi
 
 | CLI | `SupportsCleanContext` | Mechanism | Seeded into the temp home |
 |-----|:---:|-----------|---------------------------|
-| Claude | ✅ | `CLAUDE_CONFIG_DIR` → per-run temp dir | `.credentials.json`, `settings.json` (excludes `CLAUDE.md`, `projects/`) |
-| Codex | ✅ | `CODEX_HOME` → per-run temp dir | `auth.json`, `config.toml` (excludes `history.jsonl`) |
+| Claude | ✅ | `CLAUDE_CONFIG_DIR` → per-run temp dir | `.credentials.json` (**shared by link**), `settings.json` (copied) — excludes `CLAUDE.md`, `projects/` |
+| Codex | ✅ | `CODEX_HOME` → per-run temp dir | `auth.json` (**shared by link**), `config.toml` (copied) — excludes `history.jsonl` |
 | Gemini / Antigravity | ❌ shared-only | agentapi driver exposes no documented home override | — |
 
 A CLI with no isolation mechanism honestly **declares `shared-only`** (`SupportsCleanContext => false`). A run that requested `clean` against a shared-only CLI is stamped `contextMode = "shared"` so the read-only Execution Context panel (§2.8) shows the truth rather than a mode the CLI couldn't honor.
 
 **Auth is the adapter's duty.** Seeding only auth + base config (never history/memory) is what lets a clean run still log in. If auth comes from an env var instead (`ANTHROPIC_API_KEY`), a missing seed file is non-fatal — the clean home is still created and the env override still points at it.
+
+**Credentials are shared by link, not copied (AGT-2066).** The credential file (`.credentials.json` / `auth.json`) is **hard-linked** (Windows) or **symlinked** (POSIX) back to the operator's one home file rather than copied into the temp home; base config stays an isolated copy. This closes the *OAuth token roulette* seen live on 2026-07-10: with per-run copies, N parallel runs that hit an expired token each refresh the same rotating refresh token, the provider validates only the first, its new token is written into a temp home that is deleted at run end, and the home file keeps the now-dead token — so every later launch fails "OAuth session expired and could not be refreshed". A shared link makes any run's refresh write through to the single home file that every concurrent run and every later launch reads. Tearing the per-run home down removes only the extra directory entry, never the home file's data. When a link cannot be created (cross-volume temp dir, missing privilege), the preparer falls back to the old copy for that run and logs a warning; auth still works, only the parallel-refresh drift is uncovered. The same drift on the Linux runner host is tracked in [`linux-runner-host.md`](../operations/setup/linux-runner-host.md) (kickoff D5).
 
 **Lifetime.** The per-run temp home is owned by the run's `ProcInfo` and torn down when that is evicted (not at process exit), so the async `DescribeContextSources` call at run-finish can still read the seeded paths. Teardown is best-effort and idempotent.
 
@@ -171,7 +173,7 @@ A CLI with no isolation mechanism honestly **declares `shared-only`** (`Supports
 - Per-run preparer + handle: [`CleanContextPreparer` / `CleanContextPreparation`](../../backend/Features/Cli/Execution/CleanContextPreparation.cs) (`PrepareClaude` / `PrepareCodex` return a disposable preparation that owns the temp home).
 - Adapter hook + env injection: `SupportsCleanContext` / `PrepareCleanContext` on [`CliExecutionServiceBase`](../../backend/Features/Cli/Execution/CliExecutionServiceBase.cs) (clean home built and env overrides applied in `StartAsync`); Claude / Codex overrides in their adapters.
 
-**Test.** `CliContextModesTests` (vocabulary defaults + `SupportsClean` matrix; `CleanContextPreparer` seeds only the allow-listed files, sets the right env var, surfaces the temp paths as sources, and tears the home down on dispose) and `ProjectSettingsServiceTests` (resolution precedence, shared-only reporting, override persistence) cover the policy + isolation path.
+**Test.** `CliContextModesTests` (vocabulary defaults + `SupportsClean` matrix; `CleanContextPreparer` seeds only the allow-listed files, sets the right env var, surfaces the temp paths as sources, and tears the home down on dispose; **AGT-2066**: the credential file is shared by link so a simulated parallel-refresh storm writes through to the one home file and per-run teardown leaves it intact, while `settings.json` stays an isolated copy) and `ProjectSettingsServiceTests` (resolution precedence, shared-only reporting, override persistence) cover the policy + isolation path.
 
 **New CLI note.** Default a new CLI to **shared-only** (inherit the base `SupportsCleanContext => false`). Implement `clean` only when the CLI has a real config-home env override (like `CLAUDE_CONFIG_DIR` / `CODEX_HOME`): add a `PrepareXxx` to `CleanContextPreparer` that seeds only auth + base config, then override `SupportsCleanContext => true` and `PrepareCleanContext` on the adapter. Never fake `clean` by passing a flag the CLI doesn't honor — declaring shared-only honestly is correct.
 

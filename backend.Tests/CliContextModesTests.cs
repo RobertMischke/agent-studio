@@ -15,7 +15,9 @@ namespace AgentStudio.Tests;
 /// Claude/Codex report clean support; (2) the preparer creates an isolated home,
 /// seeds only the auth + base config, points the right env var at it, surfaces
 /// the temp paths as sources (for the T1a panel), and tears the home down on
-/// dispose.
+/// dispose. AGT-2066 adds a third: the credential file is <b>shared by link</b>
+/// (not copied) so a mid-run OAuth refresh persists into the one home file every
+/// later launch reads, while base config stays an isolated copy.
 /// </summary>
 public sealed class CliContextModesTests : IDisposable
 {
@@ -94,6 +96,131 @@ public sealed class CliContextModesTests : IDisposable
         // Seeded files are surfaced as global-config sources.
         Assert.Contains(prep.Sources, s =>
             s.Kind == CliContextSourceKinds.GlobalConfig && (s.Label?.Contains(".credentials.json") ?? false));
+    }
+
+    // --- AGT-2066: credential is shared by link, not copied ---------------
+
+    [Fact]
+    public void PrepareClaude_CredentialsSharedByLink_RefreshWritesThroughToHome()
+    {
+        // The clean home's .credentials.json must be a LINK to the one home file,
+        // not a throwaway copy: when the CLI rotates the OAuth token mid-run it
+        // rewrites the file in its config dir, and that new token has to land in
+        // the single home file every later launch reads (incident 2026-07-10).
+        var userHome = NewUserHome();
+        var homeCred = Path.Combine(userHome, ".claude", ".credentials.json");
+        WriteFile(homeCred, "{\"token\":\"old\"}");
+        WriteFile(Path.Combine(userHome, ".claude", "settings.json"), "{}");
+
+        using var prep = CleanContextPreparer.PrepareClaude(userHome, NullLogger.Instance);
+        Assert.NotNull(prep);
+        _homes.Add(prep!.TempHome);
+
+        var tempCred = Path.Combine(prep.TempHome, ".credentials.json");
+        Assert.True(File.Exists(tempCred));
+
+        // Simulate the CLI's in-place refresh write against the config-dir file.
+        File.WriteAllText(tempCred, "{\"token\":\"refreshed\"}");
+
+        // It wrote through to the shared home file.
+        Assert.Equal("{\"token\":\"refreshed\"}", File.ReadAllText(homeCred));
+
+        // The temp home is surfaced as a Linked source (T1a panel truthfulness).
+        Assert.Contains(prep.Sources, s =>
+            s.Kind == CliContextSourceKinds.GlobalConfig
+            && (s.Label?.Contains(".credentials.json") ?? false)
+            && (s.Label?.StartsWith("Linked") ?? false));
+    }
+
+    [Fact]
+    public void PrepareClaude_ParallelRuns_ShareOneCredential_SoWinningRefreshSurvives()
+    {
+        // The reproduction: many parallel clean contexts off the one home. Under
+        // the old copy behaviour a token rotation in one run died with its temp
+        // dir; with a shared link the winning refresh persists for everyone.
+        var userHome = NewUserHome();
+        var homeCred = Path.Combine(userHome, ".claude", ".credentials.json");
+        WriteFile(homeCred, "{\"token\":\"expired\"}");
+
+        var preps = new List<CleanContextPreparation>();
+        for (var i = 0; i < 12; i++)
+        {
+            var p = CleanContextPreparer.PrepareClaude(userHome, NullLogger.Instance);
+            Assert.NotNull(p);
+            _homes.Add(p!.TempHome);
+            preps.Add(p);
+        }
+
+        // One run wins the refresh race and rotates the token in its own home.
+        File.WriteAllText(Path.Combine(preps[3].TempHome, ".credentials.json"), "{\"token\":\"rotated\"}");
+
+        // The rotated token landed in the single home file...
+        Assert.Equal("{\"token\":\"rotated\"}", File.ReadAllText(homeCred));
+        // ...and every other in-flight run sees it too (shared inode), so none is
+        // left holding the dead token.
+        foreach (var p in preps)
+            Assert.Equal("{\"token\":\"rotated\"}", File.ReadAllText(Path.Combine(p.TempHome, ".credentials.json")));
+
+        // Tearing every per-run home down leaves the live home credential intact.
+        foreach (var p in preps) p.Dispose();
+        Assert.True(File.Exists(homeCred));
+        Assert.Equal("{\"token\":\"rotated\"}", File.ReadAllText(homeCred));
+    }
+
+    [Fact]
+    public void Dispose_WithLinkedCredential_LeavesHomeFileIntact()
+    {
+        // Teardown deletes the temp home recursively; deleting the credential
+        // LINK must remove only the extra directory entry, never the home file.
+        var userHome = NewUserHome();
+        var homeCred = Path.Combine(userHome, ".claude", ".credentials.json");
+        WriteFile(homeCred, "{\"token\":\"live\"}");
+
+        var prep = CleanContextPreparer.PrepareClaude(userHome, NullLogger.Instance);
+        Assert.NotNull(prep);
+        var home = prep!.TempHome;
+
+        prep.Dispose();
+
+        Assert.False(Directory.Exists(home));
+        Assert.True(File.Exists(homeCred));
+        Assert.Equal("{\"token\":\"live\"}", File.ReadAllText(homeCred));
+    }
+
+    [Fact]
+    public void PrepareClaude_Settings_IsCopiedSnapshot_NotSharedWithHome()
+    {
+        // settings.json is context, not credentials: it must stay an independent
+        // copy so a clean run cannot mutate the operator's base config back home.
+        var userHome = NewUserHome();
+        WriteFile(Path.Combine(userHome, ".claude", ".credentials.json"), "{}");
+        var homeSettings = Path.Combine(userHome, ".claude", "settings.json");
+        WriteFile(homeSettings, "{\"a\":1}");
+
+        using var prep = CleanContextPreparer.PrepareClaude(userHome, NullLogger.Instance);
+        Assert.NotNull(prep);
+        _homes.Add(prep!.TempHome);
+
+        File.WriteAllText(Path.Combine(prep.TempHome, "settings.json"), "{\"a\":2}");
+        Assert.Equal("{\"a\":1}", File.ReadAllText(homeSettings));
+    }
+
+    [Fact]
+    public void PrepareCodex_AuthSharedByLink_RefreshWritesThroughToHome()
+    {
+        // Codex rotates its ChatGPT OAuth token in auth.json exactly like Claude,
+        // so auth.json is shared by link too; config.toml stays a copy.
+        var userHome = NewUserHome();
+        var homeAuth = Path.Combine(userHome, ".codex", "auth.json");
+        WriteFile(homeAuth, "{\"key\":\"old\"}");
+        WriteFile(Path.Combine(userHome, ".codex", "config.toml"), "model = \"gpt-5-codex\"");
+
+        using var prep = CleanContextPreparer.PrepareCodex(userHome, NullLogger.Instance);
+        Assert.NotNull(prep);
+        _homes.Add(prep!.TempHome);
+
+        File.WriteAllText(Path.Combine(prep.TempHome, "auth.json"), "{\"key\":\"new\"}");
+        Assert.Equal("{\"key\":\"new\"}", File.ReadAllText(homeAuth));
     }
 
     [Fact]
