@@ -78,6 +78,19 @@ public static class PostProcessingOutcomeTaxonomy
     public const int MaxCliLaunchRetries = 1;
 
     /// <summary>
+    /// Bounded retry budget for a POST-STEP verdict that came back missing /
+    /// corrupt / unparseable because the reviewing CLI call itself died (the
+    /// backend cut that killed the aspect runner mid-run, AGT-2021; belege the
+    /// AGT-1996 hard-cut). A dead reviewer is an INFRASTRUCTURE fault, never the
+    /// card's unfinished work, so the affected step reruns exactly ONCE with the
+    /// environmental backoff and only records an <see cref="RunIssueKind.InfraCrash"/>
+    /// (flagged <c>environmental</c>, no reissue-budget burn) when the retry again
+    /// yields no verdict. Reuses the AGT-1944 taxonomy - same backoff, same
+    /// "environmental never counts as a failed change" contract.
+    /// </summary>
+    public const int MaxPostStepVerdictRetries = 1;
+
+    /// <summary>
     /// True when an issue kind is a TRANSIENT environmental fault that clears on
     /// its own, so re-running the same task after a short backoff usually
     /// succeeds. These are the only members that retry; the other environmental
@@ -169,6 +182,37 @@ public static class PostProcessingOutcomeTaxonomy
             TimeSpan.Zero,
             priorRetryAttempt,
             $"Transient environmental fault ({issueKind}) persisted after {priorRetryAttempt} retr{(priorRetryAttempt == 1 ? "y" : "ies")}; escalating flagged environmental.");
+    }
+
+    /// <summary>
+    /// Decide what to do with a post-step (aspect / code-review) whose verdict
+    /// came back missing / unparseable because the reviewing CLI call died - an
+    /// environmental infra fault, not the card's work. Reruns the step once with
+    /// the environmental backoff (<see cref="RetryBackoff"/>), then escalates as
+    /// an <see cref="RunIssueKind.InfraCrash"/> flagged <c>environmental</c>.
+    /// <paramref name="priorRetryAttempt"/> is how many environmental retries this
+    /// step has already spent (0 on first detection). Same shape as
+    /// <see cref="DecideEnvironmentalRetry"/> so the AGT-1944 contract is reused
+    /// verbatim - only the per-kind budget (<see cref="MaxPostStepVerdictRetries"/>)
+    /// differs.
+    /// </summary>
+    public static EnvironmentalRetryDecision DecidePostStepVerdictRetry(int priorRetryAttempt)
+    {
+        if (priorRetryAttempt < MaxPostStepVerdictRetries)
+        {
+            var attempt = priorRetryAttempt + 1;
+            return new EnvironmentalRetryDecision(
+                EnvironmentalRetryAction.RetryWithBackoff,
+                RetryBackoff(attempt),
+                attempt,
+                $"Post-step produced no parseable verdict (environmental infra fault); retry {attempt}/{MaxPostStepVerdictRetries} after backoff.");
+        }
+
+        return new EnvironmentalRetryDecision(
+            EnvironmentalRetryAction.Escalate,
+            TimeSpan.Zero,
+            priorRetryAttempt,
+            $"Post-step still produced no parseable verdict after {priorRetryAttempt} environmental retr{(priorRetryAttempt == 1 ? "y" : "ies")}; recording InfraCrash flagged environmental (no reissue-budget burn).");
     }
 
     /// <summary>

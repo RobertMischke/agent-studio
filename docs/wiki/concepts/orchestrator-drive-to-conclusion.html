@@ -456,6 +456,30 @@
             <code>docs/contracts/run-outcome.md</code> &sect; "Post-processing outcome taxonomy".
           </td>
         </tr>
+        <tr>
+          <td>2026-07-10</td>
+          <td><code>AGT-2021</code><br><span class="small">aspect-verdict-ausfall-environmental-retry-statt-gate-item<br>(beleg <code>AGT-1996</code>, baut auf <code>AGT-1944</code>)</span></td>
+          <td>
+            A hard backend cut killed the aspect runner mid-run. The reviewing CLI produced no output, so the aspect verdict came
+            back as the gate item <em>"Aspect runner produced no parseable verdict"</em> - counted as the card's unfinished work and
+            escalated. That is an INFRASTRUCTURE outage, not a work deficit: exactly the fault class the AGT-1944 taxonomy handles for
+            CLI runs but did not yet cover for the ASPECT / post-review steps.
+          </td>
+          <td>
+            The aspect / post-step path had no environmental class of its own: a dead reviewer (CLI threw or returned nothing)
+            collapsed into the same deterministic <code>review:unparseable</code> concern as a genuine format violation, so a killed
+            runner read as the agent's opinion and reached a work-quality terminal.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> a missing / unparseable post-step verdict caused by a dead reviewer is now classified
+            environmental. The aspect runner reruns that step exactly once with the AGT-1944 backoff
+            (<code>PostProcessingOutcomeTaxonomy.DecidePostStepVerdictRetry</code>, budget 1); a second miss flags
+            <code>AspectVerdict.IsInfraFailure</code>, and <code>ReviewDecisionOrchestrator.HandleAspectInfraCrashAsync</code>
+            escalates the card flagged <code>environmental</code> + <code>InfraCrash</code> as a chain-ending <code>Escalate</code>
+            (no reissue-budget burn). A reviewer that DID reply keeps the existing <code>review:unparseable</code> concern; the other
+            post-steps (code-review-grade, wiki) already swallow a crash into a Skipped/Failed row and never gate the lane.
+          </td>
+        </tr>
       </tbody>
     </table>
 

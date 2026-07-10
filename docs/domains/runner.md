@@ -97,6 +97,14 @@ state.
   review with a "partial work to inspect" hint rather than a bare `5e` park. See
   the taxonomy section of
   [docs/contracts/run-outcome.md](../contracts/run-outcome.md).
+- Post-step (aspect / code-review) verdicts extend the same taxonomy: a missing /
+  unparseable verdict caused by the reviewing CLI dying is ENVIRONMENTAL, not the
+  card's work (AGT-2021, belege AGT-1996). The step reruns once with the
+  environmental backoff (`PostProcessingOutcomeTaxonomy.DecidePostStepVerdictRetry`,
+  `MaxPostStepVerdictRetries` = 1); a second miss records an `InfraCrash` flagged
+  `environmental` and escalates via a chain-ending `Escalate` decision, so the
+  card's reissue budget is never charged. See the pipeline domain map for the
+  aspect-runner / orchestrator wiring.
 - Environmental cycles do not count against progress or budget: a transient
   environmental fault never accrues toward the no-progress quarantine streak
   (`RunQuarantineBreaker.CountsAsNoProgressFailure`), and the shared reissue

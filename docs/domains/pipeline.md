@@ -118,6 +118,21 @@ pipeline view.
   the four cheap aspect reviews stay on Haiku - the deliberate ASS-855/ASS-916
   asymmetry. Opt out per deployment with `CodeReviewStep:AutoGrade=false`. An
   unparseable reply degrades to grade C, never silently A.
+- A missing / unparseable aspect verdict caused by the reviewing CLI dying (the
+  backend cut that killed the aspect runner mid-run) is an ENVIRONMENTAL infra
+  fault, never the card's unfinished work (AGT-2021, belege AGT-1996). The aspect
+  runner reruns that step exactly once with the AGT-1944 environmental backoff
+  (`PostProcessingOutcomeTaxonomy.DecidePostStepVerdictRetry`,
+  `MaxPostStepVerdictRetries` = 1); only when the retry again yields no output is
+  the verdict flagged `AspectVerdict.IsInfraFailure`. The orchestrator then
+  short-circuits before the accept / reissue routing and escalates the card
+  flagged `environmental` + `InfraCrash` as a chain-ending `Escalate` decision, so
+  the reissue budget is NOT charged (`ReviewDecisionOrchestrator.HandleAspectInfraCrashAsync`).
+  A CLI that DID reply (even garbage) is not infra: it keeps the existing
+  `review:unparseable` concern. The other post-steps
+  (`post-code-review-grade`, wiki-maintenance / wiki-learnings, regression-radar)
+  are reporting-only and already swallow a crash into a Skipped/Failed step row,
+  so a post-step crash there never gates the lane or counts as a work deficit.
 - Abort review is contract-bounded: the model returns a verdict, while
   `PostAbortReviewDecider` owns the binding action and rerun budget.
 - The read-only pipeline drops git steps. Planning and research tasks must not

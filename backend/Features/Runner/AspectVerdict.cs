@@ -60,7 +60,20 @@ public sealed record AspectVerdict(
     AspectStatus Status,
     string Summary,
     string Body,
-    string? ConcernTagId);
+    string? ConcernTagId)
+{
+    /// <summary>
+    /// True when this verdict is a POST-STEP INFRA failure - the aspect's
+    /// reviewing CLI call died / returned nothing, so there is no real model
+    /// opinion here - even after the single environmental retry (AGT-2021). Such
+    /// a verdict is an environmental infra crash, NEVER the card's unfinished
+    /// work: the orchestrator records it as an <c>InfraCrash</c> flagged
+    /// <c>environmental</c> and does not burn the reissue budget. Default false;
+    /// added as an init-only property so every positional construction stays
+    /// source-compatible.
+    /// </summary>
+    public bool IsInfraFailure { get; init; }
+}
 
 /// <summary>
 /// Structured, machine-readable source of truth for one aspect verdict,

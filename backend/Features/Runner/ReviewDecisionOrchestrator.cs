@@ -171,6 +171,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     internal const string LintScssReissueReasonPrefix = "lint-scss reissue: ";
     internal const string BuildTestGateReissueReasonPrefix = "build-test-gate reissue: ";
 
+    /// <summary>
+    /// Stable prefix on the <c>Reason</c> field of the <see cref="ReviewDecisionKind.Escalate"/>
+    /// record the aspect-verdict InfraCrash path emits (AGT-2021). Lets a reader
+    /// tell an environmental infra crash apart from a real work-quality escalation.
+    /// </summary>
+    internal const string AspectInfraCrashReasonPrefix = "aspect-verdict infra crash: ";
+
     public ReviewDecisionOrchestrator(
         TaskScannerService scanner,
         TaskStateMachine stateMachine,
@@ -1584,6 +1591,22 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         var report = await _aspectRunner.RunAsync(inputs, enabledAspects, cliBinary, aspectModel, perAspectTimeout, ct, modelForAspect, thinkingLevelForAspect, promptForAspect);
 
+        // Aspect-verdict infra crash (AGT-2021): one or more aspects produced no
+        // verdict because the reviewing CLI died - even after the aspect runner's
+        // single environmental retry. This is an INFRASTRUCTURE fault (the backend
+        // cut that killed the runner mid-run, AGT-1996), NOT the card's unfinished
+        // work. Short-circuit BEFORE the block/evidence/solution-quality routing
+        // and the remaining reporting-only post-steps: the card must not be
+        // accepted, reissued, or counted as a work deficit. Record an InfraCrash
+        // flagged environmental and hand to human review WITHOUT burning the
+        // reissue budget (an Escalate decision, which resets the attempt chain).
+        if (report.HasInfraFailure)
+        {
+            _pipelineLog?.Complete(current.FolderPath);
+            await HandleAspectInfraCrashAsync(workspace, entry, pending, current, report, ct);
+            return;
+        }
+
         // ASS-563: run the lint-scss post-step BEFORE the pipeline Complete
         // mark so its step record lands in pipeline-execution.json while
         // the file is still in its in-flight state. Skipped/Ok/Warn just
@@ -1875,6 +1898,104 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             current.FolderPath,
             moved.FolderPath);
     }
+
+    /// <summary>
+    /// Handle an aspect-verdict INFRA crash (AGT-2021): one or more aspects
+    /// produced no verdict because the reviewing CLI died, and the aspect runner's
+    /// single environmental retry did not recover it. This is an infrastructure
+    /// fault, never the card's unfinished work, so:
+    /// <list type="bullet">
+    ///   <item>the card is moved to <c>5e-escalated</c> flagged <c>environmental</c>
+    ///   (an honest human-review terminal - a human re-queues the infra blip),</item>
+    ///   <item>the decision is recorded as an <see cref="ReviewDecisionKind.Escalate"/>,
+    ///   which is a chain boundary: it does NOT append a Reissue record and it
+    ///   resets the attempt chain, so the card's reissue budget is not burned
+    ///   (<see cref="CountReissuesInCurrentChain"/>),</item>
+    ///   <item>the outcome / timeline carry <c>InfraCrash</c> + <c>environmental</c>
+    ///   so a reviewer reads it as an infra blip, not a failed change.</item>
+    /// </list>
+    /// </summary>
+    private async Task HandleAspectInfraCrashAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        TaskInfo current,
+        AspectRunReport report,
+        CancellationToken ct)
+    {
+        var crashedAspects = report.InfraFailures.Select(v => v.Aspect).ToList();
+        var aspectList = crashedAspects.Count == 0 ? "aspect review" : string.Join(", ", crashedAspects);
+        var noun = crashedAspects.Count == 1 ? "aspect" : "aspects";
+        var reason = AspectInfraCrashReasonPrefix +
+            $"the {aspectList} {noun} produced no verdict after an environmental retry (reviewing CLI died). " +
+            "Classified environmental (InfraCrash); the card's work is unaffected and its reissue budget is not charged.";
+
+        // Strip any stale concern chips a prior pass left behind; the infra-failure
+        // verdicts hang no concern tag of their own.
+        ConcernTagWriter.ReconcileConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
+
+        _chatLog.AppendSupervisor(current, "escalate",
+            $"Auto-review could not obtain an aspect verdict: the reviewing CLI died even after an environmental retry. " +
+            $"This is an infrastructure crash (InfraCrash), not a problem with the change. Promoted to {TaskStates.Escalated} flagged environmental.");
+
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to move {JobId} to escalated after aspect infra-crash: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+        }
+
+        var escalatedFolder = move.NewFolderPath ?? current.FolderPath;
+        var escalated = current with { FolderPath = escalatedFolder, State = TaskStates.Escalated };
+
+        RecordOrchestratorDecisionStep(escalatedFolder, PipelineStepStatus.Failed,
+            "environmental", reason);
+        WritePostProcessingOutcome(escalated, PostProcessingOutcomes.FailedPostProcessing,
+            summary: reason,
+            performerCliType: CliTypes.Claude,
+            stepId: PipelineCatalogue.OrchestratorDecisionStepId,
+            evidenceRef: "pipeline-execution.json",
+            findingRefs: report.InfraFailures.Select(v => $"aspect-{v.Aspect}.md").ToList());
+
+        EmitVerdictTimeline(escalatedFolder,
+            TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, reason,
+            BuildInfraCrashDetails(crashedAspects, reason));
+
+        // Escalate, NOT Reissue: a chain-ending verdict that resets the reissue
+        // budget, so the environmental infra crash never counts against the card.
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: reason,
+            Prompt: "(multi-aspect run; reviewing CLI produced no verdict after environmental retry)",
+            Response: AspectSummaryLine(report),
+            FollowUp: string.Empty),
+            current.FolderPath,
+            escalatedFolder);
+
+        _statusSnapshot.RecordEscalate();
+
+        _ = ct; // no async CLI work on this deterministic path; keep the signature uniform
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Timeline details for an aspect-verdict InfraCrash escalation (AGT-2021).
+    /// Carries the <c>environmental</c> + <c>InfraCrash</c> flags so the frontend
+    /// and any reviewer read it as an infra blip, not a failed change.
+    /// </summary>
+    private static Dictionary<string, string> BuildInfraCrashDetails(IReadOnlyList<string> crashedAspects, string reason)
+        => new()
+        {
+            ["cause"] = "aspect-verdict-infra-crash",
+            ["environmental"] = "true",
+            ["issueKind"] = RunIssueKind.InfraCrash.ToString(),
+            ["aspects"] = string.Join(", ", crashedAspects),
+            ["reason"] = Truncate(reason, 600),
+        };
 
     /// <summary>
     /// True when the LATEST run for this task produced no new commit - HEAD was

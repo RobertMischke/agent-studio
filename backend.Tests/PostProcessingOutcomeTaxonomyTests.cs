@@ -177,6 +177,34 @@ public class PostProcessingOutcomeTaxonomyTests
         Assert.Equal(TimeSpan.Zero, decision.Backoff);
     }
 
+    // ---- DecidePostStepVerdictRetry (AGT-2021) ------------------------------
+
+    [Fact]
+    public void PostStepVerdict_FirstMiss_RetriesOnceWithBackoff()
+    {
+        // A missing / unparseable post-step verdict (dead reviewer) reruns exactly
+        // once with the environmental backoff before it may escalate.
+        var decision = PostProcessingOutcomeTaxonomy.DecidePostStepVerdictRetry(priorRetryAttempt: 0);
+        Assert.Equal(EnvironmentalRetryAction.RetryWithBackoff, decision.Action);
+        Assert.Equal(1, decision.Attempt);
+        Assert.Equal(TimeSpan.FromSeconds(30), decision.Backoff);
+    }
+
+    [Fact]
+    public void PostStepVerdict_AfterOneRetry_EscalatesAsInfraCrash()
+    {
+        // The retry budget is exactly one; a second miss escalates (the caller
+        // records an InfraCrash flagged environmental).
+        var decision = PostProcessingOutcomeTaxonomy.DecidePostStepVerdictRetry(
+            priorRetryAttempt: PostProcessingOutcomeTaxonomy.MaxPostStepVerdictRetries);
+        Assert.Equal(EnvironmentalRetryAction.Escalate, decision.Action);
+        Assert.Equal(TimeSpan.Zero, decision.Backoff);
+    }
+
+    [Fact]
+    public void PostStepVerdict_BudgetIsExactlyOne()
+        => Assert.Equal(1, PostProcessingOutcomeTaxonomy.MaxPostStepVerdictRetries);
+
     // ---- RetryBackoff curve --------------------------------------------------
 
     [Theory]

@@ -1419,6 +1419,50 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task TaskDone_AspectVerdictInfraCrash_EscalatesEnvironmental_WithoutBudgetBurn()
+    {
+        // AGT-2021: the reviewing CLI dies on both the run and the single
+        // environmental retry, so no aspect produces a verdict. This is an
+        // INFRASTRUCTURE crash, not the card's unfinished work. The card must be
+        // escalated flagged environmental (InfraCrash), NEVER reissued or accepted,
+        // and the escalation must NOT burn the reissue budget (an Escalate record,
+        // never a Reissue).
+        SeedReviewJobWithDone("infra-crash-job");
+        var orchestrator = BuildOrchestratorWithAspects(aspectStub: _ => string.Empty);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // Lane: moved to 5e-escalated, never accepted (5-human-review) or
+        // reissued (2-ready).
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "infra-crash-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "infra-crash-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "infra-crash-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "infra-crash-job")));
+
+        // Decision journal: exactly one record, an Escalate (chain-ending, so no
+        // budget is charged) - and crucially NOT a Reissue.
+        var records = ReviewDecisionLog.ReadAll(_workspace, Project);
+        var record = Assert.Single(records);
+        Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
+        Assert.DoesNotContain(records, r => r.Kind == ReviewDecisionKind.Reissue);
+        Assert.StartsWith(ReviewDecisionOrchestrator.AspectInfraCrashReasonPrefix, record.Reason);
+        // No reissue in the chain -> the card's reissue budget is untouched.
+        Assert.Equal(0, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, "infra-crash-job"));
+
+        // Outcome evidence is a post-processing failure (infra), not a work
+        // deficit reissue.
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.Escalated, "infra-crash-job");
+        Assert.Contains(outcomes, o => o.Outcome == PostProcessingOutcomes.FailedPostProcessing);
+
+        // Timeline carries the environmental + InfraCrash flags.
+        var events = ReadTimeline(TaskStates.Escalated, "infra-crash-job");
+        var escalate = Assert.Single(
+            events.Where(e => e.Kind == TimelineEventKinds.OrchestratorEscalated).ToList());
+        Assert.Equal("true", escalate.Details?["environmental"]);
+        Assert.Equal("InfraCrash", escalate.Details?["issueKind"]);
+    }
+
+    [Fact]
     public async Task TaskDone_AllAspectsPass_EmitsOrchestratorVerdictAcceptedTimelineEvent()
     {
         // ASS-566: the positive terminal of the completion loop must reach
@@ -1747,6 +1791,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
         aspectRunner.CliRunner = (aspectId, _, _, _, _, _) => Task.FromResult(aspectStub(aspectId));
+        // No real wall-clock wait on the AGT-2021 environmental retry path.
+        aspectRunner.VerdictRetryBackoff = _ => TimeSpan.Zero;
         var taskAccess = BuildTaskAccess(scanner, stateMachine, config);
         var orchestrator = new ReviewDecisionOrchestrator(
             scanner, stateMachine, taskAccess, chatLog, prompts, aspectRunner, statusSnapshot ?? new AutoReviewStatusSnapshot(), config,

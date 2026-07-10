@@ -487,6 +487,115 @@ public class AspectRunnerTests : IDisposable
         Assert.Null(AspectVerdictParsing.TryParseJson("{ not valid json"));
     }
 
+    // ---- AGT-2021: environmental retry-once + InfraCrash --------------------
+
+    [Fact]
+    public async Task MissingVerdict_FromDeadReviewer_RetriesOnce_ThenRecovers()
+    {
+        // The backend cut kills the reviewing CLI mid-run -> the first call
+        // returns nothing. This is an INFRASTRUCTURE fault, not the card's work,
+        // so the aspect runner reruns the step once with the environmental
+        // backoff; the retry succeeds and the aspect passes cleanly.
+        var calls = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
+        var runner = BuildRunner(aspect =>
+        {
+            var n = calls.AddOrUpdate(aspect, 1, (_, c) => c + 1);
+            return n == 1
+                ? string.Empty // dead reviewer: no output
+                : "[[ASPECT_VERDICT: status=pass; summary=Recovered on retry.]]\n[[TASK_DONE]]";
+        });
+        runner.VerdictRetryBackoff = _ => TimeSpan.Zero; // no real wait in the test
+
+        var report = await runner.RunAsync(BuildInputs(),
+            new[] { "code-quality" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.False(report.HasInfraFailure);
+        Assert.Equal(AspectStatus.Pass, report.Overall);
+        Assert.Empty(report.ConcernTagIds);
+        Assert.Equal(2, calls["code-quality"]); // ran once, retried once
+        Assert.False(report.Verdicts.Single().IsInfraFailure);
+    }
+
+    [Fact]
+    public async Task MissingVerdict_Twice_RecordsInfraCrash_NotUnfinishedWork()
+    {
+        // The reviewer dies on both the run and the retry -> environmental
+        // InfraCrash. The verdict is flagged IsInfraFailure and hangs NO
+        // review:unparseable concern tag (that tag means "model replied but broke
+        // the format", a different, non-infra signal).
+        var calls = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
+        var runner = BuildRunner(aspect =>
+        {
+            calls.AddOrUpdate(aspect, 1, (_, c) => c + 1);
+            return string.Empty; // dead every time
+        });
+        runner.VerdictRetryBackoff = _ => TimeSpan.Zero;
+
+        var report = await runner.RunAsync(BuildInputs(),
+            new[] { "code-quality" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.True(report.HasInfraFailure);
+        Assert.Single(report.InfraFailures);
+        Assert.Equal("code-quality", report.InfraFailures[0].Aspect);
+        Assert.True(report.Verdicts.Single().IsInfraFailure);
+        Assert.Null(report.Verdicts.Single().ConcernTagId);
+        Assert.Empty(report.ConcernTagIds); // no review:unparseable chip leaks
+        Assert.Equal(2, calls["code-quality"]); // one run + one retry, then stop
+        Assert.Contains("environmental infra crash", report.Verdicts.Single().Summary);
+    }
+
+    [Fact]
+    public async Task ReviewerThrows_TreatedAsInfra_RetriesThenInfraCrash()
+    {
+        // A CLI invocation that THROWS (not just an empty reply) is the same
+        // infra class: retry once, then InfraCrash.
+        var calls = 0;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance)
+        {
+            VerdictRetryBackoff = _ => TimeSpan.Zero
+        };
+        runner.CliRunner = (_, _, _, _, _, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            throw new InvalidOperationException("reviewing CLI died");
+        };
+
+        var report = await runner.RunAsync(BuildInputs(),
+            new[] { "requirement-fit" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.True(report.HasInfraFailure);
+        Assert.Equal(2, calls); // one run + one retry
+    }
+
+    [Fact]
+    public async Task NonEmptyUnparseableReply_StaysConcern_NoRetry()
+    {
+        // A reviewer that DID reply (even garbage) is not an infra fault: it keeps
+        // the existing review:unparseable concern and is NOT retried. Guards the
+        // AGT-2021 change against widening the environmental class too far.
+        var calls = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
+        var runner = BuildRunner(aspect =>
+        {
+            calls.AddOrUpdate(aspect, 1, (_, c) => c + 1);
+            return "I have no opinion.";
+        });
+        runner.VerdictRetryBackoff = _ => TimeSpan.Zero;
+
+        var report = await runner.RunAsync(BuildInputs(),
+            new[] { "code-quality" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None);
+
+        Assert.False(report.HasInfraFailure);
+        Assert.Equal(AspectStatus.Concerns, report.Overall);
+        Assert.Equal("review:unparseable", report.ConcernTagIds[0]);
+        Assert.Equal(1, calls["code-quality"]); // no retry for a real (if garbage) reply
+    }
+
     private AspectRunInputs BuildInputs() => new(
         Project: "demo",
         JobId: "test-job",
