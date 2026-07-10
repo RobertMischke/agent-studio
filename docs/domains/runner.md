@@ -46,6 +46,12 @@ state.
   and `/park` API surface, and session turn dispatch through the existing
   orchestrator CLI runner. Records persist under
   `<TaskRepository>/.metadata/orchestrator-sessions/<encoded>/`.
+- `backend/Features/Registry/OrchestratorSettingsResolver.cs`: pure two-tier
+  resolver for the workspace-shaped orchestrator knobs (model, thinking level,
+  autonomy) - `project override → workspace default → platform constant` - plus
+  the injectable `OrchestratorDefaultsProvider` the read sites call (ADR-0061).
+  The autonomy read sites are `ProjectRunner` (orchestrator model override) and
+  `OrchestratorPrepHostedService` / `IntakeHostedService` (autonomy level).
 - `backend/Services/Runner/OrchestratorReplyParser.cs`: `{REPLY | STEER |
   BLOCK}` grammar.
 - `backend/Services/Runner/RunQuarantineBreaker.cs`: no-progress failure streak
@@ -159,6 +165,15 @@ state.
   a failed auto-commit leaves the branch tip at develop, which reads as "merged"
   and would force-remove the deliverable. Genuine auto-commit failures at
   integration are surfaced as a High `integration-error`, never silent.
+- Workspace-shaped orchestrator settings (model, thinking level, autonomy)
+  resolve `project override → workspace default → platform constant` through
+  `OrchestratorSettingsResolver`, never read ad-hoc at a call site. The provider
+  is tolerant: an unmapped project or an empty workspace tier collapses to the
+  old project-only chain, so an empty workspace-settings store is byte-for-byte
+  identical to pre-migration behaviour. The process-wide supervisor/orchestrator
+  lifecycle flags stay platform-global in `OrchestratorConfigService` and are
+  **not** workspace-shaped. See
+  [ADR-0061](../architecture/decisions/adr-archive.md#adr-0061---orchestrator-settings-are-a-two-tier-config-project-override-wins-over-workspace-default-wins-over-platform-constant-2026-07-11).
 
 ## Verification
 

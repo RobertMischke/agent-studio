@@ -92,6 +92,14 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   `CommitAttributionRunner.cs`: deterministic commit-to-task binding.
 - `backend/Services/Tasks/ReviewEvidenceLog.cs` and
   `ScreenshotIndexService.cs`: review evidence and visual proof.
+- `backend/Features/Registry/WorkspaceSettingsService.cs` and
+  `WorkspaceSettingsEndpoints.cs`: per-workspace default orchestrator settings
+  (`WorkspaceSettings` beside `WorkspaceRecord`, persisted to
+  `.metadata/workspace-settings.json`), exposed via
+  `GET /api/workspaces/{id}/settings`, `PUT .../orchestrator-model`, and
+  `PUT .../autonomy` (404 on unknown id). This is the workspace tier of the
+  two-tier orchestrator config; the precedence and read sites live runner-side
+  (ADR-0058, see [runner.md](runner.md)).
 
 ## Invariants
 
