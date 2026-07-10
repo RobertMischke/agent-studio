@@ -11,6 +11,7 @@ import { TaskDetailPrefetchService } from './task-detail-prefetch.service';
 import { LanePagerService } from './lane-pager.service';
 import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import type { TaskInfo, TaskDetail } from '../../../models/task.model';
 
 const noop = (): void => undefined;
@@ -210,5 +211,130 @@ describe('TriageController · optimistic navigation on Accept', () => {
 
     expect(revertSpy).toHaveBeenCalled();
     expect(openSpy).toHaveBeenCalledWith(taskA);
+  });
+});
+
+/**
+ * AGT-2069 — the planning-task spawn-contract accept guard (the AGT-1915 trap).
+ *
+ * Accepting a planning task into 6-completed must first pass through the
+ * spawn-contract confirm dialog when the task spawned no follow-up cards and
+ * carries no "no follow-up intended" declaration. The operator can override, but
+ * never by accident. Coding tasks and contract-satisfied planning tasks move
+ * straight through with no dialog.
+ */
+describe('TriageController · planning accept spawn-contract guard', () => {
+  let ctrl: TriageController;
+  let jobService: TaskService;
+  let selection: TaskSelectionService;
+  let confirmDialog: ConfirmDialogService;
+
+  const wp = '/wp';
+
+  const makePlanningJob = (contractSatisfied: boolean): TaskInfo =>
+    ({
+      id: 'plan-a',
+      taskKey: `${wp}::plan-a`,
+      title: 'Plan A',
+      state: '5-human-review',
+      order: 1,
+      watchPath: wp,
+      projectName: 'p',
+      mode: 'planning',
+      planningSpawn: {
+        spawned: [],
+        spawnedCount: 0,
+        // A satisfied contract in this fixture comes from a deliberate
+        // no-follow-up declaration; an unsatisfied one has neither spawns
+        // nor declaration.
+        noFollowUpDeclared: contractSatisfied,
+        contractSatisfied,
+      },
+    }) as unknown as TaskInfo;
+
+  const makeCodingJob = (): TaskInfo =>
+    ({
+      id: 'code-a',
+      taskKey: `${wp}::code-a`,
+      title: 'Code A',
+      state: '5-human-review',
+      order: 1,
+      watchPath: wp,
+      projectName: 'p',
+      mode: 'coding',
+    }) as unknown as TaskInfo;
+
+  // confirmPlanningAcceptThenMove awaits the confirm promise, so let queued
+  // microtasks/macrotasks drain before asserting.
+  const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    ctrl = TestBed.inject(TriageController);
+    jobService = TestBed.inject(TaskService);
+    selection = TestBed.inject(TaskSelectionService);
+    confirmDialog = TestBed.inject(ConfirmDialogService);
+
+    // Neutralise the optimistic-move plumbing so whether performMove ran is
+    // observable purely through moveJob().
+    vi.spyOn(jobService, 'applyOptimisticMove').mockReturnValue({} as never);
+    vi.spyOn(jobService, 'findLaneIndex').mockReturnValue(-1);
+    vi.spyOn(jobService, 'moveJob').mockReturnValue(of({}));
+    vi.spyOn(selection, 'advanceAfterMutation').mockReturnValue(true);
+    vi.spyOn(selection, 'triageLanePeers').mockReturnValue([]);
+  });
+
+  it('pops the warning and does NOT move when the operator cancels', async () => {
+    const job = makePlanningJob(false);
+    const confirmSpy = vi.spyOn(confirmDialog, 'confirm').mockResolvedValue(false);
+
+    ctrl.move(job, { targetState: '6-completed', actionId: 'mark-done' });
+    await flush();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    const opts = confirmSpy.mock.calls[0][0];
+    expect(opts.kind).toBe('danger');
+    expect(String(opts.title)).toMatch(/planning/i);
+    expect(jobService.moveJob).not.toHaveBeenCalled();
+  });
+
+  it('moves when the operator confirms "Accept anyway"', async () => {
+    const job = makePlanningJob(false);
+    vi.spyOn(confirmDialog, 'confirm').mockResolvedValue(true);
+
+    ctrl.move(job, { targetState: '6-completed', actionId: 'mark-done' });
+    await flush();
+
+    expect(jobService.moveJob).toHaveBeenCalledWith('plan-a', '6-completed', wp);
+  });
+
+  it('moves a contract-satisfied planning task straight through with no warning', async () => {
+    const job = makePlanningJob(true);
+    const confirmSpy = vi.spyOn(confirmDialog, 'confirm').mockResolvedValue(true);
+
+    ctrl.move(job, { targetState: '6-completed', actionId: 'mark-done' });
+    await flush();
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(jobService.moveJob).toHaveBeenCalledWith('plan-a', '6-completed', wp);
+  });
+
+  it('never gates a coding task', async () => {
+    const job = makeCodingJob();
+    const confirmSpy = vi.spyOn(confirmDialog, 'confirm').mockResolvedValue(true);
+
+    ctrl.move(job, { targetState: '6-completed', actionId: 'mark-done' });
+    await flush();
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(jobService.moveJob).toHaveBeenCalled();
   });
 });

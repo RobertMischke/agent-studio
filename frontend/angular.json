@@ -787,6 +787,73 @@
           "defaultConfiguration": "development"
         }
       }
+    },
+    "planning-visibility-mockup": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "mockup",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/mockups/planning-visibility/main.ts",
+            "index": "src/mockups/planning-visibility/index.html",
+            "tsConfig": "tsconfig.mockup.json",
+            "inlineStyleLanguage": "scss",
+            "outputPath": "dist/planning-visibility-mockup",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
+            "styles": [
+              "src/styles.scss",
+              "src/mockups/planning-visibility/styles.scss"
+            ]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "600kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "40kB",
+                  "maximumError": "48kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "port": 4032,
+            "host": "127.0.0.1"
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "planning-visibility-mockup:build:production"
+            },
+            "development": {
+              "buildTarget": "planning-visibility-mockup:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
     }
   }
 }
