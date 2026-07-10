@@ -751,6 +751,21 @@ public class ProjectRunner
                 ["hoursRemaining"] = proj?.HoursRemaining.ToString("0.##") ?? string.Empty,
                 ["nextReset"] = plan.NextResetAt?.ToString("o") ?? string.Empty,
             });
+
+        // AGT-2055 req 3 ("+ Feed-Zeile") + req 7: every load-steering decision
+        // also lands on the global orchestrator feed under the load-distribution
+        // topic, carrying the burn-rate / remaining-budget / remaining-time
+        // numbers. That feed is the data source for the separate
+        // load-distribution view, so the switch / throttle / wait is never a
+        // silent decision the operator has to reconstruct from logs.
+        _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
+        {
+            Kind = OrchestratorLogKinds.Decision,
+            Topic = OrchestratorLogTopics.LoadDistribution,
+            JobId = info.Id,
+            Summary = plan.Reason,
+            Reasoning = QuotaAdmissionPlanner.DescribeLoadNumbers(plan),
+        });
     }
 
     /// <summary>
@@ -1897,18 +1912,24 @@ public class ProjectRunner
             var route = _quotaFallback?.Resolve(
                 info.CliType, info.Model, info.ThinkingLevel, EvaluateAdmissionQuota);
             var strictCap = EvaluateQuotaCap(info.CliType);
+            // AGT-2055: the algorithmic pre-launch decision for THIS run, computed
+            // once here - before the run claims a slot, so its projected-throttle
+            // slot count matches the pickup gate's view. Reused for the quiet-wait
+            // reject just below and emitted at the commit point further down, so
+            // every launch (a healthy primary or a pre-emptive model switch) is
+            // documented with its burn-rate / projection numbers.
+            var admissionPlan = PlanQuotaAdmission(info);
             if (strictCap.Blocked && route?.IsFallback != true)
             {
                 // Everything is exhausted: wait quietly with a reason + next
                 // reset, and record the decision. No spawn, no reissue burn.
-                var waitPlan = PlanQuotaAdmission(info);
-                EmitQuotaAdmissionDecision(info, waitPlan);
+                EmitQuotaAdmissionDecision(info, admissionPlan);
                 _logger.LogInformation(
                     "[taskboard] {Intent} for job {JobId} deferred by quota admission: {Reason}",
-                    intent, jobId, waitPlan.Reason);
+                    intent, jobId, admissionPlan.Reason);
                 return RunOutcome.Reject(new RunRejection(
                     Reason: RunRejectReason.QuotaCapExceeded,
-                    Message: waitPlan.Reason));
+                    Message: admissionPlan.Reason));
             }
 
             // Auto-pickup consumes a saved pending-intent if there is one,
@@ -2123,6 +2144,17 @@ public class ProjectRunner
             NotifyStatus();
 
             Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
+
+            // AGT-2055 req 3/7: document the pre-launch admission decision for the
+            // run we are now committing to spawn - a pre-emptive model switch
+            // ("model switched pre-launch: ...") or a healthy primary launch -
+            // as a task timeline entry + a load-distribution feed line carrying
+            // the projection numbers. Deferrals (wait / throttle) are recorded at
+            // the pickup gate; this is the launch side of the same ledger. A
+            // healthy primary launch stays a silent log-only line (the planner's
+            // LaunchPrimary outcome early-returns before the task-facing tee), so
+            // only genuine load-steering reaches the timeline and feed.
+            EmitQuotaAdmissionDecision(info, admissionPlan);
 
             if (route?.IsFallback == true)
             {

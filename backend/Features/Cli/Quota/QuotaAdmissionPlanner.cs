@@ -145,6 +145,30 @@ public static class QuotaAdmissionPlanner
             Projection: QuotaWindowProjection.WorstProjection(snapshotFor(cli), caps, nowUtc));
     }
 
+    /// <summary>
+    /// One-line "with the numbers" description of an admission decision for the
+    /// load-distribution feed (AGT-2055, requirement 7): burn rate, remaining
+    /// budget and remaining time behind the umschichten / drosseln / normal
+    /// call. Falls back to the outcome + next reset when no window could be
+    /// projected (e.g. a snapshot with no reset time to extrapolate from).
+    /// </summary>
+    public static string DescribeLoadNumbers(QuotaAdmissionPlan plan)
+    {
+        var p = plan?.Projection;
+        if (p is null)
+        {
+            var outcome = plan?.Outcome.ToString() ?? "unknown";
+            return plan?.NextResetAt is { } reset
+                ? $"{outcome}; next reset {reset:HH:mm} UTC"
+                : outcome;
+        }
+
+        var budgetLeft = Math.Max(0d, p.CapPct - p.CurrentUsedPct);
+        return
+            $"burn {p.BurnRatePctPerHour:0.#}%/h, used {p.CurrentUsedPct:0.#}% -> projected {p.ProjectedUsedPct:0.#}% " +
+            $"(cap {p.CapPct}%), {budgetLeft:0.#}% budget left, {p.HoursRemaining:0.#}h to reset";
+    }
+
     private static string BuildSwitchReason(string primaryCli, CliRouteDecision route)
     {
         var why = !string.IsNullOrWhiteSpace(route.Reason) ? route.Reason : route.PrimaryCap.DescribeReason();

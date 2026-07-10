@@ -169,6 +169,41 @@ public sealed class QuotaAdmissionPlannerTests : IDisposable
         Assert.Equal(QuotaAdmissionOutcome.LaunchPrimary, plan.Outcome);
     }
 
+    // ── req 7: the load-distribution feed line carries the numbers ──
+    [Fact]
+    public void DescribeLoadNumbers_CarriesBurnRateBudgetAndTime()
+    {
+        var fallback = Routing(new CliModelRouteProfile { CliType = "claude", PrimaryModel = "claude-opus" });
+        // 60% at the halfway point of a 5-hour window -> projects to 120%.
+        Snapshot("claude", ("5-hour", 60, Now.AddHours(2.5)));
+        var plan = Plan("claude", fallback, occupiedSlots: 1);   // throttle: projected, no fallback, slot busy
+        Assert.Equal(QuotaAdmissionOutcome.Throttle, plan.Outcome);
+        Assert.NotNull(plan.Projection);
+
+        var text = QuotaAdmissionPlanner.DescribeLoadNumbers(plan);
+
+        Assert.Contains("burn", text);
+        Assert.Contains("%/h", text);          // burn rate
+        Assert.Contains("budget left", text);  // remaining budget
+        Assert.Contains("to reset", text);     // remaining time
+        Assert.Contains("projected", text);
+    }
+
+    // ── the formatter degrades cleanly when there is no projectable window ──
+    [Fact]
+    public void DescribeLoadNumbers_NoProjection_FallsBackToOutcomeAndReset()
+    {
+        var plan = new QuotaAdmissionPlan(
+            QuotaAdmissionOutcome.Wait, "claude", Model: null, ThinkingLevel: null,
+            IsFallback: false, Reason: "waiting: all quotas exhausted",
+            NextResetAt: Now.AddHours(4), Projection: null);
+
+        var text = QuotaAdmissionPlanner.DescribeLoadNumbers(plan);
+
+        Assert.Contains("Wait", text);
+        Assert.Contains("next reset", text);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
     private QuotaAdmissionPlan Plan(string cli, CliQuotaFallbackService? fallback, int occupiedSlots) =>
         QuotaAdmissionPlanner.Plan(

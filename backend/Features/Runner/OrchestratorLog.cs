@@ -176,4 +176,11 @@ public static class OrchestratorLogTopics
     public const string Recovery = "recovery";
     public const string TaskPicked = "task-picked";
     public const string General = "general";
+    /// <summary>
+    /// AGT-2055: the algorithmic pre-launch quota / load-steering decisions
+    /// (switch model / throttle / quiet wait / normal launch) with their
+    /// burn-rate and projection numbers. These feed lines are the data source
+    /// for the separate load-distribution view.
+    /// </summary>
+    public const string LoadDistribution = "load-distribution";
 }
