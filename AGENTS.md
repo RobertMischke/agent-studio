@@ -19,6 +19,10 @@ apply only under `frontend/`.
 - Familiar runtime, CLI, permission, filesystem, runner, or state-machine
   failure: search [docs/wiki/common-problems/](docs/wiki/common-problems/)
   before debugging from scratch.
+- Current state of a designated topic (so we do not re-discover the same ground):
+  [docs/wiki/concepts/designated-topics/](docs/wiki/concepts/designated-topics/README.md).
+  The opt-in `post-agents-wiki-sync` step keeps these pointers consistent and the
+  per-topic Current State pages fresh.
 
 ## Non-Negotiable Rules
 

@@ -229,6 +229,24 @@ public static class PipelineCatalogue
     public const string WikiLearningsStepId = "post-wiki-learnings";
 
     /// <summary>
+    /// Opt-in deterministic post-step that keeps the AGENTS.md -&gt; wiki pointers
+    /// for a set of designated topics consistent (no dead / missing link) and
+    /// maintains a machine-owned "Current State / Progress" page per designated
+    /// topic under <c>docs/wiki/concepts/designated-topics/</c>, so agents read the
+    /// current state of a topic instead of re-discovering it every run ("gegen im
+    /// Kreis drehen"). It is CLI-agnostic (no model call - it derives the per-topic
+    /// current-state line from the task's own title / newest commit / typed outcome,
+    /// and matches a task to a topic by shared tags or changed-file path prefixes)
+    /// and idempotent (re-running on the same task refreshes timestamps without
+    /// duplicating a progress row). Reporting-only - it never changes the lane
+    /// decision. Implemented by <c>AgentsWikiSyncPostStepRunner</c>; defaults
+    /// <c>DefaultEnabled = false</c> because it is a per-project opt-in pass (same
+    /// switch the wiki-maintenance / wiki-learnings / drift steps use) that also
+    /// self-provisions an empty designated-topics registry the operator fills in.
+    /// </summary>
+    public const string AgentsWikiSyncStepId = "post-agents-wiki-sync";
+
+    /// <summary>
     /// Post-core completeness check that runs immediately after the core agent
     /// run, before the aspect verdicts. It is the deterministic
     /// <c>CompletionGate</c> scan of the run's own close-out evidence
@@ -631,6 +649,23 @@ public static class PipelineCatalogue
                     // it distills, so it must schedule after the aspects.
                     DependsOn = [.. AspectStepIds],
                     Idempotent = true,
+                    DefaultEnabled = false,
+                },
+                new PipelineStep
+                {
+                    Id = AgentsWikiSyncStepId,
+                    DisplayName = "AGENTS/wiki sync",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    // Deterministic wiki upkeep keyed off the task's own evidence
+                    // (tags / changed files / commit), independent of the aspect
+                    // verdicts, so it only needs the core run to have produced the
+                    // change set - mirrors the wiki-maintenance dependency.
+                    DependsOn = [CoreAgentRunStepId],
+                    Idempotent = true,
+                    // Opt-in per project: an operator turns on the designated-topic
+                    // sync (and fills in the seeded registry), same as the sibling
+                    // wiki steps.
                     DefaultEnabled = false,
                 },
                 new PipelineStep

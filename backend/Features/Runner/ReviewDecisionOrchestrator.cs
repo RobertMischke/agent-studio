@@ -138,6 +138,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly IBuildTestGateRunner? _buildTestGateRunner;
     private readonly WikiMaintenancePostStepRunner? _wikiMaintenance;
     private readonly WikiLearningsPostStepRunner? _wikiLearnings;
+    // The opt-in AGENTS.md <-> wiki designated-topics sync (AGT-1782). Optional so
+    // the many stand-alone test constructors keep compiling; production DI supplies
+    // the registered singleton.
+    private readonly AgentsWikiSyncPostStepRunner? _agentsWikiSync;
     private readonly WikiTaskCrossReferenceService? _wikiTaskCrossReferences;
     private readonly RegressionRadarService? _regressionRadar;
     // The opt-in task-spawner post-step (AGT-2028). Optional so the many
@@ -208,7 +212,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         WorkspaceArtifactCommitService? workspaceArtifactCommits = null,
         AgentStudio.Review.CodeReviewStepService? codeReviewStep = null,
         TaskSpawnerPostStepRunner? taskSpawner = null,
-        WikiTaskCrossReferenceService? wikiTaskCrossReferences = null)
+        WikiTaskCrossReferenceService? wikiTaskCrossReferences = null,
+        AgentsWikiSyncPostStepRunner? agentsWikiSync = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -236,6 +241,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _codeReviewStep = codeReviewStep;
         _taskSpawner = taskSpawner;
         _wikiTaskCrossReferences = wikiTaskCrossReferences;
+        _agentsWikiSync = agentsWikiSync;
 
         _statusSnapshot.ConfigureEscalationRateAlert(
             _configuration.GetValue(
@@ -1642,7 +1648,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // is reporting-only and never changes the task lane decision.
         RunWikiLearningsPostStep(entry, current, report, statusSummary, diffSummary);
 
-        // AGT-2053: append bidirectional task/wiki associations after both wiki
+        // AGENTS/wiki-sync post-step (AGT-1782): opt-in project-scoped upkeep that
+        // keeps the AGENTS.md -> wiki pointers for the designated topics consistent
+        // (no dead/missing link) and collects each designated topic's current state
+        // from the task's own change set, so agents stop re-discovering the same
+        // ground. Reporting-only and never changes the task lane decision.
+        RunAgentsWikiSyncPostStep(entry, current);
+
+        // AGT-2053: append bidirectional task/wiki associations after the wiki
         // producers have settled. This is reporting-only and deliberately does
         // not clean stale targets: missing pages/tasks remain useful history.
         RunWikiTaskCrossReferenceStep(entry, current);
@@ -3731,6 +3744,91 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
         {
             StepId = PipelineCatalogue.WikiLearningsStepId,
+            Kind = StepKind.Tool,
+            Status = status,
+            StartedAt = now - TimeSpan.FromMilliseconds(durationMs),
+            CompletedAt = now,
+            DurationMs = durationMs,
+            Verdict = verdictToken,
+            Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+        });
+    }
+
+    /// <summary>
+    /// Opt-in AGENTS/wiki-sync post-step (<c>post-agents-wiki-sync</c>). Keeps the
+    /// designated-topic pointers in the project's AGENTS.md consistent and collects
+    /// each designated topic's current state via the injected
+    /// <see cref="AgentsWikiSyncPostStepRunner"/>. Disabled by default and gated by
+    /// the same per-project switch the sibling wiki steps use. Reporting-only and
+    /// fully non-gating: any failure records a failed / skipped step and the review
+    /// decision continues unchanged.
+    /// </summary>
+    private void RunAgentsWikiSyncPostStep(WatchPathEntry entry, TaskInfo current)
+    {
+        if (_agentsWikiSync == null) return;
+
+        var settings = _projectSettings?.Get(entry.Name);
+        var step = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
+            string.Equals(s.Id, PipelineCatalogue.AgentsWikiSyncStepId, StringComparison.OrdinalIgnoreCase));
+        var ctx = new PipelineStepConditionContext
+        {
+            Aborted = false,
+            ExitCode = 0,
+            AnyAspectFailed = false,
+            TaskType = current.TaskType,
+            Tags = current.Tags,
+        };
+        var shouldRun = step is null
+            ? PipelineStepConfigResolver.ShouldRun(settings, PipelineCatalogue.AgentsWikiSyncStepId, ctx)
+            : PipelineStepConfigResolver.ShouldRun(settings, step, ctx);
+        if (!shouldRun)
+        {
+            RecordAgentsWikiSyncStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "off", reason: "post-step disabled by config or condition");
+            return;
+        }
+
+        var sw = Stopwatch.StartNew();
+        AgentsWikiSyncResult result;
+        try
+        {
+            var changedFiles = ResolveLatestRunChangedFiles(current, entry.Path);
+            var frameLanguage = WorkstreamFrameLanguageResolver.Resolve(entry.Name, settings?.WorkstreamFramePublic);
+            result = _agentsWikiSync.Run(current, entry, changedFiles, frameLanguage: frameLanguage);
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: agents-wiki-sync post-step threw for {Project}/{JobId}; recording failure",
+                entry.Name, current.Id);
+            RecordAgentsWikiSyncStep(current.FolderPath, PipelineStepStatus.Failed,
+                sw.ElapsedMilliseconds, "error", ex.Message);
+            return;
+        }
+        sw.Stop();
+
+        var status = result.Verdict == AgentsWikiSyncVerdict.Error
+            ? PipelineStepStatus.Failed
+            : result.Verdict == AgentsWikiSyncVerdict.Skipped
+                ? PipelineStepStatus.Skipped
+                : PipelineStepStatus.Passed;
+        var verdict = result.Verdict.ToString().ToLowerInvariant();
+        RecordAgentsWikiSyncStep(current.FolderPath, status, sw.ElapsedMilliseconds, verdict, result.Reason);
+    }
+
+    private void RecordAgentsWikiSyncStep(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        long durationMs,
+        string verdictToken,
+        string? reason)
+    {
+        if (_pipelineLog == null) return;
+        var now = DateTime.UtcNow;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.AgentsWikiSyncStepId,
             Kind = StepKind.Tool,
             Status = status,
             StartedAt = now - TimeSpan.FromMilliseconds(durationMs),

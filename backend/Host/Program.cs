@@ -419,6 +419,10 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.IBuildTestGateRunner,
     AgentStudio.Pipeline.BuildTestGateRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiMaintenancePostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiLearningsPostStepRunner>();
+// Opt-in AGENTS.md <-> wiki designated-topics sync (AGT-1782): keeps the
+// designated-topic pointers consistent and collects each topic's current state.
+// Injected into the review orchestrator; default-OFF per project.
+builder.Services.AddSingleton<AgentStudio.Pipeline.AgentsWikiSyncPostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiTaskCrossReferenceService>();
 // Opt-in task-spawner post-step (AGT-2028): relevance judgment + follow-up
 // card creation into a configured target project. Injected into the review

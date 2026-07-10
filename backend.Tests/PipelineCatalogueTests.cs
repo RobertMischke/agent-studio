@@ -35,12 +35,12 @@ public class PipelineCatalogueTests
         Assert.False(p.Core[0].Idempotent); // Core agent runs are not safe to re-run blindly.
 
         // Post includes the deterministic review/build gates, four aspects,
-        // implemented tool steps (incl. the opt-in wiki-maintenance and
-        // wiki-learnings distillation steps), the deferred operator-triggered
+        // implemented tool steps (incl. the opt-in wiki-maintenance, wiki-learnings
+        // distillation, and agents/wiki-sync steps), the deferred operator-triggered
         // "Merge into Develop" step and its integration-branch push twin, the
         // automatic code-review quality-grade step, the opt-in task-spawner step,
         // final orchestrator decision, and opt-in drift dimensions.
-        Assert.Equal(24, p.Post.Count);
+        Assert.Equal(25, p.Post.Count);
     }
 
     [Fact]
@@ -473,6 +473,51 @@ public class PipelineCatalogueTests
             PipelineSteps = new Dictionary<string, PipelineStepSetting>
             {
                 [PipelineCatalogue.WikiLearningsStepId] = new() { Enabled = true },
+            },
+        };
+        Assert.True(PipelineStepConfigResolver.IsEnabled(settings, step));
+    }
+
+    [Fact]
+    public void StandardPipeline_AgentsWikiSync_IsOptInToolStep_AfterWikiLearnings_BeforeDecision()
+    {
+        // AGT-1782: the AGENTS/wiki-sync step ships as a deterministic (no model)
+        // Tool post-step that defaults OFF - keeping the designated-topic pointers
+        // consistent and collecting their current state is an opt-in per-project
+        // pass, like wiki-maintenance and wiki-learnings. It is keyed off the
+        // task's own change set, so it depends on the core run (not the aspect
+        // verdicts) and sits with the sibling wiki steps before the final decision.
+        var p = PipelineCatalogue.Standard;
+        var step = p.Post.First(s => s.Id == PipelineCatalogue.AgentsWikiSyncStepId);
+        Assert.Equal("post-agents-wiki-sync", step.Id);
+        Assert.Equal(StepKind.Tool, step.Kind);
+        Assert.Equal(StepRunMode.Sequential, step.RunMode);
+        Assert.False(step.Stub);
+        Assert.False(step.Deferred);
+        Assert.True(step.Idempotent);
+        Assert.False(step.DefaultEnabled); // opt-in
+        Assert.Null(step.Model); // deterministic, no LLM
+        Assert.Contains(PipelineCatalogue.CoreAgentRunStepId, step.DependsOn);
+
+        var syncIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.AgentsWikiSyncStepId);
+        var learningsIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.WikiLearningsStepId);
+        var decisionIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.OrchestratorDecisionStepId);
+        Assert.True(learningsIndex < syncIndex,
+            $"wiki-learnings (idx {learningsIndex}) must precede agents/wiki-sync (idx {syncIndex})");
+        Assert.True(syncIndex < decisionIndex,
+            $"agents/wiki-sync (idx {syncIndex}) must precede orchestrator-decision (idx {decisionIndex})");
+
+        // Not a git step: the read-only planning/research pipeline keeps it.
+        Assert.DoesNotContain(PipelineCatalogue.AgentsWikiSyncStepId, PipelineCatalogue.GitStepIds);
+        Assert.Contains(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.AgentsWikiSyncStepId);
+
+        // Opt-in gate: default off, but a per-project override turns it on.
+        Assert.False(PipelineStepConfigResolver.IsEnabled((ProjectSettings?)null, step));
+        var settings = new ProjectSettings
+        {
+            PipelineSteps = new Dictionary<string, PipelineStepSetting>
+            {
+                [PipelineCatalogue.AgentsWikiSyncStepId] = new() { Enabled = true },
             },
         };
         Assert.True(PipelineStepConfigResolver.IsEnabled(settings, step));
