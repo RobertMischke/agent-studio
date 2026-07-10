@@ -414,6 +414,7 @@ public class TaskScannerService : ITaskScanner
                 Fixture = raw.TryGetProperty("fixture", out var fix)
                     && fix.ValueKind is JsonValueKind.True,
                 Phase = ReadPhase(raw, resolvedState, jobDir),
+                SteerPendingSince = ReadSteerPendingSince(jobDir, resolvedState),
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),
                 References = ReadReferences(raw),
@@ -853,6 +854,33 @@ public class TaskScannerService : ITaskScanner
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Run-Liveness Slice B: the UTC time a 3-progress card's steer-pending wait
+    /// started, read from the durable <c>steer-pending.json</c> marker. Only
+    /// 3-progress cards carry the wait, so the file probe is skipped otherwise.
+    /// The wait-start is read directly (not through the runner marker type) to
+    /// keep the scanner free of a Runner-layer dependency.
+    /// </summary>
+    private static DateTime? ReadSteerPendingSince(string jobFolder, string state)
+    {
+        if (!string.Equals(state, TaskStates.Progress, StringComparison.OrdinalIgnoreCase)) return null;
+        var path = Path.Combine(jobFolder, "steer-pending.json");
+        if (!File.Exists(path)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            if (doc.RootElement.TryGetProperty("waitStartedAt", out var el)
+                && el.ValueKind == JsonValueKind.String
+                && el.TryGetDateTime(out var dt))
+                return dt.ToUniversalTime();
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "TaskScannerService: torn / unreadable steer-pending.json - no wait pill");
+        }
+        return null;
     }
 
     private const int OutcomeIssueTailBytes = 16 * 1024;

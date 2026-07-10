@@ -1,6 +1,7 @@
 # Run-Liveness and Slot Semantics
 
-Status: Concept. Slice A implemented (2026-07-10); Slices B and C are follow-up cards.
+Status: Concept. Slice A implemented (2026-07-10); Slice B implemented
+(2026-07-11); Slice C is a follow-up card.
 
 ## Problem
 
@@ -112,12 +113,71 @@ Every decision is appended to `<workspace>/logs/run-liveness.jsonl`.
 | `Runner:RunLiveness:IntervalSeconds` | `15` | Uptime sweep cadence (clamped 5..55). |
 | `Runner:RunLiveness:GraceSeconds` | `30` | Uptime silence tolerated before a missing heartbeat counts as process-lost (clamped 0..55). Boot uses 0. |
 
-## Slices B and C (follow-up cards)
+## Slice B (implemented)
 
-- **Slice B - Steer-timeout.** A run that is steered (a follow-up handed in)
-  but never re-acknowledges the steer must not deadlock (belegt AGT-1936). Give
-  the steer its own bounded heartbeat and recovery.
+Steer-timeout: **no steered / NeedsInput card waits indefinitely.** Slice A
+demotes a card whose *process* is gone; a steered card is different - it is
+waiting on purpose (so it is excluded from the Slice A heartbeat check) and needs
+its own bounded wait plus recovery.
+
+Belegt (2026-07-10 evening): three cards (2062/2067/2068) hung in parallel
+~5 hours on steer questions whose answer was already knowable from the branch
+state ("is this already implemented?" - their work was long since merged). The
+runs waited unbounded because the NeedsInput wait had no timeout; the loss was
+invisible because no lane moved (the watcher only sees transitions). 15
+slot-hours lost.
+
+When an auto-mode run asks a steer / `[[TASK_NEEDS_INPUT]]` question the
+orchestrator cannot answer on its own (it STEERs, BLOCKs, declines, or hits the
+auto-loop circuit breaker), the runner drops a durable `steer-pending.json`
+marker recording when the wait started, stamps the visible `steer-pending` phase
+("waiting for answer since mm:ss"), and tees an `orchestrator_steered` timeline
+event. A short-cadence sweep then enforces a bounded wait over one pure policy
+(`SteerTimeoutPolicy.Decide`):
+
+| Situation | Action | Reason code |
+|---|---|---|
+| Attended (manual mode) | leave it - a human is answering | `attended-wait` |
+| Inside the timeout | keep waiting (card shows the wait pill) | `within-timeout` |
+| Timed out, answer derivable from context | auto-answer + resume the run | `auto-answered` |
+| Timed out, no confident answer | route to a blocked `5e-escalated` escalation | `blocked-ambiguous` |
+
+The **auto-answer** is the named 2067 case: for an "is this already
+implemented?" question, the resolver checks the branch/develop state - if the
+task's `task/<id>` branch is already an ancestor of the integration branch, it
+answers "already integrated, finalize" and hands the answer back as a Continue
+(via a queued pending intent + demote to `2-ready`). Every other question shape,
+and every uncertain/errored resolve, is ambiguous -> a normal blocked
+escalation. "When unsure, escalate; never wait forever."
+
+### Key code
+
+| Concern | Symbol | File |
+|---|---|---|
+| Pure decision core (the bounded-wait invariant) | `SteerTimeoutPolicy.Decide` | `backend/Shared/Runner/SteerTimeoutPolicy.cs` |
+| "Is this already implemented?" classifier | `SteerQuestionClassifier` | `backend/Shared/Runner/SteerQuestionClassifier.cs` |
+| Durable steer-pending marker | `SteerPendingMarker` / `SteerPendingRecord` | `backend/Features/Runner/SteerPendingMarker.cs` |
+| Uptime sweep executor | `SteerTimeoutMonitor` | `backend/Features/Runner/SteerTimeoutMonitor.cs` |
+| Sweep cadence | `SteerTimeoutMonitorHostedService` | `backend/Features/Runner/SteerTimeoutMonitorHostedService.cs` |
+| Branch-state auto-answer resolver | `SteerTimeoutResolver` / `ISteerTimeoutResolver` | `backend/Features/Runner/SteerTimeoutResolver.cs` |
+| Mark a run steer-pending (marker + phase + timeline) | `ProjectRunner.MarkSteerPending` | `backend/Features/Runner/ProjectRunner.cs` |
+| Blocked escalation funnel | `HumanReviewEscalation.EscalateAsync` (category `steer-timeout`) | `backend/Features/Runner/HumanReviewEscalation.cs` |
+
+Every decision is appended to `<workspace>/logs/steer-timeout.jsonl` and mirrored
+to the card's timeline (`steer_timeout_resolved`).
+
+### Configuration
+
+| Key | Default | Meaning |
+|---|---|---|
+| `Runner:SteerTimeout:Enabled` | `true` | Master switch for the sweep. |
+| `Runner:SteerTimeout:TimeoutSeconds` | `120` | Bounded wait before an unanswered steer times out. |
+| `Runner:SteerTimeout:IntervalSeconds` | `20` | Sweep cadence (clamped 5..55). |
+
+## Slice C (follow-up card)
+
 - **Slice C - Sub-states + slot accounting.** Make the `execution` /
-  `post-processing` sub-states first-class and reconcile the coding-slot count
-  against live run-heartbeats so a demoted/finished card frees its seat exactly
-  once.
+  `post-processing` sub-states first-class (the `steer-pending` phase Slice B
+  introduces is the first of these pulled forward) and reconcile the coding-slot
+  count against live run-heartbeats so a demoted/finished card frees its seat
+  exactly once.

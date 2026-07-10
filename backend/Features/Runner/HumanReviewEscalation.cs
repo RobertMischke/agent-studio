@@ -79,6 +79,12 @@ public static class HumanReviewEscalationCategories
     /// after the retired 1b-needs-human-review lane was removed.</summary>
     public const string HumanDecisionNeeded = "human-decision-needed";
 
+    /// <summary>An unanswered steer / NeedsInput question timed out (Run-Liveness
+    /// Slice B, concept Rule 2) and the answer was not derivable from the task
+    /// context. Routed to 5e-escalated with a clear reason instead of waiting
+    /// indefinitely (belegt 2062/2067/2068, 2026-07-10).</summary>
+    public const string SteerTimeout = "steer-timeout";
+
     /// <summary>Retroactive category for cards parked in 5-human-review before
     /// the escalation funnel existed (boot-time backfill).</summary>
     public const string UnknownLegacy = "unknown-legacy";

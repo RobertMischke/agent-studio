@@ -15,6 +15,7 @@ import {
   buildHumanReviewBadge,
   buildCodeReviewGradeBadge,
   buildPhaseBadge,
+  formatSteerWait,
   buildOwnerChip,
   buildPipelineDots,
   buildTokenBubble,
@@ -1533,6 +1534,33 @@ describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
     const blocked = buildPhaseBadge('post-processing-blocked');
     expect(blocked?.label).toBe('Post processing blocked');
     expect(blocked?.tone).toBe('post-processing-blocked');
+  });
+
+  it('surfaces a steer-pending wait with a live "since" timer (Run-Liveness Slice B)', () => {
+    const since = '2026-07-11T00:00:00.000Z';
+    const now = Date.parse(since) + 135_000; // 2m 15s later
+    const pill = buildPhaseBadge('steer-pending', since, now);
+    expect(pill?.tone).toBe('steer-pending');
+    expect(pill?.label).toBe('Waiting for answer 2:15');
+    expect(pill?.tooltip).toContain('will not hang');
+  });
+
+  it('shows the bare steer-pending label when no wait-start is known', () => {
+    expect(buildPhaseBadge('steer-pending')?.label).toBe('Waiting for answer');
+  });
+});
+
+describe('formatSteerWait', () => {
+  it('formats sub-hour waits as m:ss', () => {
+    expect(formatSteerWait(0)).toBe('0:00');
+    expect(formatSteerWait(75_000)).toBe('1:15');
+    expect(formatSteerWait(9_000)).toBe('0:09');
+  });
+  it('formats hour-plus waits as h:mm - the 5-hour hang shape', () => {
+    expect(formatSteerWait(5 * 3600_000 + 7 * 60_000)).toBe('5:07h');
+  });
+  it('never goes negative on clock skew', () => {
+    expect(formatSteerWait(-5000)).toBe('0:00');
   });
 });
 

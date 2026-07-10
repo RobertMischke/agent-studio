@@ -1,0 +1,445 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.Extensions.Configuration;
+
+namespace AgentStudio.Runner;
+
+/// <summary>
+/// Run-Liveness Slice B executor (concept:
+/// <c>docs/concepts/run-liveness-and-slot-semantics.md</c>, Rule 2). Enforces
+/// the steer-timeout invariant: <b>no steered / NeedsInput card waits
+/// indefinitely</b>. An auto-mode run that asks a question the orchestrator
+/// cannot answer on its own leaves a durable <see cref="SteerPendingRecord"/>
+/// marker; this monitor sweeps those markers and, once a card has waited past
+/// its bounded timeout, resolves the wait one of two ways (concept Rule 2):
+/// <list type="bullet">
+///   <item><b>Auto-answer</b> - when the answer is unambiguous from the task
+///   context (the branch-state check for the "is this already implemented?"
+///   class), feed it back as a Continue so the run resumes.</item>
+///   <item><b>Blocked</b> - otherwise route the card to a normal
+///   <c>5e-escalated</c> escalation with a clear reason, via the
+///   <see cref="HumanReviewEscalation"/> funnel. Never an endless wait.</item>
+/// </list>
+///
+/// <para>
+/// Belegt (2026-07-10): three cards (2062/2067/2068) hung ~5 hours on steer
+/// questions whose work was already merged. The loss was invisible because no
+/// lane moved. Slice A demotes a card whose PROCESS is gone; a steered card is
+/// waiting on purpose (so it is excluded from Slice A's heartbeat check) and
+/// needs this separate bounded wait + phase-aware recovery.
+/// </para>
+///
+/// <para>
+/// Same shape as <see cref="RunLivenessMonitor"/>: a short-cadence uptime sweep
+/// (<see cref="SteerTimeoutMonitorHostedService"/>) over one pure policy
+/// (<see cref="SteerTimeoutPolicy"/>). Every decision is appended to
+/// <c>&lt;workspace&gt;/logs/steer-timeout.jsonl</c> and mirrored to the card's
+/// timeline (<see cref="TimelineEventKinds.SteerTimeoutResolved"/>). Idempotent:
+/// acting moves the card out of <c>3-progress</c>, so a second sweep no longer
+/// finds it there.
+/// </para>
+/// </summary>
+public sealed class SteerTimeoutMonitor
+{
+    private readonly TaskScannerService _scanner;
+    private readonly TaskTransitionService _transitions;
+    private readonly TaskMutationService _mutations;
+    private readonly HumanReviewEscalation _escalation;
+    private readonly ProjectSettingsService _projectSettings;
+    private readonly OrchestratorChatLog _chatLog;
+    private readonly ISteerTimeoutResolver _resolver;
+    private readonly IServiceProvider _services;
+    private readonly IConfiguration _configuration;
+    private readonly AgentStudio.TaskAccess.ITaskAccess _taskAccess;
+    private readonly ILogger<SteerTimeoutMonitor> _logger;
+    private readonly AgentStudio.Tasks.TimelineLog? _timeline;
+    private readonly IJsonlAppender _appender;
+
+    /// <summary>Default bounded wait before an unanswered steer times out (concept Rule 2: "Default 120s, konfigurierbar").</summary>
+    public const int DefaultTimeoutSeconds = 120;
+
+    /// <summary>Test seam mirroring <see cref="RunLivenessMonitor.StatusProviderOverride"/>: replaces the runner-status lookup.</summary>
+    internal Func<RunnerStatus?>? StatusProviderOverride { get; set; }
+
+    public SteerTimeoutMonitor(
+        TaskScannerService scanner,
+        TaskTransitionService transitions,
+        TaskMutationService mutations,
+        HumanReviewEscalation escalation,
+        ProjectSettingsService projectSettings,
+        OrchestratorChatLog chatLog,
+        ISteerTimeoutResolver resolver,
+        IServiceProvider services,
+        IConfiguration configuration,
+        AgentStudio.TaskAccess.ITaskAccess taskAccess,
+        ILogger<SteerTimeoutMonitor> logger,
+        AgentStudio.Tasks.TimelineLog? timeline = null,
+        IJsonlAppender? appender = null)
+    {
+        _scanner = scanner;
+        _transitions = transitions;
+        _mutations = mutations;
+        _escalation = escalation;
+        _projectSettings = projectSettings;
+        _chatLog = chatLog;
+        _resolver = resolver;
+        _services = services;
+        _configuration = configuration;
+        _taskAccess = taskAccess;
+        _logger = logger;
+        _timeline = timeline;
+        _appender = appender ?? new JsonlAppender();
+    }
+
+    /// <summary>
+    /// One uptime sweep: for every <c>3-progress</c> card carrying a
+    /// steer-pending marker, apply <see cref="SteerTimeoutPolicy"/> and execute
+    /// the verdict. Returns the actions taken (auto-answered / blocked), for the
+    /// hosted service to log and for tests to assert.
+    /// </summary>
+    public async Task<IReadOnlyList<SteerTimeoutOutcome>> SweepAsync(CancellationToken ct = default)
+    {
+        var outcomes = new List<SteerTimeoutOutcome>();
+
+        if (!_configuration.GetValue("Runner:SteerTimeout:Enabled", true))
+            return outcomes;
+
+        var configTimeout = Math.Max(1, _configuration.GetValue("Runner:SteerTimeout:TimeoutSeconds", DefaultTimeoutSeconds));
+        var now = DateTime.UtcNow;
+        var status = SafeGetStatus();
+
+        foreach (var entry in _scanner.GetWatchPaths())
+        {
+            ct.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(entry.Path) || !Directory.Exists(entry.Path)) continue;
+
+            var projectStatus = status?.Projects != null && status.Projects.TryGetValue(entry.Name, out var ps) ? ps : null;
+            var attended = IsManualMode(projectStatus?.Mode);
+            var activeJobId = projectStatus?.ActiveJobId;
+
+            // Snapshot candidates before acting on any (matching the Slice A /
+            // StaleProgressArchiver measure-then-act discipline): acting moves a
+            // folder, and FindJob has folder side effects.
+            var candidates = new List<Candidate>();
+            foreach (var laneFolder in _taskAccess.ListLaneFolders(entry.Path, TaskStates.Progress))
+            {
+                ct.ThrowIfCancellationRequested();
+                // Never act on the runner's still-active job: its owning run holds
+                // the latch (e.g. a circuit-breaker path that has not yet released
+                // it), so moving it would race the runner. Mirrors the Slice A /
+                // StaleProgressArchiver active-job guard.
+                if (!string.IsNullOrEmpty(activeJobId)
+                    && string.Equals(laneFolder.Slug, activeJobId, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var marker = SteerPendingMarker.TryRead(laneFolder.FolderPath, _logger);
+                if (marker == null) continue;
+                candidates.Add(new Candidate(laneFolder.Slug, laneFolder.FolderPath, marker));
+            }
+
+            foreach (var c in candidates)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var timeoutSeconds = c.Marker.TimeoutSeconds > 0 ? c.Marker.TimeoutSeconds : configTimeout;
+                var secondsWaiting = (now - c.Marker.WaitStartedAt).TotalSeconds;
+
+                // Only run the (git-touching) resolver once the wait has actually
+                // timed out; within-timeout cards keep waiting with no I/O.
+                SteerResolveResult? resolved = null;
+                if (!attended && secondsWaiting >= timeoutSeconds)
+                    resolved = ResolveSafe(entry, c);
+
+                var facts = new SteerTimeoutFacts(
+                    Attended: attended,
+                    SecondsWaiting: secondsWaiting,
+                    TimeoutSeconds: timeoutSeconds,
+                    HasConfidentAutoAnswer: resolved?.HasAnswer ?? false,
+                    AutoAnswerText: resolved?.AnswerText,
+                    AmbiguityReason: resolved?.AmbiguityReason);
+                var decision = SteerTimeoutPolicy.Decide(facts);
+
+                switch (decision.Action)
+                {
+                    case SteerTimeoutAction.KeepWaiting:
+                        // Still waiting (or attended): no move, no audit noise -
+                        // the card keeps its "waiting for answer since mm:ss" pill.
+                        break;
+
+                    case SteerTimeoutAction.AutoAnswer:
+                    {
+                        var outcome = await AutoAnswerAsync(entry, c, decision, secondsWaiting, timeoutSeconds, now, ct);
+                        outcomes.Add(outcome);
+                        AppendAudit(outcome);
+                        break;
+                    }
+
+                    case SteerTimeoutAction.RouteBlocked:
+                    {
+                        var outcome = await RouteBlockedAsync(entry, c, decision, secondsWaiting, timeoutSeconds, now, ct);
+                        outcomes.Add(outcome);
+                        AppendAudit(outcome);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (outcomes.Count > 0)
+            _logger.LogInformation(
+                "SteerTimeoutMonitor: resolved {Count} timed-out steer wait(s) ({Answered} auto-answered, {Blocked} blocked).",
+                outcomes.Count,
+                outcomes.Count(o => o.Kind == SteerTimeoutOutcomeKinds.AutoAnswered),
+                outcomes.Count(o => o.Kind == SteerTimeoutOutcomeKinds.Blocked));
+
+        return outcomes;
+    }
+
+    private SteerResolveResult ResolveSafe(WatchPathEntry entry, Candidate c)
+    {
+        try
+        {
+            var settings = _projectSettings.Get(entry.Name);
+            var ctx = new SteerResolveContext(
+                Project: entry.Name,
+                JobId: TryReadJobId(c.JobFolder) ?? c.Slug,
+                JobFolder: c.JobFolder,
+                WatchPath: entry.Path,
+                Question: c.Marker.Question,
+                RepoRoot: string.IsNullOrWhiteSpace(entry.RootPath) ? null : entry.RootPath,
+                TaskBranch: $"task/{TryReadJobId(c.JobFolder) ?? c.Slug}",
+                ConfiguredIntegrationBranch: settings.IntegrationBranch);
+            return _resolver.Resolve(ctx);
+        }
+        catch (Exception ex)
+        {
+            // Fail-safe: any resolver failure is ambiguous -> blocked escalation,
+            // never a false auto-answer.
+            _logger.LogDebug(ex, "SteerTimeoutMonitor: resolver threw for {Project}/{Slug}", entry.Name, c.Slug);
+            return SteerResolveResult.Ambiguous($"resolver failed ({ex.Message})");
+        }
+    }
+
+    private async Task<SteerTimeoutOutcome> AutoAnswerAsync(
+        WatchPathEntry entry, Candidate c, SteerTimeoutDecision decision,
+        double secondsWaiting, double timeoutSeconds, DateTime now, CancellationToken ct)
+    {
+        var jobId = TryReadJobId(c.JobFolder) ?? c.Slug;
+        var answer = decision.AnswerText ?? string.Empty;
+
+        // Queue the answer as a Continue and hand the card back to auto-pickup:
+        // save the pending intent, clear the steer marker + phase, then demote to
+        // 2-ready so the runner resumes the recorded session with the answer -
+        // the same path a user follow-up to a busy project takes.
+        var intent = _mutations.SavePendingIntent(
+            jobId, ContinueModes.Continue, answer,
+            reason: "steer-timeout-auto-answer", activeJobId: null, watchPath: entry.Path);
+        if (intent == null)
+            return Outcome(SteerTimeoutOutcomeKinds.AutoAnswerFailed, entry, c, decision, jobId,
+                target: null, secondsWaiting, timeoutSeconds,
+                reason: "could not save the auto-answer pending intent (job not found)", now);
+
+        SteerPendingMarker.Clear(c.JobFolder, _logger);
+        _mutations.SetJobPhase(c.JobFolder, null); // steer-pending phase is illegal in 2-ready
+
+        _chatLog.Append(_scanner.FindJob(jobId, entry.Path) ?? FallbackInfo(jobId, c.JobFolder, entry.Name),
+            OrchestratorMessageKind.Decision,
+            $"[steer-timeout] No answer after {secondsWaiting:F0}s (> {timeoutSeconds:F0}s). Auto-answered from the task context and resumed the run: {Truncate(answer, 200)}");
+
+        var moveOutcome = await _transitions.MoveAsync(jobId, TaskStates.Ready, entry.Path, ct);
+        if (moveOutcome.Status != MoveJobStatus.Success)
+        {
+            // The intent is saved and the marker cleared; a failed demote leaves
+            // the card in 3-progress but no longer waiting silently - report it.
+            return Outcome(SteerTimeoutOutcomeKinds.AutoAnswerFailed, entry, c, decision, jobId,
+                target: TaskStates.Ready, secondsWaiting, timeoutSeconds,
+                reason: $"auto-answer saved but demote to {TaskStates.Ready} refused: {moveOutcome.Status} {moveOutcome.Message}", now);
+        }
+
+        EmitResolvedTimeline(moveOutcome.NewFolderPath ?? c.JobFolder, jobId,
+            SteerTimeoutOutcomeKinds.AutoAnswered, decision, secondsWaiting, timeoutSeconds, answer);
+
+        _logger.LogWarning(
+            "SteerTimeoutMonitor: auto-answered steer for {JobId} after {Silence:F0}s and demoted 3-progress -> 2-ready to resume.",
+            jobId, secondsWaiting);
+        return Outcome(SteerTimeoutOutcomeKinds.AutoAnswered, entry, c, decision, jobId,
+            target: TaskStates.Ready, secondsWaiting, timeoutSeconds, reason: decision.Detail, now);
+    }
+
+    private async Task<SteerTimeoutOutcome> RouteBlockedAsync(
+        WatchPathEntry entry, Candidate c, SteerTimeoutDecision decision,
+        double secondsWaiting, double timeoutSeconds, DateTime now, CancellationToken ct)
+    {
+        var jobId = TryReadJobId(c.JobFolder) ?? c.Slug;
+        var reason =
+            $"Steer question unanswered for {secondsWaiting:F0}s (> {timeoutSeconds:F0}s timeout) and not derivable from the task context. " +
+            $"Question: {Truncate(c.Marker.Question ?? c.Marker.Ask ?? "(none)", 200)}. " +
+            (string.IsNullOrWhiteSpace(decision.Detail) ? "" : $"({decision.Detail})");
+
+        _chatLog.Append(_scanner.FindJob(jobId, entry.Path) ?? FallbackInfo(jobId, c.JobFolder, entry.Name),
+            OrchestratorMessageKind.GiveUp,
+            $"[steer-timeout] No answer after {secondsWaiting:F0}s (> {timeoutSeconds:F0}s) and the answer is not derivable from the task context. Escalating to human review instead of waiting.");
+
+        // Clear the marker first so the folder does not carry a stale marker into
+        // 5e-escalated (the escalation funnel renames the folder).
+        SteerPendingMarker.Clear(c.JobFolder, _logger);
+
+        try
+        {
+            var move = await _escalation.EscalateAsync(
+                jobId, entry.Path, entry.Name,
+                HumanReviewEscalationCategories.SteerTimeout, reason, ct);
+            if (move.Status != MoveJobStatus.Success)
+                return Outcome(SteerTimeoutOutcomeKinds.BlockFailed, entry, c, decision, jobId,
+                    target: TaskStates.Escalated, secondsWaiting, timeoutSeconds,
+                    reason: $"escalation to {TaskStates.Escalated} refused: {move.Status} {move.Message}", now);
+
+            EmitResolvedTimeline(move.NewFolderPath ?? c.JobFolder, jobId,
+                SteerTimeoutOutcomeKinds.Blocked, decision, secondsWaiting, timeoutSeconds, answerGiven: null);
+
+            _logger.LogWarning(
+                "SteerTimeoutMonitor: steer for {JobId} unanswered {Silence:F0}s past timeout; escalated 3-progress -> 5e-escalated (steer-timeout).",
+                jobId, secondsWaiting);
+            return Outcome(SteerTimeoutOutcomeKinds.Blocked, entry, c, decision, jobId,
+                target: TaskStates.Escalated, secondsWaiting, timeoutSeconds, reason: decision.Detail, now);
+        }
+        catch (Exception ex)
+        {
+            return Outcome(SteerTimeoutOutcomeKinds.BlockFailed, entry, c, decision, jobId,
+                target: TaskStates.Escalated, secondsWaiting, timeoutSeconds, reason: $"exception: {ex.Message}", now);
+        }
+    }
+
+    private void EmitResolvedTimeline(
+        string folderPath, string jobId, string outcomeKind, SteerTimeoutDecision decision,
+        double secondsWaiting, double timeoutSeconds, string? answerGiven)
+    {
+        var summary = outcomeKind == SteerTimeoutOutcomeKinds.AutoAnswered
+            ? $"Steer timeout: auto-answered after {secondsWaiting:F0}s. {Truncate(answerGiven ?? "", 160)}"
+            : $"Steer timeout: no answer after {secondsWaiting:F0}s; routed to blocked escalation.";
+        var details = new Dictionary<string, string>
+        {
+            ["reasonCode"] = decision.ReasonCode,
+            ["secondsWaiting"] = ((long)secondsWaiting).ToString(),
+            ["timeoutSeconds"] = ((long)timeoutSeconds).ToString(),
+            ["outcome"] = outcomeKind,
+        };
+        if (!string.IsNullOrWhiteSpace(answerGiven)) details["answer"] = Truncate(answerGiven!, 500);
+        _timeline?.Append(folderPath, TimelineEventKinds.SteerTimeoutResolved, TimelineActors.System, summary, details: details);
+    }
+
+    private RunnerStatus? SafeGetStatus()
+    {
+        try
+        {
+            return StatusProviderOverride != null
+                ? StatusProviderOverride()
+                : (_services.GetService(typeof(TaskRunnerService)) as TaskRunnerService)?.GetStatus();
+        }
+        catch (Exception ex)
+        {
+            // Treat every project as unattended (auto) if the runner status is
+            // unreadable - the safe posture is to enforce the timeout, not to
+            // assume a human is watching. Manual-mode markers are only written in
+            // auto mode anyway, so this stays correct in practice.
+            _logger.LogDebug(ex, "SteerTimeoutMonitor: could not read runner status; treating projects as unattended.");
+            return null;
+        }
+    }
+
+    private static bool IsManualMode(string? mode) =>
+        string.Equals(mode, "manual", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(mode, "paused", StringComparison.OrdinalIgnoreCase);
+
+    private static string? TryReadJobId(string jobFolder)
+    {
+        var path = Path.Combine(jobFolder, "task.json");
+        if (!File.Exists(path)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+        }
+        catch { return null; }
+    }
+
+    private static TaskInfo FallbackInfo(string jobId, string folder, string project) => new()
+    {
+        Id = jobId,
+        FolderPath = folder,
+        ProjectName = project,
+        Title = jobId,
+    };
+
+    private static string Truncate(string s, int max)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        return s.Length <= max ? s : s[..max] + "...";
+    }
+
+    private static SteerTimeoutOutcome Outcome(
+        string kind, WatchPathEntry entry, Candidate c, SteerTimeoutDecision decision,
+        string jobId, string? target, double secondsWaiting, double timeoutSeconds, string reason, DateTime at)
+        => new()
+        {
+            At = at,
+            Kind = kind,
+            ReasonCode = decision.ReasonCode,
+            ProjectName = entry.Name,
+            Slug = c.Slug,
+            JobId = jobId,
+            TargetState = target,
+            SecondsWaiting = (long)secondsWaiting,
+            TimeoutSeconds = (long)timeoutSeconds,
+            Reason = reason,
+        };
+
+    private void AppendAudit(SteerTimeoutOutcome outcome)
+    {
+        var workspaceRoot = _configuration["TaskRepository"];
+        if (string.IsNullOrWhiteSpace(workspaceRoot)) return;
+        try
+        {
+            var path = Path.Combine(workspaceRoot, "logs", "steer-timeout.jsonl");
+            _appender.AppendAsync(path, outcome, JsonOptions).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SteerTimeoutMonitor: failed to append steer-timeout.jsonl");
+        }
+    }
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    private readonly record struct Candidate(string Slug, string JobFolder, SteerPendingRecord Marker);
+}
+
+/// <summary>One row in <c>&lt;workspace&gt;/logs/steer-timeout.jsonl</c>.</summary>
+public sealed record SteerTimeoutOutcome
+{
+    [JsonPropertyName("at")] public DateTime At { get; init; }
+    [JsonPropertyName("kind")] public string Kind { get; init; } = "";
+    [JsonPropertyName("reasonCode")] public string ReasonCode { get; init; } = "";
+    [JsonPropertyName("projectName")] public string ProjectName { get; init; } = "";
+    [JsonPropertyName("slug")] public string Slug { get; init; } = "";
+    [JsonPropertyName("jobId")] public string? JobId { get; init; }
+    [JsonPropertyName("targetState")] public string? TargetState { get; init; }
+    [JsonPropertyName("secondsWaiting")] public long SecondsWaiting { get; init; }
+    [JsonPropertyName("timeoutSeconds")] public long TimeoutSeconds { get; init; }
+    [JsonPropertyName("reason")] public string Reason { get; init; } = "";
+}
+
+/// <summary>String constants for <see cref="SteerTimeoutOutcome.Kind"/>.</summary>
+public static class SteerTimeoutOutcomeKinds
+{
+    /// <summary>Timed out; auto-answered from the task context and resumed the run.</summary>
+    public const string AutoAnswered = "auto-answered";
+    /// <summary>The auto-answer save or resume move refused/threw.</summary>
+    public const string AutoAnswerFailed = "auto-answer-failed";
+    /// <summary>Timed out; no confident answer, escalated to 5e-escalated.</summary>
+    public const string Blocked = "blocked";
+    /// <summary>The escalation move refused or threw.</summary>
+    public const string BlockFailed = "block-failed";
+}

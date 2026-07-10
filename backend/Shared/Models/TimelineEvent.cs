@@ -124,6 +124,17 @@ public static class TimelineEventKinds
     /// <summary>The orchestrator emitted a STEER block (see OrchestratorReplyParser).</summary>
     public const string OrchestratorSteered = "orchestrator_steered";
     /// <summary>
+    /// Run-Liveness Slice B (concept Rule 2): an unanswered steer / NeedsInput
+    /// question hit its bounded timeout and the runner resolved it without a
+    /// human - either auto-answered from the task context (the branch-state
+    /// check) or routed to a blocked escalation. <see cref="TimelineEvent.Summary"/>
+    /// carries the decision and the answer given; <see cref="TimelineEvent.Details"/>
+    /// carries the reason code, how long it waited, and the timeout. Emitted so a
+    /// card's history shows why the wait ended instead of an invisible 5-hour hang
+    /// (belegt 2062/2067/2068, 2026-07-10).
+    /// </summary>
+    public const string SteerTimeoutResolved = "steer_timeout_resolved";
+    /// <summary>
     /// The orchestrator's auto-review pass judged the run genuinely done
     /// and promoted it forward (to human review). The positive terminal of
     /// the completion loop (ADR-0049 / ASS-566): the counterpart to

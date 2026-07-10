@@ -1912,6 +1912,15 @@ public class ProjectRunner
             var info = _scanner.FindJob(jobId, Entry.Path);
             if (info == null) return RunOutcome.Reject(new RunRejection(RunRejectReason.TaskNotFound, "Job not found"));
 
+            // Run-Liveness Slice B: a new run on this job ends any steer-pending
+            // wait (the user answered, the steer-timeout auto-answered, or a
+            // reissue took over). Clear the durable marker + its "waiting for
+            // answer" phase so the steer-timeout monitor stops tracking it and the
+            // card no longer shows the wait pill while it is actually running.
+            SteerPendingMarker.Clear(info.FolderPath, _logger);
+            if (string.Equals(info.Phase, LifecyclePhases.SteerPending, StringComparison.OrdinalIgnoreCase))
+                _mutations.SetJobPhase(info.FolderPath, null);
+
             // Resolve the workspace route from the latest cached quota. The
             // decision is per-run and never mutates job.json, so a reset makes
             // the next invocation return to primary automatically.
@@ -3366,6 +3375,16 @@ public class ProjectRunner
                 RecordLoopGuard(info, PipelineStepStatus.Failed,
                     verdict: "loop-detected",
                     summary: StuckLoopGuard.FormatBreakerMessage(existingLoop, _stuckLoopBudget));
+                // The card is now waiting on the user with the loop budget spent.
+                // Release the active-job latch (as the STEER / decline branches
+                // below do) so the seat is freed and this card is no longer the
+                // runner's active job - otherwise it would pin the slot with no
+                // live run behind it. Slice B then bounds the wait: the
+                // steer-timeout monitor escalates it after the timeout so it
+                // cannot hang forever.
+                _activeRuns.Release(jobId);
+                NotifyStatus();
+                MarkSteerPending(info, jobId, SteerPendingKinds.BlockedDeferral, outcome.Summary, ask: null);
                 return;
             }
 
@@ -3468,6 +3487,9 @@ public class ProjectRunner
                     Reasoning = why,
                     TokenUsage = result.TokenUsage
                 });
+                // Slice B: the orchestrator errored / deferred, so this auto-mode
+                // card is now waiting unattended. Bound the wait via the marker.
+                MarkSteerPending(info, jobId, SteerPendingKinds.BlockedDeferral, outcome.Summary, ask: null);
                 return;
             }
 
@@ -3499,6 +3521,9 @@ public class ProjectRunner
                     Reasoning = why,
                     TokenUsage = result.TokenUsage
                 });
+                // Slice B: the orchestrator deferred to the user, so this auto-mode
+                // card is now waiting unattended. Bound the wait via the marker.
+                MarkSteerPending(info, jobId, SteerPendingKinds.BlockedDeferral, outcome.Summary, ask: null);
                 return;
             }
 
@@ -3555,6 +3580,12 @@ public class ProjectRunner
                     }
                     catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of orchestrator steer token usage failed for {JobId}", jobId); }
                 }
+
+                // Slice B: the job is left in NeedsInput waiting for the user's
+                // answer to the steer. Record the durable steer-pending marker +
+                // visible phase so the wait is bounded (the steer-timeout monitor
+                // auto-answers or escalates after the timeout) and never hangs.
+                MarkSteerPending(info, jobId, SteerPendingKinds.Steer, outcome.Summary, parsed.Need);
                 return;
             }
 
@@ -3699,6 +3730,47 @@ public class ProjectRunner
     {
         if (string.IsNullOrEmpty(s) || s.Length <= max) return s;
         return s[..(max - 1)].TrimEnd() + "...";
+    }
+
+    /// <summary>
+    /// Run-Liveness Slice B (concept Rule 2): mark an auto-mode run as waiting on
+    /// an unanswered steer / NeedsInput question the orchestrator could not answer
+    /// on its own. Writes the durable <see cref="SteerPendingRecord"/> marker (so
+    /// <see cref="SteerTimeoutMonitor"/> can enforce a bounded wait even across a
+    /// restart), stamps the visible <see cref="LifecyclePhases.SteerPending"/>
+    /// phase so the card shows "waiting for answer", and tees an
+    /// <see cref="TimelineEventKinds.OrchestratorSteered"/> event onto the
+    /// timeline. Best-effort: a marker/timeline failure must never crash the
+    /// decision path. The wait timeout itself is owned by the monitor's config
+    /// (<c>Runner:SteerTimeout:TimeoutSeconds</c>); the marker leaves it unset.
+    /// </summary>
+    private void MarkSteerPending(TaskInfo info, string jobId, string kind, string? question, string? ask)
+    {
+        if (info == null || string.IsNullOrWhiteSpace(info.FolderPath)) return;
+        try
+        {
+            SteerPendingMarker.Write(info.FolderPath, new SteerPendingRecord
+            {
+                WaitStartedAt = DateTime.UtcNow,
+                Kind = kind,
+                Question = string.IsNullOrWhiteSpace(question) ? null : Truncate(question, 2000),
+                Ask = string.IsNullOrWhiteSpace(ask) ? null : Truncate(ask, 2000),
+                CliType = info.CliType,
+            }, _logger);
+            _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.SteerPending);
+            _timeline?.Append(
+                info.FolderPath,
+                TimelineEventKinds.OrchestratorSteered,
+                TimelineActors.Orchestrator,
+                summary: kind == SteerPendingKinds.Steer
+                    ? $"Steered - waiting for an answer: {Truncate(ask ?? question ?? "", 160)}"
+                    : $"Waiting for an answer (unattended): {Truncate(question ?? ask ?? "", 160)}",
+                details: new Dictionary<string, string> { ["kind"] = kind });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "MarkSteerPending failed for {JobId}", jobId);
+        }
     }
 
     /// <summary>

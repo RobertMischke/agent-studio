@@ -351,6 +351,10 @@ builder.Services.AddSingleton<StaleProgressArchiver>();
 // (boot adoption scan + uptime sweep). See
 // docs/concepts/run-liveness-and-slot-semantics.md.
 builder.Services.AddSingleton<RunLivenessMonitor>();
+// Run-Liveness Slice B: the steer-timeout monitor - no steered / NeedsInput card
+// waits indefinitely. See docs/concepts/run-liveness-and-slot-semantics.md Rule 2.
+builder.Services.AddSingleton<ISteerTimeoutResolver, SteerTimeoutResolver>();
+builder.Services.AddSingleton<SteerTimeoutMonitor>();
 builder.Services.AddSingleton<PickupFailureLog>();
 builder.Services.AddSingleton<InfraHaltLog>();
 builder.Services.AddSingleton<CrossSlugInfraCircuitBreaker>();
@@ -470,6 +474,11 @@ builder.Services.AddHostedService<StaleProgressSweepHostedService>();
 // within the 60s budget when its owning run dies while the backend stays up;
 // the boot adoption scan below handles zombies already present at startup.
 builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
+// Runtime steer-timeout sweep (Run-Liveness Slice B). Resolves an unanswered
+// steer / NeedsInput wait (auto-answer from the task context, else a blocked
+// escalation) within timeout + one interval, so a steered card never hangs for
+// hours the way 2062/2067/2068 did on 2026-07-10.
+builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
 // Wiki-grading maintenance run (AGT-2051): the maintenance-model default (its own
 // config class in the CLI-management area), the companion sidecar writer, the

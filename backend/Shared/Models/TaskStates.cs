@@ -34,6 +34,14 @@ public static class LifecyclePhases
     // checks) is working" without a new filesystem state.
     public const string ExecutionRunning = "execution-running";
     public const string ExecutionStalled = "execution-stalled";
+    /// <summary>
+    /// 3-progress substate for Run-Liveness Slice B (concept Rule 2): the run
+    /// asked a steer / NeedsInput question in an auto mode and is waiting for an
+    /// answer. Surfaces the "waiting for answer since mm:ss" pill so the wait is
+    /// visible instead of an invisible hang. Written next to the durable
+    /// <c>steer-pending.json</c> marker; cleared when a new run resumes the card.
+    /// </summary>
+    public const string SteerPending = "steer-pending";
     public const string PostProcessingRunning = "post-processing-running";
     public const string PostProcessingBlocked = "post-processing-blocked";
     public const string AwaitingReview = "awaiting-review";
@@ -41,7 +49,7 @@ public static class LifecyclePhases
     public static readonly string[] All =
     [
         HumanReady, IntakeRunning, IntakeBlocked, IntakePassed,
-        ExecutionRunning, ExecutionStalled,
+        ExecutionRunning, ExecutionStalled, SteerPending,
         PostProcessingRunning, PostProcessingBlocked, AwaitingReview
     ];
 
@@ -57,7 +65,7 @@ public static class LifecyclePhases
     public static readonly Dictionary<string, string[]> AllowedByState = new()
     {
         [TaskStates.Ready] = [HumanReady, IntakeRunning, IntakeBlocked, IntakePassed],
-        [TaskStates.Progress] = [ExecutionRunning, ExecutionStalled, PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
+        [TaskStates.Progress] = [ExecutionRunning, ExecutionStalled, SteerPending, PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
         [TaskStates.AutoReview] = [PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
     };
 

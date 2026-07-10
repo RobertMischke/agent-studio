@@ -221,6 +221,16 @@ public record TaskInfo
     public string? Phase { get; init; }
 
     /// <summary>
+    /// Run-Liveness Slice B (concept Rule 2): when this <c>3-progress</c> card is
+    /// waiting on an unanswered steer / NeedsInput question, the UTC time the wait
+    /// started - read from the durable <c>steer-pending.json</c> marker. Null when
+    /// the card is not steer-pending. Drives the board's "waiting for answer since
+    /// mm:ss" pill so the wait is visible instead of an invisible hang. Paired
+    /// with <see cref="Phase"/> == <see cref="LifecyclePhases.SteerPending"/>.
+    /// </summary>
+    public DateTime? SteerPendingSince { get; init; }
+
+    /// <summary>
     /// Structural classification of the task. One of <see cref="TaskTypes.Bug"/>,
     /// <see cref="TaskTypes.Feature"/>, or <see cref="TaskTypes.Chore"/>
     /// (default for legacy and technical work). Stored in <c>job.json</c> as

@@ -309,6 +309,14 @@ export interface TaskInfo {
    */
   phase?: string | null;
   /**
+   * Run-Liveness Slice B: when this 3-progress card is waiting on an unanswered
+   * steer / NeedsInput question (`phase === 'steer-pending'`), the ISO UTC time
+   * the wait started - read from the durable `steer-pending.json` marker. Null
+   * otherwise. Drives the card's "Waiting for answer since m:ss" pill so the wait
+   * is visible instead of an invisible hang.
+   */
+  steerPendingSince?: string | null;
+  /**
    * Structural classification of the task. One of `bug`, `feature`, or
    * `chore` (default for legacy and technical work). Drives the small chip
    * rendered on the kanban card and the type filter pill in the header.

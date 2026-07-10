@@ -141,6 +141,15 @@ state.
   is refused + escalated. Read-only (planning / research) and epic-planning runs
   run in-place. See
   [ADR-0057](../architecture/decisions/adr-archive.md#adr-0057---always-worktree-garantie-every-coding-run-is-worktree-isolated-including-single-slot-resumereissue-with-a-main-checkout-guard-2026-06-22).
+- Steer-timeout (Run-Liveness Slice B): an auto-mode run that asks a steer /
+  `[[TASK_NEEDS_INPUT]]` question the orchestrator cannot answer leaves a durable
+  `steer-pending.json` marker + a visible `steer-pending` phase, and a bounded
+  sweep (`SteerTimeoutMonitor` over `SteerTimeoutPolicy.Decide`) resolves the wait
+  after `Runner:SteerTimeout:TimeoutSeconds` (default 120s): auto-answer from the
+  branch state when the question is unambiguous, else a `steer-timeout` blocked
+  escalation. A steered card never waits indefinitely. See
+  [docs/concepts/run-liveness-and-slot-semantics.md](../concepts/run-liveness-and-slot-semantics.md).
+
 - Supervisor code is advice-first. Emergency primitives must call runner
   services, not poke task state directly.
 - Teardown never drops uncommitted work. `WorktreeTaskLifecycle.TeardownIfIntegrated`
