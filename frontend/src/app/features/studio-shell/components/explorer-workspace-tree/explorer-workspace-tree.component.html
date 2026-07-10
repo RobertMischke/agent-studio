@@ -172,11 +172,14 @@
             @if (isExpanded(p.name)) {
               <!-- Fixed project-scoped rows for Board (kanban), Project Hub,
                    Wiki, and Epics (overview), followed by 0..N dynamic
-                   Project URL rows (see the @for below). The workspace is the
-                   first navigation level; project rows and their destinations
-                   share the second-level inset. Per-lane children stay retired. -->
+                   Project URL rows (see the @for below). These are the third
+                   tree level: `level="child"` insets them one step under the
+                   project row (workspace → project → destinations) so a project
+                   reads as clearly superordinate to its destinations rather than
+                   flush beside them (AGT-2057 regression fix). Per-lane children
+                   stay retired. -->
               <div class="studio-tree-children">
-                <app-tree-row level="root" glyph="grid"
+                <app-tree-row level="child" glyph="grid"
                               label="Board"
                               [ariaLabel]="'Board, ' + boardLaneCountsLabel(p)"
                               [active]="p.isActive && activeProjectSurface() === 'board'"
@@ -187,19 +190,19 @@
                     [counts]="laneCountsFor(p)" [view]="metricView()"
                     [projectName]="p.name" />
                 </app-tree-row>
-                <app-tree-row level="root" glyph="layout"
+                <app-tree-row level="child" glyph="layout"
                               label="Project Hub"
                               [active]="p.isActive && activeProjectSurface() === 'hub'"
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'hub' ? 'page' : null"
                               [testid]="'studio-explorer-project-hub-' + p.name"
                               (selectRequest)="openHubRequest.emit(p.name)" />
-                <app-tree-row level="root" glyph="book"
+                <app-tree-row level="child" glyph="book"
                               label="Wiki"
                               [active]="p.isActive && activeProjectSurface() === 'wiki'"
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'wiki' ? 'page' : null"
                               [testid]="'studio-explorer-project-wiki-' + p.name"
                               (selectRequest)="openWikiRequest.emit(p.name)" />
-                <app-tree-row level="root" glyph="book"
+                <app-tree-row level="child" glyph="book"
                               label="Epics"
                               [active]="p.isActive && activeProjectSurface() === 'epics'"
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'epics' ? 'page' : null"
@@ -212,7 +215,7 @@
                      these are plain external links, NOT tabs, so they do not go
                      through the StudioTabStateService @Output() emitters. -->
                 @for (u of p.urls; track u.id) {
-                  <app-tree-row level="root" glyph="link"
+                  <app-tree-row level="child" glyph="link"
                                 [label]="u.label"
                                 [ariaLabel]="u.label + ', opens ' + u.url + ' in a new tab'"
                                 [cacTooltip]="u.url"

@@ -71,18 +71,26 @@ test('prompt overrides are explicit and filterable in both themes', async ({ pag
   await expect(projectButton).toBeVisible({ timeout: 15_000 });
   if (!(await boardButton.isVisible().catch(() => false))) await projectButton.click();
   await expect(boardButton).toBeVisible();
+  const parsePx = (v: string) => Number.parseFloat(v) || 0;
   const [projectInset, destinationInset] = await Promise.all([
     projectButton.evaluate((el) => getComputedStyle(el).paddingLeft),
     boardButton.evaluate((el) => getComputedStyle(el).paddingLeft),
   ]);
-  expect(destinationInset).toBe(projectInset);
+  // AGT-2057: the Explorer hierarchy is workspace -> project -> destinations.
+  // A project's Board / Hub / Wiki / Epics rows nest ONE level below the
+  // project row, so the destination inset is deeper than the project inset,
+  // never flush with it. (This assertion previously demanded equality, which
+  // is what let the AGT-2037 flat-layout regression ship.)
+  expect(parsePx(destinationInset)).toBeGreaterThan(parsePx(projectInset));
   await boardButton.click();
   await expect(boardButton).toHaveAttribute('aria-current', 'page');
 
   await setTheme(page, 'dark');
   await page.mouse.move(800, 50);
   await page.screenshot({ path: path.join(RESULTS_DIR, 'explorer-nav-after-dark--mocked.png') });
-  await page.addStyleTag({ content: '.studio-tree-children .tree-row { padding-left: 44px !important; }' });
+  // Reference shot of the pre-fix regression: force the destinations flush with
+  // the project row (the flat 8px inset AGT-2037 introduced).
+  await page.addStyleTag({ content: '.studio-tree-children .tree-row { padding-left: 8px !important; }' });
   await page.screenshot({ path: path.join(RESULTS_DIR, 'explorer-nav-before-dark--mocked.png') });
   await page.reload();
   await setTheme(page, 'light');
