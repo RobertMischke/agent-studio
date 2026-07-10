@@ -44,6 +44,15 @@ pipeline view.
   step's `PipelineSteps` override. The origin push primitive is
   `GitService.PushIntegrationBranchAsync` (non-force; a diverged remote is
   reported, never overwritten).
+- `backend/Features/Pipeline/TaskSpawnerPostStepRunner.cs` (+ `TaskSpawnerDecision.cs`,
+  `TaskSpawnerModelSelector.cs`, `SpawnedTaskLedger.cs`): the opt-in
+  `post-task-spawner` step (AGT-2028). After a task settles it asks the best
+  available model whether the change set is relevant to a configured target
+  project and, on a conservative yes, creates a follow-up card there via
+  `TaskMutationService.CreateJob` with a `relatedTo` back-reference. Generic (not
+  website-hardwired): target project, relevance question, and spawn lane come from
+  `ProjectSettings.TaskSpawner`. Driven from `ReviewDecisionOrchestrator`
+  (`RunTaskSpawnerPostStepAsync`); template `prompts/runtime/task-spawner-relevance.md`.
 - `backend/Services/Pipeline/PipelineStepConfigResolver.cs`: effective model and
   step config resolution.
 - `backend/Services/Pipeline/PipelineStepConditionEvaluator.cs`: per-step
@@ -156,6 +165,24 @@ pipeline view.
   operator-triggered action only (Project Hub Git-Management). See
   `docs/wiki/concepts/task-integration-and-merge-workflow.md` §"Branch cleanup"
   for the dry-run/execute contract and the AGT-1945 guard it would reuse.
+- `post-task-spawner` (AGT-2028) is an opt-in `StepKind.Orchestrator` post-step,
+  `DefaultEnabled = false` and additionally gated on a `ProjectSettings.TaskSpawner`
+  target - a project must both enable the step (`PipelineSteps["post-task-spawner"]`)
+  and configure a target project before it fires. It runs in the reporting bracket
+  (after the aspects, before the pipeline `Complete` mark) and is reporting-only:
+  it NEVER changes the source task's lane decision. The relevance + prompt-generation
+  model is quality-first (best available Claude at `max` effort via
+  `TaskSpawnerModelSelector`, layered under the per-project step override), while the
+  spawned card is left to the target project's default model. It is conservative and
+  spam-safe by three guards: a run whose aspects `Block` does not spawn (it is about
+  to be reissued); an unparseable / not-relevant / prompt-less verdict spawns nothing;
+  and the per-source `.metadata/spawned-tasks.jsonl` ledger caps spawns at
+  `MaxPerSourceTask` (default 1) so the reissue loop can never double-spawn. Spawn
+  creates a `references.relatedTo` edge to the source (a non-blocking reference, NOT a
+  `dependsOn` wait - the separate Task-Dependencies feature turns references into
+  waits), records a `task_spawned` timeline entry + a `needs-follow-up-task`
+  post-processing outcome on the source, and writes the card through the bounded
+  `TaskMutationService.CreateJob` path (never a hand-written folder).
 - Pipeline history is per run. Re-opened tasks append a new attempt and keep
   earlier attempts addressable.
 - Raw step-call prompts are captured once, at central dispatch, into
@@ -186,5 +213,11 @@ pipeline view.
 - Raw step-prompt capture changes need `StepPromptLogTests` (writer/reader
   round-trip with provenance, dedup for main-run shape, capture-before-failure)
   and the `overview-pane.component.spec.ts` step-prompt read-model assertion.
+- Task-spawner changes need `TaskSpawnerPostStepTests` (relevance sentinel parse
+  yes/no/unparseable, dedup-ledger budget + same-target block, best-available-model
+  default, and the end-to-end runner writing the follow-up card into a target
+  project's flat store with a `relatedTo` back-reference) plus the
+  `PipelineCatalogueTests` step-shape pin (opt-in Orchestrator step, after aspects,
+  before the decision, kept in the read-only pipeline).
 - Frontend pipeline rendering changes need Playwright or component coverage plus
   screenshots when the user-facing view changes.

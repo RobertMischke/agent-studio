@@ -169,6 +169,18 @@ public static class TimelineEventKinds
     /// </summary>
     public const string ExecutionContext = "execution_context";
     /// <summary>
+    /// The task-spawner post-step judged this task's change set relevant to
+    /// another project and created a follow-up card there (AGT-2028). Emitted on
+    /// the SOURCE task so its history shows the hand-off ("Spawned WEB-123 in
+    /// Website"); <see cref="TimelineEvent.Summary"/> reads the spawned key +
+    /// target project and <see cref="TimelineEvent.Details"/> carries
+    /// <c>targetProject</c> / <c>targetKey</c> / <c>targetJobId</c> / <c>reason</c>.
+    /// The spawned card gets its own <see cref="PromptCreated"/> entry and a
+    /// <c>relatedTo</c> reference back to this task. Reporting-only: the spawn
+    /// never changes the source task's lane decision.
+    /// </summary>
+    public const string TaskSpawned = "task_spawned";
+    /// <summary>
     /// The task was completed out-of-band (operator chat, external agent, a
     /// remote host) and reconciled through
     /// <c>POST /api/tasks/{id}/external-completion</c> instead of a runner run.

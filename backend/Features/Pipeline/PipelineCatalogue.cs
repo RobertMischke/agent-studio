@@ -283,6 +283,27 @@ public static class PipelineCatalogue
     public const string CodeReviewGradeStepId = "post-code-review-grade";
 
     /// <summary>
+    /// Opt-in post-step (AGT-2028) that, after a task settles, asks the best
+    /// available model whether the change set is relevant to another project
+    /// (a new feature, a removed capability, ...) and, on a conservative yes,
+    /// SPAWNS a follow-up card there with a generated prompt and a
+    /// <c>relatedTo</c> reference back to the source task. The relevance +
+    /// prompt-generation model is quality-first (defaults to the catalogue's best
+    /// Claude, currently Opus 4.8, at <c>max</c> effort); the spawned card is
+    /// worked by the target project's default model. Generic, not
+    /// website-hardwired: the target project, relevance question, and spawn lane
+    /// come from <c>ProjectSettings.TaskSpawner</c>. Reporting-only - it never
+    /// gates the source task's lane decision. It is
+    /// <see cref="PipelineStep.DefaultEnabled"/> = false (an operator turns it on
+    /// per project, same opt-in switch the drift / wiki steps use) and, because it
+    /// makes a per-task LLM judgment plus writes a card, it dedupes via the source
+    /// job's <c>.metadata/spawned-tasks.jsonl</c> ledger (max 1 per source task by
+    /// default). Implemented by <c>TaskSpawnerPostStepRunner</c>, driven from
+    /// <c>ReviewDecisionOrchestrator</c>.
+    /// </summary>
+    public const string TaskSpawnerStepId = "post-task-spawner";
+
+    /// <summary>
     /// Display name for the post-core completeness check
     /// (<see cref="OrchestratorReviewStepId"/>): the EARLY gate that runs straight
     /// after the core run, before the aspect verdicts. It is deliberately distinct
@@ -631,6 +652,23 @@ public static class PipelineCatalogue
                     // Every pipelined task carries a grade (ASS-1657), so on by
                     // default; an operator can still disable it per project.
                     DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = TaskSpawnerStepId,
+                    DisplayName = "Task spawner",
+                    // An LLM relevance judgment that consumes the change set and
+                    // emits a spawn/no-spawn verdict, the same shape as the grade
+                    // step, so it reuses StepKind.Orchestrator rather than the
+                    // Aspect kind (pinned to the four aspect-runner ids).
+                    Kind = StepKind.Orchestrator,
+                    RunMode = StepRunMode.Sequential,
+                    // Reads the full settled change set after the aspects have run.
+                    DependsOn = [.. AspectStepIds],
+                    Idempotent = true,
+                    // Opt-in: a project turns it on only when it wants a follow-up
+                    // card auto-created in another project (Default aus). No spam.
+                    DefaultEnabled = false,
                 },
                 new PipelineStep
                 {

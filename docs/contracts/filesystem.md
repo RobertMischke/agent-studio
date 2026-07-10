@@ -90,6 +90,7 @@ Each job folder uses this structure:
                     # Optional: typed Post Processing outcomes
   .metadata/        # Application-owned sidecars (pipeline-execution.json, files.json, ...)
                     # Optional: .metadata/prompts.jsonl (raw step-call prompts)
+                    # Optional: .metadata/spawned-tasks.jsonl (task-spawner dedup ledger, AGT-2028)
   attachments/      # Input files supplied with the task
   results/          # Output evidence such as screenshots
                     # Optional: results/review-evidence.jsonl (audit / review findings)

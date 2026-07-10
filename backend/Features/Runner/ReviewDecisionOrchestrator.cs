@@ -139,6 +139,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly WikiMaintenancePostStepRunner? _wikiMaintenance;
     private readonly WikiLearningsPostStepRunner? _wikiLearnings;
     private readonly RegressionRadarService? _regressionRadar;
+    // The opt-in task-spawner post-step (AGT-2028). Optional so the many
+    // stand-alone test constructors keep compiling; production DI supplies it.
+    private readonly TaskSpawnerPostStepRunner? _taskSpawner;
 
     /// <summary>
     /// Regression-radar analysis injection point. Tests substitute a
@@ -202,7 +205,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         HumanReviewEscalation? humanReviewEscalation = null,
         RegressionRadarService? regressionRadar = null,
         WorkspaceArtifactCommitService? workspaceArtifactCommits = null,
-        AgentStudio.Review.CodeReviewStepService? codeReviewStep = null)
+        AgentStudio.Review.CodeReviewStepService? codeReviewStep = null,
+        TaskSpawnerPostStepRunner? taskSpawner = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -228,6 +232,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _regressionRadar = regressionRadar;
         _workspaceArtifactCommits = workspaceArtifactCommits;
         _codeReviewStep = codeReviewStep;
+        _taskSpawner = taskSpawner;
 
         _statusSnapshot.ConfigureEscalationRateAlert(
             _configuration.GetValue(
@@ -1643,6 +1648,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // grade never gates the lane decision below.
         await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
 
+        // Task-spawner post-step (AGT-2028): opt-in, quality-first relevance
+        // judgment that, on a conservative yes, spawns a follow-up card in a
+        // configured target project (e.g. "we changed X -> update the website").
+        // Reporting-only and deduped; it never gates the source task's decision.
+        // Runs after the aspects settle and before the Complete mark so its step
+        // record lands in the in-flight pipeline-execution.json.
+        await RunTaskSpawnerPostStepAsync(entry, current, report, taskBody, statusSummary, diffSummary, resultsInventory, ct);
+
         _pipelineLog?.Complete(current.FolderPath);
 
         if (report.Overall == AspectStatus.Block)
@@ -2962,6 +2975,190 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     }
 
     /// <summary>
+    /// Drive the opt-in task-spawner post-step (AGT-2028). Resolves the
+    /// per-project enable flag + spawn config, asks the best available model
+    /// whether the settled change is relevant to the configured target project,
+    /// and - on a conservative yes that is not already deduped - creates a
+    /// follow-up card there. Reporting-only: it records a pipeline step + a
+    /// timeline entry on the SOURCE task and NEVER gates the source lane
+    /// decision. Never throws into the tick (except cancellation); any failure
+    /// records a skipped / failed row.
+    /// </summary>
+    private async Task RunTaskSpawnerPostStepAsync(
+        WatchPathEntry entry,
+        TaskInfo current,
+        AspectRunReport report,
+        string taskBody,
+        string statusSummary,
+        string diffSummary,
+        string resultsInventory,
+        CancellationToken ct)
+    {
+        if (_taskSpawner == null) return;
+
+        var stepId = PipelineCatalogue.TaskSpawnerStepId;
+        var settings = _projectSettings?.Get(entry.Name);
+        var catalogueStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
+            string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase));
+        var conditionCtx = new PipelineStepConditionContext
+        {
+            Aborted = false,
+            ExitCode = 0,
+            AnyAspectFailed = report.Overall == AspectStatus.Block,
+            TaskType = current.TaskType,
+            Tags = current.Tags,
+        };
+        var shouldRun = catalogueStep is null
+            ? PipelineStepConfigResolver.ShouldRun(settings, stepId, conditionCtx)
+            : PipelineStepConfigResolver.ShouldRun(settings, catalogueStep, conditionCtx);
+        if (!shouldRun)
+        {
+            RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "off", reason: "post-step disabled by config or condition");
+            return;
+        }
+
+        var config = settings?.TaskSpawner;
+        if (config == null || string.IsNullOrWhiteSpace(config.TargetProject))
+        {
+            RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "no-target", reason: "no TaskSpawner target project configured");
+            return;
+        }
+
+        // Only spawn from a run that is settling into accept / accept-with-concerns.
+        // A Block run is about to be reissued, so a follow-up would be premature;
+        // the dedup ledger will still let a later good run spawn exactly once.
+        if (report.Overall == AspectStatus.Block)
+        {
+            RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "source-blocked", reason: "source run blocked/reissued; not spawning");
+            return;
+        }
+
+        var startedAt = DateTime.UtcNow;
+        try
+        {
+            // Quality-first: the spawn evaluation defaults to the best available
+            // model at max effort, layered under any per-project override.
+            var (defaultModel, defaultCli, defaultThinking) = TaskSpawnerModelSelector.Resolve(
+                _configuration["TaskSpawnerStep:DefaultModel"],
+                _configuration["TaskSpawnerStep:DefaultCli"],
+                _configuration["TaskSpawnerStep:DefaultThinkingLevel"]);
+            var model = catalogueStep is null
+                ? defaultModel
+                : PipelineStepConfigResolver.ResolveModel(settings, catalogueStep, defaultModel);
+            var cli = PipelineStepConfigResolver.ResolveCliType(settings, stepId) ?? defaultCli;
+            var thinking = catalogueStep is null
+                ? defaultThinking
+                : PipelineStepConfigResolver.ResolveThinkingLevel(settings, catalogueStep, cli, model, defaultThinking);
+
+            var runCtx = new TaskSpawnerRunContext
+            {
+                Source = current,
+                SourceProjectName = entry.Name,
+                TargetProject = config.TargetProject!.Trim(),
+                RelevanceQuestion = config.RelevanceQuestion,
+                SpawnLane = string.IsNullOrWhiteSpace(config.SpawnLane) ? TaskStates.Backlog : config.SpawnLane!.Trim(),
+                MaxPerSourceTask = config.MaxPerSourceTask is > 0 ? config.MaxPerSourceTask.Value : 1,
+                TaskBody = taskBody,
+                StatusSummary = statusSummary,
+                DiffSummary = diffSummary,
+                ResultsInventory = resultsInventory,
+                Model = model,
+                Cli = cli,
+                ThinkingLevel = thinking,
+            };
+
+            var result = await _taskSpawner.RunAsync(runCtx, ct);
+            var durationMs = (long)(DateTime.UtcNow - startedAt).TotalMilliseconds;
+
+            switch (result.Verdict)
+            {
+                case TaskSpawnerVerdict.Spawned:
+                    RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Passed, durationMs,
+                        "spawned", result.Reason, result.Model,
+                        verdictSummary: $"{result.TargetKey} in {result.TargetProjectName}");
+                    WritePostProcessingOutcome(current, PostProcessingOutcomes.NeedsFollowUpTask,
+                        summary: $"Spawned {result.TargetKey} in {result.TargetProjectName}: {result.Reason}",
+                        performerCliType: cli,
+                        stepId: stepId,
+                        followUpTaskIds: string.IsNullOrWhiteSpace(result.TargetJobId)
+                            ? null
+                            : new[] { result.TargetJobId! });
+                    EmitVerdictTimeline(current.FolderPath, TimelineEventKinds.TaskSpawned, TimelineActors.Orchestrator,
+                        $"Spawned {result.TargetKey} in {result.TargetProjectName}",
+                        new Dictionary<string, string>
+                        {
+                            ["targetProject"] = result.TargetProjectName ?? config.TargetProject!,
+                            ["targetKey"] = result.TargetKey ?? string.Empty,
+                            ["targetJobId"] = result.TargetJobId ?? string.Empty,
+                            ["reason"] = result.Reason,
+                        });
+                    _logger.LogInformation(
+                        "task-spawner: project={Project} job={JobId} spawned={TargetKey} target={TargetProject} model={Model}",
+                        entry.Name, current.Id, result.TargetKey, result.TargetProjectName, result.Model);
+                    break;
+                case TaskSpawnerVerdict.NotRelevant:
+                    RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped, durationMs,
+                        "not-relevant", result.Reason, result.Model);
+                    break;
+                case TaskSpawnerVerdict.Deduped:
+                    RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped, durationMs,
+                        "deduped", result.Reason, result.Model);
+                    break;
+                case TaskSpawnerVerdict.Error:
+                    RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Failed, durationMs,
+                        "error", result.Reason, result.Model);
+                    break;
+                default:
+                    RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped, durationMs,
+                        "skipped", result.Reason, result.Model);
+                    break;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "task-spawner: post-step failed for {Project}/{JobId}; recording a skipped row",
+                entry.Name, current.Id);
+            RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped,
+                (long)(DateTime.UtcNow - startedAt).TotalMilliseconds, "error",
+                "task-spawner step error: " + ex.Message);
+        }
+    }
+
+    private void RecordTaskSpawnerStep(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        long durationMs,
+        string verdictToken,
+        string? reason,
+        string? model = null,
+        string? verdictSummary = null)
+    {
+        if (_pipelineLog == null) return;
+        var now = DateTime.UtcNow;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.TaskSpawnerStepId,
+            Kind = StepKind.Orchestrator,
+            Status = status,
+            StartedAt = now - TimeSpan.FromMilliseconds(durationMs),
+            CompletedAt = now,
+            DurationMs = durationMs,
+            Model = model,
+            Verdict = verdictToken,
+            VerdictSummary = string.IsNullOrWhiteSpace(verdictSummary) ? null : verdictSummary,
+            Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+        });
+    }
+
+    /// <summary>
     /// Build the diff text the quality-grade pass reviews: the aggregate diff
     /// of every commit the task owns (the same per-task scoping the
     /// user-triggered code-review endpoint and the protocol-pane change set
@@ -3065,6 +3262,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string? stepId = null,
         string? evidenceRef = null,
         IReadOnlyList<string>? findingRefs = null,
+        IReadOnlyList<string>? followUpTaskIds = null,
         string performer = PostProcessingPerformers.SupportingAgent)
     {
         if (!PostProcessingOutcomes.All.Contains(outcome, StringComparer.Ordinal))
@@ -3084,6 +3282,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Summary = string.IsNullOrWhiteSpace(summary) ? null : summary,
             EvidenceRef = evidenceRef,
             FindingRefs = findingRefs?.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal).ToList() ?? [],
+            FollowUpTaskIds = followUpTaskIds?.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal).ToList() ?? [],
         }, _logger);
 
         _logger.LogInformation(
