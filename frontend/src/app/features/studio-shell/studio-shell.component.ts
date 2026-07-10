@@ -46,6 +46,7 @@ import { WorkspaceManagerService, ProjectDragDropService, WorkspaceOverlaysServi
 import { WorkspaceSettingsService } from '../shell/state/workspace-settings.service';
 import { ProjectLookupService } from '../../services/project-lookup.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
+import { resolveActiveActivityKey } from './components/studio-activity-bar/studio-activity-bar.active-key';
 import { ExplorerWorkspaceTreeComponent, type ExplorerProjectSurface } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
 import { TooltipDirective } from 'coding-agent-chat/shared';
@@ -723,6 +724,22 @@ export class StudioShellComponent {
     { key: 'activity', icon: 'activity', label: 'Activity' },
     { key: 'runbook', icon: 'runbook', label: 'Runbook' },
   ];
+
+  /**
+   * Single source of truth for the ActivityBar's active marker (AGT-2042).
+   * The sidebar toggle (`activePanel` + `sidebarVisible`) and the editor
+   * route (`activeTab().kind`) used to light up buttons independently, so
+   * two could be active at once. Funnelling both through one resolved key
+   * makes the marker exclusive by construction — a button is active iff its
+   * key equals this value.
+   */
+  readonly activeActivityKey = computed(() =>
+    resolveActiveActivityKey({
+      activeTabKind: this.activeTab()?.kind,
+      activePanel: this.activePanel(),
+      sidebarVisible: this.sidebarVisible(),
+    }),
+  );
 
   readonly activityBarBadgeCounts = computed<Record<string, number>>(() => ({
     filters: this.filterBadgeCount()

@@ -127,14 +127,10 @@
     <!-- Activity bar -->
     <app-studio-activity-bar
       [items]="activityBarItems"
-      [activePanel]="activePanel()"
-      [sidebarVisible]="sidebarVisible()"
+      [activeKey]="activeActivityKey()"
       [badgeCounts]="activityBarBadgeCounts()"
-      [backlogActive]="activeTab()?.kind === 'backlog'"
       [backlogCount]="backlogCount()"
-      [epicsActive]="activeTab()?.kind === 'epics'"
       [hasEpics]="hasEpics()"
-      [settingsActive]="activeTab()?.kind === 'workspace-settings'"
       (panelToggle)="togglePanel($event)"
       (openBacklogRequest)="onActivityBarOpenBacklog()"
       (openEpicsRequest)="onActivityBarOpenEpics()" />

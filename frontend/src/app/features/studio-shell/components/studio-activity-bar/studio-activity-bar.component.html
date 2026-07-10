@@ -6,7 +6,7 @@
   @for (item of items(); track item.key) {
     <button type="button"
             class="studio-ab__btn"
-            [class.studio-ab__btn--active]="activePanel() === item.key && sidebarVisible()"
+            [class.studio-ab__btn--active]="activeKey() === item.key"
             [cacTooltip]="item.label"
             [attr.data-panel]="item.key"
             [attr.data-testid]="'studio-ab-' + item.key"
@@ -48,7 +48,7 @@
        jobs under the active project filter. -->
   <button type="button"
           class="studio-ab__btn studio-ab__btn--backlog"
-          [class.studio-ab__btn--active]="backlogActive()"
+          [class.studio-ab__btn--active]="activeKey() === 'backlog'"
           cacTooltip="Open backlog triage (Ctrl+B)"
           data-testid="studio-ab-backlog"
           (click)="openBacklogRequest.emit()">
@@ -66,7 +66,7 @@
   @if (hasEpics()) {
     <button type="button"
             class="studio-ab__btn studio-ab__btn--epics"
-            [class.studio-ab__btn--active]="epicsActive()"
+            [class.studio-ab__btn--active]="activeKey() === 'epics'"
             cacTooltip="Open epic overview"
             data-testid="studio-ab-epics"
             (click)="openEpicsRequest.emit()">
@@ -78,7 +78,7 @@
        to the bottom with Settings — workspace-level config destinations. -->
   <button type="button"
           class="studio-ab__btn"
-          [class.studio-ab__btn--active]="activePanel() === 'admin' && sidebarVisible()"
+          [class.studio-ab__btn--active]="activeKey() === 'admin'"
           cacTooltip="Admin"
           data-testid="studio-ab-admin"
           (click)="panelToggle.emit('admin')">
@@ -90,7 +90,7 @@
   </button>
   <button type="button"
           class="studio-ab__btn"
-          [class.studio-ab__btn--active]="settingsActive() || (activePanel() === 'settings' && sidebarVisible())"
+          [class.studio-ab__btn--active]="activeKey() === 'settings'"
           cacTooltip="Settings"
           data-testid="studio-ab-settings"
           (click)="panelToggle.emit('settings')">

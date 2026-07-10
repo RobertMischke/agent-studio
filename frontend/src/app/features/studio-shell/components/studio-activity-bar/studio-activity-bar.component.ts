@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
+import type { StudioActivityItemKey } from './studio-activity-bar.active-key';
 
 export type StudioActivityPanelKey = 'explorer' | 'filters' | 'cli' | 'activity' | 'runbook';
 
@@ -20,20 +21,19 @@ export interface StudioActivityBarItem {
 })
 export class StudioActivityBarComponent {
   readonly items = input.required<readonly StudioActivityBarItem[]>();
-  readonly activePanel = input.required<string>();
-  readonly sidebarVisible = input.required<boolean>();
+  /**
+   * The single ActivityBar item that carries the active marker, or `null`
+   * when none does. Resolved by the shell from one source (see
+   * `resolveActiveActivityKey`) so at most one button is ever active —
+   * this is the fix for AGT-2042 (two items marked active at once).
+   */
+  readonly activeKey = input.required<StudioActivityItemKey | null>();
   /** Per-item badge counts. Items with count > 0 show a small badge on the icon. */
   readonly badgeCounts = input<Readonly<Record<string, number>>>({});
-  /** True while the backlog triage screen is visible. Drives the active highlight. */
-  readonly backlogActive = input<boolean>(false);
   /** Count of `0-backlog` tasks under the current project filter; renders a numeric badge. */
   readonly backlogCount = input<number>(0);
-  /** True while an Epics tab is active. Drives the active highlight. */
-  readonly epicsActive = input<boolean>(false);
   /** Whether any epics exist. The Epics button is hidden when false. */
   readonly hasEpics = input<boolean>(false);
-  /** True while the Workspace settings editor tab is active. */
-  readonly settingsActive = input<boolean>(false);
   readonly panelToggle = output<StudioActivityPanelKey | 'settings' | 'admin'>();
   /** Fires when the user clicks the always-visible Backlog button. */
   readonly openBacklogRequest = output<void>();
