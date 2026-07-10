@@ -113,74 +113,13 @@
   background: color-mix(in srgb, var(--studio-accent) 20%, transparent);
 }
 
-.sheet__project-picker {
-  position: relative;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px 5px 11px;
-  background: var(--studio-bg-hover);
-  border: 1px solid var(--studio-border);
-  border-radius: 6px;
-  color: var(--studio-fg);
-  font-weight: 600;
-  font-size: 12px;
-}
-.sheet__combo-wrap--active {
-  border-color: color-mix(in srgb, var(--studio-accent-3) 42%, transparent);
-  background: color-mix(in srgb, var(--studio-accent-3) 10%, transparent);
-}
-.sheet__combo-wrap--open {
-  border-color: color-mix(in srgb, var(--studio-accent-4) 72%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--studio-accent-4) 25%, transparent);
-}
-.sheet__select-icon,
-.sheet__select-caret { flex: 0 0 auto; opacity: 0.85; }
-.sheet__combo-input {
+.sheet__workspace {
   flex: 1 1 auto;
   min-width: 0;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  font: inherit;
-  padding: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-height: 0;
+  display: flex;
   overflow: hidden;
 }
-.sheet__combo-input::placeholder { color: inherit; opacity: 0.85; }
-.sheet__combo-input:focus { outline: none; }
-.sheet__combo-list {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  max-height: 280px;
-  overflow-y: auto;
-  margin: 0;
-  padding: 4px;
-  list-style: none;
-  background: var(--studio-bg-elevated);
-  border: 1px solid var(--studio-border-strong);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.30);
-  z-index: 30;
-}
-.sheet__combo-option {
-  padding: 6px 10px;
-  border-radius: 6px;
-  color: var(--studio-fg);
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.sheet__combo-option:hover,
-.sheet__combo-option--active { background: var(--studio-bg-selected); color: var(--studio-fg-strong); }
-.sheet__combo-option--current { color: var(--studio-accent); font-weight: 650; }
-
 .sheet__content {
   flex: 1 1 auto;
   min-width: 0;
@@ -327,11 +266,4 @@
    width on phones. */
 @media (max-width: 720px) {
   :host(.is-open) { width: min(100vw, 460px); }
-  // `.sheet__header` from the legacy BEM was removed (the header is
-  // owned by `<app-sidesheet>`); the picker still gets a mobile
-  // reflow so it doesn't crowd the title.
-  .sheet__project-picker {
-    width: 100%;
-    margin-top: 4px;
-  }
 }

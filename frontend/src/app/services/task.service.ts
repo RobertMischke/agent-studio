@@ -1835,6 +1835,12 @@ export class TaskService {
     );
   }
 
+  getOrchestratorContextSessions() {
+    return this.http.get<import('../features/orchestrator').OrchestratorContextSessionsResponse>(
+      `${this.baseUrl}/orchestrator/sessions`,
+    );
+  }
+
   // Cycle 10d: token-aggregate endpoints moved to TokensApiService
   // (`features/tokens/services/`). Caller migration:
   // `inject(TokensApiService)` instead of `inject(TaskService)` + the

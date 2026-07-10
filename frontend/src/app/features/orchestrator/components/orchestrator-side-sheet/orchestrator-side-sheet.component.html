@@ -17,42 +17,11 @@
                testid="orch-side-sheet"
                (closeRequest)="hide()">
   <div header-actions class="sheet__header-extras">
-    <div class="sheet__project-picker sheet__combo-wrap--active"
-         [class.sheet__combo-wrap--open]="comboOpen()"
-         data-testid="orch-side-sheet-project-combo-wrap">
-      <span class="sheet__select-icon">💬</span>
-      <input #comboInput
-             type="text"
-             class="sheet__combo-input"
-             data-testid="orch-side-sheet-project-combo"
-             [value]="comboQuery()"
-             [placeholder]="effectiveProject() ?? 'Pick a project...'"
-             [disabled]="pinned()"
-             (input)="onComboInput($event)"
-             (focus)="onComboFocus()"
-             (blur)="onComboBlur()"
-             (keydown)="onComboKeydown($event)" />
-      <span class="sheet__select-caret">▾</span>
-      @if (comboOpen() && filteredProjects().length > 0) {
-        <ul class="sheet__combo-list"
-            role="listbox"
-            data-testid="orch-side-sheet-project-combo-list">
-          @for (proj of filteredProjects(); track proj; let i = $index) {
-            <li class="sheet__combo-option"
-                role="option"
-                tabindex="0"
-                [attr.aria-selected]="proj === activeProject()"
-                [class.sheet__combo-option--active]="i === comboHighlight()"
-                [class.sheet__combo-option--current]="proj === activeProject()"
-                [attr.data-testid]="'orch-side-sheet-project-combo-option-' + proj"
-                (mousedown)="onComboOptionMousedown($event)"
-                (click)="selectComboOption(proj, $event)" (keydown.enter)="selectComboOption(proj, $event)" (keydown.space)="selectComboOption(proj, $event); $event.preventDefault()">
-              {{ proj }}
-            </li>
-          }
-        </ul>
-      }
-    </div>
+    <app-orchestrator-project-picker
+      [projects]="projects()"
+      [activeProject]="effectiveProject()"
+      [disabled]="pinned()"
+      (projectSelected)="selectProjectTab($event)" />
 
     <div class="sheet__header-actions">
       <button class="sheet__btn sheet__btn--pin"
@@ -84,16 +53,16 @@
     </div>
   </div>
 
-  <select hidden
-          data-testid="orch-side-sheet-project-select"
-          [value]="activeProject() ?? ''"
-          (change)="onProjectSelectChange($event)">
-    @for (proj of projects(); track proj) {
-      <option [value]="proj">{{ proj }}</option>
-    }
-  </select>
-
-  <main class="sheet__content">
+  <main class="sheet__workspace">
+    <app-chat-switcher-rail
+      [sessions]="contextSessions()"
+      [projects]="projects()"
+      [tasks]="jobService.jobs()"
+      [activeContextKey]="contextKey()"
+      [unreadContextKeys]="unreadContextKeys()"
+      (contextSelected)="selectChatContext($event)"
+      (locationRequested)="onNavigateToContext($event)" />
+    <div class="sheet__content">
     <!-- "Where am I right now" locator: project · task · lane · live run.
          Reusable per task-context so the task-focused orchestrator surface
          (separate planning task) can drop it in unchanged. -->
@@ -124,7 +93,11 @@
       <div class="sheet__error">{{ err }}</div>
     }
 
-    @if (effectiveProject()) {
+    @if (selectedContextKey() === 'global') {
+      <section class="sheet__no-project" data-testid="orchestrator-global-chat-empty">
+        Global orchestrator selected. This workspace has no global transcript yet.
+      </section>
+    } @else if (effectiveProject()) {
       <section class="sheet__chat">
         <!-- Single Composer-owned chat surface. Project-chat's former
              app-local virtual history list deliberately gives way here;
@@ -186,5 +159,6 @@
     } @else {
       <div class="sheet__no-project">No watched projects yet.</div>
     }
+    </div>
   </main>
 </app-sidesheet>

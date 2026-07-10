@@ -1645,6 +1645,25 @@ export class App implements OnInit, OnDestroy {
     this.orchSideSheetRef?.toggle();
   }
 
+  onNavigateToChatContext(contextKey: string): void {
+    if (contextKey === 'global') {
+      this.studioTabState.activateAllProjectsBoard();
+      return;
+    }
+    if (contextKey.startsWith('project:')) {
+      this.studioTabState.open({ kind: 'board', projectName: contextKey.slice('project:'.length) });
+      return;
+    }
+    if (!contextKey.startsWith('task:')) return;
+    const slash = contextKey.indexOf('/');
+    if (slash < 0) return;
+    const projectName = contextKey.slice('task:'.length, slash);
+    const taskKey = contextKey.slice(slash + 1);
+    const task = this.jobService.jobs().find(item => item.projectName === projectName
+      && (item.taskKey === taskKey || item.displayKey === taskKey || item.key === taskKey));
+    if (task) this.studioTabState.open({ kind: 'task', taskKey: task.taskKey });
+  }
+
   /**
    * Phase 5: orchestrator side sheet emitted "make a task from this".
    * Picks the watch path that matches the named project, opens the

@@ -17,6 +17,11 @@ public sealed record OrchestratorParkResponse(
     int ParkedQueuedTurns,
     bool CancelledActiveTurn);
 
+public sealed record OrchestratorContextRuntimeStatus(
+    string ContextKey,
+    string Status,
+    int QueuePosition);
+
 internal sealed class OrchestratorTurnWorkItem
 {
     public required string ContextKey { get; init; }
@@ -41,6 +46,7 @@ public sealed class OrchestratorTurnService
     private readonly object _gate = new();
     private readonly Queue<OrchestratorTurnWorkItem> _queued = new();
     private readonly Dictionary<string, CancellationTokenSource> _active = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _parked = new(StringComparer.Ordinal);
 
     public OrchestratorTurnService(
         OrchestratorSessionRegistry registry,
@@ -74,6 +80,7 @@ public sealed class OrchestratorTurnService
 
         lock (_gate)
         {
+            _parked.Remove(key.Value);
             var limit = ActiveLimit;
             if (_active.Count < limit)
             {
@@ -98,6 +105,7 @@ public sealed class OrchestratorTurnService
         var cancelledActive = false;
         lock (_gate)
         {
+            _parked.Add(key.Value);
             var keep = new Queue<OrchestratorTurnWorkItem>();
             while (_queued.TryDequeue(out var item))
             {
@@ -126,6 +134,23 @@ public sealed class OrchestratorTurnService
             null, null, null, null, null, null));
 
         return new OrchestratorParkResponse(key.Value, parkedQueued, cancelledActive);
+    }
+
+    public IReadOnlyList<OrchestratorContextRuntimeStatus> SnapshotStatuses()
+    {
+        lock (_gate)
+        {
+            var active = _active.Keys
+                .Select(key => key[..key.LastIndexOf('|')])
+                .Distinct(StringComparer.Ordinal)
+                .Select(key => new OrchestratorContextRuntimeStatus(key, StatusActive, 0));
+            var queued = _queued
+                .Select((item, index) => new OrchestratorContextRuntimeStatus(item.ContextKey, StatusQueued, index + 1));
+            var parked = _parked
+                .Where(key => !_active.Keys.Any(activeKey => activeKey.StartsWith(key + "|", StringComparison.Ordinal)))
+                .Select(key => new OrchestratorContextRuntimeStatus(key, StatusParked, 0));
+            return active.Concat(queued).Concat(parked).ToList();
+        }
     }
 
     private int ActiveLimit => Math.Max(1, _config.GetValue("Orchestrator:SessionTurns:ActiveLimit", 4));

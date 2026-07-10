@@ -64,6 +64,25 @@ export interface OrchestratorSessionResponse {
   session: OrchestratorSession | null;
 }
 
+export interface OrchestratorContextSession {
+  contextKey: string;
+  kind: 'global' | 'project' | 'task';
+  projectId: string | null;
+  taskKey: string | null;
+  updatedAt: string;
+  model: string | null;
+  cumulativeInputTokens: number;
+  cumulativeOutputTokens: number;
+  cumulativeCacheReadTokens: number;
+  cumulativeCacheCreationTokens: number;
+  runtimeStatus: 'idle' | 'active' | 'queued' | 'parked';
+  queuePosition: number;
+}
+
+export interface OrchestratorContextSessionsResponse {
+  sessions: OrchestratorContextSession[];
+}
+
 /**
  * One turn in the per-project orchestrator chat. Mirrors backend
  * `OrchestratorChatTurn`. Roles: 'user' for the human's messages,
