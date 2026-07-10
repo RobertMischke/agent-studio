@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -54,11 +56,44 @@ public class ProjectDocsService
         [".ico"] = "image/x-icon",
     };
 
+    // ---- Wiki performance caches (AGT-2013) ----
+    //
+    // Building the wiki tree opens one file per doc-node to sniff its title and
+    // parses every companion sidecar - O(N) file reads with no memoization, so
+    // every navigation re-read the whole docs/ tree from disk. Two cache layers
+    // fix that: a per-file title memo so an unchanged doc is never re-opened, and
+    // a whole-tree memo validated by a cheap enumerate-only signature so a warm
+    // request that finds nothing changed returns the assembled tree (and its
+    // ETag) without opening a single file. Both key on the project name; the
+    // signature is what makes them self-invalidating on any docs/ change.
+
+    // path -> (mtimeTicks, size, sniffed title). Survives across tree rebuilds so
+    // a single-file edit re-reads only that one file, not all N.
+    private readonly ConcurrentDictionary<string, (long Mtime, long Size, string? Title)> _titleCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // projectName -> (docs signature, assembled tree, ETag). A signature hit means
+    // the docs/ tree is provably unchanged, so the cached tree is served verbatim.
+    private readonly ConcurrentDictionary<string, (string Signature, WikiTree Tree, string ETag)> _treeCache =
+        new(StringComparer.Ordinal);
+
     public ProjectDocsService(TaskScannerService scanner, ProjectRegistry registry, ILogger<ProjectDocsService> logger)
     {
         _scanner = scanner;
         _registry = registry;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Drops the in-memory wiki title + tree caches. Tests that mutate a fixture
+    /// docs/ tree in place (without an mtime-visible change, or faster than the
+    /// filesystem timestamp resolution) call this to force a cold rebuild;
+    /// production relies on the docs signature to self-invalidate.
+    /// </summary>
+    internal void InvalidateWikiTreeCache()
+    {
+        _titleCache.Clear();
+        _treeCache.Clear();
     }
 
     /// <summary>
@@ -195,6 +230,7 @@ public class ProjectDocsService
     {
         var full = ResolveWikiPath(projectName, relPath, requireDoc: true);
         if (full == null || !File.Exists(full)) return null;
+        GitProcessTelemetry.RecordFileRead();
         return new WikiFileContent(relPath.Replace('\\', '/'), File.ReadAllText(full));
     }
 
@@ -267,24 +303,92 @@ public class ProjectDocsService
     /// document nodes (<c>.md</c>, <c>.html</c>, and <c>.json</c>). Siblings are
     /// sorted folders first, then files; an optional leading <c>NN-</c> numeric
     /// prefix on a name controls ordering and is stripped from the displayed
-    /// title. No git is invoked here, so building the tree stays cheap even for
-    /// a large docs folder (per-file commit metadata is fetched lazily on open).
+    /// title. No git is invoked here, and a warm cache serves the whole tree
+    /// without opening a file (see <see cref="GetWikiTreeResult"/>).
     /// </summary>
-    public WikiTree? GetWikiTree(string projectName)
+    public WikiTree? GetWikiTree(string projectName) => GetWikiTreeResult(projectName)?.Tree;
+
+    /// <summary>
+    /// <see cref="GetWikiTree"/> plus the tree's ETag, and the caching that makes
+    /// both cheap. Cold, the tree is built by opening one file per doc-node to
+    /// sniff its title; that per-file title read is memoized. Warm, a cheap
+    /// enumerate-only signature over docs/ (every file's path + mtime + size, no
+    /// content reads) is compared against the last build: an unchanged signature
+    /// returns the cached tree and ETag with zero file reads, which is what keeps
+    /// the wiki entry under target. Any add / remove / rename / edit bumps the
+    /// signature and triggers a rebuild that re-reads only the changed files.
+    /// The whole call is measured under a <see cref="GitProcessTelemetry"/> scope
+    /// so the rollup shows how many files a request actually opened.
+    /// </summary>
+    public WikiTreeResult? GetWikiTreeResult(string projectName)
     {
         var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return null;
 
+        using var _t = GitProcessTelemetry.BeginRequest("wiki/tree", _logger);
+
         var wikiDir = Path.Combine(baseDir, WikiRel);
         var exists = Directory.Exists(wikiDir);
-        var root = exists
-            ? BuildTreeNodes(
-                new DirectoryInfo(wikiDir),
-                Path.GetFullPath(wikiDir),
-                LoadWikiMetadataIndex(wikiDir))
-            : [];
-        return new WikiTree(projectName, wikiDir, exists, root);
+        if (!exists)
+            return new WikiTreeResult(new WikiTree(projectName, wikiDir, false, []), FormatETag("wiki-tree-empty"));
+
+        var fullWikiDir = Path.GetFullPath(wikiDir);
+        var signature = ComputeDocsSignature(fullWikiDir);
+
+        if (signature != null
+            && _treeCache.TryGetValue(projectName, out var cached)
+            && cached.Signature == signature)
+        {
+            return new WikiTreeResult(cached.Tree, cached.ETag);
+        }
+
+        var root = BuildTreeNodes(
+            new DirectoryInfo(wikiDir),
+            fullWikiDir,
+            LoadWikiMetadataIndex(wikiDir),
+            _titleCache);
+        var tree = new WikiTree(projectName, wikiDir, true, root);
+        var etag = FormatETag("wiki-tree-" + (signature ?? "nosig"));
+
+        if (signature != null)
+            _treeCache[projectName] = (signature, tree, etag);
+
+        return new WikiTreeResult(tree, etag);
     }
+
+    /// <summary>
+    /// Enumerate-only fingerprint of the docs/ tree: every file's full path,
+    /// last-write time, and size, hashed. Deliberately reads no file contents -
+    /// it is the cheap "did anything change" probe that gates the expensive
+    /// title-sniffing rebuild. A doc edit bumps its mtime; an add / remove /
+    /// rename changes the set; either way the hash changes. Returns null if the
+    /// tree can't be enumerated, which the caller treats as "always rebuild".
+    /// </summary>
+    private static string? ComputeDocsSignature(string fullWikiDir)
+    {
+        try
+        {
+            var di = new DirectoryInfo(fullWikiDir);
+            var sb = new StringBuilder();
+            foreach (var f in di.EnumerateFiles("*", SearchOption.AllDirectories)
+                                .OrderBy(f => f.FullName, StringComparer.Ordinal))
+            {
+                sb.Append(f.FullName).Append('')
+                  .Append(f.LastWriteTimeUtc.Ticks).Append('')
+                  .Append(f.Length).Append('\n');
+            }
+            var hash = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
+            return Convert.ToHexString(hash).ToLowerInvariant();
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: docs signature enumeration failed; rebuilding tree uncached.");
+            return null;
+        }
+    }
+
+    /// <summary>Formats a cache token as a quoted strong HTTP entity tag.</summary>
+    internal static string FormatETag(string token) => "\"" + token + "\"";
 
     /// <summary>
     /// The most-recently-edited wiki documents for the dashboard "recent edits"
@@ -297,19 +401,54 @@ public class ProjectDocsService
     /// can't be resolved so the surface degrades to "no recent edits".
     /// </summary>
     public WikiRecentEdits? GetWikiRecentEdits(string projectName, GitService git, int limit = 12)
+        => GetWikiRecentEditsResult(projectName, git, limit)?.Edits;
+
+    /// <summary>
+    /// <see cref="GetWikiRecentEdits"/> plus its ETag, and the HEAD-keyed caching
+    /// that makes it cheap. The recent-edits list is a view over committed git
+    /// history, so it is invariant while HEAD does not move: the whole assembled
+    /// payload (including the per-row title reads) is memoized keyed by the wiki
+    /// branch HEAD sha. A new commit moves HEAD and refreshes it; until then a
+    /// warm request pays only the cheap HEAD probe (itself briefly TTL-cached)
+    /// instead of the multi-hundred-ms <c>git log</c> walk that dominated the
+    /// dashboard landing. Measured under a <see cref="GitProcessTelemetry"/> scope.
+    /// </summary>
+    public WikiRecentEditsResult? GetWikiRecentEditsResult(string projectName, GitService git, int limit = 12)
     {
         var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return null;
         if (limit <= 0) limit = 12;
 
+        using var _t = GitProcessTelemetry.BeginRequest("wiki/recent", _logger);
+
         var wikiDir = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
         var exists = Directory.Exists(wikiDir);
-        if (!exists) return new WikiRecentEdits(projectName, wikiDir, false, []);
+        if (!exists)
+            return new WikiRecentEditsResult(
+                new WikiRecentEdits(projectName, wikiDir, false, []), FormatETag("wiki-recent-nodir"));
 
         var repoRoot = git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot))
-            return new WikiRecentEdits(projectName, wikiDir, true, []);
+            return new WikiRecentEditsResult(
+                new WikiRecentEdits(projectName, wikiDir, true, []), FormatETag("wiki-recent-norepo"));
 
+        var head = git.GetHeadShaCached(repoRoot);
+        var key = string.Join('', "wiki-recent-payload", repoRoot, wikiDir, limit);
+        var payload = git.MemoizeByHead(repoRoot, key,
+            () => BuildRecentEdits(projectName, git, repoRoot, wikiDir, limit));
+        var etag = FormatETag("wiki-recent-" + (head ?? "nohead") + "-" + limit);
+        return new WikiRecentEditsResult(payload, etag);
+    }
+
+    /// <summary>
+    /// Assembles the recent-edits payload from a fresh <c>git log</c> walk under
+    /// docs/ and per-row title sniffs. Split out so <see cref="MemoizeByHead"/>
+    /// only invokes it on a HEAD-miss; the loop, filtering, and title reads are
+    /// unchanged from the original inline implementation.
+    /// </summary>
+    private WikiRecentEdits BuildRecentEdits(
+        string projectName, GitService git, string repoRoot, string wikiDir, int limit)
+    {
         var docsRepoRel = Path.GetRelativePath(repoRoot, wikiDir).Replace('\\', '/');
         // Ask git for more distinct files than we need: some will be filtered
         // out as companions, deletions, or non-doc files below.
@@ -345,6 +484,72 @@ public class ProjectDocsService
     }
 
     /// <summary>
+    /// Per-doc history + provenance payload for the wiki history panel, with its
+    /// ETag, and the HEAD-keyed caching behind it. The file's commit history and
+    /// last-touching model are folded into one HEAD-keyed git memo (see
+    /// <see cref="GitService.GetWikiDocGitInfoCached"/>); the frontmatter is parsed
+    /// from the live on-disk file (one read, so the ETag folds in the file mtime).
+    /// Returns null when the doc can't be resolved or is missing, matching the
+    /// endpoint's 404 contract. Measured under a telemetry scope.
+    /// </summary>
+    public WikiHistoryResult? GetWikiHistory(string projectName, string relPath, GitService git)
+    {
+        using var _t = GitProcessTelemetry.BeginRequest("wiki/history", _logger);
+
+        var full = ResolveWikiDocFullPath(projectName, relPath);
+        if (full == null || !File.Exists(full)) return null;
+
+        var repoRoot = git.ResolveRepoRootForProject(projectName);
+        List<GitCommitInfo> commits = [];
+        string? trailerModel = null;
+        string? head = null;
+        if (!string.IsNullOrWhiteSpace(repoRoot))
+        {
+            head = git.GetHeadShaCached(repoRoot);
+            var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
+            var info = git.GetWikiDocGitInfoCached(repoRoot, repoRel, 50);
+            commits = info.Commits;
+            trailerModel = info.Model;
+        }
+
+        GitProcessTelemetry.RecordFileRead();
+        var meta = ParseWikiMetadata(File.ReadAllText(full));
+        var model = !string.IsNullOrWhiteSpace(meta.Model) ? meta.Model : trailerModel;
+        var payload = new WikiFileHistory(relPath.Replace('\\', '/'), model, meta, commits);
+
+        // History depends on HEAD (the git side) and the live file's frontmatter
+        // (the model/why can change with an uncommitted edit before HEAD moves),
+        // so the validator folds both HEAD and the file's mtime.
+        var mtime = File.GetLastWriteTimeUtc(full).Ticks;
+        var etag = FormatETag("wiki-hist-" + (head ?? "nohead") + "-" + mtime);
+        return new WikiHistoryResult(payload, etag);
+    }
+
+    /// <summary>
+    /// Content of a wiki doc as it existed at an earlier commit, plus its ETag.
+    /// The bytes are content-addressed (a concrete sha + path never change), so
+    /// the read is served from a permanent cache and the ETag is simply the sha.
+    /// Returns null when the doc, repo, or revision can't be resolved. Measured
+    /// under a telemetry scope.
+    /// </summary>
+    public WikiRevisionResult? GetWikiRevision(string projectName, string sha, string relPath, GitService git)
+    {
+        using var _t = GitProcessTelemetry.BeginRequest("wiki/revision", _logger);
+
+        var full = ResolveWikiDocFullPath(projectName, relPath);
+        if (full == null) return null;
+        var repoRoot = git.ResolveRepoRootForProject(projectName);
+        if (string.IsNullOrWhiteSpace(repoRoot)) return null;
+
+        var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
+        var content = git.GetFileAtCommitCached(repoRoot, sha, repoRel);
+        if (content == null) return null;
+
+        var payload = new WikiRevisionContent(relPath.Replace('\\', '/'), sha, content);
+        return new WikiRevisionResult(payload, FormatETag("wiki-rev-" + sha));
+    }
+
+    /// <summary>
     /// Recursively maps a docs directory into wiki tree nodes. Folders with no
     /// document descendants are dropped so the tree only surfaces navigable
     /// content. Hidden entries (dot-prefixed) are skipped.
@@ -352,14 +557,15 @@ public class ProjectDocsService
     private static List<WikiTreeNode> BuildTreeNodes(
         DirectoryInfo dir,
         string docsRoot,
-        IReadOnlyDictionary<string, WikiTreeMetadata> metadataByRelPath)
+        IReadOnlyDictionary<string, WikiTreeMetadata> metadataByRelPath,
+        ConcurrentDictionary<string, (long Mtime, long Size, string? Title)> titleCache)
     {
         var nodes = new List<WikiTreeNode>();
 
         foreach (var sub in dir.GetDirectories())
         {
             if (sub.Name.StartsWith('.')) continue;
-            var children = BuildTreeNodes(sub, docsRoot, metadataByRelPath);
+            var children = BuildTreeNodes(sub, docsRoot, metadataByRelPath, titleCache);
             if (children.Count == 0) continue; // prune empty folders
             var rel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
             nodes.Add(new WikiTreeNode(
@@ -380,7 +586,7 @@ public class ProjectDocsService
                 : ext.Equals(".json", StringComparison.OrdinalIgnoreCase)
                     ? "json"
                     : "html";
-            var title = ExtractDocTitle(file.FullName, ext)
+            var title = ResolveDocTitleCached(titleCache, file, ext)
                 ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(file.Name));
             metadataByRelPath.TryGetValue(rel, out var metadata);
             nodes.Add(new WikiTreeNode(
@@ -390,6 +596,27 @@ public class ProjectDocsService
 
         nodes.Sort(CompareTreeNodes);
         return nodes;
+    }
+
+    /// <summary>
+    /// Sniffs a doc's title, memoized by (path, mtime, size). A cache hit returns
+    /// the previously-sniffed title without opening the file - the read that
+    /// dominated tree building. The actual read (on a miss) happens inside
+    /// <see cref="ExtractDocTitle"/>, which is where the file-read is recorded
+    /// against the ambient telemetry scope, so the rollup's file count reflects
+    /// only genuine disk work.
+    /// </summary>
+    private static string? ResolveDocTitleCached(
+        ConcurrentDictionary<string, (long Mtime, long Size, string? Title)> cache,
+        FileInfo file, string ext)
+    {
+        var mtime = file.LastWriteTimeUtc.Ticks;
+        var size = file.Length;
+        if (cache.TryGetValue(file.FullName, out var e) && e.Mtime == mtime && e.Size == size)
+            return e.Title;
+        var title = ExtractDocTitle(file.FullName, ext);
+        cache[file.FullName] = (mtime, size, title);
+        return title;
     }
 
     /// <summary>
@@ -408,6 +635,7 @@ public class ProjectDocsService
             try
             {
                 var companionRel = Path.GetRelativePath(wikiDir, file).Replace('\\', '/');
+                GitProcessTelemetry.RecordFileRead();
                 using var doc = JsonDocument.Parse(File.ReadAllText(file));
                 var root = doc.RootElement;
                 if (root.ValueKind != JsonValueKind.Object) continue;
@@ -534,6 +762,7 @@ public class ProjectDocsService
 
         try
         {
+            GitProcessTelemetry.RecordFileRead();
             using var stream = File.OpenRead(sourceFull);
             var currentHash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
             return !string.Equals(currentHash, expectedHash.Trim().ToLowerInvariant(), StringComparison.Ordinal);
@@ -754,9 +983,15 @@ public class ProjectDocsService
         return results;
     }
 
-    /// <summary>Cheap label sniff for a nicer title than the file name.</summary>
+    /// <summary>
+    /// Cheap label sniff for a nicer title than the file name. Opens the file, so
+    /// it records one read against the ambient telemetry scope; the tree builder
+    /// only calls it on a title-cache miss, so the recorded count reflects genuine
+    /// disk work rather than every doc-node on every request.
+    /// </summary>
     private static string? ExtractDocTitle(string path, string extension)
     {
+        GitProcessTelemetry.RecordFileRead();
         if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
             return ExtractJsonTitle(path);
         if (extension.Equals(".html", StringComparison.OrdinalIgnoreCase)
@@ -985,6 +1220,20 @@ public record WikiTreeNode(
 
 /// <summary>The physical docs/ folder tree exposed to the wiki UI.</summary>
 public record WikiTree(string ProjectName, string BaseDir, bool Exists, List<WikiTreeNode> Root);
+
+/// <summary>
+/// A cached wiki payload plus the HTTP entity tag the GET endpoint uses to
+/// answer <c>If-None-Match</c> with a 304 when the client already holds the
+/// current version (AGT-2013). The <see cref="ETag"/> is a strong, content- or
+/// HEAD-derived validator, so a matching one guarantees the payload is current.
+/// </summary>
+public record WikiTreeResult(WikiTree Tree, string ETag);
+public record WikiRecentEditsResult(WikiRecentEdits Edits, string ETag);
+public record WikiHistoryResult(WikiFileHistory History, string ETag);
+public record WikiRevisionResult(WikiRevisionContent Revision, string ETag);
+
+/// <summary>Content of a wiki doc as it existed at an earlier commit.</summary>
+public record WikiRevisionContent(string RelPath, string Sha, string Content);
 
 /// <summary>Outcome of a wiki filesystem mutation (create/move/delete).</summary>
 public record WikiMutationResult(bool Success, string? FullPath, string? Error)

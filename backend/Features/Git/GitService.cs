@@ -118,6 +118,15 @@ public record GitRecentFileEdit(
     string Subject);
 
 /// <summary>
+/// The per-doc git provenance the wiki history panel renders, folded into one
+/// record so a single HEAD-keyed cache entry covers both reads (see
+/// <see cref="GitService.GetWikiDocGitInfoCached"/>): the file's commit history
+/// (newest first) and the model name that last touched it (from the latest
+/// commit's <c>Co-authored-by</c> trailer, or null for a hand-authored commit).
+/// </summary>
+public record WikiDocGitInfo(List<GitCommitInfo> Commits, string? Model);
+
+/// <summary>
 /// Per-commit enrichment for the deterministic commit-attribution step: the
 /// full commit body (<c>%B</c>, scanned for <c>Co-Authored-By:</c> trailers
 /// so an agent co-author is detected even when the operator is the author)
@@ -362,6 +371,108 @@ public class GitService
                 _shaRangeOrder.RemoveFirst();
                 _shaRangeCache.Remove(first.Value);
             }
+        }
+    }
+
+    // ---- HEAD-keyed git memoization (AGT-2013, shared primitive with AGT-2007) ----
+    //
+    // Git history under a branch is immutable while HEAD does not move: the
+    // recent-edits directory walk and the per-file history for a given path
+    // return the identical answer until a new commit lands. So those answers are
+    // memoized keyed by a logical key and validated by the repo's HEAD sha - HEAD
+    // unchanged => cache hit, no `git log` spawn - paying only a single cheap
+    // `rev-parse HEAD` (itself briefly TTL-cached below) to decide hit vs miss.
+    // This is the CACHE half of AGT-2013's wiki-history work and is deliberately
+    // a general primitive so the task-detail git-info surface (AGT-2007) can key
+    // its own history reads off HEAD the same way rather than duplicating a cache.
+
+    private readonly ConcurrentDictionary<string, (DateTime At, string? Sha)> _headShaCache =
+        new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan HeadShaTtl = TimeSpan.FromSeconds(2);
+
+    private const int HeadKeyedCacheLimit = 256;
+    private readonly object _headKeyedLock = new();
+    private readonly LinkedList<string> _headKeyedOrder = new();
+    private readonly Dictionary<string, (LinkedListNode<string> Node, string Head, object Value)> _headKeyedCache =
+        new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// HEAD sha at <paramref name="root"/>, cached for ~2s so a burst of wiki
+    /// requests (tree + recent + history when a page is opened) shares one
+    /// <c>rev-parse HEAD</c> spawn instead of one per call. Returns null when the
+    /// path is not a git repository. The spawn, when it does happen, still records
+    /// into the ambient <see cref="GitProcessTelemetry"/> scope.
+    /// </summary>
+    public string? GetHeadShaCached(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root)) return null;
+        if (_headShaCache.TryGetValue(root, out var cached) && DateTime.UtcNow - cached.At < HeadShaTtl)
+            return cached.Sha;
+        var sha = ReadHeadShaAt(root);
+        _headShaCache[root] = (DateTime.UtcNow, sha);
+        return sha;
+    }
+
+    /// <summary>
+    /// Serves <paramref name="compute"/>'s result from cache when the repo HEAD at
+    /// <paramref name="root"/> is unchanged since it was last computed for
+    /// <paramref name="logicalKey"/>, else recomputes and stores it. A new commit
+    /// moves HEAD and transparently invalidates every dependent entry. Bounded LRU.
+    /// When HEAD cannot be read (the path is not a repo) it falls back to a live
+    /// compute with no caching, so behaviour degrades to "always fresh", never to
+    /// a wrong cached hit. <paramref name="compute"/> must return a non-null
+    /// reference (a null result is not cached and is recomputed each call). The
+    /// compute runs outside the lock; a rare concurrent double-miss just computes
+    /// twice, which is harmless for these idempotent read-only lookups.
+    /// </summary>
+    public T MemoizeByHead<T>(string root, string logicalKey, Func<T> compute) where T : class
+    {
+        var head = GetHeadShaCached(root);
+        if (head == null) return compute();
+
+        lock (_headKeyedLock)
+        {
+            if (_headKeyedCache.TryGetValue(logicalKey, out var e) && e.Head == head && e.Value is T hit)
+            {
+                _headKeyedOrder.Remove(e.Node);
+                _headKeyedOrder.AddLast(e.Node);
+                return hit;
+            }
+        }
+
+        var value = compute();
+        if (value == null) return value;
+
+        lock (_headKeyedLock)
+        {
+            if (_headKeyedCache.TryGetValue(logicalKey, out var existing))
+            {
+                _headKeyedOrder.Remove(existing.Node);
+                _headKeyedCache.Remove(logicalKey);
+            }
+            var node = _headKeyedOrder.AddLast(logicalKey);
+            _headKeyedCache[logicalKey] = (node, head, value);
+            while (_headKeyedCache.Count > HeadKeyedCacheLimit && _headKeyedOrder.First is { } first)
+            {
+                _headKeyedOrder.RemoveFirst();
+                _headKeyedCache.Remove(first.Value);
+            }
+        }
+        return value;
+    }
+
+    /// <summary>
+    /// Drops the HEAD-sha and HEAD-keyed memo caches. Tests that commit into a
+    /// fixture repo and then re-query within the 2s HEAD TTL call this so the new
+    /// commit is observed immediately; production just lets HEAD roll over.
+    /// </summary>
+    internal void InvalidateHeadKeyedCaches()
+    {
+        _headShaCache.Clear();
+        lock (_headKeyedLock)
+        {
+            _headKeyedCache.Clear();
+            _headKeyedOrder.Clear();
         }
     }
 
@@ -3495,6 +3606,70 @@ public class GitService
 
         var (output, _, code) = RunGitArgs(root, "show", $"{sha}:{repoRelPath.Replace('\\', '/')}");
         return code == 0 ? output : null;
+    }
+
+    // ---- HEAD-cached wiki git reads (AGT-2013) ----
+    //
+    // The wiki dashboard + per-doc panels re-ask for the same recent-edits walk
+    // and file history on every navigation. These wrap the raw reads above in the
+    // HEAD-keyed memo so a warm (HEAD-unchanged) request serves them from memory
+    // with at most one `rev-parse HEAD` spawn instead of a fresh multi-hundred-ms
+    // `git log`. See <see cref="MemoizeByHead{T}"/>.
+
+    private const char CacheKeySep = '';
+
+    /// <summary>
+    /// The per-doc git provenance the wiki history panel needs: the file's commit
+    /// history (newest first) and the model that last touched it. Both raw reads
+    /// are folded into one HEAD-keyed memo entry so a warm history open costs zero
+    /// git spawns beyond the shared HEAD probe, instead of the two `git log`
+    /// spawns (history + trailer) it used to make on every open.
+    /// </summary>
+    public WikiDocGitInfo GetWikiDocGitInfoCached(string repoRoot, string repoRelPath, int limit = 50)
+    {
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        var key = string.Join(CacheKeySep, "wiki-hist", root, repoRelPath, limit);
+        return MemoizeByHead(root, key, () => new WikiDocGitInfo(
+            GetFileHistory(root, repoRelPath, limit),
+            GetLatestModelForPath(root, repoRelPath)));
+    }
+
+    /// <summary>
+    /// HEAD-independent cached <see cref="GetFileAtCommit"/>: a file's bytes at a
+    /// concrete commit are content-addressed and never change, so the result is
+    /// cached permanently (bounded LRU, reusing the SHA-range cache) keyed by
+    /// (root, sha, path). Only caches when <paramref name="sha"/> is an immutable
+    /// object name (hex), never a symbolic ref like a branch that could move.
+    /// </summary>
+    public string? GetFileAtCommitCached(string repoRoot, string sha, string repoRelPath)
+    {
+        if (string.IsNullOrWhiteSpace(sha) || !IsLikelyShaOrRef(sha)) return null;
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        if (!LooksLikeImmutableSha(sha))
+            return GetFileAtCommit(root, sha, repoRelPath);
+
+        var key = string.Join(CacheKeySep, "wiki-rev", root, sha, repoRelPath.Replace('\\', '/'));
+        if (TryGetShaRangeCached<string>(key, out var cached)) return cached;
+        var content = GetFileAtCommit(root, sha, repoRelPath);
+        if (content != null) StoreShaRangeCached(key, content);
+        return content;
+    }
+
+    /// <summary>
+    /// True when <paramref name="sha"/> is a plain hex object name (a concrete,
+    /// immutable commit id), as opposed to a symbolic ref such as a branch or tag
+    /// whose target can move. Used to gate permanent caching of content-addressed
+    /// reads: an immutable sha is safe to cache forever; a movable ref is not.
+    /// </summary>
+    private static bool LooksLikeImmutableSha(string sha)
+    {
+        if (sha.Length is < 7 or > 40) return false;
+        foreach (var c in sha)
+        {
+            var isHex = c is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F';
+            if (!isHex) return false;
+        }
+        return true;
     }
 
     /// <summary>

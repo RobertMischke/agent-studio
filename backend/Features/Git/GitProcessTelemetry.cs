@@ -4,15 +4,18 @@ using Microsoft.Extensions.Logging;
 namespace AgentStudio.Git;
 
 /// <summary>
-/// Ambient, per-request accounting of git subprocess spawns for the git-info
-/// endpoints (status / diff / hygiene / provenance / inventory). This is the
-/// MEASURE half of AGT-2007: git-info requests were slow and it was not
-/// obvious why, because a single request quietly forks many serial git
-/// processes and on Windows a bare spawn already costs ~70-100ms. A request
-/// opens a <see cref="BeginRequest"/> scope; every <see cref="GitService"/>
-/// spawn records its subcommand and duration into the ambient scope; and the
-/// scope logs a rollup on dispose - "how many git processes ran for this
-/// request, and where the wall-time went".
+/// Ambient, per-request accounting of the two expensive things a docs/git-info
+/// request does: git subprocess spawns and doc-file reads. Started as the
+/// MEASURE half of AGT-2007 (git-info requests were slow and it was not obvious
+/// why, because a single request quietly forks many serial git processes and on
+/// Windows a bare spawn already costs ~70-100ms) and extended for AGT-2013 (the
+/// wiki tree reads one file per doc-node for title extraction, so a request can
+/// silently open hundreds of files). A request opens a <see cref="BeginRequest"/>
+/// scope; every <see cref="GitService"/> spawn records its subcommand and
+/// duration, and every doc-file read records via <see cref="RecordFileRead"/>,
+/// into the ambient scope; the scope logs a rollup on dispose - "how many git
+/// processes ran and how many files were read for this request, and where the
+/// wall-time went".
 ///
 /// <para>
 /// The scope flows through the async/thread-pool boundary via
@@ -69,11 +72,24 @@ public static class GitProcessTelemetry
     }
 
     /// <summary>
-    /// Diagnostic/test hook: the ambient scope's running tally
-    /// (spawn count, summed git ms), or null when nothing is measuring.
+    /// Records <paramref name="count"/> doc-file reads against the ambient
+    /// request scope (a no-op when nothing is measuring). Callers increment only
+    /// when a file is actually opened - a cache hit that skips the read must not
+    /// - so the rollup's <c>files=</c> count is a faithful measure of how much
+    /// disk work a request did, and drops to zero once the wiki caches are warm.
     /// </summary>
-    internal static (int Spawns, long GitMs)? CurrentTally()
-        => _current.Value is { } s ? (s.Spawns, s.GitMs) : null;
+    internal static void RecordFileRead(int count = 1)
+    {
+        if (count > 0) _current.Value?.AddFileReads(count);
+    }
+
+    /// <summary>
+    /// Diagnostic/test hook: the ambient scope's running tally
+    /// (spawn count, summed git ms, doc-file reads), or null when nothing is
+    /// measuring.
+    /// </summary>
+    internal static (int Spawns, long GitMs, int FileReads)? CurrentTally()
+        => _current.Value is { } s ? (s.Spawns, s.GitMs, s.FileReads) : null;
 
     private sealed class GitRequestScope : IDisposable
     {
@@ -86,6 +102,7 @@ public static class GitProcessTelemetry
 
         public int Spawns { get; private set; }
         public long GitMs { get; private set; }
+        public int FileReads { get; private set; }
 
         public GitRequestScope(string label, ILogger logger, GitRequestScope? parent)
         {
@@ -105,6 +122,11 @@ public static class GitProcessTelemetry
             }
         }
 
+        public void AddFileReads(int count)
+        {
+            lock (_gate) FileReads += count;
+        }
+
         public void Dispose()
         {
             _wall.Stop();
@@ -114,10 +136,12 @@ public static class GitProcessTelemetry
             string breakdown;
             int spawns;
             long gitMs;
+            int fileReads;
             lock (_gate)
             {
                 spawns = Spawns;
                 gitMs = GitMs;
+                fileReads = FileReads;
                 breakdown = string.Join(", ", _byCommand
                     .OrderByDescending(kv => kv.Value.Ms)
                     .Select(kv => $"{kv.Key}x{kv.Value.Count}={kv.Value.Ms}ms"));
@@ -125,10 +149,12 @@ public static class GitProcessTelemetry
 
             // gitMs is the summed subprocess time; when a request fans its reads
             // out in parallel, wallMs is lower than gitMs - that gap is exactly
-            // the serial time the parallelism removed.
+            // the serial time the parallelism removed. files is the doc-file read
+            // count (AGT-2013): a warm wiki cache serves tree/recent/history with
+            // files=0 and spawns<=1, which is the whole point of the cache layer.
             _logger.LogInformation(
-                "git-info request={Label} spawns={Spawns} gitMs={GitMs} wallMs={WallMs} breakdown=[{Breakdown}]",
-                _label, spawns, gitMs, _wall.ElapsedMilliseconds, breakdown);
+                "git-info request={Label} spawns={Spawns} gitMs={GitMs} files={FileReads} wallMs={WallMs} breakdown=[{Breakdown}]",
+                _label, spawns, gitMs, fileReads, _wall.ElapsedMilliseconds, breakdown);
         }
     }
 }
