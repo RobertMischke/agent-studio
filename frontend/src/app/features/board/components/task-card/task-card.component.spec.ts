@@ -1131,7 +1131,7 @@ describe('TaskCardComponent (smoke)', () => {
 });
 
 describe('buildEffectiveModelChip', () => {
-  it('shows the effective run thinking level and strengthens a configured mismatch', () => {
+  it('shows the effective run thinking level and strengthens a default mismatch', () => {
     const job = makeJob({
       cliType: 'codex',
       model: 'gpt-5.6-sol',
@@ -1143,13 +1143,14 @@ describe('buildEffectiveModelChip', () => {
       },
     });
 
-    const chip = buildEffectiveModelChip(job, makeOwner());
+    const chip = buildEffectiveModelChip(job, makeOwner({ defaultThinkingLevel: 'high' }));
 
     expect(chip.thinkingLevel).toMatchObject({
       short: 'm',
       effective: 'medium',
       configured: 'ultra',
       differsFromConfigured: true,
+      differsFromDefault: true,
     });
     expect(chip.tooltip.body).toContain('Thinking level:</b> medium');
     expect(chip.tooltip.body).toContain('Configured thinking level:</b> ultra');
@@ -1158,10 +1159,22 @@ describe('buildEffectiveModelChip', () => {
   it('keeps a configured/default thinking level quiet before the first run', () => {
     const chip = buildEffectiveModelChip(
       makeJob({ cliType: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'high', execution: null }),
-      makeOwner(),
+      makeOwner({ defaultThinkingLevel: 'high' }),
     );
 
-    expect(chip.thinkingLevel).toMatchObject({ short: 'h', effective: 'high', differsFromConfigured: false });
+    expect(chip.thinkingLevel).toMatchObject({ short: 'h', effective: 'high', differsFromDefault: false });
+  });
+
+  it('strengthens a task override even when the run matches its configured level', () => {
+    const chip = buildEffectiveModelChip(
+      makeJob({ cliType: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'ultra', execution: null }),
+      makeOwner({ defaultThinkingLevel: 'high' }),
+    );
+
+    expect(chip.thinkingLevel).toMatchObject({
+      short: 'u', effective: 'ultra', configured: 'ultra', defaultLevel: 'high',
+      differsFromConfigured: false, differsFromDefault: true,
+    });
   });
 
   it('shows a visible quota-fallback badge with model and reason', () => {

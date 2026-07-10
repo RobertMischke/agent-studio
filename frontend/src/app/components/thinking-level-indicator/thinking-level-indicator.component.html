@@ -1,6 +1,6 @@
 <span class="thinking-level"
-      [class.thinking-level--override]="indicator().differsFromConfigured"
+      [class.thinking-level--override]="indicator().differsFromDefault"
       [cacTooltip]="indicator().tooltip"
       [attr.data-testid]="testId()"
       [attr.data-thinking-level]="indicator().effective"
-      [attr.data-thinking-level-override]="indicator().differsFromConfigured">{{ indicator().short }}</span>
+      [attr.data-thinking-level-override]="indicator().differsFromDefault">{{ indicator().short }}</span>

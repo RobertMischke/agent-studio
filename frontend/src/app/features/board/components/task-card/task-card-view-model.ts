@@ -364,7 +364,8 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
 
   const thinkingLevel = buildThinkingLevelIndicator(
     job.execution,
-    job.thinkingLevel ?? owner.defaultThinkingLevel,
+    job.thinkingLevel,
+    owner.defaultThinkingLevel,
     fullModel,
   );
   const tooltip = buildModelTooltip(job, owner, source, ownerCli, ownerModel, thinkingLevel);

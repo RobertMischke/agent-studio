@@ -29,6 +29,7 @@ import type { CliModelInfo } from '../../features/cli';
 import { TaskService } from '../../services/task.service';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
 import { ErrorDialogService } from '../../services/error-dialog.service';
+import { ClientService } from '../../services/client.service';
 import { NowTickService } from '../../services/now-tick.service';
 import { LayoutPanesService } from './services/layout-panes.service';
 import { TaskArtifactsService } from './services/task-artifacts.service';
@@ -115,9 +116,13 @@ export class TaskDetailComponent implements OnDestroy {
   private jobService = inject(TaskService);
   private catalogStore = inject(CliCatalogStore);
   private errorDialog = inject(ErrorDialogService);
+  private clientService = inject(ClientService);
   private undo = inject(UndoController);
 
   readonly detail = input.required<TaskDetail>();
+  readonly defaultThinkingLevel = computed(() =>
+    this.clientService.resolve(this.detail().info.ownerClientId).defaultThinkingLevel ?? null
+  );
   readonly watchPaths = input<WatchPathEntry[]>([]);
   /** Peers in the same on-disk lane as the current job, in kanban order. */
   readonly lanePeers = input<TaskInfo[]>([]);

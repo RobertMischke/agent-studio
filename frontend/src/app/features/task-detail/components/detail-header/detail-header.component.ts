@@ -48,13 +48,19 @@ import { ThinkingLevelIndicatorComponent } from '../../../../components/thinking
 })
 export class DetailHeaderComponent {
   readonly info = input.required<TaskInfo>();
+  readonly defaultThinkingLevel = input<string | null>(null);
   readonly headerModel = computed(() => {
     const info = this.info();
     return info.execution?.model ?? info.model ?? null;
   });
   readonly headerModelLabel = computed(() => shortModelName(this.headerModel()));
   readonly thinkingLevelIndicator = computed(() =>
-    buildThinkingLevelIndicator(this.info().execution, this.info().thinkingLevel, this.headerModel())
+    buildThinkingLevelIndicator(
+      this.info().execution,
+      this.info().thinkingLevel,
+      this.defaultThinkingLevel(),
+      this.headerModel(),
+    )
   );
   readonly editingTitle = input(false);
   readonly titleDraft = input<string>('');
