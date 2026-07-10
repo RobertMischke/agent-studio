@@ -240,6 +240,9 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(board?.getAttribute('aria-current')).toBeNull();
     expect(hub?.classList.contains('tree-row--active')).toBe(true);
     expect(hub?.getAttribute('aria-current')).toBe('page');
+    expect(board?.classList.contains('tree-row--root')).toBe(true);
+    expect(hub?.classList.contains('tree-row--root')).toBe(true);
+    expect(root.querySelector('.studio-tree-children .tree-row--child')).toBeNull();
   });
 
   it('renders a Wiki row under Project Hub that emits openWikiRequest', () => {

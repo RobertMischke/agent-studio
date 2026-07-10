@@ -59,6 +59,7 @@ export class PromptAdminPanelComponent implements OnInit {
   readonly busy = signal(false);
   readonly actionError = signal<string | null>(null);
   readonly collapsedGroups = signal<ReadonlySet<string>>(new Set());
+  readonly onlyOverrides = signal(false);
   /** Toggles the read-only "shipped default" comparison block. */
   readonly showDefault = signal(false);
 
@@ -81,6 +82,22 @@ export class PromptAdminPanelComponent implements OnInit {
     for (const item of cat.items) if (!seen.includes(item.group)) seen.push(item.group);
     return seen.map((name) => ({ name, items: buckets.get(name)! }));
   });
+
+  readonly visibleGroups = computed<PromptGroup[]>(() => {
+    const groups = this.groups();
+    if (!this.onlyOverrides()) return groups;
+    return groups
+      .map((group) => ({ ...group, items: group.items.filter((item) => item.hasOverride) }))
+      .filter((group) => group.items.length > 0);
+  });
+
+  readonly overrideCount = computed(() =>
+    this.catalog()?.items.filter((item) => item.hasOverride).length ?? 0
+  );
+
+  readonly inheritedCount = computed(() =>
+    (this.catalog()?.items.length ?? 0) - this.overrideCount()
+  );
 
   readonly dirty = computed(() => {
     const d = this.detail();
