@@ -290,19 +290,29 @@ The registry may store local checkout configuration, while API readers receive
 resolved context. Branch names alone are insufficient for review or caching;
 revision is required. Secrets embedded in origins are redacted from logs and UI.
 
-## 8. Follow-up implementation slices
+## 8. Explicit follow-up cards
 
-1. **Foundation slice:** persistence, resolved
-   `BranchContext`, working/running roles, starter scaffold, and shared control.
-2. **Card C, Wiki checkout implementation:** isolated source, refresh state machine,
-   branch switching, atomic revision publication, dirty-checkout protection,
-   and status API.
-3. **Surface adoption:** Wiki, Prompts, Tasks, Project URLs, and Project Hub use
-   the shared control; URLs gain represented-branch persistence.
-4. **Card D, product proof screenshots:** real-backend screenshots for matching and divergent
-   branch states in both themes, including keyboard/focus disclosure for URLs.
-5. **Parallel WEB card, website documentation:** publish the relationship model independently of
-   product implementation, with the visual map as source material.
+This discovery slice hands off exactly these separately tracked follow-up cards:
+
+1. **Card C, Wiki Checkout:** implement the isolated Wiki source, refresh state
+   machine, branch switching, atomic revision publication, dirty-checkout
+   protection, and status API.
+2. **Parallel WEB card, UI surfaces and Explorer tree:** implement the shared
+   Branch Context Control across Wiki, Prompts, Tasks, Project URLs, and Project
+   Hub; add represented-branch persistence and hover/focus disclosure for URLs;
+   and implement the relationship and branch/worktree hierarchy in the Explorer
+   tree. Publish the relationship-level website documentation as product proof,
+   using the visual map as source material.
+3. **Card D, Screenshots:** capture real-backend product-proof screenshots for
+   matching and divergent branch states in both themes, including the Explorer
+   tree and keyboard/focus disclosure for URLs. This follows the UI implementation
+   in the parallel WEB card.
+
+Foundation work needed by Cards C and WEB includes persistence, resolved
+`BranchContext`, working/running roles, the starter scaffold, and the shared
+control contract. The cards may sequence that foundation between them during
+implementation; it is not a fourth follow-up deliverable from this discovery
+slice.
 
 ## 9. Acceptance criteria for later implementation
 
