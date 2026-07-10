@@ -1,5 +1,5 @@
 ﻿import { NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, output, signal } from '@angular/core';
 import { WorkspaceOverlaysService } from '../../state/workspace-overlays.service';
 import type { WorkspaceSettingsSection } from '../../state/workspace-overlays.service';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
@@ -15,6 +15,8 @@ import { WorkspaceManagementComponent } from '../workspace-management/workspace-
 import type { TaskScreenshot } from '../../../../features/screenshots';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
+import { TaskService } from '../../../../services/task.service';
+import type { ProjectSourceDescriptor } from '../../../../models/task.model';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 
@@ -79,6 +81,8 @@ export class WorkspaceOverlaysComponent {
   readonly openJobDetail = output<{ jobId: string; watchPath: string }>();
 
   private readonly modalStack = inject(ModalStackService);
+  private readonly tasks = inject(TaskService);
+  readonly projectSources = signal<readonly ProjectSourceDescriptor[]>([]);
   private readonly destroyRef = inject(DestroyRef);
   private modalDisposer: (() => void) | null = null;
 
@@ -89,6 +93,7 @@ export class WorkspaceOverlaysComponent {
     { key: 'updates', label: 'Updates', description: 'Keep this instance in sync with stable.', icon: '\u{1F504}', group: 'global' },
     { key: 'workspaces', label: 'Workspaces', description: 'Manage every workspace and its projects.', icon: '\u{1F5C2}', group: 'global' },
     { key: 'remote-hosts', label: 'Remote hosts', description: 'Execution locations: heartbeat, vitals, quota, and Re-Probe / Drain / Retire.', icon: '\u{1F4E1}', group: 'global' },
+    { key: 'project-sources', label: 'Project sources', description: 'Available origins for newly onboarded projects.', icon: '\u{1F4C1}', group: 'global' },
     { key: 'caps', label: 'Usage caps', description: 'Per-CLI quota caps and runner rules.', icon: '⚙', group: 'workspace' },
     { key: 'working-memory', label: 'Working memory', description: 'Per-CLI memory and session state. Auth stays protected.', icon: '\u{1F9E0}', group: 'workspace' },
     { key: 'prompts', label: 'System prompts', description: 'Application-wide runtime prompt defaults and overrides.', icon: 'T', group: 'workspace' },
@@ -115,6 +120,7 @@ export class WorkspaceOverlaysComponent {
   }
 
   constructor() {
+    this.tasks.getProjectSources().subscribe({ next: sources => this.projectSources.set(sources), error: () => this.projectSources.set([]) });
     // One modal-stack registration tracks the whole view so Escape and
     // backdrop ordering behave like the other studio modals.
     effect(() => {
@@ -149,6 +155,7 @@ export class WorkspaceOverlaysComponent {
       case 'updates': return 'workspace-updates-overlay';
       case 'workspaces': return 'workspace-management-overlay';
       case 'remote-hosts': return 'workspace-remote-hosts-overlay';
+      case 'project-sources': return 'workspace-project-sources-overlay';
       case 'working-memory': return 'workspace-working-memory-overlay';
       case 'overview': return 'workspace-settings-overview-panel';
     }

@@ -23,6 +23,14 @@ or commit attribution.
 
 ## API-First Task Organization
 
+## Project source contract
+
+`GET /api/project-sources` returns the extensible source catalogue used by
+onboarding and Workspace Settings. `POST /api/projects` accepts an optional
+`sourceType`; omitted values default to `local-folder`. Only catalogue entries
+marked available may be created. `remote-git` and `cloud` are reserved,
+currently unavailable extension points.
+
 Agents must organize tasks through the application API, never by direct
 filesystem mutation under `agent-taskboard-workspace/projects/**` or
 `agent-taskboard-workspace/.metadata/**`.

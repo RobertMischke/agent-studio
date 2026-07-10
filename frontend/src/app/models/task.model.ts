@@ -1000,6 +1000,7 @@ export interface ProjectUrlSuggestion {
  * `ProjectSummary`.
  */
 export interface RegistryProjectSummary {
+  sourceType: ProjectSourceType;
   id: string;
   displayName: string;
   shortCode: string;
@@ -1016,6 +1017,7 @@ export interface RegistryProjectSummary {
 }
 
 export interface CreateRegistryProjectRequest {
+  sourceType?: ProjectSourceType;
   workspaceId: string;
   displayName: string;
   shortCode?: string;
@@ -1028,6 +1030,14 @@ export interface CreateRegistryProjectRequest {
    * (or hand-edits the gitignored appsettings.Local.json WatchPaths entry).
    */
   rootPath?: string;
+}
+
+export type ProjectSourceType = 'local-folder' | 'remote-git' | 'cloud';
+export interface ProjectSourceDescriptor {
+  id: ProjectSourceType;
+  label: string;
+  available: boolean;
+  description: string;
 }
 
 /**

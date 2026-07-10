@@ -20,6 +20,15 @@
         </select>
       </label>
       <label class="opd__field">
+        <span class="opd__label">Project source</span>
+        <select class="opd__input" data-testid="onboard-project-source"
+                [ngModel]="sourceType()" (ngModelChange)="sourceType.set($event)">
+          @for (source of projectSources(); track source.id) {
+            <option [value]="source.id" [disabled]="!source.available">{{ source.label }}{{ source.available ? '' : ' (coming soon)' }}</option>
+          }
+        </select>
+      </label>
+      <label class="opd__field">
         <span class="opd__label">Display Name</span>
         <input #nameInput class="opd__input" type="text"
                data-testid="onboard-project-display-name"

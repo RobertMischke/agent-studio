@@ -20,6 +20,7 @@ export type WorkspaceSettingsSection =
   | 'updates'
   | 'workspaces'
   | 'remote-hosts'
+  | 'project-sources'
   | 'caps'
   | 'working-memory'
   | 'prompts'
@@ -160,6 +161,7 @@ export class WorkspaceOverlaysService {
       case '#/workspace/settings/updates': return 'updates';
       case '#/workspace/settings/workspaces': return 'workspaces';
       case '#/workspace/settings/remote-hosts': return 'remote-hosts';
+      case '#/workspace/settings/project-sources': return 'project-sources';
       case '#/workspace/settings/working-memory': return 'working-memory';
       // Retired 'summary' aliases resolve to the overview (migration: no crash).
       case '#/workspace/summary':
@@ -179,6 +181,7 @@ export class WorkspaceOverlaysService {
       case 'updates': return '#/workspace/settings/updates';
       case 'workspaces': return '#/workspace/settings/workspaces';
       case 'remote-hosts': return '#/workspace/settings/remote-hosts';
+      case 'project-sources': return '#/workspace/settings/project-sources';
       case 'working-memory': return '#/workspace/settings/working-memory';
       case 'overview': return '#/workspace/settings';
     }
@@ -192,6 +195,7 @@ export class WorkspaceOverlaysService {
     '#/workspace/settings/updates',
     '#/workspace/settings/workspaces',
     '#/workspace/settings/remote-hosts',
+    '#/workspace/settings/project-sources',
     '#/workspace/settings/working-memory',
     '#/workspace/caps',
     '#/workspace/prompts',

@@ -611,6 +611,10 @@ export class TaskService {
     return this.http.post<RegistryProjectSummary>(`${this.baseUrl}/projects`, body);
   }
 
+  getProjectSources() {
+    return this.http.get<import('../models/task.model').ProjectSourceDescriptor[]>(`${this.baseUrl}/project-sources`);
+  }
+
   // ----- Project URLs (per-project watchable dev-server / preview URLs) -----
 
   /** Detected URL suggestions from the project's repo (package.json / angular.json / README). */
