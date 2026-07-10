@@ -50,6 +50,11 @@ coverage.
 - `frontend/src/app/components/cli-model-selector/`: shared CLI/model picker.
 - `frontend/src/app/features/polling/`: bounded polling services for detail
   panes and runtime data.
+- `frontend/src/app/features/shell/components/workspace-overlays/`: the global
+  Workspace Settings home. Its rail is the single navigation surface for CLI
+  Management, system prompts, token usage, visual evidence, and the workspace
+  summary. Legacy CLI-admin and usage links resolve to the CLI Management
+  section at `#/workspace/settings/caps`.
 
 ## Invariants
 
@@ -64,6 +69,9 @@ coverage.
 - Before adding visual variants, check the style guide and update it if a new
   pattern is truly needed.
 - Use stable `data-testid` hooks for Playwright selectors.
+- Workspace-level CLI administration is not a separate sheet. Model and
+  environment management, completion contracts, sessions, usage caps, and
+  token spend belong to Workspace Settings under CLI Management.
 
 ## Verification
 

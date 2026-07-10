@@ -68,6 +68,9 @@ async function stubBackgroundApis(page: Page) {
       },
     ],
   }));
+  await page.route('**/api/admin/prompts/coverage', json({
+    items: [], totalSites: 0, coveredSites: 0, pendingSites: 0,
+  }));
   await page.route('**/api/admin/prompts/runner-fresh-start.md', json({
     name: 'runner-fresh-start.md',
     title: 'Runner: fresh start',
@@ -100,7 +103,8 @@ async function stubBackgroundApis(page: Page) {
     windowStart: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
     windowEnd: new Date().toISOString(),
     headline: 'Nothing notable in the last 24 hours.',
-    byProject: [], topDecisions: [], openHumanDecisions: [], crashEvidence: [],
+    byProject: [], crashes: [], topDecisions: [], openHumanDecisions: [],
+    schemaVersion: '1',
   }));
 }
 
@@ -149,6 +153,7 @@ test.describe('Workspace settings home (Dach)', () => {
       await page.getByTestId(`workspace-settings-rail-${key}`).click();
       await expect(page.getByTestId(overlayTestid)).toBeVisible();
       await expect(page.getByTestId(innerTestid)).toBeVisible({ timeout: 5_000 });
+      await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
     }
 
     await page.getByTestId('workspace-settings-rail-caps').click();

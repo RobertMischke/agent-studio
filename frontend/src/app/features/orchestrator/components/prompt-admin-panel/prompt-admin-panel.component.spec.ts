@@ -228,6 +228,22 @@ describe('PromptAdminPanelComponent', () => {
     expect(usage!.textContent).toContain('ProjectRunner');
   });
 
+  it('keeps the settings rail usable when an older prompt-detail response omits registry arrays', async () => {
+    const fixture = await mount();
+    const api = TestBed.inject(PromptAdminService) as unknown as FakePromptAdminService;
+    api.getDetail = () => Promise.resolve({
+        ...freshDetail(),
+        slots: undefined,
+        usages: undefined,
+      } as unknown as PromptDetail);
+
+    await fixture.componentInstance.select(FRESH);
+    expect(() => fixture.detectChanges()).not.toThrow();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.textContent).toContain('No named slots');
+    expect(host.textContent).toContain('No recorded usage');
+  });
+
   it('renders the inline-migration coverage rollup with a covered / total count', async () => {
     const fixture = await mount();
     const host = fixture.nativeElement as HTMLElement;
