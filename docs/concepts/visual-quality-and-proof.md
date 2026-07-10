@@ -89,3 +89,30 @@ the grading run (AGT-2051) grades them like any page.
 | VQ-5 | post-deploy Pulse entry with evidence flip-through (human loop) | S |
 
 Order: VQ-4 (cheap, immediate) → VQ-1 → VQ-2 → VQ-3 → VQ-5.
+
+## 4. The review instrument (operator-directed, 2026-07-11 night) — a standard tool
+
+Beyond per-card proof (Loop 2): a **full-app visual survey** as a reusable
+instrument, run against the live stable with REAL data (the operator's
+board — genuine edge cases included: overfull lanes, long titles, escalation
+history chips, mixed themes).
+
+1. **The sweep**: every surface and function screenshotted systematically
+   (explorer, board states, task detail incl. pipeline/result/escalation
+   panels, settings pages, wiki/pulse, search, usage) — both themes, desktop
+   + narrow; edge-case states deliberately visited, not avoided.
+2. **The feedback page**: one browsable page — screenshot list, and next to
+   EVERY screenshot the visual findings (what is hard to read, what is good,
+   what to improve; consistency, alignment, visual elements) written by a
+   best-of-class model looking at the actual pixels.
+3. **The proposal system (Project Hub)**: findings become **structured
+   proposal documents** (wiki-form: Befund / Beleg-Screenshot / Vorschlag /
+   Aufwand) listed in the Project Hub with an **approve flow** — operator
+   approves → implementation card is spawned (task-spawner mechanics,
+   planning-task contract). The operator curates; the machine drafts.
+4. **Standard**: the sweep is repeatable (after big UI waves, before
+   releases); each run's page is dated and kept — the visual history of the
+   product.
+
+Sequencing note: the first sweep runs AFTER the backlog drain and BEFORE the
+website revamp (WEB-R cards) — its curated screenshots feed the website work.
