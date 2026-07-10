@@ -83,6 +83,141 @@ export interface EscalationDelivery {
   filesChanged: number;
 }
 
+/**
+ * DtC step 6 — the escalation-category families that mean the ORCHESTRATOR (or
+ * the infra under it) could not conclude and handed the task to a human: the
+ * "GaveUpToHuman" terminal. These read distinctly from a logical NeedsReview,
+ * where the agent itself concluded the work needs a human's judgement
+ * (`[[TASK_BLOCKED]]` / `[[TASK_NEEDS_INPUT]]`) or a quality gate flagged it.
+ *
+ * The set mirrors the backend `HumanReviewEscalationCategories` give-up members
+ * (infra crash / inconclusive / quota / environmental / cli-launch / watchdog /
+ * pickup-zombie / empty-fast-exit / context-overflow / model-invalid /
+ * quarantined / auto-failure-park). Source = the escalation category the runtime
+ * already writes into the `status.md` stub and the orchestrator log — no new
+ * side-channel.
+ */
+const GAVE_UP_CATEGORIES = new Set<string>([
+  'infra-crash',
+  'orchestrator-inconclusive',
+  'inconclusive-with-results',
+  'quota-exhausted',
+  'environmental',
+  'cli-launch-failed',
+  'watchdog-kill',
+  'pickup-zombie',
+  'empty-fast-exit',
+  'context-overflow',
+  'model-invalid',
+  'quarantined',
+  'auto-failure-park',
+]);
+
+/** Presentable labels for the escalation categories the give-up banner shows. */
+const CATEGORY_LABELS: Record<string, string> = {
+  'infra-crash': 'Infra crash',
+  'orchestrator-inconclusive': 'Orchestrator inconclusive',
+  'inconclusive-with-results': 'Inconclusive (partial results)',
+  'quota-exhausted': 'Quota exhausted',
+  environmental: 'Environmental fault',
+  'cli-launch-failed': 'CLI launch failed',
+  'watchdog-kill': 'Watchdog kill',
+  'pickup-zombie': 'Pickup zombie',
+  'empty-fast-exit': 'Empty fast exit',
+  'context-overflow': 'Context overflow',
+  'model-invalid': 'Model invalid',
+  quarantined: 'Quarantined',
+  'auto-failure-park': 'Auto-failure park',
+};
+
+/** Turn a raw category slug into a human label (title-cases unknown slugs). */
+export function escalationCategoryLabel(category: string): string {
+  const key = category.trim().toLowerCase();
+  if (CATEGORY_LABELS[key]) return CATEGORY_LABELS[key];
+  return key
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/**
+ * `HumanReviewEscalation.BuildStatusStub` writes `- Category: <slug>` and
+ * `- Reason: <text>` into the escalated card's `status.md` when a system
+ * escalation left no agent-written summary (the exact infra-crash / inconclusive
+ * give-up case). Lift those two lines back out so the panel can name the
+ * category. Returns null when the status has no `Category:` line — i.e. the card
+ * carries a real agent summary (a logical / quality escalation), which is
+ * itself the signal that it is NOT a system give-up.
+ */
+export function parseStatusStubEscalation(
+  statusMarkdown: string | null | undefined,
+): { category: string; reason: string | null } | null {
+  if (!statusMarkdown) return null;
+  let category: string | null = null;
+  let reason: string | null = null;
+  for (const line of statusMarkdown.split(/\r?\n/)) {
+    const cat = /^\s*-\s*Category:\s*(.+\S)\s*$/i.exec(line);
+    if (cat && !category) category = cat[1].trim();
+    const rea = /^\s*-\s*Reason:\s*(.+\S)\s*$/i.exec(line);
+    if (rea && !reason) reason = rea[1].trim();
+  }
+  return category ? { category: category.toLowerCase(), reason } : null;
+}
+
+/**
+ * Classification of an escalated card into the DtC terminal it reached:
+ * `gave-up` (the orchestrator/infra could not conclude — GaveUpToHuman) vs
+ * `needs-review` (a logical / quality escalation a human judges on its merits).
+ * Only `gave-up` gets the distinct prominent banner; `needs-review` keeps the
+ * standard escalation presentation.
+ */
+export interface EscalationClassView {
+  kind: 'gave-up' | 'needs-review';
+  /** Raw category slug (e.g. `infra-crash`), when one was recovered. */
+  category: string | null;
+  /** Human label for the category chip, when known. */
+  categoryLabel: string | null;
+  /** One-line honest reason, from the status stub or the steering event. */
+  reason: string | null;
+}
+
+/**
+ * Derive the escalation class from the escalation category the runtime already
+ * recorded. Priority: the `status.md` stub category (reliable for the primary
+ * system-escalation path, including infra-crash), then the steering event's
+ * `cause` / reason text (the aspect-verdict infra path writes
+ * `aspect-verdict-infra-crash`). A card with an escalate verdict but no
+ * recognisable give-up category is a logical NeedsReview. Returns null when the
+ * card is not an escalation at all.
+ */
+export function deriveEscalationClass(
+  inputs: Pick<EscalationSummaryInputs, 'info' | 'statusMarkdown' | 'steering'>,
+): EscalationClassView | null {
+  const isEscalation = inputs.info.orchestratorVerdict === 'escalate';
+  const stub = parseStatusStubEscalation(inputs.statusMarkdown);
+  const cause = causeOf(inputs.steering);
+  const steeringReason = inputs.steering?.reason?.trim() || null;
+
+  // Category, best available: the stub slug wins; else sniff the steering cause
+  // (e.g. `aspect-verdict-infra-crash`) for a known give-up token.
+  let category = stub?.category ?? null;
+  if (!category && cause) {
+    const hit = [...GAVE_UP_CATEGORIES].find((c) => cause.toLowerCase().includes(c));
+    if (hit) category = hit;
+  }
+
+  const isGiveUp = !!category && GAVE_UP_CATEGORIES.has(category);
+  if (!isGiveUp && !isEscalation) return null;
+
+  return {
+    kind: isGiveUp ? 'gave-up' : 'needs-review',
+    category,
+    categoryLabel: category ? escalationCategoryLabel(category) : null,
+    reason: stub?.reason ?? steeringReason,
+  };
+}
+
 /** The three gate recommendations the operator chooses between. */
 export type EscalationRecommendationKind = 'accept' | 'reissue' | 'needs-decision';
 
@@ -97,6 +232,12 @@ export interface EscalationRecommendation {
 
 /** The full aggregated view model the panel renders. */
 export interface EscalationSummaryView {
+  /**
+   * DtC step 6 — whether the orchestrator/infra gave up (GaveUpToHuman) or a
+   * human must review a logical/quality escalation. Drives the distinct
+   * give-up banner. Null when the card is not an escalation.
+   */
+  escalation: EscalationClassView | null;
   /** One-line escalation reason headline (from the steering event). */
   reason: string | null;
   /** Machine cause label (e.g. `completion-gate`), when recorded. */
@@ -122,6 +263,12 @@ export interface EscalationSummaryInputs {
   followUpMarkdown: string | null;
   /** Latest escalate/reissue steering info from the timeline, or null. */
   steering: SteeringInfo | null;
+  /**
+   * The card's `status.md` body (`TaskDetail.statusMarkdown`). Carries the
+   * escalation category + reason for a system escalation (via the
+   * `BuildStatusStub` `- Category:` / `- Reason:` lines); null when absent.
+   */
+  statusMarkdown: string | null;
 }
 
 /**
@@ -310,6 +457,7 @@ export function deriveRecommendation(
 export function buildEscalationSummaryView(inputs: EscalationSummaryInputs): EscalationSummaryView {
   const { items, source } = resolveGateItems(inputs);
   return {
+    escalation: deriveEscalationClass(inputs),
     reason: inputs.steering?.reason?.trim() || null,
     cause: causeOf(inputs.steering),
     gateItems: items,

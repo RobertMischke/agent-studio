@@ -3,6 +3,8 @@
     class="escalation"
     data-testid="escalation-summary"
     [class.escalation--collapsed]="collapsed()"
+    [class.escalation--gave-up]="v.escalation?.kind === 'gave-up'"
+    [attr.data-escalation-kind]="v.escalation?.kind ?? null"
     aria-label="Escalation summary">
     <!-- Whole header row is the collapse toggle (pattern: pipeline-UI headers). -->
     <button
@@ -12,10 +14,10 @@
       [attr.aria-expanded]="!collapsed()"
       aria-controls="escalation-body"
       (click)="toggleCollapsed()">
-      <span class="escalation__eyebrow" aria-hidden="true">⚠</span>
+      <span class="escalation__eyebrow" aria-hidden="true">{{ v.escalation?.kind === 'gave-up' ? '⚙' : '⚠' }}</span>
 
       <span class="escalation__headline">
-        <span class="escalation__title">Escalation</span>
+        <span class="escalation__title" data-testid="escalation-title">{{ headTitle() }}</span>
         <!-- Single-line essence: reason category · review grade · merge status. -->
         <span class="escalation__essence" data-testid="escalation-essence">
           @if (essenceReason(); as reason) {
@@ -58,6 +60,23 @@
 
     @if (!collapsed()) {
       <div class="escalation__body" id="escalation-body" data-testid="escalation-body">
+        @if (v.escalation?.kind === 'gave-up') {
+          <div class="escalation__giveup" data-testid="escalation-gave-up">
+            <div class="escalation__giveup-head">
+              <span class="escalation__giveup-label">Handed to a human — the orchestrator could not conclude</span>
+              @if (v.escalation?.categoryLabel; as cat) {
+                <span class="escalation__giveup-cat" data-testid="escalation-gave-up-category">{{ cat }}</span>
+              }
+            </div>
+            @if (v.escalation?.reason; as r) {
+              <p class="escalation__giveup-reason" data-testid="escalation-gave-up-reason">{{ r }}</p>
+            }
+            <p class="escalation__giveup-note">
+              An infra / orchestrator fault kept the task from a clean verdict, not a rejection of the work.
+              The drive-to-conclusion loop was preserved and the task handed to you — no automated quality review ran.
+            </p>
+          </div>
+        }
         @if (v.reason) {
           <p class="escalation__reason" data-testid="escalation-reason">
             {{ v.reason }}

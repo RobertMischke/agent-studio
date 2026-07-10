@@ -16,6 +16,19 @@
   // Collapsed: just the header strip, tightened up so it stops dominating.
   &--collapsed { padding: var(--studio-spacing-3); }
 
+  // DtC step 6 — a GaveUpToHuman escalation (infra crash / inconclusive / quota /
+  // …) wears a distinct amber "system fault" wash instead of the red
+  // decision-needed wash, so it reads apart from a logical / quality escalation
+  // at a glance. R1: the state is carried by the all-round tint, never a left
+  // bar; R5: both themes read the same severity tokens.
+  &--gave-up {
+    border-color: color-mix(in srgb, var(--severity-warn) 48%, var(--studio-border));
+    background: color-mix(in srgb, var(--severity-warn) 7%, var(--studio-bg-raised, var(--studio-bg)));
+
+    .escalation__eyebrow,
+    .escalation__count { color: var(--severity-warn); }
+  }
+
   // The whole header row is the collapse toggle.
   &__head {
     display: flex;
@@ -133,6 +146,59 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     @include m.thin-scroll;
+  }
+
+  // Prominent GaveUpToHuman banner at the top of the body: names the terminal
+  // ("handed to a human"), the escalation category, and the honest reason.
+  &__giveup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--studio-spacing-1);
+    padding: var(--studio-spacing-2) var(--studio-spacing-3);
+    border-radius: 6px;
+    border: 1px solid color-mix(in srgb, var(--severity-warn) 45%, transparent);
+    background: color-mix(in srgb, var(--severity-warn) 12%, transparent);
+  }
+
+  &__giveup-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--studio-spacing-2);
+  }
+
+  &__giveup-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--studio-fg-strong);
+  }
+
+  &__giveup-cat {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: var(--severity-warn);
+    background: color-mix(in srgb, var(--severity-warn) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--severity-warn) 45%, transparent);
+  }
+
+  &__giveup-reason {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--studio-fg);
+  }
+
+  &__giveup-note {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--studio-fg-dim);
   }
 
   &__reason {

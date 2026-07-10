@@ -490,6 +490,35 @@
       gap: var(--studio-spacing-2);
       margin-bottom: var(--studio-card-section-gap);
     }
+    /* DtC step 6 — CooldownRetry banner. A 3-progress card that infra-crashed and
+       is holding out its scheduled re-pickup backoff (runActivity.failed-backoff).
+       Full-width warn-toned banner (the DtC "transient" tone) so a cooling task
+       reads distinctly from the "Running live" tint and from a fresh stall — it is
+       neither a live run nor a dead one. R1: status via all-round background tint,
+       never a left accent bar. */
+    .task-card__cooldown {
+      display: flex;
+      align-items: center;
+      gap: var(--studio-spacing-2);
+      margin-bottom: var(--studio-card-section-gap);
+      padding: 4px var(--studio-spacing-2);
+      border-radius: 6px;
+      font-size: var(--studio-card-meta-size);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+      color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
+      border: 1px solid color-mix(in srgb, var(--studio-accent-warn) 42%, transparent);
+      cursor: help;
+    }
+    .task-card__cooldown-glyph { flex: 0 0 auto; font-size: 12px; }
+    .task-card__cooldown-label { flex: 1 1 auto; min-width: 0; }
+    .task-card__cooldown-countdown {
+      flex: 0 0 auto;
+      font-variant-numeric: tabular-nums;
+      opacity: 0.85;
+    }
     .task-card__execution-pill,
     .task-card__pending-pill,
     .task-card__waiting-pill,

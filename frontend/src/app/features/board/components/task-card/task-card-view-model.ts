@@ -1116,6 +1116,71 @@ export function buildExecutionBadge(job: TaskInfo): ExecutionBadge | null {
   return null;
 }
 
+/**
+ * DtC drive-to-conclusion infra-retry budget: up to 3 total attempts per
+ * run-chain (attempt 1 = original run + up to 2 infra retries). Mirrors the
+ * backend `CompletionRetrigger` DefaultBudget; see the four-terminal model in
+ * `docs/wiki/concepts/orchestrator-drive-to-conclusion.html`. The k/3 in the
+ * CooldownRetry banner counts against this budget.
+ */
+export const INFRA_RETRY_BUDGET = 3;
+
+export interface CooldownRetryBanner {
+  /** Attempt this cooldown is holding for, clamped to [1, budget]. */
+  attempt: number;
+  budget: number;
+  /** Whole seconds until the scheduled re-pickup, or null when already due. */
+  secondsLeft: number | null;
+  /** Primary line, e.g. `infra-crashed · retrying 2/3`. */
+  label: string;
+  /** Countdown fragment, e.g. `in 210s` (or `now` when the timer elapsed). */
+  countdown: string;
+  tooltip: string;
+}
+
+/**
+ * DtC step 6 — the CooldownRetry banner for a `3-progress` card that infra-crashed
+ * and is holding out a scheduled re-pickup backoff (the `runActivity.failed-backoff`
+ * state, ASS-1751). This is the ONLY non-live state allowed in 3-progress, and it
+ * must read distinctly from the normal "Running live" chip so a cooling task does
+ * not look like a fresh stall: the card renders it as a warn-toned banner
+ * (`infra-crashed · retrying k/3 · in Ns`), not the running tint.
+ *
+ * Source is the already-overlaid `runActivity` (kind + backoffUntil + attempt) —
+ * no new side-channel. `nowMs` is injected so the countdown ticks from the card's
+ * shared clock signal. Returns null off the Progress lane, when no runActivity is
+ * attached, or for any run-activity state other than `failed-backoff`.
+ */
+export function buildCooldownRetryBanner(job: TaskInfo, nowMs: number): CooldownRetryBanner | null {
+  if (job.state !== TaskState.Progress) return null;
+  const activity = job.runActivity;
+  if (!activity || activity.kind !== 'failed-backoff') return null;
+
+  const attempt = Math.min(Math.max(activity.attempt, 1), INFRA_RETRY_BUDGET);
+  const untilMs = activity.backoffUntil ? Date.parse(activity.backoffUntil) : Number.NaN;
+  const secondsLeft = Number.isFinite(untilMs) && untilMs > nowMs
+    ? Math.max(1, Math.round((untilMs - nowMs) / 1000))
+    : null;
+  const countdown = secondsLeft !== null ? `in ${secondsLeft}s` : 'now';
+
+  const lastError = activity.lastError?.trim();
+  const tooltipLines = [
+    'Infra crash — the last run died before a terminal verdict.',
+    `The orchestrator kept the loop and scheduled a re-pickup (attempt ${attempt} of ${INFRA_RETRY_BUDGET})${secondsLeft !== null ? ` in ~${secondsLeft}s` : ' now'}.`,
+    'This is a held CooldownRetry, not a live run and not a stall.',
+  ];
+  if (lastError) tooltipLines.push(`Last error: ${lastError}`);
+
+  return {
+    attempt,
+    budget: INFRA_RETRY_BUDGET,
+    secondsLeft,
+    label: `infra-crashed · retrying ${attempt}/${INFRA_RETRY_BUDGET}`,
+    countdown,
+    tooltip: tooltipLines.join('\n'),
+  };
+}
+
 export interface ReviewBadge { label: string; tone: 'generating' | 'ready' | 'failed'; tooltip: string; }
 
 /**

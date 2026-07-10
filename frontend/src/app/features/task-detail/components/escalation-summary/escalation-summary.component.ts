@@ -139,6 +139,7 @@ export class EscalationSummaryComponent {
       codeReviews: this.codeReviews(),
       followUpMarkdown: this.followUpMarkdown(),
       steering: this.steering(),
+      statusMarkdown: this.detail().statusMarkdown,
     }),
   );
 
@@ -162,12 +163,25 @@ export class EscalationSummaryComponent {
   );
 
   /**
-   * One-line reason essence for the collapsed header: the machine cause label
-   * (e.g. `completion-gate`) when the gate recorded one, else the human reason
-   * headline. Null when neither exists, so the essence slot stays empty.
+   * DtC step 6 — header title. A GaveUpToHuman escalation says so plainly
+   * ("Orchestrator gave up"), reading distinctly from a logical / quality
+   * escalation ("Escalation") a human judges on its merits.
+   */
+  readonly headTitle = computed<string>(() =>
+    this.view().escalation?.kind === 'gave-up' ? 'Orchestrator gave up' : 'Escalation',
+  );
+
+  /**
+   * One-line reason essence for the collapsed header: for a GaveUpToHuman card
+   * the escalation-category label leads (e.g. `Infra crash`); otherwise the
+   * machine cause label (e.g. `completion-gate`) when the gate recorded one,
+   * else the human reason headline. Null when none exists, so the slot stays empty.
    */
   readonly essenceReason = computed<string | null>(() => {
     const v = this.view();
+    if (v.escalation?.kind === 'gave-up') {
+      return v.escalation.categoryLabel ?? v.escalation.reason ?? v.cause?.trim() ?? v.reason?.trim() ?? null;
+    }
     return v.cause?.trim() || v.reason?.trim() || null;
   });
 
