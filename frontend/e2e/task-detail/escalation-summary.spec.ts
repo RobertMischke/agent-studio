@@ -148,6 +148,14 @@ async function installRoutes(page: Page): Promise<void> {
   await page.route(new RegExp(`/api/tasks/${JOB_ID}(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(DETAIL) }));
 
+  // The Overview tab polls `/api/tasks/{id}/pipeline` and reads `res.pipeline.allSteps`.
+  // The catch-all above answers `[]`, whose `.pipeline` is undefined, so the component
+  // throws and the shell raises a global "Unexpected application error" overlay that
+  // floats over — and corrupts — the focused panel screenshot. Answer the real shape
+  // (`null` = no pipeline yet) so the Overview tab renders cleanly and no overlay appears.
+  await page.route(/\/api\/tasks\/[^/]+\/pipeline(\?|$)/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }));
+
   // Narrow sub-routes win over the detail route (registered later).
   await page.route('**/code-review/list**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(CODE_REVIEW_LIST) }));
@@ -155,6 +163,21 @@ async function installRoutes(page: Page): Promise<void> {
     route.fulfill({ status: 200, contentType: 'text/plain', body: FOLLOW_UP }));
   await page.route('**/timeline**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(TIMELINE) }));
+}
+
+/**
+ * The shell can surface a transient "Unexpected application error" overlay when an
+ * un-mocked (or shape-mismatched) shell endpoint answers unexpectedly — the header
+ * CLI-quota poll and the pipeline poll are the usual culprits. It renders above the
+ * page and would bleed into a focused panel screenshot, so dismiss any such overlay
+ * (Escape closes it) before capturing. Idempotent: a no-op when no dialog is present.
+ */
+async function dismissAppErrorDialog(page: Page): Promise<void> {
+  const dialog = page.getByTestId('error-dialog');
+  for (let i = 0; i < 3 && (await dialog.isVisible().catch(() => false)); i++) {
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => undefined);
+  }
 }
 
 async function setTheme(page: Page, theme: 'dark' | 'light'): Promise<void> {
@@ -198,10 +221,15 @@ test.describe('Escalation summary panel', () => {
     // Escalation reason headline from the timeline event.
     await expect(page.getByTestId('escalation-reason')).toContainText('Completion gate');
 
+    // No stray shell-error overlay may be floating over the panel before we capture.
+    await dismissAppErrorDialog(page);
+    await expect(page.getByTestId('error-dialog')).toBeHidden();
+
     const panel = page.getByTestId('escalation-summary');
     for (const theme of ['dark', 'light'] as const) {
       await setTheme(page, theme);
       await page.waitForTimeout(200);
+      await dismissAppErrorDialog(page);
       await panel.scrollIntoViewIfNeeded();
       const shot = await panel.screenshot();
       await testInfo.attach(`escalation-summary-${theme}--mocked.png`, { body: shot, contentType: 'image/png' });
