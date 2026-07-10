@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -289,7 +290,28 @@ public class GitService
         _prompts = prompts ?? new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         _usage = usage;
         _registry = registry ?? new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+        // Give the ambient git-spawn telemetry a logger for out-of-scope
+        // slow-spawn warnings (the per-request rollup uses its own logger).
+        GitProcessTelemetry.Logger ??= logger;
     }
+
+    // The git toplevel of a directory is immutable for the lifetime of the
+    // process - a checkout's work-tree root does not move - so it is safe to
+    // memoize unconditionally. ResolveGitToplevel sits on the hot path of
+    // essentially every git-info endpoint (status, diff, hygiene, provenance,
+    // inventory, commits...); caching it removes one ~70ms `rev-parse
+    // --show-toplevel` spawn (Windows) from every one of those requests once
+    // warm. Only successful resolutions are cached, so a path that is not yet a
+    // repository keeps being probed until it becomes one.
+    private static readonly ConcurrentDictionary<string, string> _toplevelCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Drops the memoized <c>rev-parse --show-toplevel</c> results. Tests that
+    /// recreate a repository at a path they previously probed call this so a
+    /// stale toplevel can't leak across fixtures; production never needs it.
+    /// </summary>
+    internal static void InvalidateToplevelCache() => _toplevelCache.Clear();
 
     private readonly object _summaryLock = new();
     private DateTime _summaryAt = DateTime.MinValue;
@@ -455,6 +477,7 @@ public class GitService
     /// </summary>
     public GitHygieneStatus GetJobHygiene(string jobId, string? watchPath, bool isActiveJob = false)
     {
+        using var _t = GitProcessTelemetry.BeginRequest("tasks/git/hygiene", _logger);
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null)
         {
@@ -638,6 +661,7 @@ public class GitService
             }
         }
 
+        using var _t = GitProcessTelemetry.BeginRequest("git/inventory", _logger);
         var fresh = ComputeProjectInventory(projectName);
         lock (_inventoryLock)
         {
@@ -1033,6 +1057,10 @@ public class GitService
     {
         if (preferRunLocation)
         {
+            // Measure the endpoint-driven live status path (AGT-2007). Internal
+            // callers pass preferRunLocation=false and stay unmeasured to keep
+            // the rollup logs scoped to user-facing git-info requests.
+            using var _t = GitProcessTelemetry.BeginRequest("tasks/git/status", _logger);
             var loc = ResolveRunLocation(jobId, watchPath);
             if (loc == null)
                 return new GitStatusResult(false, null, 0, 0, 0, [], "Job not found or project has no RootPath configured.");
@@ -1064,11 +1092,22 @@ public class GitService
 
     private GitStatusResult ReadStatusAtRoot(string root, bool isWorktree = false)
     {
-        var (statusOut, statusErr, statusCode) = RunGit(root, "status --porcelain=v1");
+        // These four reads are independent: the porcelain status, the current
+        // branch, and the two numstat diffs share no state. Each is its own git
+        // process (~70-160ms of Windows spawn cost), so running them
+        // concurrently turns a serial ~500ms into roughly one spawn's wall-time
+        // (AGT-2007). Parsing below is unchanged - only the fetch is parallel.
+        var reads = RunGitParallel(
+            () => RunGitReadonly(root, "status --porcelain=v1"),
+            () => RunGitReadonly(root, "rev-parse --abbrev-ref HEAD"),
+            () => RunGitReadonly(root, "diff --numstat HEAD"),
+            () => RunGitReadonly(root, "diff --numstat"));
+
+        var (statusOut, statusErr, statusCode) = reads[0];
         if (statusCode != 0)
             return new GitStatusResult(true, null, 0, 0, 0, [], statusErr.Trim(), isWorktree);
 
-        var (branchOut, _, _) = RunGit(root, "rev-parse --abbrev-ref HEAD");
+        var (branchOut, _, _) = reads[1];
         var branch = branchOut.Trim();
 
         var statusByPath = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -1086,9 +1125,8 @@ public class GitService
         // even for files only changed unstaged. Untracked files won't appear in
         // diff output; we add zero counts for those.
         var numstat = new Dictionary<string, (int Added, int Removed)>(StringComparer.Ordinal);
-        foreach (var args in new[] { "diff --numstat HEAD", "diff --numstat" })
+        foreach (var (numOut, _, numCode) in new[] { reads[2], reads[3] })
         {
-            var (numOut, _, numCode) = RunGit(root, args);
             if (numCode != 0) continue;
             foreach (var line in numOut.Split('\n'))
             {
@@ -1142,6 +1180,9 @@ public class GitService
     public GitDiffLookupResult GetDiffResult(string jobId, string? watchPath, string? path, bool preferRunLocation = false)
     {
         string? root;
+        using var _t = preferRunLocation
+            ? GitProcessTelemetry.BeginRequest("tasks/git/diff", _logger)
+            : null;
         if (preferRunLocation)
         {
             var loc = ResolveRunLocation(jobId, watchPath);
@@ -3742,11 +3783,14 @@ public class GitService
     private static string? ResolveGitToplevel(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return null;
+        if (_toplevelCache.TryGetValue(path, out var cachedRoot)) return cachedRoot;
         var (output, _, code) = RunGit(path, "rev-parse --show-toplevel");
         if (code != 0) return null;
         var toplevel = output.Trim();
         if (string.IsNullOrEmpty(toplevel)) return null;
-        return toplevel.Replace('/', Path.DirectorySeparatorChar);
+        var normalized = toplevel.Replace('/', Path.DirectorySeparatorChar);
+        _toplevelCache[path] = normalized;
+        return normalized;
     }
 
     private static string? ResolveConfiguredRepositoryPath(WatchPathEntry entry)
@@ -3771,6 +3815,32 @@ public class GitService
         };
 
         return RunGitProcess(psi, stdin);
+    }
+
+    /// <summary>
+    /// Like <see cref="RunGit"/> but with <c>GIT_OPTIONAL_LOCKS=0</c>, so the
+    /// spawn never takes the optional <c>index.lock</c> or writes the refreshed
+    /// index back. Used for the read-only status/diff reads the live-status view
+    /// now fans out in parallel (AGT-2007): it guarantees a pure read - no
+    /// working-tree mutation even while a run agent is actively editing the same
+    /// checkout - and removes any index.lock contention between the concurrent
+    /// reads. Git treats the status index-refresh lock as optional, so this only
+    /// skips a stat-cache write; the porcelain/numstat output is unchanged.
+    /// </summary>
+    private static (string Out, string Err, int Code) RunGitReadonly(string cwd, string args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            Arguments = args,
+            WorkingDirectory = cwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        psi.EnvironmentVariables["GIT_OPTIONAL_LOCKS"] = "0";
+        return RunGitProcess(psi, null);
     }
 
     /// <summary>
@@ -3803,6 +3873,19 @@ public class GitService
 
     private static (string Out, string Err, int Code) RunGitProcess(ProcessStartInfo psi, string? stdin)
     {
+        // Time every spawn and record it against the ambient git-info request
+        // scope (if any). This is the per-subprocess half of the AGT-2007
+        // instrumentation; the scope rollup turns it into "N spawns, X ms".
+        var command = CommandLabel(psi);
+        var sw = Stopwatch.StartNew();
+        var result = RunGitProcessCore(psi, stdin);
+        sw.Stop();
+        GitProcessTelemetry.Record(command, sw.ElapsedMilliseconds, result.Code);
+        return result;
+    }
+
+    private static (string Out, string Err, int Code) RunGitProcessCore(ProcessStartInfo psi, string? stdin)
+    {
         try
         {
             using var p = Process.Start(psi)!;
@@ -3824,6 +3907,74 @@ public class GitService
         {
             return ("", ex.Message, -1);
         }
+    }
+
+    /// <summary>
+    /// A short, low-cardinality label for one git spawn - the git subcommand
+    /// (e.g. <c>status</c>, <c>merge-base</c>, <c>rev-parse</c>). Deliberately
+    /// the first token only: it groups spawns cleanly in the telemetry rollup
+    /// and never leaks a branch name, path, or commit message into the logs.
+    /// </summary>
+    private static string CommandLabel(ProcessStartInfo psi)
+    {
+        if (psi.ArgumentList.Count > 0)
+            return psi.ArgumentList[0];
+        var args = psi.Arguments;
+        if (string.IsNullOrWhiteSpace(args)) return "git";
+        var space = args.IndexOf(' ');
+        return space < 0 ? args : args[..space];
+    }
+
+    /// <summary>
+    /// Runs several independent git invocations concurrently and returns their
+    /// results in input order. Each git call is its own OS process, so on
+    /// Windows - where a bare spawn already costs ~70-100ms - fanning the
+    /// independent reads of a status/provenance request out across the thread
+    /// pool collapses a serial sum into a single max. The ambient
+    /// <see cref="GitProcessTelemetry"/> scope flows into each task (captured
+    /// ExecutionContext), so per-request spawn accounting still adds up. The
+    /// callbacks must not throw (the git helpers already swallow their own
+    /// failures); a throwing callback surfaces via <see cref="Task.WaitAll"/>.
+    /// </summary>
+    private static T[] RunGitParallel<T>(params Func<T>[] work)
+    {
+        if (work.Length == 0) return [];
+        if (work.Length == 1) return [work[0]()];
+        var tasks = new Task<T>[work.Length];
+        for (var i = 0; i < work.Length; i++)
+        {
+            var w = work[i];
+            tasks[i] = Task.Run(w);
+        }
+        Task.WaitAll(tasks);
+        var results = new T[work.Length];
+        for (var i = 0; i < work.Length; i++) results[i] = tasks[i].Result;
+        return results;
+    }
+
+    /// <summary>
+    /// The set of commit SHAs reachable from <paramref name="tipRef"/> but not
+    /// from <paramref name="baseSha"/> (<c>git rev-list base..tip</c>), as full
+    /// SHAs. ONE git call regardless of how many commits are in the range - the
+    /// batch replacement for calling <c>merge-base --is-ancestor</c> once per
+    /// commit when classifying a task branch's merge-set (AGT-2007). Empty on
+    /// any failure or when the ref does not exist, matching the conservative
+    /// "unknown -> not contained" behaviour of the per-commit checks it
+    /// replaces.
+    /// </summary>
+    public HashSet<string> GetReachableShaSet(string repoRoot, string baseSha, string tipRef)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return set;
+        if (!IsLikelyShaOrRef(baseSha) || !IsLikelyBranchName(tipRef)) return set;
+        var (output, _, code) = RunGitArgs(repoRoot, "rev-list", $"{baseSha}..{tipRef}");
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return set;
+        foreach (var line in output.Split('\n'))
+        {
+            var sha = line.Trim();
+            if (sha.Length > 0) set.Add(sha);
+        }
+        return set;
     }
 
 }
