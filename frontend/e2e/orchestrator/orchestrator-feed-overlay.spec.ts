@@ -24,7 +24,6 @@ import { contrastRatio } from '../helpers/contrast';
  * Light + dark screenshots are dropped into the job results/ folder.
  */
 
-const SLUG = 'runbook';
 const PROJECT = 'Runbook';
 
 const SESSION = {
@@ -81,9 +80,14 @@ const LOG_ENTRIES = [
   },
 ];
 
+const GLOBAL_LOG_ENTRIES = LOG_ENTRIES.map((entry, index) => ({
+  ...entry,
+  project: index === 3 ? 'Agent Task Processor' : PROJECT,
+}));
+
 const EMPTY_GROUPED = {
   archive: [], autoReview: [], backlog: [], codeNotComplete: [], completed: [],
-  humanReview: [], preparation: [], progress: [], ready: [],
+  failedPickup: [], humanReview: [], orchestratorPrep: [], preparation: [], progress: [], ready: [], review: [],
 };
 
 async function mockBackend(page: Page): Promise<void> {
@@ -102,6 +106,15 @@ async function mockBackend(page: Page): Promise<void> {
   // app throws `jobs is not iterable` and the dev error dialog buries the UI.
   await page.route('**/api/tasks/grouped', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(EMPTY_GROUPED) }),
+  );
+  await page.route('**/api/tasks/archive**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], total: 0 }) }),
+  );
+  await page.route('**/api/cli/usage**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) }),
+  );
+  await page.route('**/api/cli/quota**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ snapshots: [] }) }),
   );
 
   await page.route('**/api/watch-paths', (route) =>
@@ -129,6 +142,10 @@ async function mockBackend(page: Page): Promise<void> {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ project: PROJECT, entries: LOG_ENTRIES }) }),
   );
 
+  await page.route('**/api/runner/orchestrator-feed', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ entries: GLOBAL_LOG_ENTRIES }) }),
+  );
+
   await page.route('**/api/runner/*/token-summary', (route) =>
     route.fulfill({
       status: 200,
@@ -154,34 +171,40 @@ const RESULTS_DIR = process.env.JOB_RESULTS_DIR
   ? join(process.env.JOB_RESULTS_DIR, 'orch-feed-overlay')
   : join(process.cwd(), 'test-results', 'orch-feed-overlay');
 
-test('orchestrator-feed overlay: deep-link opens it, scopes are labelled, layout + contrast hold on both themes', async ({ page }) => {
+test('global orchestrator feed: status bar opens it, filters, layout + contrast hold on both themes', async ({ page }) => {
   mkdirSync(RESULTS_DIR, { recursive: true });
   await page.setViewportSize({ width: 1440, height: 960 });
   await mockBackend(page);
 
   // Requirement #4 — deep-link anchor. A cold navigation straight to the
   // feed hash must reproduce the open overlay (bookmark / reload parity).
-  await page.goto(`/#/project/${SLUG}/feed`);
+  await page.goto('/');
+  await dismissDevErrorDialog(page);
+  await page.getByTestId('status-bar-feed').click({ force: true });
 
   const feed = page.getByTestId('orchestrator-feed');
   await expect(feed).toBeVisible({ timeout: 15_000 });
   await dismissDevErrorDialog(page);
   await expect(feed).toBeVisible();
 
-  // The URL anchor survives the round-trip.
-  expect(await page.evaluate(() => location.hash)).toBe(`#/project/${SLUG}/feed`);
-
   // Requirement #3 — scope separation is explicit and labelled.
   const projectScope = page.getByTestId('orchestrator-feed-scope');
   const globalScope = page.getByTestId('global-orchestrator-scope');
   await expect(projectScope).toBeVisible();
-  await expect(projectScope).toHaveText(/project scope/i);
+  await expect(projectScope).toHaveText(/workspace scope/i);
   await expect(globalScope).toBeVisible();
   await expect(globalScope).toHaveText(/global scope/i);
 
   // Feed actually rendered the mocked entries.
   const entries = page.locator('.orch-feed__entry');
   await expect(entries.first()).toBeVisible();
+  // The project deep-link starts scoped to Runbook, and the quiet default
+  // hides observations until the operator explicitly asks for all activity.
+  expect(await entries.count()).toBe(3);
+  await feed.getByRole('button', { name: 'Runbook' }).click();
+  expect(await entries.count()).toBe(2);
+  await page.getByTestId('feed-project-all').click();
+  await page.getByTestId('feed-kind-all').click();
   expect(await entries.count()).toBe(LOG_ENTRIES.length);
 
   // Requirement #1 — three-pane layout lays out side by side (non-zero,
@@ -222,7 +245,7 @@ test('orchestrator-feed overlay: deep-link opens it, scopes are labelled, layout
     }
 
     await page.locator('.overlay__panel--orch-feed').screenshot({
-      path: join(RESULTS_DIR, `orch-feed-${theme}.png`),
+      path: join(RESULTS_DIR, `orch-feed-${theme}--mocked.png`),
     });
   }
 });

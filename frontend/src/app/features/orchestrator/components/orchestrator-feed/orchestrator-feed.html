@@ -2,79 +2,86 @@
   <header class="orch-feed__head">
     <div class="orch-feed__title-block">
       <div class="orch-feed__title-row">
-        <h2 class="orch-feed__title">Orchestrator feed</h2>
-        <span class="orch-feed__scope orch-feed__scope--project" data-testid="orchestrator-feed-scope">
-          Project scope
-        </span>
+        <h2 class="orch-feed__title">Activity across projects</h2>
+        <span class="orch-feed__scope orch-feed__scope--project" data-testid="orchestrator-feed-scope">Workspace scope</span>
       </div>
-      <p class="orch-feed__sub">{{ projectName() }} · {{ entries().length }} {{ entries().length === 1 ? 'entry' : 'entries' }}</p>
+      <p class="orch-feed__sub">{{ projects().length }} projects · {{ visibleEntries().length }} signal events</p>
     </div>
     <button type="button" class="orch-feed__refresh" (click)="refresh()" [disabled]="loading()" data-testid="orchestrator-refresh">
       {{ loading() ? '...' : 'Refresh' }}
     </button>
   </header>
-  @if (error()) {
-    <div class="orch-feed__error" role="alert">{{ error() }}</div>
-  }
 
-  <!--
-    Global scope. The orchestrator "brain" is a singleton that spans every
-    watched project; it is rendered here as a clearly-labelled banner so it
-    reads as a separate scope from the per-project feed below, not as a row
-    of the project's own filters. (Scope-separation requirement, ASS-693.)
-  -->
+  @if (error()) { <div class="orch-feed__error" role="alert">{{ error() }}</div> }
+
   <section class="orch-feed__global" aria-label="Global orchestrator scope">
     <app-global-orchestrator-card />
   </section>
 
   <div class="orch-feed__grid">
     <aside class="orch-feed__filters" aria-label="Feed filters">
-      <app-token-summary-block [projectName]="projectName()" />
-
       <div class="orch-feed__filter-group">
-        <h3>Sections</h3>
-        @for (filter of kindFilters; track filter.id) {
-          <button type="button"
-                  class="orch-feed__filter"
-                  [class.orch-feed__filter--active]="kindFilter() === filter.id"
-                  (click)="selectFilter(filter.id)">
-            <span>{{ filter.label }}</span>
-            <strong>{{ filterCount(filter.id) }}</strong>
+        <h3>Projects</h3>
+        <button type="button" class="orch-feed__filter"
+                [class.orch-feed__filter--active]="projectFilter() === 'all'"
+                (click)="selectProject('all')" data-testid="feed-project-all">
+          <span>All projects</span><strong>{{ projects().length }}</strong>
+        </button>
+        @for (project of projects(); track project) {
+          <button type="button" class="orch-feed__filter"
+                  [class.orch-feed__filter--active]="projectFilter() === project"
+                  (click)="selectProject(project)">
+            <span class="orch-feed__project-label"><i [style.--project-hue]="projectHue(project)"></i>{{ project }}</span>
           </button>
         }
       </div>
+
+      <div class="orch-feed__filter-group">
+        <h3>Event class</h3>
+        @for (filter of kindFilters; track filter.id) {
+          <button type="button" class="orch-feed__filter"
+                  [class.orch-feed__filter--active]="kindFilter() === filter.id"
+                  (click)="selectFilter(filter.id)" [attr.data-testid]="'feed-kind-' + filter.id">
+            <span>{{ filter.label }}</span><strong>{{ filterCount(filter.id) }}</strong>
+          </button>
+        }
+      </div>
+      <p class="orch-feed__quiet-note">Signal hides passive observations that already read like the task timeline.</p>
     </aside>
 
     <section class="orch-feed__stream" data-testid="orchestrator-feed-stream">
       @if (visibleEntries().length === 0 && !loading() && !error()) {
         <div class="orch-feed__empty">No orchestrator activity in this section yet.</div>
       }
-      <ul class="orch-feed__list">
-        @for (entry of visibleEntries(); track entry.ts + entry.summary) {
-          <li>
-            <button type="button"
-                    class="orch-feed__entry"
-                    [class.orch-feed__entry--selected]="isSelected(entry)"
-                    [class.orch-feed__entry--decision]="entry.kind === 'decision'"
-                    [class.orch-feed__entry--action]="entry.kind === 'action'"
-                    [class.orch-feed__entry--observation]="entry.kind === 'observation'"
-                    [class.orch-feed__entry--intervention]="entry.kind === 'intervention'"
-                    (click)="selectEntry(entry)">
-              <div class="orch-feed__entry-top">
-                <span class="orch-feed__kind">{{ kindLabel(entry.kind) }}</span>
-                <span class="orch-feed__topic">{{ entry.topic }}</span>
-                <span class="orch-feed__ts">{{ formatTime(entry.ts) }}</span>
-              </div>
-              <span class="orch-feed__summary">{{ entry.summary }}</span>
-              @if (entry.tokenUsage; as tu) {
-                <span class="orch-feed__tokens" [cacTooltip]="tokenTooltip(tu)">
-                  {{ tu.model || '?' }} · ↑{{ tu.inputTokens }} ↓{{ tu.outputTokens }}
-                </span>
-              }
-            </button>
-          </li>
+      <div class="orch-feed__list">
+        @for (group of groupedEntries(); track group.key) {
+          <section class="orch-feed__group" [attr.aria-label]="group.day + ', ' + group.project">
+            <header class="orch-feed__group-head">
+              <span>{{ group.day }}</span>
+              <span class="orch-feed__project-label"><i [style.--project-hue]="projectHue(group.project)"></i>{{ group.project }}</span>
+            </header>
+            @for (entry of group.entries; track entry.ts + entry.summary) {
+              <button type="button" class="orch-feed__entry"
+                      [class.orch-feed__entry--selected]="isSelected(entry)"
+                      [class.orch-feed__entry--decision]="entry.kind === 'decision'"
+                      [class.orch-feed__entry--action]="entry.kind === 'action'"
+                      [class.orch-feed__entry--observation]="entry.kind === 'observation'"
+                      [class.orch-feed__entry--intervention]="entry.kind === 'intervention'"
+                      (click)="selectEntry(entry)">
+                <div class="orch-feed__entry-top">
+                  <span class="orch-feed__kind">{{ kindLabel(entry.kind) }}</span>
+                  <span class="orch-feed__topic">{{ entry.topic }}</span>
+                  <span class="orch-feed__ts">{{ formatTime(entry.ts) }}</span>
+                </div>
+                <span class="orch-feed__summary">{{ entry.summary }}</span>
+                @if (entry.tokenUsage; as tu) {
+                  <span class="orch-feed__tokens" [cacTooltip]="tokenTooltip(tu)">{{ tu.model || '?' }} · ↑{{ tu.inputTokens }} ↓{{ tu.outputTokens }}</span>
+                }
+              </button>
+            }
+          </section>
         }
-      </ul>
+      </div>
     </section>
 
     <aside class="orch-feed__detail" data-testid="orchestrator-feed-detail">
@@ -86,52 +93,41 @@
         <h3>{{ entry.summary }}</h3>
         <dl class="orch-feed__meta">
           <div><dt>Time</dt><dd>{{ formatTime(entry.ts) }}</dd></div>
+          @if (entry.project) { <div><dt>Project</dt><dd>{{ entry.project }}</dd></div> }
           @if (entry.jobId) { <div><dt>Task</dt><dd><code>{{ entry.jobId }}</code></dd></div> }
           @if (entry.tokenUsage; as tu) {
             <div><dt>Model</dt><dd>{{ tu.model || '?' }}</dd></div>
             <div><dt>Tokens</dt><dd>↑{{ tu.inputTokens }} / ↓{{ tu.outputTokens }}</dd></div>
           }
         </dl>
+        @if (entry.jobId && entry.project) {
+          <button type="button" class="orch-feed__open-task" (click)="navigateToTask(entry)" data-testid="orchestrator-open-task">Open task</button>
+        }
         @if (entry.reasoning) {
-          <section class="orch-feed__detail-section">
-            <h4>Why</h4>
-            <p>{{ entry.reasoning }}</p>
-          </section>
+          <section class="orch-feed__detail-section"><h4>Why</h4><p>{{ entry.reasoning }}</p></section>
         }
         @if (entry.kind === 'decision' && entry.jobId) {
           @if (overridingTs() === entry.ts) {
             <div class="orch-feed__override-form">
-              <textarea class="orch-feed__override-input"
-                        placeholder="Your direction. Will be sent as a Steer follow-up."
-                        [(ngModel)]="overrideDraft"
-                        data-testid="orchestrator-override-input"
-                        rows="4"></textarea>
+              <textarea class="orch-feed__override-input" placeholder="Your direction. Will be sent as a Steer follow-up."
+                        [(ngModel)]="overrideDraft" data-testid="orchestrator-override-input" rows="4"></textarea>
               <div class="orch-feed__override-actions">
-                <button type="button"
-                        class="orch-feed__override-cancel"
-                        (click)="cancelOverride()"
-                        [disabled]="submittingOverride()">Cancel</button>
-                <button type="button"
-                        class="orch-feed__override-submit"
-                        (click)="submitOverride(entry)"
-                        [disabled]="submittingOverride() || !overrideDraft.trim()"
-                        data-testid="orchestrator-override-submit">
+                <button type="button" class="orch-feed__override-cancel" (click)="cancelOverride()" [disabled]="submittingOverride()">Cancel</button>
+                <button type="button" class="orch-feed__override-submit" (click)="submitOverride(entry)"
+                        [disabled]="submittingOverride() || !overrideDraft.trim()" data-testid="orchestrator-override-submit">
                   {{ submittingOverride() ? 'Sending...' : 'Send override' }}
                 </button>
               </div>
             </div>
           } @else {
-            <button type="button"
-                    class="orch-feed__override"
-                    (click)="startOverride(entry)"
-                    data-testid="orchestrator-override-start"
-                    [cacTooltip]="'Disagree with this decision? Send a Steer follow-up to the agent.'">
+            <button type="button" class="orch-feed__override" (click)="startOverride(entry)"
+                    data-testid="orchestrator-override-start" [cacTooltip]="'Disagree with this decision? Send a Steer follow-up to the agent.'">
               Override this decision
             </button>
           }
         }
       } @else {
-        <p class="orch-feed__empty">Select a feed event to inspect the decision, evidence, action, and budget.</p>
+        <p class="orch-feed__empty">Select a feed event to inspect its context and target.</p>
       }
     </aside>
   </div>

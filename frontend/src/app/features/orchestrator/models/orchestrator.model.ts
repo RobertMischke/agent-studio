@@ -14,6 +14,9 @@
  * intervention. Topics group entries in the UI feed.
  */
 export interface OrchestratorLogEntry {
+  /** Present on workspace-wide feed responses. */
+  project?: string;
+  watchPath?: string;
   ts: string;
   kind: 'decision' | 'action' | 'observation' | 'intervention';
   topic: string;
@@ -34,6 +37,10 @@ export interface OrchestratorTokenUsage {
 
 export interface OrchestratorLogResponse {
   project: string;
+  entries: OrchestratorLogEntry[];
+}
+
+export interface GlobalOrchestratorFeedResponse {
   entries: OrchestratorLogEntry[];
 }
 

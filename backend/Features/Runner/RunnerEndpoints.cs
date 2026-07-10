@@ -32,6 +32,35 @@ public static class RunnerEndpoints
                 return Results.Ok(new { project = "(global)", session });
             });
 
+        // Workspace-wide activity feed. Keep the project on every row so the
+        // client can group and navigate without issuing one request per watch
+        // path. The result is capped after the merge: a noisy project cannot
+        // force every other project out before timestamps are compared.
+        runnerGroup.MapGet("/orchestrator-feed",
+            (TaskScannerService scanner, OrchestratorLog log) =>
+            {
+                var entries = scanner.GetWatchPaths()
+                    .SelectMany(project => log.Read(project.Path).Select(entry => new
+                    {
+                        project = project.Name,
+                        watchPath = project.Path,
+                        entry.Ts,
+                        entry.Kind,
+                        entry.Topic,
+                        entry.Summary,
+                        entry.Reasoning,
+                        entry.JobId,
+                        entry.ParticipantId,
+                        entry.TokenUsage,
+                        entry.UserOverride
+                    }))
+                    .OrderByDescending(entry => entry.Ts)
+                    .Take(500)
+                    .ToList();
+
+                return Results.Ok(new { entries });
+            });
+
         runnerGroup.MapPut("/{projectName}/mode", (string projectName, SetRunnerModeRequest req, TaskRunnerService runner, TaskScannerService scanner) =>
         {
             var result = runner.RequestModeChange(projectName, req.Mode, req.Reason);

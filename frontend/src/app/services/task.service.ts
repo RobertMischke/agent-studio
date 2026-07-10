@@ -1499,6 +1499,13 @@ export class TaskService {
     );
   }
 
+  /** Read the newest orchestrator events across every watched project. */
+  getGlobalOrchestratorFeed() {
+    return this.http.get<import('../features/orchestrator').GlobalOrchestratorFeedResponse>(
+      `${this.baseUrl}/runner/orchestrator-feed`,
+    );
+  }
+
   /**
    * Read the per-project list of 4-review jobs whose latest CLI output
    * carries an unresolved [[TASK_NEEDS_INPUT]] sentinel. Drives the
