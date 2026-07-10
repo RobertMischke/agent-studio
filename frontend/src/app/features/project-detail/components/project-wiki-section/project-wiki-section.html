@@ -546,9 +546,9 @@
                       role="tab"
                       aria-selected="true"
                       data-testid="project-wiki-tab-home">
-                <app-studio-icon name="book" [size]="13"></app-studio-icon>
-                <span>Root</span>
-                <small>Home</small>
+                <app-studio-icon name="activity" [size]="13"></app-studio-icon>
+                <span>Pulse</span>
+                <small>Generated</small>
               </button>
             </div>
           </header>
@@ -558,11 +558,11 @@
                [style.--pwiki-context-width]="contextWidthStyle()">
             <article class="pwiki__reader pwiki__landing" data-testid="project-wiki-viewer-empty">
               <header class="pwiki__landing-head">
-                <span class="pwiki__doc-kind">Root folder</span>
-                <h2 class="pwiki__doc-title">Read, connect, and verify project knowledge.</h2>
+                <span class="pwiki__doc-kind">Pulse</span>
+                <h2 class="pwiki__doc-title">What changed, what needs sorting, and how stale the knowledge is.</h2>
                 <p>
-                  Start at the root folder, browse categories, open Markdown or HTML pages, inspect links and history,
-                  or start a drift check when a page may no longer match the current system.
+                  A generated entry view over this wiki - the recent-edits feed, the unfiled inbox, and
+                  deterministic drift grading per Workstream area. It is not a wiki page and cannot be edited.
                 </p>
               </header>
 
@@ -581,54 +581,11 @@
                 </button>
               </div>
 
-              <section class="pwiki__landing-grid" aria-label="Suggested pages">
-                @for (doc of suggestedDocs(); track doc.relPath) {
-                  <article class="pwiki__doc-card"
-                           [attr.data-testid]="'project-wiki-suggested-card-' + doc.relPath">
-                    <button class="pwiki__doc-card-main" type="button"
-                            [attr.data-testid]="'project-wiki-suggested-' + doc.relPath"
-                            (click)="openFile(doc.relPath!, doc.type)">
-                      <span class="pwiki__doc-card-kind">
-                        {{ doc.type === 'html' ? 'HTML' : doc.type === 'json' ? 'JSON' : 'MD' }}
-                      </span>
-                      <strong>{{ doc.title }}</strong>
-                      <code>{{ doc.relPath }}</code>
-                    </button>
-                    <span class="pwiki__metric-strip pwiki__metric-strip--card"
-                          [attr.data-testid]="'project-wiki-suggested-ratings-' + doc.relPath">
-                      @for (chip of documentMetricChips(doc); track chip.key) {
-                        @if (chip.reportAnchor) {
-                          <button class="pwiki__metric"
-                                  type="button"
-                                  [attr.data-tone]="chip.tone"
-                                  [attr.data-kind]="chip.key"
-                                  [attr.data-testid]="'project-wiki-suggested-metric-' + doc.relPath + '-' + chip.key"
-                                  [attr.aria-label]="chip.label"
-                                  [cacTooltip]="chip.tooltip"
-                                  (click)="openReportSection($event, doc, chip.reportAnchor)">
-                            <span class="pwiki__metric-value">
-                              <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
-                              <span>{{ chip.display }}</span>
-                            </span>
-                          </button>
-                        } @else {
-                          <span class="pwiki__metric"
-                                [attr.data-tone]="chip.tone"
-                                [attr.data-kind]="chip.key"
-                                [attr.data-testid]="'project-wiki-suggested-metric-' + doc.relPath + '-' + chip.key"
-                                [attr.aria-label]="chip.label"
-                                [cacTooltip]="chip.tooltip">
-                            <span class="pwiki__metric-value">
-                              <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
-                              <span>{{ chip.display }}</span>
-                            </span>
-                          </span>
-                        }
-                      }
-                    </span>
-                  </article>
-                }
-              </section>
+              <app-wiki-pulse
+                  class="pwiki__pulse"
+                  [pulse]="pulse()"
+                  [loading]="pulseLoading()"
+                  (openPage)="onPulseOpen($event)" />
             </article>
 
             @if (!contextCollapsed()) {

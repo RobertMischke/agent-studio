@@ -117,6 +117,26 @@ public static class EngineeringWorkstreamFrame
     /// <summary>True when the path is a frame folder (root or one of the five areas).</summary>
     public static bool IsFrameFolder(string? relPath) => FrameFolders.Contains(Normalize(relPath));
 
+    /// <summary>
+    /// The frame area a docs-root-relative path lives under (the area folder
+    /// itself or any node below it), or <c>null</c> when the path is the frame
+    /// root, the overview shell, or outside the frame entirely. Backs the wiki
+    /// Pulse change-feed area badge and the per-area drift grade bar, both of
+    /// which classify a page by its owning area.
+    /// </summary>
+    public static FrameArea? AreaForPath(string? relPath)
+    {
+        var rel = Normalize(relPath);
+        if (rel.Length == 0) return null;
+        foreach (var area in Areas)
+        {
+            if (rel.Equals(area.FolderRel, StringComparison.OrdinalIgnoreCase)
+                || rel.StartsWith(area.FolderRel + "/", StringComparison.OrdinalIgnoreCase))
+                return area;
+        }
+        return null;
+    }
+
     /// <summary>True when the path is exactly the frame root folder (not an area or subpage).</summary>
     public static bool IsFrameRoot(string? relPath) =>
         Normalize(relPath).Equals(FrameRootRel, StringComparison.OrdinalIgnoreCase);

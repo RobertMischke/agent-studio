@@ -3463,6 +3463,43 @@ public class GitService
     }
 
     /// <summary>
+    /// Author dates (UTC, newest first) of up to <paramref name="maxCommits"/>
+    /// non-merge commits that touched any of <paramref name="repoRelPaths"/>.
+    /// Backs the wiki Pulse drift-grading heuristic (PULSE-1): how many code
+    /// commits have landed under the code roots since a knowledge page was last
+    /// refreshed. A single <c>git log</c> spawn that reads only the author date
+    /// (no diff / name walk) so it stays cheap even with the cap. Returns an
+    /// empty list when the repo or paths can't be resolved, mirroring the other
+    /// read-only git lookups on this service.
+    /// </summary>
+    public List<DateTime> GetCommitAuthorDatesUnderPaths(
+        string repoRoot, IReadOnlyCollection<string> repoRelPaths, int maxCommits = 500)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || repoRelPaths == null || repoRelPaths.Count == 0) return [];
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        if (!Directory.Exists(root)) return [];
+        if (maxCommits <= 0) maxCommits = 500;
+
+        var args = new List<string> { "log", "--no-merges", $"--max-count={maxCommits}", "--pretty=format:%aI", "--" };
+        foreach (var p in repoRelPaths)
+            if (!string.IsNullOrWhiteSpace(p)) args.Add(p.Replace('\\', '/'));
+        if (args[^1] == "--") return []; // no usable pathspec survived
+
+        var (output, _, code) = RunGitArgs(root, args.ToArray());
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+
+        var list = new List<DateTime>();
+        foreach (var line in output.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (DateTime.TryParse(line.Trim(), System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                out var ts))
+                list.Add(DateTime.SpecifyKind(ts, DateTimeKind.Utc));
+        }
+        return list;
+    }
+
+    /// <summary>
     /// Parses <c>git log --name-only --pretty=format:&lt;RS&gt;%H&lt;US&gt;...</c>
     /// output (see <see cref="GetRecentEditsUnderPath"/>) into per-file
     /// most-recent-commit records. Split out for unit testing.

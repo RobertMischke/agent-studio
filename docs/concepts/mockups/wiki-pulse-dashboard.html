@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wiki Pulse dashboard (PULSE-1)</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #ffffff; --fg: #1c2128; --fg-muted: #5a6472;
+    --line: rgba(28,33,40,0.12); --line-soft: rgba(28,33,40,0.06);
+    --accent: #2f74d0; --accent-soft: rgba(47,116,208,0.14);
+    --violet: #7c5cff; --violet-soft: rgba(124,92,255,0.16);
+    --good: #2f9e5f; --warn: #c9820b; --bad: #d1453b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171c; --surface: #1b1f26; --fg: #e6e9ef; --fg-muted: #9aa4b2;
+      --line: rgba(230,233,239,0.12); --line-soft: rgba(230,233,239,0.05);
+      --accent: #6ea8ff; --accent-soft: rgba(110,168,255,0.16);
+      --violet: #b3a1ff; --violet-soft: rgba(179,161,255,0.18);
+      --good: #59c98a; --warn: #e0a83a; --bad: #ff6b60;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .frame { max-width: 980px; margin: 0 auto; padding: 22px; }
+
+  .wpulse { display: flex; flex-direction: column; gap: 16px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+
+  .head { display: flex; align-items: center; gap: 10px; }
+  .head .icon { width: 28px; height: 28px; border-radius: 7px; display: inline-flex;
+    align-items: center; justify-content: center; color: var(--accent); background: var(--accent-soft); }
+  .head h3 { margin: 0; font-size: 1rem; font-weight: 700; }
+  .head p { margin: 1px 0 0; font-size: 0.74rem; color: var(--fg-muted); }
+  .overall { margin-left: auto; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.03em;
+    padding: 3px 10px; border-radius: 999px; color: var(--warn);
+    border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+    background: color-mix(in srgb, var(--warn) 12%, transparent); }
+
+  .gradebar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .seg { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 7px;
+    border: 1px solid var(--line); background: var(--line-soft); border-top: 3px solid var(--line); }
+  .seg .t { font-size: 0.72rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seg .g { font-size: 0.7rem; font-weight: 700; }
+  .seg .c { font-size: 0.64rem; color: var(--fg-muted); }
+  .seg.good { border-top-color: color-mix(in srgb, var(--good) 70%, transparent); background: color-mix(in srgb, var(--good) 8%, transparent); }
+  .seg.good .g { color: var(--good); }
+  .seg.warn { border-top-color: color-mix(in srgb, var(--warn) 70%, transparent); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+  .seg.warn .g { color: var(--warn); }
+  .seg.bad  { border-top-color: color-mix(in srgb, var(--bad) 70%, transparent); background: color-mix(in srgb, var(--bad) 8%, transparent); }
+  .seg.bad .g { color: var(--bad); }
+  .seg.muted .g { color: var(--fg-muted); }
+
+  .legend { display: flex; gap: 14px; font-size: 0.7rem; color: var(--fg-muted); margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
+  .panel { border: 1px solid var(--line); background: var(--line-soft); border-radius: 9px; padding: 12px;
+    display: flex; flex-direction: column; gap: 8px; }
+  .panel-head { display: flex; align-items: center; gap: 8px; color: var(--fg-muted); }
+  .panel-head h4 { margin: 0; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fg); }
+  .badge { margin-left: auto; font-size: 0.7rem; padding: 1px 8px; border-radius: 999px;
+    background: color-mix(in srgb, var(--fg) 8%, transparent); color: var(--fg-muted); }
+  .badge.warn { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--fg); }
+  .badge.good { background: color-mix(in srgb, var(--good) 20%, transparent); color: var(--fg); }
+
+  .day-head { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--fg-muted); margin: 6px 0 4px; }
+  .row { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border-radius: 7px; }
+  .row:hover { background: color-mix(in srgb, var(--fg) 6%, transparent); }
+  .row-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .area { display: inline-flex; align-items: center; gap: 3px; font-size: 0.64rem; font-weight: 600;
+    padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); }
+  .task { font-size: 0.64rem; font-weight: 700; font-family: ui-monospace, monospace;
+    padding: 1px 6px; border-radius: 4px; background: var(--violet-soft); }
+  .kind { margin-left: auto; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.05em; color: var(--fg-muted); }
+  .row-title { font-size: 0.84rem; font-weight: 600; }
+  .row-meta { font-size: 0.7rem; color: var(--fg-muted); }
+  .reason { font-size: 0.72rem; color: var(--fg-muted); }
+  .path { font-size: 0.68rem; font-family: ui-monospace, monospace; color: var(--fg-muted); }
+  h1.page { font-size: 0.9rem; color: var(--fg-muted); font-weight: 600; margin: 0 0 12px; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <h1 class="page">docs/concepts/mockups/wiki-pulse-dashboard.html &middot; the generated wiki landing view (PULSE-1)</h1>
+  <section class="wpulse">
+    <div class="head">
+      <span class="icon">◔</span>
+      <div>
+        <h3>Pulse</h3>
+        <p>Generated entry view - the wiki's history, inbox, and drift. Not a wiki page.</p>
+      </div>
+      <span class="overall">Drift Aging</span>
+    </div>
+
+    <div>
+      <div class="gradebar">
+        <div class="seg warn"><span class="t">Current Development State</span><span class="g">Aging</span><span class="c">12 commits</span></div>
+        <div class="seg good"><span class="t">Development Signals</span><span class="g">Fresh</span><span class="c">2 commits</span></div>
+        <div class="seg bad"><span class="t">System Knowledge</span><span class="g">Stale</span><span class="c">73 commits</span></div>
+        <div class="seg muted"><span class="t">Decision Log</span><span class="g">Empty</span><span class="c">no pages</span></div>
+        <div class="seg muted"><span class="t">Workstream Log</span><span class="g">Empty</span><span class="c">no pages</span></div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--good)"></i>Fresh 1</span>
+        <span><i style="background:var(--warn)"></i>Aging 1</span>
+        <span><i style="background:var(--bad)"></i>Stale 1</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <article class="panel">
+        <div class="panel-head">◔ <h4>Change feed</h4><span class="badge">4</span></div>
+        <div class="day-head">Today</div>
+        <div class="row">
+          <div class="row-top"><span class="area">📌 Current Development State</span><span class="task">AGT-2014</span><span class="kind">MD</span></div>
+          <strong class="row-title">Pulse landing view</strong>
+          <span class="row-meta">Robert Mischke &middot; 2h ago</span>
+        </div>
+        <div class="row">
+          <div class="row-top"><span class="area">📌 Development Signals</span><span class="kind">MD</span></div>
+          <strong class="row-title">Latency regression note</strong>
+          <span class="row-meta">codex &middot; 5h ago</span>
+        </div>
+        <div class="day-head">Yesterday</div>
+        <div class="row">
+          <div class="row-top"><span class="area">📌 System Knowledge</span><span class="task">AGT-1984</span><span class="kind">MD</span></div>
+          <strong class="row-title">Wiki checkout relocation</strong>
+          <span class="row-meta">Claude Opus 4.8 &middot; 1d ago</span>
+        </div>
+        <div class="row">
+          <div class="row-top"><span class="kind">MD</span></div>
+          <strong class="row-title">Scratch idea</strong>
+          <span class="row-meta">Robert Mischke &middot; 1d ago</span>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">▤ <h4>Needs sorting</h4><span class="badge warn">2</span></div>
+        <div class="row">
+          <div class="row-top"><span class="kind">MD</span></div>
+          <strong class="row-title">Scratch idea</strong>
+          <span class="reason">Loose page at the wiki root - not filed under a category.</span>
+          <code class="path">scratch-idea.md</code>
+        </div>
+        <div class="row">
+          <div class="row-top"><span class="kind">MD</span></div>
+          <strong class="row-title">Migration jots</strong>
+          <span class="reason">Inside the Workstream frame but not filed under one of the five areas.</span>
+          <code class="path">engineering-workstream/migration-jots.md</code>
+        </div>
+      </article>
+    </div>
+  </section>
+</div>
+</body>
+</html>

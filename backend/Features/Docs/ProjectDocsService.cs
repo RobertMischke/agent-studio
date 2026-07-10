@@ -483,6 +483,321 @@ public class ProjectDocsService
         return new WikiRecentEdits(projectName, wikiDir, true, results);
     }
 
+    // -------- Wiki Pulse (PULSE-1: change-feed + inbox + drift grading) --------
+
+    // Top-level repo directories that are code (not knowledge) but are never a
+    // "code root" for the drift heuristic: the wiki root itself plus build
+    // output / tooling folders whose churn is not a system-behaviour signal.
+    // Everything else at the repo root is treated as a code root.
+    private static readonly HashSet<string> CodeRootDenyList =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "node_modules", "dist", "build", "bin", "obj", "out", "target",
+            "coverage", "test-results", "playwright-report", "packages-lock",
+            ".git", ".vs", ".vscode", ".idea", ".github",
+        };
+
+    // Conventional wiki landing files that legitimately sit at the docs root, so
+    // they are not flagged as unfiled "inbox" fragments.
+    private static readonly HashSet<string> RootIndexNames =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "README.md", "index.md", "index.html", "index.htm", "home.md",
+        };
+
+    // A task key stamped into a commit subject / page frontmatter, e.g. AGT-2014.
+    private static readonly Regex TaskKeyRegex =
+        new(@"\b([A-Z][A-Z0-9]{1,9}-\d{1,6})\b", RegexOptions.Compiled);
+
+    /// <summary>
+    /// The wiki Pulse landing payload (PULSE-1): the generated entry view shown
+    /// when the wiki opens, composed from three deterministic sources so it never
+    /// multiplies the slow per-doc git calls (two <c>git log</c> spawns total):
+    /// <list type="number">
+    ///   <item><b>Change feed</b> - the recently-edited pages (git author + when),
+    ///   each enriched with its Workstream frame-area badge and a task key parsed
+    ///   from the page frontmatter or the commit subject.</item>
+    ///   <item><b>Inbox</b> - loose / unfiled knowledge pages that sit at the wiki
+    ///   root or inside the frame but under no area; an empty inbox is the healthy
+    ///   state.</item>
+    ///   <item><b>Drift grading v1</b> - per frame area, how many commits landed
+    ///   under the code roots since each page was last updated, banded
+    ///   Fresh (0-9) / Aging (10-49) / Stale (50+); the area grade is its worst
+    ///   page.</item>
+    /// </list>
+    /// Each section degrades to an "unavailable" state carrying a reason rather
+    /// than failing, so a missing docs folder or repository never blank-screens
+    /// the view. Returns <c>null</c> only when the project itself is unknown.
+    /// </summary>
+    public WikiPulse? GetWikiPulse(string projectName, GitService git, int feedLimit = 12)
+    {
+        var baseDir = ResolveBaseDir(projectName);
+        if (baseDir == null) return null;
+        feedLimit = Math.Clamp(feedLimit, 1, 50);
+
+        var wikiDir = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
+        var generatedAt = DateTime.UtcNow.ToString("o");
+
+        if (!Directory.Exists(wikiDir))
+        {
+            const string reason = "No docs/ folder for this project yet.";
+            return new WikiPulse(projectName, wikiDir, false, generatedAt,
+                new WikiPulseFeed(false, reason, []),
+                new WikiPulseInbox(false, reason, 0, []),
+                WikiPulseDrift.Unavailable(reason));
+        }
+
+        // Inbox is a pure filesystem read (no git), so it works even when the
+        // project has no resolvable repository.
+        var allDocs = ListWikiDocs(wikiDir);
+        var inbox = BuildPulseInbox(allDocs);
+
+        var repoRoot = git.ResolveRepoRootForProject(projectName);
+        if (string.IsNullOrWhiteSpace(repoRoot))
+        {
+            const string reason = "No git repository resolved for this project.";
+            return new WikiPulse(projectName, wikiDir, true, generatedAt,
+                new WikiPulseFeed(false, reason, []),
+                inbox,
+                WikiPulseDrift.Unavailable(reason));
+        }
+
+        var docsRepoRel = Path.GetRelativePath(repoRoot, wikiDir).Replace('\\', '/');
+        // One git walk backs BOTH the feed (top N, newest first) and the drift
+        // heuristic's per-page "last updated" map, so Pulse costs one docs log.
+        var rawRecent = git.GetRecentEditsUnderPath(repoRoot, docsRepoRel, limit: 2000, commitScan: 1500);
+
+        var feedItems = new List<WikiPulseFeedItem>();
+        var lastUpdateByRel = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in rawRecent)
+        {
+            var full = Path.GetFullPath(Path.Combine(repoRoot, e.RepoRelPath));
+            if (!full.StartsWith(wikiDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                && !full.Equals(wikiDir, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
+            var ext = Path.GetExtension(full);
+            if (!WikiDocExtensions.Contains(ext)) continue;
+            if (IsWikiCompanionFile(docsRel)) continue;
+            if (!File.Exists(full)) continue; // a deletion in the log
+
+            lastUpdateByRel[docsRel] = e.AuthorDateUtc;
+
+            if (feedItems.Count < feedLimit)
+            {
+                var title = ExtractDocTitle(full, ext)
+                    ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(full));
+                var area = EngineeringWorkstreamFrame.AreaForPath(docsRel);
+                feedItems.Add(new WikiPulseFeedItem(
+                    RelPath: docsRel,
+                    Title: title,
+                    Author: e.Author,
+                    AuthorDateUtc: e.AuthorDateUtc,
+                    Sha: e.Sha,
+                    ShortSha: e.ShortSha,
+                    Subject: e.Subject,
+                    FrameAreaSlug: area?.Slug,
+                    FrameAreaTitle: area?.Title,
+                    TaskKey: ExtractPulseTaskKey(full, ext, e.Subject)));
+            }
+        }
+
+        var feed = new WikiPulseFeed(true, feedItems.Count == 0 ? "No recent edits in git history." : null, feedItems);
+
+        var codeRoots = ResolveCodeRoots(repoRoot);
+        var drift = BuildPulseDrift(allDocs, lastUpdateByRel, repoRoot, codeRoots, git);
+
+        return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift);
+    }
+
+    /// <summary>
+    /// Task key for a Pulse feed row: the page's own frontmatter <c>task-key</c>
+    /// wins (authoritative for markdown pages), else a key parsed from the commit
+    /// subject. Null when neither carries one.
+    /// </summary>
+    private static string? ExtractPulseTaskKey(string fullPath, string ext, string? subject)
+    {
+        if (ext.Equals(".md", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var fromMeta = ParseWikiMetadata(File.ReadAllText(fullPath)).TaskKey;
+                if (!string.IsNullOrWhiteSpace(fromMeta)) return fromMeta.Trim();
+            }
+            catch (Exception __ex)
+            {
+                SilentCatch.Note(__ex, "ProjectDocsService: unreadable page for Pulse task-key; falling back to subject.");
+            }
+        }
+        return ExtractTaskKeyFromSubject(subject);
+    }
+
+    /// <summary>Parses the first task key (e.g. <c>AGT-2014</c>) from a commit subject.</summary>
+    internal static string? ExtractTaskKeyFromSubject(string? subject)
+    {
+        if (string.IsNullOrWhiteSpace(subject)) return null;
+        var m = TaskKeyRegex.Match(subject);
+        return m.Success ? m.Groups[1].Value : null;
+    }
+
+    /// <summary>
+    /// Loose / unfiled knowledge pages for the Pulse inbox: a knowledge doc that
+    /// sits directly at the wiki root (and is not a conventional landing file), or
+    /// one dropped inside the Workstream frame root but under no area. Both are
+    /// "needs sorting" signals; an empty list is the healthy state.
+    /// </summary>
+    private static WikiPulseInbox BuildPulseInbox(IReadOnlyList<WikiFileEntry> docs)
+    {
+        var items = new List<WikiPulseInboxItem>();
+        foreach (var doc in docs)
+        {
+            var rel = doc.RelPath;
+            string? reason = null;
+            if (!rel.Contains('/', StringComparison.Ordinal) && !RootIndexNames.Contains(rel))
+            {
+                reason = "Loose page at the wiki root - not filed under a category.";
+            }
+            else if (EngineeringWorkstreamFrame.IsWithinFrame(rel)
+                     && !EngineeringWorkstreamFrame.IsFrameShell(rel)
+                     && EngineeringWorkstreamFrame.AreaForPath(rel) == null)
+            {
+                reason = "Inside the Workstream frame but not filed under one of the five areas.";
+            }
+            if (reason == null) continue;
+            items.Add(new WikiPulseInboxItem(rel, doc.Title, TypeFromExtension(rel), reason));
+        }
+        items.Sort((a, b) => string.Compare(a.RelPath, b.RelPath, StringComparison.OrdinalIgnoreCase));
+        return new WikiPulseInbox(true, null, items.Count, items);
+    }
+
+    /// <summary>
+    /// Deterministic drift grade bar (PULSE-1, no LLM): for each Workstream frame
+    /// area, count how many commits under the code roots landed after each page's
+    /// last update, band each page Fresh / Aging / Stale, and grade the area by
+    /// its worst page. Areas with no filed pages report <c>Empty</c>. A page whose
+    /// last-update timestamp is unknown (outside the git scan window) is left
+    /// Unknown and excluded from the counts.
+    /// </summary>
+    private static WikiPulseDrift BuildPulseDrift(
+        IReadOnlyList<WikiFileEntry> docs,
+        IReadOnlyDictionary<string, DateTime> lastUpdateByRel,
+        string repoRoot,
+        IReadOnlyList<string> codeRoots,
+        GitService git)
+    {
+        if (codeRoots.Count == 0)
+            return WikiPulseDrift.Unavailable("No code roots found to grade drift against.");
+
+        // Descending author dates of recent code commits; counting how many are
+        // newer than a page's last update is the deterministic drift score.
+        var codeTimes = git.GetCommitAuthorDatesUnderPaths(repoRoot, codeRoots, maxCommits: 500);
+
+        var areas = new List<WikiPulseDriftArea>();
+        int totalFresh = 0, totalAging = 0, totalStale = 0, totalGraded = 0;
+        var worstOverall = DriftGradeRank("Empty");
+        string overall = "Empty";
+
+        foreach (var area in EngineeringWorkstreamFrame.Areas)
+        {
+            var pages = docs.Where(d =>
+                    !EngineeringWorkstreamFrame.IsFrameShell(d.RelPath)
+                    && EngineeringWorkstreamFrame.AreaForPath(d.RelPath)?.Slug == area.Slug)
+                .ToList();
+
+            int fresh = 0, aging = 0, stale = 0, worstCount = 0;
+            var areaWorst = DriftGradeRank("Empty");
+            string areaGrade = "Empty";
+            foreach (var page in pages)
+            {
+                if (!lastUpdateByRel.TryGetValue(page.RelPath, out var lastUpdate)) continue; // Unknown
+                var since = codeTimes.Count(t => t > lastUpdate);
+                if (since > worstCount) worstCount = since;
+                var band = DriftBand(since);
+                switch (band)
+                {
+                    case "Fresh": fresh++; break;
+                    case "Aging": aging++; break;
+                    case "Stale": stale++; break;
+                }
+                if (DriftGradeRank(band) > areaWorst)
+                {
+                    areaWorst = DriftGradeRank(band);
+                    areaGrade = band;
+                }
+            }
+
+            var graded = fresh + aging + stale;
+            totalFresh += fresh; totalAging += aging; totalStale += stale; totalGraded += graded;
+            if (areaWorst > worstOverall)
+            {
+                worstOverall = areaWorst;
+                overall = areaGrade;
+            }
+
+            areas.Add(new WikiPulseDriftArea(
+                Slug: area.Slug,
+                Title: area.Title,
+                Grade: areaGrade,
+                PageCount: pages.Count,
+                GradedPageCount: graded,
+                WorstCommitCount: worstCount,
+                FreshCount: fresh,
+                AgingCount: aging,
+                StaleCount: stale));
+        }
+
+        var reason = totalGraded == 0
+            ? "No knowledge pages filed under the Workstream frame yet."
+            : null;
+        return new WikiPulseDrift(true, reason, overall, areas,
+            new WikiPulseDriftCounts(totalFresh, totalAging, totalStale, totalGraded));
+    }
+
+    /// <summary>Drift band for a code-commits-since-update count (0-9 / 10-49 / 50+).</summary>
+    internal static string DriftBand(int commitsSinceUpdate) =>
+        commitsSinceUpdate >= 50 ? "Stale" : commitsSinceUpdate >= 10 ? "Aging" : "Fresh";
+
+    /// <summary>Ordinal severity so the worst page/area can be selected (higher = worse).</summary>
+    private static int DriftGradeRank(string grade) => grade switch
+    {
+        "Stale" => 3,
+        "Aging" => 2,
+        "Fresh" => 1,
+        _ => 0, // Empty / Unknown
+    };
+
+    /// <summary>
+    /// The repo-root-relative directories treated as "code roots" for the drift
+    /// heuristic: every top-level directory except the wiki root, build output,
+    /// and tooling folders (see <see cref="CodeRootDenyList"/>). Deterministic and
+    /// project-agnostic - it discovers whatever source folders a repo actually has.
+    /// </summary>
+    private static List<string> ResolveCodeRoots(string repoRoot)
+    {
+        var roots = new List<string>();
+        if (!Directory.Exists(repoRoot)) return roots;
+        var wikiTop = WikiRel.Split('/', '\\')[0]; // "docs"
+        foreach (var dir in Directory.EnumerateDirectories(repoRoot))
+        {
+            var name = Path.GetFileName(dir);
+            if (string.IsNullOrEmpty(name) || name.StartsWith('.')) continue;
+            if (name.Equals(wikiTop, StringComparison.OrdinalIgnoreCase)) continue;
+            if (CodeRootDenyList.Contains(name)) continue;
+            roots.Add(name);
+        }
+        roots.Sort(StringComparer.OrdinalIgnoreCase);
+        return roots;
+    }
+
+    private static string TypeFromExtension(string relPath)
+    {
+        var ext = Path.GetExtension(relPath);
+        if (ext.Equals(".html", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".htm", StringComparison.OrdinalIgnoreCase)) return "html";
+        if (ext.Equals(".json", StringComparison.OrdinalIgnoreCase)) return "json";
+        return "md";
+    }
+
     /// <summary>
     /// Per-doc history + provenance payload for the wiki history panel, with its
     /// ETag, and the HEAD-keyed caching behind it. The file's commit history and
@@ -1263,6 +1578,82 @@ public record WikiRecentEdit(
 
 /// <summary>Recent-edits payload backing the wiki dashboard landing surface.</summary>
 public record WikiRecentEdits(string ProjectName, string BaseDir, bool Exists, List<WikiRecentEdit> Edits);
+
+// ---- Wiki Pulse (PULSE-1: the generated wiki landing view) ----
+
+/// <summary>
+/// The generated wiki Pulse landing view (PULSE-1): a read-only, non-editable
+/// composition of the change feed, the sort-needed inbox, and the deterministic
+/// drift grade bar. Each section carries its own availability + reason so a
+/// missing docs folder or repository degrades to an empty state, never an error.
+/// </summary>
+public record WikiPulse(
+    string ProjectName,
+    string BaseDir,
+    bool Exists,
+    string GeneratedAtUtc,
+    WikiPulseFeed Feed,
+    WikiPulseInbox Inbox,
+    WikiPulseDrift Drift);
+
+/// <summary>Change-feed section: recently-edited pages, newest first.</summary>
+public record WikiPulseFeed(bool Available, string? Reason, List<WikiPulseFeedItem> Items);
+
+/// <summary>
+/// One change-feed row: a recently-edited page plus its owning Workstream frame
+/// area (the badge) and a task key parsed from frontmatter or the commit subject.
+/// </summary>
+public record WikiPulseFeedItem(
+    string RelPath,
+    string Title,
+    string Author,
+    DateTime AuthorDateUtc,
+    string Sha,
+    string ShortSha,
+    string Subject,
+    string? FrameAreaSlug,
+    string? FrameAreaTitle,
+    string? TaskKey);
+
+/// <summary>Inbox section: loose / unfiled pages that need sorting.</summary>
+public record WikiPulseInbox(bool Available, string? Reason, int Count, List<WikiPulseInboxItem> Items);
+
+/// <summary>One unfiled page plus the reason it landed in the inbox.</summary>
+public record WikiPulseInboxItem(string RelPath, string Title, string Type, string Reason);
+
+/// <summary>
+/// Drift-grading section: the per-frame-area grade bar plus roll-up counts.
+/// <see cref="OverallGrade"/> is the worst area grade (Fresh / Aging / Stale /
+/// Empty).
+/// </summary>
+public record WikiPulseDrift(
+    bool Available,
+    string? Reason,
+    string OverallGrade,
+    List<WikiPulseDriftArea> Areas,
+    WikiPulseDriftCounts Counts)
+{
+    public static WikiPulseDrift Unavailable(string reason) =>
+        new(false, reason, "Empty", [], new WikiPulseDriftCounts(0, 0, 0, 0));
+}
+
+/// <summary>
+/// One frame area's drift grade. <see cref="Grade"/> is the worst page's band;
+/// <see cref="WorstCommitCount"/> is that page's code-commits-since-update count.
+/// </summary>
+public record WikiPulseDriftArea(
+    string Slug,
+    string Title,
+    string Grade,
+    int PageCount,
+    int GradedPageCount,
+    int WorstCommitCount,
+    int FreshCount,
+    int AgingCount,
+    int StaleCount);
+
+/// <summary>Roll-up of how many graded pages fall in each drift band.</summary>
+public record WikiPulseDriftCounts(int Fresh, int Aging, int Stale, int Graded);
 
 public record SecurityMeta(string? LastReviewDate, string? Rating, string? Summary);
 public record SecurityFileEntry(string Name, string RelPath, DateTime UpdatedAt, long Size);

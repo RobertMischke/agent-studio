@@ -93,6 +93,18 @@ public static class ProjectDocsEndpoints
                 : ConditionalOk(http, res.ETag, res.Edits);
         });
 
+        // The generated wiki Pulse landing view (PULSE-1): change feed + inbox +
+        // deterministic drift grade bar, composed server-side so the landing
+        // surface costs two git walks instead of the tree + recent + per-doc
+        // history fan-out. Sits before the /files catch-all for path precedence.
+        app.MapGet("/api/projects/{projectName}/wiki/pulse", (string projectName, ProjectDocsService docs, GitService git, int? feedLimit) =>
+        {
+            var pulse = docs.GetWikiPulse(projectName, git, feedLimit ?? 12);
+            return pulse == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(pulse);
+        });
+
         app.MapGet("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs) =>
         {
             var file = docs.ReadWikiFile(projectName, relPath);

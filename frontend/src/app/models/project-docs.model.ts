@@ -162,6 +162,91 @@ export interface WikiRevisionContent {
   content: string;
 }
 
+// ---- Wiki Pulse (PULSE-1: the generated wiki landing view) ----
+
+/** One change-feed row: a recently-edited page + frame-area badge + task key. */
+export interface WikiPulseFeedItem {
+  relPath: string;
+  title: string;
+  author: string;
+  authorDateUtc: string;
+  sha: string;
+  shortSha: string;
+  subject: string;
+  frameAreaSlug: string | null;
+  frameAreaTitle: string | null;
+  taskKey: string | null;
+}
+
+/** Change-feed section (recently-edited pages, newest first). */
+export interface WikiPulseFeed {
+  available: boolean;
+  reason: string | null;
+  items: WikiPulseFeedItem[];
+}
+
+/** One unfiled page plus the reason it landed in the inbox. */
+export interface WikiPulseInboxItem {
+  relPath: string;
+  title: string;
+  type: WikiNodeType;
+  reason: string;
+}
+
+/** Inbox section (loose / unfiled pages; an empty list is healthy). */
+export interface WikiPulseInbox {
+  available: boolean;
+  reason: string | null;
+  count: number;
+  items: WikiPulseInboxItem[];
+}
+
+/** One frame area's drift grade (worst page band + code-commit counts). */
+export interface WikiPulseDriftArea {
+  slug: string;
+  title: string;
+  grade: string; // Fresh | Aging | Stale | Empty
+  pageCount: number;
+  gradedPageCount: number;
+  worstCommitCount: number;
+  freshCount: number;
+  agingCount: number;
+  staleCount: number;
+}
+
+/** Roll-up of how many graded pages fall in each drift band. */
+export interface WikiPulseDriftCounts {
+  fresh: number;
+  aging: number;
+  stale: number;
+  graded: number;
+}
+
+/** Drift-grading section (the per-area grade bar + roll-up counts). */
+export interface WikiPulseDrift {
+  available: boolean;
+  reason: string | null;
+  overallGrade: string; // Fresh | Aging | Stale | Empty
+  areas: WikiPulseDriftArea[];
+  counts: WikiPulseDriftCounts;
+}
+
+/**
+ * The generated wiki Pulse landing view (PULSE-1): a read-only composition of
+ * the change feed, the sort-needed inbox, and the deterministic drift grade
+ * bar. Not a wiki page - it is generated, never editable. Each section carries
+ * its own `available` + `reason` so a missing source degrades to an empty state.
+ */
+export interface WikiPulse {
+  projectName: string;
+  baseDir: string;
+  exists: boolean;
+  generatedAtUtc: string;
+  feed: WikiPulseFeed;
+  inbox: WikiPulseInbox;
+  drift: WikiPulseDrift;
+}
+
 export interface ArchitectureDecisionSummary {
   id: string;
   title: string;

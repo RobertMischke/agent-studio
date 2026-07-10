@@ -5,7 +5,7 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ProjectWikiSectionComponent } from './project-wiki-section';
-import type { WikiFileHistory, WikiTree } from '../../../../models/project-docs.model';
+import type { WikiFileHistory, WikiPulse, WikiTree } from '../../../../models/project-docs.model';
 
 const TREE: WikiTree = {
   projectName: 'Demo',
@@ -45,6 +45,57 @@ const TREE: WikiTree = {
   ],
 };
 
+const PULSE: WikiPulse = {
+  projectName: 'Demo',
+  baseDir: '/repo/docs',
+  exists: true,
+  generatedAtUtc: '2026-07-10T09:00:00Z',
+  feed: {
+    available: true,
+    reason: null,
+    items: [
+      {
+        relPath: 'concepts/overview.md',
+        title: 'Concept overview',
+        author: 'Alice',
+        authorDateUtc: '2026-07-10T08:00:00Z',
+        sha: 'abc1234',
+        shortSha: 'abc1234',
+        subject: 'AGT-2014 refine overview',
+        frameAreaSlug: null,
+        frameAreaTitle: null,
+        taskKey: 'AGT-2014',
+      },
+    ],
+  },
+  inbox: {
+    available: true,
+    reason: null,
+    count: 1,
+    items: [
+      {
+        relPath: 'stray.md',
+        title: 'Stray note',
+        type: 'md',
+        reason: 'Loose page at the wiki root - not filed under a category.',
+      },
+    ],
+  },
+  drift: {
+    available: true,
+    reason: null,
+    overallGrade: 'Aging',
+    areas: [
+      { slug: '10-current-development-state', title: 'Current Development State', grade: 'Aging', pageCount: 1, gradedPageCount: 1, worstCommitCount: 12, freshCount: 0, agingCount: 1, staleCount: 0 },
+      { slug: '20-development-signals', title: 'Development Signals', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
+      { slug: '30-system-knowledge', title: 'System Knowledge', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
+      { slug: '40-decision-log', title: 'Decision Log', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
+      { slug: '50-workstream-log', title: 'Workstream Log', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
+    ],
+    counts: { fresh: 0, aging: 1, stale: 0, graded: 1 },
+  },
+};
+
 async function setup(tree: WikiTree = TREE) {
   await TestBed.configureTestingModule({
     imports: [ProjectWikiSectionComponent],
@@ -62,19 +113,18 @@ async function setup(tree: WikiTree = TREE) {
   fixture.detectChanges();
 
   http.expectOne('/api/projects/Demo/wiki/tree').flush(tree);
-  flushWikiRecent(http);
+  flushWikiPulse(http);
   fixture.detectChanges();
   return { fixture, http };
 }
 
 /**
- * refresh() fetches the git-backed dashboard recent-edits list alongside the
- * tree. Every refresh (initial load and post-mutation re-read) issues it, so the
- * fake backend must answer it or verify() trips on the dangling request.
+ * refresh() fetches the git-backed Pulse landing view alongside the tree. Every
+ * refresh (initial load and post-mutation re-read) issues it, so the fake
+ * backend must answer it or verify() trips on the dangling request.
  */
-function flushWikiRecent(http: HttpTestingController): void {
-  http.expectOne(r => r.url.includes('/wiki/recent'))
-    .flush({ projectName: 'Demo', baseDir: '/repo/docs', exists: true, edits: [] });
+function flushWikiPulse(http: HttpTestingController, pulse: WikiPulse = PULSE): void {
+  http.expectOne(r => r.url.includes('/wiki/pulse')).flush(pulse);
 }
 
 const el = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
@@ -289,7 +339,7 @@ describe('ProjectWikiSectionComponent', () => {
     });
     http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
     http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
-    flushWikiRecent(http);
+    flushWikiPulse(http);
     fixture.detectChanges();
 
     expect(fixture.componentInstance.openedContent()).toBe('# Changed\n');
@@ -329,12 +379,14 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
-  it('renders a functional default workspace page and collapses side panels', async () => {
+  it('opens on the generated Pulse landing view and collapses side panels', async () => {
     const { fixture, http } = await setup();
     const root = el(fixture);
 
+    // The wiki opens on Pulse (not a page), with its two quick actions + aside.
     expect(root.querySelector('[data-testid="project-wiki-viewer-empty"]')!.textContent)
-      .toContain('Root folder');
+      .toContain('Pulse');
+    expect(root.querySelector('[data-testid="project-wiki-pulse"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="project-wiki-open-first"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="project-wiki-workspace-meta"]')).toBeTruthy();
 
@@ -348,35 +400,29 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
-  it('shows sidecar chips on suggested root cards and opens the report from there', async () => {
+  it('renders the Pulse feed, inbox, and drift bar and opens a feed page', async () => {
     const { fixture, http } = await setup();
     const root = el(fixture);
 
-    const card = root.querySelector('[data-testid="project-wiki-suggested-card-concepts/overview.md"]');
-    expect(card?.textContent).toContain('B');
-    expect(card?.textContent).toContain('Now');
-    expect(card?.textContent).not.toContain('D:');
-    expect(card?.textContent).not.toContain('Dir:');
-    expect(card?.textContent).not.toContain('DriftB');
-    expect(card?.textContent).not.toContain('DirectionCurrent');
+    // Change feed row carries its task key + area/drift segment renders.
+    expect(root.querySelector('[data-testid="project-wiki-pulse-task-concepts/overview.md"]')?.textContent)
+      .toContain('AGT-2014');
+    expect(root.querySelector('[data-testid="project-wiki-pulse-area-10-current-development-state"]')?.textContent)
+      .toContain('Aging');
+    // Inbox lists the loose page; overall drift chip shows the worst grade.
+    expect(root.querySelector('[data-testid="project-wiki-pulse-inbox-open-stray.md"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-pulse-overall"]')?.textContent).toContain('Aging');
 
-    root.querySelector<HTMLButtonElement>(
-      '[data-testid="project-wiki-suggested-metric-concepts/overview.md-drift"]'
-    )!.click();
+    // Clicking a feed row opens the page in the reader.
+    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-pulse-feed-open-concepts/overview.md"]')!.click();
     fixture.detectChanges();
-
     http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
       .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n\nBody text.' });
     http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
-    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md.report.html')
-      .flush({
-        relPath: 'concepts/overview.md.report.html',
-        content: '<!doctype html><html><body><h2 id="why-drift">Why drift?</h2></body></html>',
-      });
     fixture.detectChanges();
 
-    expect(root.querySelector('[data-testid="project-wiki-tab-report"]')?.className)
-      .toContain('pwiki__tab--active');
+    expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')?.textContent)
+      .toContain('concepts/overview.md');
     http.verify();
   });
 
@@ -615,7 +661,7 @@ describe('ProjectWikiSectionComponent', () => {
 
     // The mutation triggers a refresh of the physical tree.
     http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
-    flushWikiRecent(http);
+    flushWikiPulse(http);
     fixture.detectChanges();
     http.verify();
   });
@@ -641,7 +687,7 @@ describe('ProjectWikiSectionComponent', () => {
     post.flush({ from: 'README.md', to: 'concepts/README.md', sha: 'abc1234' });
 
     http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
-    flushWikiRecent(http);
+    flushWikiPulse(http);
     fixture.detectChanges();
     http.verify();
   });
