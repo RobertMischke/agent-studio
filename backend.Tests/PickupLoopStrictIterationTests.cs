@@ -323,6 +323,7 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
             ProjectRunner.WorktreeBlockedFailureThreshold,
             ProjectRunner.WorktreeBlockedExecutionStatus,
             $"Orphan worktree dir busy at {busyPath}; deferring task {slug}.");
+        Assert.Equal(ProjectRunner.WorktreeBlockedFailureThreshold, runner.GetPickupFailureThreshold(slug));
 
         var picked = InvokePickerLoop(runner);
 
@@ -347,6 +348,19 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         Assert.Contains("\"threshold\":5", row);
         Assert.Contains("\"executionStatus\":\"worktree-blocked\"", row);
         Assert.Contains(busyPath.Replace("\\", "\\\\"), row);
+    }
+
+    [Fact]
+    public void RevertNoticeLimiter_EmitsOncePerTenMinutes_WithSuppressionCount()
+    {
+        var runner = BuildRunner();
+        var start = new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc);
+
+        Assert.Equal((true, 0), runner.TakeRevertLogDecisionForTest("busy-orphan", start));
+        Assert.Equal((false, 1), runner.TakeRevertLogDecisionForTest("busy-orphan", start.AddMinutes(1)));
+        Assert.Equal((false, 2), runner.TakeRevertLogDecisionForTest("busy-orphan", start.AddMinutes(9)));
+        Assert.Equal((true, 2), runner.TakeRevertLogDecisionForTest("busy-orphan", start.AddMinutes(10)));
+        Assert.Equal((true, 0), runner.TakeRevertLogDecisionForTest("another-task", start.AddMinutes(1)));
     }
 
     [Fact]

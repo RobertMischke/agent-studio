@@ -6681,7 +6681,10 @@ public class ProjectRunner
         var state = _pickupAttempts.GetOrAdd(slug, _ => new PickupAttemptState());
         state.Count = count;
         state.History.Clear();
-        var entries = Math.Min(count, PickupFailureThreshold);
+        var threshold = string.Equals(executionStatus, WorktreeBlockedExecutionStatus, StringComparison.Ordinal)
+            ? WorktreeBlockedFailureThreshold
+            : PickupFailureThreshold;
+        var entries = Math.Min(count, threshold);
         for (var i = 0; i < entries; i++)
         {
             state.History.Enqueue(new PickupAttemptDiagnostic
@@ -6699,11 +6702,17 @@ public class ProjectRunner
     internal int GetPickupAttempts(string slug)
         => _pickupAttempts.TryGetValue(slug, out var s) ? s.Count : 0;
 
-    private int GetPickupFailureThreshold(string slug)
+    internal int GetPickupFailureThreshold(string slug)
         => _pickupAttempts.TryGetValue(slug, out var state)
-           && state.History.LastOrDefault()?.ExecutionStatus == WorktreeBlockedExecutionStatus
+           && IsWorktreeBlockedFailure(state.History.LastOrDefault())
             ? WorktreeBlockedFailureThreshold
             : PickupFailureThreshold;
+
+    private static bool IsWorktreeBlockedFailure(PickupAttemptDiagnostic? attempt)
+        => string.Equals(
+            attempt?.ExecutionStatus,
+            WorktreeBlockedExecutionStatus,
+            StringComparison.Ordinal);
 
     private void RecordWorktreePreparationFailure(string jobId, string? error)
     {
@@ -7367,8 +7376,12 @@ public class ProjectRunner
             && historySnapshot.Count > 0
             && historySnapshot.All(h => string.Equals(h.ExecutionStatus, SpawnFailedExecutionStatus, StringComparison.Ordinal));
 
-        var worktreeBlocked = historySnapshot.Count > 0
-            && historySnapshot.All(h => string.Equals(h.ExecutionStatus, WorktreeBlockedExecutionStatus, StringComparison.Ordinal));
+        // The latest failure determines both the retry budget and escalation
+        // category. Earlier generic pickup failures must not erase a later
+        // busy-worktree diagnosis and make the visible threshold disagree with
+        // the five-attempt decision used by the picker.
+        var worktreeBlocked = !isZombieEscalation
+            && IsWorktreeBlockedFailure(historySnapshot.LastOrDefault());
         var targetState = spawnFailure ? TaskStates.Ready : TaskStates.Escalated;
         var worktreeError = worktreeBlocked
             ? historySnapshot.LastOrDefault(h => !string.IsNullOrWhiteSpace(h.Error))?.Error
@@ -7663,9 +7676,7 @@ public class ProjectRunner
         // precondition the reroute expects. For a spawn failure it returns the
         // unchanged task to 2-ready and pauses the runner (CLI unavailable);
         // there is nothing more to do.
-        var worktreeBlocked = _pickupAttempts.TryGetValue(jobId, out var failureState)
-            && failureState.History.LastOrDefault()?.ExecutionStatus == WorktreeBlockedExecutionStatus;
-        var threshold = worktreeBlocked ? WorktreeBlockedFailureThreshold : PickupFailureThreshold;
+        var threshold = GetPickupFailureThreshold(jobId);
         if (intent == RunIntent.AutoPickup && attempts >= threshold)
         {
             var candidate = new ProgressPickupCandidate(info.FolderPath, jobId, info, DateTime.UtcNow);
@@ -7687,26 +7698,10 @@ public class ProjectRunner
         if (intent == RunIntent.AutoPickup)
             _rapidCrashBackoffUntil[jobId] = DateTime.UtcNow + RapidCrashBreaker.Backoff(Math.Max(1, attempts));
 
-        var logState = _revertLogStates.GetOrAdd(jobId, _ => new RevertLogState());
         var now = DateTime.UtcNow;
-        var shouldEmit = false;
-        var suppressed = 0;
-        lock (logState)
-        {
-            if (logState.LastEmittedUtc == default || now - logState.LastEmittedUtc >= RevertLogInterval)
-            {
-                shouldEmit = true;
-                suppressed = logState.Suppressed;
-                logState.Suppressed = 0;
-                logState.LastEmittedUtc = now;
-            }
-            else
-            {
-                logState.Suppressed++;
-            }
-        }
-
-        if (!shouldEmit) return;
+        var logDecision = TakeRevertLogDecision(jobId, now);
+        if (!logDecision.Emit) return;
+        var suppressed = logDecision.Suppressed;
 
         _logger.LogInformation(
             "[taskboard] pick-reverted-no-run job={JobId} project={Project} attempts={Attempts} suppressedSinceLast={Suppressed} nextRetryNotBefore={NextRetryNotBefore}",
@@ -7729,6 +7724,29 @@ public class ProjectRunner
             _logger.LogDebug(ex, "[taskboard] chat-log append failed for reverted pick {JobId}", jobId);
         }
     }
+
+    private (bool Emit, int Suppressed) TakeRevertLogDecision(string jobId, DateTime nowUtc)
+    {
+        var logState = _revertLogStates.GetOrAdd(jobId, _ => new RevertLogState());
+        lock (logState)
+        {
+            if (logState.LastEmittedUtc != default
+                && nowUtc - logState.LastEmittedUtc < RevertLogInterval)
+            {
+                logState.Suppressed++;
+                return (false, logState.Suppressed);
+            }
+
+            var suppressed = logState.Suppressed;
+            logState.Suppressed = 0;
+            logState.LastEmittedUtc = nowUtc;
+            return (true, suppressed);
+        }
+    }
+
+    /// <summary>Test seam for the ten-minute per-task revert notice limiter.</summary>
+    internal (bool Emit, int Suppressed) TakeRevertLogDecisionForTest(string jobId, DateTime nowUtc)
+        => TakeRevertLogDecision(jobId, nowUtc);
 
     /// <summary>
     /// Pure decision: should the just-finished run trigger a session-chain

@@ -52,6 +52,10 @@ apply only under `frontend/`.
   [docs/wiki/concepts/orchestrator-drive-to-conclusion.html](docs/wiki/concepts/orchestrator-drive-to-conclusion.html)
   before changing that logic, and maintain it after. Append each incident to
   its case log (date, slug, what crashed, which terminal it reached).
+- A repeatedly busy orphan worktree is a bounded drive-to-conclusion failure:
+  after five preparation attempts, escalate it with a visible
+  `worktree-blocked` gate item containing the busy path, and pause retries.
+  Repeated `pick-reverted-no-run` notices remain rate-limited per task.
 - Agent shell policy: default to bash/sh, prefer existing `.sh` scripts, and
   avoid PowerShell-specific file creation.
 
