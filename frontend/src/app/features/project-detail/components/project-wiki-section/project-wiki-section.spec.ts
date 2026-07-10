@@ -394,9 +394,15 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.detectChanges();
     expect(root.querySelector('[data-testid="project-wiki-tree"]')).toBeNull();
 
-    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-toggle-context"]')!.click();
+    // The meta rail folds via its own labelled head toggle (not a top-bar
+    // mini-icon): the rail stays mounted as a slim strip, the body hides.
+    const metaToggle = root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-meta-toggle"]')!;
+    expect(metaToggle, 'meta toggle head').toBeTruthy();
+    expect(metaToggle.getAttribute('aria-expanded')).toBe('true');
+    metaToggle.click();
     fixture.detectChanges();
-    expect(root.querySelector('[data-testid="project-wiki-workspace-meta"]')).toBeNull();
+    expect(metaToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('#project-wiki-meta-body')!.hasAttribute('hidden')).toBe(true);
     http.verify();
   });
 
@@ -445,12 +451,90 @@ describe('ProjectWikiSectionComponent', () => {
 
     const root = el(fixture);
     expect(root.querySelector('[data-testid="project-wiki-tree"]')).toBeNull();
-    expect(root.querySelector('[data-testid="project-wiki-meta-panel"]')).toBeNull();
+    // The collapsed rail stays mounted (grade badge remains visible); only the
+    // meta body folds, and the head reports the collapsed state via aria.
+    expect(root.querySelector('[data-testid="project-wiki-meta-panel"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-meta-toggle"]')!.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('#project-wiki-meta-body')!.hasAttribute('hidden')).toBe(true);
     expect(root.querySelector('[data-testid="project-wiki-source-editor"]')!.textContent).toContain('# Restored');
     expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent).toContain('concepts/overview.md');
     expect(fixture.componentInstance.navWidth()).toBe(340);
     expect(fixture.componentInstance.contextWidth()).toBe(360);
     expect(JSON.parse(localStorage.getItem(wikiStorageKey()) ?? '{}').expandedIds).toContain('concepts');
+    http.verify();
+  });
+
+  it('surfaces the page drift grade in the meta head, visible even when the rail is collapsed', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    // The grade lifted from the drift-metadata card into the head reads the
+    // companion driftGrade (B, "warn" tone) so it is legible at a glance.
+    const grade = el(fixture).querySelector('[data-testid="project-wiki-meta-grade"]')!;
+    expect(grade.textContent).toContain('B');
+    expect(grade.getAttribute('data-tone')).toBe('warn');
+
+    // Collapsing the rail keeps the grade badge mounted in the (now vertical) head.
+    fixture.componentInstance.toggleContext();
+    fixture.detectChanges();
+    const toggle = el(fixture).querySelector('[data-testid="project-wiki-meta-toggle"]')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(el(fixture).querySelector('[data-testid="project-wiki-meta-grade"]')!.textContent).toContain('B');
+    expect(el(fixture).querySelector('#project-wiki-meta-body')!.hasAttribute('hidden')).toBe(true);
+    http.verify();
+  });
+
+  it('remembers the meta-rail collapse state per page', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    const cmp = fixture.componentInstance;
+
+    const openReadmeHistory = () => http.expectOne('/api/projects/Demo/wiki/history/README.md').flush({
+      relPath: 'README.md', model: null,
+      metadata: { model: null, updatedAt: null, reason: null, taskKey: null, status: null, runCount: null, hasFrontmatter: false },
+      commits: [],
+    });
+
+    // Open overview.md and fold its meta rail.
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Overview\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+    expect(cmp.contextCollapsed()).toBe(false);
+    cmp.toggleContext();
+    expect(cmp.contextCollapsed()).toBe(true);
+
+    // A different page keeps its own state (default: expanded).
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-README.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/README.md')
+      .flush({ relPath: 'README.md', content: '# Readme\n' });
+    openReadmeHistory();
+    fixture.detectChanges();
+    expect(cmp.contextCollapsed()).toBe(false);
+
+    // Reopening overview.md restores its remembered collapsed state.
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Overview\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+    expect(cmp.contextCollapsed()).toBe(true);
+
+    // The per-page choice is persisted for a later session.
+    const stored = JSON.parse(localStorage.getItem(wikiStorageKey()) ?? '{}');
+    expect(stored.metaCollapsedByPage?.['concepts/overview.md']).toBe(true);
+    // README was only viewed, never toggled, so it keeps the default (no entry).
+    expect(stored.metaCollapsedByPage?.['README.md']).toBeUndefined();
     http.verify();
   });
 

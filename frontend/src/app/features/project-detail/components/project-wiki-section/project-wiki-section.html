@@ -55,13 +55,6 @@
         <app-studio-icon name="folder" [size]="12"></app-studio-icon>
         <span>Category</span>
       </button>
-      <button class="pwiki__chrome-btn"
-              type="button"
-              data-testid="project-wiki-toggle-context"
-              [cacTooltip]="contextCollapsed() ? 'Show context panels' : 'Hide context panels'"
-              (click)="toggleContext()">
-        <app-studio-icon name="panelRight" [size]="14"></app-studio-icon>
-      </button>
     }
   </header>
 
@@ -401,14 +394,15 @@
               }
             </article>
 
-            @if (!contextCollapsed()) {
             <div class="pwiki__splitter pwiki__splitter--context"
                  role="separator"
-                 tabindex="0"
                  aria-controls="project-wiki-context"
                  aria-orientation="vertical"
                  data-testid="project-wiki-context-splitter"
                  [class.pwiki__splitter--active]="resizingPanel() === 'context'"
+                 [class.pwiki__splitter--hidden]="contextCollapsed()"
+                 [attr.tabindex]="contextCollapsed() ? -1 : 0"
+                 [attr.aria-hidden]="contextCollapsed() ? 'true' : null"
                  [attr.aria-label]="'Resize page context panels'"
                  [attr.aria-valuemin]="contextMinWidth"
                  [attr.aria-valuemax]="contextMaxWidth"
@@ -421,7 +415,35 @@
                  (keydown)="onPanelSplitterKeydown($event, 'context')">
               <span aria-hidden="true"></span>
             </div>
-            <aside class="pwiki__aside" id="project-wiki-context" data-testid="project-wiki-context-panel" aria-label="Page context">
+            <aside class="pwiki__aside"
+                   [class.pwiki__aside--collapsed]="contextCollapsed()"
+                   id="project-wiki-context"
+                   data-testid="project-wiki-context-panel"
+                   aria-label="Page meta">
+              <button class="pwiki__meta-toggle" type="button"
+                      data-testid="project-wiki-meta-toggle"
+                      [attr.aria-expanded]="!contextCollapsed()"
+                      aria-controls="project-wiki-meta-body"
+                      [cacTooltip]="contextCollapsed() ? 'Show page meta' : 'Hide page meta'"
+                      (click)="toggleContext()">
+                <span class="pwiki__meta-toggle-chevron" aria-hidden="true">
+                  <app-studio-icon [name]="contextCollapsed() ? 'chevronLeft' : 'chevronRight'" [size]="15"></app-studio-icon>
+                </span>
+                <span class="pwiki__meta-toggle-label">Meta</span>
+                <span class="pwiki__meta-toggle-spacer"></span>
+                @if (metaGradeBadge(); as badge) {
+                  <span class="pwiki__meta-grade"
+                        [attr.data-tone]="badge.tone"
+                        data-testid="project-wiki-meta-grade"
+                        [cacTooltip]="badge.label">{{ badge.display }}</span>
+                } @else {
+                  <span class="pwiki__meta-grade pwiki__meta-grade--empty"
+                        data-tone="muted"
+                        data-testid="project-wiki-meta-grade"
+                        aria-hidden="true">·</span>
+                }
+              </button>
+              <div class="pwiki__meta-body" id="project-wiki-meta-body" [hidden]="contextCollapsed()">
               <section class="pwiki__panel" data-testid="project-wiki-meta-panel">
                 <div class="pwiki__panel-head">
                   <span>Page info</span>
@@ -536,9 +558,8 @@
                   <p class="pwiki__panel-empty">No page links detected.</p>
                 }
               </section>
-
+              </div>
             </aside>
-            }
           </div>
         } @else {
           <header class="pwiki__viewer-head" data-testid="project-wiki-tabs-empty">
@@ -589,27 +610,45 @@
                   (openPage)="onPulseOpen($event)" />
             </article>
 
-            @if (!contextCollapsed()) {
-              <div class="pwiki__splitter pwiki__splitter--context"
-                   role="separator"
-                   tabindex="0"
-                   aria-controls="project-wiki-context"
-                   aria-orientation="vertical"
-                   data-testid="project-wiki-context-splitter"
-                   [class.pwiki__splitter--active]="resizingPanel() === 'context'"
-                   [attr.aria-label]="'Resize root context panels'"
-                   [attr.aria-valuemin]="contextMinWidth"
-                   [attr.aria-valuemax]="contextMaxWidth"
-                   [attr.aria-valuenow]="contextWidth()"
-                   cacTooltip="Drag to resize the root context panels"
-                   (pointerdown)="startPanelResize($event, 'context')"
-                   (pointermove)="resizePanel($event)"
-                   (pointerup)="finishPanelResize($event)"
-                   (pointercancel)="finishPanelResize($event)"
-                   (keydown)="onPanelSplitterKeydown($event, 'context')">
-                <span aria-hidden="true"></span>
-              </div>
-              <aside class="pwiki__aside pwiki__aside--landing" id="project-wiki-context" data-testid="project-wiki-context-panel" aria-label="Root context">
+            <div class="pwiki__splitter pwiki__splitter--context"
+                 role="separator"
+                 aria-controls="project-wiki-context"
+                 aria-orientation="vertical"
+                 data-testid="project-wiki-context-splitter"
+                 [class.pwiki__splitter--active]="resizingPanel() === 'context'"
+                 [class.pwiki__splitter--hidden]="contextCollapsed()"
+                 [attr.tabindex]="contextCollapsed() ? -1 : 0"
+                 [attr.aria-hidden]="contextCollapsed() ? 'true' : null"
+                 [attr.aria-label]="'Resize root context panels'"
+                 [attr.aria-valuemin]="contextMinWidth"
+                 [attr.aria-valuemax]="contextMaxWidth"
+                 [attr.aria-valuenow]="contextWidth()"
+                 cacTooltip="Drag to resize the root context panels"
+                 (pointerdown)="startPanelResize($event, 'context')"
+                 (pointermove)="resizePanel($event)"
+                 (pointerup)="finishPanelResize($event)"
+                 (pointercancel)="finishPanelResize($event)"
+                 (keydown)="onPanelSplitterKeydown($event, 'context')">
+              <span aria-hidden="true"></span>
+            </div>
+            <aside class="pwiki__aside pwiki__aside--landing"
+                   [class.pwiki__aside--collapsed]="contextCollapsed()"
+                   id="project-wiki-context"
+                   data-testid="project-wiki-context-panel"
+                   aria-label="Root meta">
+              <button class="pwiki__meta-toggle" type="button"
+                      data-testid="project-wiki-meta-toggle"
+                      [attr.aria-expanded]="!contextCollapsed()"
+                      aria-controls="project-wiki-meta-body"
+                      [cacTooltip]="contextCollapsed() ? 'Show project meta' : 'Hide project meta'"
+                      (click)="toggleContext()">
+                <span class="pwiki__meta-toggle-chevron" aria-hidden="true">
+                  <app-studio-icon [name]="contextCollapsed() ? 'chevronLeft' : 'chevronRight'" [size]="15"></app-studio-icon>
+                </span>
+                <span class="pwiki__meta-toggle-label">Meta</span>
+                <span class="pwiki__meta-toggle-spacer"></span>
+              </button>
+              <div class="pwiki__meta-body" id="project-wiki-meta-body" [hidden]="contextCollapsed()">
                 <section class="pwiki__panel" data-testid="project-wiki-workspace-meta">
                   <div class="pwiki__panel-head">
                     <span>Root folder</span>
@@ -647,8 +686,8 @@
                     </button>
                   </div>
               </section>
+              </div>
             </aside>
-            }
           </div>
         }
       </div>

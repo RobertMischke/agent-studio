@@ -246,6 +246,20 @@
   background: color-mix(in srgb, var(--studio-accent) 18%, transparent);
 }
 
+// When the meta rail is collapsed its resize handle has nothing to resize:
+// drop it out of the flow and out of the tab order (the slim rail head is the
+// reopen target instead).
+.pwiki__splitter--hidden {
+  width: 0;
+  min-width: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.pwiki__splitter--hidden::before {
+  display: none;
+}
+
 .pwiki__tree-top {
   display: flex;
   align-items: center;
@@ -726,6 +740,11 @@
 }
 
 .pwiki__workspace {
+  // Collapsed meta rail keeps a slim strip (chevron + vertical "Meta" + grade
+  // badge) instead of vanishing, so the grade stays readable and the reopen
+  // target stays on screen. Both states share the same three grid tracks so the
+  // column change can animate smoothly (no layout snap when toggling).
+  --pwiki-meta-rail-collapsed: 46px;
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 1px var(--pwiki-context-width, 284px);
@@ -734,8 +753,19 @@
   overflow: hidden;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .pwiki__workspace {
+    transition: grid-template-columns 220ms ease;
+  }
+}
+
+// A live splitter drag must track the pointer 1:1 - never lag behind an easing.
+.pwiki__workspace--resizing {
+  transition: none;
+}
+
 .pwiki__workspace--aside-collapsed {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 0 var(--pwiki-meta-rail-collapsed);
 }
 
 .pwiki__reader {
@@ -957,10 +987,147 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  overflow-y: auto;
+  overflow: hidden; // the head stays put; the body owns the scroll
   border-left: 1px solid var(--studio-border);
   background: color-mix(in srgb, var(--studio-bg-sidebar) 82%, var(--studio-bg-editor));
+}
+
+// ---- meta rail: labelled toggle head + scrollable body ----
+
+// Generous, clearly labelled toggle (chevron + "Meta" + grade badge) that
+// replaces the old top-bar mini-icon. It is a full-width button so the whole
+// head is the hit target, and it is keyboard-native (Enter/Space) with
+// aria-expanded driven from the template.
+.pwiki__meta-toggle {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--studio-spacing-3);
+  border: 0;
+  border-bottom: 1px solid var(--studio-border);
+  background: var(--pwiki-editor-chrome);
+  color: var(--studio-fg);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.pwiki__meta-toggle:hover {
+  background: var(--studio-bg-hover);
+}
+
+.pwiki__meta-toggle:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: -2px;
+}
+
+.pwiki__meta-toggle-chevron {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--studio-fg-muted);
+}
+
+.pwiki__meta-toggle-label {
+  flex: 0 0 auto;
+  color: var(--studio-fg-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pwiki__meta-toggle:hover .pwiki__meta-toggle-chevron,
+.pwiki__meta-toggle:hover .pwiki__meta-toggle-label {
+  color: var(--studio-fg-strong);
+}
+
+.pwiki__meta-toggle-spacer {
+  flex: 1 1 auto;
+}
+
+// Grade badge lifted out of the drift-metadata card into the head, so the
+// Wiki-grading verdict reads at a glance - including in the collapsed rail.
+.pwiki__meta-grade {
+  flex: 0 0 auto;
+  min-width: 20px;
+  min-height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--studio-spacing-1);
+  border: 1px solid color-mix(in srgb, var(--studio-border) 80%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--studio-fg-muted) 12%, transparent);
+  color: var(--studio-fg);
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.pwiki__meta-grade[data-tone='good'] {
+  border-color: color-mix(in srgb, var(--severity-pass) 45%, var(--studio-border));
+  background: color-mix(in srgb, var(--severity-pass) 18%, transparent);
+  color: color-mix(in srgb, var(--severity-pass) 82%, var(--studio-fg));
+}
+
+.pwiki__meta-grade[data-tone='warn'] {
+  border-color: color-mix(in srgb, var(--severity-warn) 50%, var(--studio-border));
+  background: color-mix(in srgb, var(--severity-warn) 20%, transparent);
+  color: color-mix(in srgb, var(--severity-warn) 88%, var(--studio-fg));
+}
+
+.pwiki__meta-grade[data-tone='bad'] {
+  border-color: color-mix(in srgb, var(--severity-high) 48%, var(--studio-border));
+  background: color-mix(in srgb, var(--severity-high) 16%, transparent);
+  color: color-mix(in srgb, var(--severity-high) 82%, var(--studio-fg));
+}
+
+.pwiki__meta-grade[data-tone='info'] {
+  border-color: color-mix(in srgb, var(--severity-info) 45%, var(--studio-border));
+  background: color-mix(in srgb, var(--severity-info) 16%, transparent);
+  color: color-mix(in srgb, var(--severity-info) 82%, var(--studio-fg));
+}
+
+.pwiki__meta-grade[data-tone='muted'],
+.pwiki__meta-grade--empty {
+  border-style: dashed;
+  background: transparent;
+  color: var(--studio-fg-muted);
+}
+
+.pwiki__meta-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
   @include m.thin-scroll;
+}
+
+.pwiki__meta-body[hidden] {
+  display: none;
+}
+
+// ---- collapsed slim rail: vertical head, grade badge pinned to the foot ----
+.pwiki__aside--collapsed .pwiki__meta-toggle {
+  flex-direction: column;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  height: 100%;
+  min-height: 0;
+  padding: var(--studio-spacing-2) 0;
+  border-bottom: 0;
+}
+
+.pwiki__aside--collapsed .pwiki__meta-toggle-label {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.14em;
 }
 
 .pwiki__panel {
@@ -1598,11 +1765,29 @@
   }
 
   .pwiki__aside {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
     border-top: 1px solid var(--studio-border);
     border-left: 0;
     overflow: visible;
+  }
+
+  // Stacked under the reader: the panels lay out three-across, and the toggle
+  // head returns to a horizontal bar (no slim vertical rail on narrow layouts).
+  .pwiki__meta-body {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .pwiki__aside--collapsed .pwiki__meta-toggle {
+    flex-direction: row;
+    height: auto;
+    min-height: 40px;
+    padding: 0 var(--studio-spacing-3);
+    border-bottom: 0;
+  }
+
+  .pwiki__aside--collapsed .pwiki__meta-toggle-label {
+    writing-mode: horizontal-tb;
   }
 
   .pwiki__workspace--aside-collapsed {
@@ -1671,8 +1856,9 @@
     gap: 0;
   }
 
-  .pwiki__aside {
-    display: flex;
+  // Narrowest layout: panels stack in a single column again.
+  .pwiki__meta-body {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .pwiki__tabs {
