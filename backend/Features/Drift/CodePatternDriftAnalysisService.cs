@@ -68,7 +68,7 @@ public sealed class CodePatternDriftAnalysisService
     /// </summary>
     public static IReadOnlyList<CodePatternRule> LoadEffectiveRules(string repoRoot, ILogger? logger = null)
     {
-        var path = Path.Combine(repoRoot, "docs", "code-patterns.md");
+        var path = Path.Combine(repoRoot, "docs", "contracts", "code-patterns.md");
         var fromDocs = CodePatternRuleLoader.LoadFromFile(path, logger);
         if (fromDocs.Count == 0) return DefaultRules;
         var ids = new HashSet<string>(DefaultRules.Select(r => r.Id), StringComparer.OrdinalIgnoreCase);
