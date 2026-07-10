@@ -1,0 +1,45 @@
+<div class="rh" data-testid="remote-hosts-panel">
+  <header class="rh__head">
+    <div class="rh__intro">
+      <h2 class="rh__title">Remote Hosts</h2>
+      <p class="rh__subtitle">
+        Every execution location in one place - your local machine and each
+        remote runner - with heartbeat status, capabilities, system vitals, and
+        per-CLI quota. Re-Probe, Drain, or Retire a host from its row.
+      </p>
+    </div>
+    <button class="rh__refresh"
+            type="button"
+            data-testid="remote-hosts-refresh"
+            [disabled]="loading()"
+            (click)="reload()">
+      {{ loading() ? '⏳' : '↻' }}
+      <span>Reload</span>
+    </button>
+  </header>
+
+  <div class="rh__summary" data-testid="remote-hosts-summary">
+    <span class="rh__count"><strong>{{ total() }}</strong> {{ total() === 1 ? 'host' : 'hosts' }}</span>
+    <span class="rh__sep" aria-hidden="true">·</span>
+    <span class="rh__count"><strong>{{ onlineCount() }}</strong> online</span>
+    <span class="rh__sep" aria-hidden="true">·</span>
+    <span class="rh__count"><strong>{{ remoteCount() }}</strong> remote</span>
+  </div>
+
+  @if (error(); as err) {
+    <div class="rh__error" data-testid="remote-hosts-error">{{ err }}</div>
+  }
+
+  @if (total() === 0 && !loading()) {
+    <div class="rh__empty" data-testid="remote-hosts-empty">
+      No hosts registered yet. The local machine and remote runners appear here
+      once they report a heartbeat.
+    </div>
+  }
+
+  <div class="rh__list">
+    @for (host of hosts(); track host.id) {
+      <app-remote-host-card [host]="host" [now]="now()" (action)="onAction($event)" />
+    }
+  </div>
+</div>

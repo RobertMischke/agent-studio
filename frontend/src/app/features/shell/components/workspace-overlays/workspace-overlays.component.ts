@@ -5,6 +5,7 @@ import type { WorkspaceSettingsSection } from '../../state/workspace-overlays.se
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import { TokenUsageSectionComponent } from '../../../tokens';
 import { CliAdminPanelComponent, CliWorkingMemoryPanelComponent } from '../../../cli';
+import { RemoteHostsPanelComponent } from '../../../remote-hosts';
 import { PromptAdminPanelComponent } from '../../../orchestrator';
 // Direct path (not the studio-shell barrel) so we don't pull StudioShellComponent
 // and re-form the shell <-> studio-shell import cycle (AGT-2035).
@@ -53,6 +54,7 @@ interface SettingsRailItem {
     WorkspaceScreenshotsComponent,
     CliAdminPanelComponent,
     CliWorkingMemoryPanelComponent,
+    RemoteHostsPanelComponent,
     PromptAdminPanelComponent,
     AppearanceSettingsComponent,
     UpdatesSettingsComponent,
@@ -86,6 +88,7 @@ export class WorkspaceOverlaysComponent {
     { key: 'appearance', label: 'Appearance', description: 'Theme and activity-bar side. Applies to you everywhere.', icon: '\u{1F3A8}', group: 'global' },
     { key: 'updates', label: 'Updates', description: 'Keep this instance in sync with stable.', icon: '\u{1F504}', group: 'global' },
     { key: 'workspaces', label: 'Workspaces', description: 'Manage every workspace and its projects.', icon: '\u{1F5C2}', group: 'global' },
+    { key: 'remote-hosts', label: 'Remote hosts', description: 'Execution locations: heartbeat, vitals, quota, and Re-Probe / Drain / Retire.', icon: '\u{1F4E1}', group: 'global' },
     { key: 'caps', label: 'Usage caps', description: 'Per-CLI quota caps and runner rules.', icon: '⚙', group: 'workspace' },
     { key: 'working-memory', label: 'Working memory', description: 'Per-CLI memory and session state. Auth stays protected.', icon: '\u{1F9E0}', group: 'workspace' },
     { key: 'prompts', label: 'System prompts', description: 'Application-wide runtime prompt defaults and overrides.', icon: 'T', group: 'workspace' },
@@ -145,6 +148,7 @@ export class WorkspaceOverlaysComponent {
       case 'appearance': return 'workspace-appearance-overlay';
       case 'updates': return 'workspace-updates-overlay';
       case 'workspaces': return 'workspace-management-overlay';
+      case 'remote-hosts': return 'workspace-remote-hosts-overlay';
       case 'working-memory': return 'workspace-working-memory-overlay';
       case 'overview': return 'workspace-settings-overview-panel';
     }

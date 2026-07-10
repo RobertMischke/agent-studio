@@ -100,6 +100,9 @@
         @case ('workspaces') {
           <app-workspace-management />
         }
+        @case ('remote-hosts') {
+          <app-remote-hosts-panel />
+        }
         @case ('caps') {
           <app-cli-admin-panel (openJobDetail)="openJobDetail.emit($event)" />
         }
