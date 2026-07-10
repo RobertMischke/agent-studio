@@ -932,6 +932,12 @@ cliRouter.OnRunEvent += (cliType, jobId, evt) =>
 // GenericCliExecutionService.ReattachOnStartup. Must run before any new CLI run
 // is started so we never have two processes editing the same repo.
 cliRouter.ReattachAll();
+// A detached ng/esbuild helper is no longer reachable from its original CLI
+// PID and therefore has no useful active-jobs entry. At boot there are no live
+// runs yet, so reclaim helpers whose command line still points into an
+// ephemeral task worktree before pickup starts.
+WindowsWorktreeOrphanSweeper.Sweep(
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("WorktreeOrphanBootSweep"));
 
 // Wire up Runner status → SignalR push
 var taskRunner = app.Services.GetRequiredService<TaskRunnerService>();

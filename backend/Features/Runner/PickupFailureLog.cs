@@ -157,6 +157,7 @@ public sealed record PickupAttemptDiagnostic
     [JsonPropertyName("durationSeconds")] public double DurationSeconds { get; init; }
     [JsonPropertyName("outputLines")] public int OutputLines { get; init; }
     [JsonPropertyName("executionStatus")] public string? ExecutionStatus { get; init; }
+    [JsonPropertyName("error")] public string? Error { get; init; }
 }
 
 /// <summary>

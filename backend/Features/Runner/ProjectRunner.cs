@@ -336,6 +336,15 @@ public class ProjectRunner
     // so the existing quarantine route parks the task after the threshold.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _rapidCrashBackoffUntil = new(StringComparer.Ordinal);
 
+    private sealed class RevertLogState
+    {
+        public DateTime LastEmittedUtc;
+        public int Suppressed;
+    }
+
+    private static readonly TimeSpan RevertLogInterval = TimeSpan.FromMinutes(10);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, RevertLogState> _revertLogStates = new(StringComparer.Ordinal);
+
     private bool IsInRapidCrashBackoff(string jobId)
         => _rapidCrashBackoffUntil.TryGetValue(jobId, out var until) && until > DateTime.UtcNow;
 
@@ -2144,9 +2153,7 @@ public class ProjectRunner
                     // cross-contamination this fix exists to prevent. Release the
                     // slot and serialize; the next auto-pickup tick retries once a
                     // worktree can be prepared/reused.
-                    _logger.LogWarning(
-                        "[taskboard] worktree prepare/reuse failed for {Job}: {Err} - serializing (refusing shared main checkout for a coding run)",
-                        jobId, prep.Error);
+                    RecordWorktreePreparationFailure(jobId, prep.Error);
                     _activeRuns.Release(jobId);
                     ReleasePickupLockIfHeld();
                     _mutations.RollbackStashedPendingIntent(info.FolderPath);
@@ -6403,9 +6410,10 @@ public class ProjectRunner
             return null;
 
         var attempts = GetPickupAttempts(slug);
-        if (attempts >= PickupFailureThreshold)
+        var pickupThreshold = GetPickupFailureThreshold(slug);
+        if (attempts >= pickupThreshold)
         {
-            RerouteOverBudgetFolder(candidate, slug, attempts);
+            RerouteOverBudgetFolder(candidate, slug, attempts, thresholdOverride: pickupThreshold);
             return null;
         }
 
@@ -6563,6 +6571,8 @@ public class ProjectRunner
     /// nothing" (escalate to 5-human-review).
     /// </summary>
     internal const string SpawnFailedExecutionStatus = "spawn-failed";
+    internal const string WorktreeBlockedExecutionStatus = "worktree-blocked";
+    internal const int WorktreeBlockedFailureThreshold = 5;
     /// <summary>
     /// Per-attempt deadline (seconds) within which the spawned CLI must
     /// produce at least one streamed output line for the attempt to count
@@ -6622,7 +6632,7 @@ public class ProjectRunner
     /// 2-ready + pause path, or leave it null for the task-shaped ->
     /// 5-human-review path. History is bounded at the threshold to mirror the
     /// real recorder.</summary>
-    internal void SetPickupAttemptsForTest(string slug, int count, string? executionStatus = null)
+    internal void SetPickupAttemptsForTest(string slug, int count, string? executionStatus = null, string? error = null)
     {
         var state = _pickupAttempts.GetOrAdd(slug, _ => new PickupAttemptState());
         state.Count = count;
@@ -6635,7 +6645,8 @@ public class ProjectRunner
                 At = DateTime.UtcNow,
                 DurationSeconds = 0,
                 OutputLines = 0,
-                ExecutionStatus = executionStatus
+                ExecutionStatus = executionStatus,
+                Error = error
             });
         }
     }
@@ -6643,6 +6654,27 @@ public class ProjectRunner
     /// <summary>Test seam: read the per-slug attempt counter.</summary>
     internal int GetPickupAttempts(string slug)
         => _pickupAttempts.TryGetValue(slug, out var s) ? s.Count : 0;
+
+    private int GetPickupFailureThreshold(string slug)
+        => _pickupAttempts.TryGetValue(slug, out var state)
+           && state.History.LastOrDefault()?.ExecutionStatus == WorktreeBlockedExecutionStatus
+            ? WorktreeBlockedFailureThreshold
+            : PickupFailureThreshold;
+
+    private void RecordWorktreePreparationFailure(string jobId, string? error)
+    {
+        var state = _pickupAttempts.GetOrAdd(jobId, _ => new PickupAttemptState());
+        state.Count++;
+        state.History.Enqueue(new PickupAttemptDiagnostic
+        {
+            At = DateTime.UtcNow,
+            DurationSeconds = 0,
+            OutputLines = 0,
+            ExecutionStatus = WorktreeBlockedExecutionStatus,
+            Error = error
+        });
+        while (state.History.Count > WorktreeBlockedFailureThreshold) state.History.Dequeue();
+    }
 
     /// <summary>Test seam: number of distinct tasks the auto-failure breaker has
     /// parked in 5e-escalated without a success in between - the "3x3"
@@ -7289,14 +7321,21 @@ public class ProjectRunner
             && historySnapshot.Count > 0
             && historySnapshot.All(h => string.Equals(h.ExecutionStatus, SpawnFailedExecutionStatus, StringComparison.Ordinal));
 
+        var worktreeBlocked = historySnapshot.Count > 0
+            && historySnapshot.All(h => string.Equals(h.ExecutionStatus, WorktreeBlockedExecutionStatus, StringComparison.Ordinal));
         var targetState = spawnFailure ? TaskStates.Ready : TaskStates.Escalated;
+        var worktreeError = worktreeBlocked
+            ? historySnapshot.LastOrDefault(h => !string.IsNullOrWhiteSpace(h.Error))?.Error
+            : null;
 
         // Computed up front so the zombie escalation can carry the reason into
         // the decision journal + status.md stub written by the funnel.
         var reason = reasonOverride
             ?? (spawnFailure
                 ? $"Auto-pickup could not start the {cliTypeBeforeMove ?? "agent"} CLI for '{slug}': {attempts} consecutive attempts (budget {threshold}) failed to spawn a process. The task is unchanged and was returned to {TaskStates.Ready}; the runner paused so it does not spin against an unavailable CLI."
-                : $"Auto-pickup ran the CLI for '{slug}' on {attempts} consecutive attempts (budget {threshold}) but the run never produced a CLI output line within {PickupOutputDeadlineSeconds}s. The task was escalated for a person to decide.");
+                : worktreeBlocked
+                    ? $"Worktree preparation for '{slug}' remained blocked after {attempts} attempts (budget {threshold}). {worktreeError ?? "The orphan worktree directory is still busy."} Automatic retry is paused; release the process holding this path, then re-queue the task."
+                    : $"Auto-pickup ran the CLI for '{slug}' on {attempts} consecutive attempts (budget {threshold}) but the run never produced a CLI output line within {PickupOutputDeadlineSeconds}s. The task was escalated for a person to decide.");
 
         // Spawn failure returns the unchanged task to 2-ready (no verdict - it
         // is re-picked once the CLI is fixed). A task-shaped / zombie folder is
@@ -7306,7 +7345,7 @@ public class ProjectRunner
             ? _states.MoveJob(jobIdBeforeMove, TaskStates.Ready, Entry.Path)
             : _humanReviewEscalation.Escalate(
                 jobIdBeforeMove, Entry.Path, ProjectName,
-                HumanReviewEscalationCategories.PickupZombie, reason);
+                worktreeBlocked ? HumanReviewEscalationCategories.WorktreeBlocked : HumanReviewEscalationCategories.PickupZombie, reason);
         if (moveResult.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -7544,10 +7583,13 @@ public class ProjectRunner
         // precondition the reroute expects. For a spawn failure it returns the
         // unchanged task to 2-ready and pauses the runner (CLI unavailable);
         // there is nothing more to do.
-        if (intent == RunIntent.AutoPickup && attempts >= PickupFailureThreshold)
+        var worktreeBlocked = _pickupAttempts.TryGetValue(jobId, out var failureState)
+            && failureState.History.LastOrDefault()?.ExecutionStatus == WorktreeBlockedExecutionStatus;
+        var threshold = worktreeBlocked ? WorktreeBlockedFailureThreshold : PickupFailureThreshold;
+        if (intent == RunIntent.AutoPickup && attempts >= threshold)
         {
             var candidate = new ProgressPickupCandidate(info.FolderPath, jobId, info, DateTime.UtcNow);
-            RerouteOverBudgetFolder(candidate, jobId, attempts);
+            RerouteOverBudgetFolder(candidate, jobId, attempts, thresholdOverride: threshold);
             return;
         }
 
@@ -7565,9 +7607,31 @@ public class ProjectRunner
         if (intent == RunIntent.AutoPickup)
             _rapidCrashBackoffUntil[jobId] = DateTime.UtcNow + RapidCrashBreaker.Backoff(Math.Max(1, attempts));
 
+        var logState = _revertLogStates.GetOrAdd(jobId, _ => new RevertLogState());
+        var now = DateTime.UtcNow;
+        var shouldEmit = false;
+        var suppressed = 0;
+        lock (logState)
+        {
+            if (logState.LastEmittedUtc == default || now - logState.LastEmittedUtc >= RevertLogInterval)
+            {
+                shouldEmit = true;
+                suppressed = logState.Suppressed;
+                logState.Suppressed = 0;
+                logState.LastEmittedUtc = now;
+            }
+            else
+            {
+                logState.Suppressed++;
+            }
+        }
+
+        if (!shouldEmit) return;
+
         _logger.LogInformation(
-            "[taskboard] reverted job {JobId} on {Project} from 3-progress back to 2-ready (run never started; no zombie left in 3-progress)",
-            jobId, ProjectName);
+            "[taskboard] pick-reverted-no-run job={JobId} project={Project} attempts={Attempts} suppressedSinceLast={Suppressed} nextRetryNotBefore={NextRetryNotBefore}",
+            jobId, ProjectName, attempts, suppressed,
+            _rapidCrashBackoffUntil.TryGetValue(jobId, out var retryAt) ? retryAt : null);
 
         try
         {
@@ -7578,7 +7642,7 @@ public class ProjectRunner
                     "pick-reverted-no-run",
                     "The task was picked into 3-progress but the agent process never started. " +
                     "It was returned to 2-ready immediately so it is not stranded as a zombie in 3-progress; " +
-                    "the orchestrator will retry it.");
+                    $"the orchestrator will retry it. Repeated identical notices suppressed since the prior notice: {suppressed}.");
         }
         catch (Exception ex)
         {

@@ -310,6 +310,41 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     }
 
     [Fact]
+    public void StrictIteration_BusyOrphanAtFiveAttempts_EscalatesWithPathAndStopsRetrying()
+    {
+        const string slug = "busy-orphan";
+        var busyPath = Path.Combine(Path.GetTempPath(), "ass-worktrees", "demo", slug);
+        WriteJob(TaskStates.Progress, slug);
+
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+        runner.SetPickupAttemptsForTest(
+            slug,
+            ProjectRunner.WorktreeBlockedFailureThreshold,
+            ProjectRunner.WorktreeBlockedExecutionStatus,
+            $"Orphan worktree dir busy at {busyPath}; deferring task {slug}.");
+
+        var picked = InvokePickerLoop(runner);
+
+        Assert.Null(picked);
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, slug)));
+        var escalated = Path.Combine(_watchPath, TaskStates.Escalated, slug);
+        Assert.True(Directory.Exists(escalated));
+
+        var status = File.ReadAllText(Path.Combine(escalated, "status.md"));
+        Assert.Contains("worktree-blocked", status);
+        Assert.Contains(busyPath, status);
+        Assert.Contains("after 5 attempts", status);
+
+        var row = File.ReadAllLines(Path.Combine(_workspaceRoot, "logs", "pickup-failures.jsonl"))
+            .Single(line => line.Length > 0);
+        Assert.Contains("\"threshold\":5", row);
+        Assert.Contains("\"executionStatus\":\"worktree-blocked\"", row);
+        Assert.Contains(busyPath.Replace("\\", "\\\\"), row);
+    }
+
+    [Fact]
     public void StrictIteration_PostMoveSkeleton_TwinInHumanReview_IsSilentlyDeleted()
     {
         // Setup mirrors the Windows file-handle race that produces the

@@ -15,6 +15,9 @@ public static class HumanReviewEscalationCategories
     public const string EnvironmentBlocker = "environment-blocker";
     public const string AutoFailurePark = "auto-failure-park";
     public const string PickupZombie = "pickup-zombie";
+    /// <summary>A task worktree remained locked after bounded cleanup retries.
+    /// The busy path is included in the escalation reason for operator action.</summary>
+    public const string WorktreeBlocked = "worktree-blocked";
     public const string EmptyFastExit = "empty-fast-exit";
 
     /// <summary>The agent CLI process died hard (exitCode &lt; 0) before it could
