@@ -142,6 +142,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     // the many stand-alone test constructors keep compiling; production DI supplies
     // the registered singleton.
     private readonly AgentsWikiSyncPostStepRunner? _agentsWikiSync;
+    private readonly WorkstreamCollectorPostStepRunner? _workstreamCollector;
     private readonly WikiTaskCrossReferenceService? _wikiTaskCrossReferences;
     private readonly RegressionRadarService? _regressionRadar;
     // The opt-in task-spawner post-step (AGT-2028). Optional so the many
@@ -213,7 +214,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         AgentStudio.Review.CodeReviewStepService? codeReviewStep = null,
         TaskSpawnerPostStepRunner? taskSpawner = null,
         WikiTaskCrossReferenceService? wikiTaskCrossReferences = null,
-        AgentsWikiSyncPostStepRunner? agentsWikiSync = null)
+        AgentsWikiSyncPostStepRunner? agentsWikiSync = null,
+        WorkstreamCollectorPostStepRunner? workstreamCollector = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -242,6 +244,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _taskSpawner = taskSpawner;
         _wikiTaskCrossReferences = wikiTaskCrossReferences;
         _agentsWikiSync = agentsWikiSync;
+        _workstreamCollector = workstreamCollector;
 
         _statusSnapshot.ConfigureEscalationRateAlert(
             _configuration.GetValue(
@@ -1654,6 +1657,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // from the task's own change set, so agents stop re-discovering the same
         // ground. Reporting-only and never changes the task lane decision.
         RunAgentsWikiSyncPostStep(entry, current);
+
+        // EW-2: collect the settled task into the fixed Workstream frame. The
+        // model only proposes records; the runner owns and bounds every write.
+        await RunWorkstreamCollectorPostStepAsync(
+            entry, current, report, taskBody, statusSummary, diffSummary, ct);
 
         // AGT-2053: append bidirectional task/wiki associations after the wiki
         // producers have settled. This is reporting-only and deliberately does
@@ -3863,6 +3871,105 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             DurationMs = durationMs,
             Verdict = verdictToken,
             Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+        });
+    }
+
+    private async Task RunWorkstreamCollectorPostStepAsync(
+        WatchPathEntry entry,
+        TaskInfo current,
+        AspectRunReport report,
+        string taskBody,
+        string statusSummary,
+        string diffSummary,
+        CancellationToken ct)
+    {
+        if (_workstreamCollector == null) return;
+        var stepId = PipelineCatalogue.WorkstreamCollectorStepId;
+        var settings = _projectSettings?.Get(entry.Name);
+        var step = PipelineCatalogue.Standard.Post.First(s => s.Id == stepId);
+        var condition = new PipelineStepConditionContext
+        {
+            Aborted = false,
+            ExitCode = 0,
+            AnyAspectFailed = report.Overall == AspectStatus.Block,
+            TaskType = current.TaskType,
+            Tags = current.Tags,
+        };
+        if (!PipelineStepConfigResolver.ShouldRun(settings, step, condition))
+        {
+            RecordWorkstreamCollectorStep(current.FolderPath, PipelineStepStatus.Skipped,
+                0, "off", "post-step disabled by config or condition");
+            return;
+        }
+        if (report.Overall == AspectStatus.Block)
+        {
+            RecordWorkstreamCollectorStep(current.FolderPath, PipelineStepStatus.Skipped,
+                0, "source-blocked", "source run is being reissued; completion collection deferred");
+            return;
+        }
+
+        var started = DateTime.UtcNow;
+        try
+        {
+            var fallbackModel = ModelMetadataRegistry.DefaultForCli(CliTypes.Claude) ?? ModelIds.ClaudeSonnet45;
+            var model = PipelineStepConfigResolver.ResolveModel(settings, step, fallbackModel);
+            var cli = PipelineStepConfigResolver.ResolveCliType(settings, stepId) ?? CliTypes.Claude;
+            var thinking = PipelineStepConfigResolver.ResolveThinkingLevel(settings, step, cli, model, "high");
+            var review = string.Join("\n", report.Verdicts.Select(v =>
+                $"- {v.Aspect}: {AspectVerdictParsing.StatusToken(v.Status)} - {v.Summary}"));
+            var result = await _workstreamCollector.RunAsync(new WorkstreamCollectorContext
+            {
+                Task = current,
+                Project = entry,
+                TaskBody = taskBody,
+                StatusSummary = statusSummary,
+                DiffSummary = diffSummary,
+                ReviewSummary = review,
+                Model = model,
+                Cli = cli,
+                ThinkingLevel = thinking,
+                FrameLanguage = WorkstreamFrameLanguageResolver.Resolve(entry.Name, settings?.WorkstreamFramePublic),
+            }, ct);
+            var status = result.Verdict == WorkstreamCollectorVerdict.Error
+                ? PipelineStepStatus.Failed
+                : result.Verdict == WorkstreamCollectorVerdict.Skipped
+                    ? PipelineStepStatus.Skipped
+                    : PipelineStepStatus.Passed;
+            RecordWorkstreamCollectorStep(current.FolderPath, status,
+                (long)(DateTime.UtcNow - started).TotalMilliseconds,
+                result.Verdict.ToString().ToLowerInvariant(), result.Reason, result.Model);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "workstream_collector_post_step_failed project={Project} job={JobId}", entry.Name, current.Id);
+            RecordWorkstreamCollectorStep(current.FolderPath, PipelineStepStatus.Failed,
+                (long)(DateTime.UtcNow - started).TotalMilliseconds, "error", ex.Message);
+        }
+    }
+
+    private void RecordWorkstreamCollectorStep(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        long durationMs,
+        string verdict,
+        string? reason,
+        string? model = null)
+    {
+        if (_pipelineLog == null) return;
+        var now = DateTime.UtcNow;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.WorkstreamCollectorStepId,
+            Kind = StepKind.Orchestrator,
+            Status = status,
+            StartedAt = now - TimeSpan.FromMilliseconds(durationMs),
+            CompletedAt = now,
+            DurationMs = durationMs,
+            Model = model,
+            Verdict = verdict,
+            Reason = reason,
         });
     }
 

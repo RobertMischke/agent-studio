@@ -80,6 +80,30 @@ mutations (`409 Conflict` for move/delete, a rejected save for content), and the
 wiki tree tags each frame node with an `immutable` flag so the UI shows a lock
 affordance and hides rename/delete/move.
 
+### 4.1 EW-2 collector lifecycle
+
+EW-2 adds an opt-in collector pair to the task pipeline. At task onboarding,
+`pre-workstream-onboarding` ensures the EW-1 frame and replaces the bounded
+`Current Development State/current.md` projection with the task that is about
+to run. At settled completion, `post-workstream-collector` receives task,
+status, diff, and aspect evidence and proposes updates to the frame. Both steps
+are reporting-only and never influence the lane decision.
+
+The completion model receives the complete five-area frame map, the known pages
+already under the frame, each area's authoring rules, and the hard growth
+budgets. Its JSON reply is only a proposal. The backend validates identities and
+owns every filesystem write:
+
+- Workstream Log receives one chronological outcome entry.
+- Development Signals merge by stable identity and increment `frequency`.
+- System Knowledge updates the identity page in place and always carries
+  `Last Updated From` provenance, falling back to the task key when omitted.
+- Decision Log changes only for an actual decision.
+- Current Development State is replaced when active state changes.
+
+The two pipeline steps default off and are enabled per project. Activating
+either step self-provisions the EW-1 frame before writing.
+
 ## 5. Subpages — where the actual content goes
 
 Everything below an area folder is an ordinary wiki page with full git history.
@@ -87,6 +111,21 @@ Operators and agents add, edit, move, and delete subpages freely; only the frame
 scaffolding is fixed. A decision is a subpage under `40-decision-log/`; a drift
 write-up is a subpage under `20-development-signals/`. The frame gives the
 address; the subpages carry the payload.
+
+EW-2 makes the anti-overgrowth rules executable, not prompt advice:
+
+- maximum 8 accepted proposals per collector run and 3 per area per run;
+- maximum 40 Markdown pages per area;
+- maximum 100 retained Workstream Log entries, newest first;
+- maximum 4,000 characters per generated item;
+- maximum subpage depth of 2 below an area, expressed as either `identity.md`
+  or `group/identity.md`;
+- no model-authored landing shells or additional top-level areas;
+- update-by-identity is preferred and enforced for signals and system knowledge.
+
+The prompt requires related existing subpages to be linked when applicable.
+Weak, duplicate, or structurally invalid proposals are rejected individually,
+while valid siblings still apply.
 
 ## 6. AGT-1984 — relocation into the wiki's own checkout
 
@@ -117,8 +156,10 @@ relative paths plus rules over them, which is exactly what survives a relocation
   bootstrap action and no "onboarded" flag (operator decision 2026-07-10):
   activating a wiki-writing step is what creates the structure. See
   [§9](#9-self-provisioning-agt-2024).
-- **Later:** subpage authoring conventions per area, and wiring
-  signals/decisions/log entries from pipeline output (EW-2 collector, curator).
+- **EW-2:** opt-in task-onboarding and completion collector, area-specific
+  merge/update rules, prompt-known pages, mandatory provenance, and hard
+  anti-overgrowth budgets. A later curator may improve editorial quality without
+  changing these storage limits.
 - **EW-3:** a gated, exactly-once retro pilot classifies existing task history
   into an initial state, signal, knowledge, decision, and log baseline. A
   default-off periodic curator then verifies collector-owned pages, merges

@@ -25,10 +25,11 @@ public class PipelineCatalogueTests
         // followed by the opt-in orchestrator-prep step that replaced the
         // standalone 1a-orchestrator-prep backlog lane, then the deterministic
         // reissue open-items check that foregrounds leftover items on a re-issue.
-        Assert.Equal(3, p.Pre.Count);
+        Assert.Equal(4, p.Pre.Count);
         Assert.Equal(PipelineCatalogue.LoopGuardStepId, p.Pre[0].Id);
         Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, p.Pre[1].Id);
         Assert.Equal(PipelineCatalogue.PreReissueOpenItemsStepId, p.Pre[2].Id);
+        Assert.Equal(PipelineCatalogue.PreWorkstreamOnboardingStepId, p.Pre[3].Id);
         Assert.Single(p.Core);
         Assert.Equal(PipelineCatalogue.CoreAgentRunStepId, p.Core[0].Id);
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
@@ -40,7 +41,7 @@ public class PipelineCatalogueTests
         // "Merge into Develop" step and its integration-branch push twin, the
         // automatic code-review quality-grade step, the opt-in task-spawner step,
         // final orchestrator decision, and opt-in drift dimensions.
-        Assert.Equal(25, p.Post.Count);
+        Assert.Equal(26, p.Post.Count);
     }
 
     [Fact]
@@ -524,6 +525,24 @@ public class PipelineCatalogueTests
     }
 
     [Fact]
+    public void StandardPipeline_WorkstreamCollector_IsOptInBoundedPromptStep_BeforeDecision()
+    {
+        var p = PipelineCatalogue.Standard;
+        var step = p.Post.First(s => s.Id == PipelineCatalogue.WorkstreamCollectorStepId);
+        Assert.Equal(StepKind.Orchestrator, step.Kind);
+        Assert.False(step.DefaultEnabled);
+        Assert.True(step.Idempotent);
+        Assert.Equal("workstream-collector.md", step.PromptTemplate);
+        foreach (var aspectId in PipelineCatalogue.AspectStepIds)
+            Assert.Contains(aspectId, step.DependsOn);
+        Assert.True(p.Post.FindIndex(s => s.Id == PipelineCatalogue.AgentsWikiSyncStepId)
+            < p.Post.FindIndex(s => s.Id == PipelineCatalogue.WorkstreamCollectorStepId));
+        Assert.True(p.Post.FindIndex(s => s.Id == PipelineCatalogue.WorkstreamCollectorStepId)
+            < p.Post.FindIndex(s => s.Id == PipelineCatalogue.OrchestratorDecisionStepId));
+        Assert.Contains(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.WorkstreamCollectorStepId);
+    }
+
+    [Fact]
     public void StandardPipeline_TaskSpawner_IsOptInOrchestratorStep_AfterAspects_BeforeDecision()
     {
         // AGT-2028: the task-spawner ships as an opt-in Orchestrator post-step
@@ -715,14 +734,14 @@ public class PipelineCatalogueTests
             .ToList();
         Assert.Equal(expected, ro.AllSteps.Select(s => s.Id).ToList());
 
-        // The core agent run and all Pre steps (loop guard + orchestrator prep
-        // + reissue open-items check) are not git steps, so they remain.
+        // The core agent run and all Pre steps are not git steps, so they remain.
         Assert.Single(ro.Core);
         Assert.Equal(PipelineCatalogue.CoreAgentRunStepId, ro.Core[0].Id);
-        Assert.Equal(3, ro.Pre.Count);
+        Assert.Equal(4, ro.Pre.Count);
         Assert.Equal(PipelineCatalogue.LoopGuardStepId, ro.Pre[0].Id);
         Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, ro.Pre[1].Id);
         Assert.Equal(PipelineCatalogue.PreReissueOpenItemsStepId, ro.Pre[2].Id);
+        Assert.Equal(PipelineCatalogue.PreWorkstreamOnboardingStepId, ro.Pre[3].Id);
 
         // Every git step was removed from Post.
         var standardPostGitSteps = standard.Post.Count(s => PipelineCatalogue.GitStepIds.Contains(s.Id));

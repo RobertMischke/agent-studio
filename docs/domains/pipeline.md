@@ -68,6 +68,12 @@ pipeline view.
   current-state line is derived from the task's title / newest commit / typed
   outcome. Driven from `ReviewDecisionOrchestrator` (`RunAgentsWikiSyncPostStep`),
   next to the wiki-maintenance / wiki-learnings producers.
+- `backend/Features/Pipeline/WorkstreamCollectorPostStepRunner.cs`: the opt-in
+  EW-2 collector pair. The pre-step publishes Current Development State at task
+  onboarding; the completion step gives a one-shot model the fixed frame, known
+  pages, and settled evidence, then server-validates and applies its JSON
+  proposal. Identity merges, frequency, provenance, budgets, and maximum depth
+  are backend rules, not model discretion.
 - `backend/Services/Pipeline/PipelineStepConfigResolver.cs`: effective model and
   step config resolution.
 - `backend/Services/Pipeline/PipelineStepConditionEvaluator.cs`: per-step
@@ -254,6 +260,10 @@ pipeline view.
   the AGENTS.md pointer verify / self-heal) plus the `PipelineCatalogueTests`
   step-shape pin (opt-in Tool step, after wiki-learnings, before the decision,
   kept in the read-only pipeline).
+- Workstream collector changes need `WorkstreamCollectorPostStepTests` (response
+  parsing, signal frequency merge, System Knowledge update-in-place and
+  provenance, onboarding replacement, depth and budget rejection) plus the
+  `PipelineCatalogueTests` pre/post step shape pins.
 - Task-spawner changes need `TaskSpawnerPostStepTests` (relevance sentinel parse
   yes/no/unparseable, dedup-ledger budget + same-target block, best-available-model
   default, and the end-to-end runner writing the follow-up card into a target
