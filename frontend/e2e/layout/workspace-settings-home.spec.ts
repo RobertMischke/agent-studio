@@ -26,6 +26,12 @@ import { dismissDevErrorDialog } from '../helpers/theme';
 
 const SHOT_DIR = process.env.OVERLAY_SHOT_DIR ?? 'test-results';
 
+function settingsHome(page: Page) {
+  return page.locator(
+    '[data-testid="workspace-settings-inline"], [data-testid="workspace-settings-overlay"]',
+  );
+}
+
 async function stubBackgroundApis(page: Page) {
   const json = (body: unknown) => async (route: import('@playwright/test').Route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
@@ -43,6 +49,9 @@ async function stubBackgroundApis(page: Page) {
   await page.route('**/api/cli/quota', json({ ttlMs: 600_000, snapshots: [] }));
   await page.route('**/api/cli/quota/caps', json({ defaultCapPct: 95, caps: {} }));
   await page.route('**/api/cli/usage', json({ entries: [] }));
+  await page.route('**/api/cli/contracts', json([]));
+  await page.route('**/api/cli/*/models*', json({ models: [], source: 'stubbed' }));
+  await page.route('**/api/cli/*/working-memory*', json({ entries: [] }));
   await page.route('**/api/admin/prompts', json({
     overrideDirectory: 'stubbed',
     items: [
@@ -54,6 +63,8 @@ async function stubBackgroundApis(page: Page) {
         hasDefault: true,
         hasOverride: false,
         defaultChangedSinceOverride: false,
+        slots: [],
+        usageCount: 0,
       },
     ],
   }));
@@ -72,6 +83,8 @@ async function stubBackgroundApis(page: Page) {
     baseDefaultSha: null,
     defaultChangedSinceOverride: false,
     overrideUpdatedAt: null,
+    slots: [],
+    usages: [],
   }));
   await page.route('**/api/dev-tools/flags', json({ updateStableEnabled: false, deleteE2EJobsEnabled: false }));
   await page.route('**/api/clients', json([]));
@@ -81,6 +94,7 @@ async function stubBackgroundApis(page: Page) {
     windowHours: 24, bucketMinutes: 60, bucketCount: 0,
     cells: [], projects: [], fetchedAt: new Date().toISOString(), disclaimer: 'stubbed',
   }));
+  await page.route('**/api/workspace/tokens/expensive-jobs*', json({ jobs: [] }));
   await page.route('**/api/workspace/screenshots*', json({ windowHours: 72, projectFilter: null, screenshots: [] }));
   await page.route('**/api/workspace/summary*', json({
     windowStart: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
@@ -114,7 +128,7 @@ test.describe('Workspace settings home (Dach)', () => {
     await expect(trigger).toBeVisible();
     await trigger.click();
 
-    await expect(page.getByTestId('workspace-settings-overlay')).toBeVisible();
+    await expect(settingsHome(page)).toBeVisible();
     await expect(page.getByTestId('workspace-settings-title')).toBeVisible();
     await expect(page.getByTestId('workspace-settings-overview')).toBeVisible();
 
@@ -122,13 +136,14 @@ test.describe('Workspace settings home (Dach)', () => {
       await expect(page.getByTestId(`workspace-settings-card-${key}`)).toBeVisible();
       await expect(page.getByTestId(`workspace-settings-rail-${key}`)).toBeVisible();
     }
+    await expect(page.getByTestId('workspace-settings-rail-caps')).toContainText('CLI Management');
 
-    await page.screenshot({ path: join(SHOT_DIR, 'workspace-settings-overview.png'), fullPage: false });
+    await page.screenshot({ path: join(SHOT_DIR, 'workspace-settings-overview--mocked.png'), fullPage: false });
   });
 
   test('rail navigates between sections, each keeping its legacy hook', async ({ page }) => {
     await page.getByTestId('status-bar-settings').click();
-    await expect(page.getByTestId('workspace-settings-overlay')).toBeVisible();
+    await expect(settingsHome(page)).toBeVisible();
 
     for (const { key, overlayTestid, innerTestid } of SECTIONS) {
       await page.getByTestId(`workspace-settings-rail-${key}`).click();
@@ -136,7 +151,8 @@ test.describe('Workspace settings home (Dach)', () => {
       await expect(page.getByTestId(innerTestid)).toBeVisible({ timeout: 5_000 });
     }
 
-    await page.screenshot({ path: join(SHOT_DIR, 'workspace-settings-caps-section.png'), fullPage: false });
+    await page.getByTestId('workspace-settings-rail-caps').click();
+    await page.screenshot({ path: join(SHOT_DIR, 'workspace-settings-cli-management--mocked.png'), fullPage: false });
   });
 
   test('overview card jumps straight into its section', async ({ page }) => {
@@ -149,13 +165,24 @@ test.describe('Workspace settings home (Dach)', () => {
   test('deep-link #/workspace/settings opens the home on the overview', async ({ page }) => {
     await page.goto('/#/workspace/settings');
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.getByTestId('workspace-settings-overlay')).toBeVisible({ timeout: 5_000 });
+    await expect(settingsHome(page)).toBeVisible({ timeout: 5_000 });
     await expect(page.getByTestId('workspace-settings-overview')).toBeVisible();
   });
 
-  test('close button dismisses the home', async ({ page }) => {
+  test('CLI-management deep-link opens the consolidated Settings section', async ({ page }) => {
+    await page.goto('/#/workspace/settings/caps');
+    await page.waitForLoadState('domcontentloaded');
+
+    await expect(settingsHome(page)).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('workspace-settings-rail-caps')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('cli-admin-panel')).toBeVisible();
+    await expect(page.getByTestId('cli-contracts-explainer')).toContainText('not configuration');
+  });
+
+  test('legacy modal close button dismisses the home when modal layout is active', async ({ page }) => {
     await page.getByTestId('status-bar-settings').click();
-    await expect(page.getByTestId('workspace-settings-overlay')).toBeVisible();
+    await expect(settingsHome(page)).toBeVisible();
+    test.skip(await page.getByTestId('workspace-settings-close').count() === 0, 'Studio layout renders Settings inline');
     await page.getByTestId('workspace-settings-close').click();
     await expect(page.getByTestId('workspace-settings-overlay')).toHaveCount(0);
   });

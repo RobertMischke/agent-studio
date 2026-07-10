@@ -36,9 +36,14 @@ describe('CliContractsPanelComponent', () => {
 
     const req = http.expectOne((r) => r.url.endsWith('/cli/contracts'));
     req.flush(SAMPLE);
+    fixture.detectChanges();
 
     expect(fixture.componentInstance.contracts().length).toBe(1);
     expect(fixture.componentInstance.contracts()[0].typed).toBe(true);
+    const explainer = fixture.nativeElement.querySelector('[data-testid="cli-contracts-explainer"]') as HTMLElement;
+    expect(explainer.textContent).toContain('read-only registry');
+    expect(explainer.textContent).toContain('GET /api/cli/contracts');
+    expect(explainer.textContent).toContain('not configuration');
     http.verify();
   });
 });

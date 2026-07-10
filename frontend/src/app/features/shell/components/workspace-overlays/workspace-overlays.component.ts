@@ -66,7 +66,7 @@ export class WorkspaceOverlaysComponent {
   /** Rail order: landing first, then the content sections. */
   readonly railItems: readonly SettingsRailItem[] = [
     { key: 'overview', label: 'Overview', description: 'Global defaults and usage surfaces, in one place.', icon: '\u{1F3E0}' },
-    { key: 'caps', label: 'Usage caps', description: 'Per-CLI quota caps and runner rules, with full usage detail.', icon: '⚙' },
+    { key: 'caps', label: 'CLI Management', description: 'Models, environments, completion signals, sessions, usage caps, and token spend.', icon: '⚙' },
     { key: 'prompts', label: 'System prompts', description: 'Application-wide runtime prompt defaults and overrides.', icon: 'T' },
     { key: 'tokens', label: 'Token usage', description: 'Orchestrator token spend across every watched project.', icon: '\u{1F4CA}' },
     { key: 'screenshots', label: 'Visual evidence', description: 'Screenshots captured by tasks across all projects.', icon: '\u{1F441}' },

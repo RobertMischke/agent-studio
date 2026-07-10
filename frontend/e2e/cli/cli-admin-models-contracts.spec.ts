@@ -3,7 +3,7 @@ import type { CliCompletionContract } from '../../src/app/features/cli';
 
 /**
  * Admin/CLI page (T7a): the model-catalog, completion-contract, and
- * working-memory sections folded into the workspace Settings "Usage caps"
+ * working-memory sections folded into the workspace Settings "CLI Management"
  * panel.
  *
  * Verifies:
@@ -63,6 +63,8 @@ test.describe('Admin/CLI page — models & completion contracts', () => {
     await expect(contracts).toBeVisible();
     await expect(contracts.getByTestId('cli-contract-card-claude')).toBeVisible();
     await expect(contracts.getByTestId('cli-contract-typed-copilot')).toContainText('exit-based');
+    await expect(contracts.getByTestId('cli-contracts-explainer')).toContainText('read-only registry');
+    await expect(contracts.getByTestId('cli-contracts-explainer')).toContainText('not configuration');
 
     await expect(overlay.getByTestId('cli-admin-working-memory')).toBeVisible();
 
