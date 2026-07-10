@@ -35,8 +35,18 @@ Siblings are sorted folders first, then files. An optional leading numeric
 prefix such as `01-`, `01_`, or `01.` controls sort order and is hidden from the
 display title. Without a prefix, items sort by display title.
 
+One exception overrides the sort above: the **Workstream frame root**
+(`docs/engineering-workstream/`) is pinned as the first top-level tree node,
+ahead of all other `docs/` siblings, regardless of alphabetical order. Only the
+top-level frame root is pinned — nested siblings inside the frame keep the normal
+folders-then-prefix-then-title order. See
+[concepts/engineering-workstream.md §8](../concepts/engineering-workstream.md#8-display-name-and-tree-position).
+
 The display title for a document is its first H1 when present; otherwise it is
-the file name without extension and without the optional order prefix.
+the file name without extension and without the optional order prefix. The one
+overriding case is the Workstream frame root, whose tree label is remapped to
+`Workstream` while its on-disk folder stays `engineering-workstream` (operator
+decision 2026-07-09).
 
 ## API endpoints
 

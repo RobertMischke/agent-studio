@@ -721,7 +721,11 @@ describe('ProjectWikiSectionComponent', () => {
     exists: true,
     root: [
       {
-        name: 'engineering-workstream', title: 'engineering-workstream',
+        // Backend relabels the frame root to "Workstream" (folder stays
+        // engineering-workstream) and pins it first - see ProjectDocsService /
+        // EngineeringWorkstreamFrame.DisplayTitle. The tree the component renders
+        // therefore already carries the display title.
+        name: 'engineering-workstream', title: 'Workstream',
         relPath: 'engineering-workstream', type: 'folder', immutable: true, children: [
           {
             name: '40-decision-log', title: 'decision-log',
@@ -737,7 +741,7 @@ describe('ProjectWikiSectionComponent', () => {
             ],
           },
           {
-            name: '00-overview.html', title: 'Engineering Workstream',
+            name: '00-overview.html', title: 'Workstream',
             relPath: 'engineering-workstream/00-overview.html', type: 'html', immutable: true, children: [],
           },
         ],
@@ -750,6 +754,24 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.componentInstance.toggleExpand('engineering-workstream/40-decision-log');
     fixture.detectChanges();
   }
+
+  it('renders the frame root labelled "Workstream" as the first tree node', async () => {
+    const { fixture, http } = await setup(FRAME_TREE);
+    const root = el(fixture);
+
+    // The frame root node carries the relabelled display title...
+    const frameRow = root.querySelector<HTMLElement>(
+      '[data-testid="project-wiki-node-engineering-workstream"]');
+    expect(frameRow, 'frame root row').toBeTruthy();
+    expect(frameRow!.querySelector('.pwiki__label-text')!.textContent!.trim())
+      .toBe('Workstream');
+
+    // ...and it is the first top-level row rendered (pinned to the top).
+    const firstRow = root.querySelector<HTMLElement>('[data-testid^="project-wiki-node-"]');
+    expect(firstRow!.getAttribute('data-testid'))
+      .toBe('project-wiki-node-engineering-workstream');
+    http.verify();
+  });
 
   it('marks frame folders and shells with a lock affordance, subpages without', async () => {
     const { fixture, http } = await setup(FRAME_TREE);
