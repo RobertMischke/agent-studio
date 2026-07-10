@@ -387,6 +387,73 @@
         }
       }
     },
+    "task-card-delete-mockup": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "mockup",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/mockups/task-card-delete/main.ts",
+            "index": "src/mockups/task-card-delete/index.html",
+            "tsConfig": "tsconfig.mockup.json",
+            "inlineStyleLanguage": "scss",
+            "outputPath": "dist/task-card-delete-mockup",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
+            "styles": [
+              "src/styles.scss",
+              "src/mockups/task-card-delete/styles.scss"
+            ]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "600kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "40kB",
+                  "maximumError": "48kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "port": 4028,
+            "host": "127.0.0.1"
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "task-card-delete-mockup:build:production"
+            },
+            "development": {
+              "buildTarget": "task-card-delete-mockup:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
+    },
     "run-activity-pill-mockup": {
       "projectType": "application",
       "root": "",
