@@ -17,6 +17,34 @@ interface ModelUsageRow {
   modelPriced: boolean;
 }
 
+type WindowTone = 'ok' | 'warn' | 'hot' | 'unknown';
+
+/**
+ * Presentational projection of a reported quota window: the raw
+ * {@link QuotaWindow} plus the derived percentage, traffic-light tone,
+ * clamped bar width, and the reset / limit strings the card renders.
+ * No mapping or refresh logic lives here — it only reshapes the input
+ * row into what the template draws.
+ */
+interface WindowView {
+  label: string;
+  pct: number | null;
+  pctLabel: string;
+  barPct: number;
+  tone: WindowTone;
+  /** Implied cap, or null when the window reports no usable limit. */
+  limit: string | null;
+  reset: string | null;
+}
+
+/** Summary head over the model table: totals shown as stat tiles. */
+interface UsageTotals {
+  costUsd: number;
+  tokens: number;
+  models: number;
+  anyPriced: boolean;
+}
+
 /**
  * One detail modal for a single CLI's usage. Opened by clicking that
  * CLI's card in the status-bar quota strip — one modal per CLI type, no
@@ -62,6 +90,42 @@ export class CliUsageModalComponent {
 
   readonly windows = computed<QuotaWindow[]>(() => this.row()?.windows ?? []);
 
+  /** Reshapes each reported window into its card projection (pct, tone,
+   *  bar width, reset countdown). Pure derivation of the input row. */
+  readonly windowViews = computed<WindowView[]>(() =>
+    this.windows().map((w) => {
+      const pct = w.usedPct === null ? null : Math.round(w.usedPct);
+      const barPct = pct === null ? 0 : Math.max(0, Math.min(100, pct));
+      const limit = this.limitText(w);
+      return {
+        label: w.label,
+        pct,
+        pctLabel: pct === null ? '—' : `${pct}%`,
+        barPct,
+        tone: this.toneForPct(pct),
+        limit: limit === 'n/a' ? null : limit,
+        reset: w.resetLabel ?? null,
+      };
+    }),
+  );
+
+  /** Summed cost / token totals across the shown model rows — the
+   *  "Summen-Kopf" over the model table. Presentational only. */
+  readonly totals = computed<UsageTotals>(() => {
+    const rows = this.modelRows();
+    let costUsd = 0;
+    let tokens = 0;
+    let anyPriced = false;
+    for (const r of rows) {
+      tokens += this.totalTokens(r);
+      if (r.modelPriced) {
+        costUsd += r.estimatedApiCostUsd;
+        anyPriced = true;
+      }
+    }
+    return { costUsd, tokens, models: rows.length, anyPriced };
+  });
+
   readonly modelRows = computed<ModelUsageRow[]>(() => {
     const cli = this.cliType();
     const rows: ModelUsageRow[] = [];
@@ -96,6 +160,18 @@ export class CliUsageModalComponent {
 
   totalTokens(row: ModelUsageRow): number {
     return row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheCreationTokens;
+  }
+
+  /** Read + creation cache tokens folded into one "Cache" column value. */
+  cacheTokens(row: ModelUsageRow): number {
+    return row.cacheReadTokens + row.cacheCreationTokens;
+  }
+
+  private toneForPct(pct: number | null): WindowTone {
+    if (pct === null) return 'unknown';
+    if (pct < 70) return 'ok';
+    if (pct < 90) return 'warn';
+    return 'hot';
   }
 
   formatTokens(n: number): string {

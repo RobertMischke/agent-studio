@@ -90,12 +90,13 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     const modal = page.getByTestId('cli-usage-modal-codex');
     await expect(modal).toBeVisible({ timeout: 6_000 });
 
-    const windowsTable = page.getByTestId('cli-usage-modal-windows');
-    await expect(windowsTable).toBeVisible();
-    // The Limit column reads the implied 100% cap for every %-window.
-    await expect(windowsTable.locator('tbody tr').first()).toContainText('100%');
+    const windowsList = page.getByTestId('cli-usage-modal-windows');
+    await expect(windowsList).toBeVisible();
+    // Each window card reads its implied 100% cap ("of 100%") for a
+    // %-window instead of a bare "n/a".
+    await expect(page.getByTestId('cli-usage-window').first()).toContainText('100%');
     // And no window falls back to the empty "n/a" placeholder.
-    await expect(windowsTable.locator('tbody')).not.toContainText('n/a');
+    await expect(windowsList).not.toContainText('n/a');
 
     await page.screenshot({ path: `${SHOT_DIR}/codex-usage-modal--mocked.png`, fullPage: false });
   });
