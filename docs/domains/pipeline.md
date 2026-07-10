@@ -157,6 +157,12 @@ pipeline view.
   (`post-code-review-grade`, wiki-maintenance / wiki-learnings, regression-radar)
   are reporting-only and already swallow a crash into a Skipped/Failed step row,
   so a post-step crash there never gates the lane or counts as a work deficit.
+- `post-build-test-gate` verifies a coding task in its registered
+  `task/<id>` worktree when that worktree is live. It must not build in the
+  shared project checkout for a worktree run: a dev backend can legitimately
+  hold that checkout's build output open, and the shared checkout can contain
+  different source. Sequential and legacy runs with no registered worktree
+  retain the shared-checkout fallback.
 - Abort review is contract-bounded: the model returns a verdict, while
   `PostAbortReviewDecider` owns the binding action and rerun budget.
 - The read-only pipeline drops git steps. Planning and research tasks must not

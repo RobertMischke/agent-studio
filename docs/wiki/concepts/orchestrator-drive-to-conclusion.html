@@ -519,6 +519,25 @@
              <code>environmental-load</code>, not orchestrator inconclusive. Existing agent runs are not killed.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-08</td>
+          <td><code>AGT-1943</code><br><span class="small">post-build-test-gate worktree isolation<br>(observed on <code>AGT-1937</code>)</span></td>
+          <td>
+            The automatic <code>post-build-test-gate</code> ran <code>dotnet build</code> in the shared dev checkout while a
+            permitted dev backend was running there. The backend held <code>OrchestratorApi.exe</code> open, MSBuild emitted
+            <code>MSB3021</code>/<code>MSB3026</code>/<code>MSB3027</code>, and two red gate attempts falsely escalated a task
+            whose own worktree was green.
+          </td>
+          <td>
+            The review orchestrator always passed the project's configured repository path to the build gate, even when the
+            completed coding run owned a registered <code>task/&lt;id&gt;</code> worktree.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the build gate resolves the live task worktree from its branch and verifies that
+            checkout. Sequential and legacy tasks without a live worktree keep the shared-checkout fallback. A regression test
+            models the shared checkout as <code>MSB3026</code>-locked and proves the green worktree reaches review.
+          </td>
+        </tr>
       </tbody>
     </table>
 

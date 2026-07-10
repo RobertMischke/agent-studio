@@ -2504,6 +2504,33 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         return result;
     }
 
+    /// <summary>
+    /// The build gate must verify the checkout that produced the task result.
+    /// A parallel coding run owns a registered <c>task/&lt;id&gt;</c> worktree;
+    /// building the shared checkout can collide with a dev backend that has its
+    /// output executable open and can also verify different source. Sequential
+    /// and legacy runs have no live task worktree and keep the shared-checkout
+    /// fallback.
+    /// </summary>
+    private string ResolveBuildTestGateRepositoryPath(WatchPathEntry entry, TaskInfo current)
+    {
+        var sharedRepoPath = string.IsNullOrWhiteSpace(entry.RepositoryPath)
+            ? entry.RootPath
+            : entry.RepositoryPath;
+        if (_git == null || string.IsNullOrWhiteSpace(sharedRepoPath))
+            return sharedRepoPath;
+
+        var taskBranch = WorktreeTaskLifecycle.BranchFor(current.Id);
+        var worktreePath = _git.WorktreePathForBranch(sharedRepoPath, taskBranch);
+        if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
+            return sharedRepoPath;
+
+        _logger.LogInformation(
+            "build_test_gate_worktree_selected project={Project} job={JobId} branch={Branch} repository={Repository}",
+            entry.Name, current.Id, taskBranch, worktreePath);
+        return worktreePath;
+    }
+
     private void RecordLintScssStep(
         string jobFolderPath,
         PipelineStepStatus status,
@@ -2572,7 +2599,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 "mode=off", false, false);
         }
 
-        var repoPath = string.IsNullOrWhiteSpace(entry.RepositoryPath) ? entry.RootPath : entry.RepositoryPath;
+        var repoPath = ResolveBuildTestGateRepositoryPath(entry, current);
         var timeoutSeconds = _configuration.GetValue($"PostSteps:{PipelineCatalogue.BuildTestGateStepId}:TimeoutSeconds", 300);
         var changedFiles = ResolveLatestRunChangedFiles(current, entry.Path);
 
