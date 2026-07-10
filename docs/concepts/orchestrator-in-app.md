@@ -45,6 +45,12 @@ retry, 2028 spawner, 2029 waits-on) shrink how often these hands are
 needed; the orchestrator handles the remainder — and unknown-unknowns.
 
 ### 2.3 Anchor — self-preservation despite living inside
+**Deprioritized by the operator (2026-07-10):** the dead-host problem is
+deliberately ignored for now — the operator mostly works in other
+applications anyway and restarts a dead host himself; the existing
+watchdog/start scripts stay as they are. The split below remains the
+target picture for later, not a near-term slice.
+
 The honest paradox: a component inside the app cannot restart its own dead
 host. Split responsibilities:
 
