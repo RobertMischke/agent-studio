@@ -482,6 +482,7 @@ builder.Services.AddSingleton<IQuotaProbe, AntigravityQuotaProbe>();
 builder.Services.AddSingleton<QuotaCacheStore>();
 builder.Services.AddSingleton<QuotaService>();
 builder.Services.AddSingleton<CliQuotaCapsService>();
+builder.Services.AddSingleton<CliQuotaFallbackService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskWatcherService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
 // F22: server-rendered conversation projection. The projector serves the

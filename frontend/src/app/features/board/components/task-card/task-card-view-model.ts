@@ -282,7 +282,7 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-export type EffectiveModelSource = 'run' | 'explicit' | 'default' | 'human' | 'unknown';
+export type EffectiveModelSource = 'fallback' | 'run' | 'explicit' | 'default' | 'human' | 'unknown';
 
 export interface EffectiveModelChip {
   icon: string;
@@ -313,7 +313,15 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
   let source: EffectiveModelSource;
   let isDefault: boolean;
 
-  if (execution?.status === 'running' && execution.model) {
+  if (job.quotaFallback) {
+    const cli = isCliType(job.quotaFallback.cliType) ? job.quotaFallback.cliType : null;
+    icon = cli ? cliTypeIcon(cli) : '\u{26A0}';
+    label = `fallback: ${shortModelName(job.quotaFallback.model)}`;
+    fullModel = job.quotaFallback.model;
+    cliLbl = cli ? cliTypeLabel(cli) : null;
+    source = 'fallback';
+    isDefault = false;
+  } else if (execution?.status === 'running' && execution.model) {
     const cli = jobCli ?? ownerCli;
     icon = cli ? cliTypeIcon(cli) : '\u{1F916}';
     label = shortModelName(execution.model);
@@ -367,14 +375,18 @@ function buildModelTooltip(
   const lines: string[] = [];
 
   const jobCli = isCliType(job.cliType) ? job.cliType : null;
-  const effectiveCli = jobCli ?? ownerCli;
-  const effectiveModel = source === 'run'
+  const fallbackCli = isCliType(job.quotaFallback?.cliType) ? job.quotaFallback.cliType : null;
+  const effectiveCli = source === 'fallback' ? fallbackCli : jobCli ?? ownerCli;
+  const effectiveModel = source === 'fallback'
+    ? job.quotaFallback?.model
+    : source === 'run'
     ? job.execution?.model ?? job.model ?? ownerModel
     : job.model ?? ownerModel;
 
   lines.push(`<b>Model:</b> ${escapeHtml(effectiveModel ?? 'none')}${source === 'default' ? ' <i>(client default)</i>' : source === 'run' ? ' <i>(running)</i>' : ''}`);
   lines.push(`<b>CLI:</b> ${effectiveCli ? escapeHtml(cliTypeLabel(effectiveCli)) : 'none'}${!jobCli && ownerCli ? ' <i>(client default)</i>' : ''}`);
   lines.push(`<b>Agent:</b> ${escapeHtml(job.agent || 'none')} <i>(pickup permission)</i>`);
+  if (source === 'fallback') lines.push(`<b>Reason:</b> quota (${escapeHtml(job.quotaFallback?.reason ?? 'cap reached')})`);
 
   const ownerLabel = owner.displayName || owner.id;
   const defaultParts: string[] = [];
@@ -385,7 +397,7 @@ function buildModelTooltip(
   lines.push(`<b>Defaults:</b> ${escapeHtml(defaultsStr)}`);
 
   return {
-    title: source === 'run' ? 'Running model' : source === 'default' ? 'Effective model (client default)' : 'Effective model',
+    title: source === 'fallback' ? 'Quota fallback active' : source === 'run' ? 'Running model' : source === 'default' ? 'Effective model (client default)' : 'Effective model',
     body: lines.join('<br>'),
   };
 }

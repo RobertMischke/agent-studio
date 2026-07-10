@@ -1161,6 +1161,10 @@
     .task-card__effective-model--default .task-card__effective-model-cli {
       font-style: italic;
     }
+    .task-card__effective-model[data-model-source="fallback"] {
+      border-color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn-strong) 12%, transparent);
+    }
     /* AGT-2003 runner badge next to the CLI badge. Remote = accent chip with an
        arrow + runner name so a card running on another host is recognizable at a
        glance (the operator's lokal-vs-remote "Abgleich"); local = a quiet muted

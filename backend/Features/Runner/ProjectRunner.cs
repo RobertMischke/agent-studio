@@ -127,6 +127,7 @@ public class ProjectRunner
     private readonly AgentStudio.Registry.OrchestratorDefaultsProvider? _orchestratorDefaults;
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
+    private readonly CliQuotaFallbackService? _quotaFallback;
     private readonly GitService _git;
     private readonly PickupFailureLog _pickupFailures;
     private readonly CrossSlugInfraCircuitBreaker _infraBreaker;
@@ -395,7 +396,8 @@ public class ProjectRunner
         HumanReviewEscalation? humanReviewEscalation = null,
         PostAbortReviewStepService? postAbortReview = null,
         AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null,
-        AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null)
+        AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null,
+        CliQuotaFallbackService? quotaFallback = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -416,6 +418,7 @@ public class ProjectRunner
         _orchestratorDefaults = orchestratorDefaults;
         _quotaService = quotaService;
         _quotaCaps = quotaCaps;
+        _quotaFallback = quotaFallback;
         _git = git;
         _pickupFailures = pickupFailures;
         _infraBreaker = infraBreaker;
@@ -682,6 +685,12 @@ public class ProjectRunner
         var jobId = _activeJobId;
         var cliType = _activeCliType;
         if (jobId == null || string.IsNullOrWhiteSpace(cliType)) return CapEvaluation.NotBlocked;
+        var active = _activeRuns.Single;
+        // A same-CLI fallback is explicitly allowed to run past the primary
+        // model's cap. Cross-CLI fallbacks remain guarded by their own quota.
+        if (active?.FallbackFromCliType != null &&
+            string.Equals(active.FallbackFromCliType, cliType, StringComparison.OrdinalIgnoreCase))
+            return CapEvaluation.NotBlocked;
         var ev = EvaluateQuotaCap(cliType);
         if (!ev.Blocked) return CapEvaluation.NotBlocked;
 
@@ -715,12 +724,15 @@ public class ProjectRunner
         {
             activeExec = _router.Get(_activeCliType).GetExecution(activeJobKey);
         }
+        var activeRun = _activeRuns.Single;
         return new ProjectRunnerStatus
         {
             ProjectName = ProjectName,
             Mode = _mode,
             ActiveJobId = _activeJobId,
             ActiveExecution = activeExec,
+            QuotaFallbackModel = activeRun?.FallbackFromCliType == null ? null : activeExec?.Model,
+            QuotaFallbackReason = activeRun?.QuotaFallbackReason,
             QueuedJobIds = queued,
             Role = RunnerRoles.Format(_role),
             PendingMode = _pendingMode,
@@ -1772,20 +1784,20 @@ public class ProjectRunner
             var info = _scanner.FindJob(jobId, Entry.Path);
             if (info == null) return RunOutcome.Reject(new RunRejection(RunRejectReason.TaskNotFound, "Job not found"));
 
-            // Quota cap gate: refuse to start when the CLI is past its
-            // configured per-window cap. Auto-pickup will retry on the next
-            // tick (and the next, ...) until the user lifts the cap or the
-            // window resets - this is intentional: the user wants the job
-            // queued, not failed.
-            var capBlock = EvaluateQuotaCap(info.CliType);
-            if (capBlock.Blocked)
+            // Resolve the workspace route from the latest cached quota. The
+            // decision is per-run and never mutates job.json, so a reset makes
+            // the next invocation return to primary automatically.
+            var route = _quotaFallback?.Resolve(
+                info.CliType, info.Model, info.ThinkingLevel, EvaluateQuotaCap);
+            var capBlock = route?.PrimaryCap ?? EvaluateQuotaCap(info.CliType);
+            if (capBlock.Blocked && route?.IsFallback != true)
             {
                 _logger.LogInformation(
                     "[taskboard] {Intent} for job {JobId} blocked by quota cap: {Reason}",
                     intent, jobId, capBlock.DescribeReason());
                 return RunOutcome.Reject(new RunRejection(
                     Reason: RunRejectReason.QuotaCapExceeded,
-                    Message: $"Quota cap exceeded: {capBlock.DescribeReason()}"));
+                    Message: $"Quota cap exceeded: {route?.Reason ?? capBlock.DescribeReason()}"));
             }
 
             // Auto-pickup consumes a saved pending-intent if there is one,
@@ -1808,22 +1820,40 @@ public class ProjectRunner
                 }
             }
 
-            var cli = GetCliFor(info);
+            var cli = route == null ? GetCliFor(info) : _router.Get(route.CliType);
             var initialState = info.State;
             var promptPath = Path.Combine(info.FolderPath, "prompt.md");
             var jobFolder = info.FolderPath;
 
+            // Session ids are CLI-owned. A cross-CLI fallback, and the later
+            // return to primary, must start a fresh session even when both CLIs
+            // happen to use UUID-shaped ids.
+            var sessionNameForPlan = info.SessionName;
+            IReadOnlyList<string>? sessionChainForPlan = info.SessionChain;
+            try
+            {
+                var latestSessionCli = _sessions.ReadSessionEvents(jobId, Entry.Path)
+                    .LastOrDefault(e => !string.IsNullOrWhiteSpace(e.Cli))?.Cli;
+                if (!string.IsNullOrWhiteSpace(latestSessionCli)
+                    && !string.Equals(latestSessionCli, cli.CliType, StringComparison.OrdinalIgnoreCase))
+                {
+                    sessionNameForPlan = null;
+                    sessionChainForPlan = [];
+                }
+            }
+            catch (Exception ex) { _logger.LogDebug(ex, "Could not validate session CLI for {JobId}; planner will use recorded session", jobId); }
+
             var plan = RunPlanner.PlanRun(
                 intent,
                 initialState,
-                info.SessionName,
+                sessionNameForPlan,
                 cli.CliType,
                 cli.IsCompatibleSessionName,
                 jobId,
                 promptPath,
                 jobFolder,
                 followupPrompt,
-                info.SessionChain,
+                sessionChainForPlan,
                 continueMode: mode);
 
             // Pick<->Start atomicity (ASS-1655): remember whether THIS call is the
@@ -1866,8 +1896,8 @@ public class ProjectRunner
             // A user continue on an epic is the user steering the plan, not a
             // fresh decomposition, so it is left on the normal path.
             var isEpicPlanningRun = EpicRunPolicy.IsPlanningRun(info.Kind, intent);
-            var runModel = info.Model;
-            var runThinkingLevel = info.ThinkingLevel;
+            var runModel = route?.Model ?? info.Model;
+            var runThinkingLevel = route?.ThinkingLevel ?? info.ThinkingLevel;
             if (isEpicPlanningRun)
             {
                 plan = plan with { PromptTemplate = RuntimePromptService.EpicDecomposition, PromptOverride = null };
@@ -1982,6 +2012,34 @@ public class ProjectRunner
             NotifyStatus();
 
             Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
+
+            if (route?.IsFallback == true)
+            {
+                if (_activeRuns.Get(jobId) is { } fallbackRun)
+                {
+                    fallbackRun.FallbackFromCliType = info.CliType ?? CliTypes.Claude;
+                    fallbackRun.QuotaFallbackReason = route.Reason;
+                }
+                var fallbackNote = $"Fallback: {route.CliType}/{route.Model}; reason: quota ({route.Reason})";
+                _logger.LogWarning(
+                    "cli_quota_fallback_activated jobId={JobId} primaryCli={PrimaryCli} fallbackCli={FallbackCli} fallbackModel={FallbackModel} reason={Reason}",
+                    jobId, info.CliType, route.CliType, route.Model, route.Reason);
+                _chatLog.Append(info, OrchestratorMessageKind.Decision, "[quota-fallback] " + fallbackNote);
+                _timeline?.Append(
+                    info.FolderPath,
+                    TimelineEventKinds.QuotaFallbackActivated,
+                    TimelineActors.System,
+                    summary: fallbackNote,
+                    details: new()
+                    {
+                        ["primaryCli"] = info.CliType ?? string.Empty,
+                        ["primaryModel"] = info.Model ?? string.Empty,
+                        ["fallbackCli"] = route.CliType,
+                        ["fallbackModel"] = route.Model ?? string.Empty,
+                        ["reason"] = "quota",
+                        ["quotaDetail"] = route.Reason ?? string.Empty,
+                    });
+            }
 
             // Diagnostic logs - surface the planner's decision in one place so
             // operators reading the log can tell which branch fired without
@@ -2130,6 +2188,9 @@ public class ProjectRunner
                 details: new()
                 {
                     ["cli"] = cli.CliType ?? string.Empty,
+                    ["model"] = runModel ?? string.Empty,
+                    ["quotaFallback"] = route?.IsFallback == true ? "true" : "false",
+                    ["fallbackReason"] = route?.Reason ?? string.Empty,
                     ["intent"] = plan.EventKind ?? string.Empty,
                     ["resumed"] = plan.ResumeFlag ? "true" : "false",
                 });
@@ -2850,6 +2911,14 @@ public class ProjectRunner
         DateTime? backoffUntil = _rapidCrashBackoffUntil.TryGetValue(jobId, out var until) ? until : null;
         var failures = _consecutiveFailNoProgress.TryGetValue(jobId, out var n) ? n : 0;
         return new RunActivityFacts(slotActive, backoffUntil, failures);
+    }
+
+    public QuotaFallbackStatus? GetQuotaFallback(string jobId)
+    {
+        var run = _activeRuns.Get(jobId);
+        if (run?.FallbackFromCliType == null || string.IsNullOrWhiteSpace(run.CliType)) return null;
+        var execution = _router.Get(run.CliType).GetExecution(GetJobKey(jobId));
+        return new QuotaFallbackStatus(run.CliType, execution?.Model, run.QuotaFallbackReason);
     }
 
     /// <summary>

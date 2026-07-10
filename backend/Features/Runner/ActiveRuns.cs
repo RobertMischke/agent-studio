@@ -18,6 +18,9 @@ internal sealed class ActiveRun
     public required string JobId { get; init; }
     /// <summary>CLI driving this run; null between claim and CLI resolution.</summary>
     public string? CliType { get; set; }
+    /// <summary>Primary CLI whose exhausted quota caused this run to use a fallback.</summary>
+    public string? FallbackFromCliType { get; set; }
+    public string? QuotaFallbackReason { get; set; }
     public RunIntent Intent { get; init; }
     public string? Followup { get; init; }
     public RunPlan? Plan { get; init; }

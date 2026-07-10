@@ -46,6 +46,8 @@ public record TaskInfo
     public string? ThinkingLevel { get; init; }
     /// <summary>Which CLI backend executes this job: <c>claude</c>, <c>codex</c>, or <c>gemini</c>. Defaults to <c>claude</c>.</summary>
     public string? CliType { get; init; }
+    /// <summary>Effective fallback for the current run; null outside a quota-routed run.</summary>
+    public QuotaFallbackStatus? QuotaFallback { get; init; }
     /// <summary>
     /// Card kind: <c>task</c> (default, a runnable unit of work) or <c>epic</c>
     /// (a container grouping sub-tasks under one overarching goal). An epic is

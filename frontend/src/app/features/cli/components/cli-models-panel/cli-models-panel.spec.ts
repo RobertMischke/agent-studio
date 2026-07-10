@@ -4,6 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { CliModelsPanelComponent } from './cli-models-panel';
+import { CLI_TYPES } from '../../../../models/task.model';
 
 /**
  * Smoke + one behavioural check. Compiles + instantiates the standalone
@@ -22,7 +23,7 @@ describe('CliModelsPanelComponent', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(CliModelsPanelComponent);
     const groups = fixture.componentInstance.groups();
-    expect(groups.length).toBeGreaterThanOrEqual(4);
+    expect(groups.length).toBe(CLI_TYPES.length);
     expect(groups.map((g) => g.cliType)).toContain('claude');
     expect(groups.every((g) => typeof g.label === 'string' && g.label.length > 0)).toBe(true);
   });

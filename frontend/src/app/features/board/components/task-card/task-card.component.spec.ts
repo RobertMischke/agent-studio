@@ -1082,6 +1082,20 @@ describe('TaskCardComponent (smoke)', () => {
 });
 
 describe('buildEffectiveModelChip', () => {
+  it('shows a visible quota-fallback badge with model and reason', () => {
+    const job = makeJob({
+      cliType: 'claude',
+      model: 'claude-opus-4-7',
+      quotaFallback: { cliType: 'codex', model: 'gpt-5.3-codex', reason: 'claude Weekly at 100% (cap 95%)' },
+    });
+    const chip = buildEffectiveModelChip(job, makeOwner());
+    expect(chip.source).toBe('fallback');
+    expect(chip.label).toBe('fallback: gpt-5.3-codex');
+    expect(chip.cliLabel).toBe('Codex');
+    expect(chip.tooltip.title).toBe('Quota fallback active');
+    expect(chip.tooltip.body).toContain('Weekly at 100%');
+  });
+
   it('shows owner-client default when job has no cliType/model', () => {
     const job = makeJob({ agent: 'human', cliType: null, model: null, ownerClientId: 'local-default' });
     const owner = makeOwner({ defaultCliType: 'claude', defaultModel: 'claude-opus-4-7' });

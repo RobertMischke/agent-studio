@@ -27,6 +27,7 @@ public class TaskRunnerService : BackgroundService
     private readonly ProjectSettingsService _projectSettings;
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
+    private readonly CliQuotaFallbackService? _quotaFallback;
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
     private readonly OrchestratorRunner _orchestratorRunner;
@@ -130,7 +131,8 @@ public class TaskRunnerService : BackgroundService
         AgentStudio.Registry.ProjectRegistry? projectRegistry = null,
         AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null,
         RunLeaseService? runLeases = null,
-        RunnerIdentity? runnerIdentity = null)
+        RunnerIdentity? runnerIdentity = null,
+        CliQuotaFallbackService? quotaFallback = null)
     {
         _config = config;
         _logger = logger;
@@ -146,6 +148,7 @@ public class TaskRunnerService : BackgroundService
         _projectSettings = projectSettings;
         _quotaService = quotaService;
         _quotaCaps = quotaCaps;
+        _quotaFallback = quotaFallback;
         _chatLog = chatLog;
         _orchestratorLog = orchestratorLog;
         _orchestratorRunner = orchestratorRunner;
@@ -332,7 +335,8 @@ public class TaskRunnerService : BackgroundService
                 humanReviewEscalation: _humanReviewEscalation,
                 postAbortReview: _postAbortReview,
                 sessionInspector: _sessionInspector,
-                orchestratorDefaults: _orchestratorDefaults);
+                orchestratorDefaults: _orchestratorDefaults,
+                quotaFallback: _quotaFallback);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
@@ -815,6 +819,14 @@ public class TaskRunnerService : BackgroundService
         return _runners.TryGetValue(projectName, out var runner)
             ? runner.GetRunActivity(jobId)
             : default;
+    }
+
+    public QuotaFallbackStatus? GetQuotaFallbackForJob(string jobId, string projectName)
+    {
+        if (string.IsNullOrEmpty(projectName)) return null;
+        return _runners.TryGetValue(projectName, out var runner)
+            ? runner.GetQuotaFallback(jobId)
+            : null;
     }
 
     private static WatchdogConfig LoadWatchdogConfig(IConfiguration cfg)

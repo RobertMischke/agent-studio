@@ -620,3 +620,13 @@ public record SetCliQuotaCapRequest
     public string WindowLabel { get; init; } = "";
     public int CapPct { get; init; }
 }
+
+public record SetCliModelRouteRequest
+{
+    public string CliType { get; init; } = "";
+    public string? PrimaryModel { get; init; }
+    public string? PrimaryThinkingLevel { get; init; }
+    public string? FallbackCliType { get; init; }
+    public string? FallbackModel { get; init; }
+    public string? FallbackThinkingLevel { get; init; }
+}

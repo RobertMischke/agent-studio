@@ -167,6 +167,11 @@ export interface TaskInfo {
   model: string | null;
   thinkingLevel?: string | null;
   cliType: CliType | null;
+  quotaFallback?: {
+    cliType: string;
+    model: string | null;
+    reason: string | null;
+  } | null;
   /**
    * Card kind. `epic` cards are containers for sub-tasks; `task` (the default
    * when omitted) is an ordinary card. See backend `TaskKinds`.
@@ -1055,6 +1060,8 @@ export interface ProjectRunnerStatus {
   mode: string;
   activeJobId: string | null;
   activeExecution: CliExecution | null;
+  quotaFallbackModel?: string | null;
+  quotaFallbackReason?: string | null;
   queuedJobIds: string[];
   /**
    * Human-readable reason recorded the last time the runner mode changed

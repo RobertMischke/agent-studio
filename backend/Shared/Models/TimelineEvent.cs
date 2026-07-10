@@ -79,6 +79,8 @@ public static class TimelineEventKinds
     public const string PromptCreated = "prompt_created";
     /// <summary>One CLI invocation started (start / continue / recovery).</summary>
     public const string AgentRunStarted = "agent_run_started";
+    /// <summary>A run switched to its configured fallback because primary quota was exhausted.</summary>
+    public const string QuotaFallbackActivated = "quota_fallback_activated";
     /// <summary>
     /// ADR-0052: the parallel pick-gate admitted this task into a runner slot.
     /// <see cref="TimelineEvent.Summary"/> carries the occupancy
