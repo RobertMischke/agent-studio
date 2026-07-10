@@ -46,6 +46,15 @@ public static class EngineeringWorkstreamFrame
     /// </summary>
     public const string FrameRootRel = "engineering-workstream";
 
+    /// <summary>
+    /// User-facing label for the frame's root node in the wiki tree. The physical
+    /// folder stays <see cref="FrameRootRel"/> ("engineering-workstream") so
+    /// existing checkouts keep working; only the displayed name changed to
+    /// "Workstream" (operator decision 2026-07-09). The frame is also pinned to the
+    /// top of the wiki tree - see <see cref="IsFrameRoot"/>.
+    /// </summary>
+    public const string RootDisplayName = "Workstream";
+
     /// <summary>The frame overview / orientation landing shell.</summary>
     public const string OverviewShellRel = FrameRootRel + "/00-overview.html";
 
@@ -78,7 +87,7 @@ public static class EngineeringWorkstreamFrame
         Area("40-decision-log", "Decision Log",
             "Why the system is shaped the way it is: decisions taken, alternatives rejected, and their triggers."),
         Area("50-workstream-log", "Workstream Log",
-            "The running narrative of the engineering workstream: what happened, in order, over time."),
+            "The running narrative of the workstream: what happened, in order, over time."),
     ];
 
     private static FrameArea Area(string folder, string title, string purpose) =>
@@ -107,6 +116,19 @@ public static class EngineeringWorkstreamFrame
 
     /// <summary>True when the path is a frame folder (root or one of the five areas).</summary>
     public static bool IsFrameFolder(string? relPath) => FrameFolders.Contains(Normalize(relPath));
+
+    /// <summary>True when the path is exactly the frame root folder (not an area or subpage).</summary>
+    public static bool IsFrameRoot(string? relPath) =>
+        Normalize(relPath).Equals(FrameRootRel, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The display label a wiki tree node should carry, or <c>null</c> to fall back
+    /// to the default (order-prefix-stripped folder name). Only the frame root is
+    /// relabelled - to <see cref="RootDisplayName"/> ("Workstream"); the five areas
+    /// keep the titles derived from their own folder names.
+    /// </summary>
+    public static string? DisplayTitle(string? relPath) =>
+        IsFrameRoot(relPath) ? RootDisplayName : null;
 
     /// <summary>True when the path is a frame landing shell (overview or an area index).</summary>
     public static bool IsFrameShell(string? relPath) => FrameShells.Contains(Normalize(relPath));

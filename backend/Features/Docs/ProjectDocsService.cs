@@ -363,7 +363,9 @@ public class ProjectDocsService
             if (children.Count == 0) continue; // prune empty folders
             var rel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
             nodes.Add(new WikiTreeNode(
-                sub.Name, StripOrderPrefix(sub.Name), rel, "folder", children, null,
+                sub.Name,
+                EngineeringWorkstreamFrame.DisplayTitle(rel) ?? StripOrderPrefix(sub.Name),
+                rel, "folder", children, null,
                 EngineeringWorkstreamFrame.IsStructural(rel)));
         }
 
@@ -578,9 +580,18 @@ public class ProjectDocsService
         return "medium";
     }
 
-    /// <summary>Folders before files; then by numeric order prefix; then name.</summary>
+    /// <summary>
+    /// Workstream frame root first (pinned as the top wiki element); then folders
+    /// before files; then by numeric order prefix; then name.
+    /// </summary>
     private static int CompareTreeNodes(WikiTreeNode a, WikiTreeNode b)
     {
+        // The Workstream frame is pinned to the top of the tree. Only the frame
+        // root matches (a top-level node), so nested siblings keep normal order.
+        var aPin = EngineeringWorkstreamFrame.IsFrameRoot(a.RelPath) ? 0 : 1;
+        var bPin = EngineeringWorkstreamFrame.IsFrameRoot(b.RelPath) ? 0 : 1;
+        if (aPin != bPin) return aPin - bPin;
+
         var aFolder = a.Type == "folder";
         var bFolder = b.Type == "folder";
         if (aFolder != bFolder) return aFolder ? -1 : 1;
@@ -621,7 +632,7 @@ public class ProjectDocsService
     /// endpoints phrase the immutability rule identically.
     /// </summary>
     public static string FrameLockMessage(string relPath, string verb) =>
-        $"'{relPath}' is part of the fixed Engineering Workstream frame and cannot be {verb}. "
+        $"'{relPath}' is part of the fixed Workstream frame and cannot be {verb}. "
         + "Create or edit subpages under an area folder instead.";
 
     /// <summary>

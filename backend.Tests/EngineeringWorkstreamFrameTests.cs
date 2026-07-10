@@ -142,6 +142,38 @@ public class EngineeringWorkstreamFrameTests : IDisposable
         Assert.False(subpage!.Immutable);
     }
 
+    // ---- frame root display name + top pin ----
+
+    [Fact]
+    public void DisplayTitle_RelabelsFrameRootToWorkstream_LeavesOthersDefault()
+    {
+        Assert.Equal("Workstream", EngineeringWorkstreamFrame.DisplayTitle("engineering-workstream"));
+        Assert.Null(EngineeringWorkstreamFrame.DisplayTitle("engineering-workstream/40-decision-log"));
+        Assert.Null(EngineeringWorkstreamFrame.DisplayTitle("architecture"));
+        Assert.True(EngineeringWorkstreamFrame.IsFrameRoot("engineering-workstream"));
+        Assert.False(EngineeringWorkstreamFrame.IsFrameRoot("engineering-workstream/40-decision-log"));
+    }
+
+    [Fact]
+    public void GetWikiTree_PinsWorkstreamFrameFirst_WithWorkstreamDisplayName()
+    {
+        var projectRoot = Path.Combine(_tempDir, "order-proj");
+        SeedFrame(projectRoot);
+        // A sibling top-level docs folder that sorts before "engineering-workstream"
+        // alphabetically - it must still land after the pinned frame root.
+        var arch = Path.Combine(projectRoot, "docs", "architecture");
+        Directory.CreateDirectory(arch);
+        File.WriteAllText(Path.Combine(arch, "index.md"), "# Architecture\n");
+
+        var docs = BuildDocsService(("Order", projectRoot));
+        var tree = docs.GetWikiTree("Order");
+        Assert.NotNull(tree);
+
+        Assert.Equal("engineering-workstream", tree!.Root[0].RelPath);
+        Assert.Equal("Workstream", tree.Root[0].Title);
+        Assert.Contains(tree.Root.Skip(1), n => n.RelPath == "architecture");
+    }
+
     // ---- WriteWikiFile content lock ----
 
     [Fact]
@@ -157,7 +189,7 @@ public class EngineeringWorkstreamFrameTests : IDisposable
 
         var blockedOverview = docs.WriteWikiFile("Write", "engineering-workstream/00-overview.html", "<h1>hacked</h1>");
         Assert.False(blockedOverview.Success);
-        Assert.Contains("fixed Engineering Workstream frame", blockedOverview.Error);
+        Assert.Contains("fixed Workstream frame", blockedOverview.Error);
 
         var blockedShell = docs.WriteWikiFile("Write", "engineering-workstream/40-decision-log/index.html", "<h1>hacked</h1>");
         Assert.False(blockedShell.Success);

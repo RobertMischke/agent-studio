@@ -43,7 +43,7 @@ Use this page as the first stop when you need the right document quickly.
 | Agent message bus | [architecture/bus/agent-message-bus.md](architecture/bus/agent-message-bus.md) |
 | UX doctrine | [product/design-principles.md](product/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](product/orchestrator-chat.md) |
-| Engineering Workstream frame | [concepts/engineering-workstream.md](concepts/engineering-workstream.md) |
+| Workstream frame (top wiki element; internal name engineering-workstream) | [concepts/engineering-workstream.md](concepts/engineering-workstream.md) |
 | Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](concepts/run-liveness-and-slot-semantics.md) |
 | Result view and case templates | [concepts/result-view-and-case-templates.md](concepts/result-view-and-case-templates.md) |
 | Wiki classification | [product/wiki-document-classification.md](product/wiki-document-classification.md) |

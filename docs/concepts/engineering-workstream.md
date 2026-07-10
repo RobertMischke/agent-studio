@@ -1,8 +1,15 @@
-# Engineering Workstream
+# Workstream
 
 Status: Concept (living). Slice EW-1 implemented.
 
-The Engineering Workstream is a fixed frame in every project's wiki that keeps
+> Naming (operator decision 2026-07-09): user-facing, this frame is called
+> **Workstream** and is pinned as the **top** element of every project wiki's
+> content tree. The internal identifiers, the concept file name, and the physical
+> folder (`docs/engineering-workstream/`) keep the historical
+> `engineering-workstream` name so existing checkouts do not break; only the
+> displayed label was remapped (see [§8](#8-display-name-and-tree-position)).
+
+The Workstream is a fixed frame in every project's wiki that keeps
 the development story in the same five places, in the same order, forever. It is
 the answer to "where does knowledge about how this project is being built
 actually live?" — so that operators and agents never have to guess, and never
@@ -107,3 +114,22 @@ relative paths plus rules over them, which is exactly what survives a relocation
 - **Later:** seeding the frame into other project wikis, subpage authoring
   conventions per area, and wiring signals/decisions/log entries from pipeline
   output.
+
+## 8. Display name and tree position
+
+The 2026-07-09 rename is a presentation-layer change, deliberately kept off the
+frame's identity so it stays relocatable (see [§6](#6-agt-1984--relocation-into-the-wikis-own-checkout)):
+
+- **Display name.** The frame root's wiki-tree label is
+  `EngineeringWorkstreamFrame.RootDisplayName` (`"Workstream"`), applied in
+  `ProjectDocsService.BuildTreeNodes` via `EngineeringWorkstreamFrame.DisplayTitle`.
+  Only the root is relabelled; the five areas keep the titles derived from their
+  own folder names.
+- **Physical folder unchanged.** The on-disk folder stays
+  `docs/engineering-workstream/` (`FrameRootRel`), so existing checkouts, the
+  immutability rules, and every wiki-root-relative path keep working. A physical
+  folder rename, if ever wanted, is a separate migration and is out of scope here.
+- **Top of the tree.** The frame root is pinned first in
+  `ProjectDocsService.CompareTreeNodes` (`EngineeringWorkstreamFrame.IsFrameRoot`
+  sorts ahead of all other `docs/` siblings), so the Workstream always leads the
+  wiki content tree regardless of alphabetical order.
