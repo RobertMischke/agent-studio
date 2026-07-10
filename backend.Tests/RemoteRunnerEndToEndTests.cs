@@ -161,6 +161,21 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Health_probe_reports_reachable_against_the_live_server()
+    {
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+
+        // The connectivity preflight hits the server's open /healthz route. A live
+        // server returns a null reason (reachable); the runbook's readiness check
+        // (agent-runner --health-check) and the run preflight both branch on this.
+        var reason = await client.ProbeHealthAsync(CancellationToken.None);
+
+        Assert.Null(reason);
+    }
+
+    [Fact]
     public async Task Second_runner_is_refused_while_the_lease_is_held()
     {
         SeedTask(TaskStates.Progress, TaskKey, "Contended", "Prompt.");

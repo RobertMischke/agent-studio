@@ -24,6 +24,20 @@ public sealed class RemoteTaskRunner
     /// <returns>Process exit code: 0 on a clean handoff, non-zero when the run could not complete.</returns>
     public async Task<int> RunAsync(string taskKey, CancellationToken shutdown)
     {
+        // Connectivity preflight: over a reverse tunnel the Task Server is only
+        // reachable while the tunnel is up. Probe /healthz first so a dropped
+        // connection is reported once, cleanly, as a connection-lost diagnostic
+        // that names the tunnel - instead of surfacing as a raw transport error
+        // buried in register/lease and reading like a task launch failure.
+        var health = await _client.ProbeHealthAsync(shutdown);
+        if (health is not null)
+        {
+            _log($"connection lost: cannot reach the task server at {_options.ServerUrl} ({health}). " +
+                 "Verify the reverse tunnel / autossh service is up (agent-runner --health-check) before assigning tasks.");
+            return 4;
+        }
+        _log("preflight ok: task server reachable");
+
         // Register the runner identity first: the server's X-Client-Id boundary
         // rejects every write (lease, logs, artifacts, completion) from an
         // unregistered id with 401, so this must precede the lease acquire.

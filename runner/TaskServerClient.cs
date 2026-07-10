@@ -61,6 +61,44 @@ public sealed class TaskServerClient : IDisposable
     /// <summary>The client id this runner presents as X-Client-Id (server-assigned after registration).</summary>
     public string ClientId { get; private set; } = string.Empty;
 
+    /// <summary>How long the liveness probe waits before it calls the server unreachable.</summary>
+    private const int HealthProbeTimeoutSeconds = 10;
+
+    /// <summary>
+    /// Liveness probe against the Task Server's open <c>/healthz</c> route. Returns
+    /// <c>null</c> when the server answers 200; otherwise a short human-readable
+    /// reason (HTTP status, timeout, or transport error). It never throws for an
+    /// unreachable server - a dropped reverse tunnel is an expected, recoverable
+    /// state, so the caller can report "connection lost" cleanly instead of letting
+    /// a raw transport exception cascade through register/lease/launch. The probe
+    /// uses its own short timeout so a black-holed tunnel fails fast rather than
+    /// blocking on the 60 s request timeout.
+    /// </summary>
+    public async Task<string?> ProbeHealthAsync(CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(HealthProbeTimeoutSeconds));
+        try
+        {
+            using var resp = await _http.GetAsync("/healthz", timeout.Token);
+            return resp.IsSuccessStatusCode
+                ? null
+                : $"server answered /healthz with HTTP {(int)resp.StatusCode}";
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw; // a real shutdown, not a health failure - let the caller unwind
+        }
+        catch (OperationCanceledException)
+        {
+            return $"no response within {HealthProbeTimeoutSeconds}s (reverse tunnel down?)";
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
+
     private void SetClientId(string clientId)
     {
         ClientId = clientId;

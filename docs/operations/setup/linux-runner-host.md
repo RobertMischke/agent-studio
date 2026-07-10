@@ -56,7 +56,9 @@ Linux host and fills a bounded set of task slots without owning task state:
 `agent-runner` (Hetzner, `88.99.136.78`). SSH key-auth, one sudo-capable user.
 No inbound ports beyond SSH until the central-URL auth work (Phase 2) lands, so
 the runner reaches the Task Server over an `ssh -R`/`-L` tunnel or the operator's
-LAN address during the MVP.
+LAN address during the MVP. For **unattended** operation, keep that tunnel up as
+a supervised, auto-reconnecting service and gate work on its health-check:
+[remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
 
 ## 1. Provision the host
 
@@ -69,18 +71,35 @@ npm i -g @anthropic-ai/claude-code @openai/codex
 npx playwright install --with-deps chromium
 ```
 
-One-time headless CLI auth (the known weak spot, kickoff D5): complete the OAuth
-+ onboarding once over an SSH port-forward, or seed `~/.claude/.credentials.json`
-+ an onboarded `~/.claude.json`. Verify with `claude --version` and one throwaway
-`claude -p "say hi"` before wiring the runner.
+### Per-host CLI credentials (D5, permanent)
 
-Parallel clean-context runs share this one credential file rather than copying
-it, so a token refresh during any run writes through to `~/.claude/.credentials.json`
-and every later launch keeps working (AGT-2066 "OAuth token roulette"; see the
-clean-context section of [`docs/cli/supported-clis.md`](../../cli/supported-clis.md)).
-On this Linux host the share is a **symlink**; the same fix applies here as on the
-Windows host, so keep `~/.claude/.credentials.json` a plain file the runner user
-can read and write in place, not itself a symlink into a per-run temp dir.
+Authenticate every CLI **on the host itself** so the host owns its own
+credentials. Do **not** copy the operator's `~/.claude/.credentials.json` /
+`~/.codex/auth.json` over from the studio. A seeded credential shares a
+refresh-token lineage with the operator's account, so when the operator side
+re-logs-in or rotates its token, the host's copy is invalidated and the host
+drops out logged-out mid-batch. This drift was live on 2026-07-09 (host-claude
+logged out after an operator-side token rotation, needing a manual re-seed); a
+host that logged in independently is immune to it. Per-host login is the
+permanent replacement for the earlier shared-credential seeding.
+
+- **Claude.** Log in directly on the host, once, over an `ssh -L` port-forward so
+  the OAuth browser step can complete (`claude`, finish onboarding), **or** mint a
+  long-lived headless token on the host with `claude setup-token`. Either way the
+  host holds its **own** refresh token, independent of the operator's. Verify with
+  `claude --version` and one throwaway `claude -p "say hi"` before wiring the runner.
+- **Codex.** Same rule: run `codex login` on the host so it writes the host's own
+  `~/.codex/auth.json`; do not copy the operator's. Verify with `codex --version`.
+- **Rotation is now per host.** If a host's own token is ever revoked, re-run that
+  host's login / `setup-token` **on that host**. No other host and no operator-side
+  action is involved, so there is no cross-host drift to chase.
+
+The host's `~/.claude/.credentials.json` must stay a plain file the runner user
+can read and write in place, so Claude's own token refresh persists for the next
+launch. (The studio's clean-context mechanism keeps the same in-place invariant
+for parallel runs by sharing the one credential file *by link* rather than
+copying it - AGT-2066 "OAuth token roulette"; see the clean-context section of
+[`docs/cli/supported-clis.md`](../../cli/supported-clis.md).)
 
 ## 2. Build the runner
 
@@ -182,13 +201,20 @@ clean Mode-A Studio stack.
    /opt/agent-runner/agent-runner <TASK-KEY>
    ```
 
-The runner then, in order: **registers its client identity** (see below),
-acquires the fenced lease, starts heartbeating, checks out the branch from
-origin, fetches `prompt.md` over the API, spawns the CLI in the working tree,
-ships stdout/stderr to the server every few seconds, uploads everything under
-`results/`, posts the external-completion, and releases the lease. Exit code `0`
-means a clean handoff; `1` a blocked/needs-input outcome; `2` lease not granted;
-`3` lease lost mid-run; `4` the task server was unreachable or rejected a call.
+The runner then, in order: **preflights connectivity** (probes `/healthz`, so a
+dropped tunnel is reported cleanly *before* any lease or CLI work), **registers
+its client identity** (see below), acquires the fenced lease, starts
+heartbeating, checks out the branch from origin, fetches `prompt.md` over the
+API, spawns the CLI in the working tree, ships stdout/stderr to the server every
+few seconds, uploads everything under `results/`, posts the external-completion,
+and releases the lease. Exit code `0` means a clean handoff; `1` a
+blocked/needs-input outcome; `2` lease not granted; `3` lease lost mid-run; `4`
+the task server was unreachable or rejected a call.
+
+For unattended operation, run `agent-runner --health-check` as a readiness probe
+(exit `0` reachable, `4` not) before assigning a task, and keep the tunnel up as
+a service. Both are covered in
+[remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
 
 ### Client identity registration (required)
 
@@ -222,6 +248,12 @@ The task passes RM-5 acceptance when, after the runner exits `0`:
   the same assigned project.
 - **`lease not granted: Held` in one-task mode** - another runner already holds
   the task. The daemon claim path normally avoids this before launch.
+- **`connection lost: cannot reach the task server ...` at startup** - the
+  preflight `/healthz` probe failed, almost always a dropped reverse tunnel.
+  Confirm with `agent-runner --health-check`; if it also exits `4`, restart the
+  tunnel service ([remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md)).
+  The runner refuses at preflight by design, so no half-started lease or CLI is
+  left behind.
 - **`lease lost: StaleToken` mid-run** - a TTL takeover happened; the network was
   slow enough that heartbeats missed the window. Raise `RUNNER_TTL_SECONDS` /
   lower `RUNNER_HEARTBEAT_SECONDS`, or check the tunnel.

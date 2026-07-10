@@ -59,6 +59,14 @@ public sealed class RunnerOptions
     /// <summary>Delay between empty daemon pickup polls.</summary>
     public int PollSeconds { get; init; }
 
+    /// <summary>
+    /// When set (<c>--health-check</c>), the runner only probes the Task Server's
+    /// liveness and exits: 0 when the server is reachable, 4 when it is not. No task
+    /// key is required. This is the readiness probe the reverse-tunnel service uses
+    /// to confirm the connection before assigning work.
+    /// </summary>
+    public bool HealthCheckOnly { get; init; }
+
     public static string Env(string name, string fallback = "")
         => Environment.GetEnvironmentVariable(name) is { Length: > 0 } v ? v : fallback;
 
@@ -76,6 +84,7 @@ public sealed class RunnerOptions
         string? positional = null;
         var once = true;
         var help = false;
+        var healthCheck = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -83,6 +92,7 @@ public sealed class RunnerOptions
             if (a is "-h" or "--help") { help = true; continue; }
             if (a == "--once") { once = true; continue; }
             if (a == "--poll") { once = false; continue; }
+            if (a == "--health-check") { healthCheck = true; continue; }
             if (a.StartsWith("--", StringComparison.Ordinal))
             {
                 var key = a[2..];
@@ -117,6 +127,7 @@ public sealed class RunnerOptions
                 ? maxV : EnvInt("RUNNER_MAX_PARALLELISM", 2),
             PollSeconds = overrides.TryGetValue("poll-seconds", out var poll) && int.TryParse(poll, out var pollV) && pollV > 0
                 ? pollV : EnvInt("RUNNER_POLL_SECONDS", 5),
+            HealthCheckOnly = healthCheck,
         };
 
         var taskKey = positional ?? (overrides.TryGetValue("task", out var tk) ? tk : null);

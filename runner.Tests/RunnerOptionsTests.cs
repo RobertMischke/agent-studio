@@ -53,6 +53,22 @@ public class RunnerOptionsTests
     [InlineData("project/task 20", "project-task-20")]
     public void Worktree_segment_is_filesystem_safe(string input, string expected)
         => Assert.Equal(expected, GitWorkspace.SafeSegment(input));
+
+    [Fact]
+    public void Health_check_flag_sets_health_check_only_and_needs_no_task_key()
+    {
+        var (options, taskKey, _, help) = RunnerOptions.Parse(["--health-check"]);
+        Assert.True(options.HealthCheckOnly);
+        Assert.Null(taskKey);
+        Assert.False(help);
+    }
+
+    [Fact]
+    public void Health_check_only_defaults_false_for_a_normal_run()
+    {
+        var (options, _, _, _) = RunnerOptions.Parse(["AGT-1"]);
+        Assert.False(options.HealthCheckOnly);
+    }
 }
 
 public class AgentCliArgsTests

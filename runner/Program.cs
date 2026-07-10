@@ -16,7 +16,6 @@ void Log(string message) => Console.Error.WriteLine($"[{DateTime.UtcNow:HH:mm:ss
 
 var daemonMode = taskKey is null || !once;
 Log($"agent-runner starting: server={options.ServerUrl} mode={(daemonMode ? "daemon" : "one-shot")} task={taskKey ?? "(assigned projects)"}");
-
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
@@ -26,6 +25,24 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 using var client = new TaskServerClient(options);
+
+// Readiness probe (--health-check): confirm the Task Server is reachable over the
+// tunnel and exit, without touching a task. This is the check the reverse-tunnel
+// service runs so a down connection is reported once and cleanly (exit 4) instead
+// of cascading through a launch attempt. No task key is required.
+if (options.HealthCheckOnly)
+{
+    var health = await client.ProbeHealthAsync(shutdown.Token);
+    if (health is null)
+    {
+        Log($"health-check ok: task server reachable at {options.ServerUrl}");
+        return 0;
+    }
+    Log($"health-check failed: cannot reach the task server at {options.ServerUrl} ({health}). " +
+        "The reverse tunnel / autossh service is likely down.");
+    return 4;
+}
+
 
 try
 {
@@ -70,10 +87,13 @@ static void PrintUsage()
           agent-runner <TASK-KEY> [options]
           agent-runner --task <TASK-KEY> [options]
           agent-runner --poll [options]
+          agent-runner --health-check [--server <url>]
 
         Most configuration comes from environment variables (see the runbook,
         docs/operations/setup/linux-runner-host.md). Command-line flags override:
 
+          --health-check          Probe the Task Server and exit (0 reachable,
+                                  4 not). Readiness check for the tunnel service.
           --server <url>          Task Server base URL       (RUNNER_SERVER_URL)
           --runner-id <id>        Stable runner identity     (RUNNER_ID)
           --runner-name <name>    Board-facing runner name   (RUNNER_NAME)
