@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
 :host { display: block; }
 
 .escalation {
@@ -5,29 +7,91 @@
   flex-direction: column;
   gap: var(--studio-spacing-3);
   padding: var(--studio-spacing-4);
+  // No left accent line (operator hard-rule): the panel reads as escalation
+  // through its tinted all-round border + background wash, not a side stripe.
   border: 1px solid color-mix(in srgb, var(--severity-high) 45%, var(--studio-border));
-  border-left: 3px solid var(--severity-high);
   border-radius: 8px;
   background: color-mix(in srgb, var(--severity-high) 6%, var(--studio-bg-raised, var(--studio-bg)));
 
+  // Collapsed: just the header strip, tightened up so it stops dominating.
+  &--collapsed { padding: var(--studio-spacing-3); }
+
+  // The whole header row is the collapse toggle.
   &__head {
     display: flex;
     align-items: center;
     gap: var(--studio-spacing-2);
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid var(--studio-accent);
+      outline-offset: 2px;
+      border-radius: 6px;
+    }
+
+    &:hover .escalation__chevron { color: var(--studio-fg); }
   }
 
   &__eyebrow {
+    flex: 0 0 auto;
     font-size: 14px;
     color: var(--severity-high);
   }
 
+  &__headline {
+    display: flex;
+    align-items: center;
+    gap: var(--studio-spacing-2);
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
   &__title {
-    margin: 0;
+    flex: 0 0 auto;
     font-size: 13px;
     font-weight: 700;
     letter-spacing: 0.01em;
     color: var(--studio-fg-strong);
+  }
+
+  // One-line essence carried by the header at all times (category · grade · merge).
+  &__essence {
+    display: flex;
+    align-items: center;
+    gap: var(--studio-spacing-2);
     flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12px;
+  }
+
+  &__essence-reason {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--studio-fg-dim);
+  }
+
+  &__essence-merge {
+    display: inline-flex;
+    gap: var(--studio-spacing-1);
+    flex: 0 0 auto;
+    font-size: 11px;
+  }
+
+  &__chevron {
+    flex: 0 0 auto;
+    font-size: 10px;
+    color: var(--studio-fg-dim);
+    transition: color 0.15s ease;
   }
 
   &__rec {
@@ -57,6 +121,18 @@
       background: color-mix(in srgb, var(--severity-high) 16%, transparent);
       border-color: color-mix(in srgb, var(--severity-high) 45%, transparent);
     }
+  }
+
+  // Expanded body: height-capped with an internal scroll so a long checklist
+  // scrolls in place instead of pushing the rest of the detail view down.
+  &__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--studio-spacing-3);
+    max-height: 340px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    @include m.thin-scroll;
   }
 
   &__reason {
@@ -210,6 +286,15 @@
       color: var(--severity-high);
       background: color-mix(in srgb, var(--severity-high) 16%, transparent);
       border-color: color-mix(in srgb, var(--severity-high) 45%, transparent);
+    }
+
+    // Compact grade chip for the header essence line.
+    &--sm {
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      font-size: 11px;
+      font-weight: 700;
     }
   }
 

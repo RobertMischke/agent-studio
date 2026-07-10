@@ -1,105 +1,153 @@
 @if (view(); as v) {
-  <section class="escalation" data-testid="escalation-summary" aria-label="Escalation summary">
-    <header class="escalation__head">
+  <section
+    class="escalation"
+    data-testid="escalation-summary"
+    [class.escalation--collapsed]="collapsed()"
+    aria-label="Escalation summary">
+    <!-- Whole header row is the collapse toggle (pattern: pipeline-UI headers). -->
+    <button
+      type="button"
+      class="escalation__head"
+      data-testid="escalation-toggle"
+      [attr.aria-expanded]="!collapsed()"
+      aria-controls="escalation-body"
+      (click)="toggleCollapsed()">
       <span class="escalation__eyebrow" aria-hidden="true">⚠</span>
-      <h3 class="escalation__title">Escalation — operator decision needed</h3>
+
+      <span class="escalation__headline">
+        <span class="escalation__title">Escalation</span>
+        <!-- Single-line essence: reason category · review grade · merge status. -->
+        <span class="escalation__essence" data-testid="escalation-essence">
+          @if (essenceReason(); as reason) {
+            <span class="escalation__essence-reason" data-testid="escalation-essence-reason">{{ reason }}</span>
+          }
+          @if (v.review; as r) {
+            @if (r.grade; as grade) {
+              <span
+                class="escalation__grade escalation__grade--sm escalation__grade--{{ r.gradeTone }}"
+                data-testid="escalation-essence-grade">{{ grade }}</span>
+            }
+          }
+          @if (v.delivery.merge; as m) {
+            <span
+              class="escalation__essence-merge"
+              data-testid="escalation-essence-merge"
+              [cacTooltip]="m.tooltip"
+              [attr.aria-label]="m.ariaLabel">
+              <span class="escalation__seg" [class.escalation__seg--in]="m.develop.merged">
+                {{ m.develop.label }} {{ m.develop.merged ? '✓' : '—' }}
+              </span>
+              <span class="escalation__seg" [class.escalation__seg--in]="m.main.merged">
+                {{ m.main.label }} {{ m.main.merged ? '✓' : '—' }}
+              </span>
+            </span>
+          }
+        </span>
+      </span>
+
       @if (v.recommendation; as rec) {
-        <span class="escalation__rec escalation__rec--{{ rec.tone }}"
-              data-testid="escalation-recommendation"
-              [cacTooltip]="'The completion gate\'s recommendation for this card.'">
+        <span
+          class="escalation__rec escalation__rec--{{ rec.tone }}"
+          data-testid="escalation-recommendation"
+          [cacTooltip]="'The completion gate\'s recommendation for this card.'">
           {{ rec.label }}
         </span>
       }
-    </header>
+      <span class="escalation__chevron" aria-hidden="true">{{ collapsed() ? '▸' : '▾' }}</span>
+    </button>
 
-    @if (v.reason) {
-      <p class="escalation__reason" data-testid="escalation-reason">
-        {{ v.reason }}
-        @if (v.cause) {
-          <span class="escalation__cause">· {{ v.cause }}</span>
-        }
-      </p>
-    }
-
-    <div class="escalation__grid">
-      <!-- 1. Open gate points -->
-      <section class="escalation__block escalation__block--gate">
-        <h4 class="escalation__block-title">
-          Open gate points
-          @if (view().gateItems.length > 0) {
-            <span class="escalation__count" data-testid="escalation-gate-count">{{ openGateCount() }} open</span>
-          }
-        </h4>
-        @if (v.gateItems.length > 0) {
-          <ul class="escalation__checklist" data-testid="escalation-gate-items">
-            @for (item of v.gateItems; track $index) {
-              <li class="escalation__gate-item" [class.escalation__gate-item--done]="item.checked">
-                <span class="escalation__check" aria-hidden="true">{{ item.checked ? '☑' : '☐' }}</span>
-                @if (item.tone) {
-                  <span class="escalation__verdict escalation__verdict--{{ item.tone }}">{{ item.verdict }}</span>
-                }
-                <span class="escalation__gate-text">{{ item.text }}</span>
-              </li>
+    @if (!collapsed()) {
+      <div class="escalation__body" id="escalation-body" data-testid="escalation-body">
+        @if (v.reason) {
+          <p class="escalation__reason" data-testid="escalation-reason">
+            {{ v.reason }}
+            @if (v.cause) {
+              <span class="escalation__cause">· {{ v.cause }}</span>
             }
-          </ul>
-          @if (gateSourceLabel(v.gateSource); as src) {
-            <p class="escalation__source" data-testid="escalation-gate-source">{{ src }}</p>
-          }
-        } @else {
-          <p class="escalation__empty" data-testid="escalation-gate-empty">
-            No structured gate points were recorded for this escalation.
           </p>
         }
-      </section>
 
-      <!-- 2. Review verdict + 3. Delivery context -->
-      <div class="escalation__side">
-        <section class="escalation__block escalation__block--review">
-          <h4 class="escalation__block-title">Review verdict</h4>
-          @if (v.review; as r) {
-            <div class="escalation__verdict-head" data-testid="escalation-review-head">
-              @if (r.grade) {
-                <span class="escalation__grade escalation__grade--{{ r.gradeTone }}"
-                      data-testid="escalation-review-grade">{{ r.grade }}</span>
+        <div class="escalation__grid">
+          <!-- 1. Open gate points -->
+          <section class="escalation__block escalation__block--gate">
+            <h4 class="escalation__block-title">
+              Open gate points
+              @if (view().gateItems.length > 0) {
+                <span class="escalation__count" data-testid="escalation-gate-count">{{ openGateCount() }} open</span>
               }
-              <span class="escalation__verdict escalation__verdict--{{ r.verdictTone }}"
-                    data-testid="escalation-review-verdict">{{ r.verdict }}</span>
-              @if (r.model) {
-                <span class="escalation__model" [cacTooltip]="formatRunAt(r.runAt)">{{ r.model }}</span>
+            </h4>
+            @if (v.gateItems.length > 0) {
+              <ul class="escalation__checklist" data-testid="escalation-gate-items">
+                @for (item of v.gateItems; track $index) {
+                  <li class="escalation__gate-item" [class.escalation__gate-item--done]="item.checked">
+                    <span class="escalation__check" aria-hidden="true">{{ item.checked ? '☑' : '☐' }}</span>
+                    @if (item.tone) {
+                      <span class="escalation__verdict escalation__verdict--{{ item.tone }}">{{ item.verdict }}</span>
+                    }
+                    <span class="escalation__gate-text">{{ item.text }}</span>
+                  </li>
+                }
+              </ul>
+              @if (gateSourceLabel(v.gateSource); as src) {
+                <p class="escalation__source" data-testid="escalation-gate-source">{{ src }}</p>
               }
-            </div>
-            @if (r.summary) {
-              <p class="escalation__summary" data-testid="escalation-review-summary">{{ r.summary }}</p>
-            }
-          } @else {
-            <p class="escalation__empty" data-testid="escalation-review-empty">No code-review grade on file.</p>
-          }
-        </section>
-
-        <section class="escalation__block escalation__block--delivery">
-          <h4 class="escalation__block-title">Delivery context</h4>
-          <div class="escalation__delivery" data-testid="escalation-delivery">
-            @if (v.delivery.merge; as m) {
-              <span class="escalation__merge" [cacTooltip]="m.tooltip" [attr.aria-label]="m.ariaLabel">
-                <span class="escalation__seg" [class.escalation__seg--in]="m.develop.merged">
-                  {{ m.develop.label }} {{ m.develop.merged ? '✓' : '—' }}
-                </span>
-                <span class="escalation__seg" [class.escalation__seg--in]="m.main.merged">
-                  {{ m.main.label }} {{ m.main.merged ? '✓' : '—' }}
-                </span>
-              </span>
             } @else {
-              <span class="escalation__merge escalation__merge--none">No committed work yet</span>
+              <p class="escalation__empty" data-testid="escalation-gate-empty">
+                No structured gate points were recorded for this escalation.
+              </p>
             }
-            <span class="escalation__counts" data-testid="escalation-delivery-counts">
-              {{ v.delivery.commitCount }} {{ v.delivery.commitCount === 1 ? 'commit' : 'commits' }}
-              @if (v.delivery.filesChanged > 0) {
-                · {{ v.delivery.filesChanged }} {{ v.delivery.filesChanged === 1 ? 'file' : 'files' }}
+          </section>
+
+          <!-- 2. Review verdict + 3. Delivery context -->
+          <div class="escalation__side">
+            <section class="escalation__block escalation__block--review">
+              <h4 class="escalation__block-title">Review verdict</h4>
+              @if (v.review; as r) {
+                <div class="escalation__verdict-head" data-testid="escalation-review-head">
+                  @if (r.grade) {
+                    <span class="escalation__grade escalation__grade--{{ r.gradeTone }}"
+                          data-testid="escalation-review-grade">{{ r.grade }}</span>
+                  }
+                  <span class="escalation__verdict escalation__verdict--{{ r.verdictTone }}"
+                        data-testid="escalation-review-verdict">{{ r.verdict }}</span>
+                  @if (r.model) {
+                    <span class="escalation__model" [cacTooltip]="formatRunAt(r.runAt)">{{ r.model }}</span>
+                  }
+                </div>
+                @if (r.summary) {
+                  <p class="escalation__summary" data-testid="escalation-review-summary">{{ r.summary }}</p>
+                }
+              } @else {
+                <p class="escalation__empty" data-testid="escalation-review-empty">No code-review grade on file.</p>
               }
-            </span>
+            </section>
+
+            <section class="escalation__block escalation__block--delivery">
+              <h4 class="escalation__block-title">Delivery context</h4>
+              <div class="escalation__delivery" data-testid="escalation-delivery">
+                @if (v.delivery.merge; as m) {
+                  <span class="escalation__merge" [cacTooltip]="m.tooltip" [attr.aria-label]="m.ariaLabel">
+                    <span class="escalation__seg" [class.escalation__seg--in]="m.develop.merged">
+                      {{ m.develop.label }} {{ m.develop.merged ? '✓' : '—' }}
+                    </span>
+                    <span class="escalation__seg" [class.escalation__seg--in]="m.main.merged">
+                      {{ m.main.label }} {{ m.main.merged ? '✓' : '—' }}
+                    </span>
+                  </span>
+                } @else {
+                  <span class="escalation__merge escalation__merge--none">No committed work yet</span>
+                }
+                <span class="escalation__counts" data-testid="escalation-delivery-counts">
+                  {{ v.delivery.commitCount }} {{ v.delivery.commitCount === 1 ? 'commit' : 'commits' }}
+                  @if (v.delivery.filesChanged > 0) {
+                    · {{ v.delivery.filesChanged }} {{ v.delivery.filesChanged === 1 ? 'file' : 'files' }}
+                  }
+                </span>
+              </div>
+            </section>
           </div>
-        </section>
+        </div>
       </div>
-    </div>
+    }
   </section>
 }
