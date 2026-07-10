@@ -456,6 +456,29 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.className).toContain('task-card__issue-pill--high');
   });
 
+  it('renders an older outcome issue as history after a later accepted run', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      state: '5-human-review',
+      orchestratorVerdict: 'accept',
+      lastActivity: '2026-07-10T11:00:00Z',
+      outcomeIssue: {
+        kind: 'watchdog-timeout', label: 'Watchdog', severity: 'High', summary: 'Older failed attempt',
+        lastSeenAt: '2026-07-10T10:00:00Z',
+      },
+    }));
+    fixture.detectChanges();
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-outcome-issue"]') as HTMLElement;
+    expect(pill.className).toContain('task-card__issue-pill--historical');
+    expect(pill.className).not.toContain('task-card__issue-pill--high');
+    expect(pill.textContent).toContain('↺');
+  });
+
   it('renders an unpushed task branch as a warning outcome issue', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],
@@ -1358,6 +1381,29 @@ describe('buildTagChips — lane-mirror + concern suppression', () => {
       label: 'Reissue',
       ghost: false,
     })]);
+  });
+
+  it('renders reissue and abort markers as quiet history in human review', () => {
+    const abort = tag('abort-review:watchdog', 'Abort: watchdog');
+    abort.color = '#ef4444';
+    abort.description = 'The run stopped after a watchdog timeout';
+    const chips = buildTagChips(['reissue:autoreview', abort.id], registry(abort), '5-human-review');
+
+    expect(chips).toEqual([
+      expect.objectContaining({ id: 'reissue:autoreview', historical: true, historyGlyph: '↺' }),
+      expect.objectContaining({ id: abort.id, historical: true, historyGlyph: '↺' }),
+    ]);
+    expect(chips[0].tooltip).toContain('Recorded occurrences: 1 tag');
+    expect(chips[1].tooltip).toContain('watchdog timeout');
+  });
+
+  it('keeps reissue and abort markers alarm-coloured in 5e-escalated', () => {
+    const abort = tag('abort-review:watchdog', 'Abort: watchdog');
+    abort.color = '#ef4444';
+    const chips = buildTagChips(['reissue:autoreview', abort.id], registry(abort), '5e-escalated');
+
+    expect(chips[0]).toEqual(expect.objectContaining({ historical: false, color: '#f59e0b' }));
+    expect(chips[1]).toEqual(expect.objectContaining({ historical: false, color: '#ef4444' }));
   });
 
   it('does not suppress a lane-name tag in an unrelated lane', () => {

@@ -315,7 +315,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
    */
   readonly needsAttention = computed(() => cardNeedsAttention(this.job()));
 
-  readonly outcomeIssueBadge = computed(() => buildOutcomeIssueBadge(this.job().outcomeIssue));
+  readonly outcomeIssueBadge = computed(() => buildOutcomeIssueBadge(this.job()));
 
   /**
    * Card-level "code review running" flag. Reads the shared

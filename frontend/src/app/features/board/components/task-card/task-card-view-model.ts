@@ -409,6 +409,8 @@ export interface TaskTagChip {
   ghost: boolean;
   concern: boolean;
   unparseable: boolean;
+  historical: boolean;
+  historyGlyph: string | null;
   tooltip: string;
 }
 
@@ -448,7 +450,19 @@ const LANE_MIRROR_CARD_TAG_TEXT: Record<string, readonly string[]> = {
   [TaskState.Archive]: ['archive', 'archived'],
 };
 
-const REISSUE_AUTO_REVIEW_TAG_ID = 'reissue:autoreview';
+const HISTORY_TAG_RE = /^(?:reissue|abort-review):(.+)$/i;
+const HISTORY_PRESENTATION_LANES = new Set<string>([
+  TaskState.HumanReview,
+  TaskState.Completed,
+  TaskState.Archive,
+]);
+
+function historyTagDetails(id: string): { kind: 'reissue' | 'abort'; reason: string } | null {
+  const match = HISTORY_TAG_RE.exec(id);
+  if (!match) return null;
+  const kind = id.toLowerCase().startsWith('reissue:') ? 'reissue' : 'abort';
+  return { kind, reason: match[1].replace(/[-_]+/g, ' ').trim() };
+}
 
 function compactTagText(value: string): string {
   return value
@@ -486,15 +500,24 @@ export function buildTagChips(
   return list.flatMap((id) => {
     const entry = byId.get(id);
     if (isSuppressedCardTag(id, entry, state)) return [];
-    if (id.toLowerCase() === REISSUE_AUTO_REVIEW_TAG_ID) {
+    const history = historyTagDetails(id);
+    const historical = history !== null && state !== undefined && HISTORY_PRESENTATION_LANES.has(state);
+    if (history) {
+      const label = entry?.label ?? (history.kind === 'reissue' ? 'Reissue' : 'Abort review');
+      const reason = entry?.description || history.reason || 'No reason recorded';
+      const occurrences = list.filter((candidate) => historyTagDetails(candidate)?.kind === history.kind).length;
       return {
         id,
-        label: 'Reissue',
-        color: '#f59e0b',
+        label,
+        color: historical ? 'var(--studio-fg-dim)' : (entry?.color ?? (history.kind === 'reissue' ? '#f59e0b' : '#ef4444')),
         ghost: false,
         concern: false,
         unparseable: false,
-        tooltip: 'Auto-review sent this task back for another attempt.'
+        historical,
+        historyGlyph: historical ? '↺' : null,
+        tooltip: historical
+          ? `History only: ${label}. When: before the task reached its current ${state} lane. Recorded occurrences: ${occurrences} tag${occurrences === 1 ? '' : 's'}. Reason: ${reason}. Open the task timeline for the exact run time and full context.`
+          : `${label} is active in the ${state ?? 'current'} lane. Reason: ${reason}.`
       };
     }
     if (entry) {
@@ -505,6 +528,8 @@ export function buildTagChips(
         ghost: false,
         concern: false,
         unparseable: false,
+        historical: false,
+        historyGlyph: null,
         tooltip: entry.description ? `${entry.label}: ${entry.description}` : entry.label
       };
     }
@@ -515,7 +540,9 @@ export function buildTagChips(
       ghost: true,
       concern: false,
       unparseable: false,
-        tooltip: `Unknown tag '${id}'; registry entry was removed`
+      historical: false,
+      historyGlyph: null,
+      tooltip: `Unknown tag '${id}'; registry entry was removed`
       };
   });
 }
@@ -1271,18 +1298,29 @@ export function buildCodeReviewGradeBadge(tags: readonly string[] | undefined): 
   return null;
 }
 
-export interface OutcomeIssueBadge { label: string; tone: 'info' | 'warn' | 'high'; tooltip: string; }
+export interface OutcomeIssueBadge { label: string; tone: 'info' | 'warn' | 'high'; historical: boolean; tooltip: string; }
 
-export function buildOutcomeIssueBadge(issue: TaskInfo['outcomeIssue']): OutcomeIssueBadge | null {
+export function buildOutcomeIssueBadge(job: TaskInfo): OutcomeIssueBadge | null {
+  const issue = job.outcomeIssue;
   if (!issue) return null;
   const severity = (issue.severity ?? '').toLowerCase();
-  const tone = severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
+  const issueAt = issue.lastSeenAt ? Date.parse(issue.lastSeenAt) : Number.NaN;
+  const acceptedAt = job.lastActivity ? Date.parse(job.lastActivity) : Number.NaN;
+  const historical = HISTORY_PRESENTATION_LANES.has(job.state)
+    && job.orchestratorVerdict === 'accept'
+    && Number.isFinite(issueAt)
+    && Number.isFinite(acceptedAt)
+    && issueAt < acceptedAt;
+  const tone = historical ? 'info' : severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
   const seen = issue.lastSeenAt ? `\nLast seen: ${formatShortTime(issue.lastSeenAt)}` : '';
   const summary = issue.summary ? `\n\n${issue.summary}` : '';
   return {
     label: issue.label || issue.kind,
     tone,
-    tooltip: `Runner outcome issue: ${issue.kind}${seen}${summary}`
+    historical,
+    tooltip: historical
+      ? `History only: this runner issue predates the later accepted run.${seen}${summary}`
+      : `Runner outcome issue: ${issue.kind}${seen}${summary}`
   };
 }
 

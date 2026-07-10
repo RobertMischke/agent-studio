@@ -178,9 +178,10 @@
     @if (outcomeIssueBadge(); as oib) {
       <span class="task-card__issue-pill"
             [class]="'task-card__issue-pill--' + oib.tone"
+            [class.task-card__issue-pill--historical]="oib.historical"
             [cacTooltip]="oib.tooltip"
             data-testid="task-card-outcome-issue">
-        {{ oib.label }}
+        @if (oib.historical) { <span aria-hidden="true">↺</span> } {{ oib.label }}
       </span>
     }
     @if (codeReviewRunning()) {
@@ -319,10 +320,12 @@
               [class.task-card__tag-chip--ghost]="tg.ghost && !tg.concern && !tg.unparseable"
               [class.task-card__tag-chip--concern]="tg.concern"
               [class.task-card__tag-chip--unparseable]="tg.unparseable"
+              [class.task-card__tag-chip--historical]="tg.historical"
               [attr.data-tag-id]="tg.id"
+              [attr.data-history]="tg.historical ? 'true' : null"
               [attr.data-testid]="tg.concern ? 'task-card-concern-chip' : (tg.unparseable ? 'task-card-unparseable-chip' : null)"
               [style.--tag-color]="tg.color"
-              [cacTooltip]="tg.tooltip">@if (tg.concern) { <span class="task-card__tag-chip-warn" aria-hidden="true">⚠</span> } @else if (tg.unparseable) { <span class="task-card__tag-chip-unparseable-glyph" aria-hidden="true">📝</span> }{{ tg.label }}</span>
+              [cacTooltip]="tg.tooltip">@if (tg.concern) { <span class="task-card__tag-chip-warn" aria-hidden="true">⚠</span> } @else if (tg.unparseable) { <span class="task-card__tag-chip-unparseable-glyph" aria-hidden="true">📝</span> } @else if (tg.historyGlyph) { <span class="task-card__tag-chip-history-glyph" aria-hidden="true">{{ tg.historyGlyph }}</span> }{{ tg.label }}</span>
       }
     </div>
   }
