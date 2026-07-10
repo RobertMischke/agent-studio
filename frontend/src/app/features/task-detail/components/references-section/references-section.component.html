@@ -84,6 +84,26 @@
           </div>
         </div>
       }
+
+      @if (wikiPages().length > 0) {
+        <div class="refs__row" data-testid="references-row-wiki">
+          <span class="refs__label">Wiki pages</span>
+          <div class="refs__chips">
+            @for (page of wikiPages(); track page.relPath) {
+              <span class="refs__chip"
+                    [class.refs__chip--ghost]="page.exists === false"
+                    [attr.data-testid]="'wiki-reference-' + page.relPath">
+                <button type="button" class="refs__chip-link"
+                      [disabled]="page.exists === false"
+                      (click)="openWikiPage(page.relPath)"
+                      [cacTooltip]="page.exists === false ? 'Reference existed; target no longer exists' : page.relPath">
+                  {{ page.title || page.relPath }}
+                </button>
+              </span>
+            }
+          </div>
+        </div>
+      }
     </div>
 
     @if (adding()) {

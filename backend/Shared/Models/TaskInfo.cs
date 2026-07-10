@@ -252,6 +252,13 @@ public record TaskInfo
     public TaskReferences References { get; init; } = new();
 
     /// <summary>
+    /// Wiki pages associated with this task. The list is append-only and
+    /// deliberately survives deletion of a target page; <c>Exists</c> is a
+    /// read-time rendering hint and is never required for persistence.
+    /// </summary>
+    public List<RelatedWikiPage> RelatedWikiPages { get; init; } = [];
+
+    /// <summary>
     /// AGT-2029 — read-time "waits-on" projection derived from
     /// <see cref="References"/>.<c>DependsOn</c> against the whole workspace
     /// (all projects, all lanes including archive). Tells the card which

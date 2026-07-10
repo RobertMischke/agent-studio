@@ -417,6 +417,7 @@ public class TaskScannerService : ITaskScanner
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),
                 References = ReadReferences(raw),
+                RelatedWikiPages = ReadRelatedWikiPages(raw, entry),
                 Provenance = ReadProvenance(raw),
                 ExternalCompletion = ReadExternalCompletion(raw)
             };
@@ -761,6 +762,30 @@ public class TaskScannerService : ITaskScanner
         catch
         {
             return new TaskReferences();
+        }
+    }
+
+    private static List<RelatedWikiPage> ReadRelatedWikiPages(JsonElement raw, WatchPathEntry entry)
+    {
+        if (!raw.TryGetProperty("relatedWikiPages", out var refs) || refs.ValueKind != JsonValueKind.Array)
+            return [];
+        try
+        {
+            var pages = JsonSerializer.Deserialize<List<RelatedWikiPage>>(refs.GetRawText(), TaskJsonFile.ReadOpts) ?? [];
+            var root = string.IsNullOrWhiteSpace(entry.RepositoryPath) ? entry.RootPath : entry.RepositoryPath;
+            return pages
+                .Where(p => !string.IsNullOrWhiteSpace(p.RelPath))
+                .GroupBy(p => p.RelPath, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First() with
+                {
+                    Exists = !string.IsNullOrWhiteSpace(root)
+                        && File.Exists(Path.Combine(root!, g.First().RelPath.Replace('/', Path.DirectorySeparatorChar)))
+                })
+                .ToList();
+        }
+        catch
+        {
+            return [];
         }
     }
 

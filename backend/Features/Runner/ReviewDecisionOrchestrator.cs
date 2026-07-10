@@ -138,6 +138,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly IBuildTestGateRunner? _buildTestGateRunner;
     private readonly WikiMaintenancePostStepRunner? _wikiMaintenance;
     private readonly WikiLearningsPostStepRunner? _wikiLearnings;
+    private readonly WikiTaskCrossReferenceService? _wikiTaskCrossReferences;
     private readonly RegressionRadarService? _regressionRadar;
     // The opt-in task-spawner post-step (AGT-2028). Optional so the many
     // stand-alone test constructors keep compiling; production DI supplies it.
@@ -206,7 +207,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         RegressionRadarService? regressionRadar = null,
         WorkspaceArtifactCommitService? workspaceArtifactCommits = null,
         AgentStudio.Review.CodeReviewStepService? codeReviewStep = null,
-        TaskSpawnerPostStepRunner? taskSpawner = null)
+        TaskSpawnerPostStepRunner? taskSpawner = null,
+        WikiTaskCrossReferenceService? wikiTaskCrossReferences = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -233,6 +235,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _workspaceArtifactCommits = workspaceArtifactCommits;
         _codeReviewStep = codeReviewStep;
         _taskSpawner = taskSpawner;
+        _wikiTaskCrossReferences = wikiTaskCrossReferences;
 
         _statusSnapshot.ConfigureEscalationRateAlert(
             _configuration.GetValue(
@@ -1639,6 +1642,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // is reporting-only and never changes the task lane decision.
         RunWikiLearningsPostStep(entry, current, report, statusSummary, diffSummary);
 
+        // AGT-2053: append bidirectional task/wiki associations after both wiki
+        // producers have settled. This is reporting-only and deliberately does
+        // not clean stale targets: missing pages/tasks remain useful history.
+        RunWikiTaskCrossReferenceStep(entry, current);
+
         // Code-review quality-grade post-step (ASS-1657): the first-class
         // automatic review that assigns an A/B/C/D grade to the task's change
         // set with a quality-first model (Opus by default), recorded on the
@@ -2620,6 +2628,25 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 "ReviewDecisionOrchestrator: changed-file probe failed for {JobId}; build-test gate will run conservatively",
                 job.Id);
             return null;
+        }
+    }
+
+    private void RunWikiTaskCrossReferenceStep(WatchPathEntry entry, TaskInfo current)
+    {
+        if (_wikiTaskCrossReferences == null) return;
+        var root = string.IsNullOrWhiteSpace(entry.RepositoryPath) ? entry.RootPath : entry.RepositoryPath;
+        if (string.IsNullOrWhiteSpace(root)) return;
+        try
+        {
+            _wikiTaskCrossReferences.LinkAuto(root!, current,
+                ResolveLatestRunChangedFiles(current, entry.Path) ?? Array.Empty<string>());
+            _scanner.InvalidateCache();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: wiki-task cross-reference step failed for {Project}/{JobId}",
+                entry.Name, current.Id);
         }
     }
 

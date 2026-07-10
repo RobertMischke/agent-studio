@@ -36,6 +36,7 @@ import { StudioIconComponent, type StudioIconName } from '../../../../components
 import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
 import { WikiPulseComponent, WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
+import { StudioTabStateService } from '../../../studio-shell/services/studio-tab-state.service';
 import {
   WikiTreeRow,
   collectFolderIds,
@@ -132,6 +133,7 @@ export class ProjectWikiSectionComponent {
   private readonly catalog = inject(CliCatalogStore);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly tabs = inject(StudioTabStateService);
 
   readonly cliTypes = CLI_TYPES;
 
@@ -209,6 +211,12 @@ export class ProjectWikiSectionComponent {
   private resizeState: WikiResizeState | null = null;
 
   protected readonly nodeId = nodeId;
+
+  openRelatedTask(key: string): void {
+    const target = this.tasks.jobs().find(task =>
+      (task.key ?? task.id).toUpperCase() === key.toUpperCase());
+    if (target) this.tabs.open({ kind: 'task', taskKey: target.taskKey });
+  }
 
   constructor() {
     effect(() => {

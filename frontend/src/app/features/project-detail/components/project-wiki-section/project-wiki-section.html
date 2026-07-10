@@ -469,6 +469,7 @@
                                       data-testid="project-wiki-history"
                                       [history]="history()"
                                       [loading]="loadingHistory()"
+                                      (openTask)="openRelatedTask($event)"
                                       (viewRevision)="onViewRevision($event)" />
               </section>
 

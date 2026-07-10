@@ -21,6 +21,7 @@ import { TaskService } from '../../../../services/task.service';
 import { NotificationService } from '../../../../services/notification.service';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { TaskSelectionService } from '../../state/task-selection.service';
+import { StudioTabStateService } from '../../../studio-shell/services/studio-tab-state.service';
 
 /**
  * F34 detail-view reference editor. Renders the four cross-reference rows
@@ -45,6 +46,7 @@ export class ReferencesSectionComponent {
   private readonly tasks = inject(TaskService);
   private readonly selection = inject(TaskSelectionService);
   private readonly notifications = inject(NotificationService);
+  private readonly tabs = inject(StudioTabStateService);
 
   readonly info = input.required<TaskInfo>();
 
@@ -84,7 +86,10 @@ export class ReferencesSectionComponent {
   readonly blocking = signal<TaskReferenceLink[]>([]);
 
   /** The section renders when there is either an outgoing ref or an incoming dependent. */
-  readonly hasAnyReferences = computed(() => this.totalCount() > 0 || this.blocking().length > 0);
+  readonly hasAnyReferences = computed(() =>
+    this.totalCount() > 0 || this.blocking().length > 0 || (this.info().relatedWikiPages?.length ?? 0) > 0);
+
+  readonly wikiPages = computed(() => this.info().relatedWikiPages ?? []);
 
   private lastSeededKey: string | null = null;
   private readonly seed = effect(() => {
@@ -277,6 +282,17 @@ export class ReferencesSectionComponent {
 
   toggleAdding(): void {
     this.adding.update((v) => !v);
+  }
+
+  openWikiPage(relPath: string): void {
+    const projectName = this.info().projectName;
+    if (!projectName) return;
+    try {
+      const key = `atp.projectWiki.v1.${projectName}`;
+      const current = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+      localStorage.setItem(key, JSON.stringify({ ...current, openedRel: relPath, viewerTab: 'doc' }));
+    } catch { /* Navigation still opens the wiki when browser storage is unavailable. */ }
+    this.tabs.open({ kind: 'hub', projectName, section: 'wiki' });
   }
 }
 

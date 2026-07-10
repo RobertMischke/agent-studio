@@ -78,6 +78,14 @@ export interface TaskReferences {
   supersedes: string[];
 }
 
+export interface RelatedWikiPage {
+  relPath: string;
+  title: string;
+  linkedAt: string;
+  source: 'auto' | 'manual';
+  exists?: boolean | null;
+}
+
 /** The four F34 relation kinds, in display order. */
 export type TaskReferenceKind = 'dependsOn' | 'relatedTo' | 'blockedBy' | 'supersedes';
 export const TASK_REFERENCE_KINDS: TaskReferenceKind[] = [
@@ -290,6 +298,8 @@ export interface TaskInfo {
    * detail-view reference section and the card `waiting on KEY` badge.
    */
   references?: TaskReferences;
+  /** Wiki pages accumulated by completion post-processing. Missing targets are retained as ghosts. */
+  relatedWikiPages?: RelatedWikiPage[];
   /**
    * AGT-2029: read-time waits-on status derived from `references.dependsOn`
    * against the whole workspace (all projects, all lanes incl. archive). Mirrors

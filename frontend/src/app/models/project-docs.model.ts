@@ -81,6 +81,15 @@ export interface WikiFileHistory {
   model: string | null;
   metadata: WikiDocMetadata;
   commits: WikiCommitInfo[];
+  relatedTasks?: RelatedTaskReference[];
+}
+
+export interface RelatedTaskReference {
+  key: string;
+  title: string;
+  linkedAt: string;
+  source: 'auto' | 'manual';
+  exists: boolean | null;
 }
 
 /** Kind of a wiki tree node: a folder, or a document by source type. */

@@ -830,7 +830,14 @@ public class ProjectDocsService
         GitProcessTelemetry.RecordFileRead();
         var meta = ParseWikiMetadata(File.ReadAllText(full));
         var model = !string.IsNullOrWhiteSpace(meta.Model) ? meta.Model : trailerModel;
-        var payload = new WikiFileHistory(relPath.Replace('\\', '/'), model, meta, commits);
+        var relatedTasks = ReadRelatedTasks(full + ".meta.json");
+        var knownKeys = _scanner.ScanAllJobsWithArchive()
+            .Select(t => t.Key ?? t.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        relatedTasks = relatedTasks
+            .Select(t => t with { Exists = knownKeys.Contains(t.Key) })
+            .ToList();
+        var payload = new WikiFileHistory(relPath.Replace('\\', '/'), model, meta, commits, relatedTasks);
 
         // History depends on HEAD (the git side) and the live file's frontmatter
         // (the model/why can change with an uncommitted edit before HEAD moves),
@@ -838,6 +845,22 @@ public class ProjectDocsService
         var mtime = File.GetLastWriteTimeUtc(full).Ticks;
         var etag = FormatETag("wiki-hist-" + (head ?? "nohead") + "-" + mtime);
         return new WikiHistoryResult(payload, etag);
+    }
+
+    private static List<RelatedTask> ReadRelatedTasks(string sidecarPath)
+    {
+        if (!File.Exists(sidecarPath)) return [];
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(sidecarPath));
+            if (!doc.RootElement.TryGetProperty("relatedTasks", out var refs) || refs.ValueKind != JsonValueKind.Array)
+                return [];
+            return JsonSerializer.Deserialize<List<RelatedTask>>(refs.GetRawText(), TaskJsonFile.ReadOpts) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     /// <summary>
@@ -1564,7 +1587,12 @@ public record WikiSaveResult(bool Success, string? FullPath, bool Changed, strin
 }
 
 /// <summary>History + provenance payload for one wiki doc.</summary>
-public record WikiFileHistory(string RelPath, string? Model, WikiDocMetadata Metadata, List<GitCommitInfo> Commits);
+public record WikiFileHistory(
+    string RelPath,
+    string? Model,
+    WikiDocMetadata Metadata,
+    List<GitCommitInfo> Commits,
+    List<RelatedTask> RelatedTasks);
 
 /// <summary>One row in the wiki dashboard's "recent edits" list.</summary>
 public record WikiRecentEdit(
