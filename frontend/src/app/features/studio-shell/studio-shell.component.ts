@@ -1329,6 +1329,57 @@ export class StudioShellComponent {
     return null;
   }
 
+  /**
+   * AGT-2034 — resolve the owning project name for a tab so the tab strip
+   * can paint the project's colour dot and keep the full name in the
+   * tooltip. Returns `null` for tabs that do not belong to a single project
+   * (All-projects board/backlog/epics, workspace settings, welcome, diff),
+   * so no dot renders there.
+   */
+  private tabProjectName(tab: StudioTab): string | null {
+    switch (tab.kind) {
+      case 'board':
+        return tab.projectName === '__all__' ? null : tab.projectName;
+      case 'backlog':
+      case 'epics':
+      case 'hub':
+        return tab.projectName;
+      case 'task':
+      case 'activity':
+        return this.findJob(tab.taskKey)?.projectName ?? null;
+      case 'epic':
+        return this.findJob(tab.viewTaskKey ?? tab.epicKey)?.projectName ?? null;
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * AGT-2034 — project-identity colour for the tab's leading dot, or `null`
+   * when the tab is not tied to a single project (so no dot renders). Reuses
+   * the shared `projectIdentity()` palette — the same hue the Explorer tree
+   * and board cards use — so a project's colour reads consistently across the
+   * whole shell. No new colour source. The dot only encodes origin; the
+   * shortCode (Board/Hub tabs) or task key (Task tabs) beside it stays the
+   * primary text label, so colour is never the sole carrier (A11y).
+   */
+  tabDotColor(tab: StudioTab): string | null {
+    const name = this.tabProjectName(tab);
+    return name ? projectIdentity(name).color : null;
+  }
+
+  /**
+   * AGT-2034 — native tooltip text for a tab. The visible label is shortened
+   * to `SHORTCODE · Board` to save room; the hover restores the full project
+   * name so the origin is never lost. Falls back to the plain label for tabs
+   * with no owning project.
+   */
+  tabTooltip(tab: StudioTab): string {
+    const name = this.tabProjectName(tab);
+    const label = this.tabLabel(tab);
+    return name ? `${name} — ${label}` : label;
+  }
+
   private findJob(taskKey: string): TaskInfo | null {
     const grouped = this.grouped();
     for (const lane of Object.values(grouped)) {

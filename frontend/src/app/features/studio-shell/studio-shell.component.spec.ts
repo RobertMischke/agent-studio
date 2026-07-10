@@ -8,6 +8,7 @@ import { StudioShellComponent } from './studio-shell.component';
 import type { RegistryProjectSummary, RegistryWorkspaceListItem, TaskInfo } from '../../models/task.model';
 import { TaskService } from '../../services/task.service';
 import { StudioTabStateService } from './services/studio-tab-state.service';
+import { projectIdentity } from '../../services/project-identity.util';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -669,5 +670,36 @@ describe('StudioShellComponent hub tab label + icon', () => {
       .toBe('layout');
     expect(component.tabIcon({ kind: 'board', projectName: 'Agent Software Studio' }))
       .toBeNull();
+  });
+
+  it('paints the project-identity colour dot for project-scoped tabs (AGT-2034)', () => {
+    const component = makeComponent();
+    const expected = projectIdentity('Agent Software Studio').color;
+    expect(component.tabDotColor({ kind: 'board', projectName: 'Agent Software Studio' }))
+      .toBe(expected);
+    expect(component.tabDotColor({ kind: 'hub', projectName: 'Agent Software Studio', section: 'wiki' }))
+      .toBe(expected);
+    expect(component.tabDotColor({ kind: 'backlog', projectName: 'Agent Software Studio' }))
+      .toBe(expected);
+    // Reuses the shared palette — no bespoke colour source.
+    expect(expected).toBe(projectIdentity('Agent Software Studio').color);
+  });
+
+  it('renders no dot for tabs without a single owning project (AGT-2034)', () => {
+    const component = makeComponent();
+    expect(component.tabDotColor({ kind: 'board', projectName: '__all__' })).toBeNull();
+    expect(component.tabDotColor({ kind: 'backlog', projectName: null })).toBeNull();
+    expect(component.tabDotColor({ kind: 'epics', projectName: null })).toBeNull();
+    expect(component.tabDotColor({ kind: 'workspace-settings' })).toBeNull();
+    expect(component.tabDotColor({ kind: 'welcome' })).toBeNull();
+  });
+
+  it('keeps the full project name in the tab tooltip while the label stays short (AGT-2034)', () => {
+    const component = makeComponent();
+    expect(component.tabTooltip({ kind: 'board', projectName: 'Agent Software Studio' }))
+      .toBe('Agent Software Studio — ASS · Board');
+    // Tabs with no owning project fall back to the plain label.
+    expect(component.tabTooltip({ kind: 'board', projectName: '__all__' }))
+      .toBe('All projects · Board');
   });
 });

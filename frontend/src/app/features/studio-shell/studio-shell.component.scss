@@ -1886,6 +1886,19 @@
     pointer-events: none;
   }
 
+  // AGT-2034 — small project-colour "Farbklecks" marking the tab's origin.
+  // A rounded square (not a circle) so it stays distinct from status dots.
+  // The 1px ring lifts it off both the light and dark tab surfaces so the
+  // colour reads with contrast in either theme; colour is never the sole
+  // carrier because the shortCode / task-key text sits right beside it.
+  &__dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px var(--studio-border);
+  }
+
   &__num {
     font-family: var(--font-mono);
     font-size: 10px;

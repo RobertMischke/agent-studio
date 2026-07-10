@@ -682,6 +682,7 @@
                  [class.studio-tab--drop-before]="dragOverTabKey() === tabKey(t) && draggingTabKey() !== tabKey(t)"
                  [attr.aria-selected]="activeKey() === tabKey(t) ? 'true' : 'false'"
                  [attr.aria-label]="tabLabel(t)"
+                 [attr.title]="tabTooltip(t)"
                  [attr.data-tab-key]="tabKey(t)"
                  (click)="selectTab(tabKey(t))"
                  (keydown.enter)="selectTab(tabKey(t))"
@@ -692,6 +693,12 @@
                  (dragleave)="onTabDragLeave($event, tabKey(t))"
                  (drop)="onTabDrop($event, tabKey(t))"
                  (dragend)="onTabDragEnd($event)" (keydown.enter)="selectTab(tabKey(t))" (keydown.space)="selectTab(tabKey(t)); $event.preventDefault()">
+              @if (tabDotColor(t); as dot) {
+                <span class="studio-tab__dot"
+                      [style.background]="dot"
+                      [attr.data-testid]="'studio-tab-dot'"
+                      aria-hidden="true"></span>
+              }
               @if (tabNum(t); as n) {
                 <span class="studio-tab__num">{{ n }}</span>
               }
