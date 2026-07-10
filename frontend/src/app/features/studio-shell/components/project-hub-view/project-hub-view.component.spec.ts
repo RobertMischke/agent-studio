@@ -6,6 +6,7 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ProjectHubViewComponent } from './project-hub-view.component';
 import { StudioTabStateService } from '../../services/studio-tab-state.service';
+import { studioTabKey } from '../../studio-shell.types';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -74,6 +75,28 @@ describe('ProjectHubViewComponent (smoke)', () => {
 
     expect(fixture.componentInstance.activeRail()).toBe('security');
     expect(tabState.activeTab()).toEqual({ kind: 'hub', projectName: 'Alpha', section: 'security' });
+  });
+
+  it('retargets the current Hub tab to the distinct Wiki identity from the rail', async () => {
+    window.localStorage?.removeItem('atp.studio.tabs.v1');
+    await TestBed.configureTestingModule({
+      imports: [ProjectHubViewComponent],
+      providers: [
+        provideZonelessChangeDetection(), provideHttpClient(),
+        provideHttpClientTesting(), provideRouter([]),
+      ],
+    }).compileComponents();
+    const tabState = TestBed.inject(StudioTabStateService);
+    tabState.open({ kind: 'hub', projectName: 'Alpha', section: 'overview' });
+    const fixture = TestBed.createComponent(ProjectHubViewComponent);
+    fixture.componentRef.setInput('projectName', 'Alpha');
+    fixture.componentRef.setInput('initialSection', 'overview');
+    fixture.detectChanges();
+
+    fixture.componentInstance.setRail('wiki');
+
+    expect(tabState.activeKey()).toBe('hub:Alpha:wiki');
+    expect(tabState.tabs().some(tab => studioTabKey(tab) === 'hub:Alpha')).toBe(false);
   });
 
   it('follows a section change on the tab payload (Wiki -> Overview)', async () => {
