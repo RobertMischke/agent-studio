@@ -9,6 +9,7 @@ import {
   ExplorerWorkspaceTreeComponent,
   type ExplorerProjectRow,
 } from './explorer-workspace-tree.component';
+import type { ProjectPulseState } from '../../studio-shell.pulse';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { RegistryWorkspaceListItem, RegistryProjectSummary } from '../../../../models/task.model';
 
@@ -390,6 +391,113 @@ describe('ExplorerWorkspaceTreeComponent', () => {
 
     expect(cmp.projectActions.contextMenu()).toBeNull();
     expect(emitted).toEqual([{ projectId: 'PROJ-Alpha', displayName: 'Alpha', shortCode: 'ALP' }]);
+  });
+});
+
+describe('ExplorerWorkspaceTreeComponent — AGT-2031 auto-pickup pulse', () => {
+  const pulse = (entries: [string, ProjectPulseState][]) =>
+    new Map<string, ProjectPulseState>(entries);
+
+  it('renders a per-project pulse dot reflecting idle / active / off state', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    cmp.setCollapsed('workspace', false);
+    cmp.setCollapsed('ws:__all__', false);
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha'), row('Beta'), row('Gamma')]);
+    fixture.componentRef.setInput('projectPulseByName', pulse([
+      ['Alpha', 'auto-idle'],
+      ['Beta', 'auto-active'],
+    ]));
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const dot = (name: string) =>
+      root.querySelector<HTMLElement>(`[data-testid="studio-explorer-project-pulse-${name}"]`);
+
+    expect(dot('Alpha')?.getAttribute('data-pulse')).toBe('auto-idle');
+    expect(dot('Alpha')?.classList.contains('studio-auto-pulse--idle')).toBe(true);
+    expect(dot('Alpha')?.getAttribute('aria-label')).toBe('Auto-pickup on');
+
+    expect(dot('Beta')?.getAttribute('data-pulse')).toBe('auto-active');
+    expect(dot('Beta')?.classList.contains('studio-auto-pulse--active')).toBe(true);
+    expect(dot('Beta')?.getAttribute('aria-label')).toBe('Auto-pickup running');
+
+    // Not on auto → the slot still renders (reserved width, no reflow) but is
+    // marked off with no accessible label.
+    expect(dot('Gamma')?.getAttribute('data-pulse')).toBe('off');
+    expect(dot('Gamma')?.classList.contains('studio-auto-pulse--idle')).toBe(false);
+    expect(dot('Gamma')?.classList.contains('studio-auto-pulse--active')).toBe(false);
+    expect(dot('Gamma')?.getAttribute('aria-label')).toBeNull();
+  });
+
+  it('rolls child pulses into the active-wins aggregate with the on-auto names', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [
+        project('Alpha', 'ws-default', '/repos/Alpha'),
+        project('Beta', 'ws-default', '/repos/Beta'),
+        project('Gamma', 'ws-default', '/repos/Gamma'),
+      ]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha'), row('Beta'), row('Gamma')]);
+    fixture.componentRef.setInput('projectPulseByName', pulse([
+      ['Alpha', 'auto-idle'],
+      ['Beta', 'auto-active'],
+    ]));
+
+    const agg = cmp.wsPulseAggregate(cmp.groups()[0]);
+    // active beats idle; the off project (Gamma) drops out of the name list.
+    expect(agg).toEqual({ state: 'auto-active', autoProjects: ['Alpha', 'Beta'] });
+    expect(cmp.aggregatePulseTooltip(agg)).toBe('Auto-pickup running: Alpha, Beta');
+  });
+
+  it('shows the aggregate dot on a collapsed workspace header, hides it when expanded', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    cmp.setCollapsed('workspace', false);
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+    fixture.componentRef.setInput('projectPulseByName', pulse([['Alpha', 'auto-idle']]));
+
+    const root: HTMLElement = fixture.nativeElement;
+    const wsDot = () => root.querySelector<HTMLElement>('[data-testid="studio-explorer-ws-pulse-ws-default"]');
+
+    cmp.setCollapsed('ws:ws-default', false);
+    fixture.detectChanges();
+    expect(wsDot()).toBeNull(); // expanded → per-project dots carry the signal
+
+    cmp.setCollapsed('ws:ws-default', true);
+    fixture.detectChanges();
+    expect(wsDot()?.getAttribute('data-pulse')).toBe('auto-idle');
+    expect(wsDot()?.getAttribute('aria-label')).toBe('Auto-pickup on: Alpha');
+  });
+
+  it('surfaces the whole-tree aggregate on the panel header only when collapsed', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha'), row('Beta')]);
+    fixture.componentRef.setInput('projectPulseByName', pulse([
+      ['Alpha', 'auto-idle'],
+      ['Beta', 'auto-active'],
+    ]));
+
+    expect(cmp.allPulseAggregate()).toEqual({ state: 'auto-active', autoProjects: ['Alpha', 'Beta'] });
+
+    const root: HTMLElement = fixture.nativeElement;
+    const panelDot = () => root.querySelector<HTMLElement>('[data-testid="studio-explorer-workspace-pulse"]');
+
+    cmp.setCollapsed('workspace', false);
+    fixture.detectChanges();
+    expect(panelDot()).toBeNull();
+
+    cmp.setCollapsed('workspace', true);
+    fixture.detectChanges();
+    expect(panelDot()?.getAttribute('data-pulse')).toBe('auto-active');
   });
 });
 

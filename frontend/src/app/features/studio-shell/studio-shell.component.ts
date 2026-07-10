@@ -48,6 +48,7 @@ import { ProjectLookupService } from '../../services/project-lookup.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
 import { resolveActiveActivityKey } from './components/studio-activity-bar/studio-activity-bar.active-key';
 import { ExplorerWorkspaceTreeComponent, type ExplorerProjectSurface } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
+import { deriveProjectPulseByName, type ProjectPulseState } from './studio-shell.pulse';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { TaskStatusPopoverDirective } from '../../components/task-status-card';
@@ -297,6 +298,12 @@ export class StudioShellComponent {
   autoModeFor(name: string): string {
     return this.jobService.runnerStatus().projects[name]?.mode ?? 'manual';
   }
+
+  /** AGT-2031 — project name → auto-pickup pulse state for the Explorer tree's
+   *  subtle activity indicator (derivation lives in studio-shell.pulse). */
+  readonly projectPulseByName = computed<ReadonlyMap<string, ProjectPulseState>>(() =>
+    deriveProjectPulseByName(this.jobService.runnerStatus().projects, this.projectRows()),
+  );
 
   /** Short label for the auto-mode chip ("auto", "single", "paused", "manual"). */
   autoModeLabelFor(name: string): string {

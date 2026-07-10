@@ -72,6 +72,12 @@
       "styles": 399,
       "total": 1060
     },
+    "src/app/features/studio-shell/components/explorer-workspace-tree/explorer-workspace-tree.component.ts": {
+      "typeScript": 500,
+      "template": 284,
+      "styles": 154,
+      "total": 938
+    },
     "src/app/features/studio-shell/studio-shell.component.ts": {
       "typeScript": 1333,
       "template": 838,

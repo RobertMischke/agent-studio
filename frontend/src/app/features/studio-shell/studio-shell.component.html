@@ -204,6 +204,7 @@
                   [expandedProjects]="expandedProjects()"
                   [showAllActive]="activeProjectName() === null && activeTab()?.kind === 'board'"
                   [activeProjectSurface]="activeProjectSurface()"
+                  [projectPulseByName]="projectPulseByName()"
                   (showAll)="pickProject(null)"
                   (toggleExpanded)="toggleProjectExpanded($event)"
                   (openBoardRequest)="openBoard($event)"
