@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildDemoEvents,
   parseBugHashtags,
   resolveAttachmentUrl,
   suppressLocalDuplicates,
@@ -56,6 +57,31 @@ describe('orchestrator-side-sheet.util', () => {
       const server = [turn('s1', 'hello'), turn('s2', 'world')];
       const local = [turn('l1', 'hello')];
       expect(suppressLocalDuplicates(server, local).map((t) => t.id)).toEqual(['s2']);
+    });
+  });
+
+  describe('buildDemoEvents', () => {
+    it('seeds one card per demo event kind, anchored on baseTs', () => {
+      const base = Date.parse('2026-07-08T00:00:00Z');
+      const events = buildDemoEvents(base);
+      // Six event kinds plus the four decision sub-types = nine cards.
+      expect(events).toHaveLength(9);
+      expect(events.map((e) => e.kind)).toEqual([
+        'tool-call',
+        'watchdog',
+        'rate-limit',
+        'session-recovered',
+        'memory-refreshed',
+        'decision',
+        'decision',
+        'decision',
+        'decision',
+      ]);
+      // First card sits exactly on baseTs; later cards are offset forward
+      // so the demo timeline renders in a stable chronological order.
+      expect(events[0].timestamp).toBe(new Date(base).toISOString());
+      const ordered = events.map((e) => Date.parse(e.timestamp));
+      expect(ordered).toEqual([...ordered].sort((a, b) => a - b));
     });
   });
 });
