@@ -1,4 +1,4 @@
-
+using static AgentStudio.Tasks.TaskEndpointHelpers;
 
 namespace AgentStudio.Tasks;
 
@@ -25,8 +25,9 @@ public static class TaskReviewEvidenceEndpoints
         // POST /api/tasks/{jobId}/review-evidence/{evidenceId}/acknowledge
         // Body: { "acknowledged": true|false } — defaults to true.
         group.MapPost("/{jobId}/review-evidence/{evidenceId}/acknowledge",
-            (string jobId, string evidenceId, string? watchPath, AcknowledgeEvidenceRequest? body, TaskScannerService scanner) =>
+            (string jobId, string evidenceId, string? project, string? watchPath, AcknowledgeEvidenceRequest? body, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound();
 
@@ -49,8 +50,9 @@ public static class TaskReviewEvidenceEndpoints
         // the finding's title + body + linked artifacts/file refs. Default
         // landing lane is 1-preparation so the user reviews and promotes.
         group.MapPost("/{jobId}/review-evidence/{evidenceId}/follow-up",
-            (string jobId, string evidenceId, string? watchPath, CreateFollowupFromEvidenceRequest? body, TaskScannerService scanner, TaskMutationService mutations) =>
+            (string jobId, string evidenceId, string? project, string? watchPath, CreateFollowupFromEvidenceRequest? body, TaskScannerService scanner, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound();
 

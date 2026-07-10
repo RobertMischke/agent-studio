@@ -1,4 +1,4 @@
-
+using static AgentStudio.Tasks.TaskEndpointHelpers;
 
 namespace AgentStudio.Tasks;
 
@@ -26,11 +26,14 @@ public static class TaskPipelineEndpoints
     {
         group.MapGet("/{jobId}/pipeline", (
             string jobId,
+            string? project,
             string? watchPath,
             TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
             ProjectSettingsService projectSettings,
             PipelineExecutionLog pipelineLog) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
 
@@ -107,10 +110,13 @@ public static class TaskPipelineEndpoints
         // they already live in the task's prompt.md / chat.
         group.MapGet("/{jobId}/step-prompts", (
             string jobId,
+            string? project,
             string? watchPath,
             TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
             AgentStudio.Cli.StepPromptLog promptLog) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
 

@@ -27,7 +27,7 @@ API uses yet.
 
 `/api/tasks` is the only public route. The former `/api/jobs` compatibility
 alias was removed in
-[ADR-0057](../../architecture/decisions/adr-archive.md#adr-0057---apijobs-compatibility-alias-removed-route-is-apitasks-only-2026-06-22)
+[ADR-0058](../../architecture/decisions/adr-archive.md#adr-0058---apijobs-compatibility-alias-removed-route-is-apitasks-only-2026-06-22)
 (Phase 1 of this cleanup) and the create DTO was renamed `CreateJobRequest` ->
 `CreateTaskRequest`, so the domain reads "Task" end to end. There is no `/api/jobs`
 route or `CreateJobRequest` type anymore.

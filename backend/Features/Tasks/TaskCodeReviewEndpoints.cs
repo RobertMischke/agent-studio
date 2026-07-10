@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Configuration;
 
+using static AgentStudio.Tasks.TaskEndpointHelpers;
+
 namespace AgentStudio.Tasks;
 
 /// <summary>
@@ -70,8 +72,9 @@ public static class TaskCodeReviewEndpoints
         // newest-first. Each entry carries the parsed frontmatter so the
         // frontend can render verdict + summary without fetching each file.
         group.MapGet("/{jobId}/code-review/list",
-            (string jobId, string? watchPath, TaskScannerService scanner, FileGenerationIndex generationIndex) =>
+            (string jobId, string? project, string? watchPath, TaskScannerService scanner, FileGenerationIndex generationIndex, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = $"No job '{jobId}'" });
 
@@ -126,8 +129,9 @@ public static class TaskCodeReviewEndpoints
         // name that came from the list endpoint; we never accept arbitrary
         // paths.
         group.MapGet("/{jobId}/code-review/{fileName}",
-            (string jobId, string fileName, string? watchPath, TaskScannerService scanner) =>
+            (string jobId, string fileName, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = $"No job '{jobId}'" });
 
@@ -159,6 +163,7 @@ public static class TaskCodeReviewEndpoints
         // Synchronous: returns the report once the review finishes.
         group.MapPost("/{jobId}/code-review",
             async (string jobId,
+                   string? project,
                    string? watchPath,
                    CodeReviewStepEndpointRequest? body,
                    TaskScannerService scanner,
@@ -166,8 +171,10 @@ public static class TaskCodeReviewEndpoints
                    GitService git,
                    CodeReviewStepService service,
                    IConfiguration configuration,
+                   AgentStudio.Registry.ProjectRegistry projects,
                    CancellationToken ct) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var resolvedWatchPath = body?.WatchPath ?? watchPath;
             var info = scanner.FindJob(jobId, resolvedWatchPath);
             if (info == null) return Results.NotFound(new { error = $"No job '{jobId}'" });
