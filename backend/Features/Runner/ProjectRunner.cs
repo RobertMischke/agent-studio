@@ -254,6 +254,10 @@ public class ProjectRunner
     // decision + slot occupancy. Pure observability; never gates execution.
     private string? _lastPickReason;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _pendingPickReasons = new(StringComparer.Ordinal);
+    // AGT-2055: last emitted pre-launch quota decision per job, so a card that
+    // waits/throttles across many pickup ticks records ONE timeline + feed
+    // entry per decision change instead of one per tick.
+    private readonly Dictionary<string, string> _lastAdmissionDecisionByJob = new(StringComparer.Ordinal);
     // Run intent / follow-up / plan / reissue-attempt now live on the
     // ActiveRun record inside _activeRuns (see ActiveRuns.cs), so OnCliFinished
     // reads them per-run rather than from shared single-active scalars.
@@ -675,6 +679,81 @@ public class ProjectRunner
     }
 
     /// <summary>
+    /// AGT-2055: the <b>admission</b> quota view - strict cap OR a projected
+    /// breach before the window resets. Used to route the pre-launch decision
+    /// (so a primary about to hit the wall switches to its fallback early) while
+    /// the strict <see cref="EvaluateQuotaCap"/> stays the sole trigger for
+    /// stopping an already-running job. Cheap and non-blocking; safe on a tick.
+    /// </summary>
+    public CapEvaluation EvaluateAdmissionQuota(string? cliType)
+    {
+        if (string.IsNullOrWhiteSpace(cliType)) return CapEvaluation.NotBlocked;
+        var snap = _quotaService.GetCachedFor(cliType);
+        var strict = _quotaCaps.Evaluate(snap);
+        if (strict.Blocked) return strict;
+        return QuotaWindowProjection.EvaluateProjectedBreach(snap, _quotaCaps, DateTime.UtcNow)
+               ?? CapEvaluation.NotBlocked;
+    }
+
+    /// <summary>
+    /// AGT-2055: run the algorithmic pre-launch quota check for a card. Pure
+    /// decision over the cached snapshots + the AGT-2040 routing map; never
+    /// spawns anything. See <see cref="QuotaAdmissionPlanner"/>.
+    /// </summary>
+    private QuotaAdmissionPlan PlanQuotaAdmission(TaskInfo info)
+        => QuotaAdmissionPlanner.Plan(
+            info.CliType, info.Model, info.ThinkingLevel,
+            _quotaFallback, _quotaCaps,
+            c => string.IsNullOrWhiteSpace(c) ? null : _quotaService.GetCachedFor(c!),
+            DateTime.UtcNow,
+            _activeRuns.Count);
+
+    /// <summary>
+    /// Emit the pre-launch load-steering decision (AGT-2055 req 3 + 7). Always a
+    /// structured log line - the data source for the load-distribution view -
+    /// and, for the notable decisions (switch / throttle / wait), a task
+    /// timeline + feed entry. The task-facing entries are de-duplicated per job
+    /// so a card that waits across many ticks does not spam its timeline.
+    /// </summary>
+    private void EmitQuotaAdmissionDecision(TaskInfo info, QuotaAdmissionPlan plan)
+    {
+        var proj = plan.Projection;
+        _logger.LogInformation(
+            "cli_quota_admission_decision jobId={JobId} project={Project} outcome={Outcome} cli={Cli} model={Model} isFallback={IsFallback} projectedPct={Projected} burnPctPerHour={Burn} hoursRemaining={Hours} nextReset={Reset} reason={Reason}",
+            info.Id, ProjectName, plan.Outcome, plan.CliType, plan.Model ?? "<default>", plan.IsFallback,
+            proj?.ProjectedUsedPct, proj?.BurnRatePctPerHour, proj?.HoursRemaining, plan.NextResetAt, plan.Reason);
+
+        // The healthy "launch primary" decision is the silent normal path; only
+        // the load-steering decisions reach the task surface.
+        if (plan.Outcome == QuotaAdmissionOutcome.LaunchPrimary) return;
+
+        var key = $"{plan.Outcome}|{plan.CliType}|{plan.Model}|{plan.Reason}";
+        lock (_lastAdmissionDecisionByJob)
+        {
+            if (_lastAdmissionDecisionByJob.TryGetValue(info.Id, out var prev) && prev == key) return;
+            _lastAdmissionDecisionByJob[info.Id] = key;
+        }
+
+        _chatLog.Append(info, OrchestratorMessageKind.Decision, "[quota-admission] " + plan.Reason);
+        _timeline?.Append(
+            info.FolderPath,
+            TimelineEventKinds.QuotaAdmissionDecision,
+            TimelineActors.System,
+            summary: plan.Reason,
+            details: new()
+            {
+                ["outcome"] = plan.Outcome.ToString(),
+                ["cli"] = plan.CliType,
+                ["model"] = plan.Model ?? string.Empty,
+                ["isFallback"] = plan.IsFallback ? "true" : "false",
+                ["projectedPct"] = proj?.ProjectedUsedPct.ToString("0.#") ?? string.Empty,
+                ["burnPctPerHour"] = proj?.BurnRatePctPerHour.ToString("0.##") ?? string.Empty,
+                ["hoursRemaining"] = proj?.HoursRemaining.ToString("0.##") ?? string.Empty,
+                ["nextReset"] = plan.NextResetAt?.ToString("o") ?? string.Empty,
+            });
+    }
+
+    /// <summary>
     /// If a job is currently running on this project and its CLI has gone
     /// past a configured cap, request a stop. Returns the cap evaluation that
     /// triggered the stop (or "not blocked" when nothing was stopped) so the
@@ -877,6 +956,27 @@ public class ProjectRunner
             // Never double-claim a folder already occupying a slot. This is not
             // a visible-order deviation; the card is already running.
             if (_activeRuns.Contains(candidate.Info.Id)) continue;
+
+            // AGT-2055 pre-launch quota gate: an algorithmic check against the
+            // cached quota snapshots BEFORE any launch is attempted. A card whose
+            // target CLI is exhausted (Wait) - or, with a slot already busy, only
+            // projected to breach (Throttle) - is skipped quietly here: no spawn,
+            // no usage-limit error, no burned reissue budget. A different-CLI card
+            // later in the stream can still be picked; when every candidate is
+            // blocked the loop returns null and the runner simply waits for the
+            // next reset (the scheduler re-ticks and wakes on its own). The
+            // switch/throttle/wait decision is emitted (de-duplicated per job) so
+            // the load-steering is never silent.
+            var qplan = PlanQuotaAdmission(candidate.Info);
+            if (qplan.Outcome is QuotaAdmissionOutcome.Wait or QuotaAdmissionOutcome.Throttle)
+            {
+                EmitQuotaAdmissionDecision(candidate.Info, qplan);
+                _lastPickReason = $"quota-defer: {candidate.Info.Id}: {qplan.Reason}";
+                _logger.LogInformation(
+                    "[taskboard] quota admission gate deferring {Job} on {Project}: {Reason}",
+                    candidate.Info.Id, ProjectName, qplan.Reason);
+                continue;
+            }
 
             if (_activeRuns.Count > 0)
             {
@@ -1787,17 +1887,28 @@ public class ProjectRunner
             // Resolve the workspace route from the latest cached quota. The
             // decision is per-run and never mutates job.json, so a reset makes
             // the next invocation return to primary automatically.
+            //
+            // AGT-2055: route against the PROJECTION-AWARE admission view so a
+            // primary that is about to breach its window switches to the AGT-2040
+            // fallback pre-emptively (before the wall), not after a burned launch.
+            // The hard block below stays on the STRICT cap so a manual start is
+            // never refused purely on a projection - only when a model is truly
+            // exhausted and no fallback saved it.
             var route = _quotaFallback?.Resolve(
-                info.CliType, info.Model, info.ThinkingLevel, EvaluateQuotaCap);
-            var capBlock = route?.PrimaryCap ?? EvaluateQuotaCap(info.CliType);
-            if (capBlock.Blocked && route?.IsFallback != true)
+                info.CliType, info.Model, info.ThinkingLevel, EvaluateAdmissionQuota);
+            var strictCap = EvaluateQuotaCap(info.CliType);
+            if (strictCap.Blocked && route?.IsFallback != true)
             {
+                // Everything is exhausted: wait quietly with a reason + next
+                // reset, and record the decision. No spawn, no reissue burn.
+                var waitPlan = PlanQuotaAdmission(info);
+                EmitQuotaAdmissionDecision(info, waitPlan);
                 _logger.LogInformation(
-                    "[taskboard] {Intent} for job {JobId} blocked by quota cap: {Reason}",
-                    intent, jobId, capBlock.DescribeReason());
+                    "[taskboard] {Intent} for job {JobId} deferred by quota admission: {Reason}",
+                    intent, jobId, waitPlan.Reason);
                 return RunOutcome.Reject(new RunRejection(
                     Reason: RunRejectReason.QuotaCapExceeded,
-                    Message: $"Quota cap exceeded: {route?.Reason ?? capBlock.DescribeReason()}"));
+                    Message: waitPlan.Reason));
             }
 
             // Auto-pickup consumes a saved pending-intent if there is one,

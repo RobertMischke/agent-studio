@@ -1,0 +1,181 @@
+using AgentStudio.Shared;
+
+namespace AgentStudio.Cli;
+
+/// <summary>
+/// What the pre-launch quota check decided for one candidate card.
+/// </summary>
+public enum QuotaAdmissionOutcome
+{
+    /// <summary>Launch on the requested/primary model - quota is healthy.</summary>
+    LaunchPrimary,
+    /// <summary>Launch on the AGT-2040 fallback because the primary is (or is about to be) capped.</summary>
+    LaunchFallback,
+    /// <summary>Do not launch: every viable model is exhausted. Wait quietly for the next reset.</summary>
+    Wait,
+    /// <summary>Only reduce parallelism: a projected breach with no fallback while a slot is already busy.</summary>
+    Throttle,
+}
+
+/// <summary>
+/// The pre-launch quota decision for a card, plus the numbers behind it.
+/// </summary>
+public sealed record QuotaAdmissionPlan(
+    QuotaAdmissionOutcome Outcome,
+    string CliType,
+    string? Model,
+    string? ThinkingLevel,
+    bool IsFallback,
+    string Reason,
+    DateTime? NextResetAt,
+    QuotaProjection? Projection)
+{
+    /// <summary>True when the runner should proceed to a launch (primary or fallback).</summary>
+    public bool ShouldLaunch => Outcome is QuotaAdmissionOutcome.LaunchPrimary or QuotaAdmissionOutcome.LaunchFallback;
+
+    /// <summary>True when the card should be held back this tick (wait or throttle).</summary>
+    public bool IsDeferred => Outcome is QuotaAdmissionOutcome.Wait or QuotaAdmissionOutcome.Throttle;
+}
+
+/// <summary>
+/// The algorithmic pre-launch admission check the operator asked for (AGT-2055):
+/// "Die Last-Steuerung soll ein ALGORITHMUS sein, nicht ein CLI-Call." Before a
+/// card is admitted, the scheduler evaluates the cached quota snapshots for its
+/// target CLI and decides - purely from data, without spawning anything -
+/// whether to launch on primary, switch to the AGT-2040 fallback, throttle, or
+/// wait for the next reset.
+///
+/// <para>
+/// This planner deliberately <b>reuses</b> the merged AGT-2040 routing map
+/// (<see cref="CliQuotaFallbackService"/>) rather than duplicating "which model
+/// replaces which": that map IS the configuration. The planner's own job is
+/// (a) to feed the router a <i>projection-aware</i> quota view so a primary
+/// that is about to breach switches early, and (b) to turn a "no viable model"
+/// situation into a quiet, reasoned wait instead of a burned launch.
+/// </para>
+/// </summary>
+public static class QuotaAdmissionPlanner
+{
+    public static QuotaAdmissionPlan Plan(
+        string? requestedCli,
+        string? requestedModel,
+        string? requestedThinking,
+        CliQuotaFallbackService? fallback,
+        CliQuotaCapsService caps,
+        Func<string?, QuotaSnapshot?> snapshotFor,
+        DateTime nowUtc,
+        int occupiedSlots)
+    {
+        var cli = string.IsNullOrWhiteSpace(requestedCli)
+            ? CliTypes.Claude
+            : requestedCli!.Trim().ToLowerInvariant();
+
+        // Strict = already over the configured cap. Admission = strict OR
+        // projected-to-breach-before-reset. The router is fed the admission
+        // view so a primary about to hit the wall routes to the fallback now.
+        CapEvaluation Strict(string? c) => caps.Evaluate(snapshotFor(c));
+        CapEvaluation Admission(string? c)
+        {
+            var strict = Strict(c);
+            if (strict.Blocked) return strict;
+            return QuotaWindowProjection.EvaluateProjectedBreach(snapshotFor(c), caps, nowUtc)
+                   ?? CapEvaluation.NotBlocked;
+        }
+
+        var route = fallback?.Resolve(cli, requestedModel, requestedThinking, Admission);
+
+        // 1) The router switched us to the fallback (primary capped or projected;
+        //    a usable fallback exists). Documented model switch before start.
+        if (route?.IsFallback == true)
+        {
+            return new QuotaAdmissionPlan(
+                QuotaAdmissionOutcome.LaunchFallback,
+                route.CliType,
+                route.Model,
+                route.ThinkingLevel,
+                IsFallback: true,
+                Reason: BuildSwitchReason(cli, route),
+                NextResetAt: EarliestReset(snapshotFor(cli), nowUtc, caps, blockedOnly: false)?.ResetAt,
+                Projection: QuotaWindowProjection.WorstProjection(snapshotFor(cli), caps, nowUtc));
+        }
+
+        // Primary path (no fallback taken): resolve the concrete primary model
+        // from the route (which may carry the workspace-configured primary).
+        var model = route?.Model ?? requestedModel;
+        var thinking = route?.ThinkingLevel ?? requestedThinking;
+        var strictPrimary = Strict(cli);
+        var admissionPrimary = route?.PrimaryCap ?? Admission(cli);
+
+        // 2) Primary is ACTUALLY over cap and no fallback saved us: everything is
+        //    exhausted. Wait quietly with a reason and the next reset time.
+        if (strictPrimary.Blocked)
+        {
+            var blockedReset =
+                EarliestReset(snapshotFor(cli), nowUtc, caps, blockedOnly: true)
+                ?? EarliestReset(snapshotFor(route?.CliType ?? cli), nowUtc, caps, blockedOnly: true)
+                ?? EarliestReset(snapshotFor(cli), nowUtc, caps, blockedOnly: false);
+            var detail = !string.IsNullOrWhiteSpace(route?.Reason) ? route!.Reason : strictPrimary.DescribeReason();
+            var reason = AppendReset($"waiting: all quotas exhausted ({detail})", blockedReset);
+            return new QuotaAdmissionPlan(
+                QuotaAdmissionOutcome.Wait, cli, model, thinking,
+                IsFallback: false, Reason: reason, NextResetAt: blockedReset?.ResetAt,
+                Projection: QuotaWindowProjection.WorstProjection(snapshotFor(cli), caps, nowUtc));
+        }
+
+        // 3) Primary is only PROJECTED to breach and there is no usable fallback.
+        //    Throttle (reduce parallelism) rather than block - but never throttle
+        //    to zero: the first/only run always proceeds, else nothing ever runs.
+        if (admissionPrimary.Blocked)
+        {
+            var proj = QuotaWindowProjection.WorstProjection(snapshotFor(cli), caps, nowUtc);
+            var reset = EarliestReset(snapshotFor(cli), nowUtc, caps, blockedOnly: false);
+            var throttle = occupiedSlots > 0;
+            var verb = throttle ? "throttling" : "launching (projection-flagged)";
+            return new QuotaAdmissionPlan(
+                throttle ? QuotaAdmissionOutcome.Throttle : QuotaAdmissionOutcome.LaunchPrimary,
+                cli, model, thinking, IsFallback: false,
+                Reason: AppendReset($"{verb}: {admissionPrimary.DescribeReason()}", reset),
+                NextResetAt: reset?.ResetAt, Projection: proj);
+        }
+
+        // 4) Healthy: launch on primary.
+        return new QuotaAdmissionPlan(
+            QuotaAdmissionOutcome.LaunchPrimary, cli, model, thinking,
+            IsFallback: false, Reason: "launch: quota ok", NextResetAt: null,
+            Projection: QuotaWindowProjection.WorstProjection(snapshotFor(cli), caps, nowUtc));
+    }
+
+    private static string BuildSwitchReason(string primaryCli, CliRouteDecision route)
+    {
+        var why = !string.IsNullOrWhiteSpace(route.Reason) ? route.Reason : route.PrimaryCap.DescribeReason();
+        return $"model switched pre-launch: {primaryCli} -> {route.CliType}/{route.Model ?? "<default>"}, reason: {why}";
+    }
+
+    /// <summary>Earliest future-resetting window in a snapshot (optionally only over-cap windows).</summary>
+    private static QuotaWindow? EarliestReset(
+        QuotaSnapshot? snapshot, DateTime nowUtc, CliQuotaCapsService caps, bool blockedOnly)
+    {
+        if (snapshot?.Windows == null) return null;
+        QuotaWindow? best = null;
+        foreach (var w in snapshot.Windows)
+        {
+            if (w.ResetAt is null) continue;
+            if (blockedOnly)
+            {
+                if (w.UsedPct is null) continue;
+                if (w.UsedPct.Value < caps.GetCap(snapshot.CliType, w.Label)) continue;
+            }
+            if (best is null || w.ResetAt < best.ResetAt) best = w;
+        }
+        return best;
+    }
+
+    private static string AppendReset(string reason, QuotaWindow? resetWindow)
+    {
+        if (resetWindow?.ResetAt is null) return reason;
+        var human = !string.IsNullOrWhiteSpace(resetWindow.ResetLabel)
+            ? resetWindow.ResetLabel!
+            : resetWindow.ResetAt.Value.ToString("HH:mm 'UTC'");
+        return $"{reason}, next reset {human}";
+    }
+}

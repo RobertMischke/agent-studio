@@ -82,6 +82,14 @@ public static class TimelineEventKinds
     /// <summary>A run switched to its configured fallback because primary quota was exhausted.</summary>
     public const string QuotaFallbackActivated = "quota_fallback_activated";
     /// <summary>
+    /// AGT-2055: the algorithmic pre-launch quota check made a load-steering
+    /// decision for a card before any launch was attempted - switch model,
+    /// throttle, or wait for the next reset. <see cref="TimelineEvent.Details"/>
+    /// carries the burn-rate/projection numbers so the load-distribution view
+    /// has a stable data source.
+    /// </summary>
+    public const string QuotaAdmissionDecision = "quota_admission_decision";
+    /// <summary>
     /// ADR-0052: the parallel pick-gate admitted this task into a runner slot.
     /// <see cref="TimelineEvent.Summary"/> carries the occupancy
     /// ("slot N/M") and the <c>ParallelSlotPolicy</c> rationale, so the
