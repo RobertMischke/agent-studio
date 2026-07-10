@@ -88,10 +88,24 @@
       min-width: 0;
       overflow: hidden;
     }
-    .column__icon { font-size: 18px; flex-shrink: 0; }
+    // Every direct header child sits on one centred line (the header itself is
+    // `display:flex; align-items:center`). Each chip/glyph carries
+    // `line-height:1` and an explicit inline-flex box so its own text metrics
+    // can't lift it off the shared centre-line — the "number sitting too high"
+    // bug came from the count pill relying on inline baseline metrics next to
+    // the taller emoji icon. Numbers use tabular-nums so the count width is
+    // stable digit-to-digit.
+    .column__icon {
+      font-size: 18px;
+      line-height: 1;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+    }
     .column__title {
       margin: 0;
       font-size: 14px;
+      line-height: 1;
       font-weight: 600;
       color: var(--studio-fg, #e2e8f0);
       flex: 1 1 0;
@@ -101,16 +115,27 @@
       white-space: nowrap;
     }
     .column__count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 20px;
+      min-width: 22px;
+      box-sizing: border-box;
       background: rgba(255,255,255,0.08);
       border-radius: 10px;
-      padding: 2px 8px;
+      padding: 0 8px;
       font-size: 12px;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
       color: var(--studio-fg-dim, #94a3b8);
+      flex-shrink: 0;
     }
     // F35: lane-header sort-strategy glyph. Dimmed so it reads as metadata,
     // not an action; brighter on the 'mixed' marker to flag the ambiguity.
     .column__sort-indicator {
       flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
       font-size: 13px;
       line-height: 1;
       color: var(--studio-fg-dim, #94a3b8);
@@ -575,8 +600,9 @@
     }
 
     // ─────────────────────────────────────────────────────────────────
-    // Lane status cluster (In-Progress only). Three chips:
-    //   * RUNNING — live job id + duration + model with a pulsing dot.
+    // Lane status cluster (In-Progress only). Three items:
+    //   * running — a single pulsing dot (no label); the run's job id /
+    //     elapsed / model / foreign note live in its tooltip.
     //   * mode (AUTO / MANUAL / PAUSED) — pickup-mode pill, clickable.
     //   * Q:N — count of items waiting in 2-ready.
     // Colour tokens match the dark Catppuccin-inspired palette and pass
@@ -616,53 +642,34 @@
       color: var(--studio-fg, rgba(255,255,255,0.85));
     }
 
-    // Running pill: live blue/teal so it's read first.
-    .column__status-pill--running {
-      border-color: rgba(94, 192, 220, 0.55);
-      background: rgba(94, 192, 220, 0.12);
-      color: #5ec0dc;
-      // Allow the meta (jobId · duration · model) to truncate when the
-      // header is narrow. The label + dot stay; the meta gives way.
-      min-width: 0;
-      max-width: 30ch;
-      overflow: hidden;
-    }
-    // Foreign-backend run: same blue but with a dashed border so the
-    // operator can see at a glance that another backend on the shared
-    // workspace owns the run. The live dot stays so it still reads as
-    // "active right now".
-    .column__status-pill--running-foreign {
-      border-style: dashed;
-      max-width: 38ch;
-    }
-    .column__status-pill--running .column__status-pill-meta {
-      font-weight: 500;
-      letter-spacing: 0;
-      text-transform: none;
-      color: var(--studio-fg, rgba(255,255,255,0.85));
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      min-width: 0;
-    }
-    .column__status-pill-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--studio-fg-muted, rgba(255,255,255,0.40));
+    // Running indicator — a single pulsing dot, no label. The dot IS the
+    // whole indicator; job id / elapsed / model / the foreign-backend note
+    // live in the tooltip. This is the fix for the hard-truncated label
+    // fragment that used to sit next to the dot when the header was narrow.
+    .column__running-dot {
       flex-shrink: 0;
-    }
-    .column__status-pill-dot--live {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
       background: #5ec0dc;
       box-shadow: 0 0 0 3px rgba(94, 192, 220, 0.22);
+      cursor: default;
       animation: column-status-pulse 1.6s ease-in-out infinite;
+    }
+    // Foreign-backend run: hollow ring (transparent core, tinted border) so
+    // "running elsewhere on the shared workspace" still reads at a glance —
+    // text-free, still just a dot.
+    .column__running-dot--foreign {
+      background: transparent;
+      border: 2px solid #5ec0dc;
+      box-shadow: 0 0 0 3px rgba(94, 192, 220, 0.14);
     }
     @keyframes column-status-pulse {
       0%, 100% { opacity: 1; }
       50%      { opacity: 0.45; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .column__status-pill-dot--live { animation: none; }
+      .column__running-dot { animation: none; }
     }
 
     // Mode chips — three distinct colours so the operator can't confuse them.
@@ -698,15 +705,14 @@
         color: rgba(0,0,0,0.55);
         border-color: rgba(0,0,0,0.14);
       }
-      .column__status-pill--running {
-        color: #1d6b85;
-        background: rgba(94, 192, 220, 0.18);
-        border-color: rgba(29, 107, 133, 0.45);
-      }
-      .column__status-pill--running .column__status-pill-meta { color: rgba(0,0,0,0.78); }
-      .column__status-pill-dot--live {
+      .column__running-dot {
         background: #1d6b85;
         box-shadow: 0 0 0 3px rgba(29, 107, 133, 0.24);
+      }
+      .column__running-dot--foreign {
+        background: transparent;
+        border-color: #1d6b85;
+        box-shadow: 0 0 0 3px rgba(29, 107, 133, 0.16);
       }
       .column__status-pill--auto {
         color: #1f7a3f;

@@ -68,17 +68,19 @@
           <span class="column__status-cluster"
                 [attr.data-testid]="'lane-status-cluster-' + state()">
             @if (cluster.running; as run) {
-              <span class="column__status-pill column__status-pill--running"
-                    [class.column__status-pill--running-foreign]="run.foreign"
+              <!-- Running indicator is the dot ONLY. All the detail (job id,
+                   elapsed, model, foreign-backend note) lives in the tooltip
+                   so the header never renders a hard-truncated label fragment
+                   next to the dot. The foreign case is a hollow-ring variant,
+                   still text-free. -->
+              <span class="column__running-dot"
+                    [class.column__running-dot--foreign]="run.foreign"
                     [attr.data-testid]="'lane-running-pill-' + state()"
                     [attr.data-job-id]="run.jobId"
                     [attr.data-foreign]="run.foreign ? 'true' : null"
-                    [cacTooltip]="run.tooltip">
-                <span class="column__status-pill-dot column__status-pill-dot--live"
-                      aria-hidden="true"></span>
-                <span class="column__status-pill-label">RUNNING</span>
-                <span class="column__status-pill-meta">{{ run.jobId }} · {{ run.duration }}@if (run.model) { · {{ run.model }} }@if (run.foreign) { · external }</span>
-              </span>
+                    [cacTooltip]="run.tooltip"
+                    role="img"
+                    [attr.aria-label]="run.tooltip"></span>
             }
             <button type="button"
                     class="column__status-pill column__status-pill--mode"
