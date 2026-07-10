@@ -1043,6 +1043,26 @@
       line-height: 1;
       opacity: 0.8;
     }
+    /* PUB-1: "publishable: npm, website" chip on accepted cards. */
+    .task-card__publishable {
+      display: flex;
+      margin: 0 0 var(--studio-card-section-gap);
+    }
+    .task-card__publishable-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      line-height: 1;
+      padding: 3px var(--studio-spacing-2);
+      border-radius: 5px;
+      color: var(--studio-success);
+      background: color-mix(in srgb, var(--studio-success) 14%, rgba(0,0,0,0));
+      border: 1px solid color-mix(in srgb, var(--studio-success) 55%, transparent);
+    }
+    .task-card__publishable-label { opacity: 0.8; font-weight: 500; }
     .task-card__meta {
       display: flex;
       justify-content: flex-start;

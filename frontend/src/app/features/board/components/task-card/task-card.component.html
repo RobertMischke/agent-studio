@@ -326,6 +326,14 @@
       }
     </div>
   }
+  @if (publishableChip(); as pub) {
+    <div class="task-card__publishable" data-testid="task-card-publishable">
+      <span class="task-card__publishable-chip"
+            [cacTooltip]="'Accepted task work is publishable via: ' + pub.text + '.'">
+        <span class="task-card__publishable-label">publishable:</span> {{ pub.text }}
+      </span>
+    </div>
+  }
   @if (isEpic() && epicExpanded()) {
     <div class="task-card__epic-subtasks" data-testid="task-card-epic-subtasks">
       @if (inlineEpicSubTasks().length > 0) {

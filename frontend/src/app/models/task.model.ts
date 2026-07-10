@@ -312,6 +312,16 @@ export interface TaskInfo {
   mergeSignal?: TaskMergeSignal | null;
 
   /**
+   * PUB-1: read-time "publishable to" signal for accepted (6-completed) cards -
+   * which publish targets (npm / NuGet / website) this task's merged work
+   * touches, so the card / detail renders a "publishable: npm, website" chip.
+   * Computed batched per project on the backend by set-membership of the task's
+   * mainline anchor against each target's pending set. Null on non-accepted
+   * cards and cards whose work touches no derived publish target.
+   */
+  publishSignal?: TaskPublishSignal | null;
+
+  /**
    * ASS-1751: read-time run-activity classification for `3-progress` cards,
    * distinguishing a live run, a failed run waiting out the rapid-crash
    * backoff, and an orphan killed by a backend restart. Present only on
@@ -1141,7 +1151,51 @@ export interface ProjectSnapshot {
   orchestratorSession: OrchestratorSession | null;
   reviewDecisionsPending: { jobId: string; title: string; reason: string | null }[];
   runnerPendingDecisions: { jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }[];
+  /** PUB-1: derived publish targets + pending deltas for the Hub publish badges. */
+  publishTargets: PublishTarget[];
   queueHealth: ProjectQueueHealth;
+}
+
+/**
+ * PUB-1 - a derived publish target for a project, rendered as a Hub badge like
+ * "NuGet 0.3.1 -> 4 tasks pending". Repo-fact-derived and read-only. A package
+ * that has never been released carries `firstPublishPending` (no version, no
+ * count); `pendingCount === 0` is a quiet state (no badge). `pendingCount` is
+ * null when no baseline could be derived from git (see `referenceKind === 'none'`).
+ */
+export interface PublishTarget {
+  /** Stable id: 'package:npm', 'package:nuget', or 'website'. */
+  id: string;
+  /** Wire value is the camelCase enum name (JsonStringEnumConverter). */
+  kind: 'package' | 'website';
+  /** 'npm' | 'nuget' for packages; null for websites. */
+  ecosystem: string | null;
+  /** Short label the badge renders: 'npm', 'NuGet', 'Website'. */
+  label: string;
+  /** Package id/name (e.g. 'coding-agent-chat'); null for websites / unknown. */
+  packageName: string | null;
+  /** Current published version (e.g. '0.3.1'); null when never released. */
+  currentVersion: string | null;
+  /** A package with a release workflow but no tag: never published. */
+  firstPublishPending: boolean;
+  /** Merged commits since the reference touching this target's scope; null = no baseline. */
+  pendingCount: number | null;
+  /** How the baseline was set: 'tag' | 'release-tag' | 'pages-branch' | 'none'. */
+  referenceKind: string;
+  /** The reference the baseline resolves to (tag name or date); null for 'none'. */
+  reference: string | null;
+}
+
+/**
+ * PUB-1 - per-task publish chip signal folded onto an accepted task
+ * (`TaskInfo.publishSignal`): which publish targets the task's merged work is
+ * publishable to. Renders "publishable: npm, website" on the card / detail.
+ */
+export interface TaskPublishSignal {
+  /** Target ids the task is publishable to ('package:npm', 'website', ...). */
+  targetIds: string[];
+  /** Short labels for the chip, in target order (e.g. 'npm', 'Website'). */
+  labels: string[];
 }
 
 export interface CrashRecoveryPending {

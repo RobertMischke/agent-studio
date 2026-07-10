@@ -284,6 +284,18 @@ public record TaskInfo
     public TaskMergeSignal? MergeSignal { get; init; }
 
     /// <summary>
+    /// PUB-1 — read-time "publishable to" projection for accepted (6-completed)
+    /// tasks: which publish targets (npm / NuGet / website) this task's merged work
+    /// touches, so the card / task-detail renders a "publishable: npm, website"
+    /// chip. Computed batched per project by <c>TaskPublishableService</c> by
+    /// set-membership of the task's mainline anchor against each target's pending
+    /// commit set (O(projects), never per card) and folded onto the board payload.
+    /// Never persisted to <c>task.json</c>; null on non-accepted cards and on cards
+    /// whose work touches no derived publish target.
+    /// </summary>
+    public TaskPublishSignal? PublishSignal { get; init; }
+
+    /// <summary>
     /// Read-time visibility projection (ASS-1751) for <c>3-progress</c> tasks
     /// that disambiguates a live run, a failed run waiting out the rapid-crash
     /// backoff, and an orphaned run killed by a backend restart. Folded on by

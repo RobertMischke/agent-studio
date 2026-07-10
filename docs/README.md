@@ -47,6 +47,7 @@ Use this page as the first stop when you need the right document quickly.
 | Wiki Pulse dashboard (change feed + inbox + drift grading; PULSE-1) | [concepts/wiki-pulse-dashboard.md](concepts/wiki-pulse-dashboard.md) |
 | Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](concepts/run-liveness-and-slot-semantics.md) |
 | Result view and case templates | [concepts/result-view-and-case-templates.md](concepts/result-view-and-case-templates.md) |
+| Publishing workflows (publish-target derivation + pending badges; PUB-1) | [concepts/publishing-workflows.md](concepts/publishing-workflows.md) |
 | Wiki classification | [product/wiki-document-classification.md](product/wiki-document-classification.md) |
 | Wiki editing flow | [product/wiki-editing-and-branch-flow.md](product/wiki-editing-and-branch-flow.md) |
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](schemas/wiki-document-companion.schema.json) |

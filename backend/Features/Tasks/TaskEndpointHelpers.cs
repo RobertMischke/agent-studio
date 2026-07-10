@@ -164,6 +164,21 @@ internal static class TaskEndpointHelpers
                 : job);
 
     /// <summary>
+    /// PUB-1 — folds the batched per-task publish signal onto each accepted card.
+    /// The lookup is built ONCE per request by <see cref="TaskPublishableService"/>
+    /// (O(projects), never per card), so this stays an O(1) dictionary hit per job.
+    /// Jobs without a signal (not accepted, or touching no derived target) pass
+    /// through untouched.
+    /// </summary>
+    internal static IEnumerable<TaskInfo> WithPublishSignal(
+        this IEnumerable<TaskInfo> jobs,
+        IReadOnlyDictionary<string, TaskPublishSignal> publishByJobKey)
+        => jobs.Select(job =>
+            publishByJobKey.TryGetValue(job.TaskKey, out var signal)
+                ? job with { PublishSignal = signal }
+                : job);
+
+    /// <summary>
     /// AGT-2029 — builds a per-TaskKey lookup of waits-on status for the jobs
     /// that actually carry dependsOn edges. Resolution is <b>archive-inclusive</b>
     /// (a dependency is fulfilled when its target reaches 6-completed OR

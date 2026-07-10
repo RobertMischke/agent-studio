@@ -256,6 +256,11 @@ builder.Services.AddSingleton<IAutoReviewPostProcessingQueue>(sp =>
     sp.GetRequiredService<AutoReviewPostProcessingQueue>());
 builder.Services.AddSingleton<TaskProvenanceService>();
 builder.Services.AddSingleton<BoardMergeStatusService>();
+// PUB-1: read-only publish-target derivation (repo facts -> Hub badges + task
+// chips). PublishTargetService derives + caches per project; TaskPublishableService
+// folds the per-task chip signal onto accepted cards (O(projects), no per-card git).
+builder.Services.AddSingleton<PublishTargetService>();
+builder.Services.AddSingleton<TaskPublishableService>();
 builder.Services.AddSingleton<TaskTransitionService>();
 // Out-of-band task completion (docs/concepts/out-of-band-task-completion.md §3):
 // reconciles a task finished outside the runner in one atomic call.

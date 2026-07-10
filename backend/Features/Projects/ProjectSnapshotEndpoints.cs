@@ -45,6 +45,7 @@ public static class ProjectSnapshotEndpoints
             OrchestratorLog log,
             OrchestratorSessionStore sessionStore,
             ITaskAccess taskAccess,
+            PublishTargetService publish,
             AgentStudio.Registry.ProjectRegistry projectRegistry) =>
         {
             // Resolve the watch path once. Every per-project field below
@@ -149,6 +150,9 @@ public static class ProjectSnapshotEndpoints
                 orchestratorSession = session,
                 reviewDecisionsPending = reviewDecisions,
                 runnerPendingDecisions = liveItems,
+                // PUB-1: derived publish targets + pending deltas for the Hub
+                // publish badges. Read-only, repo-fact-derived, cached per project.
+                publishTargets = publish.GetProjectPublishStatus(projectName).Targets,
                 queueHealth = ReadQueueHealth(entry.Path, taskAccess),
                 _diag = new { reviewHits = ReviewCacheHits, reviewMisses = ReviewCacheMisses }
             });

@@ -142,6 +142,18 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   readonly tagChips = computed(() => buildTagChips(this.job().tags, this.tagRegistry.byId(), this.job().state));
 
+  /**
+   * PUB-1: "publishable: npm, website" chip for accepted (6-completed) cards.
+   * The backend folds `publishSignal` only onto completed tasks whose merged
+   * work touches a derived publish target, so the presence of labels is the
+   * whole gate - no card renders it otherwise (Ruhe by default).
+   */
+  readonly publishableChip = computed(() => {
+    const labels = this.job().publishSignal?.labels ?? [];
+    if (labels.length === 0) return null;
+    return { labels, text: labels.join(', ') };
+  });
+
   /** True for cards where "Pick next" makes sense (front-of-queue promotion). */
   readonly canPickNext = computed(() => this.job().state === TaskState.Ready);
 

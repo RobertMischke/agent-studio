@@ -13,7 +13,7 @@ public static class TaskCrudEndpoints
 {
     public static void MapTaskCrudEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus) =>
+        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
         {
             var raw = scanner.ScanAllJobs();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
@@ -21,8 +21,10 @@ public static class TaskCrudEndpoints
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
             var mergeLookup = mergeStatus.BuildLookup(raw);
+            var publishLookup = publishStatus.BuildLookup(raw);
             var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup))
                           .WithMergeSignal(mergeLookup)
+                          .WithPublishSignal(publishLookup)
                           .ToList();
             if (TaskQueryRequest.FromQuery(ctx.Request.Query) is { IsActive: true } query)
             {
@@ -34,7 +36,7 @@ public static class TaskCrudEndpoints
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (bool? includeFixtures, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, BoardMergeStatusService mergeStatus) =>
+        group.MapGet("/grouped", (bool? includeFixtures, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
         {
             var raw = scanner.ScanAllJobs();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
@@ -42,8 +44,10 @@ public static class TaskCrudEndpoints
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
             var mergeLookup = mergeStatus.BuildLookup(raw);
+            var publishLookup = publishStatus.BuildLookup(raw);
             var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup))
                           .WithMergeSignal(mergeLookup)
+                          .WithPublishSignal(publishLookup)
                           .ToList();
             // F35: each lane is sorted using a per-project strategy. The kanban
             // mixes projects inside one lane, so the sort groups by project,
@@ -183,7 +187,7 @@ public static class TaskCrudEndpoints
             });
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? watchPath, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions, BoardMergeStatusService mergeStatus) =>
+        group.MapGet("/{jobId}", (string jobId, string? watchPath, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
         {
             var detail = scanner.GetJobDetail(jobId, watchPath);
             if (detail is null) return Results.NotFound();
@@ -203,6 +207,11 @@ public static class TaskCrudEndpoints
             var mergeLookup = mergeStatus.BuildLookup(new[] { withRuntime.Info });
             if (mergeLookup.TryGetValue(withRuntime.Info.TaskKey, out var signal))
                 withRuntime = withRuntime with { Info = withRuntime.Info with { MergeSignal = signal } };
+            // PUB-1: fold the per-task publish chip signal so a completed card opened
+            // from the board shows "publishable: npm, website" in its detail too.
+            var publishLookup = publishStatus.BuildLookup(new[] { withRuntime.Info });
+            if (publishLookup.TryGetValue(withRuntime.Info.TaskKey, out var publishSignal))
+                withRuntime = withRuntime with { Info = withRuntime.Info with { PublishSignal = publishSignal } };
             return Results.Ok(withRuntime);
         });
 

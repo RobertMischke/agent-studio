@@ -4217,4 +4217,115 @@ public class GitService
         return set;
     }
 
+    // ----- PUB-1: publish-target derivation primitives (read-only) -----
+
+    /// <summary>
+    /// The newest version tag (<c>v*</c>) in the repository, by descending
+    /// semantic-version order, or null when the package has never been tagged
+    /// (the "first publish pending" case). One <c>git tag</c> spawn. Returns the
+    /// raw tag name including the leading <c>v</c> (e.g. <c>v0.3.1</c>); callers
+    /// strip the prefix for display. Read-only; empty/failure yields null.
+    /// </summary>
+    public string? GetLatestVersionTag(string repoRoot)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        var (output, _, code) = RunGitArgs(repoRoot, "tag", "--list", "v[0-9]*", "--sort=-v:refname");
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return null;
+        foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            var tag = line.Trim();
+            if (tag.Length > 0) return tag;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// UTC author date of a ref's tip commit (e.g. a Pages deploy branch tip),
+    /// or null when the ref does not resolve. PUB-1 treats a <c>gh-pages</c> tip
+    /// date as the "last website deploy" instant when no release tag anchors the
+    /// website target. Read-only; one spawn.
+    /// </summary>
+    public DateTime? GetTipCommitDateUtc(string repoRoot, string tipRef)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        if (!IsLikelyBranchName(tipRef)) return null;
+        var (output, _, code) = RunGitArgs(repoRoot, "log", "-1", "--pretty=format:%aI", tipRef);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return null;
+        if (DateTime.TryParse(output.Trim(), System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                out var ts))
+            return DateTime.SpecifyKind(ts, DateTimeKind.Utc);
+        return null;
+    }
+
+    /// <summary>
+    /// First-parent (mainline) commits on <paramref name="branch"/> that touch a
+    /// publish target's path scope, newest first. Optionally bounded below by
+    /// <paramref name="sinceRef"/> (a tag or SHA: <c>sinceRef..branch</c>) and/or
+    /// <paramref name="sinceDateIso"/> (git <c>--since</c>). <c>--first-parent</c>
+    /// collapses each merged task branch to its single mainline commit, so the
+    /// result is "how many integrations touched this target since the reference",
+    /// not raw per-commit churn - the merge commit's SHA is exactly the anchor the
+    /// board records for that task, so a caller can answer "is task X publishable
+    /// to this target?" by set-membership without any per-task git spawn. Scope is
+    /// expressed as git pathspecs: <paramref name="includePrefixes"/> (empty =
+    /// whole tree) and <paramref name="excludePrefixes"/> (git <c>:(exclude)</c>
+    /// magic). Ref and path arguments are validated so a crafted value yields an
+    /// empty list rather than a smuggled flag. Read-only; one spawn.
+    /// </summary>
+    public List<GitCommitInfo> GetMainlineCommitsForScope(
+        string repoRoot,
+        string branch,
+        IReadOnlyList<string> includePrefixes,
+        IReadOnlyList<string> excludePrefixes,
+        string? sinceRef = null,
+        string? sinceDateIso = null)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return [];
+        if (!IsLikelyBranchName(branch)) return [];
+        if (!string.IsNullOrWhiteSpace(sinceRef) && !IsLikelyShaOrRef(sinceRef!)) return [];
+
+        const string fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
+        var args = new List<string> { "log", "--first-parent", "--shortstat", $"--pretty=format:{fmt}" };
+        if (!string.IsNullOrWhiteSpace(sinceDateIso)) args.Add($"--since={sinceDateIso}");
+        args.Add(string.IsNullOrWhiteSpace(sinceRef) ? branch : $"{sinceRef}..{branch}");
+
+        args.Add("--");
+        var addedInclude = false;
+        foreach (var inc in includePrefixes)
+        {
+            var p = NormalizePathspec(inc);
+            if (p == null) continue;
+            args.Add(p);
+            addedInclude = true;
+        }
+        if (!addedInclude) args.Add("."); // whole tree
+        foreach (var exc in excludePrefixes)
+        {
+            var p = NormalizePathspec(exc);
+            if (p == null) continue;
+            args.Add($":(exclude){p}");
+        }
+
+        var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+        return ParseLogBlocks(output);
+    }
+
+    /// <summary>
+    /// Validates and normalises a repo-relative path prefix used as a git
+    /// pathspec: forward slashes, no leading slash, no <c>..</c> traversal, no
+    /// pathspec-magic leader (<c>:</c>). Returns null for an unusable value so it
+    /// is dropped rather than passed to git. Internal for unit testing.
+    /// </summary>
+    internal static string? NormalizePathspec(string? prefix)
+    {
+        if (string.IsNullOrWhiteSpace(prefix)) return null;
+        var p = prefix.Replace('\\', '/').Trim();
+        if (p.Length == 0) return null;
+        if (p[0] == '/' || p[0] == ':') return null;
+        if (p.Contains("..", StringComparison.Ordinal)) return null;
+        return p;
+    }
+
 }
