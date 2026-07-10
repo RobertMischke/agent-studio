@@ -521,10 +521,6 @@
         <app-tag-manager-dialog
           (closed)="onTagManagerClosed()" />
       }
-      @if (orchestratorSettingsOpen()) {
-        <app-orchestrator-settings-modal
-          (closed)="closeOrchestratorSettings()" />
-      }
       <app-workspace-banner [projects]="bannerProjects()" />
       <app-project-overlays
         (securityFollowUp)="onSecurityFollowUp($event)"
@@ -878,11 +874,6 @@
       }
       <app-notification-stack />
       <app-media-lightbox />
-
-      @if (orchestratorSettingsOpen()) {
-        <app-orchestrator-settings-modal
-          (closed)="closeOrchestratorSettings()" />
-      }
 
       @defer (when verboseDebugContext() !== null) {
         @if (verboseDebugContext(); as ctx) {

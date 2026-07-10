@@ -119,6 +119,22 @@
             </div>
           </section>
         }
+        @case ('orchestrator') {
+          <section class="ws-settings__section" data-testid="workspace-orchestrator">
+            <header class="ws-settings__section-head">
+              <h2 class="ws-settings__panel-title">Orchestrator</h2>
+              <p class="ws-settings__panel-desc">
+                Platform-global runtime flags for the orchestrator, supervisor,
+                meta-cycle, and auto-intervention loops. These gate whole hosted
+                loops for this backend, so they are a single instance-wide value
+                (not a per-workspace default). Per-workspace orchestrator
+                <strong>model</strong> and <strong>autonomy</strong> defaults live
+                on each project's Settings → Workspace defaults instead.
+              </p>
+            </header>
+            <app-orchestrator-logic-panel />
+          </section>
+        }
         @case ('caps') {
           <app-cli-admin-panel (openJobDetail)="openJobDetail.emit($event)" />
         }

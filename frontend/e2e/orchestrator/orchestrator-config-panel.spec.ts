@@ -2,17 +2,19 @@ import { test, expect } from '../fixtures/dev-backend';
 
 /**
  * Locks the orchestrator + supervisor flag UI reachable from the header
- * dev-tools menu. Today that surface is the "Orchestrator" section of the
- * Orchestrator Settings modal, backed by OrchestratorLogicPanel; the menu
- * item `orch-config` opens the modal and the modal renders the logic panel
- * on its default (orchestrator) rail. Uses the harmless
- * `Supervisor:HardCheckEnabled` flag for the round-trip toggle so the test
- * never enables features that would change runner behaviour. Asserts:
+ * dev-tools menu. AGT-1812 retired the standalone Orchestrator Settings modal;
+ * the flags now render as the platform-global "Orchestrator" section of the one
+ * consolidated Settings view (Global group), backed by the same
+ * OrchestratorLogicPanel. The menu item `orch-config` opens that view on the
+ * orchestrator section (panel testid `orchestrator-config-overlay`). Uses the
+ * harmless `Supervisor:HardCheckEnabled` flag for the round-trip toggle so the
+ * test never enables features that would change runner behaviour. Asserts:
  *
  *  - the GET endpoint returns the typed catalog with the four toggles the
  *    task explicitly calls out (review-decision, prep, soft-reasoning,
  *    meta-cycle);
- *  - the dev-tools menu entry opens the settings modal on the logic panel;
+ *  - the dev-tools menu entry opens the consolidated Settings view on the
+ *    orchestrator section, rendering the logic panel;
  *  - the panel renders rows for all four targeted toggles;
  *  - toggling and saving writes the flag to disk (gated by X-Client-Id);
  *  - the "saved" banner appears after a successful save.
@@ -72,7 +74,7 @@ test.describe('Orchestrator logic config (settings modal, dev-tools menu)', () =
     expect(snap.overrideFilePath).toContain('appsettings.Local.json');
   });
 
-  test('dev-tools menu opens the settings modal and renders the four targeted toggles', async ({ page, devBackend }) => {
+  test('dev-tools menu opens the consolidated Settings view on the orchestrator section and renders the four targeted toggles', async ({ page, devBackend }) => {
     expect(devBackend.port).toBe(5030);
     await page.goto('/');
     await expect(page.getByTestId('app-root')).toBeVisible({ timeout: 10_000 });
@@ -82,7 +84,11 @@ test.describe('Orchestrator logic config (settings modal, dev-tools menu)', () =
     await expect(menuItem).toBeVisible();
     await menuItem.click();
 
-    await expect(page.getByTestId('orchestrator-settings-modal')).toBeVisible();
+    // AGT-1812: lands on the consolidated Settings view (Global → Orchestrator),
+    // not the retired standalone modal.
+    await expect(page.getByTestId('workspace-settings-overlay')).toBeVisible();
+    const panelHost = page.getByTestId('orchestrator-config-overlay');
+    await expect(panelHost).toBeVisible();
 
     const panel = page.getByTestId('orchestrator-logic-panel');
     await expect(panel).toBeVisible();

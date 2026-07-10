@@ -6,7 +6,7 @@ import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import { TokenUsageSectionComponent } from '../../../tokens';
 import { CliAdminPanelComponent, CliWorkingMemoryPanelComponent } from '../../../cli';
 import { RemoteHostsPanelComponent } from '../../../remote-hosts';
-import { PromptAdminPanelComponent } from '../../../orchestrator';
+import { OrchestratorLogicPanelComponent, PromptAdminPanelComponent } from '../../../orchestrator';
 // Direct path (not the studio-shell barrel) so we don't pull StudioShellComponent
 // and re-form the shell <-> studio-shell import cycle (AGT-2035).
 import { AppearanceSettingsComponent } from '../../../studio-shell/components/appearance-settings/appearance-settings.component';
@@ -38,14 +38,16 @@ interface SettingsRailItem {
  * Workspace grouping.
  *
  * Global group (per-user / app-wide): Appearance (Theme + Activity bar),
- * Updates, Workspaces (registry management). Workspace group (defaults applied
- * across the workspace's projects): Usage caps, Working memory, System prompts,
- * Token usage, Visual evidence.
+ * Updates, Workspaces (registry management), Orchestrator (the platform-global
+ * lifecycle flags AGT-1812 moved out of their standalone modal). Workspace group
+ * (defaults applied across the workspace's projects): Usage caps, Working memory,
+ * System prompts, Token usage, Visual evidence.
  *
  * Each content section re-uses a stable outer test id
  * (`cli-admin-overlay`, `prompt-admin-overlay`, `workspace-tokens-overlay`,
- * `workspace-screenshots-overlay`, plus the new appearance/updates/
- * workspaces/working-memory ids) so deep-links and specs keep resolving.
+ * `workspace-screenshots-overlay`, `orchestrator-config-overlay`, plus the new
+ * appearance/updates/workspaces/working-memory ids) so deep-links and specs
+ * keep resolving.
  */
 @Component({
   selector: 'app-workspace-overlays',
@@ -58,6 +60,7 @@ interface SettingsRailItem {
     CliWorkingMemoryPanelComponent,
     RemoteHostsPanelComponent,
     PromptAdminPanelComponent,
+    OrchestratorLogicPanelComponent,
     AppearanceSettingsComponent,
     UpdatesSettingsComponent,
     WorkspaceManagementComponent,
@@ -94,6 +97,7 @@ export class WorkspaceOverlaysComponent {
     { key: 'workspaces', label: 'Workspaces', description: 'Manage every workspace and its projects.', icon: '\u{1F5C2}', group: 'global' },
     { key: 'remote-hosts', label: 'Remote hosts', description: 'Execution locations: heartbeat, vitals, quota, and Re-Probe / Drain / Retire.', icon: '\u{1F4E1}', group: 'global' },
     { key: 'project-sources', label: 'Project sources', description: 'Available origins for newly onboarded projects.', icon: '\u{1F4C1}', group: 'global' },
+    { key: 'orchestrator', label: 'Orchestrator', description: 'Platform-global supervisor, meta-cycle, and auto-intervention lifecycle flags.', icon: '\u{1F916}', group: 'global' },
     { key: 'caps', label: 'Usage caps', description: 'Per-CLI quota caps and runner rules.', icon: '⚙', group: 'workspace' },
     { key: 'working-memory', label: 'Working memory', description: 'Per-CLI memory and session state. Auth stays protected.', icon: '\u{1F9E0}', group: 'workspace' },
     { key: 'prompts', label: 'System prompts', description: 'Application-wide runtime prompt defaults and overrides.', icon: 'T', group: 'workspace' },
@@ -156,6 +160,7 @@ export class WorkspaceOverlaysComponent {
       case 'workspaces': return 'workspace-management-overlay';
       case 'remote-hosts': return 'workspace-remote-hosts-overlay';
       case 'project-sources': return 'workspace-project-sources-overlay';
+      case 'orchestrator': return 'orchestrator-config-overlay';
       case 'working-memory': return 'workspace-working-memory-overlay';
       case 'overview': return 'workspace-settings-overview-panel';
     }

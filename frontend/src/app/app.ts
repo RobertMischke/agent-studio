@@ -48,7 +48,6 @@ import {
   type TriageButton,
 } from './features/task-detail';
 import {
-  OrchestratorSettingsModalComponent,
   OrchestratorSideSheetComponent,
 } from './features/orchestrator';
 import {
@@ -149,7 +148,6 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     TaskColumnComponent,
     TaskDetailComponent,
     OrchestratorSideSheetComponent,
-    OrchestratorSettingsModalComponent,
     ProjectOverlaysComponent,
     AutoReviewIndicatorComponent,
     StatusBarComponent,
@@ -375,14 +373,6 @@ export class App implements OnInit, OnDestroy {
   // Cycle 9: side-sheet width owned by UiPreferencesService.
   private readonly uiPrefs = inject(UiPreferencesService);
   readonly sideSheetWidth = this.uiPrefs.sideSheetWidth;
-  /**
-   * Orchestrator Settings modal visibility. Replaces the former "Logic" tab
-   * inside the sidesheet; the modal uses the project-shell rail + panel
-   * layout so settings sit visually alongside the project window pattern.
-   * Persisted via UiPreferencesService so an F5 reload reopens the modal
-   * instead of dropping it.
-   */
-  readonly orchestratorSettingsOpen = this.uiPrefs.orchestratorSettingsOpen;
   readonly collapsedGroups = signal<Set<string>>(
     new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')),
   );
@@ -878,12 +868,14 @@ export class App implements OnInit, OnDestroy {
     this.openOrchestratorSettings();
   }
 
+  /**
+   * AGT-1812: the standalone Orchestrator-settings modal was retired. The header
+   * Dev-tools "Orchestrator config" entry and the orchestrator side-sheet gear
+   * now open the platform-global lifecycle flags as the "Orchestrator" section of
+   * the one consolidated Settings view (Global group).
+   */
   openOrchestratorSettings(): void {
-    this.uiPrefs.setOrchestratorSettingsOpen(true);
-  }
-
-  closeOrchestratorSettings(): void {
-    this.uiPrefs.setOrchestratorSettingsOpen(false);
+    this.workspaceOverlays.openOrchestrator();
   }
 
   /**

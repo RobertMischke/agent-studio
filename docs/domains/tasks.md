@@ -99,7 +99,7 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   `GET /api/workspaces/{id}/settings`, `PUT .../orchestrator-model`, and
   `PUT .../autonomy` (404 on unknown id). This is the workspace tier of the
   two-tier orchestrator config; the precedence and read sites live runner-side
-  (ADR-0058, see [runner.md](runner.md)).
+  (ADR-0061, see [runner.md](runner.md)).
 
 ## Invariants
 
