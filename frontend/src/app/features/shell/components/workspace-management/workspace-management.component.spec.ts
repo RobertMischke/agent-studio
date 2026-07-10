@@ -59,6 +59,7 @@ describe('WorkspaceManagementComponent workspace-delete gating', () => {
 
   function project(id: string): RegistryProjectSummary {
     return {
+      sourceType: 'local-folder',
       id,
       displayName: id,
       shortCode: id,

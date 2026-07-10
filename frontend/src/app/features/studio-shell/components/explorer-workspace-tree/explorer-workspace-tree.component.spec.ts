@@ -15,6 +15,7 @@ import type { RegistryWorkspaceListItem, RegistryProjectSummary } from '../../..
 
 function project(displayName: string, workspaceId: string, storage: string): RegistryProjectSummary {
   return {
+    sourceType: 'local-folder',
     id: `PROJ-${displayName}`,
     displayName,
     shortCode: displayName.slice(0, 3).toUpperCase(),
