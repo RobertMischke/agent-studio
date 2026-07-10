@@ -6982,9 +6982,11 @@ public class ProjectRunner
                 continue;
 
             var attempts = GetPickupAttempts(slug);
-            if (attempts >= PickupFailureThreshold)
+            var pickupThreshold = GetPickupFailureThreshold(slug);
+            if (attempts >= pickupThreshold)
             {
-                var pausedDuringReroute = RerouteOverBudgetFolder(candidate, slug, attempts);
+                var pausedDuringReroute = RerouteOverBudgetFolder(
+                    candidate, slug, attempts, thresholdOverride: pickupThreshold);
                 // Spawn-failure pause (loop-inventory:
                 // pickup.spawn-failure-budget-pause / cross-slug-infra-circuit-breaker).
                 // If rerouting this over-budget folder just paused the runner
@@ -7359,6 +7361,14 @@ public class ProjectRunner
             return false;
         }
 
+        // The escalation summary turns checklist rows from
+        // orchestrator-follow-up.md into visible gate items. A category in
+        // status.md explains the terminal, but it is not actionable on its own.
+        // Persist the busy path as one open worktree-blocked item so an operator
+        // sees exactly what must be released before re-queuing the card.
+        if (worktreeBlocked && !string.IsNullOrWhiteSpace(moveResult.NewFolderPath))
+            WriteWorktreeBlockedGateItem(moveResult.NewFolderPath!, reason, jobIdBeforeMove);
+
         var record = new PickupFailureRecord
         {
             At = now,
@@ -7426,6 +7436,32 @@ public class ProjectRunner
         // loop is already broken; the runner continues to the next 3-progress
         // folder (then 2-ready) so one stuck task does not stall the queue.
         return false;
+    }
+
+    private void WriteWorktreeBlockedGateItem(string folderPath, string reason, string jobId)
+    {
+        var path = Path.Combine(folderPath, "orchestrator-follow-up.md");
+        var item = $"- [ ] {HumanReviewEscalationCategories.WorktreeBlocked}: {reason}";
+        try
+        {
+            var existing = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+            if (existing.Contains(item, StringComparison.Ordinal)) return;
+
+            var prefix = string.IsNullOrWhiteSpace(existing)
+                ? "# Orchestrator follow-up" + Environment.NewLine + Environment.NewLine
+                : existing.TrimEnd() + Environment.NewLine + Environment.NewLine;
+            File.WriteAllText(path, prefix + item + Environment.NewLine);
+            _logger.LogWarning(
+                "[taskboard] worktree-blocked gate item recorded for {JobId} at {FollowUpPath}",
+                jobId, path);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "[taskboard] failed to record worktree-blocked gate item for {JobId} at {FollowUpPath}",
+                jobId, path);
+        }
     }
 
     /// <summary>

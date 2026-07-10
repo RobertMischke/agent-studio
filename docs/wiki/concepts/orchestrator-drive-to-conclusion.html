@@ -480,6 +480,25 @@
             post-steps (code-review-grade, wiki) already swallow a crash into a Skipped/Failed row and never gate the lane.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2076</code><br><span class="small">worktree-orphan-resilienz</span></td>
+          <td>
+            Five cards spent a day cycling through worktree preparation while detached <code>ng serve</code> and
+            <code>esbuild</code> helpers held their task worktrees open. About 1,400
+            <code>pick-reverted-no-run</code> events produced 1.7 GB of backend log without a visible terminal.
+          </td>
+          <td>
+            Run teardown killed only the reachable CLI PID tree, detached helpers survived a backend restart, the busy-worktree
+            preparation path had no bounded terminal, and identical revert notices were emitted on every pickup tick.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> Windows runs use a kill-on-close process group plus a boot orphan sweep; a busy
+            worktree retries with exponential cooldown and escalates after five attempts as <code>worktree-blocked</code>, with the
+            busy path in a visible gate item; identical revert logs and chat notices are limited to one per ten minutes with a
+            suppression count. The terminal is <span class="lane">5e-escalated</span>, never an endless ready/progress loop.
+          </td>
+        </tr>
       </tbody>
     </table>
 

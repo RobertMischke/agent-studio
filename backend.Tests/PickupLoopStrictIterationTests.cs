@@ -337,6 +337,11 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         Assert.Contains(busyPath, status);
         Assert.Contains("after 5 attempts", status);
 
+        var followUp = File.ReadAllText(Path.Combine(escalated, "orchestrator-follow-up.md"));
+        Assert.Contains("- [ ] worktree-blocked:", followUp);
+        Assert.Contains(busyPath, followUp);
+        Assert.Contains("after 5 attempts", followUp);
+
         var row = File.ReadAllLines(Path.Combine(_workspaceRoot, "logs", "pickup-failures.jsonl"))
             .Single(line => line.Length > 0);
         Assert.Contains("\"threshold\":5", row);
