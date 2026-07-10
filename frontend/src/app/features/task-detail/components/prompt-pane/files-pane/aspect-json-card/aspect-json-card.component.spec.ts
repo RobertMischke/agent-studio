@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { AspectJsonCardComponent } from './aspect-json-card.component';
-import type { AspectDocument } from './aspect-document.model';
+import type { AspectDocument } from '../aspect-document.model';
 
 function doc(overrides: Partial<AspectDocument> = {}): AspectDocument {
   return {

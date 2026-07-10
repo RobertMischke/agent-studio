@@ -123,6 +123,11 @@ internal static class TaskEndpointHelpers
         TaskRunnerInfo? runner = job.State == TaskStates.Progress
             ? runners.ResolveRunnerBadge(job.TaskKey)
             : null;
+        // AGT-2069: spawn-visibility + spawn-contract projection for planning
+        // tasks. Gated strictly on planning mode (rare) so the two small sidecar
+        // reads never touch the coding-card common case and the
+        // JobsEndpointPerfTests contract holds. Null on every non-planning card.
+        var planningSpawn = BuildPlanningSpawnSummary(job);
         return job with
         {
             Execution = exec,
@@ -147,7 +152,43 @@ internal static class TaskEndpointHelpers
             SummaryState = summary != null && summary.Status != TaskSummaryStatus.None ? summary : null,
             TokenSummary = tokens,
             OrchestratorVerdict = verdict,
-            WaitsOn = waitsOn
+            WaitsOn = waitsOn,
+            PlanningSpawn = planningSpawn
+        };
+    }
+
+    /// <summary>
+    /// AGT-2069 — build the read-time spawn-visibility + spawn-contract summary
+    /// for a planning task from its two app-owned sidecars: the AGT-2028 spawn
+    /// ledger (<c>.metadata/spawned-tasks.jsonl</c>) and the no-follow-up
+    /// declaration (<c>.metadata/planning-closure.json</c>). Returns null for any
+    /// non-planning task so the field stays absent on the coding-card common
+    /// case; the two reads only ever run for the rare planning card, keeping the
+    /// per-job overlay O(1) for the board.
+    /// </summary>
+    internal static PlanningSpawnSummary? BuildPlanningSpawnSummary(TaskInfo job)
+    {
+        if (!PlanningCompletionGate.Applies(job.Mode)) return null;
+        if (string.IsNullOrWhiteSpace(job.FolderPath)) return new PlanningSpawnSummary();
+
+        var spawned = SpawnedTaskLedger.Read(job.FolderPath)
+            .Select(r => new PlanningSpawnRef
+            {
+                TargetKey = r.TargetKey,
+                TargetJobId = r.TargetJobId,
+                TargetProject = r.TargetProject,
+                Reason = r.Reason,
+                At = r.At,
+            })
+            .ToList();
+
+        var closure = PlanningClosureStore.Read(job.FolderPath);
+        return new PlanningSpawnSummary
+        {
+            Spawned = spawned,
+            NoFollowUpDeclared = closure?.NoFollowUpDeclared ?? false,
+            NoFollowUpReason = closure?.Reason,
+            DeclaredAt = closure?.DeclaredAt,
         };
     }
 

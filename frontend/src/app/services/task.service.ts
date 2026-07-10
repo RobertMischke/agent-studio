@@ -697,6 +697,21 @@ export class TaskService {
     );
   }
 
+  /**
+   * AGT-2069 — declare (or clear) "no follow-up intended" on a planning task.
+   * This satisfies the spawn-contract completion gate without producing
+   * follow-up cards, by an explicit operator call. Returns the recomputed
+   * spawn summary so the detail can update without a re-fetch. 400 when the
+   * task is not a planning task.
+   */
+  setPlanningClosure(jobId: string, declared: boolean, reason: string | null, watchPath?: string) {
+    return this.http.post<import('../models/task.model').PlanningSpawnSummary>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/planning-closure`,
+      { declared, reason },
+      this.withWatchPath(watchPath),
+    );
+  }
+
   // Tag registry + per-job tag mutation. Backlog-lane spec.
   listTags() {
     return this.http.get<import('../models/task.model').TagRegistryEntry[]>(`${this.baseUrl}/tags`);

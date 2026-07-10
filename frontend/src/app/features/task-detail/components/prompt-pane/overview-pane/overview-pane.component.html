@@ -60,6 +60,8 @@
         </button>
       </div>
     }
+
+    <app-planning-spawn-panel [job]="job()" (changed)="referencesChanged.emit()" />
   </section>
 
   <!-- Compact status + agent block -->

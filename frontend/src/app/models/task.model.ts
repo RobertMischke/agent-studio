@@ -150,6 +150,36 @@ export interface SetTaskReferencesResponse {
   warnings: { code: string; kind: string; target: string; message: string }[];
 }
 
+/**
+ * AGT-2069: one follow-up card a planning task spawned (from the AGT-2028 spawn
+ * ledger). Mirrors backend `PlanningSpawnRef`. Rendered as a "spawnt: AGT-xxxx"
+ * microcard chip on the planning task's detail.
+ */
+export interface PlanningSpawnRef {
+  targetKey?: string | null;
+  targetJobId?: string | null;
+  targetProject?: string | null;
+  reason?: string | null;
+  at: string;
+}
+
+/**
+ * AGT-2069: read-time spawn-visibility + spawn-contract projection for a
+ * planning task. Mirrors backend `PlanningSpawnSummary`. Present (non-null) only
+ * on `mode === 'planning'` cards; drives the "spawnt: AGT-xxxx" chips, the
+ * "no follow-up cards" warning, and the accept-dialog guard against the
+ * AGT-1915 trap. `contractSatisfied` is true when a follow-up card exists OR
+ * the operator declared "no follow-up intended".
+ */
+export interface PlanningSpawnSummary {
+  spawned: PlanningSpawnRef[];
+  spawnedCount: number;
+  noFollowUpDeclared: boolean;
+  noFollowUpReason?: string | null;
+  declaredAt?: string | null;
+  contractSatisfied: boolean;
+}
+
 export interface TaskInfo {
   id: string;
   taskKey: string;
@@ -364,6 +394,15 @@ export interface TaskInfo {
    * "→ <runner>" next to the CLI badge instead of the quiet local presentation.
    */
   runner?: TaskRunnerInfo | null;
+
+  /**
+   * AGT-2069: read-time spawn-visibility + spawn-contract projection, present
+   * (non-null) only on planning-mode cards. Mirrors backend
+   * `TaskInfo.PlanningSpawn`. Drives the spawn chips / "no follow-up cards"
+   * warning on the planning task's detail and the accept-dialog guard against
+   * the AGT-1915 trap. Null on every coding / research / epic card.
+   */
+  planningSpawn?: PlanningSpawnSummary | null;
 }
 
 /**

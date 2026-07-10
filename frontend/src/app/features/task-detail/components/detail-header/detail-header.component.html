@@ -54,6 +54,15 @@
           </h2>
         </div>
         <div class="detail__meta">
+          @if (modeBadge(); as mb) {
+            <span class="detail__mode-badge"
+                  [class]="'detail__mode-badge--' + mb.mode"
+                  data-testid="detail-mode-badge"
+                  [attr.data-mode]="mb.mode"
+                  [cacTooltip]="mb.tooltip">
+              <span aria-hidden="true">{{ mb.icon }}</span> {{ mb.label }}
+            </span>
+          }
           <span class="detail__meta-item"
                 data-testid="detail-created-at"
                 [cacTooltip]="createdAtTooltip()">⏱ erstellt {{ relativeCreated() }}</span>

@@ -43,6 +43,7 @@ import { RegressionRadarComponent } from '../../../../regression-radar';
 import { AgentWorkDetailComponent } from '../agent-work-detail/agent-work-detail.component';
 import type { PipelineStepResultHeader } from '../pipeline-step-result/pipeline-step-result.component';
 import { ReferencesSectionComponent } from '../../references-section/references-section.component';
+import { PlanningSpawnPanelComponent } from '../../planning-spawn-panel/planning-spawn-panel.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { StructuredTooltip, TooltipSeverity } from 'coding-agent-chat/shared';
 import { TaskPromptPopoverComponent } from '../task-prompt-popover/task-prompt-popover.component';
@@ -456,7 +457,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, StudioIconComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, StudioIconComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })

@@ -516,27 +516,36 @@
       letter-spacing: 0.02em;
     }
     /* Mode badge (planning / research). Only non-coding modes render a pill so
-       the board stays quiet for the default mode; the tinted variants make a
-       planning or research card recognizable at a glance. Glyph + label come
-       from the same source as the create-dialog mode picker. */
+       the board stays quiet for the default mode. AGT-2069: planning cards get
+       a deliberately loud, filled badge ("here work is PLANNED") so a
+       planning-task -> follow-up-card workflow is unmistakable at a glance;
+       research stays a calmer filled tint. Glyph + label come from the same
+       source as the create-dialog mode picker. */
     .task-card__mode-pill {
       border: 1px solid transparent;
       cursor: help;
       white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 700;
     }
     .task-card__mode-glyph {
       font-size: 11px;
       line-height: 1;
     }
+    /* AGT-2069: prominent filled planning badge (both themes: saturated fill +
+       light text reads on light and dark card surfaces). */
     .task-card__mode-pill--planning {
-      color: #d8b4fe;
-      background: rgba(192, 132, 252, 0.12);
-      border-color: rgba(192, 132, 252, 0.32);
+      color: #f5f3ff;
+      background: #7c3aed;
+      border-color: #6d28d9;
+      box-shadow: 0 1px 4px rgba(124, 58, 237, 0.45);
     }
     .task-card__mode-pill--research {
-      color: #7dd3fc;
-      background: rgba(56, 189, 248, 0.12);
-      border-color: rgba(56, 189, 248, 0.32);
+      color: #ecfeff;
+      background: #0e7490;
+      border-color: #155e75;
+      box-shadow: 0 1px 4px rgba(14, 116, 144, 0.4);
     }
     .task-card__pending-pill {
       color: var(--severity-warn);

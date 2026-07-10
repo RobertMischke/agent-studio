@@ -7,7 +7,7 @@ import { UndoController } from '../../../services/undo.service';
 import { TaskDetailPrefetchService } from './task-detail-prefetch.service';
 import { TaskSelectionService } from './task-selection.service';
 import { LanePagerService, LANE_LABELS } from './lane-pager.service';
-import { laneLabelFor } from './triage-actions.model';
+import { laneLabelFor, needsPlanningAcceptWarning } from './triage-actions.model';
 
 /**
  * Cycle 10c job-detail-feature controller: orchestrates the triage
@@ -71,7 +71,44 @@ export class TriageController {
    * series. With the lane-pager prefetch already warming the next
    * peer's detail, step 3 is now a synchronous signal flip.
    */
+  /**
+   * Lane-specific move. AGT-2069: accepting a planning task (move to
+   * 6-completed) first passes through the spawn-contract guard — if the task
+   * spawned no follow-up cards and carries no "no follow-up intended"
+   * declaration, a confirm dialog surfaces the AGT-1915 trap and the operator
+   * must explicitly accept anyway. Every other move goes straight through.
+   */
   move(info: TaskInfo, ev: { targetState: string; actionId: string }): void {
+    if (needsPlanningAcceptWarning(info, ev.targetState)) {
+      void this.confirmPlanningAcceptThenMove(info, ev);
+      return;
+    }
+    this.performMove(info, ev);
+  }
+
+  private async confirmPlanningAcceptThenMove(
+    info: TaskInfo,
+    ev: { targetState: string; actionId: string },
+  ): Promise<void> {
+    const ok = await this.confirmDialog.confirm({
+      title: 'Planning task without follow-up cards',
+      message:
+        'This planning task has not spawned any follow-up cards, and no "no follow-up intended" ' +
+        'declaration was made. Accepting it now risks the AGT-1915 trap — a plan approved with no ' +
+        'work ever created. Accept anyway?',
+      detail: info.title || info.id,
+      confirmLabel: 'Accept anyway',
+      cancelLabel: 'Keep in review',
+      kind: 'danger',
+    });
+    if (!ok) {
+      this.clearActing();
+      return;
+    }
+    this.performMove(info, ev);
+  }
+
+  private performMove(info: TaskInfo, ev: { targetState: string; actionId: string }): void {
     const lane = this.jobSelection.triageLaneState ?? info.state;
     const peers = this.jobSelection.triageLanePeers();
     // Capture prev lane + slot BEFORE the optimistic move so undo can

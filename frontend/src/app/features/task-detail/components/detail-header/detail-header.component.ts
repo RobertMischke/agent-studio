@@ -3,7 +3,9 @@ import { TaskInfo, TaskState } from '../../../../models/task.model';
 import {
   formatDateTime as fmtDateTime,
   formatRelativeShort as fmtRelativeShort,
-  stateLabel as fmtStateLabel
+  stateLabel as fmtStateLabel,
+  taskModeIcon,
+  taskModeLabel,
 } from '../../../../services/format.util';
 import { NowTickService } from '../../../../services/now-tick.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
@@ -405,6 +407,26 @@ export class DetailHeaderComponent {
   readonly runActivityBadge = computed(() => buildRunActivityBadge(this.info(), this.nowTick()));
 
   readonly identity = computed(() => projectIdentity(this.info().projectName));
+
+  /**
+   * AGT-2069 — prominent planning/research badge for the detail header. Only
+   * non-coding modes render one, so the header stays quiet for the common case
+   * while a planning-task detail is unmistakably marked "here work is PLANNED".
+   * Glyph + label come from the same source as the board card + create picker.
+   */
+  readonly modeBadge = computed(() => {
+    const mode = this.info().mode;
+    if (mode !== 'planning' && mode !== 'research') return null;
+    return {
+      mode,
+      icon: taskModeIcon(mode),
+      label: taskModeLabel(mode),
+      tooltip:
+        mode === 'planning'
+          ? 'Planning task: read-only. It investigates and proposes the next work; it is only done once it spawns follow-up cards or declares no follow-up intended.'
+          : 'Research task: read-only with web access. It gathers information and reports findings.',
+    };
+  });
 
   stateLabel(state: string): string { return fmtStateLabel(state); }
 

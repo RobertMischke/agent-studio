@@ -338,6 +338,19 @@ public record TaskInfo
     /// runner badge next to the CLI badge and the task-detail run header.
     /// </summary>
     public TaskRunnerInfo? Runner { get; init; }
+
+    /// <summary>
+    /// AGT-2069 — read-time spawn-visibility + spawn-contract projection for a
+    /// planning task (<c>Mode == planning</c>): which follow-up cards it spawned
+    /// (AGT-2028 ledger), whether the operator declared "no follow-up intended",
+    /// and whether the spawn contract is satisfied. Folded on by
+    /// <c>TaskEndpointHelpers.WithRuntime</c> only for planning-mode tasks (two
+    /// small sidecar reads, gated so the perf contract holds); null on every
+    /// coding / research / epic card. Never persisted to <c>task.json</c>. Drives
+    /// the "spawnt: AGT-xxxx" chips, the "no follow-up cards" warning, and the
+    /// accept-dialog guard against the AGT-1915 trap.
+    /// </summary>
+    public PlanningSpawnSummary? PlanningSpawn { get; init; }
 }
 
 /// <summary>

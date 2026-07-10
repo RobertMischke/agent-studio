@@ -4,7 +4,7 @@ import {
   aspectVerdictLabel,
   aspectVerdictTone,
   type AspectVerdictTone,
-} from '../../../../../components/aspect-findings/aspect-findings.model';
+} from '../../../../../../components/aspect-findings/aspect-findings.model';
 import type { AspectDocument } from '../aspect-document.model';
 
 /**

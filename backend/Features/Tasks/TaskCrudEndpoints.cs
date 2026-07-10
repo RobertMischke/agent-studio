@@ -298,6 +298,40 @@ public static class TaskCrudEndpoints
             return Results.Ok(plan with { Attachments = attachments });
         });
 
+        // AGT-2069 — declare (or clear) "bewusst keine Umsetzung" (deliberately
+        // no follow-up) for a planning task. This is the escape hatch that lets a
+        // planning task satisfy the spawn-contract completion gate without
+        // producing follow-up cards, by an explicit operator call rather than a
+        // silent slip past the AGT-1915 trap. Writes the app-owned
+        // .metadata/planning-closure.json sidecar (never task.json) and returns
+        // the recomputed spawn summary so the UI updates without a re-fetch.
+        group.MapPost("/{jobId}/planning-closure", (string jobId, string? watchPath,
+            SetPlanningClosureRequest req,
+            TaskScannerService scanner,
+            ILoggerFactory loggerFactory) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info is null) return Results.NotFound();
+            if (!PlanningCompletionGate.Applies(info.Mode))
+                return Results.BadRequest(new { error = "Only planning tasks carry a follow-up declaration." });
+            if (string.IsNullOrWhiteSpace(info.FolderPath))
+                return Results.BadRequest(new { error = "Task folder is unavailable." });
+
+            var logger = loggerFactory.CreateLogger("PlanningClosure");
+            var ok = PlanningClosureStore.Write(
+                info.FolderPath, req?.Declared ?? false, req?.Reason, req?.DeclaredBy, logger);
+            if (!ok)
+                return Results.Json(new { error = "Failed to persist the planning declaration." },
+                    statusCode: StatusCodes.Status500InternalServerError);
+
+            logger.LogInformation(
+                "planning-closure {Action} for {Project}/{Key} (declared={Declared})",
+                (req?.Declared ?? false) ? "declared" : "cleared",
+                info.ProjectName, info.Key ?? info.Id, req?.Declared ?? false);
+
+            return Results.Ok(BuildPlanningSpawnSummary(info) ?? new PlanningSpawnSummary());
+        });
+
         group.MapPut("/{jobId}/state", async (string jobId, string? watchPath, MoveJobRequest req,
             TaskTransitionService transitions,
             CancellationToken ct) =>
@@ -619,6 +653,13 @@ public static class TaskCrudEndpoints
         return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", TaskStates.All)}");
     }
 }
+
+/// <summary>
+/// AGT-2069 — body for <c>POST /api/tasks/{id}/planning-closure</c>.
+/// <see cref="Declared"/> true records a deliberate "no follow-up intended"
+/// declaration (with an optional <see cref="Reason"/>); false clears it.
+/// </summary>
+public sealed record SetPlanningClosureRequest(bool Declared, string? Reason, string? DeclaredBy);
 
 public sealed record TaskReferenceStatusRequest(IReadOnlyList<string>? Keys);
 
