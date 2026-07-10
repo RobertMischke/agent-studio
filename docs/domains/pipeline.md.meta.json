@@ -98,5 +98,13 @@
       "evidence": []
     }
   ],
-  "nextAction": "Refresh examples after the current board-card terminology is finalized."
+  "nextAction": "Refresh examples after the current board-card terminology is finalized.",
+  "relatedTasks": [
+    {
+      "key": "AGT-2022",
+      "title": "Review-/Aspect-Evidenz: results/ \u002B Task-Branch-Diff statt nur Working-Diff (read-only-Tasks)",
+      "linkedAt": "2026-07-10T15:11:35.547485Z",
+      "source": "auto"
+    }
+  ]
 }
