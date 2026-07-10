@@ -570,14 +570,55 @@
       border: 1px solid rgba(249, 226, 175, 0.28);
       cursor: help;
     }
-    /* F34: dependsOn target not yet complete. Amber-toned "blocked" cue so
-       the operator can see at a glance that a card is gated on another task. */
+    /* AGT-2029: waits-on dependency chip. Clickable (routes to the dependency
+       it names) and state-aware: amber "open" while a dependency is still
+       running (the card is held back from auto-pickup), green "ready" once all
+       dependencies complete, red "cycle" for an unfulfillable dependency cycle
+       (a configuration error). */
     .task-card__waiting-pill {
+      cursor: pointer;
+      white-space: nowrap;
+      font-family: inherit;
+      border: 1px solid transparent;
+      background: transparent;
+      transition:
+        background 0.12s ease,
+        border-color 0.12s ease;
+    }
+    .task-card__waiting-glyph {
+      font-size: 11px;
+      line-height: 1;
+    }
+    .task-card__waiting-pill--open {
       color: var(--severity-warn);
       background: rgba(249, 226, 175, 0.12);
-      border: 1px solid rgba(249, 226, 175, 0.28);
-      cursor: help;
-      white-space: nowrap;
+      border-color: rgba(249, 226, 175, 0.28);
+    }
+    .task-card__waiting-pill--open:hover {
+      background: rgba(249, 226, 175, 0.2);
+      border-color: rgba(249, 226, 175, 0.45);
+    }
+    .task-card__waiting-pill--ready {
+      color: #a6e3a1;
+      background: rgba(166, 227, 161, 0.12);
+      border-color: rgba(166, 227, 161, 0.28);
+    }
+    .task-card__waiting-pill--ready:hover {
+      background: rgba(166, 227, 161, 0.2);
+      border-color: rgba(166, 227, 161, 0.45);
+    }
+    .task-card__waiting-pill--cycle {
+      color: #f38ba8;
+      background: rgba(243, 139, 168, 0.14);
+      border-color: rgba(243, 139, 168, 0.34);
+    }
+    .task-card__waiting-pill--cycle:hover {
+      background: rgba(243, 139, 168, 0.22);
+      border-color: rgba(243, 139, 168, 0.5);
+    }
+    .task-card__waiting-pill:focus-visible {
+      outline: 2px solid var(--studio-accent);
+      outline-offset: 1px;
     }
     /* Auto-loop pill: shown only while the orchestrator is actively
        answering NEEDS_INPUT for this job. Cyan when within budget;

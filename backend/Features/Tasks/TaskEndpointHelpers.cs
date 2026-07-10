@@ -29,13 +29,21 @@ internal static class TaskEndpointHelpers
         CliRouter router,
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId)
-        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey: null);
+        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey: null, waitsOnByJobKey: null);
+
+    internal static TaskInfo WithRuntime(
+        TaskInfo job,
+        CliRouter router,
+        TaskRunnerService runners,
+        IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
+        IReadOnlyDictionary<string, string>? verdictsByJobKey)
+        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey: null);
 
     /// <summary>
-    /// Overlay variant that also folds in per-job orchestrator token totals
-    /// and the latest orchestrator-review verdict. The caller is expected
-    /// to have built both lookups once per request, so this stays O(1) per
-    /// job — the perf contract locked by
+    /// Overlay variant that also folds in per-job orchestrator token totals,
+    /// the latest orchestrator-review verdict, and the AGT-2029 waits-on
+    /// status. The caller is expected to have built the lookups once per
+    /// request, so this stays O(1) per job — the perf contract locked by
     /// <c>JobsEndpointPerfTests.WithRuntime_Over200Jobs_FinishesWellUnderOneSecond</c>
     /// still holds.
     /// </summary>
@@ -44,7 +52,8 @@ internal static class TaskEndpointHelpers
         CliRouter router,
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
-        IReadOnlyDictionary<string, string>? verdictsByJobKey)
+        IReadOnlyDictionary<string, string>? verdictsByJobKey,
+        IReadOnlyDictionary<string, WaitsOnStatus>? waitsOnByJobKey)
     {
         // Lane is the single source of truth for "is this card live". A job
         // outside 3-progress has finished or been moved on; surfacing a stale
@@ -75,6 +84,15 @@ internal static class TaskEndpointHelpers
         if (verdictsByJobKey != null && verdictsByJobKey.TryGetValue(job.TaskKey, out var v))
         {
             verdict = v;
+        }
+        // AGT-2029: fold in the pre-computed waits-on status (which dependsOn
+        // targets are fulfilled / open, blocked, or on a cycle) so the kanban
+        // card can render a state-aware, navigable dependency chip. Only cards
+        // with dependsOn edges get an entry; the rest carry null.
+        WaitsOnStatus? waitsOn = null;
+        if (waitsOnByJobKey != null && waitsOnByJobKey.TryGetValue(job.TaskKey, out var w))
+        {
+            waitsOn = w;
         }
         // Reconcile a stale Warn-class outcome chip against the final verdict: an
         // accepted card must not surface a classifier-unknown/heuristic-done/
@@ -116,8 +134,36 @@ internal static class TaskEndpointHelpers
             },
             SummaryState = summary != null && summary.Status != TaskSummaryStatus.None ? summary : null,
             TokenSummary = tokens,
-            OrchestratorVerdict = verdict
+            OrchestratorVerdict = verdict,
+            WaitsOn = waitsOn
         };
+    }
+
+    /// <summary>
+    /// AGT-2029 — builds a per-TaskKey lookup of waits-on status for the jobs
+    /// that actually carry dependsOn edges. Resolution is <b>archive-inclusive</b>
+    /// (a dependency is fulfilled when its target reaches 6-completed OR
+    /// 7-archive, and the board snapshot omits archive), so the key index is
+    /// built from <see cref="TaskScannerService.ScanAllJobsWithArchive"/> once
+    /// per request. Cards without dependencies are skipped, keeping the common
+    /// case free.
+    /// </summary>
+    internal static Dictionary<string, WaitsOnStatus> BuildWaitsOnLookup(
+        IEnumerable<TaskInfo> jobs,
+        TaskScannerService scanner)
+    {
+        var result = new Dictionary<string, WaitsOnStatus>(StringComparer.Ordinal);
+        var withDeps = jobs.Where(j => j.References?.DependsOn.Count > 0).ToList();
+        if (withDeps.Count == 0) return result;
+
+        // One archive-inclusive index for the whole request; keys are globally
+        // unique across projects, so this resolves cross-project targets too.
+        var index = TaskReferenceIndex.Build(scanner.ScanAllJobsWithArchive());
+        foreach (var job in withDeps)
+        {
+            result[job.TaskKey] = index.EvaluateWaitsOn(job);
+        }
+        return result;
     }
 
     /// <summary>
@@ -220,5 +266,14 @@ internal static class TaskEndpointHelpers
         TaskRunnerService runners,
         IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
         IReadOnlyDictionary<string, string>? verdictsByJobKey)
-        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey) };
+        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey: null) };
+
+    internal static TaskDetail WithRuntime(
+        TaskDetail detail,
+        CliRouter router,
+        TaskRunnerService runners,
+        IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
+        IReadOnlyDictionary<string, string>? verdictsByJobKey,
+        IReadOnlyDictionary<string, WaitsOnStatus>? waitsOnByJobKey)
+        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey, waitsOnByJobKey) };
 }

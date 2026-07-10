@@ -108,12 +108,16 @@
         <span class="task-card__mode-glyph" aria-hidden="true">{{ mb.icon }}</span> {{ mb.label }}
       </span>
     }
-    @if (waitingOnLabel(); as wol) {
-      <span class="task-card__waiting-pill"
-            [cacTooltip]="waitingOnTooltip()"
-            data-testid="task-card-waiting-on">
-        ⏳ waiting on {{ wol }}
-      </span>
+    @if (dependencyChip(); as dep) {
+      <button type="button"
+              class="task-card__waiting-pill"
+              [class]="'task-card__waiting-pill--' + dep.tone"
+              [cacTooltip]="dep.tooltip"
+              [attr.data-tone]="dep.tone"
+              data-testid="task-card-waiting-on"
+              (click)="navigateToDependency(dep, $event)">
+        <span class="task-card__waiting-glyph" aria-hidden="true">{{ dep.glyph }}</span> {{ dep.label }}
+      </button>
     }
     @if (humanReviewBadge(); as hrb) {
       <span class="task-card__human-review-pill"

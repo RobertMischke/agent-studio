@@ -13,6 +13,7 @@ import {
   buildAutoReviewProcessBadge,
   buildCardCtxMenuItems,
   buildCodeReviewGradeBadge,
+  buildDependencyChip,
   buildCommitChainTooltip,
   buildCommitChainView,
   buildCommitEmptyBadge,
@@ -32,6 +33,7 @@ import {
   buildTagChips,
   buildTaskTypeChip,
   buildTokenBubble,
+  resolveDependencyTarget,
   cardNeedsAttention,
   commitChainVariant,
   formatTokens,
@@ -52,6 +54,8 @@ import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { stateLabel } from '../../../../services/format.util';
 import { BoardFiltersService } from '../../state/board-filters.service';
 import { EpicExpansionStore } from '../../state/epic-expansion.service';
+import { TaskSelectionService } from '../../../task-detail';
+import type { DependencyChip } from './task-card-view-model';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
@@ -385,40 +389,10 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   );
 
   /**
-   * F34: dependsOn targets that are known and not yet complete. Drives the
-   * card's `waiting on KEY` badge. Cards with no dependsOn edges short-circuit
-   * before reading the board snapshot, so they never depend on `jobs()` and
-   * the O(N) state lookup is paid only by the few cards that have dependencies.
-   * Targets absent from the current board view are skipped (no false positive),
-   * and completed/archived targets are satisfied.
+   * AGT-2029 waits-on dependency chip from the backend-computed `waitsOn`
+   * status (fulfilled/open per target, blocked, cycle). Null when no deps.
    */
-  readonly waitingOn = computed<string[]>(() => {
-    const deps = this.job().references?.dependsOn ?? [];
-    if (deps.length === 0) return [];
-    const stateByKey = new Map<string, string>();
-    for (const t of this.jobs.jobs()) {
-      const k = (t.key ?? '').trim();
-      if (k) stateByKey.set(k.toUpperCase(), t.state);
-    }
-    return deps.filter((dep) => {
-      const st = stateByKey.get(dep.trim().toUpperCase());
-      if (st === undefined) return false;
-      return st !== TaskState.Completed && st !== TaskState.Archive;
-    });
-  });
-
-  /** Compact badge label: first waiting key, with a "+N" suffix for the rest. */
-  readonly waitingOnLabel = computed<string | null>(() => {
-    const waiting = this.waitingOn();
-    if (waiting.length === 0) return null;
-    return waiting.length === 1 ? waiting[0] : `${waiting[0]} +${waiting.length - 1}`;
-  });
-
-  readonly waitingOnTooltip = computed(() => {
-    const waiting = this.waitingOn();
-    if (waiting.length === 0) return '';
-    return `Waiting on ${waiting.join(', ')} to complete before this task is workable.`;
-  });
+  readonly dependencyChip = computed(() => buildDependencyChip(this.job().waitsOn));
 
   readonly relativeActivity = computed(() => {
     const dateStr = this.job().lastActivity;
@@ -435,6 +409,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   // Context menu: copy actions + epic assignment (way 2).
   private readonly notifications = inject(NotificationService);
   private readonly jobs = inject(TaskService);
+  private readonly selection = inject(TaskSelectionService);
   private readonly boardFilters = inject(BoardFiltersService);
   readonly cardContextMenu = signal<{ x: number; y: number } | null>(null);
   /** Epics in this card's project, loaded on right-click for the assign submenu. */
@@ -443,6 +418,22 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   readonly cardCtxMenuItems = computed(() =>
     buildCardCtxMenuItems(this.job(), this.isEpic(), this.epicsForMenu(), this.subTaskEpicId()),
   );
+
+  /** AGT-2029: open the dependency this card is waiting on (see resolveDependencyTarget). */
+  navigateToDependency(chip: DependencyChip, event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const target = resolveDependencyTarget(chip, this.jobs.jobs());
+    if (target) {
+      this.selection.openDetail(target);
+      return;
+    }
+    this.notifications.info(
+      chip.targetKey
+        ? `${chip.targetKey} is not loaded in the current workspace view.`
+        : 'That dependency could not be opened.',
+    );
+  }
 
   openCardContextMenu(event: MouseEvent): void {
     event.preventDefault();

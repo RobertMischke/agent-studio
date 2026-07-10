@@ -192,6 +192,33 @@ public class TaskScannerService : ITaskScanner
     }
 
     /// <summary>
+    /// AGT-2029 — the live board snapshot plus the terminal <c>7-archive</c>
+    /// lane, in one list. <see cref="ScanAllJobs"/> deliberately omits archive
+    /// (hundreds of terminal cards would bloat every poll), but a waits-on
+    /// dependency is fulfilled once its target reaches <c>6-completed</c> OR
+    /// <c>7-archive</c>, so cross-project fulfillment resolution must be able to
+    /// see archived targets. Cache-backed: O(1) read of the two partitions the
+    /// index cache already built; without a cache a single raw walk already
+    /// includes archive, so this avoids the double disk walk that
+    /// <c>ScanAllJobs().Concat(ScanArchivedJobs())</c> would cost in tests.
+    /// </summary>
+    public List<TaskInfo> ScanAllJobsWithArchive()
+    {
+        if (_indexCache != null)
+        {
+            var live = _indexCache.GetSnapshot();
+            var archived = _indexCache.GetArchiveSnapshot();
+            var combined = new List<TaskInfo>(live.Count + archived.Count);
+            combined.AddRange(live);
+            combined.AddRange(archived);
+            return combined;
+        }
+        // No cache (tests / recovery): the raw disk walk already slim-hydrates
+        // the 7-archive lane, so it is archive-inclusive by construction.
+        return ScanAllJobsRaw();
+    }
+
+    /// <summary>
     /// The uncached disk walk. Always reads from disk; used by
     /// <see cref="TaskIndexCache"/> for refresh and by callers that want to
     /// bypass the cache (tests, recovery paths).

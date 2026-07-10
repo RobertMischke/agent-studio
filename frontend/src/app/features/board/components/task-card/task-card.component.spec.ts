@@ -1463,6 +1463,91 @@ describe('TaskCardComponent external-done badge render', () => {
   });
 });
 
+describe('TaskCardComponent — waits-on dependency chip (AGT-2029)', () => {
+  async function mount(job: TaskInfo) {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', job);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('renders an open, clickable waiting chip from waitsOn', async () => {
+    const fixture = await mount(
+      makeJob({
+        state: '2-ready',
+        references: { dependsOn: ['CAR-3'], relatedTo: [], blockedBy: [], supersedes: [] },
+        waitsOn: {
+          blocked: true,
+          cycleDetected: false,
+          items: [
+            {
+              key: 'CAR-3',
+              resolved: true,
+              fulfilled: false,
+              targetJobId: 'car-3',
+              targetTitle: 'Pricing lib',
+              targetState: '2-ready',
+              targetWatchPath: '/ws/car',
+            },
+          ],
+        },
+      }),
+    );
+    const chip = fixture.nativeElement.querySelector(
+      '[data-testid="task-card-waiting-on"]',
+    ) as HTMLElement | null;
+    expect(chip).toBeTruthy();
+    expect(chip!.tagName).toBe('BUTTON');
+    expect(chip!.getAttribute('data-tone')).toBe('open');
+    expect(chip!.textContent).toContain('waits: CAR-3');
+  });
+
+  it('renders a cycle chip when the dependency graph is cyclic', async () => {
+    const fixture = await mount(
+      makeJob({
+        state: '2-ready',
+        references: { dependsOn: ['APP-2'], relatedTo: [], blockedBy: [], supersedes: [] },
+        waitsOn: {
+          blocked: true,
+          cycleDetected: true,
+          items: [
+            {
+              key: 'APP-2',
+              resolved: true,
+              fulfilled: false,
+              targetJobId: 'app-2',
+              targetTitle: 'B',
+              targetState: '2-ready',
+              targetWatchPath: '/ws/app',
+            },
+          ],
+        },
+      }),
+    );
+    const chip = fixture.nativeElement.querySelector(
+      '[data-testid="task-card-waiting-on"]',
+    ) as HTMLElement | null;
+    expect(chip!.getAttribute('data-tone')).toBe('cycle');
+    expect(chip!.textContent).toContain('dep cycle');
+  });
+
+  it('renders no chip when the card has no dependencies', async () => {
+    const fixture = await mount(makeJob({ state: '2-ready' }));
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="task-card-waiting-on"]'),
+    ).toBeNull();
+  });
+});
+
 function makeJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
     id: 'task-1',

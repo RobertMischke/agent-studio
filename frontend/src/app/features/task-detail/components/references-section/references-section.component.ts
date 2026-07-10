@@ -12,6 +12,7 @@ import { FormsModule } from '@angular/forms';
 import {
   TaskInfo,
   TaskReferenceKind,
+  TaskReferenceLink,
   TaskReferences,
   TASK_REFERENCE_KINDS,
   TaskState,
@@ -74,6 +75,17 @@ export class ReferencesSectionComponent {
     supersedes: '',
   });
 
+  /**
+   * AGT-2029 reverse direction ("blocked-by-me"): the tasks that wait on THIS
+   * one (their dependsOn names this task's key). Loaded on job switch from
+   * `GET /tasks/{id}/dependents?kind=dependsOn`. Empty when nothing depends on
+   * this task or it has no stable key.
+   */
+  readonly blocking = signal<TaskReferenceLink[]>([]);
+
+  /** The section renders when there is either an outgoing ref or an incoming dependent. */
+  readonly hasAnyReferences = computed(() => this.totalCount() > 0 || this.blocking().length > 0);
+
   private lastSeededKey: string | null = null;
   private readonly seed = effect(() => {
     const info = this.info();
@@ -83,11 +95,48 @@ export class ReferencesSectionComponent {
     if (this.lastSeededKey !== info.taskKey) {
       this.lastSeededKey = info.taskKey;
       this.adding.set(false);
+      this.loadBlocking(info);
     }
     if (this.busyKind() === null) {
       this.localRefs.set(cloneRefs(refs));
     }
   });
+
+  /** Fetch the "blocked-by-me" direction for the current task (best-effort). */
+  private loadBlocking(info: TaskInfo): void {
+    this.blocking.set([]);
+    if (!info.key) return; // a keyless task can never be depended on
+    const forKey = info.taskKey;
+    this.tasks.getTaskDependents(info.id, 'dependsOn', info.watchPath).subscribe({
+      next: (links) => {
+        // Ignore a stale response if the user has already switched cards.
+        if (this.lastSeededKey === forKey) this.blocking.set(links ?? []);
+      },
+      error: () => {
+        if (this.lastSeededKey === forKey) this.blocking.set([]);
+      },
+    });
+  }
+
+  /** Short label for an incoming dependent chip: its key (or id) + title. */
+  blockingLabel(link: TaskReferenceLink): string {
+    const key = link.sourceKey ?? link.sourceJobId;
+    return link.sourceTitle ? `${key} — ${truncate(link.sourceTitle, 40)}` : key;
+  }
+
+  /** Navigate to a task that depends on this one. */
+  navigateToBlocking(link: TaskReferenceLink): void {
+    const target = this.tasks
+      .jobs()
+      .find((t) => t.id === link.sourceJobId && t.watchPath === link.sourceWatchPath);
+    if (!target) {
+      this.notifications.info(
+        `${link.sourceKey ?? link.sourceJobId} is not loaded in the current workspace view.`,
+      );
+      return;
+    }
+    this.selection.openDetail(target);
+  }
 
   /** Self key (uppercased for compare); empty when the task has no F33 key. */
   private readonly selfKey = computed(() => (this.info().key ?? '').trim());
@@ -204,8 +253,18 @@ export class ReferencesSectionComponent {
     this.localRefs.set(next);
     this.busyKind.set(kind);
     this.tasks.setTaskReferences(info.id, next, info.watchPath).subscribe({
-      next: () => {
+      next: (res) => {
         this.busyKind.set(null);
+        // AGT-2029: an unknown key is saved (not rejected) - the referenced
+        // task may be created later. Surface it as a non-blocking hint so the
+        // operator knows the edge is open rather than silently mistyped.
+        const warnings = res?.warnings ?? [];
+        if (warnings.length > 0) {
+          const keys = warnings.map((w) => w.target).join(', ');
+          this.notifications.info(
+            `Saved. ${keys} ${warnings.length === 1 ? 'does' : 'do'} not exist yet — the dependency stays open until it is created and completed.`,
+          );
+        }
         this.changed.emit();
       },
       error: (err) => {

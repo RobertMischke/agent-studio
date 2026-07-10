@@ -50,6 +50,18 @@ public sealed class TaskReferenceIndex
         !string.IsNullOrWhiteSpace(key) && _byKey.TryGetValue(key.Trim(), out var t) ? t : null;
 
     /// <summary>
+    /// AGT-2029 — computes <paramref name="job"/>'s waits-on status (which
+    /// dependsOn targets are fulfilled, whether the card is blocked, whether it
+    /// sits on a cycle) against this index. For fulfillment to see targets that
+    /// have reached the terminal <c>7-archive</c> lane, build the index from an
+    /// archive-inclusive snapshot (<c>ScanAllJobs().Concat(ScanArchivedJobs())</c>).
+    /// Delegates to the pure <see cref="WaitsOnEvaluator"/> so the runner pickup
+    /// gate and the endpoint read overlay share one implementation.
+    /// </summary>
+    public WaitsOnStatus EvaluateWaitsOn(TaskInfo job) =>
+        WaitsOnEvaluator.Evaluate(job, _byKey, _dependsOn);
+
+    /// <summary>
     /// Tasks that reference <paramref name="key"/>. Optionally filtered to a
     /// single relation kind (<see cref="TaskReferenceKinds"/>); null returns
     /// every incoming link. Empty when nothing points at the key.

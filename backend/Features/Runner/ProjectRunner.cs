@@ -5889,21 +5889,33 @@ public class ProjectRunner
 
     private sealed record DisplayedPickupCandidate(string State, TaskInfo? Info, ProgressPickupCandidate? Progress);
 
+    // AGT-2029: dedup waits-on cycle warnings. A dependency cycle is a
+    // configuration error that persists until the operator fixes it, so it must
+    // be reported (Issue) but only ONCE per card, not on every idle pickup tick.
+    private readonly HashSet<string> _waitsOnCycleWarned = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _waitsOnCycleGate = new();
+
     private List<TaskInfo> ListReadyPickupCandidatesInDisplayedOrder()
     {
-        var intakeEnabled = _projectSettings.Get(ProjectName).IntakeEnabled == true;
         var settings = _projectSettings.Get(ProjectName);
+        var intakeEnabled = settings.IntakeEnabled == true;
+        var all = _scanner.ScanAllJobs();
+        // AGT-2029 waits-on gate: resolve dependency fulfillment across ALL
+        // projects and lanes. A dependency is satisfied once its target reaches
+        // 6-completed OR 7-archive, and ScanAllJobs omits the archive lane, so
+        // the gate index is built from the archive-inclusive snapshot. Built
+        // once per candidate-list computation, not per card.
+        var waitsOnIndex = TaskReferenceIndex.Build(_scanner.ScanAllJobsWithArchive());
         return LaneSortApplier.Sort(
-                _scanner.ScanAllJobs()
-                    .Where(j => j.ProjectName == ProjectName
+                all.Where(j => j.ProjectName == ProjectName
                                 && j.State == TaskStates.Ready
-                                && IsReadyPickupCandidate(j, intakeEnabled)),
+                                && IsReadyPickupCandidate(j, intakeEnabled, waitsOnIndex)),
                 TaskStates.Ready,
                 _ => settings)
             .ToList();
     }
 
-    private bool IsReadyPickupCandidate(TaskInfo job, bool intakeEnabled)
+    private bool IsReadyPickupCandidate(TaskInfo job, bool intakeEnabled, TaskReferenceIndex waitsOnIndex)
         => AgentTypes.IsAutoPickupEligible(job.Agent)
            // Epics are containers, not work items: their sub-tasks flow through
            // the pipeline, the epic card never code-executes. Skip it hard so it
@@ -5918,7 +5930,57 @@ public class ProjectRunner
            // Rapid-crash backoff: skip a task that just crashed fast until
            // its exponential cooldown elapses (RapidCrashBreaker).
            && !IsInRapidCrashBackoff(job.Id)
-           && IsPickupAllowed(job, intakeEnabled);
+           && IsPickupAllowed(job, intakeEnabled)
+           // AGT-2029: don't pull a card whose waits-on (dependsOn) targets are
+           // not yet fulfilled, or that sits on a dependency cycle. The card
+           // falls out of the candidate list and stays visibly "waiting" on the
+           // board; the tick moves to the next candidate, so a blocked/cyclic
+           // dependency never deadlocks the runner.
+           && !IsBlockedByWaitsOn(job, waitsOnIndex);
+
+    /// <summary>
+    /// AGT-2029 waits-on pickup gate. Returns true when <paramref name="job"/>
+    /// must not be auto-picked because a dependency it waits on is unfulfilled
+    /// (its target has not reached 6-completed/7-archive, or the key is unknown
+    /// / not yet created) or because its dependsOn edges form a cycle. A cycle
+    /// is a configuration error that can never be satisfied: it is reported once
+    /// per card (structured warning + the card's waits-on status drives an error
+    /// chip in the UI) and the card is skipped rather than deadlocking the tick.
+    /// Cross-project + archive-inclusive resolution comes from
+    /// <paramref name="waitsOnIndex"/>.
+    /// </summary>
+    private bool IsBlockedByWaitsOn(TaskInfo job, TaskReferenceIndex waitsOnIndex)
+    {
+        if (job.References == null || job.References.DependsOn.Count == 0) return false;
+
+        var status = waitsOnIndex.EvaluateWaitsOn(job);
+        var cardKey = job.Key ?? job.Id;
+
+        if (status.CycleDetected)
+        {
+            bool firstReport;
+            lock (_waitsOnCycleGate) firstReport = _waitsOnCycleWarned.Add(cardKey);
+            if (firstReport)
+                _logger.LogWarning(
+                    "[taskboard] waits-on cycle on {Job} ({Project}): its dependsOn chain forms a cycle and can never be fulfilled - skipping auto-pickup (configuration error). Fix the dependency chain via the task's references.",
+                    cardKey, ProjectName);
+            return true;
+        }
+
+        // Not cyclic anymore: allow a future warning if a cycle recurs.
+        lock (_waitsOnCycleGate) _waitsOnCycleWarned.Remove(cardKey);
+
+        if (status.Blocked)
+        {
+            var open = string.Join(", ", status.Items.Where(i => !i.Fulfilled).Select(i => i.Key));
+            _logger.LogDebug(
+                "[taskboard] waits-on hold on {Job} ({Project}): waiting on {Open} to reach completed/archive before auto-pickup",
+                cardKey, ProjectName, open);
+            return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// True when a card must never be auto-picked because it is an epic

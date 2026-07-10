@@ -1091,6 +1091,118 @@ export function buildOutcomeIssueBadge(issue: TaskInfo['outcomeIssue']): Outcome
   };
 }
 
+/**
+ * AGT-2029 waits-on dependency chip. Consumes the backend-computed
+ * `waitsOn` status (fulfilled/open per target, blocked, cycle) so the card
+ * shows what the task is waiting on, in which state, and can route to the
+ * target - matching the scheduler's own decision (the runner uses the same
+ * evaluation to gate auto-pickup). Null when the task has no dependencies.
+ *
+ * States: `open` (⏳, at least one dependency not yet complete - the card is
+ * held back from auto-pickup), `ready` (✓, all complete - the card is
+ * workable), `cycle` (⚠, a dependsOn cycle that can never be fulfilled -
+ * a configuration error).
+ */
+export interface DependencyChip {
+  glyph: string;
+  label: string;
+  tone: 'open' | 'ready' | 'cycle';
+  tooltip: string;
+  /** F33 key the chip navigates to on click (first open target, else the first). */
+  targetKey: string | null;
+  /** Direct nav target resolved by the backend (works across lanes/projects, incl. archive). */
+  targetJobId: string | null;
+  targetWatchPath: string | null;
+}
+
+export function buildDependencyChip(waitsOn: TaskInfo['waitsOn']): DependencyChip | null {
+  if (!waitsOn || waitsOn.items.length === 0) return null;
+  const items = waitsOn.items;
+  const tooltip = dependencyTooltip(items, waitsOn.cycleDetected);
+
+  if (waitsOn.cycleDetected) {
+    const primary = items[0];
+    return {
+      glyph: '⚠',
+      label: 'dep cycle',
+      tone: 'cycle',
+      tooltip,
+      targetKey: primary?.key ?? null,
+      targetJobId: primary?.targetJobId ?? null,
+      targetWatchPath: primary?.targetWatchPath ?? null,
+    };
+  }
+
+  const open = items.filter((i) => !i.fulfilled);
+  if (open.length > 0) {
+    const primary = open[0];
+    const extra = open.length - 1;
+    return {
+      glyph: '⏳',
+      label: `waits: ${primary.key}${extra > 0 ? ` +${extra}` : ''}`,
+      tone: 'open',
+      tooltip,
+      targetKey: primary.key,
+      targetJobId: primary.targetJobId ?? null,
+      targetWatchPath: primary.targetWatchPath ?? null,
+    };
+  }
+
+  const primary = items[0];
+  const extra = items.length - 1;
+  return {
+    glyph: '✓',
+    label: `${primary.key}${extra > 0 ? ` +${extra}` : ''}`,
+    tone: 'ready',
+    tooltip,
+    targetKey: primary.key,
+    targetJobId: primary.targetJobId ?? null,
+    targetWatchPath: primary.targetWatchPath ?? null,
+  };
+}
+
+/**
+ * AGT-2029: resolve the task a dependency chip should open. Prefers the
+ * backend-resolved target (jobId + watchPath — correct across projects and
+ * lanes the board snapshot omits, e.g. an archived target), falling back to the
+ * F33 key against the current board snapshot. Null when it is not loaded.
+ */
+export function resolveDependencyTarget(
+  chip: DependencyChip,
+  jobs: readonly TaskInfo[],
+): TaskInfo | null {
+  if (chip.targetJobId) {
+    const byId = jobs.find(
+      (t) => t.id === chip.targetJobId && (!chip.targetWatchPath || t.watchPath === chip.targetWatchPath),
+    );
+    if (byId) return byId;
+  }
+  if (chip.targetKey) {
+    const upper = chip.targetKey.toUpperCase();
+    const byKey = jobs.find((t) => (t.key ?? '').toUpperCase() === upper);
+    if (byKey) return byKey;
+  }
+  return null;
+}
+
+function dependencyTooltip(
+  items: NonNullable<TaskInfo['waitsOn']>['items'],
+  cycle: boolean,
+): string {
+  const lines = items.map((i) => {
+    const mark = i.fulfilled ? '✓' : '◦';
+    const state = i.fulfilled ? 'done' : i.resolved ? 'open' : 'not created yet';
+    const title = i.targetTitle ? ` — ${i.targetTitle.slice(0, 40)}` : '';
+    return `${mark} ${i.key} (${state})${title}`;
+  });
+  const head = cycle
+    ? 'Dependency cycle: this task can never be auto-picked until the chain is fixed via its references.'
+    : items.every((i) => i.fulfilled)
+      ? 'All dependencies complete — this task is workable.'
+      : 'Waiting on these to reach completed/archive before pickup:';
+  return `${head}\n${lines.join('\n')}`;
+}
+
 export function buildLoopTooltip(al: AutoLoopSnapshot): string {
   const tokenLine = `${al.tokensUsed.toLocaleString()} / ${al.maxTokens.toLocaleString()} orchestrator tokens`;
   const startedAt = (() => { try { return new Date(al.startedAt).toLocaleString(); } catch { return al.startedAt; } })();

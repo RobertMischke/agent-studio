@@ -250,6 +250,19 @@ public record TaskInfo
     public TaskReferences References { get; init; } = new();
 
     /// <summary>
+    /// AGT-2029 — read-time "waits-on" projection derived from
+    /// <see cref="References"/>.<c>DependsOn</c> against the whole workspace
+    /// (all projects, all lanes including archive). Tells the card which
+    /// dependencies are fulfilled vs still open, whether the card is blocked,
+    /// and whether it sits on a dependency cycle. Never persisted to
+    /// <c>task.json</c>; folded on by the endpoint read overlay
+    /// (<c>TaskEndpointHelpers.WithRuntime</c>) and computed independently by
+    /// the runner pickup gate. Null when the task has no dependsOn edges. See
+    /// <see cref="WaitsOnEvaluator"/>.
+    /// </summary>
+    public WaitsOnStatus? WaitsOn { get; init; }
+
+    /// <summary>
     /// Append-only commit-provenance record (ASS-1724): the task's worktree
     /// branch, its fork-point base, the per-lane-transition anchors, and the
     /// develop-merge block. Written by the single recording hook in

@@ -103,23 +103,37 @@ public record TaskReferenceError(
     string Target,
     string Message);
 
-/// <summary>Outcome of <see cref="TaskReferenceValidator.Validate"/>.</summary>
-public record TaskReferenceValidationResult(IReadOnlyList<TaskReferenceError> Errors)
+/// <summary>
+/// Outcome of <see cref="TaskReferenceValidator.Validate"/>. Splits hard
+/// <see cref="Errors"/> (self-reference, dependsOn cycle) that block the write
+/// from non-blocking <see cref="Warnings"/> (AGT-2029: an unknown key is
+/// allowed because the referenced task may be created later; it surfaces as an
+/// open dependency chip instead of a 400).
+/// </summary>
+public record TaskReferenceValidationResult(
+    IReadOnlyList<TaskReferenceError> Errors,
+    IReadOnlyList<TaskReferenceError> Warnings)
 {
     public bool IsValid => Errors.Count == 0;
+    public bool HasWarnings => Warnings.Count > 0;
 
-    public static readonly TaskReferenceValidationResult Ok = new(Array.Empty<TaskReferenceError>());
+    public static readonly TaskReferenceValidationResult Ok =
+        new(Array.Empty<TaskReferenceError>(), Array.Empty<TaskReferenceError>());
 }
 
 /// <summary>
 /// Pure, dependency-free validation for F34 references. Lives in the Shared
-/// library so it is unit-testable without the web host. Three rules from the
+/// library so it is unit-testable without the web host. Rules from the
 /// acceptance criteria:
 /// <list type="number">
-/// <item>referenced keys must exist (else <see cref="TaskReferenceErrorCode.UnknownKey"/>);</item>
-/// <item>no self-reference (<see cref="TaskReferenceErrorCode.SelfReference"/>);</item>
-/// <item>dependsOn stays a DAG — a new edge that closes a cycle is rejected
-/// (<see cref="TaskReferenceErrorCode.DependsOnCycle"/>).</item>
+/// <item>no self-reference — hard error (<see cref="TaskReferenceErrorCode.SelfReference"/>);</item>
+/// <item>dependsOn stays a DAG — a new edge that closes a cycle is a hard error
+/// (<see cref="TaskReferenceErrorCode.DependsOnCycle"/>);</item>
+/// <item>referenced keys should exist, but an unknown key is a non-blocking
+/// <b>warning</b>, not a hard failure (AGT-2029): the operator may name a
+/// waits-on target that is created later. It lands in
+/// <see cref="TaskReferenceValidationResult.Warnings"/> and the write still
+/// persists (<see cref="TaskReferenceErrorCode.UnknownKey"/>).</item>
 /// </list>
 /// Cycle detection is O(V+E) DFS over the existing dependsOn graph with the
 /// edited task's outgoing edges swapped for the proposed ones.
@@ -177,6 +191,7 @@ public static class TaskReferenceValidator
         var self = NormalizeKey(selfKey);
         var norm = Normalize(proposed);
         var errors = new List<TaskReferenceError>();
+        var warnings = new List<TaskReferenceError>();
 
         foreach (var (kind, target) in norm.Enumerate())
         {
@@ -184,10 +199,14 @@ public static class TaskReferenceValidator
                 errors.Add(new TaskReferenceError(
                     TaskReferenceErrorCode.SelfReference, kind, target,
                     $"A task cannot reference itself ({target})."));
+            // AGT-2029: an unknown key is a warning, not a hard failure. The
+            // operator may name a waits-on target that does not exist yet (it is
+            // created later); persist the edge and surface it as an open
+            // dependency chip rather than rejecting the whole write.
             else if (!knownKeys.Contains(target))
-                errors.Add(new TaskReferenceError(
+                warnings.Add(new TaskReferenceError(
                     TaskReferenceErrorCode.UnknownKey, kind, target,
-                    $"Referenced task '{target}' does not exist."));
+                    $"Referenced task '{target}' does not exist yet."));
         }
 
         // Only run cycle detection on edges that exist and are not self-edges;
@@ -203,7 +222,7 @@ public static class TaskReferenceValidator
                 cycle[^1],
                 $"dependsOn would create a cycle: {string.Join(" → ", cycle)}."));
 
-        return new TaskReferenceValidationResult(errors);
+        return new TaskReferenceValidationResult(errors, warnings);
     }
 
     /// <summary>

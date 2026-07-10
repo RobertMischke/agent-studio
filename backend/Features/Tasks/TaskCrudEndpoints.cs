@@ -19,7 +19,8 @@ public static class TaskCrudEndpoints
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
-            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup)).ToList();
+            var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
+            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup)).ToList();
             if (TaskQueryRequest.FromQuery(ctx.Request.Query) is { IsActive: true } query)
             {
                 var response = TaskQueryEngine.Execute(jobs, query);
@@ -36,7 +37,8 @@ public static class TaskCrudEndpoints
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
-            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup)).ToList();
+            var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
+            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup)).ToList();
             // F35: each lane is sorted using a per-project strategy. The kanban
             // mixes projects inside one lane, so the sort groups by project,
             // applies that project's resolved strategy, then concatenates the
@@ -188,7 +190,8 @@ public static class TaskCrudEndpoints
             detail = JobCommitsAggregation.WithReconstructedInProgressCommits(detail, sessions, watchPath, git);
             var tokenLookup = BuildTokenLookup(new[] { detail.Info }, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(new[] { detail.Info }, configuration);
-            return Results.Ok(WithRuntime(detail, router, runners, tokenLookup, verdictLookup));
+            var waitsOnLookup = BuildWaitsOnLookup(new[] { detail.Info }, scanner);
+            return Results.Ok(WithRuntime(detail, router, runners, tokenLookup, verdictLookup, waitsOnLookup));
         });
 
         // Promote a finished planning task to a pre-filled coding task. Returns
@@ -457,12 +460,14 @@ public static class TaskCrudEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        // F34: replace-all write of the structured cross-reference object.
-        // Validated against the whole workspace before persisting: every
-        // referenced key must exist, a task may not reference itself, and the
-        // dependsOn graph must stay a DAG (no cycles). A validation failure
-        // returns 400 with a per-edge error list so the FE can mark the
-        // offending chip. The 200 body echoes the normalised references.
+        // F34 / AGT-2029: replace-all write of the structured cross-reference
+        // object. Validated against the whole workspace (archive-inclusive so an
+        // already-completed/archived waits-on target still resolves): a task may
+        // not reference itself and the dependsOn graph must stay a DAG (no
+        // cycles) - both hard errors returning 400 with a per-edge list. An
+        // unknown key is NOT a hard failure (AGT-2029): the waits-on target may
+        // be created later, so the write persists and the unknown edges come
+        // back as `warnings` for the FE to surface as an open dependency chip.
         group.MapPut("/{jobId}/references", (string jobId, string? watchPath, SetTaskReferencesRequest req,
             TaskScannerService scanner, TaskMutationService mutations) =>
         {
@@ -470,7 +475,7 @@ public static class TaskCrudEndpoints
             if (info == null) return Results.NotFound();
 
             var proposed = (req ?? new SetTaskReferencesRequest()).ToReferences();
-            var index = TaskReferenceIndex.Build(scanner.ScanAllJobs());
+            var index = TaskReferenceIndex.Build(scanner.ScanAllJobsWithArchive());
             var validation = TaskReferenceValidator.Validate(
                 info.Key ?? "", proposed, index.KnownKeys, index.DependsOnGraph);
 
@@ -488,7 +493,18 @@ public static class TaskCrudEndpoints
                 });
 
             var success = mutations.SetTaskReferences(jobId, proposed, watchPath);
-            return success ? Results.Ok(proposed) : Results.NotFound();
+            if (!success) return Results.NotFound();
+            return Results.Ok(new
+            {
+                references = proposed,
+                warnings = validation.Warnings.Select(w => new
+                {
+                    code = w.Code.ToString(),
+                    kind = w.Kind,
+                    target = w.Target,
+                    message = w.Message
+                })
+            });
         });
 
         // F34 reverse-index: tasks that reference this one. Optional ?kind=

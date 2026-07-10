@@ -70,16 +70,40 @@ public class TaskReferencesTests : IDisposable
     }
 
     [Fact]
-    public void Validate_UnknownKey_IsRejected()
+    public void Validate_UnknownKey_IsWarningNotError()
     {
         var proposed = new TaskReferences { DependsOn = new() { "ATP-999" } };
         var result = TaskReferenceValidator.Validate(
             "ATP-1", proposed, Keys("ATP-1", "ATP-2"), Graph());
 
-        Assert.False(result.IsValid);
-        var err = Assert.Single(result.Errors);
-        Assert.Equal(TaskReferenceErrorCode.UnknownKey, err.Code);
-        Assert.Equal("ATP-999", err.Target);
+        // AGT-2029: an unknown key no longer blocks the write - the referenced
+        // (waits-on) task may be created later. It surfaces as a warning and the
+        // write still persists.
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Errors);
+        Assert.True(result.HasWarnings);
+        var warn = Assert.Single(result.Warnings);
+        Assert.Equal(TaskReferenceErrorCode.UnknownKey, warn.Code);
+        Assert.Equal("ATP-999", warn.Target);
+    }
+
+    [Fact]
+    public void Validate_SelfReferenceAndCycle_StayHardErrors()
+    {
+        // Self-reference is a hard error even though unknown keys are lenient.
+        var self = TaskReferenceValidator.Validate(
+            "ATP-1", new TaskReferences { DependsOn = new() { "ATP-1" } },
+            Keys("ATP-1"), Graph());
+        Assert.False(self.IsValid);
+        Assert.Contains(self.Errors, e => e.Code == TaskReferenceErrorCode.SelfReference);
+
+        // A dependsOn cycle among existing keys is a hard error (rejected on write).
+        var graph = Graph(("ATP-2", new[] { "ATP-1" }));
+        var cycle = TaskReferenceValidator.Validate(
+            "ATP-1", new TaskReferences { DependsOn = new() { "ATP-2" } },
+            Keys("ATP-1", "ATP-2"), graph);
+        Assert.False(cycle.IsValid);
+        Assert.Contains(cycle.Errors, e => e.Code == TaskReferenceErrorCode.DependsOnCycle);
     }
 
     [Fact]

@@ -716,17 +716,19 @@ export class TaskService {
   }
 
   /**
-   * F34: replace-all write of a task's cross-references. Each list becomes the
-   * full set for its relation kind; the backend validates (keys must exist, no
-   * self-reference, dependsOn stays a DAG) and returns 400 with a per-edge
-   * `errors[]` body on rejection. Returns the persisted references on success.
+   * F34 / AGT-2029: replace-all write of a task's cross-references. Each list
+   * becomes the full set for its relation kind. Hard errors (self-reference,
+   * dependsOn cycle) return 400 with a per-edge `errors[]` body. An unknown key
+   * is NOT a hard failure - the waits-on target may be created later - so the
+   * write persists and the unknown edges come back as `warnings[]`. Returns the
+   * `{ references, warnings }` envelope on success.
    */
   setTaskReferences(
     jobId: string,
     references: import('../models/task.model').TaskReferences,
     watchPath?: string,
   ) {
-    return this.http.put<import('../models/task.model').TaskReferences>(
+    return this.http.put<import('../models/task.model').SetTaskReferencesResponse>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/references`,
       references,
       this.withWatchPath(watchPath),

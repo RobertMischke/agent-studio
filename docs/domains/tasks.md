@@ -74,7 +74,11 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   Processing.
 - `5-human-review` is where the user gets the final say. The orchestrator does
   not move a task directly from auto-review to completed.
-- Only `2-ready` and `3-progress` tasks can be started.
+- Only `2-ready` and `3-progress` tasks can be started. A `2-ready` card is
+  additionally held back from auto-pickup while its `references.dependsOn`
+  ("waits-on") targets are unfulfilled (AGT-2029); see the waits-on gate in
+  [runner.md](./runner.md) and the `references` field in
+  [../contracts/filesystem.md](../contracts/filesystem.md).
 - Successful CLI runs move from `3-progress` to `4-auto-review` through
   application code. Failed or stopped runs remain inspectable.
 - Direct filesystem access by app code is restricted to the bounded service

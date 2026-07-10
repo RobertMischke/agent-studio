@@ -102,6 +102,46 @@ export interface TaskReferenceLink {
   kind: TaskReferenceKind | string;
 }
 
+/**
+ * AGT-2029: one resolved (or unresolved) waits-on dependency. Mirrors backend
+ * `WaitsOnItem`. Carries enough of the target task for the card chip to render
+ * its state and route to it - including targets in lanes the board snapshot
+ * omits (e.g. archived), which is why the backend resolves this server-side.
+ */
+export interface WaitsOnItem {
+  key: string;
+  resolved: boolean;
+  fulfilled: boolean;
+  targetJobId?: string | null;
+  targetTitle?: string | null;
+  targetState?: string | null;
+  targetWatchPath?: string | null;
+}
+
+/**
+ * AGT-2029: read-time waits-on status derived from `references.dependsOn`
+ * against the whole workspace (all projects, all lanes incl. archive). Mirrors
+ * backend `WaitsOnStatus`. Present only on cards that have dependsOn edges;
+ * drives the state-aware, navigable dependency chip on the board card.
+ */
+export interface WaitsOnStatus {
+  items: WaitsOnItem[];
+  /** At least one dependency is not yet fulfilled (open or unknown). */
+  blocked: boolean;
+  /** The card sits on a dependsOn cycle - a configuration error. */
+  cycleDetected: boolean;
+}
+
+/**
+ * Response body of `PUT /api/tasks/{id}/references` (AGT-2029). The write now
+ * persists even when a referenced key is unknown; those edges come back as
+ * `warnings` (the target may be created later) rather than a 400.
+ */
+export interface SetTaskReferencesResponse {
+  references: TaskReferences;
+  warnings: { code: string; kind: string; target: string; message: string }[];
+}
+
 export interface TaskInfo {
   id: string;
   taskKey: string;
@@ -245,6 +285,14 @@ export interface TaskInfo {
    * detail-view reference section and the card `waiting on KEY` badge.
    */
   references?: TaskReferences;
+  /**
+   * AGT-2029: read-time waits-on status derived from `references.dependsOn`
+   * against the whole workspace (all projects, all lanes incl. archive). Mirrors
+   * backend `TaskInfo.WaitsOn`. Present (non-null) only on cards that carry
+   * dependsOn edges; drives the state-aware, clickable dependency chip on the
+   * board card. Null/absent means "no dependencies".
+   */
+  waitsOn?: WaitsOnStatus | null;
   /**
    * Append-only commit-provenance record (ASS-1724). Mirrors backend
    * `TaskInfo.Provenance` and ships on every board card so the git-state pill
