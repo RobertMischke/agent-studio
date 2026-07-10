@@ -760,6 +760,23 @@ export class TaskService {
   }
 
   /**
+   * AGT-2050 batch projection (the same one the inline microcard hydrator uses):
+   * resolve a set of task keys to their compact live-or-ghost reference status.
+   * Keys whose project short-code is unknown are dropped by the backend, so the
+   * result may be shorter than the input; a known key with no live task comes
+   * back as a ghost (`exists === false`). Reused by the wiki cross-reference
+   * panel so a wiki page renders its related tasks with the very same microcard.
+   */
+  getReferenceStatuses(keys: string[]) {
+    return this.http
+      .post<{ items: import('../components/task-reference-microcard/task-reference-microcard').TaskReferenceStatus[] }>(
+        `${this.baseUrl}/tasks/reference-status`,
+        { keys },
+      )
+      .pipe(map((r) => r.items ?? []));
+  }
+
+  /**
    * The deployment-configured default CLI + model for the code-review step.
    * The panel seeds its picker from this when the operator has no remembered
    * last-used pair, so a `CodeReviewStep:DefaultModel` set in appsettings
