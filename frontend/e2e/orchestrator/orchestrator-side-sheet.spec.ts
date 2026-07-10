@@ -149,7 +149,7 @@ test.describe('Orchestrator side sheet', () => {
     const settingsBtn = page.getByTestId('orch-side-sheet-settings');
     await expect(settingsBtn).toBeVisible();
     await settingsBtn.click();
-    const settingsView = page.getByTestId('workspace-settings-overlay');
+    const settingsView = page.getByTestId('workspace-settings-inline');
     await expect(settingsView).toBeVisible();
     await expect(page.getByTestId('orchestrator-config-overlay')).toBeVisible();
     await expect(page.getByTestId('orchestrator-logic-panel')).toBeVisible();
@@ -168,7 +168,8 @@ test.describe('Orchestrator side sheet', () => {
     await page.waitForTimeout(150);
     await page.screenshot({ path: `${SHOTS}/07-settings-rail-nav.png`, fullPage: false });
 
-    await page.getByTestId('workspace-settings-close').click();
+    await page.getByRole('tab').filter({ hasText: 'Workspace settings' })
+      .getByRole('button', { name: 'Close tab' }).click();
     await expect(settingsView).toHaveCount(0);
 
     // Final close.

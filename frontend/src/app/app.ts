@@ -875,6 +875,10 @@ export class App implements OnInit, OnDestroy {
    * the one consolidated Settings view (Global group).
    */
   openOrchestratorSettings(): void {
+    if (this.featureFlags.vsCodeLayout()) {
+      this.openWorkspaceSettingsInStudio('orchestrator');
+      return;
+    }
     this.workspaceOverlays.openOrchestrator();
   }
 
