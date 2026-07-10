@@ -78,11 +78,20 @@ This is epic-sized; split into slices rather than a big-bang change:
   `TaskMutationService.ResolveRequestedWatchPath` resolve a Kürzel or `PROJ-NNN`
   handle to a storage location; the task-create DTO grew a preferred `Project`
   field (`WatchPath` kept as a deprecated fallback). Covered by
-  `backend.Tests/CreateTaskByProjectHandleTests.cs`. Remaining 2a work: promote
-  the resolver into a shared service and reuse it from the other endpoints that
-  still take a raw `watchPath`.
-- Phase 2b: endpoints accept `project` and resolve internally; `watchPath` stays
-  accepted but deprecated, and is dropped from responses.
+  `backend.Tests/CreateTaskByProjectHandleTests.cs`.
+- Phase 2b (**GET/update/delete paths done**): the read / update / delete task
+  endpoints in `TaskCrudEndpoints.cs` now accept a path-free `?project=` handle
+  (Kürzel or `PROJ-NNN`) alongside the deprecated `?watchPath=`. The shared
+  `TaskEndpointHelpers.ResolveWatchPath(projects, project, watchPath)` resolves it
+  through the registry — `project` wins when set, an unknown handle falls through
+  to `watchPath` (so a stale handle can never silently target another project),
+  and `watchPath` stays accepted for legacy callers. `POST
+  /{jobId}/change-project` likewise resolves the destination via a new
+  `ChangeProjectRequest.TargetProject`. Covered by
+  `backend.Tests/TaskEndpointProjectHandleResolutionTests.cs`. Remaining 2b work:
+  extend the same handle to the sibling task endpoint groups (files, runner, git,
+  review-evidence, …) that still bind a raw `watchPath`, and drop the raw path
+  from responses.
 - Phase 2c: frontend sends `shortCode` or `projectId`; unwind
   `projectStorageByName` and `normalizeStorage` where possible.
 

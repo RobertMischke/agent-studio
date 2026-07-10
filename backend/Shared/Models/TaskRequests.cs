@@ -398,6 +398,19 @@ public record TaskOrderItem
 
 public record ChangeProjectRequest
 {
+    /// <summary>
+    /// Preferred, path-free handle of the destination project: a short code /
+    /// Kürzel (e.g. <c>ASS</c>) or a stable <c>PROJ-NNN</c> id. Resolved
+    /// server-side to the project's storage location; wins over the deprecated
+    /// <see cref="TargetWatchPath"/> when set.
+    /// </summary>
+    public string? TargetProject { get; init; }
+
+    /// <summary>
+    /// Deprecated absolute filesystem path of the destination project. Retained
+    /// for legacy callers during the watchPath-encapsulation migration; new
+    /// callers should send <see cref="TargetProject"/> instead.
+    /// </summary>
     public string TargetWatchPath { get; init; } = "";
 }
 

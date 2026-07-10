@@ -123,6 +123,10 @@ public class TaskFolderAccessIsolationTest
                 "npm staging-orphan Directory.Delete under %AppData%/Roaming/npm, not the job-folder tree.",
             ["backend/Features/Cli/Execution/RunLogStore.cs"] =
                 "Owns the per-run log directory lifecycle (run-context dirs), not lane folders.",
+            ["backend/Features/Cli/Execution/CleanContextPreparation.cs"] =
+                "Tears down the per-run clean-context temp CLI config home (OS temp dir), not the job-folder tree.",
+            ["backend/Features/Cli/Execution/CliWorkingMemoryService.cs"] =
+                "Deletes a CLI's own working-memory state under its config home (guarded by a known-state whitelist), not lane folders.",
 
             // Wiki git-ops (2026-06-10): physical folder move/delete inside the
             // project's CODE repo docs/ tree (git-backed wiki reorganisation),

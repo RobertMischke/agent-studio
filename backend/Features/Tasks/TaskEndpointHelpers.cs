@@ -10,6 +10,33 @@ namespace AgentStudio.Tasks;
 /// </summary>
 internal static class TaskEndpointHelpers
 {
+    /// <summary>
+    /// Phase 2b of the watchPath-encapsulation cleanup (ASS-1760): the external
+    /// API addresses a project by a path-free handle — a short code / Kürzel
+    /// (e.g. <c>ASS</c>) or a stable <c>PROJ-NNN</c> id — and the server resolves
+    /// it to the project's storage watchPath here, so the filesystem layout never
+    /// has to travel over the wire as a query parameter. The deprecated
+    /// <paramref name="watchPath"/> query param is still honoured for legacy
+    /// callers during the migration; when <paramref name="project"/> is set it
+    /// wins. An unknown handle falls through to <paramref name="watchPath"/>
+    /// (usually null), so the read/mutation lands on its own not-found path
+    /// rather than silently targeting the wrong project.
+    /// </summary>
+    internal static string? ResolveWatchPath(
+        AgentStudio.Registry.ProjectRegistry projects,
+        string? project,
+        string? watchPath)
+    {
+        if (string.IsNullOrWhiteSpace(project)) return watchPath;
+
+        var handle = project.Trim();
+        var record = handle.StartsWith("PROJ-", StringComparison.OrdinalIgnoreCase)
+            ? projects.FindById(handle)
+            : projects.FindByShortCode(handle);
+
+        return record is { StorageLocation: { Length: > 0 } storage } ? storage : watchPath;
+    }
+
     internal static IResult MoveResult(MoveJobOutcome outcome) => outcome.Status switch
     {
         MoveJobStatus.Success => Results.Ok(),
