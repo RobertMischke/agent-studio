@@ -8,14 +8,14 @@ Imports via `from './features/shell'`. See [`index.ts`](./index.ts).
 
 **State services**:
 
-- `UiPreferencesService` — `taskNavCollapsed`, `compactCards`, `sideSheetWidth` (persisted to localStorage).
-- `WorkspaceOverlaysService` — drives one global Workspace-settings home: `settingsOpen` + `section` (`overview` / `caps` / `prompts` / `tokens` / `screenshots` / `summary`) with URL-hash sync (`#/workspace/settings`, `#/workspace/settings/caps`, `#/workspace/settings/prompts`, `#/workspace/tokens`, `#/workspace/screenshots`, `#/workspace/summary`). Legacy `tokensOpen` / `screenshotsOpen` / `summaryOpen` / `cliAdminOpen` remain as section-derived computeds so older callers and deep-links keep resolving.
+- `UiPreferencesService` — `taskNavCollapsed`, `sideSheetWidth` (persisted to localStorage). The abolished `compactCards` card-density pref was removed (AGT-2035) and its stored key is cleared on boot.
+- `WorkspaceOverlaysService` — drives one global Workspace-settings home: `settingsOpen` + `section` grouped General / Global / Workspace: `overview` (General); `appearance` / `updates` / `workspaces` (Global); `caps` / `working-memory` / `prompts` / `tokens` / `screenshots` (Workspace). URL-hash sync (`#/workspace/settings`, `#/workspace/settings/{caps,prompts,appearance,updates,workspaces,working-memory}`, and the legacy `#/workspace/tokens` / `#/workspace/screenshots`). The retired `summary` section is gone; its `#/workspace/summary` / `#/summary` deep-links now resolve to `overview` (migration: no crash). Legacy `tokensOpen` / `screenshotsOpen` / `cliAdminOpen` / `promptAdminOpen` remain as section-derived computeds so older callers and deep-links keep resolving.
 
 **Components**:
 
 - `StatusBarComponent` — bottom strip: default-CLI picker, default-model per CLI, header-quota donut, usage-hover-panel host, and a single "Settings" entry that opens the Workspace-settings home.
 - `WorkspaceBannerComponent` — top strip: surfaces the latest orchestrator-review decision across active projects ("Orchestrator decided X for Y") for at least 30 s.
-- `WorkspaceOverlaysComponent`: the global Workspace-settings home is a rail+panel "Dach" (mirroring project settings) whose sections embed CLI Management, system prompts, token timeline, visual evidence, and summary surfaces. CLI Management includes models, completion contracts, usage caps, sessions, and working memory. Each section keeps its legacy outer test id on the active panel so old deep-links and specs still resolve.
+- `WorkspaceOverlaysComponent`: the one consolidated Workspace-settings view (AGT-2035) — a rail+panel grouped General / Global / Workspace. Global sections: Appearance (Theme + activity-bar side), Updates, Workspaces (registry management, moved off the sidebar). Workspace sections: Usage caps (CLI Management — models, completion-contracts explainer, quota caps, sessions), Working memory (extracted from Usage caps into its own section), System prompts, Token usage (the single usage area — timeline + usage detail relocated here, no double display), Visual evidence. Each section keeps its legacy outer test id on the active panel so old deep-links and specs still resolve.
 
 ## Notable
 

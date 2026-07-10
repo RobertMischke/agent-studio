@@ -29,6 +29,7 @@ async function stub(page: Page) {
   await page.route('**/api/runner/status', json({ projects: {} }));
   await page.route('**/api/cli/quota', json({ ttlMs: 1, snapshots: [] }));
   await page.route('**/api/cli/quota/caps', json({ defaultCapPct: 95, caps: {} }));
+  await page.route('**/api/cli/quota/model-routes', json({ profiles: {} }));
   await page.route('**/api/cli/contracts', json([]));
   await page.route('**/api/cli/working-memory*', json({ available: false, root: null, capturedAt: new Date().toISOString(), entries: [] }));
   await page.route('**/api/cli/sessions*', json({ sessions: [] }));

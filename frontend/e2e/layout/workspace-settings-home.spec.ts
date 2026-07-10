@@ -48,6 +48,11 @@ async function stubBackgroundApis(page: Page) {
   }));
   await page.route('**/api/cli/quota', json({ ttlMs: 600_000, snapshots: [] }));
   await page.route('**/api/cli/quota/caps', json({ defaultCapPct: 95, caps: {} }));
+  // The CLI-admin (Usage caps) section pulls model-route profiles via the quota
+  // feature. Stub it too, else an unstubbed call falls through to the dev
+  // server's SPA index.html and the app's generic HTTP handler pops an error
+  // dialog (only reachable with no backend up).
+  await page.route('**/api/cli/quota/model-routes', json({ profiles: {} }));
   await page.route('**/api/cli/usage', json({ entries: [] }));
   await page.route('**/api/cli/contracts', json([]));
   await page.route('**/api/cli/*/models*', json({ models: [], source: 'stubbed' }));
@@ -147,7 +152,10 @@ test.describe('Workspace settings home (Dach)', () => {
       await expect(page.getByTestId(`workspace-settings-card-${key}`)).toBeVisible();
       await expect(page.getByTestId(`workspace-settings-rail-${key}`)).toBeVisible();
     }
-    await expect(page.getByTestId('workspace-settings-rail-caps')).toContainText('CLI Management');
+    // AGT-2035: the consolidated rail labels this section "Usage caps" (the
+    // operator's directive-9 name); the CLI-admin panel it hosts is what used to
+    // be called "CLI Management". Assert the shipped rail label.
+    await expect(page.getByTestId('workspace-settings-rail-caps')).toContainText('Usage caps');
 
     await page.screenshot({ path: join(SHOT_DIR, 'workspace-settings-overview--mocked.png'), fullPage: false });
   });
