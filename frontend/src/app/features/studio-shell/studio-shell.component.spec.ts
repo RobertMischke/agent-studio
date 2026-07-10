@@ -348,6 +348,139 @@ describe('StudioShellComponent project lane counts', () => {
     expect(component.projectRows().find(row => row.name === 'Project A')?.laneCounts)
       .toEqual({ ready: 0, progress: 2, humanReview: 0 });
   });
+
+  it('folds escalated cards into the green Human Review chip', () => {
+    const { component, taskService } = configure();
+    taskService.grouped.set({
+      backlog: [],
+      preparation: [],
+      orchestratorPrep: [],
+      ready: [],
+      progress: [],
+      failedPickup: [],
+      codeNotComplete: [],
+      autoReview: [],
+      humanReview: [
+        task({ id: 'a-review-1', taskKey: 'watch::a-review-1', projectName: 'Project A', state: '5-human-review' }),
+      ],
+      escalated: [
+        task({ id: 'a-esc-1', taskKey: 'watch::a-esc-1', projectName: 'Project A', state: '5e-escalated' }),
+        task({ id: 'a-esc-2', taskKey: 'watch::a-esc-2', projectName: 'Project A', state: '5e-escalated' }),
+      ],
+      review: [],
+      completed: [],
+      archive: [],
+    });
+
+    const projectA = component.projectRows().find(row => row.name === 'Project A');
+    // 1 human-review + 2 escalated -> the green chip counts all three.
+    expect(projectA?.laneCounts.humanReview).toBe(3);
+    expect(projectA?.totalJobs).toBe(3);
+  });
+
+  it('keeps Delivered/Completed and Backlog out of every counter', () => {
+    const { component, taskService } = configure();
+    taskService.grouped.set({
+      backlog: [
+        task({ id: 'a-backlog-1', taskKey: 'watch::a-backlog-1', projectName: 'Project A', state: '0-backlog' }),
+      ],
+      preparation: [],
+      orchestratorPrep: [],
+      ready: [
+        task({ id: 'a-ready-1', taskKey: 'watch::a-ready-1', projectName: 'Project A', state: '2-ready' }),
+      ],
+      progress: [],
+      failedPickup: [],
+      codeNotComplete: [],
+      autoReview: [],
+      humanReview: [],
+      escalated: [],
+      review: [],
+      completed: [
+        task({ id: 'a-done-1', taskKey: 'watch::a-done-1', projectName: 'Project A', state: '6-completed' }),
+        task({ id: 'a-done-2', taskKey: 'watch::a-done-2', projectName: 'Project A', state: '6-completed' }),
+      ],
+      archive: [],
+    });
+
+    const projectA = component.projectRows().find(row => row.name === 'Project A');
+    // Only the single Ready card is active work; 2 delivered + 1 backlog count nowhere.
+    expect(projectA?.laneCounts).toEqual({ ready: 1, progress: 0, humanReview: 0 });
+    expect(projectA?.totalJobs).toBe(1);
+  });
+
+  it('does not double-count auto-review cards through the legacy `review` alias', () => {
+    const { component, taskService } = configure();
+    const autoReviewCards = [
+      task({ id: 'a-auto-1', taskKey: 'watch::a-auto-1', projectName: 'Project A', state: '4-auto-review' }),
+      task({ id: 'a-auto-2', taskKey: 'watch::a-auto-2', projectName: 'Project A', state: '4-auto-review' }),
+    ];
+    taskService.grouped.set({
+      backlog: [],
+      preparation: [],
+      orchestratorPrep: [],
+      ready: [
+        task({ id: 'a-ready-1', taskKey: 'watch::a-ready-1', projectName: 'Project A', state: '2-ready' }),
+      ],
+      progress: [],
+      failedPickup: [],
+      codeNotComplete: [],
+      autoReview: autoReviewCards,
+      humanReview: [],
+      escalated: [],
+      // GroupedJobs.review is the legacy alias === autoReview; the same cards appear here.
+      review: autoReviewCards,
+      completed: [],
+      archive: [],
+    });
+
+    const projectA = component.projectRows().find(row => row.name === 'Project A');
+    // Auto-review is not a board chip; the alias must not inflate the total either.
+    expect(projectA?.laneCounts).toEqual({ ready: 1, progress: 0, humanReview: 0 });
+    expect(projectA?.totalJobs).toBe(1);
+  });
+
+  it('keeps the project total equal to the sum of the three visible board chips (sum-invariant)', () => {
+    const { component, taskService } = configure();
+    taskService.grouped.set({
+      backlog: [
+        task({ id: 'a-backlog-1', taskKey: 'watch::a-backlog-1', projectName: 'Project A', state: '0-backlog' }),
+      ],
+      preparation: [],
+      orchestratorPrep: [],
+      ready: [
+        task({ id: 'a-ready-1', taskKey: 'watch::a-ready-1', projectName: 'Project A', state: '2-ready' }),
+        task({ id: 'a-ready-2', taskKey: 'watch::a-ready-2', projectName: 'Project A', state: '2-ready' }),
+      ],
+      progress: [
+        task({ id: 'a-progress-1', taskKey: 'watch::a-progress-1', projectName: 'Project A', state: '3-progress' }),
+      ],
+      failedPickup: [],
+      codeNotComplete: [],
+      autoReview: [
+        task({ id: 'a-auto-1', taskKey: 'watch::a-auto-1', projectName: 'Project A', state: '4-auto-review' }),
+      ],
+      humanReview: [
+        task({ id: 'a-review-1', taskKey: 'watch::a-review-1', projectName: 'Project A', state: '5-human-review' }),
+      ],
+      escalated: [
+        task({ id: 'a-esc-1', taskKey: 'watch::a-esc-1', projectName: 'Project A', state: '5e-escalated' }),
+      ],
+      review: [],
+      completed: [
+        task({ id: 'a-done-1', taskKey: 'watch::a-done-1', projectName: 'Project A', state: '6-completed' }),
+      ],
+      archive: [],
+    });
+
+    const projectA = component.projectRows().find(row => row.name === 'Project A');
+    const counts = projectA!.laneCounts;
+    // The one defining rule: the aggregate equals the sum of the numbers shown
+    // one level below it. Ready(2) + Progress(1) + Human(1 review + 1 escalated).
+    expect(counts).toEqual({ ready: 2, progress: 1, humanReview: 2 });
+    expect(projectA?.totalJobs).toBe(counts.ready + counts.progress + counts.humanReview);
+    expect(projectA?.totalJobs).toBe(5);
+  });
 });
 
 describe('StudioShellComponent epic tabs', () => {
