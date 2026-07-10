@@ -240,11 +240,38 @@ export interface WikiPulseDrift {
   counts: WikiPulseDriftCounts;
 }
 
+/** One badly-graded page in the Pulse critical section (worst first). */
+export interface WikiPulseCriticalItem {
+  relPath: string;
+  title: string;
+  grade: string; // C | D
+  assessment: string | null;
+  gradedAt: string | null;
+  model: string | null;
+  reportPath: string | null;
+  frameAreaTitle: string | null;
+}
+
 /**
- * The generated wiki Pulse landing view (PULSE-1): a read-only composition of
- * the change feed, the sort-needed inbox, and the deterministic drift grade
- * bar. Not a wiki page - it is generated, never editable. Each section carries
- * its own `available` + `reason` so a missing source degrades to an empty state.
+ * Critical-pages section (AGT-2051): pages a wiki-grading run scored C or D,
+ * worst first, from the companion grading blocks. The LLM grade supplements the
+ * deterministic drift bar. Always available (filesystem read); `overallGrade` is
+ * the worst listed grade or `none`.
+ */
+export interface WikiPulseCritical {
+  available: boolean;
+  reason: string | null;
+  count: number;
+  overallGrade: string; // D | C | none
+  items: WikiPulseCriticalItem[];
+}
+
+/**
+ * The generated wiki Pulse landing view: a read-only composition of the change
+ * feed, the sort-needed inbox, the deterministic drift grade bar, and the LLM
+ * critical-pages section. Not a wiki page - it is generated, never editable.
+ * Each section carries its own `available` + `reason` so a missing source
+ * degrades to an empty state.
  */
 export interface WikiPulse {
   projectName: string;
@@ -254,6 +281,68 @@ export interface WikiPulse {
   feed: WikiPulseFeed;
   inbox: WikiPulseInbox;
   drift: WikiPulseDrift;
+  critical: WikiPulseCritical;
+}
+
+// ---- Wiki grading maintenance run (AGT-2051) ----
+
+/** Lifecycle of a grading run (mirrors backend WikiGradingRunState, camelCased). */
+export type WikiGradingRunState = 'running' | 'completed' | 'aborted' | 'failed';
+
+/** One row in the run's recent-outcome tail. */
+export interface WikiGradingRunItem {
+  relPath: string;
+  grade: string;
+  outcome: string; // Graded | Skipped | Failed
+}
+
+/** Live status of a grading run, polled by the trigger UI. */
+export interface WikiGradingRunStatus {
+  projectName: string;
+  runId: string;
+  state: WikiGradingRunState;
+  cliType: string;
+  model: string;
+  thinkingLevel: string | null;
+  force: boolean;
+  total: number;
+  processed: number;
+  graded: number;
+  skipped: number;
+  failed: number;
+  critical: number;
+  currentRelPath: string | null;
+  startedAtUtc: string;
+  completedAtUtc: string | null;
+  error: string | null;
+  recent: WikiGradingRunItem[];
+}
+
+/** Envelope for the status poll: `status` is null until the first run starts. */
+export interface WikiGradingStatusResponse {
+  status: WikiGradingRunStatus | null;
+}
+
+/** Result of an abort request. */
+export interface WikiGradingAbortResponse {
+  aborted: boolean;
+  status: WikiGradingRunStatus | null;
+}
+
+/** Body for starting a run; every field falls back to the maintenance default. */
+export interface WikiGradingRunBody {
+  cliType?: string;
+  model?: string;
+  thinkingLevel?: string | null;
+  force?: boolean;
+  limit?: number;
+}
+
+/** The workspace maintenance-model default (its own CLI-management config class). */
+export interface WikiMaintenanceModelConfig {
+  cliType: string;
+  model: string;
+  thinkingLevel: string | null;
 }
 
 export interface ArchitectureDecisionSummary {

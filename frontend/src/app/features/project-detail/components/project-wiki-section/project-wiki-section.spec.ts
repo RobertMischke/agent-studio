@@ -94,6 +94,7 @@ const PULSE: WikiPulse = {
     ],
     counts: { fresh: 0, aging: 1, stale: 0, graded: 1 },
   },
+  critical: { available: true, reason: 'No pages have been graded yet.', count: 0, overallGrade: 'none', items: [] },
 };
 
 async function setup(tree: WikiTree = TREE) {
@@ -114,8 +115,20 @@ async function setup(tree: WikiTree = TREE) {
 
   http.expectOne('/api/projects/Demo/wiki/tree').flush(tree);
   flushWikiPulse(http);
+  flushGradingContext(http);
   fixture.detectChanges();
   return { fixture, http };
+}
+
+/**
+ * The grading trigger seeds its maintenance-model default and the current run
+ * status once per project on open (AGT-2051). Both fire from the same effect as
+ * the tree/pulse load, so the fake backend must answer them or verify() trips.
+ */
+function flushGradingContext(http: HttpTestingController): void {
+  http.expectOne('/api/cli/maintenance-model')
+    .flush({ cliType: 'claude', model: 'claude-sonnet-5', thinkingLevel: null });
+  http.expectOne(r => r.url.includes('/wiki/grading/status')).flush({ status: null });
 }
 
 /**

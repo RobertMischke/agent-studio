@@ -8,6 +8,11 @@ import {
   WikiFileContent,
   WikiFileHistory,
   WikiFileSaveResult,
+  WikiGradingAbortResponse,
+  WikiGradingRunBody,
+  WikiGradingRunStatus,
+  WikiGradingStatusResponse,
+  WikiMaintenanceModelConfig,
   WikiOverview,
   WikiPulse,
   WikiRecentEdits,
@@ -143,6 +148,41 @@ export class ProjectDocsService {
     return this.http.delete<{ relPath: string; sha: string }>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/files/${this.encodeRelPath(relPath)}`
     );
+  }
+
+  // ---- Wiki grading maintenance run (AGT-2051) ----
+
+  /** Start a global grading pass. Fields default from the maintenance model. */
+  startWikiGrading(projectName: string, body: WikiGradingRunBody = {}) {
+    return this.http.post<WikiGradingRunStatus>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/grading/run`,
+      body
+    );
+  }
+
+  /** Poll the latest run status (`status` is null until the first run starts). */
+  getWikiGradingStatus(projectName: string) {
+    return this.http.get<WikiGradingStatusResponse>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/grading/status`
+    );
+  }
+
+  /** Request cancellation of an in-flight grading run. */
+  abortWikiGrading(projectName: string) {
+    return this.http.post<WikiGradingAbortResponse>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/grading/abort`,
+      {}
+    );
+  }
+
+  /** Read the workspace maintenance-model default (CLI-management area). */
+  getMaintenanceModel() {
+    return this.http.get<WikiMaintenanceModelConfig>(`${this.baseUrl}/cli/maintenance-model`);
+  }
+
+  /** Write the workspace maintenance-model default. */
+  setMaintenanceModel(config: Partial<WikiMaintenanceModelConfig>) {
+    return this.http.put<WikiMaintenanceModelConfig>(`${this.baseUrl}/cli/maintenance-model`, config);
   }
 
   getArchitectureOverview(projectName: string) {

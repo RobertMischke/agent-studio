@@ -58,6 +58,7 @@ function makePulse(overrides: Partial<WikiPulse> = {}): WikiPulse {
       ],
       counts: { fresh: 0, aging: 0, stale: 1, graded: 1 },
     },
+    critical: { available: true, reason: 'No pages have been graded yet.', count: 0, overallGrade: 'none', items: [] },
     ...overrides,
   };
 }

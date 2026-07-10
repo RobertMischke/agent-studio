@@ -1,0 +1,212 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
+namespace AgentStudio.Docs.Grading;
+
+/// <summary>Outcome of writing a grading verdict into a companion sidecar.</summary>
+public sealed record WikiCompanionWriteResult(bool Changed, string CompanionAbsPath);
+
+/// <summary>
+/// Reads, merges, and writes the <c>grading</c> block of a wiki page's
+/// <c>&lt;source&gt;.meta.json</c> companion (AGT-2051). When a companion already
+/// exists (e.g. from the drift-companion generator), only the <c>grading</c>
+/// block is set so the rest of the sidecar is preserved verbatim; when none
+/// exists, a schema-valid minimal companion is created carrying the grading
+/// verdict. All writes are idempotent-friendly: the caller can detect a no-op
+/// via <see cref="WikiCompanionWriteResult.Changed"/>.
+/// </summary>
+public sealed class WikiCompanionStore
+{
+    private const string SchemaId =
+        "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json";
+    private const string Generator = "backend/Features/Docs/Grading/WikiGradingService.cs";
+
+    private static readonly JsonSerializerOptions WriteOpts = new() { WriteIndented = true };
+
+    /// <summary>
+    /// sha256 over the page content (matching how the run computes the idempotency
+    /// hash), plus byte size and line count, for the companion fingerprint.
+    /// </summary>
+    public static (string Hash, int SizeBytes, int LineCount) Fingerprint(string content)
+    {
+        var bytes = Encoding.UTF8.GetBytes(content ?? string.Empty);
+        var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        var lineCount = string.IsNullOrEmpty(content) ? 0 : content.Split('\n').Length;
+        return (hash, bytes.Length, lineCount);
+    }
+
+    /// <summary>sha256 of the page content, lowercase hex - the run's skip key.</summary>
+    public static string HashContent(string content) => Fingerprint(content).Hash;
+
+    /// <summary>Companion sidecar absolute path for a docs-relative page path.</summary>
+    public static string CompanionPathFor(string wikiDir, string docsRelPath) =>
+        Path.Combine(wikiDir, docsRelPath.Replace('/', Path.DirectorySeparatorChar) + ".meta.json");
+
+    /// <summary>Stored grading provenance read back for idempotent skips: the
+    /// source fingerprint hash, the grading model, and the last grade.</summary>
+    public sealed record StoredGrading(string? Hash, string? Model, string? Grade);
+
+    /// <summary>Reads the stored grading fingerprint hash + model + grade, or null
+    /// when the companion has no grading block yet. Used by the run for idempotent
+    /// skips.</summary>
+    public StoredGrading? ReadGrading(string companionAbsPath)
+    {
+        if (!File.Exists(companionAbsPath)) return null;
+        try
+        {
+            var node = JsonNode.Parse(File.ReadAllText(companionAbsPath));
+            if (node is not JsonObject obj || obj["grading"] is not JsonObject grading) return null;
+            var hash = (grading["sourceFingerprint"] as JsonObject)?["hash"]?.GetValue<string>();
+            var model = grading["model"]?.GetValue<string>();
+            var grade = grading["grade"]?.GetValue<string>();
+            return new StoredGrading(hash, model, grade);
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "WikiCompanionStore: unreadable companion during grading fingerprint read.");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Write the grading verdict into the page's companion, merging into an
+    /// existing sidecar or creating a minimal schema-valid one. Returns whether
+    /// the on-disk bytes actually changed.
+    /// </summary>
+    public WikiCompanionWriteResult WriteGrading(
+        string wikiDir,
+        string docsRelPath,
+        string title,
+        string content,
+        WikiPageGradeVerdict verdict,
+        WikiGradingRunRequest run,
+        string runId,
+        DateTime nowUtc)
+    {
+        var companionAbs = CompanionPathFor(wikiDir, docsRelPath);
+        var (hash, sizeBytes, lineCount) = Fingerprint(content);
+        var iso = nowUtc.ToString("o");
+
+        var fingerprint = new JsonObject
+        {
+            ["algorithm"] = "sha256",
+            ["hash"] = hash,
+            ["sizeBytes"] = sizeBytes,
+            ["lineCount"] = lineCount,
+            ["capturedAt"] = iso,
+        };
+
+        var grading = new JsonObject
+        {
+            ["grade"] = verdict.Grade,
+            ["assessment"] = verdict.Assessment,
+        };
+        if (verdict.Outdated.HasValue) grading["outdated"] = verdict.Outdated.Value;
+        if (verdict.Contradictory.HasValue) grading["contradictory"] = verdict.Contradictory.Value;
+        if (verdict.Gaps.HasValue) grading["gaps"] = verdict.Gaps.Value;
+        var notes = new JsonArray();
+        foreach (var n in verdict.Notes) notes.Add(n);
+        grading["notes"] = notes;
+        grading["cli"] = string.IsNullOrWhiteSpace(run.CliType) ? "claude" : run.CliType.Trim();
+        grading["model"] = run.Model;
+        if (!string.IsNullOrWhiteSpace(run.ThinkingLevel)) grading["thinkingLevel"] = run.ThinkingLevel.Trim();
+        grading["method"] = "wiki-grading-run";
+        grading["runId"] = runId;
+        grading["gradedAt"] = iso;
+        grading["ok"] = verdict.Ok;
+        grading["sourceFingerprint"] = fingerprint;
+
+        JsonObject root = ReadExistingRoot(companionAbs)
+            ?? BuildMinimalCompanion(docsRelPath, title, iso, (JsonObject)fingerprint.DeepClone(), run);
+        root["grading"] = grading;
+
+        var serialized = root.ToJsonString(WriteOpts) + "\n";
+        var changed = !File.Exists(companionAbs)
+            || !string.Equals(File.ReadAllText(companionAbs), serialized, StringComparison.Ordinal);
+        if (changed)
+        {
+            var dir = Path.GetDirectoryName(companionAbs);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            File.WriteAllText(companionAbs, serialized);
+        }
+        return new WikiCompanionWriteResult(changed, companionAbs);
+    }
+
+    private static JsonObject? ReadExistingRoot(string companionAbs)
+    {
+        if (!File.Exists(companionAbs)) return null;
+        try
+        {
+            return JsonNode.Parse(File.ReadAllText(companionAbs)) as JsonObject;
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "WikiCompanionStore: unreadable companion; rebuilding a minimal one.");
+            return null;
+        }
+    }
+
+    private static JsonObject BuildMinimalCompanion(
+        string docsRelPath, string title, string iso, JsonObject fingerprint, WikiGradingRunRequest run)
+    {
+        var sourcePath = "docs/" + docsRelPath;
+        var owner = docsRelPath.Split('/', 2)[0];
+        return new JsonObject
+        {
+            ["$schema"] = SchemaId,
+            ["schemaVersion"] = "wiki-document-companion/v1",
+            ["title"] = string.IsNullOrWhiteSpace(title) ? docsRelPath : title,
+            ["source"] = new JsonObject
+            {
+                ["path"] = sourcePath,
+                ["type"] = DocumentType(docsRelPath),
+                ["fingerprint"] = (JsonObject)fingerprint.DeepClone(),
+            },
+            ["report"] = new JsonObject
+            {
+                ["path"] = sourcePath + ".report.html",
+                ["generatedAt"] = iso,
+                ["generator"] = Generator,
+                ["template"] = "wiki-document-companion-report/v1",
+            },
+            ["classification"] = new JsonObject
+            {
+                ["owner"] = owner,
+                ["documentMode"] = "documentation",
+                ["temporalState"] = "unknown",
+                ["implementationState"] = "unknown",
+            },
+            ["review"] = new JsonObject
+            {
+                ["date"] = iso[..10],
+                ["method"] = "wiki-grading-run",
+                ["model"] = run.Model,
+                ["sourceFingerprint"] = (JsonObject)fingerprint.DeepClone(),
+                ["sourceChangedSinceReview"] = false,
+            },
+            ["drift"] = new JsonObject
+            {
+                ["grade"] = "unknown",
+                ["hasDrift"] = null,
+                ["score"] = null,
+                ["summary"] = "No drift review summary has been generated yet.",
+                ["rationale"] = new JsonArray(),
+            },
+            ["findings"] = new JsonArray(),
+        };
+    }
+
+    private static string DocumentType(string relPath)
+    {
+        var ext = Path.GetExtension(relPath).ToLowerInvariant();
+        return ext switch
+        {
+            ".md" => "markdown",
+            ".html" or ".htm" => "html",
+            ".json" => "json",
+            _ => "document",
+        };
+    }
+}

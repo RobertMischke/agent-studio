@@ -544,13 +544,17 @@ public class ProjectDocsService
             return new WikiPulse(projectName, wikiDir, false, generatedAt,
                 new WikiPulseFeed(false, reason, []),
                 new WikiPulseInbox(false, reason, 0, []),
-                WikiPulseDrift.Unavailable(reason));
+                WikiPulseDrift.Unavailable(reason),
+                WikiPulseCritical.Unavailable(reason));
         }
 
-        // Inbox is a pure filesystem read (no git), so it works even when the
-        // project has no resolvable repository.
+        // Inbox + the LLM critical-pages list are pure filesystem reads (no git),
+        // so they work even when the project has no resolvable repository. The
+        // critical list is the wiki-grading verdict surfaced in Pulse (AGT-2051),
+        // supplementing the deterministic drift bar below.
         var allDocs = ListWikiDocs(wikiDir);
         var inbox = BuildPulseInbox(allDocs);
+        var critical = BuildPulseCritical(allDocs, LoadWikiMetadataIndex(wikiDir));
 
         var repoRoot = git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot))
@@ -559,7 +563,8 @@ public class ProjectDocsService
             return new WikiPulse(projectName, wikiDir, true, generatedAt,
                 new WikiPulseFeed(false, reason, []),
                 inbox,
-                WikiPulseDrift.Unavailable(reason));
+                WikiPulseDrift.Unavailable(reason),
+                critical);
         }
 
         var docsRepoRel = Path.GetRelativePath(repoRoot, wikiDir).Replace('\\', '/');
@@ -607,8 +612,67 @@ public class ProjectDocsService
         var codeRoots = ResolveCodeRoots(repoRoot);
         var drift = BuildPulseDrift(allDocs, lastUpdateByRel, repoRoot, codeRoots, git);
 
-        return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift);
+        return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift, critical);
     }
+
+    /// <summary>
+    /// The Pulse "critical pages" section (AGT-2051): every wiki page a
+    /// wiki-grading run scored <c>C</c> or <c>D</c>, worst first, read from the
+    /// companion <c>grading</c> blocks. This is the LLM verdict surfaced in Pulse
+    /// - it supplements the deterministic drift bar (commit-count staleness) with
+    /// a strong-model judgement of page health. Always available (a filesystem
+    /// read); an ungraded wiki reads as a healthy empty state with a hint, and a
+    /// wiki with only B-or-better grades reads as "no critical pages".
+    /// </summary>
+    private static WikiPulseCritical BuildPulseCritical(
+        IReadOnlyList<WikiFileEntry> docs,
+        IReadOnlyDictionary<string, WikiTreeMetadata> metaIndex)
+    {
+        var items = new List<WikiPulseCriticalItem>();
+        var gradedCount = 0;
+        foreach (var doc in docs)
+        {
+            if (!metaIndex.TryGetValue(doc.RelPath, out var meta)) continue;
+            var grade = meta.GradingGrade?.Trim().ToUpperInvariant();
+            if (string.IsNullOrEmpty(grade) || grade == "UNKNOWN") continue;
+            gradedCount++;
+            if (grade is "C" or "D")
+            {
+                items.Add(new WikiPulseCriticalItem(
+                    RelPath: doc.RelPath,
+                    Title: doc.Title,
+                    Grade: grade,
+                    Assessment: meta.GradingAssessment,
+                    GradedAt: meta.GradedAt,
+                    Model: meta.GradingModel,
+                    ReportPath: meta.ReportPath,
+                    FrameAreaTitle: EngineeringWorkstreamFrame.AreaForPath(doc.RelPath)?.Title));
+            }
+        }
+
+        // Worst first: D before C, then a stable path order.
+        items.Sort((a, b) =>
+        {
+            var byGrade = CriticalGradeRank(b.Grade).CompareTo(CriticalGradeRank(a.Grade));
+            return byGrade != 0 ? byGrade : string.Compare(a.RelPath, b.RelPath, StringComparison.OrdinalIgnoreCase);
+        });
+
+        var reason = gradedCount == 0
+            ? "No pages have been graded yet. Run a grading pass from the trigger above."
+            : items.Count == 0
+                ? "No critical pages: every graded page is B or better."
+                : null;
+        var overall = items.Count == 0 ? "none" : items[0].Grade;
+        return new WikiPulseCritical(true, reason, items.Count, overall, items);
+    }
+
+    /// <summary>Ordinal severity for the critical list sort (D worst).</summary>
+    private static int CriticalGradeRank(string grade) => grade switch
+    {
+        "D" => 2,
+        "C" => 1,
+        _ => 0,
+    };
 
     /// <summary>
     /// Task key for a Pulse feed row: the page's own frontmatter <c>task-key</c>
@@ -983,6 +1047,7 @@ public class ProjectDocsService
                 TryJsonObject(root, "report", out var report);
                 TryJsonObject(root, "drift", out var drift);
                 TryJsonObject(root, "duplicates", out var duplicates);
+                TryJsonObject(root, "grading", out var grading);
 
                 var sourceRel = NormalizeMetadataSourcePath(JsonString(source, "path") ?? JsonString(root, "sourcePath"));
                 if (sourceRel == null) continue;
@@ -1007,7 +1072,11 @@ public class ProjectDocsService
                     Summary: JsonString(drift, "summary") ?? JsonString(root, "summary"),
                     CompanionPath: companionRel,
                     SourceChangedSinceReview: SourceChangedSinceReview(root, sourceFull),
-                    FindingsCount: JsonArrayLength(root, "findings"));
+                    FindingsCount: JsonArrayLength(root, "findings"),
+                    GradingGrade: JsonString(grading, "grade"),
+                    GradingAssessment: JsonString(grading, "assessment"),
+                    GradedAt: JsonString(grading, "gradedAt"),
+                    GradingModel: JsonString(grading, "model"));
                 index[sourceRel] = metadata;
             }
             catch (Exception __ex)
@@ -1545,7 +1614,13 @@ public record WikiTreeMetadata(
     string? Summary,
     string? CompanionPath,
     bool? SourceChangedSinceReview,
-    int? FindingsCount);
+    int? FindingsCount,
+    // LLM grading verdict written by a wiki-grading maintenance run (AGT-2051).
+    // Kept separate from the deterministic drift fields above.
+    string? GradingGrade = null,
+    string? GradingAssessment = null,
+    string? GradedAt = null,
+    string? GradingModel = null);
 
 public record WikiTreeNode(
     string Name,
@@ -1622,7 +1697,37 @@ public record WikiPulse(
     string GeneratedAtUtc,
     WikiPulseFeed Feed,
     WikiPulseInbox Inbox,
-    WikiPulseDrift Drift);
+    WikiPulseDrift Drift,
+    WikiPulseCritical Critical);
+
+/// <summary>
+/// Critical-pages section (AGT-2051): pages a wiki-grading run scored C or D,
+/// worst first, read from companion <c>grading</c> blocks. The LLM grade
+/// supplements the deterministic drift bar. Always available (filesystem read);
+/// <see cref="OverallGrade"/> is the worst listed grade or <c>none</c>.
+/// </summary>
+public record WikiPulseCritical(
+    bool Available,
+    string? Reason,
+    int Count,
+    string OverallGrade,
+    List<WikiPulseCriticalItem> Items)
+{
+    public static WikiPulseCritical Unavailable(string reason) =>
+        new(false, reason, 0, "none", []);
+}
+
+/// <summary>One badly-graded page: its grade, the one-line assessment, the
+/// grading model, and a link to its companion report.</summary>
+public record WikiPulseCriticalItem(
+    string RelPath,
+    string Title,
+    string Grade,
+    string? Assessment,
+    string? GradedAt,
+    string? Model,
+    string? ReportPath,
+    string? FrameAreaTitle);
 
 /// <summary>Change-feed section: recently-edited pages, newest first.</summary>
 public record WikiPulseFeed(bool Available, string? Reason, List<WikiPulseFeedItem> Items);

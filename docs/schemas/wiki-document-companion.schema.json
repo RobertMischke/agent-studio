@@ -106,6 +106,28 @@
         }
       }
     },
+    "grading": {
+      "type": "object",
+      "description": "Optional LLM assessment written by a wiki-grading maintenance run (AGT-2051). Separate from the deterministic 'drift' block: this is a strong-model verdict on whether the page is outdated, contradictory, or has gaps. Absent until a grading pass has run over the page.",
+      "required": ["grade", "assessment", "model", "gradedAt", "sourceFingerprint"],
+      "additionalProperties": true,
+      "properties": {
+        "grade": { "type": "string", "enum": ["A", "B", "C", "D", "unknown"] },
+        "assessment": { "type": "string" },
+        "outdated": { "type": ["boolean", "null"] },
+        "contradictory": { "type": ["boolean", "null"] },
+        "gaps": { "type": ["boolean", "null"] },
+        "notes": { "type": "array", "items": { "type": "string" } },
+        "cli": { "type": "string" },
+        "model": { "type": "string" },
+        "thinkingLevel": { "type": ["string", "null"] },
+        "method": { "type": "string" },
+        "runId": { "type": "string" },
+        "gradedAt": { "type": "string", "format": "date-time" },
+        "ok": { "type": "boolean" },
+        "sourceFingerprint": { "$ref": "#/$defs/fingerprint" }
+      }
+    },
     "axes": {
       "type": "object",
       "additionalProperties": { "type": "string" }

@@ -22,6 +22,8 @@ import { CLI_TYPES, CliType, TaskState } from '../../../../models/task.model';
 import {
   WikiFileSaveResult,
   WikiFileHistory,
+  WikiGradingRunStatus,
+  WikiMaintenanceModelConfig,
   WikiNodeType,
   WikiPulse,
   WikiTree,
@@ -36,6 +38,7 @@ import { StudioIconComponent, type StudioIconName } from '../../../../components
 import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
 import { WikiPulseComponent, WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
+import { WikiGradePanelComponent } from './wiki-grade-panel/wiki-grade-panel.component';
 import { StudioTabStateService } from '../../../studio-shell/services/studio-tab-state.service';
 import {
   WikiTreeRow,
@@ -126,6 +129,7 @@ interface WikiMetricChip {
     TooltipDirective,
     WikiDocHistoryComponent,
     WikiPulseComponent,
+    WikiGradePanelComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-wiki-section.html',
@@ -147,6 +151,15 @@ export class ProjectWikiSectionComponent {
   readonly tree = signal<WikiTree | null>(null);
   readonly pulse = signal<WikiPulse | null>(null);
   readonly pulseLoading = signal(false);
+
+  // ---- Wiki grading maintenance run (AGT-2051) ----
+  // Model chosen at the trigger, defaulting from the workspace maintenance model.
+  readonly gradeCli = signal<CliType>('claude');
+  readonly gradeModel = signal<string | null>(null);
+  readonly gradeLevel = signal<string | null>(null);
+  readonly gradingStatus = signal<WikiGradingRunStatus | null>(null);
+  readonly gradeModelOptions = computed(() => this.catalog.modelsFor(this.gradeCli()));
+  private gradingPollTimer: ReturnType<typeof setTimeout> | null = null;
   readonly loading = signal(false);
   readonly busy = signal(false);
   readonly filter = signal('');
@@ -237,6 +250,10 @@ export class ProjectWikiSectionComponent {
       if (p) {
         this.restorePersistedState(p);
         this.refresh();
+        // Seed the grading trigger (maintenance-model default + current run
+        // status) once per project. Kept out of refresh() so post-mutation
+        // re-reads do not re-fire it.
+        this.loadGradingContext();
       }
     });
   }
@@ -388,6 +405,104 @@ export class ProjectWikiSectionComponent {
   /** Open a page picked from the Pulse feed or inbox. */
   onPulseOpen(req: WikiPulseOpenRequest): void {
     this.openFile(req.relPath, req.type);
+  }
+
+  /** Open a critical page (from the grade panel) straight to its report tab. */
+  openReportPage(relPath: string): void {
+    this.openFile(relPath, this.wikiTypeForRel(relPath), 'report');
+  }
+
+  private wikiTypeForRel(relPath: string): WikiNodeType {
+    const ext = relPath.toLowerCase().split('.').pop() ?? '';
+    if (ext === 'html' || ext === 'htm') return 'html';
+    if (ext === 'json') return 'json';
+    return 'md';
+  }
+
+  // ---- wiki grading trigger (AGT-2051) ----
+
+  private gradingSeededFor: string | null = null;
+
+  onGradeModelChange(model: string): void {
+    this.gradeModel.set(model || null);
+  }
+
+  onGradeLevelChange(level: string | null): void {
+    this.gradeLevel.set(level);
+  }
+
+  startWikiGrading(): void {
+    const p = this.projectName();
+    if (!p) return;
+    this.docs.startWikiGrading(p, {
+      cliType: this.gradeCli(),
+      model: this.gradeModel() ?? undefined,
+      thinkingLevel: this.gradeLevel(),
+    }).subscribe({
+      next: status => { this.gradingStatus.set(status); this.scheduleGradingPoll(); },
+      error: err => {
+        // A 409 (a run already in flight) returns the live status in the body.
+        const status = err?.error?.status as WikiGradingRunStatus | undefined;
+        if (status) { this.gradingStatus.set(status); this.scheduleGradingPoll(); }
+      },
+    });
+  }
+
+  abortWikiGrading(): void {
+    const p = this.projectName();
+    if (!p) return;
+    this.docs.abortWikiGrading(p).subscribe({
+      next: resp => this.gradingStatus.set(resp.status),
+      error: () => void 0,
+    });
+  }
+
+  /**
+   * Loads the maintenance-model default (once per project) to pre-fill the
+   * trigger's model picker, then fetches the current run status so a run started
+   * in another tab is reflected and resumed-polled here.
+   */
+  private loadGradingContext(): void {
+    const p = this.projectName();
+    if (!p) return;
+    if (this.gradingSeededFor !== p) {
+      this.gradingSeededFor = p;
+      this.gradingStatus.set(null);
+      this.docs.getMaintenanceModel().subscribe({
+        next: cfg => {
+          const cli = CLI_TYPES.includes(cfg.cliType as CliType) ? (cfg.cliType as CliType) : 'claude';
+          this.gradeCli.set(cli);
+          this.gradeModel.set(cfg.model || null);
+          this.gradeLevel.set(cfg.thinkingLevel ?? null);
+        },
+        error: () => void 0,
+      });
+    }
+    this.docs.getWikiGradingStatus(p).subscribe({
+      next: resp => {
+        this.gradingStatus.set(resp.status);
+        if (resp.status?.state === 'running') this.scheduleGradingPoll();
+      },
+      error: () => void 0,
+    });
+  }
+
+  /** Polls the run status while a run is in flight; refreshes Pulse when it ends. */
+  private scheduleGradingPoll(): void {
+    if (this.gradingPollTimer) return;
+    this.gradingPollTimer = setTimeout(() => {
+      this.gradingPollTimer = null;
+      const p = this.projectName();
+      if (!p) return;
+      this.docs.getWikiGradingStatus(p).subscribe({
+        next: resp => {
+          this.gradingStatus.set(resp.status);
+          if (resp.status?.state === 'running') this.scheduleGradingPoll();
+          else this.refresh(); // run finished: refresh Pulse so new grades / critical pages show
+        },
+        error: () => void 0,
+      });
+    }, 1200);
   }
 
   readonly rootFolderLabel = computed(() => {

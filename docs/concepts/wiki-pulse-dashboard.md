@@ -92,6 +92,12 @@ In PULSE-1: the change feed, the inbox, and the drift grade bar.
 (live-runs) tile. Pulse is deliberately deterministic in v1 - no LLM, no live
 run state.
 
+Update (GRADE-1, 2026-07-10, AGT-2051): the Warnings surface arrived as the
+**Critical pages** section plus a **Grade all pages** trigger, driven by an
+LLM grade per page written into the companion sidecars. The deterministic drift
+bar above stays unchanged; the LLM grade *supplements* it. See
+[wiki-grading-run.md](wiki-grading-run.md).
+
 ## 5. Where it lives
 
 - Backend: `ProjectDocsService.GetWikiPulse` composes the payload;
