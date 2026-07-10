@@ -217,6 +217,23 @@ public record CreateTaskRequest
     public string Title { get; init; } = "";
     public int Order { get; init; } = 999;
     public string Agent { get; init; } = "claude";
+
+    /// <summary>
+    /// Preferred, path-free project handle: a short code / Kürzel (e.g.
+    /// <c>ASS</c>) or a stable project id (<c>PROJ-NNN</c>). The server resolves
+    /// it to the project's storage location, so the filesystem layout never
+    /// travels over the wire. When set, this takes precedence over
+    /// <see cref="WatchPath"/>.
+    /// </summary>
+    public string? Project { get; init; }
+
+    /// <summary>
+    /// Deprecated absolute filesystem path of the target project. Retained for
+    /// legacy callers during the watchPath-encapsulation migration; new callers
+    /// should send <see cref="Project"/> (Kürzel or <c>PROJ-NNN</c>) instead.
+    /// Also accepts a <c>PROJ-NNN</c> id or short code, which is resolved
+    /// server-side.
+    /// </summary>
     public string WatchPath { get; init; } = "";
     public string? PromptMarkdown { get; init; }
     public string? Model { get; init; }

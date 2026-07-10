@@ -127,10 +127,15 @@ an array of `JobInfo`-shaped objects with `id`, `title`, `projectName`,
 
 ## Process: creating one task
 
+**Prefer `project` over `watchPath`.** Create accepts a path-free `project`
+handle — a `shortCode` / Kürzel (`ASS`) or a `PROJ-NNN` id (from
+`GET /api/projects`) — which the server resolves to the project's storage
+location. This is the forward-looking contract (watchPath encapsulation, Phase
+2a); `watchPath` still works but is deprecated and, when both are sent, `project`
+wins. Using `project` also sidesteps the 409 watchPath-mismatch trap below.
+
 ```js
 const http = require('http');
-
-const watchPath = 'C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard';
 
 const task = {
   id: 'my-stable-slug',
@@ -140,7 +145,8 @@ const task = {
   taskType: 'bug',             // or feature/refactor/analysis/chore
   agent: 'codex',              // claude | codex | copilot | gemini
   cliType: 'codex',            // keep in lockstep with agent
-  watchPath,
+  project: 'ASS',              // preferred: shortCode/Kürzel or PROJ-NNN id
+  // watchPath: '...',         // deprecated fallback; see /api/watch-paths
   promptMarkdown: [
     '## Context',
     '',

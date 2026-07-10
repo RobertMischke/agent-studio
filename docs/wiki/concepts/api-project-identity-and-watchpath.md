@@ -43,12 +43,16 @@ disk layout to every client:
   specs), concentrated in `task.service.ts`, `undo.service.ts`,
   `dev-tools.service.ts`, `git-hygiene.service.ts`,
   `code-review-activity.store.ts`, and `jobs-hub-client.service.ts`.
-- `CreateJob` (`backend/Features/Tasks/TaskMutationService.cs`) matches the
-  project by exact string equality on `watchPath`. When the field is empty it
-  falls back to the first registered project, which is Runbook. So an omitted or
-  slightly-off path silently lands the task in the wrong project. This is the
-  same trap captured in
-  [../common-problems/project-name-divergence-watchpath-vs-registry/README.md](../common-problems/project-name-divergence-watchpath-vs-registry/README.md).
+- Task creation (`TaskMutationService.CreateJob`,
+  `backend/Features/Tasks/TaskMutationService.cs`) now resolves a path-free
+  handle first: the preferred `CreateTaskRequest.Project` field (or the
+  deprecated `WatchPath` fallback) accepts a `shortCode` / Kürzel (`ASS`) or a
+  `PROJ-NNN` id, which `ResolveRequestedWatchPath` turns into the project's
+  storage location via the registry (see Phase 2a below). A raw absolute path
+  still passes through for legacy callers, and an empty handle still falls back
+  to the first registered project. That last fallback is the trap captured in
+  [../common-problems/project-name-divergence-watchpath-vs-registry/README.md](../common-problems/project-name-divergence-watchpath-vs-registry/README.md);
+  addressing by `shortCode`/`projectId` avoids it.
 - The `/api/jobs` alias and its ~180 consumers have been migrated to `/api/tasks`
   (Phase 1, done). Remaining `/api/jobs` mentions live only in immutable history:
   superseded ADR entries above and dated research snapshots.
@@ -69,8 +73,14 @@ This is epic-sized; split into slices rather than a big-bang change:
 - Phase 1 (**done**): migrated all `/api/jobs` consumers to `/api/tasks` and
   retired the alias; renamed `CreateJobRequest` -> `CreateTaskRequest`.
   Mechanical, low risk.
-- Phase 2a: a central server-side resolver `project (shortCode | projectId) ->
-  watchPath`.
+- Phase 2a (**create path done**): a server-side resolver `project (shortCode |
+  projectId) -> watchPath`. `ProjectRegistry.FindByShortCode` plus
+  `TaskMutationService.ResolveRequestedWatchPath` resolve a Kürzel or `PROJ-NNN`
+  handle to a storage location; the task-create DTO grew a preferred `Project`
+  field (`WatchPath` kept as a deprecated fallback). Covered by
+  `backend.Tests/CreateTaskByProjectHandleTests.cs`. Remaining 2a work: promote
+  the resolver into a shared service and reuse it from the other endpoints that
+  still take a raw `watchPath`.
 - Phase 2b: endpoints accept `project` and resolve internally; `watchPath` stays
   accepted but deprecated, and is dropped from responses.
 - Phase 2c: frontend sends `shortCode` or `projectId`; unwind

@@ -574,11 +574,15 @@ public class TaskMutationService
     public string? CreateJob(CreateTaskRequest req)
     {
         var watchPaths = _scanner.GetWatchPaths();
-        // D1: a caller may address the target project by its stable PROJ-NNN id
-        // instead of a filesystem watchPath (the id survives a folder move that
-        // a hard-coded path would not). Resolve it to the project's storage
-        // location first; a plain path passes through unchanged.
-        var requestedPath = ResolveRequestedWatchPath(req.WatchPath);
+        // D1: a caller addresses the target project by a path-free handle — a
+        // short code / Kürzel (e.g. ASS) or a stable PROJ-NNN id (both survive a
+        // folder move that a hard-coded path would not). The preferred `Project`
+        // field wins; `WatchPath` is the deprecated fallback for legacy callers
+        // and may itself carry a handle or a raw path. Resolution turns any of
+        // these into the project's storage location; a plain path passes
+        // through unchanged.
+        var requestedHandle = string.IsNullOrWhiteSpace(req.Project) ? req.WatchPath : req.Project;
+        var requestedPath = ResolveRequestedWatchPath(requestedHandle);
         // Path-aware project resolution. The previous ordinal, case-sensitive
         // `w.Path == req.WatchPath` compared the client's watchPath byte-for-byte
         // against the RESOLVED entry path (Path.GetFullPath, back-slashed on
@@ -772,31 +776,73 @@ public class TaskMutationService
     }
 
     /// <summary>
-    /// D1: translate a project reference on <c>CreateTaskRequest.WatchPath</c>
-    /// into a filesystem watch path. A <c>PROJ-NNN</c> id is resolved through
-    /// the <see cref="ProjectRegistry"/> to the project's storage location so
-    /// the create survives a later folder move that a hard-coded path would
-    /// not. Anything that is not a PROJ id (a real path, or empty) is returned
-    /// unchanged; an unknown PROJ id is passed through verbatim so the caller
-    /// still lands on the no-matching-entry → null path (409) rather than
-    /// silently defaulting to the first project.
+    /// Resolves the caller-supplied project handle to a filesystem watchPath.
+    /// The external API contract addresses projects by a stable, path-free
+    /// handle so the FS layout never leaks into the wire:
+    /// <list type="bullet">
+    /// <item><c>PROJ-NNN</c> — the stable project id (survives a folder move).</item>
+    /// <item>a short code / Kürzel (e.g. <c>ASS</c>) — the human handle.</item>
+    /// </list>
+    /// A value that is neither (an absolute path from a legacy/deprecated
+    /// caller) passes through unchanged so existing consumers keep working
+    /// during the watchPath-encapsulation migration.
     /// </summary>
     private string? ResolveRequestedWatchPath(string? requested)
     {
         if (string.IsNullOrWhiteSpace(requested)) return requested;
-        if (!requested.StartsWith("PROJ-", StringComparison.OrdinalIgnoreCase)) return requested;
+        var trimmed = requested.Trim();
 
-        var project = _projectRegistry.FindById(requested.Trim());
-        if (project is { StorageLocation: { Length: > 0 } storage })
+        if (trimmed.StartsWith("PROJ-", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogInformation(
-                "create-by-project-id projectId={ProjectId} resolvedWatchPath={WatchPath}",
-                requested, storage);
-            return storage;
+            var byId = _projectRegistry.FindById(trimmed);
+            if (byId is { StorageLocation: { Length: > 0 } storageById })
+            {
+                _logger.LogInformation(
+                    "create-by-project-id projectId={ProjectId} resolvedWatchPath={WatchPath}",
+                    trimmed, storageById);
+                return storageById;
+            }
+
+            _logger.LogWarning("create-by-project-id-unresolved projectId={ProjectId}", trimmed);
+            return requested;
         }
 
-        _logger.LogWarning("create-by-project-id-unresolved projectId={ProjectId}", requested);
+        // Short code (Kürzel) — only when the token cannot be a filesystem path.
+        // Codes are 2–6 chars of A–Z/0–9, so anything holding a path separator,
+        // drive colon, or dot is treated as a raw path and passed through.
+        if (LooksLikeShortCode(trimmed))
+        {
+            var byCode = _projectRegistry.FindByShortCode(trimmed);
+            if (byCode is { StorageLocation: { Length: > 0 } storageByCode })
+            {
+                _logger.LogInformation(
+                    "create-by-short-code shortCode={ShortCode} resolvedWatchPath={WatchPath}",
+                    trimmed, storageByCode);
+                return storageByCode;
+            }
+            // Not a known code: fall through and treat the value as a raw path.
+        }
+
         return requested;
+    }
+
+    /// <summary>
+    /// True when <paramref name="value"/> has the shape of a project short code
+    /// (Kürzel): 2–6 chars of A–Z/0–9 and no filesystem-path markers. Used to
+    /// decide whether a create handle should be resolved via the registry
+    /// before falling back to treating it as an absolute watchPath.
+    /// </summary>
+    private static bool LooksLikeShortCode(string value)
+    {
+        if (value.Length is < 2 or > 6) return false;
+        foreach (var ch in value)
+        {
+            var isUpper = ch is >= 'A' and <= 'Z';
+            var isLower = ch is >= 'a' and <= 'z';
+            var isDigit = ch is >= '0' and <= '9';
+            if (!isUpper && !isLower && !isDigit) return false;
+        }
+        return true;
     }
 
     private string EnsureUniqueJobId(string watchPath, string baseSlug)
