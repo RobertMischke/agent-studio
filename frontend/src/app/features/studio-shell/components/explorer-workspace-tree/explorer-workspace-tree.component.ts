@@ -24,7 +24,8 @@ import { MenuComponent, type MenuItem, type MenuItemClickEvent } from '../../../
 import { ProjectDragDropService } from '../../../shell';
 import { ExplorerSectionsService } from '../../services/explorer-sections.service';
 import { ExplorerProjectActionsService } from '../../services/explorer-project-actions.service';
-import { BOARD_LANE_COUNT_TOOLTIPS, boardLaneCountsLabel, laneCountsFor, type ExplorerLaneCounts } from '../../studio-shell.project-rows';
+import { boardLaneCountsLabel, laneCountsFor, type ExplorerLaneCounts } from '../../studio-shell.project-rows';
+import { ExplorerLaneDashboardComponent, type ExplorerTreeMetricView } from '../explorer-lane-dashboard/explorer-lane-dashboard.component';
 import {
   aggregatePulse,
   aggregatePulseTooltip,
@@ -70,7 +71,6 @@ export interface ExplorerWorkspaceGroup {
 }
 
 export type ExplorerProjectSurface = 'board' | 'hub' | 'wiki' | 'epics';
-
 function folderTail(path: string): string {
   const parts = path.split(/[\\/]+/).filter(Boolean);
   return parts.length ? parts[parts.length - 1] : path;
@@ -94,7 +94,7 @@ function normalizeStorage(path: string): string {
 @Component({
   selector: 'app-explorer-workspace-tree',
   standalone: true,
-  imports: [SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective, MenuComponent, ExplorerAutoPulseComponent],
+  imports: [SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective, MenuComponent, ExplorerAutoPulseComponent, ExplorerLaneDashboardComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './explorer-workspace-tree.component.html',
@@ -110,6 +110,8 @@ export class ExplorerWorkspaceTreeComponent {
   readonly expandedProjects = input<ReadonlySet<string>>(new Set());
   readonly showAllActive = input(false);
   readonly activeProjectSurface = input<ExplorerProjectSurface | null>(null);
+  /** Experimental active-work visualization. Numbers remain the default. */
+  readonly metricView = input<ExplorerTreeMetricView>('numbers');
   /** AGT-2031 — project name → auto-pickup pulse state. Missing entries are
    *  treated as `off`. Feeds the subtle activity indicator on each project row
    *  and the aggregated pulse on collapsed workspace / tree nodes. */
@@ -303,8 +305,6 @@ export class ExplorerWorkspaceTreeComponent {
 
   readonly laneCountsFor = laneCountsFor;
   readonly boardLaneCountsLabel = boardLaneCountsLabel;
-  /** Per-lane hover help for the three board counters (see {@link BOARD_LANE_COUNT_TOOLTIPS}). */
-  readonly laneCountTooltips = BOARD_LANE_COUNT_TOOLTIPS;
 
   // ── AGT-2031: auto-pickup pulse indicator (logic in studio-shell.pulse) ───
 

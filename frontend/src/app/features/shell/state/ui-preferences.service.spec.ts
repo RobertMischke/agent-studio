@@ -32,6 +32,37 @@ describe('UiPreferencesService', () => {
     expect(localStorage.getItem('compactCards')).toBeNull();
   });
 
+  it('defaults tree metrics to numbers and persists the experimental dot view', () => {
+    const svc = TestBed.inject(UiPreferencesService);
+    expect(svc.treeMetricView()).toBe('numbers');
+    svc.setTreeMetricView('dots');
+    expect(svc.treeMetricView()).toBe('dots');
+    expect(localStorage.getItem('atp.studio.explorer.metrics')).toBe('dots');
+  });
+
+  it('mirrors a sibling tab tree metric write via the storage event', () => {
+    const svc = TestBed.inject(UiPreferencesService);
+    expect(svc.treeMetricView()).toBe('numbers');
+
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: 'atp.studio.explorer.metrics',
+        newValue: 'dots',
+        storageArea: localStorage,
+      }),
+    );
+    expect(svc.treeMetricView()).toBe('dots');
+
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: 'atp.studio.explorer.metrics',
+        newValue: 'numbers',
+        storageArea: localStorage,
+      }),
+    );
+    expect(svc.treeMetricView()).toBe('numbers');
+  });
+
   it('mirrors a sibling tab taskNavCollapsed write via the storage event', () => {
     const svc = TestBed.inject(UiPreferencesService);
     expect(svc.taskNavCollapsed()).toBe(false);
@@ -65,6 +96,7 @@ describe('UiPreferencesService', () => {
     const before = {
       nav: svc.taskNavCollapsed(),
       width: svc.sideSheetWidth(),
+      metrics: svc.treeMetricView(),
     };
     window.dispatchEvent(
       new StorageEvent('storage', {
@@ -75,5 +107,6 @@ describe('UiPreferencesService', () => {
     );
     expect(svc.taskNavCollapsed()).toBe(before.nav);
     expect(svc.sideSheetWidth()).toBe(before.width);
+    expect(svc.treeMetricView()).toBe(before.metrics);
   });
 });

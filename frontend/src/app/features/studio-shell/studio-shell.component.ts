@@ -37,7 +37,7 @@ import { BoardFiltersService, flattenGrouped } from '../board';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { NotificationService } from '../../services/notification.service';
 import { copyTextToClipboard } from '../../services/clipboard.util';
-import { WorkspaceManagerService, ProjectDragDropService, WorkspaceOverlaysService } from '../shell';
+import { WorkspaceManagerService, ProjectDragDropService, WorkspaceOverlaysService, UiPreferencesService } from '../shell';
 import { ProjectLookupService } from '../../services/project-lookup.service';
 import { ThemeService } from './services/theme.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
@@ -125,6 +125,7 @@ export class StudioShellComponent {
   private readonly tabState = inject(StudioTabStateService);
   private readonly panelState = inject(StudioPanelStateService);
   private readonly jobSelection = inject(TaskSelectionService);
+  readonly uiPrefs = inject(UiPreferencesService);
   readonly boardFilters = inject(BoardFiltersService);
   readonly explorerSections = inject(ExplorerSectionsService);
   private readonly confirmDialog = inject(ConfirmDialogService);
@@ -146,7 +147,6 @@ export class StudioShellComponent {
   readonly sidebarWidth = this.panelState.sidebarWidth;
   readonly activityBarSide = this.panelState.activityBarSide;
   readonly globalSearchOpen = signal(false);
-
   /**
    * Which Explorer-tree project rows are expanded (showing Board / Project
    * Hub / Activity sub-items). Persists across reloads so the user's

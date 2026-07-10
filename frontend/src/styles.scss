@@ -780,3 +780,11 @@ select option:hover {
   background-color: #45475a;
   color: #ffffff;
 }
+/* Active work is warm across cards, chips, and the board lane header. */
+.column[data-state='3-progress'] .column__header {
+  border-bottom-color: color-mix(in srgb, var(--lane-progress) 55%, var(--studio-border));
+}
+.column[data-state='3-progress'] .column__icon,
+.column[data-state='3-progress'] .column__title {
+  color: var(--lane-progress);
+}

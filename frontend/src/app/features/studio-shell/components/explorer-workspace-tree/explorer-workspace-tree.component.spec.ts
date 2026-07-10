@@ -175,6 +175,31 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(tipFor('studio-explorer-project-board-count-human-review-Alpha')).toMatchObject({ title: 'Human Review' });
   });
 
+  it('renders a capped, stably ordered dot dashboard with numeric a11y text', () => {
+    const fixture = mount();
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [
+      row('Alpha', { totalJobs: 20, laneCounts: { ready: 4, progress: 3, humanReview: 13 } }),
+    ]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.componentRef.setInput('metricView', 'dots');
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const dashboard = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-board-dots-Alpha"]');
+    const dots = Array.from(dashboard?.querySelectorAll<HTMLElement>('[data-lane]') ?? []);
+
+    expect(root.querySelector('[data-testid="studio-explorer-project-board-counts-Alpha"]')).toBeNull();
+    expect(dashboard?.getAttribute('aria-label')).toBe('4 ready, 3 in progress, 13 human review');
+    expect(dots).toHaveLength(15);
+    expect(dots.map(dot => dot.dataset['lane'])).toEqual([
+      ...Array(4).fill('ready'),
+      ...Array(3).fill('progress'),
+      ...Array(8).fill('humanReview'),
+    ]);
+    expect(dashboard?.querySelector('.studio-board-lane-dots__overflow')?.textContent?.trim()).toBe('+5');
+  });
+
   it('renders create workspace as a compact Workspaces header action', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;

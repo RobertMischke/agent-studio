@@ -6,6 +6,7 @@ import {
 } from '../../../../components/segmented-control/segmented-control.component';
 import { ThemeService } from '../../services/theme.service';
 import { StudioPanelStateService } from '../../services/studio-panel-state.service';
+import { UiPreferencesService } from '../../../shell';
 
 /**
  * AGT-2035 — Appearance section of the consolidated Workspace-settings view.
@@ -29,6 +30,7 @@ import { StudioPanelStateService } from '../../services/studio-panel-state.servi
 export class AppearanceSettingsComponent {
   private readonly themeService = inject(ThemeService);
   private readonly panelState = inject(StudioPanelStateService);
+  readonly uiPrefs = inject(UiPreferencesService);
 
   readonly theme = this.themeService.theme;
   readonly activityBarSide = this.panelState.activityBarSide;
@@ -41,6 +43,10 @@ export class AppearanceSettingsComponent {
     { value: 'left', label: 'Left', testid: 'settings-activitybar-left' },
     { value: 'right', label: 'Right', testid: 'settings-activitybar-right' },
   ];
+  readonly treeMetricViewOptions: readonly SegmentedOption<'numbers' | 'dots'>[] = [
+    { value: 'numbers', label: 'Numbers', testid: 'settings-tree-metrics-numbers' },
+    { value: 'dots', label: 'Dots', testid: 'settings-tree-metrics-dots' },
+  ];
 
   setTheme(value: 'dark' | 'light'): void {
     this.themeService.set(value);
@@ -48,5 +54,9 @@ export class AppearanceSettingsComponent {
 
   setActivityBarSide(side: 'left' | 'right'): void {
     this.panelState.setActivityBarSide(side);
+  }
+
+  setTreeMetricView(value: 'numbers' | 'dots'): void {
+    this.uiPrefs.setTreeMetricView(value);
   }
 }

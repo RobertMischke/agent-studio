@@ -25,4 +25,12 @@
       [value]="activityBarSide()"
       (valueChange)="setActivityBarSide($event)" />
   </div>
+  <div class="appearance__row">
+    <span class="appearance__label" id="appearance-tree-metrics-label">Tree view</span>
+    <app-segmented-control
+      ariaLabel="Tree view: active work visualization"
+      [options]="treeMetricViewOptions"
+      [value]="uiPrefs.treeMetricView()"
+      (valueChange)="setTreeMetricView($event)" />
+  </div>
 </section>

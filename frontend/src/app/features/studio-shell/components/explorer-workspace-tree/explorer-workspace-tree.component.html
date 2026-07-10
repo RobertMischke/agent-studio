@@ -183,22 +183,9 @@
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'board' ? 'page' : null"
                               [testid]="'studio-explorer-project-board-' + p.name"
                               (selectRequest)="openBoardRequest.emit(p.name)">
-                  <span class="studio-board-lane-counts"
-                        [attr.data-testid]="'studio-explorer-project-board-counts-' + p.name"
-                        [attr.aria-label]="boardLaneCountsLabel(p)">
-                    <span class="studio-board-lane-count studio-board-lane-count--ready"
-                          [cacTooltip]="laneCountTooltips.ready"
-                          [attr.data-testid]="'studio-explorer-project-board-count-ready-' + p.name"
-                          aria-hidden="true">{{ laneCountsFor(p).ready }}</span>
-                    <span class="studio-board-lane-count studio-board-lane-count--progress"
-                          [cacTooltip]="laneCountTooltips.progress"
-                          [attr.data-testid]="'studio-explorer-project-board-count-progress-' + p.name"
-                          aria-hidden="true">{{ laneCountsFor(p).progress }}</span>
-                    <span class="studio-board-lane-count studio-board-lane-count--human-review"
-                          [cacTooltip]="laneCountTooltips.humanReview"
-                          [attr.data-testid]="'studio-explorer-project-board-count-human-review-' + p.name"
-                          aria-hidden="true">{{ laneCountsFor(p).humanReview }}</span>
-                  </span>
+                  <app-explorer-lane-dashboard
+                    [counts]="laneCountsFor(p)" [view]="metricView()"
+                    [projectName]="p.name" />
                 </app-tree-row>
                 <app-tree-row level="root" glyph="layout"
                               label="Project Hub"

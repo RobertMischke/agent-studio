@@ -35,10 +35,14 @@ const STORAGE_KEY_COMPACT_CARDS = 'compactCards';
 const STORAGE_KEY_SIDE_SHEET_WIDTH = 'sideSheetWidth';
 const STORAGE_KEY_GROUP_BY_EPIC = 'boardGroupByEpic';
 const STORAGE_KEY_ORCHESTRATOR_SETTINGS_OPEN = 'orchestratorSettingsOpen';
+const STORAGE_KEY_TREE_METRICS = 'atp.studio.explorer.metrics';
 
 @Injectable({ providedIn: 'root' })
 export class UiPreferencesService {
   readonly taskNavCollapsed = signal<boolean>(localStorage.getItem(STORAGE_KEY_TASK_NAV) === '1');
+  readonly treeMetricView = signal<'numbers' | 'dots'>(
+    localStorage.getItem(STORAGE_KEY_TREE_METRICS) === 'dots' ? 'dots' : 'numbers',
+  );
   readonly sideSheetWidth = signal<number>(
     parseInt(localStorage.getItem(STORAGE_KEY_SIDE_SHEET_WIDTH) ?? '280'),
   );
@@ -96,6 +100,9 @@ export class UiPreferencesService {
       case STORAGE_KEY_GROUP_BY_EPIC:
         this.groupByEpic.set(e.newValue === '1');
         return;
+      case STORAGE_KEY_TREE_METRICS:
+        this.treeMetricView.set(e.newValue === 'dots' ? 'dots' : 'numbers');
+        return;
       default:
         return;
     }
@@ -106,6 +113,10 @@ export class UiPreferencesService {
     localStorage.setItem(STORAGE_KEY_TASK_NAV, collapsed ? '1' : '0');
   }
 
+  setTreeMetricView(value: 'numbers' | 'dots'): void {
+    this.treeMetricView.set(value);
+    localStorage.setItem(STORAGE_KEY_TREE_METRICS, value);
+  }
   toggleGroupByEpic(): void {
     const value = !this.groupByEpic();
     this.groupByEpic.set(value);

@@ -209,7 +209,7 @@
   --lane-backlog:      #9d9d9d;
   --lane-prep:         #d1bfa5;
   --lane-ready:        var(--color-green-vscode);
-  --lane-progress:     var(--color-blue-400);
+  --lane-progress:     var(--studio-accent-warn-strong);
   --lane-auto-review:  var(--color-yellow-200);
   --lane-human-review: var(--color-purple-vscode);
   --lane-escalated:    var(--studio-accent-6);
@@ -648,7 +648,7 @@
   --lane-backlog:      #6e6e6e;
   --lane-prep:         #92745a;
   --lane-ready:        var(--color-green-700);
-  --lane-progress:     var(--color-blue-700);
+  --lane-progress:     var(--color-amber-700);
   --lane-auto-review:  var(--color-yellow-700);
   --lane-human-review: #7c3aed;
   --lane-escalated:    var(--color-red-700);
