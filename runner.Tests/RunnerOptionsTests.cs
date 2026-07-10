@@ -38,6 +38,21 @@ public class RunnerOptionsTests
         var (_, _, once, _) = RunnerOptions.Parse(["AGT-1", "--poll"]);
         Assert.False(once);
     }
+
+    [Fact]
+    public void Daemon_slot_flags_are_parsed()
+    {
+        var (options, _, _, _) = RunnerOptions.Parse(
+            ["--poll", "--max-parallelism", "4", "--poll-seconds", "9"]);
+        Assert.Equal(4, options.HostMaxParallelism);
+        Assert.Equal(9, options.PollSeconds);
+    }
+
+    [Theory]
+    [InlineData("AGT-20", "AGT-20")]
+    [InlineData("project/task 20", "project-task-20")]
+    public void Worktree_segment_is_filesystem_safe(string input, string expected)
+        => Assert.Equal(expected, GitWorkspace.SafeSegment(input));
 }
 
 public class AgentCliArgsTests

@@ -94,6 +94,30 @@ public class ProjectSettingsService
     }
 
     /// <summary>
+    /// Assigns a project to one remote runner and optionally changes its remote
+    /// eligibility. Blank assignment returns pickup ownership to the local
+    /// runner. Both values are persisted in the project record in one write.
+    /// </summary>
+    public void SetExecutionRunner(string projectName, string? executionRunner, bool? remoteExecutionEnabled = null)
+    {
+        EnsureLoaded();
+        var normalized = string.IsNullOrWhiteSpace(executionRunner) ? null : executionRunner.Trim();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with
+            {
+                ExecutionRunner = normalized,
+                RemoteExecutionEnabled = remoteExecutionEnabled ?? current.RemoteExecutionEnabled,
+            };
+            Persist();
+        }
+        _logger.LogInformation(
+            "execution-runner-assignment project={Project} runner={Runner} remoteEnabled={RemoteEnabled}",
+            projectName, normalized ?? "local", remoteExecutionEnabled ?? Get(projectName).RemoteExecutionEnabled);
+    }
+
+    /// <summary>
     /// ADR-0052: sets the integration branch parallel task worktrees branch off
     /// and merge back into. Blank reverts to the default (<c>develop</c>).
     /// </summary>

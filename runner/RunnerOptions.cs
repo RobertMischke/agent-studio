@@ -53,6 +53,12 @@ public sealed class RunnerOptions
     /// <summary>Hard cap on a single CLI run before the runner gives up and reports a blocked completion.</summary>
     public int RunTimeoutSeconds { get; init; }
 
+    /// <summary>Maximum number of concurrently running task slots on this host.</summary>
+    public int HostMaxParallelism { get; init; }
+
+    /// <summary>Delay between empty daemon pickup polls.</summary>
+    public int PollSeconds { get; init; }
+
     public static string Env(string name, string fallback = "")
         => Environment.GetEnvironmentVariable(name) is { Length: > 0 } v ? v : fallback;
 
@@ -107,6 +113,10 @@ public sealed class RunnerOptions
             TtlSeconds = overrides.TryGetValue("ttl", out var ttl) && int.TryParse(ttl, out var ttlV) ? ttlV : EnvInt("RUNNER_TTL_SECONDS", 120),
             HeartbeatSeconds = EnvInt("RUNNER_HEARTBEAT_SECONDS", 30),
             RunTimeoutSeconds = EnvInt("RUNNER_RUN_TIMEOUT_SECONDS", 3600),
+            HostMaxParallelism = overrides.TryGetValue("max-parallelism", out var max) && int.TryParse(max, out var maxV) && maxV > 0
+                ? maxV : EnvInt("RUNNER_MAX_PARALLELISM", 2),
+            PollSeconds = overrides.TryGetValue("poll-seconds", out var poll) && int.TryParse(poll, out var pollV) && pollV > 0
+                ? pollV : EnvInt("RUNNER_POLL_SECONDS", 5),
         };
 
         var taskKey = positional ?? (overrides.TryGetValue("task", out var tk) ? tk : null);

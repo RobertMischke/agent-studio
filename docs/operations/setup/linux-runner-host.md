@@ -1,7 +1,7 @@
 # Linux runner host (standalone remote runner)
 
-Status: MVP runbook for RM-5 (Runner-Split C). Proves **one task end-to-end on a
-remote Linux host** against the local Studio's Task Server API.
+Status: Remote daemon runbook. The runner continuously executes server-assigned
+projects on a Linux host while retaining the RM-5 one-task diagnostic mode.
 
 This is the operator-facing companion to the plan in
 [../../research/remote-ready-kickoff-2026-07.md](../../research/remote-ready-kickoff-2026-07.md)
@@ -14,7 +14,7 @@ upload).
 ## What the standalone runner is
 
 A single self-contained .NET console process (`agent-runner`) that runs on a
-Linux host and drives one task to a result without owning any task state:
+Linux host and fills a bounded set of task slots without owning task state:
 
 - **Code arrives via git `origin`** - the runner fetches and checks out a branch
   read-only. It never pushes; the platform still owns git integration on the
@@ -28,6 +28,13 @@ Linux host and drives one task to a result without owning any task state:
   `Expired`) means another holder took over, so the runner abandons the run
   instead of racing it (the §8.2C split-brain guard, enforced runner-side in
   `runner/LeaseHeartbeat.cs`).
+- **Assignment is server-owned** - `ProjectSettings.executionRunner` names the
+  daemon that may claim a project's cards. The remote claim endpoint and the
+  local in-process runner read that same record, so config drift cannot cause
+  double pickup. Lease fencing remains the hard takeover guard.
+- **Every slot has its own linked git worktree** under
+  `$RUNNER_WORKDIR/worktrees/<task-key>`. The shared `repo/` checkout is only the
+  git metadata/fetch source. Completed task worktrees are removed after handoff.
 
 ### MVP boundaries (read before relying on it)
 
@@ -35,8 +42,11 @@ Linux host and drives one task to a result without owning any task state:
   summary, not a git diff. A run that produces committable code changes still
   needs the platform's own commit/push path; that cutover is later remote-ready
   work, not this MVP.
-- **The task to run is handed to the runner explicitly** (by task key). Full
-  autonomous pickup / pick-gate parity is out of scope for "1 task end-to-end".
+- **Suitability is explicit and narrow.** `remoteExecutionEnabled` defaults to
+  true at project level. Set it false only for machine-bound work such as the
+  UpdateService Windows machinery or live-checkout drift scans. Headless
+  Chromium, UI tests, and screenshots are remote-capable and use the host-owned
+  Mode-A stack.
 - **The CLI invocation is configurable, not hard-coded.** Headless auth and
   print-mode flags differ per CLI and per version; `RUNNER_CLI_BIN` /
   `RUNNER_CLI_ARGS` select them. See the per-CLI defaults below.
@@ -102,6 +112,8 @@ list.
 | `RUNNER_TTL_SECONDS` | `--ttl` | `120` | Requested lease TTL; the server clamps it. |
 | `RUNNER_HEARTBEAT_SECONDS` | | `30` | Renew cadence, kept below the TTL. |
 | `RUNNER_RUN_TIMEOUT_SECONDS` | | `3600` | Hard cap on a single CLI run. |
+| `RUNNER_MAX_PARALLELISM` | `--max-parallelism` | `2` | Maximum concurrent task slots on this host. |
+| `RUNNER_POLL_SECONDS` | `--poll-seconds` | `5` | Delay after an empty claim poll. |
 
 Recommended per-CLI headless defaults (verify against your installed version):
 
@@ -111,7 +123,53 @@ Recommended per-CLI headless defaults (verify against your installed version):
   exposes. When quoting gets awkward, point `RUNNER_CLI_BIN` at a small wrapper
   script instead of fighting the space-split arg parser.
 
-## 4. Run one task end-to-end
+## 4. Assign projects and run the daemon
+
+Assignment is stored through the Task Server API. The following assigns a
+remote-capable project to this daemon; use an empty `executionRunner` to hand it
+back to the local runner:
+
+```bash
+curl -X PUT "$RUNNER_SERVER_URL/api/projects/my-project/execution-runner" \
+  -H 'Content-Type: application/json' \
+  -H 'X-Client-Id: <registered-operator-client-id>' \
+  -d '{"executionRunner":"agent-runner-01","remoteExecutionEnabled":true}'
+```
+
+Start the foreground daemon with no task argument or with `--poll`:
+
+```bash
+export RUNNER_SERVER_URL=http://<studio-host>:5030
+export RUNNER_GIT_REMOTE=<origin>
+export RUNNER_NAME=agent-runner-01
+export RUNNER_MAX_PARALLELISM=2
+/opt/agent-runner/agent-runner --poll
+```
+
+The daemon registers once, polls `POST /api/runner/claim`, and fills free host
+slots. The server only returns pickup-eligible `2-ready` cards from assigned,
+remote-capable projects and moves a successful fenced claim to `3-progress`.
+
+### systemd deployment
+
+Install the shipped unit and an environment file, then enable it:
+
+```bash
+sudo install -D -m 0644 deploy/systemd/agent-runner.service /etc/systemd/system/agent-runner.service
+sudo install -d -m 0750 /etc/agent-runner /var/lib/agent-runner
+sudoedit /etc/agent-runner/runner.env
+sudo systemctl daemon-reload
+sudo systemctl enable --now agent-runner
+sudo journalctl -u agent-runner -f
+```
+
+At minimum, `runner.env` sets `RUNNER_SERVER_URL`, `RUNNER_GIT_REMOTE`,
+`RUNNER_ID`, and `RUNNER_NAME`. The unit restarts after failures, logs to
+journald, requests graceful SIGINT shutdown, and best-effort starts
+`~/bin/stack-start.sh` before the daemon so host-local screenshot runs have a
+clean Mode-A Studio stack.
+
+## 5. Run one task end-to-end for diagnostics
 
 1. On the **local board**, assign the ready task to project **`agent-runner-01`**
    (the project the remote runner serves) and note its task key.
@@ -146,7 +204,7 @@ attributes the completion to the same runner. No operator action is needed; this
 is documented so a `401 client-unknown` in the logs points at the right cause
 (usually a reverse proxy stripping the `X-Client-Id` header).
 
-## 5. Acceptance walkthrough
+## 6. Acceptance walkthrough
 
 The task passes RM-5 acceptance when, after the runner exits `0`:
 
@@ -158,9 +216,12 @@ The task passes RM-5 acceptance when, after the runner exits `0`:
 
 ## Troubleshooting
 
-- **`lease not granted: Held`** - another runner (often the in-process local one)
-  already holds the task. Stop the local project runner or pick a task assigned
-  only to `agent-runner-01`.
+- **No task is claimed** - confirm the project's `executionRunner` exactly
+  matches `RUNNER_NAME` or `RUNNER_ID`, `remoteExecutionEnabled` is true, and
+  the card is pickup-eligible in `2-ready`. The local runner intentionally skips
+  the same assigned project.
+- **`lease not granted: Held` in one-task mode** - another runner already holds
+  the task. The daemon claim path normally avoids this before launch.
 - **`lease lost: StaleToken` mid-run** - a TTL takeover happened; the network was
   slow enough that heartbeats missed the window. Raise `RUNNER_TTL_SECONDS` /
   lower `RUNNER_HEARTBEAT_SECONDS`, or check the tunnel.

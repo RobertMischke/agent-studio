@@ -56,10 +56,12 @@ state.
   state after process failure.
 - `backend/Services/Supervisor/*`: Layer 2 advisory loop, meta-cycle, and rare
   intervention primitives.
-- `runner/*`: the standalone remote runner (RM-5, Runner-Split C). A dependency-
-  free console process that runs one task on a Linux host against the Task Server
-  API only (fenced lease + heartbeat, git-origin checkout, log + artifact upload,
-  external-completion). Owns no task state and never pushes git. Operator runbook:
+- `runner/*`: the standalone remote runner daemon. A dependency-free console
+  process that continuously claims server-assigned projects with bounded host
+  slots (default 2), fenced leases + heartbeat, per-task linked git worktrees,
+  log/artifact upload, and external-completion. The original `--task <key>`
+  one-shot remains for diagnostics. It owns no task state and never pushes git.
+  Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../operations/setup/linux-runner-host.md).
 - `TaskRunnerService.ProjectRunnerBadge` + `TaskEndpointHelpers.WithRuntime`
   (AGT-2003): read-time projection of the active run lease onto `TaskInfo.Runner`
@@ -69,6 +71,11 @@ state.
   disk pickup-lock and holds none, which is exactly the lokal-vs-remote signal.
 
 ## Invariants
+
+- Remote pickup ownership lives in the project record (`executionRunner` plus
+  `remoteExecutionEnabled`). The remote claim endpoint and local ProjectRunner
+  consult the same record; assigned remote-capable projects are never locally
+  auto-picked. Lease fencing is the hard split-brain guard below that policy.
 
 - Sentinel matches are authoritative. When adding a sentinel, update
   [docs/contracts/agent-task.md](../contracts/agent-task.md) and

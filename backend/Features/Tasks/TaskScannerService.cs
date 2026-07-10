@@ -438,7 +438,11 @@ public class TaskScannerService : ITaskScanner
 
     public TaskInfo? FindJob(string jobId, string? watchPath = null)
     {
-        var matches = ScanAllJobs().Where(j => j.Id == jobId);
+        // Public task routes accept both the physical job id/slug and the
+        // stable project key shown on cards. Remote runners receive that key
+        // from the claim endpoint, so every subsequent prompt/log/completion
+        // lookup must resolve the same identity after a lane move.
+        var matches = ScanAllJobs().Where(j => MatchesTaskIdentity(j, jobId));
         if (!string.IsNullOrWhiteSpace(watchPath))
         {
             // Path-aware, OS-correct project match. A raw OrdinalIgnoreCase
@@ -495,12 +499,17 @@ public class TaskScannerService : ITaskScanner
                 var info = ScanJobFolder(jobDir, entry, TaskStates.Archive);
                 if (info == null) continue;
                 if (!string.Equals(info.State, TaskStates.Archive, StringComparison.Ordinal)) continue;
-                if (string.Equals(info.Id, jobId, StringComparison.Ordinal)) matches.Add(info);
+                if (MatchesTaskIdentity(info, jobId)) matches.Add(info);
             }
         }
 
         return matches;
     }
+
+    private static bool MatchesTaskIdentity(TaskInfo info, string identity)
+        => string.Equals(info.Id, identity, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(info.TaskKey, identity, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(info.Key, identity, StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<string> EnumerateArchiveCandidateDirs(string watchPath)
     {

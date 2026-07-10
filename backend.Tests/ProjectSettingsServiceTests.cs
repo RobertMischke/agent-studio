@@ -78,6 +78,26 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void SetExecutionRunner_Persists_assignment_and_remote_eligibility_together()
+    {
+        var svc = Build();
+
+        svc.SetExecutionRunner("demo", " runner-01 ", remoteExecutionEnabled: false);
+
+        var current = svc.Get("demo");
+        Assert.Equal("runner-01", current.ExecutionRunner);
+        Assert.False(current.RemoteExecutionEnabled);
+
+        var reloaded = Build().Get("demo");
+        Assert.Equal("runner-01", reloaded.ExecutionRunner);
+        Assert.False(reloaded.RemoteExecutionEnabled);
+
+        svc.SetExecutionRunner("demo", "  ");
+        Assert.Null(svc.Get("demo").ExecutionRunner);
+        Assert.False(svc.Get("demo").RemoteExecutionEnabled);
+    }
+
+    [Fact]
     public void SetAutoCommit_PersistsExplicitFalseAcrossReload()
     {
         var svc = Build();

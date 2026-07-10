@@ -44,6 +44,14 @@ public sealed class RemoteTaskRunner
         var lease = acquire.Lease;
         _log($"lease {lease.LeaseId} granted, fencing token {lease.FencingToken}, expires {lease.ExpiresAt:o}");
 
+        return await RunClaimedAsync(taskKey, lease, shutdown);
+    }
+
+    /// <summary>Runs a daemon-claimed task using the lease minted by the atomic claim endpoint.</summary>
+    public async Task<int> RunClaimedAsync(string taskKey, RunLeaseInfoDto lease, CancellationToken shutdown)
+    {
+        _log($"running claimed task '{taskKey}' with lease {lease.LeaseId}, fencing token {lease.FencingToken}");
+
         using var stopRun = CancellationTokenSource.CreateLinkedTokenSource(shutdown);
         var heartbeat = new LeaseHeartbeat(_client, _options, lease, _log);
         var heartbeatTask = heartbeat.RunAsync(stopRun, shutdown);
@@ -53,9 +61,11 @@ public sealed class RemoteTaskRunner
 
         RunOutcome outcome;
         List<string> uploadedFiles = [];
+        var workspace = new GitWorkspace(_options, taskKey, _log);
+        var handedBack = false;
         try
         {
-            outcome = await ExecuteAsync(taskKey, lease, shipper, stopRun, shutdown);
+            outcome = await ExecuteAsync(taskKey, workspace, shipper, stopRun, shutdown);
             await shipper.FlushAsync(shutdown);
             uploadedFiles = await UploadResultsAsync(taskKey, shutdown);
 
@@ -66,6 +76,7 @@ public sealed class RemoteTaskRunner
             }
 
             await CompleteAsync(taskKey, outcome, uploadedFiles, shutdown);
+            handedBack = true;
             _log($"task '{taskKey}' handed back to the local board: {outcome.Kind}");
             return outcome.Kind is RunOutcomeKind.Blocked or RunOutcomeKind.NeedsInput ? 1 : 0;
         }
@@ -74,21 +85,26 @@ public sealed class RemoteTaskRunner
             stopRun.Cancel();
             await SafeAwait(heartbeatTask);
             await SafeAwait(shipperTask);
-            await ReleaseAsync(lease, shutdown);
+            // Shutdown already cancelled the run token. Release with an
+            // independent token so SIGINT can relinquish the lease immediately
+            // instead of always waiting for TTL expiry.
+            await ReleaseAsync(lease, CancellationToken.None);
+            if (handedBack)
+                await SafeTeardownAsync(workspace);
         }
     }
 
     private async Task<RunOutcome> ExecuteAsync(
-        string taskKey, RunLeaseInfoDto lease, LogShipper shipper, CancellationTokenSource stopRun, CancellationToken shutdown)
+        string taskKey, GitWorkspace workspace, LogShipper shipper, CancellationTokenSource stopRun, CancellationToken shutdown)
     {
-        var workspace = new GitWorkspace(_options, _log);
         var branch = await workspace.PrepareAsync(shutdown);
         shipper.Add("system", $"[runner] working tree ready on branch '{branch}'");
 
         var prompt = await _client.ReadTaskFileAsync(taskKey, "prompt.md", shutdown)
                      ?? throw new InvalidOperationException($"Task '{taskKey}' has no prompt.md to run.");
 
-        var resultsDir = Path.Combine(_options.WorkDir, "results");
+        var resultsDir = ResultsDir(taskKey);
+        if (Directory.Exists(resultsDir)) Directory.Delete(resultsDir, recursive: true);
         Directory.CreateDirectory(resultsDir);
 
         var cli = new AgentCliProcess(_options, resultsDir, _log);
@@ -119,7 +135,7 @@ public sealed class RemoteTaskRunner
 
     private async Task<List<string>> UploadResultsAsync(string taskKey, CancellationToken ct)
     {
-        var resultsDir = Path.Combine(_options.WorkDir, "results");
+        var resultsDir = ResultsDir(taskKey);
         if (!Directory.Exists(resultsDir)) return [];
 
         var files = Directory.EnumerateFiles(resultsDir, "*", SearchOption.AllDirectories).ToList();
@@ -165,6 +181,15 @@ public sealed class RemoteTaskRunner
         {
             _log($"lease release failed (server TTL will reclaim it): {ex.Message}");
         }
+    }
+
+    private string ResultsDir(string taskKey)
+        => Path.Combine(_options.WorkDir, "tasks", GitWorkspace.SafeSegment(taskKey), "results");
+
+    private async Task SafeTeardownAsync(GitWorkspace workspace)
+    {
+        try { await workspace.TeardownAsync(CancellationToken.None); }
+        catch (Exception ex) { _log($"task worktree teardown failed: {ex.Message}"); }
     }
 
     private static async Task SafeAwait(Task task)

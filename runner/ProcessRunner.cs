@@ -22,6 +22,7 @@ public static class ProcessRunner
         string? stdin = null,
         Action<string>? onStdOut = null,
         Action<string>? onStdErr = null,
+        IReadOnlyDictionary<string, string?>? environment = null,
         CancellationToken ct = default)
     {
         var psi = new ProcessStartInfo
@@ -35,6 +36,9 @@ public static class ProcessRunner
             WorkingDirectory = workingDirectory ?? Environment.CurrentDirectory,
         };
         foreach (var arg in arguments) psi.ArgumentList.Add(arg);
+        if (environment != null)
+            foreach (var (key, value) in environment)
+                psi.Environment[key] = value;
 
         using var process = new Process { StartInfo = psi };
         var outSb = new System.Text.StringBuilder();

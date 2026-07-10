@@ -427,6 +427,13 @@ public record SetMaxParallelismRequest
     public int MaxParallelism { get; init; } = 1;
 }
 
+/// <summary>Body for the server-owned remote runner assignment.</summary>
+public record SetExecutionRunnerRequest
+{
+    public string? ExecutionRunner { get; init; }
+    public bool? RemoteExecutionEnabled { get; init; }
+}
+
 /// <summary>
 /// Body for <c>PUT /api/projects/{name}/integration-branch</c> (ADR-0052).
 /// Blank reverts to the default integration branch.

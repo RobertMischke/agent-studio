@@ -73,6 +73,24 @@ public sealed record RunLeaseResponse(
     RunLeaseInfoDto? Lease,
     string? Message = null);
 
+public sealed record RunnerClaimRequest(
+    string RunnerId,
+    string RunnerName,
+    string Hostname,
+    int Pid,
+    string BackendName,
+    int? RequestedTtlSeconds = null);
+
+public enum RunnerClaimStatus { Claimed, Empty, Invalid }
+
+public sealed record RunnerClaimResponse(
+    RunnerClaimStatus Status,
+    string? TaskKey = null,
+    string? JobId = null,
+    string? ProjectName = null,
+    RunLeaseInfoDto? Lease = null,
+    string? Message = null);
+
 /// <summary>One consolidated output line, shaped to the server's CliOutputLine JSON.</summary>
 public sealed record CliOutputLine(DateTime Timestamp, string Stream, string Text);
 

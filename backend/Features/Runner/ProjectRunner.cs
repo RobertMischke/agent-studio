@@ -898,6 +898,19 @@ public class ProjectRunner
 
         if (_mode is "manual" or "paused") return;
 
+        // The project record is the single pickup-ownership truth. When it is
+        // assigned to a remote runner and is remote-capable, this in-process
+        // runner must not race it. Explicit user starts remain available.
+        var pickupSettings = _projectSettings.Get(ProjectName);
+        if (pickupSettings.RemoteExecutionEnabled
+            && !string.IsNullOrWhiteSpace(pickupSettings.ExecutionRunner))
+        {
+            _logger.LogDebug(
+                "remote-pickup-owned project={Project} runner={Runner}; local auto-pickup skipped",
+                ProjectName, pickupSettings.ExecutionRunner);
+            return;
+        }
+
         // Onboarding gate (Slice P / ASS-1663): a project that has DECLARED a
         // build profile but has not yet passed a green validation dry-run is not
         // "pipeline-ready" - refuse auto-pickup until install+build went green

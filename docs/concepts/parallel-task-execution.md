@@ -113,6 +113,15 @@ Dependency-ordered. Each slice is independently shippable/verifiable and names i
 
 ### 8.2C Multi-system follow-up: task leases, shared store, and origin distribution
 
+**Implemented daemon slice (2026-07-10).** The standalone runner now polls an
+assignment-aware server claim endpoint and fills bounded host slots (default 2).
+The project record owns `executionRunner` and `remoteExecutionEnabled`; the
+remote claim path and local in-process pickup read those same fields. Each claim
+receives a fenced run lease, moves from `2-ready` to `3-progress`, and runs in a
+task-specific linked worktree. This delivers continuous single-server pickup;
+the stronger durable shared-store and stale-token-on-every-write requirements
+below remain the target for multi-server/high-availability operation.
+
 This is deliberately later than the local worktree/slot slices. Do **not** start a multi-system runner or "agent builder" from this concept without a reviewed design task and close operator supervision. The local slice proves slot admission and worktree isolation inside one backend. Multi-system execution changes the source-of-truth model and must be treated as a separate critical checkpoint.
 
 **Hard prerequisite: one authoritative Task Server.** A local task-folder repository is not a distribution protocol. In multi-system mode, task state, lane transitions, run records, leases, heartbeats, timeline events, and durable log/artifact references live behind a shared Task Store owned by the Task Server. Local folders can exist only as runner caches/projections. There must not be two authoritative writers, and there must not be a "best effort sync" between local file repos. This aligns with the Server/Runner split in [Task Execution & Log Architecture](task-execution-and-log-architecture.md).
