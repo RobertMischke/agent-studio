@@ -1,5 +1,6 @@
 using AgentStudio.Docs;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 using Xunit;
 
 namespace AgentStudio.Tests;
@@ -10,16 +11,22 @@ public sealed class WorkstreamCurationServiceTests : IDisposable
     private readonly WorkstreamCurationService _sut = new(NullLogger<WorkstreamCurationService>.Instance);
 
     [Fact]
-    public void RetroPilot_ClassifiesRealHistoryShape_AndIsExactlyOnce()
+    public void RetroPilot_ClassifiesCapturedAgentStudioHistory_AndIsExactlyOnce()
     {
         Directory.CreateDirectory(_root);
         var project = new WatchPathEntry { Name = "agent-studio", RootPath = _root };
-        var history = new[]
+        var corpusPath = Path.Combine(AppContext.BaseDirectory, "Fixtures",
+            "workstream-retro-pilot-agent-studio-2026-07-08.json");
+        var corpus = JsonSerializer.Deserialize<HistoricalCorpus>(File.ReadAllText(corpusPath),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        Assert.NotNull(corpus);
+        Assert.Equal("Agent Studio task history from the 2026-07-08/09 incident window", corpus.Scope);
+        Assert.All(corpus.Records, record =>
         {
-            Task("AGT-1901", "Post-processing verdict retry lost results", "post-processing missing-terminal-sentinel"),
-            Task("AGT-1902", "Restart left resume orphan", "restart resume orphan no-active-run"),
-            Task("AGT-1903", "Reissue wipe regression", "reissue wipe deleted results"),
-        };
+            Assert.StartsWith("tasks/", record.SourceArtifact, StringComparison.Ordinal);
+            Assert.Matches("^[A-F0-9]{64}$", record.SourceSha256);
+        });
+        var history = corpus.Records.Select(record => Task(record.TaskId, record.Title, record.Evidence)).ToArray();
 
         var result = _sut.RunRetroPilot(project, history, new DateTime(2026, 7, 9, 3, 0, 0, DateTimeKind.Utc));
 
@@ -32,6 +39,12 @@ public sealed class WorkstreamCurationServiceTests : IDisposable
         Assert.True(File.Exists(Path.Combine(frame, "20-development-signals", "generated", "restart-resume-orphans.md")));
         Assert.True(File.Exists(Path.Combine(frame, "20-development-signals", "generated", "reissue-wipe.md")));
         Assert.True(File.Exists(Path.Combine(frame, ".curator", "retro-pilot-v1.json")));
+        foreach (var record in corpus.Records)
+        {
+            var signal = File.ReadAllText(Path.Combine(frame, "20-development-signals", "generated",
+                $"{record.ExpectedSignal}.md"));
+            Assert.Contains($"`{record.TaskId}`", signal, StringComparison.Ordinal);
+        }
 
         var second = _sut.RunRetroPilot(project, history, new DateTime(2026, 7, 10, 3, 0, 0, DateTimeKind.Utc));
         Assert.False(second.Ran);
@@ -94,6 +107,10 @@ public sealed class WorkstreamCurationServiceTests : IDisposable
         File.WriteAllText(Path.Combine(folder, "logs", "cli-output.log"), log);
         return new TaskInfo { Id = id, Key = id, Title = title, ProjectName = "agent-studio", FolderPath = folder };
     }
+
+    private sealed record HistoricalCorpus(string CapturedAtUtc, string Scope, HistoricalRecord[] Records);
+    private sealed record HistoricalRecord(string TaskId, string Title, string Evidence, string SourceArtifact,
+        string SourceSha256, string ExpectedSignal);
 
     public void Dispose()
     {
