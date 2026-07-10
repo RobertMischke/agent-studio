@@ -52,8 +52,8 @@ export function seedRemoteHosts(nowMs: number): RemoteHost[] {
       },
     },
     {
-      id: 'hetzner-agent-runner',
-      name: 'agent-runner',
+      id: 'agent-runner-01',
+      name: 'agent-runner-01',
       role: 'remote',
       address: 'ssh://agent@runner.hetzner',
       status: 'online',

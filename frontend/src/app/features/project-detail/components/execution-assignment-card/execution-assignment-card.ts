@@ -21,7 +21,8 @@ interface ProbeCheck {
 }
 
 interface ProjectExecutionSettings {
-  executionHostId?: string;
+  executionRunner?: string | null;
+  remoteExecutionEnabled?: boolean;
   integrationBranch?: string;
 }
 
@@ -63,7 +64,7 @@ export class ExecutionAssignmentCardComponent implements OnInit {
       .subscribe({
         next: (settings) => {
           const project = settings?.[this.projectName()];
-          this.selectedHostId.set(project?.executionHostId || 'local');
+          this.selectedHostId.set(project?.remoteExecutionEnabled === false ? 'local' : project?.executionRunner || 'local');
           this.integrationBranch.set(project?.integrationBranch || 'develop');
         },
       });
@@ -76,13 +77,16 @@ export class ExecutionAssignmentCardComponent implements OnInit {
     this.saving.set(true);
     this.saveError.set(null);
     this.http
-      .put<{ executionHostId: string }>(
-        `/api/projects/${encodeURIComponent(this.projectName())}/execution-host`,
-        { hostId },
+      .put<ProjectExecutionSettings>(
+        `/api/projects/${encodeURIComponent(this.projectName())}/execution-runner`,
+        {
+          executionRunner: hostId === 'local' ? null : hostId,
+          remoteExecutionEnabled: true,
+        },
       )
       .subscribe({
         next: (response) => {
-          this.selectedHostId.set(response.executionHostId || hostId);
+          this.selectedHostId.set(response.executionRunner || 'local');
           this.saving.set(false);
           this.log('assignment-saved', { hostId: this.selectedHostId() });
         },
@@ -192,7 +196,7 @@ function noopOutcome(host: RemoteHost): { passed: boolean; detail: string } {
   return {
     passed,
     detail: passed
-      ? 'No-op handshake accepted; no task or branch was created.'
+      ? 'Runner heartbeat is healthy and can accept the no-op task.'
       : `Host is ${host.status} and cannot accept a probe.`,
   };
 }

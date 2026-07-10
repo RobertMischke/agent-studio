@@ -1,47 +1,52 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import * as fs from 'fs';
 import * as path from 'path';
-import { api } from '../helpers/api';
-
-interface WatchPath { name: string; path: string }
 
 const SCREENSHOT_DIR = process.env.PROJECT_SHELL_RESULTS_DIR?.trim()
   || path.resolve(__dirname, '..', '..', 'playwright-screenshots', 'project-execution-assignment');
-
-let projectName = '';
 
 function slugFor(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-test.beforeAll(async () => {
+test.beforeAll(() => {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
-  const paths = await api<WatchPath[]>('/api/watch-paths');
-  expect(paths.length).toBeGreaterThan(0);
-  projectName = paths.find((item) => /agent.?task|software.?studio/i.test(item.name))?.name ?? paths[0].name;
 });
 
-test('assigns a remote host and completes the guided readiness probe', async ({ page }) => {
+test('assigns a remote host and completes the guided readiness probe', async ({ page, devBackend }) => {
+  expect(devBackend.workspace).toBeTruthy();
+  const projectName = 'Agent Studio';
+  await page.route('**/api/watch-paths', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{ name: projectName, path: devBackend.workspace, rootPath: devBackend.workspace }]),
+    });
+  });
   await page.route('**/api/projects/settings', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         [projectName]: {
-          executionHostId: 'local',
+          executionRunner: null,
+          remoteExecutionEnabled: true,
           integrationBranch: 'develop',
           maxParallelism: 1,
         },
       }),
     });
   });
-  await page.route('**/api/projects/*/execution-host', async (route) => {
+  await page.route('**/api/projects/*/execution-runner', async (route) => {
     expect(route.request().method()).toBe('PUT');
-    expect(route.request().postDataJSON()).toEqual({ hostId: 'hetzner-agent-runner' });
+    expect(route.request().postDataJSON()).toEqual({
+      executionRunner: 'agent-runner-01',
+      remoteExecutionEnabled: true,
+    });
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ executionHostId: 'hetzner-agent-runner' }),
+      body: JSON.stringify({ executionRunner: 'agent-runner-01', remoteExecutionEnabled: true }),
     });
   });
 
@@ -51,8 +56,8 @@ test('assigns a remote host and completes the guided readiness probe', async ({ 
 
   const hostSelect = card.getByTestId('project-execution-host-select');
   await expect(hostSelect).toHaveValue('local');
-  await hostSelect.selectOption('hetzner-agent-runner');
-  await expect(hostSelect).toHaveValue('hetzner-agent-runner');
+  await hostSelect.selectOption('agent-runner-01');
+  await expect(hostSelect).toHaveValue('agent-runner-01');
   await expect(card.getByTestId('project-execution-selected-host')).toContainText('agent-runner');
 
   await card.getByTestId('project-execution-probe').click();

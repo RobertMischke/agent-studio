@@ -117,23 +117,6 @@ public class ProjectSettingsService
             projectName, normalized ?? "local", remoteExecutionEnabled ?? Get(projectName).RemoteExecutionEnabled);
     }
 
-    /// <summary>Persist the project-dedicated execution location.</summary>
-    public void SetExecutionHost(string projectName, string? hostId)
-    {
-        EnsureLoaded();
-        var normalized = string.IsNullOrWhiteSpace(hostId) ? "local" : hostId.Trim();
-        lock (_lock)
-        {
-            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
-            _cache[projectName] = current with { ExecutionHostId = normalized };
-            Persist();
-        }
-        _logger.LogInformation(
-            "Project execution host assigned project={Project} hostId={HostId}",
-            projectName,
-            normalized);
-    }
-
     /// <summary>
     /// ADR-0052: sets the integration branch parallel task worktrees branch off
     /// and merge back into. Blank reverts to the default (<c>develop</c>).

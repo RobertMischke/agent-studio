@@ -16,16 +16,75 @@ describe('ExecutionAssignmentCardComponent', () => {
 
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/projects/settings').flush({
-      'Agent Studio': { executionHostId: 'local', integrationBranch: 'develop' },
+      'Agent Studio': { executionRunner: null, remoteExecutionEnabled: true, integrationBranch: 'develop' },
     });
 
-    fixture.componentInstance.assign('hetzner-agent-runner');
-    const request = http.expectOne('/api/projects/Agent%20Studio/execution-host');
+    fixture.componentInstance.assign('agent-runner-01');
+    const request = http.expectOne('/api/projects/Agent%20Studio/execution-runner');
     expect(request.request.method).toBe('PUT');
-    expect(request.request.body).toEqual({ hostId: 'hetzner-agent-runner' });
-    request.flush({ executionHostId: 'hetzner-agent-runner' });
+    expect(request.request.body).toEqual({
+      executionRunner: 'agent-runner-01',
+      remoteExecutionEnabled: true,
+    });
+    request.flush({ executionRunner: 'agent-runner-01', remoteExecutionEnabled: true });
 
-    expect(fixture.componentInstance.selectedHostId()).toBe('hetzner-agent-runner');
+    expect(fixture.componentInstance.selectedHostId()).toBe('agent-runner-01');
     http.verify();
+  });
+
+  it('maps Local to the established null runner assignment', () => {
+    TestBed.configureTestingModule({
+      imports: [ExecutionAssignmentCardComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    });
+    const fixture = TestBed.createComponent(ExecutionAssignmentCardComponent);
+    fixture.componentRef.setInput('projectName', 'Agent Studio');
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/projects/settings').flush({
+      'Agent Studio': { executionRunner: 'agent-runner-01', remoteExecutionEnabled: true },
+    });
+
+    fixture.componentInstance.assign('local');
+    const request = http.expectOne('/api/projects/Agent%20Studio/execution-runner');
+    expect(request.request.body).toEqual({ executionRunner: null, remoteExecutionEnabled: true });
+    request.flush({ executionRunner: null, remoteExecutionEnabled: true });
+
+    expect(fixture.componentInstance.selectedHostId()).toBe('local');
+    http.verify();
+  });
+
+  it('reports all four readiness checks independently', async () => {
+    vi.useFakeTimers();
+    try {
+      TestBed.configureTestingModule({
+        imports: [ExecutionAssignmentCardComponent],
+        providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+      });
+      const fixture = TestBed.createComponent(ExecutionAssignmentCardComponent);
+      fixture.componentRef.setInput('projectName', 'Agent Studio');
+      fixture.detectChanges();
+
+      const http = TestBed.inject(HttpTestingController);
+      http.expectOne('/api/projects/settings').flush({
+        'Agent Studio': { executionRunner: 'agent-runner-01', remoteExecutionEnabled: true, integrationBranch: 'develop' },
+      });
+
+      const probe = fixture.componentInstance.runProbe();
+      await vi.runAllTimersAsync();
+      await probe;
+
+      expect(fixture.componentInstance.checks().map((check) => [check.key, check.state])).toEqual([
+        ['code', 'passed'],
+        ['branch', 'passed'],
+        ['toolchain', 'passed'],
+        ['noop', 'passed'],
+      ]);
+      expect(fixture.componentInstance.probePassed()).toBe(true);
+      http.verify();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

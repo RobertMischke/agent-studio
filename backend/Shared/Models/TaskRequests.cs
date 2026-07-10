@@ -628,20 +628,6 @@ public record SetCliQuotaCapRequest
     public int CapPct { get; init; }
 }
 
-public record SetExecutionHostRequest
-{
-    public string HostId { get; init; } = "local";
-}
-
-public static class ExecutionHostIds
-{
-    private static readonly System.Text.RegularExpressions.Regex Valid =
-        new("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$", System.Text.RegularExpressions.RegexOptions.Compiled);
-
-    public static bool IsValid(string? value) =>
-        !string.IsNullOrWhiteSpace(value) && Valid.IsMatch(value.Trim());
-}
-
 public record SetCliModelRouteRequest
 {
     public string CliType { get; init; } = "";

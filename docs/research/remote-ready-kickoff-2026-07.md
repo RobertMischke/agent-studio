@@ -219,9 +219,13 @@ the lease API. This phase must pass the §8.2C acceptance tests before any
 second runner appears.
 
 The project integration surface for this phase lives in Project Settings. Its
-execution card persists `ProjectSettings.ExecutionHostId` (`local` or a stable
-host-registry id) and runs a four-part readiness probe: Git code channel,
-`develop` integration branch, host toolchain, and a no-op runner handshake.
+execution card persists the existing `ProjectSettings.ExecutionRunner`
+assignment (`null` for local or a stable runner identity) through the same
+contract consumed by local pickup and remote claims. It runs a four-part
+readiness probe: Git code channel, `develop` integration branch, host toolchain,
+and no-op eligibility. The current UI-first host registry supplies the
+capability and heartbeat snapshot; the Phase 3 runner command surface replaces
+that final eligibility check with the concept's real no-op task execution.
 Board cards continue to show the actual runner identity from the fenced run
 lease, so configured intent and live attribution remain distinct.
 

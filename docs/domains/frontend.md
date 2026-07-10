@@ -64,11 +64,15 @@ groups, and a failed domain reports an error without hiding successful domains.
   its endpoints and tree contract are documented in
   [docs/contracts/wiki-tree.md](../contracts/wiki-tree.md).
 - Project Settings owns the project-dedicated execution assignment. The
-  execution card selects `local` or a host-registry id, persists through
-  `PUT /api/projects/{projectName}/execution-host`, and presents the guided
-  code-channel / `develop` / toolchain / no-op readiness checklist. Board cards
-  show the actual live runner from the run lease, not merely this configured
-  target.
+  execution card selects `local` or a healthy runner identity and persists it
+  through the runtime-owned
+  `PUT /api/projects/{projectName}/execution-runner` contract. A null runner is
+  the local default; a remote identity makes the remote daemon the sole
+  auto-pickup owner for that project. The guided check reports code channel,
+  `develop`, toolchain, and no-op readiness from the host registry snapshot.
+  Board cards deliberately show the actual live runner from the fenced run
+  lease, not merely this configured target, so assignment and attribution
+  cannot be confused.
 - `frontend/src/app/services/task.service.ts`: task API integration, optimistic
   lane moves, reorder, and rollback.
 - `frontend/src/app/services/cli-catalog.store.ts`: boot-hydrated CLI model
