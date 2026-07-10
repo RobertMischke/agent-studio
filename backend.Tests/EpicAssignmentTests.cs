@@ -146,6 +146,25 @@ public class EpicAssignmentTests : IDisposable
     }
 
     [Fact]
+    public void BuildRollup_TreatsArchivedSubTasksAsCompletedHistory()
+    {
+        var epic = new TaskInfo { Id = "epic-history", Title = "Historical Epic", Kind = TaskKinds.Epic, State = TaskStates.Archive };
+        var all = new List<TaskInfo>
+        {
+            epic,
+            Sub("s-completed", epic.Id, TaskStates.Completed, 1),
+            Sub("s-archived", epic.Id, TaskStates.Archive, 2),
+        };
+
+        var rollup = EpicEndpoints.BuildRollup(epic, all);
+
+        Assert.Equal(2, rollup.SubTaskTotal);
+        Assert.Equal(2, rollup.Completed);
+        Assert.Equal(0, rollup.InProgress);
+        Assert.Equal(0, rollup.Open);
+    }
+
+    [Fact]
     public void BuildRollup_CarriesSubTaskOrchestratorVerdict()
     {
         var epic = new TaskInfo { Id = "epic-verdict", Title = "Epic", Kind = TaskKinds.Epic, State = TaskStates.Ready };

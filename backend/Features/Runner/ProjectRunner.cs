@@ -5090,11 +5090,11 @@ public class ProjectRunner
 
         if (!result.HasSubTasks)
         {
-            _logger.LogInformation(
+            _logger.LogWarning(
                 "[taskboard] epic {EpicId} decomposition produced no sub-tasks: {Reason}",
                 epic.Id, result.Error ?? "unknown");
             _chatLog.Append(epic, OrchestratorMessageKind.Decision,
-                $"[epic] Decomposition run produced no sub-tasks ({result.Error ?? "no plan found"}). Re-run with a clearer goal or add sub-tasks manually.");
+                $"[epic] Decomposition produced no sub-tasks ({result.Error ?? "no plan found"}). The epic returns to Backlog so it cannot become a ghost completion. Clarify its goal before retrying.");
             _timeline?.Append(
                 epic.FolderPath,
                 TimelineEventKinds.EpicDecomposed,
@@ -5105,7 +5105,21 @@ public class ProjectRunner
                 {
                     ["created"] = "0",
                     ["reason"] = result.Error ?? "no plan found",
+                    ["recoveryState"] = TaskStates.Backlog,
                 });
+
+            // The normal success path has already moved the run to review by
+            // the time its plan is parsed. Undo that transition when the plan
+            // is empty: an epic with no concrete children is not completed
+            // work and must remain visible/actionable in Backlog.
+            var recovery = _states.MoveJob(epic.Id, TaskStates.Backlog, epic.WatchPath,
+                cause: "epic_decomposition_empty");
+            if (recovery.Status != MoveJobStatus.Success)
+            {
+                _logger.LogError(
+                    "[taskboard] epic {EpicId} empty-decomposition recovery to {State} failed: {Status} {Error}",
+                    epic.Id, TaskStates.Backlog, recovery.Status, recovery.Message);
+            }
             return;
         }
 

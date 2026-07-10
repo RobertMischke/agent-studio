@@ -44,8 +44,16 @@
       </div>
     }
   } @else {
-    <ul class="epic-overview__list" data-testid="epic-overview-list" role="list">
-      @for (epic of visibleEpics(); track trackByEpic($index, epic)) {
+    <div class="epic-overview__sections" data-testid="epic-overview-list">
+      @for (section of epicSections(); track section.id) {
+        <section class="epic-overview__section"
+                 [attr.data-testid]="'epic-overview-section-' + section.id">
+          <header class="epic-overview__section-head">
+            <h2>{{ section.label }}</h2>
+            <span>{{ section.epics.length }}</span>
+          </header>
+          <ul class="epic-overview__list" role="list">
+      @for (epic of section.epics; track trackByEpic($index, epic)) {
         @let identity = identityFor(epic.projectName);
         @let expanded = isExpanded(epic.id);
         <li class="epic-overview__card"
@@ -110,6 +118,11 @@
                             (click)="openSubTask(epic, sub.id)">
                       <span class="epic-overview__sub-title">{{ sub.title || sub.id }}</span>
                       <span class="epic-overview__sub-meta">
+                        <span class="epic-overview__sub-project"
+                              data-testid="epic-overview-sub-project"
+                              [style.--project-color]="identity.color"
+                              [cacTooltip]="epic.projectName"
+                              [attr.aria-label]="'Project ' + epic.projectName"></span>
                         <span class="epic-overview__sub-state" [attr.data-state]="sub.state">{{ laneLabel(sub.state) }}</span>
                         @if (verdictLabel(sub.orchestratorVerdict); as verdict) {
                           <span class="epic-overview__sub-verdict"
@@ -125,7 +138,10 @@
           }
         </li>
       }
-    </ul>
+          </ul>
+        </section>
+      }
+    </div>
   }
 
   @if (showCreate() && scopedProject(); as scope) {

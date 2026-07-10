@@ -21,7 +21,10 @@ public static class EpicEndpoints
         // the tasks list so test fixtures don't leak into the normal view.
         group.MapGet("/", (bool? includeFixtures, TaskScannerService scanner) =>
         {
-            var all = scanner.ScanAllJobs();
+            // Historical epics and their completed/archived children are part
+            // of this overview contract. The normal active-lane scan omits
+            // 7-archive and previously made finished epics disappear.
+            var all = scanner.ScanAllJobsWithArchive();
             if (includeFixtures != true) all = all.Where(j => !j.Fixture).ToList();
             var rollups = all
                 .Where(t => TaskKinds.IsEpic(t.Kind))
@@ -37,7 +40,7 @@ public static class EpicEndpoints
         {
             var epic = scanner.FindJob(epicId, watchPath);
             if (epic is null || !TaskKinds.IsEpic(epic.Kind)) return Results.NotFound();
-            return Results.Ok(BuildRollup(epic, scanner.ScanAllJobs()));
+            return Results.Ok(BuildRollup(epic, scanner.ScanAllJobsWithArchive()));
         });
 
         // Way 3 (deterministic half): create one or more sub-tasks under an

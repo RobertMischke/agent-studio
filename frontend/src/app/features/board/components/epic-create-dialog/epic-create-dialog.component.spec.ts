@@ -24,13 +24,15 @@ function mount() {
 }
 
 describe('EpicCreateDialogComponent', () => {
-  it('blocks submit until a non-empty title is entered', () => {
+  it('blocks submit until a non-empty title and goal description are entered', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;
     expect(cmp.canSubmit()).toBe(false);
     cmp.draftTitle.set('   ');
     expect(cmp.canSubmit()).toBe(false);
     cmp.draftTitle.set('Ship onboarding');
+    expect(cmp.canSubmit()).toBe(false);
+    cmp.draftDescription.set('Create a reliable first-run flow');
     expect(cmp.canSubmit()).toBe(true);
   });
 
@@ -64,6 +66,7 @@ describe('EpicCreateDialogComponent', () => {
     const http = TestBed.inject(HttpTestingController);
 
     cmp.draftTitle.set('Broken epic');
+    cmp.draftDescription.set('Goal that reaches the server');
     cmp.onSubmit();
     const req = http.expectOne((r) => r.url.endsWith('/tasks') && r.method === 'POST');
     req.flush({ error: 'duplicate slug' }, { status: 409, statusText: 'Conflict' });

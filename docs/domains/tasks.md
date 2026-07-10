@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-06-09
+Version: 2026-07-10
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -47,6 +47,20 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   why integration semantics should not depend on `maxParallelism`.
 - [../wiki/concepts/auto-review-evidence-gate-analysis.html](../wiki/concepts/auto-review-evidence-gate-analysis.html):
   why auto-review reissues good work ("Needs rework") and the evidence-gate fix.
+
+## Epic lifecycle
+
+- Epics are `kind=epic` task records; membership is the child's `epicId`.
+- `GET /api/epics` is archive-inclusive. A finished epic remains queryable when
+  all of its children are in `6-completed` or `7-archive`.
+- The Epic overview separates active and completed rollups, shows `x / y done`,
+  and expands to child lane status plus project identity.
+- Manual Epic creation requires a title and goal description. If a planning
+  run parses no sub-tasks, the runner records the failed decomposition and
+  returns the Epic to `0-backlog` instead of leaving an empty completion.
+- Empty Epic cleanup uses the Task API to move records to `7-archive`; it never
+  deletes the task folder. Archived zero-member cleanup records are omitted
+  from the overview, while completed Epics with historical children remain.
 
 ## Key Code
 
