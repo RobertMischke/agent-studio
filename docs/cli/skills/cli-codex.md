@@ -336,6 +336,27 @@ locked by:
 
 The probe reports `% used` (1 - `% left`). Source string is `/status (PTY)`.
 
+**Spark-block split is version-agnostic (AGT-2064).** `/status` renders a
+`<model>-Spark limit:` sub-block with its own near-empty 5h/Weekly lines. The
+standard windows are read only from the region ABOVE that header, so the Spark
+lines can never be mistaken for the main windows. The header regex matches
+`Spark limit` alone — do **not** re-pin it to a model string
+(`GPT-5.3-Codex-Spark`): when the Spark model bumped (5.3 → 5.6) that pinning
+collapsed the split and reported an exhausted account as `5-hour: 4% |
+Weekly: 1%`. `ParseStatusWindows_SparkOnlyWithBumpedHeader_DoesNotMasqueradeAsMainWindows`
+locks this.
+
+**Snapshots are guarded before they reach admission (AGT-2064).**
+`QuotaService` runs every probe through `QuotaPlausibilityGate`: a window that
+drops > 50 points with no reset to explain it is re-probed immediately and only
+replaces the old value when a second probe agrees. An unconfirmed drop keeps the
+prior (blocking) value flagged `Suspicious`, and `CliQuotaCapsService.Evaluate`
+blocks any `Suspicious` snapshot regardless of how green it reads. A launch that
+dies with a usage-limit error invalidates the cached snapshot immediately
+(`QuotaService.InvalidateForGroundTruthLimit`, wired from
+`ProjectRunner.OnCliFinishedAsync` on `RunIssueKind.QuotaExhausted`) and
+re-probes now rather than waiting out the TTL.
+
 ## Common tasks
 
 ### "Add a marker mapping for a new Codex frame / item type"

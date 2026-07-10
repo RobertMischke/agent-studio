@@ -153,6 +153,50 @@ public sealed class CliQuotaCapsServiceTests : IDisposable
         Assert.Equal(CliQuotaCapsService.DefaultCapPct, ev.CapPct);
     }
 
+    // AGT-2064: a snapshot flagged suspicious must block admission even when its
+    // numbers look green, so a transient downward glitch (or a snapshot a live
+    // usage-limit error contradicted) can never open the launch gate before a
+    // re-probe confirms.
+    [Fact]
+    public void Evaluate_Blocks_WhenSnapshotIsSuspicious_EvenWithGreenWindows()
+    {
+        var svc = NewService();
+        var snap = new QuotaSnapshot
+        {
+            CliType = "codex",
+            Suspicious = true,
+            SuspiciousReason = "5-hour dropped 96 points with no reset to explain it",
+            Windows = new()
+            {
+                new QuotaWindow { Label = "5-hour", UsedPct = 4 },
+                new QuotaWindow { Label = "Weekly", UsedPct = 1 }
+            }
+        };
+
+        var ev = svc.Evaluate(snap);
+
+        Assert.True(ev.Blocked);
+        Assert.True(ev.Suspicious);
+        Assert.Contains("unconfirmed", ev.DescribeReason());
+    }
+
+    [Fact]
+    public void Evaluate_Blocks_WhenSnapshotIsSuspicious_AndHasNoWindows()
+    {
+        var svc = NewService();
+        var snap = new QuotaSnapshot
+        {
+            CliType = "codex",
+            Suspicious = true,
+            SuspiciousReason = "launch died with a usage-limit error"
+        };
+
+        var ev = svc.Evaluate(snap);
+
+        Assert.True(ev.Blocked);
+        Assert.True(ev.Suspicious);
+    }
+
     private CliQuotaCapsService NewService() =>
         new(NullLogger<CliQuotaCapsService>.Instance, _config);
 }

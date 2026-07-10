@@ -31,6 +31,14 @@ export interface QuotaSnapshot {
   source: string | null;
   rawSample: string | null;
   error: string | null;
+  /**
+   * True when this snapshot is not yet trusted (AGT-2064): a single probe
+   * showed an implausible downward jump no reset explains and a confirmation
+   * re-probe has not agreed yet, or a live launch died with a usage-limit
+   * error that contradicts these numbers. Older backends omit the field.
+   */
+  suspicious?: boolean;
+  suspiciousReason?: string | null;
 }
 
 export interface QuotaReport {
