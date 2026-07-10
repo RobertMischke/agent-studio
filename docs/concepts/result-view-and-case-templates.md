@@ -196,8 +196,9 @@ frontend, so the metric head reuses the review grade (A-D from the
 | Summarizer prompt | `prompts/runtime/summary-protocol.md` |
 | Summary service + slot wiring | `backend/Features/Review/SummaryGenerationService.cs` |
 | status.md contract | `docs/contracts/protocol-style.md` §3 |
-| Aspect writer (today: markdown) | `backend/Features/Runner/AspectRunnerService.cs`, `AspectVerdict.cs` |
-| Files tab (today: raw markdown) | `frontend/src/app/features/task-detail/components/prompt-pane/files-pane/` |
+| Aspect writer (markdown twin + JSON source of truth) | `backend/Features/Runner/AspectRunnerService.cs`, `AspectVerdict.cs` (`RenderJson`) |
+| Aspect JSON list preference (prefers `.json`, suppresses `.md` twin) | `backend/Features/Tasks/TaskScannerService.cs` (`ListArtifacts`) |
+| Files tab (JSON card + markdown fallback) | `frontend/src/app/features/task-detail/components/prompt-pane/files-pane/` (`aspect-json-card.component.ts`, `aspect-document.model.ts`) |
 | Structured findings chips (reuse target) | `frontend/src/app/components/aspect-findings/` |
 
 ## 8. Follow-up scope
