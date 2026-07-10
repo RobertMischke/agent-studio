@@ -29,6 +29,8 @@ export interface OrchestratorLogEntry {
 
 export interface OrchestratorTokenUsage {
   model?: string | null;
+  /** Optional AGT-2055 attribution; older event writers omit it. */
+  thinkingLevel?: string | null;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;

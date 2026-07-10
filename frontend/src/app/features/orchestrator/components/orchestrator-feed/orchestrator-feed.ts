@@ -4,6 +4,7 @@ import type { OrchestratorLogEntry } from '../../../../features/orchestrator';
 import { TaskService } from '../../../../services/task.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { GlobalOrchestratorCardComponent } from '../global-orchestrator-card/global-orchestrator-card';
+import { LoadDistributionComponent } from '../load-distribution/load-distribution.component';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
@@ -22,7 +23,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 @Component({
   selector: 'app-orchestrator-feed',
   standalone: true,
-  imports: [FormsModule, GlobalOrchestratorCardComponent, TooltipDirective],
+  imports: [FormsModule, GlobalOrchestratorCardComponent, LoadDistributionComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-feed.html',
   styleUrl: './orchestrator-feed.scss'
@@ -37,6 +38,7 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
   readonly kindFilter = signal<string>('signal');
   readonly projectFilter = signal<string>('all');
   readonly selectedEntry = signal<OrchestratorLogEntry | null>(null);
+  readonly activeView = signal<'activity' | 'load'>('activity');
   /** Timestamp of the entry currently being overridden (one at a time). */
   readonly overridingTs = signal<string | null>(null);
   /** Submit-in-flight flag so the user cannot double-send. */
