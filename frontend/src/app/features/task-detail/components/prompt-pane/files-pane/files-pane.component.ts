@@ -8,7 +8,7 @@ import type { TaskArtifact, TaskArtifactKind } from '../../../../../models/task.
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
 import { NowTickService } from '../../../../../services/now-tick.service';
 import { formatRelativeTime } from '../../../../../services/format.util';
-import { AspectJsonCardComponent } from './aspect-json-card.component';
+import { AspectJsonCardComponent } from './aspect-json-card/aspect-json-card.component';
 import { parseAspectDocument, type AspectDocument } from './aspect-document.model';
 
 /**

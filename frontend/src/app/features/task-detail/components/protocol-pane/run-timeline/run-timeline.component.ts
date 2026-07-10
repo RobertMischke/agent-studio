@@ -1,10 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import type { CliType, TaskInfo, TaskPromptHistoryEntry } from '../../../../../models/task.model';
-import type { CliContextSource, CliExecutionContext, RunCommitInfo, RunPromptEntry, RunRecord } from '../../../../../features/run-timeline';
+import type { RunCommitInfo, RunPromptEntry, RunRecord } from '../../../../../features/run-timeline';
 import { TaskService } from '../../../../../services/task.service';
 import { cliTypeIcon, cliTypeLabel, formatTime as formatTimeValue, formatTokens } from '../../../../../services/format.util';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
+import { RunExecutionContextComponent } from './run-execution-context/run-execution-context.component';
 /**
  * Run timeline panel rendered above the activity log in the protocol
  * pane. Each card represents one CLI invocation between user inputs
@@ -30,7 +31,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 @Component({
   selector: 'app-run-timeline',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, RunExecutionContextComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './run-timeline.component.html',
   styleUrl: './run-timeline.component.scss'
@@ -221,51 +222,6 @@ export class RunTimelineComponent {
         return this.cleanPromptText(this.contextByRun().get(run.index) ?? null);
       default:
         return this.cleanPromptText(this.resolvePromptHistoryText(entry, run) ?? (run.index === 1 ? this.promptMarkdown() : null));
-    }
-  }
-
-  /**
-   * The run's execution-context snapshot grouped by source kind for display
-   * (ASS-1739 / T1a). Returns an empty list when nothing was captured so the
-   * template can hide the panel. Order follows a fixed kind priority so the
-   * panel reads consistently across runs.
-   */
-  executionGroups(r: RunRecord): { kind: string; label: string; sources: CliContextSource[] }[] {
-    const ctx = r.executionContext;
-    if (!ctx || ctx.sources.length === 0) return [];
-    const order = ['memory', 'instruction-file', 'mcp', 'session', 'global-config', 'env'];
-    const byKind = new Map<string, CliContextSource[]>();
-    for (const s of ctx.sources) {
-      const list = byKind.get(s.kind) ?? [];
-      list.push(s);
-      byKind.set(s.kind, list);
-    }
-    return [...byKind.keys()]
-      .sort((a, b) => {
-        const ia = order.indexOf(a), ib = order.indexOf(b);
-        return (ia < 0 ? order.length : ia) - (ib < 0 ? order.length : ib);
-      })
-      .map(kind => ({ kind, label: this.kindLabel(kind), sources: byKind.get(kind)! }));
-  }
-
-  hasExecutionContext(r: RunRecord): boolean {
-    const ctx = r.executionContext;
-    return !!ctx && (ctx.sources.length > 0 || !!ctx.model || !!ctx.permissionMode || !!ctx.cwd);
-  }
-
-  executionSourceLabel(ctx: CliExecutionContext | null | undefined): string {
-    return ctx?.source === 'init-frame' ? 'reported by CLI init frame' : 'derived from config conventions';
-  }
-
-  kindLabel(kind: string): string {
-    switch (kind) {
-      case 'memory': return 'Memory';
-      case 'instruction-file': return 'Instruction files';
-      case 'session': return 'Session store';
-      case 'global-config': return 'Global config';
-      case 'mcp': return 'MCP servers';
-      case 'env': return 'Environment';
-      default: return kind || 'Other';
     }
   }
 

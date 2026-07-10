@@ -5,7 +5,7 @@ import {
   aspectVerdictTone,
   type AspectVerdictTone,
 } from '../../../../../components/aspect-findings/aspect-findings.model';
-import type { AspectDocument } from './aspect-document.model';
+import type { AspectDocument } from '../aspect-document.model';
 
 /**
  * Structured renderer for a `aspect-{id}.json` artefact (concept doc §5).

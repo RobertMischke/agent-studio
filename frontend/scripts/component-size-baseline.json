@@ -108,12 +108,6 @@
       "styles": 1035,
       "total": 2812
     },
-    "src/app/features/task-detail/components/protocol-pane/run-timeline/run-timeline.component.ts": {
-      "typeScript": 488,
-      "template": 264,
-      "styles": 224,
-      "total": 976
-    },
     "src/app/features/task-detail/task-detail.ts": {
       "typeScript": 1510,
       "template": 208,
