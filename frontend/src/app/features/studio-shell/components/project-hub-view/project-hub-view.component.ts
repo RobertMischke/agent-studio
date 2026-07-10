@@ -115,10 +115,11 @@ export class ProjectHubViewComponent {
   }
 
   setRail(rail: ProjectRailKey): void {
-    this.activeRail.set(rail);
     const projectName = this.projectName();
+    const sourceKey = studioTabKey({ kind: 'hub', projectName, section: this.activeRail() });
+    this.activeRail.set(rail);
     this.tabState.retarget(
-      studioTabKey({ kind: 'hub', projectName }),
+      sourceKey,
       { kind: 'hub', projectName, section: rail },
     );
   }

@@ -58,7 +58,9 @@ export function studioTabKey(tab: StudioTab): string {
     case 'epics':    return `epics:${tab.projectName ?? '__all__'}`;
     case 'epic':     return `epic:${tab.epicKey}`;
     case 'task':     return `task:${tab.taskKey}`;
-    case 'hub':      return `hub:${tab.projectName}`;
+    case 'hub':      return tab.section === 'wiki'
+      ? `hub:${tab.projectName}:wiki`
+      : `hub:${tab.projectName}`;
     case 'diff':     return `diff:${tab.commitSha}`;
     case 'activity': return `activity:${tab.taskKey}`;
     case 'url-preview': return `url-preview:${tab.projectName}:${tab.urlId}`;

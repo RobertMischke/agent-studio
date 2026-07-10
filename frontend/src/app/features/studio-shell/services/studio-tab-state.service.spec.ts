@@ -90,26 +90,27 @@ describe('StudioTabStateService', () => {
     expect(svc.activeKey()).toBe('task:demo|x');
   });
 
-  describe('re-opening a Hub tab adopts the fresh section (no duplicate)', () => {
-    it('moves an open Overview Hub to Wiki when openWiki reuses the key', () => {
+  describe('Project Hub and Wiki tab identity', () => {
+    it('keeps an open Overview Hub and Explorer-opened Wiki as distinct tabs', () => {
       svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
       svc.open({ kind: 'hub', projectName: 'Project A', section: 'wiki' });
 
       expect(svc.tabs().filter(t => studioTabKey(t) === 'hub:Project A')).toHaveLength(1);
-      expect(svc.activeKey()).toBe('hub:Project A');
+      expect(svc.tabs().filter(t => studioTabKey(t) === 'hub:Project A:wiki')).toHaveLength(1);
+      expect(svc.activeKey()).toBe('hub:Project A:wiki');
       expect(svc.activeTab()).toEqual({ kind: 'hub', projectName: 'Project A', section: 'wiki' });
     });
 
-    it('moves an open Wiki Hub back to Overview when re-opened without a section', () => {
-      svc.open({ kind: 'hub', projectName: 'Project A', section: 'wiki' });
+    it('still adopts fresh sections that belong to the base Hub identity', () => {
       svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'drift' });
 
       expect(svc.tabs().filter(t => studioTabKey(t) === 'hub:Project A')).toHaveLength(1);
-      expect(svc.activeTab()).toEqual({ kind: 'hub', projectName: 'Project A', section: 'overview' });
+      expect(svc.activeTab()).toEqual({ kind: 'hub', projectName: 'Project A', section: 'drift' });
     });
 
     it('keeps the tab in its original slot when adopting a new section', () => {
-      svc.open({ kind: 'hub', projectName: 'Project A', section: 'wiki' });
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'drift' });
       svc.open({ kind: 'task', taskKey: 'later' });
       svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
 
