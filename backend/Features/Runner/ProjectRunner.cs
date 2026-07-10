@@ -4444,6 +4444,23 @@ public class ProjectRunner
                 execution.DurationSeconds ?? 0.0,
                 execution.ExitCode);
 
+            // Ground-truth quota hook (AGT-2064). A run that died with a
+            // usage-limit error is hard proof the cached quota snapshot is wrong,
+            // even if it read green - the error text is the evidence. Invalidate
+            // it and re-probe now instead of trusting stale numbers for up to the
+            // full TTL: otherwise the next quota-aware launch fires on the same
+            // wrong snapshot and takes the same fail. The re-probe is
+            // fire-and-forget; admission is already conservative because the
+            // snapshot is flagged suspicious the instant we invalidate it.
+            if (outcome.IssueKind == RunIssueKind.QuotaExhausted && !string.IsNullOrWhiteSpace(cliType))
+            {
+                _logger.LogWarning(
+                    "quota_ground_truth_invalidate job={JobId} cli={Cli}: run hit a usage limit; invalidating cached quota snapshot and re-probing",
+                    jobId, cliType);
+                _ = _quotaService.InvalidateForGroundTruthLimit(
+                    cliType, $"launch {jobId} died with a usage-limit error");
+            }
+
             // Count the commits this run actually produced (HeadShaBefore..After).
             // A run that committed real work but exited non-zero without a
             // sentinel - classically because a post-commit test run was killed

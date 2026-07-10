@@ -1,5 +1,24 @@
 # Frontend Instructions
 
+## Style-guide hard rules (prompt-known)
+
+The non-negotiable design rules live in
+[docs/design/style-guide-hard-rules.md](../docs/design/style-guide-hard-rules.md).
+Read them before any visual change; they override local convention. In short:
+
+- **R1 - No left accent lines or bars.** No coloured `border-left`,
+  `border-inline-start`, or left-edge `box-shadow: inset Npx 0 0 <colour>` used
+  as a decorative or status stripe on cards, panels, list rows, banners,
+  callouts, or pill groups. Encode status via **background tint, badge, or dot**
+  instead. The only sanctioned left bar is the navigation active-item indicator
+  (`--studio-nav-active-bar`, AGT-2010) covered by the nav contract below.
+- **R2 - Full-bleed views** fill the viewport; no artificial `max-width` cap on a
+  top-level view.
+- **R3 - Aggregate numbers = sum of visible children** (AGT-2017 sum invariant).
+- **R4 - Acute signals only for acute states**; history renders quietly (AGT-2049).
+- **R5 - Both themes always**, read tokens (never a one-theme hex), and every
+  animation collapses to zero duration under `prefers-reduced-motion: reduce`.
+
 ## UI Verification — Playwright is mandatory after visual changes
 
 After **every** frontend change under `frontend/src/` that touches layout, spacing, styling, component templates, or interaction states, you must verify with Playwright before declaring the task done. Static type-checks and unit tests do not catch UI regressions; the E2E suite does.

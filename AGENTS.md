@@ -37,6 +37,10 @@ under `frontend/`.
 - Written repo artifacts are English. Do not introduce em dashes. User-facing UI
   strings, backend errors shown to the UI, prompts, comments, docs, commits, and
   PR text are English.
+- UI work obeys the style-guide hard rules in
+  [docs/design/style-guide-hard-rules.md](./docs/design/style-guide-hard-rules.md).
+  Most-cited: no coloured left accent line or bar on cards, panels, rows,
+  banners, or pill groups (encode status via background tint, badge, or dot).
 - When adding a document under `docs/`, add one row to
   [docs/README.md](docs/README.md) in the same change.
 - CLI crashes, run-outcome classification, retries, or orchestrator
@@ -52,9 +56,10 @@ under `frontend/`.
 | Area | Read first | Owns |
 |---|---|---|
 | Runner | [docs/domains/runner.md](./docs/domains/runner.md) | Pickup, CLI run loop, outcome policy, supervisor loops, and the standalone remote runner (`runner/`, [runbook](./docs/operations/setup/linux-runner-host.md)). |
-| Pipeline | [docs/domains/pipeline.md](./docs/domains/pipeline.md) | Pre/core/post steps, pipeline history, step contracts. |
+| Pipeline | [docs/domains/pipeline.md](./docs/domains/pipeline.md) | Pre/core/post steps, pipeline history, step contracts, and the review/aspect evidence contract (branch diff + `results/` inventory + card mode; when "deliverables missing" is legitimate). |
 | Tasks | [docs/domains/tasks.md](./docs/domains/tasks.md) | Job folders, lane states, API mutations, task access. |
 | Frontend | [docs/domains/frontend.md](./docs/domains/frontend.md) | Angular surfaces, design system, Playwright proof. |
+| Design rules | [docs/design/style-guide-hard-rules.md](./docs/design/style-guide-hard-rules.md) | Hard, non-negotiable design rules (no left accent bars, full-bleed views, aggregate = sum of visible children, acute-only signals, both themes). |
 | CLI | [docs/domains/cli.md](./docs/domains/cli.md) | Claude, Codex, Copilot, Gemini drivers and quota probes. |
 | ADRs | [docs/architecture/decisions/adr-archive.md](./docs/architecture/decisions/adr-archive.md) | Load-bearing decisions and deliberate non-goals. |
 | Skills | [.agents/skills/README.md](.agents/skills/README.md) | Portable specialist workflows. |

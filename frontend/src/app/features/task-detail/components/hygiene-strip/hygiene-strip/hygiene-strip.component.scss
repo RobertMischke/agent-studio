@@ -73,7 +73,6 @@
     padding: 9px 11px;
     border-radius: 4px;
     background: color-mix(in srgb, var(--severity-warn) 12%, transparent);
-    border-left: 3px solid var(--severity-warn);
 
     code {
       font-family: var(--font-mono);

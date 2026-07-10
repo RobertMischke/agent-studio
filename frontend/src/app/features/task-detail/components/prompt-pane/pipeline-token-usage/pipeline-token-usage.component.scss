@@ -140,10 +140,8 @@
   &__level--run {
     border-top: 1px solid var(--studio-border);
 
-    // The live run gets a subtle accent rail so it reads apart from history.
+    // The live run is marked apart from history by its "Current" badge.
     &[data-current='true'] {
-      border-left: 2px solid var(--studio-accent);
-
       .ptu__head {
         padding-left: var(--studio-spacing-1);
       }

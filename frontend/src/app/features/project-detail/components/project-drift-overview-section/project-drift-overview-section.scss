@@ -134,10 +134,8 @@
     .pdov__dim-summary { margin: 0; color: var(--studio-fg-dim); font-size: 0.76rem; line-height: 1.4; flex-grow: 1; }
     .pdov__dim-summary--muted { color: var(--studio-fg-muted); font-style: italic; }
     .pdov__dim footer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.72rem; }
-    .pdov__dim--info     { border-left: 3px solid rgba(148,163,184,0.55); }
-    .pdov__dim--warn     { border-left: 3px solid var(--severity-warn); }
-    .pdov__dim--high     { border-left: 3px solid var(--studio-accent-strong); background: rgba(250,179,135,0.06); }
-    .pdov__dim--critical { border-left: 3px solid var(--severity-high); background: rgba(243,139,168,0.10); }
+    .pdov__dim--high     { background: rgba(250,179,135,0.06); }
+    .pdov__dim--critical { background: rgba(243,139,168,0.10); }
     .pdov__dim--empty    { cursor: default; opacity: 0.7; }
 
     .pdov__sev {
@@ -208,14 +206,11 @@
     .pdov__findings { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
     .pdov__finding {
       padding: 8px 10px;
-      border-left: 2px solid rgba(255,255,255,0.10);
       background: rgba(255,255,255,0.03);
-      border-radius: 0 4px 4px 0;
+      border-radius: 4px;
     }
-    .pdov__finding--info { border-left-color: rgba(148,163,184,0.45); }
-    .pdov__finding--warn { border-left-color: var(--severity-warn); }
-    .pdov__finding--high { border-left-color: var(--studio-accent-strong); background: rgba(250,179,135,0.06); }
-    .pdov__finding--critical { border-left-color: var(--severity-high); background: rgba(243,139,168,0.10); }
+    .pdov__finding--high { background: rgba(250,179,135,0.06); }
+    .pdov__finding--critical { background: rgba(243,139,168,0.10); }
     .pdov__finding header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px; }
     .pdov__finding p { margin: 0 0 6px; color: var(--studio-fg); font-size: 0.84rem; line-height: 1.45; }
     .pdov__finding-id code { background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 3px; font-size: 0.74rem; color: var(--severity-pending); }
@@ -226,7 +221,6 @@
       padding: 8px 10px;
       border-radius: 6px;
       background: rgba(255,255,255,0.03);
-      border-left: 2px solid rgba(196,181,253,0.40);
     }
     .pdov__followup header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 4px; }
     .pdov__followup p { margin: 0 0 6px; color: var(--studio-fg); font-size: 0.84rem; line-height: 1.45; }

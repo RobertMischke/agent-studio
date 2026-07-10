@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -2055,6 +2056,138 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             return Task.FromResult(cliResponse);
         };
         return orchestrator;
+    }
+
+    // --- branch-diff fallback: real git, end to end -------------------------
+
+    [Fact]
+    public void BranchDiffFallback_SteerFollowupCleanWorkingTree_SurfacesRealBranchCommits()
+    {
+        // AGT-2022 test scenario 3, end to end against a real repository: a steer
+        // follow-up run leaves the working tree clean (`git diff` is empty), yet
+        // the task branch still carries its commits vs the base branch. This test
+        // closes the gap the code-review named - the git-backed fallback was
+        // exercised only through its pure renderer. Here we drive the exact
+        // GitService primitives TryBuildBranchDiffSummary depends on
+        // (BranchExists / ResolveIntegrationBranch / GetCommitsInRangeAtRoot)
+        // against a seeded repo, prove the working diff really is empty, and
+        // assert the branch range still surfaces the real, landed change set so
+        // the reviewer never false-BLOCKs the task as "deliverables missing".
+        var repo = SeedBranchDiffRepo("steer-followup", commitCount: 2);
+        var git = BuildGitServiceForRepo(repo);
+
+        // Precondition of the fallback: the current run's working diff is empty.
+        var (workingDiff, _, _) = RunGit(repo, "diff HEAD");
+        Assert.True(string.IsNullOrWhiteSpace(workingDiff),
+            "seed must leave a clean working tree so this exercises the empty-working-diff fallback");
+
+        // The real primitives the orchestrator's fallback resolves lazily.
+        const string taskBranch = "task/steer-followup";
+        Assert.True(git.BranchExists(repo, taskBranch));
+        var baseBranch = git.ResolveIntegrationBranch(repo, "develop");
+        Assert.Equal("develop", baseBranch);
+
+        var commits = git.GetCommitsInRangeAtRoot(repo, baseBranch, taskBranch);
+        Assert.Equal(2, commits.Count);
+
+        // The renderer fed by real git output produces the evidence block that
+        // rides into every aspect / review prompt.
+        var summary = ReviewDecisionOrchestrator.BuildBranchDiffSummary(baseBranch, taskBranch, commits);
+
+        Assert.Contains("task/steer-followup", summary);
+        Assert.Contains("develop", summary);
+        Assert.Contains("2 commit(s) ahead", summary);
+        Assert.Contains("feat: wire the endpoint", summary);
+        Assert.Contains("feat: add the service", summary);
+        // The line counts are real git shortstat numbers, not hand-authored.
+        Assert.Contains("lines +", summary);
+        Assert.Contains("Do NOT treat an empty working diff as missing work", summary);
+    }
+
+    [Fact]
+    public void BranchDiffFallback_NoTaskBranch_YieldsNoRange()
+    {
+        // Sequential runs never create a task branch: the fallback must resolve
+        // no range (BranchExists false, empty commit list) so a genuinely empty
+        // deliverable is not dressed up with a phantom branch diff.
+        var repo = SeedBranchDiffRepo("no-branch", commitCount: 0, createTaskBranch: false);
+        var git = BuildGitServiceForRepo(repo);
+
+        Assert.False(git.BranchExists(repo, "task/no-branch"));
+        Assert.Empty(git.GetCommitsInRangeAtRoot(repo, "develop", "task/no-branch"));
+    }
+
+    /// <summary>
+    /// Seed a throwaway repo shaped like a live task worktree: <c>main</c> seed
+    /// commit, a <c>develop</c> integration branch, and (optionally) a
+    /// <c>task/&lt;name&gt;</c> branch carrying <paramref name="commitCount"/>
+    /// committed changes with a clean working tree - the steer-follow-up state
+    /// where the run-window working diff is empty but the branch holds the work.
+    /// </summary>
+    private string SeedBranchDiffRepo(string name, int commitCount, bool createTaskBranch = true)
+    {
+        var repo = Path.Combine(_workspace, "branchdiff-" + name);
+        Directory.CreateDirectory(repo);
+        RunGit(repo, "init -q -b main");
+        RunGit(repo, "config user.email test@example.com");
+        RunGit(repo, "config user.name test");
+        RunGit(repo, "config commit.gpgsign false");
+        File.WriteAllText(Path.Combine(repo, "README.md"), "seed");
+        RunGit(repo, "add -A");
+        RunGit(repo, "commit -q -m seed");
+        RunGit(repo, "checkout -q -b develop");
+
+        if (createTaskBranch)
+        {
+            RunGit(repo, $"checkout -q -b task/{name}");
+            // Newest-first order in the summary means the last commit ("wire the
+            // endpoint") is the higher one; keep the two assertion subjects fixed.
+            var subjects = new[] { "feat: add the service", "feat: wire the endpoint" };
+            for (var i = 0; i < commitCount; i++)
+            {
+                File.WriteAllText(Path.Combine(repo, $"work{i}.txt"),
+                    string.Join("\n", Enumerable.Range(0, (i + 1) * 5).Select(n => $"line {n}")) + "\n");
+                RunGit(repo, "add -A");
+                var subject = i < subjects.Length ? subjects[i] : $"feat: work {i}";
+                RunGit(repo, $"commit -q -m \"{subject}\"");
+            }
+        }
+        return repo;
+    }
+
+    private static GitService BuildGitServiceForRepo(string repo)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WatchPaths:0:Name"] = "demo",
+                ["WatchPaths:0:RootPath"] = repo,
+                ["WatchPaths:0:RepositoryPath"] = repo,
+                ["WatchPaths:0:Path"] = Path.Combine(repo, ".orchestrator", "jobs"),
+            })
+            .Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        return new GitService(NullLogger<GitService>.Instance, scanner, config);
+    }
+
+    private static (string Out, string Err, int Code) RunGit(string cwd, string args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            Arguments = args,
+            WorkingDirectory = cwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        using var p = Process.Start(psi)!;
+        var so = p.StandardOutput.ReadToEnd();
+        var se = p.StandardError.ReadToEnd();
+        p.WaitForExit(15_000);
+        return (so, se, p.ExitCode);
     }
 }
 

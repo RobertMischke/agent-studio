@@ -265,9 +265,50 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(board?.getAttribute('aria-current')).toBeNull();
     expect(hub?.classList.contains('tree-row--active')).toBe(true);
     expect(hub?.getAttribute('aria-current')).toBe('page');
-    expect(board?.classList.contains('tree-row--root')).toBe(true);
-    expect(hub?.classList.contains('tree-row--root')).toBe(true);
-    expect(root.querySelector('.studio-tree-children .tree-row--child')).toBeNull();
+    // The destinations are the third tree level: they render as `tree-row--child`
+    // (one indent step below the project row), never flush `--root`. Guards the
+    // AGT-2057 regression where AGT-2037 flattened them to `--root`.
+    expect(board?.classList.contains('tree-row--child')).toBe(true);
+    expect(hub?.classList.contains('tree-row--child')).toBe(true);
+    expect(root.querySelector('.studio-tree-children .tree-row--root')).toBeNull();
+  });
+
+  it('insets every project destination one level below the project row (AGT-2057 regression)', () => {
+    // Explorer hierarchy is workspace -> project -> destinations. The project
+    // row is `level="root"`; its Board / Project Hub / Wiki / Epics (+ URL)
+    // destinations must be `level="child"` so they nest visibly one step in and
+    // the project reads as clearly superordinate. AGT-2037 flattened them to
+    // `level="root"`, so they rendered flush beside the project ("Kuddelmuddel",
+    // looked like siblings). A unit test that had been updated to assert the
+    // flat layout let the regression ship; this locks the correct nesting.
+    const fixture = mount();
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [
+      row('Alpha', { isActive: true }),
+    ]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+
+    // The project row itself stays at the root level.
+    const projectRow = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-Alpha"]');
+    expect(projectRow?.classList.contains('tree-row--root')).toBe(true);
+    expect(projectRow?.classList.contains('tree-row--child')).toBe(false);
+
+    // Every destination under the expanded project is indented one level.
+    for (const surface of ['board', 'hub', 'wiki', 'epics']) {
+      const dest = root.querySelector<HTMLElement>(`[data-testid="studio-explorer-project-${surface}-Alpha"]`);
+      expect(dest, surface).toBeTruthy();
+      expect(dest?.classList.contains('tree-row--child'), surface).toBe(true);
+      expect(dest?.classList.contains('tree-row--root'), surface).toBe(false);
+    }
+
+    // Nothing inside the children container may render at the flat root level.
+    expect(root.querySelector('.studio-tree-children .tree-row--root')).toBeNull();
+    expect(
+      root.querySelectorAll('.studio-tree-children .tree-row--child').length,
+    ).toBeGreaterThanOrEqual(4);
   });
 
   it('renders a Wiki row under Project Hub that emits openWikiRequest', () => {

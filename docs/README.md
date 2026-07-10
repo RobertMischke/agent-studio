@@ -13,6 +13,7 @@ Use this page as the first stop when you need the right document quickly.
 | [architecture/](architecture/README.md) | Architecture model, ADR archive, proposed ADRs, backend structure, bus docs, runner-lane constraints, and HTML maps. |
 | [domains/](domains/README.md) | Current system-of-record domain maps for runner, pipeline, tasks, frontend, CLI, tokens, and token pricing. |
 | [contracts/](contracts/README.md) | Durable filesystem, task, protocol, run outcome, code-pattern, and wiki organization contracts. |
+| [design/](design/README.md) | Product-wide, prompt-known design hard rules (no left accent bars, full-bleed views, aggregate = sum, acute-only signals, both themes). |
 | [product/](product/README.md) | Product and UX direction: design principles, orchestrator chat, companion app, and skills architecture. |
 | [frontend/](frontend/README.md) | Frontend design system, style guide, testing contract, performance playbook, and audits. |
 | [cli/](cli/README.md) | Supported CLI contract, per-CLI skills, audits, and investigations. |
@@ -42,6 +43,7 @@ Use this page as the first stop when you need the right document quickly.
 | ADR archive | [architecture/decisions/adr-archive.md](architecture/decisions/adr-archive.md) |
 | Architecture model | [architecture/model.md](architecture/model.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](architecture/bus/agent-message-bus.md) |
+| Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](design/style-guide-hard-rules.md) |
 | UX doctrine | [product/design-principles.md](product/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](product/orchestrator-chat.md) |
 | Workstream frame (top wiki element; internal name engineering-workstream) | [concepts/engineering-workstream.md](concepts/engineering-workstream.md) |

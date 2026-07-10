@@ -8,7 +8,8 @@ import {
   signal,
 } from '@angular/core';
 
-import type { TaskDetail } from '../../../../models/task.model';
+import { TaskState } from '../../../../models/task.model';
+import type { TaskDetail, TaskInfo } from '../../../../models/task.model';
 import { CodeReviewListEntry, TaskService } from '../../../../services/task.service';
 import { TaskTimelinePollService } from '../../../polling/services/task-timeline-poll.service';
 import {
@@ -58,7 +59,30 @@ export class EscalationSummaryComponent {
   /** Which job the current fetch results belong to, to drop stale responses. */
   private fetchedJobId: string | null = null;
 
+  /**
+   * Collapse state of the whole panel, remembered per task (AGT-2060). The
+   * header is the click target; collapsing hides the reason line, gate
+   * checklist and detail grid so the panel stops crowding out the rest of the
+   * task-detail view. Default follows the acute-vs-history rule (AGT-2049): an
+   * acute `5e-escalated` card opens (the operator is here to act on it), every
+   * other lane where an escalation lingers (a card parked in `5-human-review`
+   * with an escalate verdict) starts closed (historical context). An explicit
+   * per-task toggle, once made, always wins over the lane default.
+   */
+  readonly collapsed = signal<boolean>(false);
+  /** Job the current collapse state was seeded for, to re-seed on task change. */
+  private collapseJobId: string | null = null;
+
   constructor() {
+    // Seed the collapse state whenever the open task changes: the stored
+    // per-task preference wins; absent that, the lane picks the default.
+    effect(() => {
+      const info = this.detail().info;
+      if (info.id === this.collapseJobId) return;
+      this.collapseJobId = info.id;
+      this.collapsed.set(initialCollapsed(info));
+    });
+
     // Re-fetch the grade list + follow-up file whenever the open job changes.
     // Both are best-effort: a missing follow-up file (the common pure-escalation
     // case) or an empty review list simply collapses that section.
@@ -137,7 +161,67 @@ export class EscalationSummaryComponent {
     () => this.view().gateItems.filter((i) => !i.checked).length,
   );
 
+  /**
+   * One-line reason essence for the collapsed header: the machine cause label
+   * (e.g. `completion-gate`) when the gate recorded one, else the human reason
+   * headline. Null when neither exists, so the essence slot stays empty.
+   */
+  readonly essenceReason = computed<string | null>(() => {
+    const v = this.view();
+    return v.cause?.trim() || v.reason?.trim() || null;
+  });
+
+  /** Toggle the panel open/closed and persist the choice for this task. */
+  toggleCollapsed(): void {
+    const next = !this.collapsed();
+    this.collapsed.set(next);
+    writeCollapsePref(this.collapseJobId, next);
+  }
+
   formatRunAt(iso: string | null): string {
     return iso ? formatDateTimeUtc(iso) : '';
+  }
+}
+
+/** localStorage key holding the per-task collapse map (`{ [jobId]: boolean }`). */
+const COLLAPSE_KEY = 'taskboard.escalation.collapsed';
+
+/**
+ * Initial collapse for a freshly-opened task: an explicit stored preference
+ * wins; otherwise the lane decides. Only the acute `5e-escalated` lane opens by
+ * default — everywhere else an escalation is historical context and starts
+ * closed.
+ */
+function initialCollapsed(info: TaskInfo): boolean {
+  const stored = readCollapsePref(info.id);
+  if (stored !== null) return stored;
+  return info.state !== TaskState.Escalated;
+}
+
+function readCollapseMap(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(COLLAPSE_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Stored collapse preference for a job, or null when the operator never set one. */
+function readCollapsePref(jobId: string): boolean | null {
+  const value = readCollapseMap()[jobId];
+  return typeof value === 'boolean' ? value : null;
+}
+
+function writeCollapsePref(jobId: string | null, value: boolean): void {
+  if (!jobId) return;
+  try {
+    const map = readCollapseMap();
+    map[jobId] = value;
+    localStorage.setItem(COLLAPSE_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore quota / privacy-mode errors — collapse still works in-memory */
   }
 }

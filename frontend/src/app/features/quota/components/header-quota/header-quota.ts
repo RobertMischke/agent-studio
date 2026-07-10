@@ -67,7 +67,6 @@ interface QuotaCardModel {
   icon: string;
   label: string;
   ariaLabel: string;
-  plan: string | null;
   chips: QuotaChip[];
   tone: Tone;
   state: QuotaCardState;
@@ -188,7 +187,6 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       icon: cliTypeIcon(s.cliType as CliType),
       label,
       ariaLabel: this.cardAriaLabel(label, chips),
-      plan: s.plan,
       chips,
       tone,
       state,
@@ -208,7 +206,6 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       icon: cliTypeIcon(cliType),
       label,
       ariaLabel: `${label} quota: no data yet`,
-      plan: null,
       chips: [this.placeholderChip()],
       tone: 'unknown',
       state: 'unavailable',

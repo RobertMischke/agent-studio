@@ -79,16 +79,13 @@
 .par__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .par__item {
   padding: 8px 10px;
-  border-left: 2px solid rgba(255,255,255,0.10);
   background: rgba(255,255,255,0.03);
-  border-radius: 0 4px 4px 0;
+  border-radius: 4px;
   cursor: pointer;
 }
 .par__item:hover { background: rgba(255,255,255,0.06); }
-.par__item--info { border-left-color: rgba(148,163,184,0.45); }
-.par__item--warn { border-left-color: var(--severity-warn); }
-.par__item--high { border-left-color: var(--studio-accent-strong); background: rgba(250,179,135,0.06); }
-.par__item--critical { border-left-color: var(--severity-high); background: rgba(243,139,168,0.10); }
+.par__item--high { background: rgba(250,179,135,0.06); }
+.par__item--critical { background: rgba(243,139,168,0.10); }
 .par__item header {
   display: flex;
   flex-wrap: wrap;

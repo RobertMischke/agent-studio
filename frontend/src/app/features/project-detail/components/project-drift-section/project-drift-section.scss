@@ -73,14 +73,10 @@
   flex-wrap: wrap;
   font-size: 0.72rem;
 }
-.pdrift__marble--info       { border-left: 3px solid rgba(148,163,184,0.55); }
-.pdrift__marble--warn       { border-left: 3px solid var(--severity-warn); }
 .pdrift__marble--high       {
-  border-left: 3px solid var(--studio-accent-strong);
   background: rgba(250,179,135,0.06);
 }
 .pdrift__marble--critical   {
-  border-left: 3px solid var(--severity-high);
   background: rgba(243,139,168,0.10);
 }
 .pdrift__marble--active {
