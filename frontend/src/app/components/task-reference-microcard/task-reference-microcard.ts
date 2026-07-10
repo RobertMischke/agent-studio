@@ -42,6 +42,13 @@ export class TaskReferenceMicrocardComponent {
     if (!merge) return null;
     return `${merge.integrationBranch} ${merge.inIntegration ? 'merged' : 'not merged'}, ${merge.releaseBranch} ${merge.inRelease ? 'merged' : 'not merged'}`;
   });
+  readonly mergePopoverLabel = computed(() => {
+    const merge = this.status().merge;
+    if (!merge) return null;
+    const integrationStatus = merge.inIntegration ? 'merged' : 'open';
+    const releaseStatus = merge.inRelease ? 'merged' : 'open';
+    return `${merge.integrationBranch}: ${integrationStatus} · ${merge.releaseBranch}: ${releaseStatus}`;
+  });
 
   open(event: MouseEvent): void {
     event.preventDefault();

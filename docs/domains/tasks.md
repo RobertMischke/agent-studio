@@ -115,9 +115,17 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   [runner.md](./runner.md) and the `references` field in
   [../contracts/filesystem.md](../contracts/filesystem.md).
 - Rendered task references resolve through `POST /api/tasks/reference-status`.
-  The endpoint accepts up to 200 keys, filters them by registry shortcode, and
-  returns one compact live or ghost projection. Merge reachability is computed
-  once for the batch through the existing cached board merge service.
+  Send `{ "keys": ["AGT-2050", "CAR-2"] }`; keys are trimmed, uppercased,
+  deduplicated, and capped at 200. The response is `{ "items": [...] }`, where
+  each item contains `key`, `exists`, `taskKey`, `title`, `lane`, project
+  identity/colour, merge reachability and branch names, and `reviewGrade`.
+  Known-project deleted keys return a ghost (`exists: false`); keys whose
+  shortcode is absent from the project registry are omitted. Consumers must
+  batch page/message references rather than issue one request per reference.
+  The task scan and merge reachability inputs are cached, merge membership is
+  computed once for the batch, and the frontend hydrator also caches resolved
+  keys for its lifetime. The reusable consumer contract and CAC-3 chat host
+  wiring are documented in [frontend/AGENTS.md](../../frontend/AGENTS.md#task-reference-microcards).
 - Successful CLI runs move from `3-progress` to `4-auto-review` through
   application code. Failed or stopped runs remain inspectable.
 - Direct filesystem access by app code is restricted to the bounded service

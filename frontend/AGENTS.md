@@ -211,6 +211,25 @@ Host wiring (all in `src/app/app.config.ts`):
 - `PROJECT_CHAT_DATA_SOURCE` → `ProjectChatDataSourceAdapter` (`services/project-chat-data-source.adapter.ts`) over `TaskService`'s `/api/projects/{p}/chat/*` endpoints.
 - `CHAT_HISTORY_CONFIRM` → `ConfirmDialogService` (structural match).
 
+### Task reference microcards
+
+`<app-task-reference-microcard>` in
+`src/app/components/task-reference-microcard/` is the shared live-or-ghost task
+reference control. Reuse it for structured task-reference lists instead of
+reimplementing lane, merge, project-colour, review-grade, tooltip, or task-tab
+navigation semantics. Its required `status` input is the compact projection
+returned by `POST /api/tasks/reference-status`.
+
+Rendered prose is upgraded by
+`TaskReferenceMicrocardHydratorService`: it scans `<cac-markdown>` and rendered
+wiki HTML, batches uncached keys into one endpoint request, and mounts the same
+component. `app.config.ts` starts the hydrator and registers
+`TaskReferenceNavigationService` at the `coding-agent-chat` CAC-3
+`taskReferences` host seam. Keep the library responsible for identifying and
+linking reference candidates; keep Studio responsible for registry validation,
+status hydration, the visual control, and task-tab navigation. Do not add
+per-reference API calls.
+
 Live turns still flow through the host: the orchestrator side sheet holds a `viewChild` of `<cac-project-chat-list>` and calls `resetAndLoad()` / `appendLive(turn)` when SignalR delivers new turns.
 
 New `ChatEvent` kinds, renderer changes, selector changes: **make them in the library repo** (`C:\Projects\coding-agent-chat`), rebuild its dist, `npm install` here. App-only helpers that intentionally stayed behind: `features/task-detail/components/activity-log.parser.ts` (filters, `buildChatMessages`, live-status derivation, tool-burst rollups, `[steer]` parsing).
