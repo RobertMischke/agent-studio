@@ -38,6 +38,9 @@ interface FakeCell {
   total: number;
   dollars: number | null;
   allModelsPriced: boolean;
+  agentTokens: number;
+  supportingTokens: number;
+  orchestratorTokens: number;
 }
 
 interface FakeProject {
@@ -53,6 +56,9 @@ interface FakeProject {
   peakBucketStart: string;
   peakBucketTotal: number;
   lastActivity: string;
+  agentTokens: number;
+  supportingTokens: number;
+  orchestratorTokens: number;
 }
 
 function buildFakeTimeline(windowHours: number, bucketMinutes: number) {
@@ -80,6 +86,9 @@ function buildFakeTimeline(windowHours: number, bucketMinutes: number) {
       peakBucketStart: new Date(windowEnd).toISOString(),
       peakBucketTotal: 0,
       lastActivity: new Date(windowEnd).toISOString(),
+      agentTokens: 0,
+      supportingTokens: 0,
+      orchestratorTokens: 0,
     };
   }
 
@@ -94,6 +103,12 @@ function buildFakeTimeline(windowHours: number, bucketMinutes: number) {
         const input = 1000 * seed;
         const output = 100 * seed;
         const total = input + output;
+        // Split each cell into the three categories so the composition bar,
+        // legend chips, and table columns have real data to reconcile.
+        // Agent runs dominate (70%), supporting 10%, orchestrator 20%.
+        const agentTokens = Math.round(total * 0.7);
+        const supportingTokens = Math.round(total * 0.1);
+        const orchestratorTokens = total - agentTokens - supportingTokens;
         cells.push({
           project: p,
           bucketStart,
@@ -106,11 +121,17 @@ function buildFakeTimeline(windowHours: number, bucketMinutes: number) {
           total,
           dollars: 0.001 * seed,
           allModelsPriced: true,
+          agentTokens,
+          supportingTokens,
+          orchestratorTokens,
         });
         totals[p].calls += 1;
         totals[p].input += input;
         totals[p].output += output;
         totals[p].total += total;
+        totals[p].agentTokens += agentTokens;
+        totals[p].supportingTokens += supportingTokens;
+        totals[p].orchestratorTokens += orchestratorTokens;
         totals[p].dollars = (totals[p].dollars ?? 0) + 0.001 * seed;
         if (total > totals[p].peakBucketTotal) {
           totals[p].peakBucketTotal = total;
@@ -233,12 +254,24 @@ test.describe('Workspace token timeline', () => {
     await expect(popover).toContainText('input');
     await expect(popover).toContainText('output');
 
-    // Per-project summary table is populated.
+    // Category composition strip: the three category chips + total are
+    // present and the orchestrator share is broken out separately.
+    await expect(page.getByTestId('wtt-composition')).toBeVisible();
+    await expect(page.getByTestId('wtt-cat-agent')).toContainText('Agent');
+    await expect(page.getByTestId('wtt-cat-supporting')).toContainText('Supporting');
+    await expect(page.getByTestId('wtt-cat-orchestrator')).toContainText('Orchestrator');
+    await expect(page.getByTestId('wtt-cat-total')).toContainText('Total');
+
+    // Per-project summary table is populated, with the Agent / Supporting /
+    // Orchestrator columns and a folded Total footer row (Summen-invariante).
     const table = page.getByTestId('wtt-table');
     await expect(table).toBeVisible();
     await expect(table).toContainText('alpha');
     await expect(table).toContainText('bravo');
     await expect(table).toContainText('charlie');
+    await expect(table).toContainText('Orchestrator');
+    await expect(page.getByTestId('wtt-table-total')).toBeVisible();
+    await expect(page.getByTestId('wtt-table-total')).toContainText('Total');
 
     // Capture the visible state for the task report.
     await page.screenshot({

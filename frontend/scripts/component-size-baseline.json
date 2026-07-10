@@ -120,6 +120,12 @@
       "styles": 1284,
       "total": 3002
     },
+    "src/app/features/tokens/components/workspace-token-timeline/workspace-token-timeline.ts": {
+      "typeScript": 432,
+      "template": 264,
+      "styles": 313,
+      "total": 1009
+    },
     "src/app/features/verbose-debug/components/verbose-debug-overlay/verbose-debug-overlay.component.ts": {
       "typeScript": 608,
       "template": 358,

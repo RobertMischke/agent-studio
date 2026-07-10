@@ -291,6 +291,60 @@ export class WorkspaceTokenTimelineComponent implements OnInit, OnDestroy {
     return s;
   });
 
+  // Category descriptors for the breakdown chips + table columns. The three
+  // shares add up to the grand total, so chips, table footer, and chart all
+  // reconcile (Summen-invariante, AGT-2017 house rule).
+  readonly categoryMeta = [
+    { key: 'agent',        label: 'Agent',        cls: 'wtt__cat--agent' },
+    { key: 'supporting',   label: 'Supporting',   cls: 'wtt__cat--supporting' },
+    { key: 'orchestrator', label: 'Orchestrator', cls: 'wtt__cat--orchestrator' },
+  ] as const;
+
+  // Workspace-wide category split across the enabled projects.
+  readonly categoryTotals = computed<{ agent: number; supporting: number; orchestrator: number }>(() => {
+    const t = this.timeline();
+    const off = this.disabledProjects();
+    let agent = 0, supporting = 0, orchestrator = 0;
+    if (t) {
+      for (const p of t.projects) {
+        if (off.has(p.project)) continue;
+        agent += p.agentTokens;
+        supporting += p.supportingTokens;
+        orchestrator += p.orchestratorTokens;
+      }
+    }
+    return { agent, supporting, orchestrator };
+  });
+
+  // Column totals for the table footer, folded over the enabled projects.
+  // This row is the invariant anchor: its Total equals the header grand
+  // total and the sum of the category chips.
+  readonly tableTotals = computed(() => {
+    const t = this.timeline();
+    const off = this.disabledProjects();
+    let total = 0, agent = 0, supporting = 0, orchestrator = 0, calls = 0, dollars = 0;
+    let anyDollars = false, allPriced = true, anyActive = false;
+    if (t) {
+      for (const p of t.projects) {
+        if (off.has(p.project)) continue;
+        anyActive = true;
+        total += p.total;
+        agent += p.agentTokens;
+        supporting += p.supportingTokens;
+        orchestrator += p.orchestratorTokens;
+        calls += p.calls;
+        if (p.dollars !== null) {
+          dollars += p.dollars;
+          anyDollars = true;
+          if (!p.allModelsPriced) allPriced = false;
+        } else {
+          allPriced = false;
+        }
+      }
+    }
+    return { total, agent, supporting, orchestrator, calls, dollars: anyDollars ? dollars : null, allPriced, anyActive };
+  });
+
   // ---- Layout helpers (viewBox math) ----
 
   yFromPct(pct: number): number {
@@ -322,6 +376,13 @@ export class WorkspaceTokenTimelineComponent implements OnInit, OnDestroy {
     }
     const hue = h % 360;
     return `hsl(${hue}, 65%, 55%)`;
+  }
+
+  /** Share of the enabled grand total, for the composition bar widths. */
+  pct(n: number): number {
+    const total = this.grandTotalTokens();
+    if (total <= 0) return 0;
+    return (n / total) * 100;
   }
 
   // ---- Formatting ----

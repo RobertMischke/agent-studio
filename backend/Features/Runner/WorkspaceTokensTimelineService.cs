@@ -26,6 +26,17 @@ public class WorkspaceTokensTimelineService
     public const int DefaultWindowHours = 24;
     public const int DefaultBucketMinutes = 60;
 
+    /// <summary>
+    /// Categorisation for the workspace timeline is participant-driven
+    /// (<c>agent:</c> / <c>support:</c> / <c>orchestrator:</c> prefixes), so
+    /// no per-job title lookup is needed here - the bus-native entries carry
+    /// their participant. An empty job map is enough for
+    /// <see cref="ProjectTokenUsageService.Categorize"/> to run its
+    /// participant branch without a disk walk.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, TaskInfo> NoJobs =
+        new Dictionary<string, TaskInfo>(StringComparer.Ordinal);
+
     private readonly OrchestratorLog _log;
     private readonly BusBackedWorkspaceTimelineReader? _busReader;
 
@@ -101,11 +112,15 @@ public class WorkspaceTokensTimelineService
                     bucket = new Bucket(project, bucketStart, bucketStart + bucketSpan);
                     cellMap[key] = bucket;
                 }
+                var entryTotal = (long)u.InputTokens + u.OutputTokens + u.CacheReadTokens + u.CacheCreationTokens;
+                var category = ProjectTokenUsageService.Categorize(entry, NoJobs);
+
                 bucket.Calls++;
                 bucket.Input += u.InputTokens;
                 bucket.Output += u.OutputTokens;
                 bucket.CacheRead += u.CacheReadTokens;
                 bucket.CacheWrite += u.CacheCreationTokens;
+                bucket.AddCategory(category, entryTotal);
 
                 var cost = TokenPricing.Estimate(u.Model, u.InputTokens, u.OutputTokens, u.CacheReadTokens, u.CacheCreationTokens);
                 if (cost.ModelKnown)
@@ -124,6 +139,7 @@ public class WorkspaceTokensTimelineService
                 pt.Output += u.OutputTokens;
                 pt.CacheRead += u.CacheReadTokens;
                 pt.CacheWrite += u.CacheCreationTokens;
+                pt.AddCategory(category, entryTotal);
                 if (cost.ModelKnown)
                 {
                     pt.Dollars = (pt.Dollars ?? 0m) + cost.Total;
@@ -160,7 +176,10 @@ public class WorkspaceTokensTimelineService
                 CacheWrite: bucket.CacheWrite,
                 Total: total,
                 Dollars: bucket.Dollars,
-                AllModelsPriced: bucket.HasPricedCall && !bucket.HasUnpricedCall));
+                AllModelsPriced: bucket.HasPricedCall && !bucket.HasUnpricedCall,
+                AgentTokens: bucket.AgentTokens,
+                SupportingTokens: bucket.SupportingTokens,
+                OrchestratorTokens: bucket.OrchestratorTokens));
         }
 
         var projectsOut = projectTotals.Values
@@ -177,7 +196,10 @@ public class WorkspaceTokensTimelineService
                 AllModelsPriced: p.HasPricedCall && !p.HasUnpricedCall,
                 PeakBucketStart: p.PeakBucketStart?.ToString("o"),
                 PeakBucketTotal: p.PeakBucketTotal,
-                LastActivity: p.LastActivity?.ToString("o")))
+                LastActivity: p.LastActivity?.ToString("o"),
+                AgentTokens: p.AgentTokens,
+                SupportingTokens: p.SupportingTokens,
+                OrchestratorTokens: p.OrchestratorTokens))
             .ToList();
 
         return new TokenTimeline(
@@ -226,12 +248,25 @@ public class WorkspaceTokensTimelineService
         public decimal? Dollars;
         public bool HasPricedCall;
         public bool HasUnpricedCall;
+        public long AgentTokens;
+        public long SupportingTokens;
+        public long OrchestratorTokens;
 
         public Bucket(string project, DateTime start, DateTime end)
         {
             Project = project;
             BucketStart = start;
             BucketEnd = end;
+        }
+
+        public void AddCategory(string category, long amount)
+        {
+            switch (category)
+            {
+                case ProjectTokenCategory.Job: AgentTokens += amount; break;
+                case ProjectTokenCategory.Supporting: SupportingTokens += amount; break;
+                case ProjectTokenCategory.Orchestrator: OrchestratorTokens += amount; break;
+            }
         }
     }
 
@@ -249,10 +284,23 @@ public class WorkspaceTokensTimelineService
         public DateTime? PeakBucketStart;
         public long PeakBucketTotal;
         public DateTime? LastActivity;
+        public long AgentTokens;
+        public long SupportingTokens;
+        public long OrchestratorTokens;
 
         public ProjectTotal(string project)
         {
             Project = project;
+        }
+
+        public void AddCategory(string category, long amount)
+        {
+            switch (category)
+            {
+                case ProjectTokenCategory.Job: AgentTokens += amount; break;
+                case ProjectTokenCategory.Supporting: SupportingTokens += amount; break;
+                case ProjectTokenCategory.Orchestrator: OrchestratorTokens += amount; break;
+            }
         }
     }
 }
@@ -277,7 +325,10 @@ public sealed record TokenTimeline(
 /// One (project, bucket) cell. <see cref="AllModelsPriced"/> is false
 /// when at least one call in the bucket used a model that is not in
 /// <see cref="TokenPricing.Catalog"/>; <see cref="Dollars"/> in that
-/// case covers only the priced subset.
+/// case covers only the priced subset. <see cref="AgentTokens"/> +
+/// <see cref="SupportingTokens"/> + <see cref="OrchestratorTokens"/> add
+/// up to <see cref="Total"/>; the split lets the UI show the orchestrator
+/// share separately (AGT-2038).
 /// </summary>
 public sealed record TokenTimelineCell(
     string Project,
@@ -290,11 +341,19 @@ public sealed record TokenTimelineCell(
     long CacheWrite,
     long Total,
     decimal? Dollars,
-    bool AllModelsPriced);
+    bool AllModelsPriced,
+    long AgentTokens,
+    long SupportingTokens,
+    long OrchestratorTokens);
 
 /// <summary>
 /// Per-project rollup over the full window. Drives the legend and the
-/// summary table under the chart.
+/// summary table under the chart. <see cref="AgentTokens"/> +
+/// <see cref="SupportingTokens"/> + <see cref="OrchestratorTokens"/> add
+/// up to <see cref="Total"/> so the table can carry a Total / davon Agent
+/// / davon Orchestrator split (AGT-2038). <see cref="LastActivity"/> now
+/// reflects the newest real activity of any kind - an agent run counts,
+/// not only the last orchestrator call.
 /// </summary>
 public sealed record TokenTimelineProject(
     string Project,
@@ -308,4 +367,7 @@ public sealed record TokenTimelineProject(
     bool AllModelsPriced,
     string? PeakBucketStart,
     long PeakBucketTotal,
-    string? LastActivity);
+    string? LastActivity,
+    long AgentTokens,
+    long SupportingTokens,
+    long OrchestratorTokens);

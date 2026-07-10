@@ -5,20 +5,33 @@ namespace AgentStudio.Tokens;
 /// <summary>
 /// Phase-4 bus-backed read path for the workspace tokens timeline
 /// (<c>GET /api/workspace/tokens</c>). For every (project, watchPath)
-/// pair, queries the bus for that project's orchestrator
-/// <c>kind=token-usage</c> messages, converts them into transient
-/// <see cref="OrchestratorLogEntry"/> records, and folds them through
-/// the existing pure-function bucketing in
-/// <see cref="WorkspaceTokensTimelineService.BuildFromEntries"/>.
+/// pair, queries the bus for that project's <c>kind=token-usage</c>
+/// messages across <b>every</b> participant (coding-agent runs, supporting
+/// analysis loops, and orchestrator meta-turns), converts them into
+/// transient <see cref="OrchestratorLogEntry"/> records, and folds them
+/// through the pure-function bucketing in
+/// <see cref="WorkspaceTokensTimelineService.BuildFromEntries"/>, which
+/// splits each project's spend into Agent / Supporting / Orchestrator
+/// subtotals off the participant prefix.
 /// </summary>
 /// <remarks>
-/// Reusing the legacy bucketer is what keeps the bus path byte-identical
-/// to the JSONL path: window snapping, bucket alignment, the per-bucket
-/// dollar accounting, and the per-project rollup ordering all flow
-/// through the same code. The parity test
-/// (<c>WorkspaceTokensTimelineBusParityTests</c>) drives both readers
-/// over the same data set and asserts numeric equality for every cell
-/// and every per-project total.
+/// <para>
+/// The view used to load <see cref="BusTokenEntryConverter.LoadOrchestratorEntries"/>
+/// (orchestrator participant only), so the nightly agent runs - the bulk
+/// of the spend - never showed up and the per-project totals read far too
+/// small (AGT-2038). It now loads
+/// <see cref="BusTokenEntryConverter.LoadTokenUsageEntries"/> so the total
+/// per project is the true sum, with the orchestrator share broken out
+/// separately.
+/// </para>
+/// <para>
+/// Reusing the shared bucketer keeps window snapping, bucket alignment,
+/// per-bucket dollar accounting, and the per-project rollup ordering in
+/// one place. The parity test
+/// (<c>WorkspaceTokensTimelineBusParityTests</c>) drives both readers over
+/// an orchestrator-only data set and asserts numeric equality for every
+/// cell and every per-project total.
+/// </para>
 /// </remarks>
 public sealed class BusBackedWorkspaceTimelineReader
 {
@@ -72,7 +85,11 @@ public sealed class BusBackedWorkspaceTimelineReader
         var perProjectEntries = new List<(string Project, IReadOnlyList<OrchestratorLogEntry> Entries)>();
         foreach (var (name, _) in projects)
         {
-            var entries = BusTokenEntryConverter.LoadOrchestratorEntries(store, workspaceRoot, name);
+            // All participants, not just the orchestrator: agent runs and
+            // supporting loops are the bulk of a project's spend and must
+            // be part of the workspace total (AGT-2038). Participant ids ride
+            // along so BuildFromEntries can split Agent/Supporting/Orchestrator.
+            var entries = BusTokenEntryConverter.LoadTokenUsageEntries(store, workspaceRoot, name);
             perProjectEntries.Add((name, entries));
         }
 
