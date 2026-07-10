@@ -16,7 +16,7 @@ import type { TaskArtifact, TaskArtifactsResponse, TaskInfo } from '../../../mod
  * must never reach the manifest, the root cause of the over-counted "9").
  */
 describe('TaskArtifactsService', () => {
-  let calls: Array<{ jobId: string; watchPath?: string }>;
+  let calls: { jobId: string; watchPath?: string }[];
   let nextResponse: TaskArtifactsResponse | null;
 
   function artifact(name: string): TaskArtifact {

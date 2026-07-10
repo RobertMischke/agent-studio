@@ -29,7 +29,7 @@ function line(text: string, stream = 'stdout', timestamp = '2026-07-09T03:15:00.
 
 // A catalog of raw stream-json frames as they appear on a single stdout line
 // when the backend renderer did not (or could not) turn them into a marker.
-const STREAM_JSON_CATALOG: ReadonlyArray<{ name: string; raw: string }> = [
+const STREAM_JSON_CATALOG: readonly { name: string; raw: string }[] = [
   {
     name: 'assistant text frame',
     raw: '{"type":"assistant","message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"hello world"}]}}',
@@ -82,7 +82,7 @@ const STREAM_JSON_CATALOG: ReadonlyArray<{ name: string; raw: string }> = [
 
 // The forward-compat case: an event type this code has never seen. It must be
 // redacted (it still carries transport structure), never rendered raw.
-const UNKNOWN_FUTURE_FRAMES: ReadonlyArray<{ name: string; raw: string }> = [
+const UNKNOWN_FUTURE_FRAMES: readonly { name: string; raw: string }[] = [
   {
     name: 'unknown future event type carrying a message envelope',
     raw: '{"type":"web_search_tool_result","message":{"role":"assistant","content":[{"type":"text","text":"x"}]}}',
@@ -112,7 +112,7 @@ describe('isNonRenderableRawLine — stream-json catalog', () => {
 });
 
 describe('isNonRenderableRawLine — false-positive guard', () => {
-  const RENDERABLE: ReadonlyArray<{ name: string; text: string }> = [
+  const RENDERABLE: readonly { name: string; text: string }[] = [
     { name: 'plain agent prose', text: 'Looking at the activity-log component now.' },
     { name: 'a Claude marker line', text: '● Read prompt.md' },
     { name: 'a tool action line', text: '* Edit src/foo.ts' },

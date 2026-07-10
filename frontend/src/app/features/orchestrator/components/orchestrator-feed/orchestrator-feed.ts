@@ -65,7 +65,7 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
     );
   });
   readonly groupedEntries = computed(() => {
-    const groups: Array<{ key: string; day: string; project: string; entries: OrchestratorLogEntry[] }> = [];
+    const groups: { key: string; day: string; project: string; entries: OrchestratorLogEntry[] }[] = [];
     for (const entry of this.visibleEntries()) {
       const day = this.formatDay(entry.ts);
       const project = entry.project || this.projectName();

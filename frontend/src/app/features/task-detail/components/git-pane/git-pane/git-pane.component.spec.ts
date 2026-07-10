@@ -81,7 +81,7 @@ function makeGitPaneMock(options?: {
     previewIsBinary,
     previewLoading,
     previewError,
-    loadPreview: (_path: string) => {
+    loadPreview: () => {
       const p = options?.previewOnLoad;
       previewContent.set(p?.content ?? null);
       previewIsBinary.set(p?.isBinary ?? false);

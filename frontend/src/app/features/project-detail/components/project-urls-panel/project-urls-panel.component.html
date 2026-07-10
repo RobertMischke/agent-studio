@@ -128,16 +128,16 @@
           }
         }
         <div class="project-urls__form">
-          <label>Label</label>
-          <input type="text" data-testid="project-urls-form-label"
+          <label for="project-urls-form-label">Label</label>
+          <input id="project-urls-form-label" type="text" data-testid="project-urls-form-label"
                  placeholder="e.g. Dev frontend"
                  [ngModel]="formLabel()" (ngModelChange)="formLabel.set($event)" />
-          <label>URL</label>
-          <input type="text" data-testid="project-urls-form-url"
+          <label for="project-urls-form-url">URL</label>
+          <input id="project-urls-form-url" type="text" data-testid="project-urls-form-url"
                  placeholder="http://localhost:4010"
                  [ngModel]="formUrl()" (ngModelChange)="formUrl.set($event)" />
-          <label>Start command (optional)</label>
-          <input type="text" data-testid="project-urls-form-command"
+          <label for="project-urls-form-command">Start command (optional)</label>
+          <input id="project-urls-form-command" type="text" data-testid="project-urls-form-command"
                  placeholder="npm run start"
                  [ngModel]="formCommand()" (ngModelChange)="formCommand.set($event)" />
           <div class="project-urls__form-actions">

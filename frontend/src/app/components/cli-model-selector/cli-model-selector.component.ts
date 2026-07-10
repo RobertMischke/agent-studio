@@ -123,7 +123,7 @@ export class CliModelSelectorComponent {
         },
         // Keep the synchronous cached catalog visible; explicit Refresh
         // still surfaces errors when the operator asks for it.
-        error: () => {},
+        error: () => void 0,
       });
       return;
     }

@@ -35,7 +35,7 @@
     </header>
 
     <div class="rgv__body" [class.rgv__body--new-file]="isNewFile()">
-      <aside class="rgv__tree" data-testid="rgv-tree" role="tree" aria-label="Changed files" (keydown)="onTreeKeydown($event)">
+      <aside class="rgv__tree" data-testid="rgv-tree" role="tree" aria-label="Changed files" tabindex="0" (keydown)="onTreeKeydown($event)">
         @if (filesState() === 'loading') {
           <div class="rgv__placeholder">Loading file list…</div>
         } @else if (filesState() === 'error') {
@@ -59,7 +59,9 @@
                  [style.padding-left.px]="8 + depth * 14"
                  [attr.data-path]="n.fullPath"
                  [attr.tabindex]="rovingPath() === n.fullPath ? 0 : -1"
-                 (click)="onNodeClick(n)">
+                 (click)="onNodeClick(n)"
+                 (keydown.enter)="onNodeClick(n)"
+                 (keydown.space)="onNodeClick(n); $event.preventDefault()">
               <span class="rgv__node-glyph">
                 @if (n.isFolder) {
                   {{ expanded().has(n.fullPath) ? '▾' : '▸' }}

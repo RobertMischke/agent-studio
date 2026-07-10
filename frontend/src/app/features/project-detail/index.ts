@@ -24,6 +24,7 @@ export { ProjectGitPanelComponent } from './components/project-git-panel/project
 export { ProjectSteeringDocsSectionComponent } from './components/project-steering-docs-section/project-steering-docs-section';
 export { ProjectSkillReadinessSectionComponent } from './components/project-skill-readiness-section/project-skill-readiness-section';
 export { ProjectWikiSectionComponent } from './components/project-wiki-section/project-wiki-section';
+export { ProjectWorkflowSectionComponent } from './components/project-workflow-section/project-workflow-section';
 
 // project-shell config (deep-link slug helpers)
 export {

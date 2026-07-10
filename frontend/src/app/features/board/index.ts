@@ -34,7 +34,10 @@ export {
   projectRunnerIndicator,
 } from './components/project-tabs/project-chip-view-model';
 export {
+  buildGitStateBadge,
   buildMergeSignal,
+  type GitStateBadge,
+  type GitStateBadgeKind,
   type MergeSignalView,
   type MergeSignalSegment,
 } from './components/task-card/task-card-view-model';

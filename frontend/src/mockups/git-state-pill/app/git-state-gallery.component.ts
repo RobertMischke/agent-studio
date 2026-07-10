@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 
 import { TaskState } from '../../../app/models/task.model';
 import type { TaskInfo } from '../../../app/models/task.model';
-import type { GitStateBadge, GitStateBadgeKind } from '../../../app/features/board/components/task-card/task-card-view-model';
-import { buildGitStateBadge } from '../../../app/features/board/components/task-card/task-card-view-model';
+import { buildGitStateBadge, type GitStateBadge, type GitStateBadgeKind } from '../../../app/features/board';
 
 /**
  * ASS-1752 visual harness for the git-state pill on the task card.

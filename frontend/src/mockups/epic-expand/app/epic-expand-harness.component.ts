@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 
-import { TaskCardComponent } from '../../../app/features/board/components/task-card/task-card.component';
+import { TaskCardComponent } from '../../../app/features/board';
 import type { TaskInfo } from '../../../app/models/task.model';
 
 /**

@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { ResultViewComponent } from '../../../app/features/task-detail/components/protocol-pane/result-view/result-view.component';
+import { ResultViewComponent, type ProtocolVerdict } from '../../../app/features/task-detail';
 import type { TaskDetail } from '../../../app/models/task.model';
-import type { ProtocolVerdict } from '../../../app/features/task-detail/components/protocol-pane/protocol-verdict';
 
 /**
  * Isolated render of the REAL {@link ResultViewComponent} across the case
