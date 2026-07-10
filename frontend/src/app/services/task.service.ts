@@ -78,6 +78,12 @@ import { JobsHubClient } from './jobs-hub-client.service';
 export interface CodeReviewListEntry {
   fileName: string;
   verdict: string;
+  /**
+   * Quality grade `A`/`B`/`C`/`D` from the automatic grade pass; null for the
+   * older user-triggered verdict reviews that carry no grade. Mirrors backend
+   * `CodeReviewListEntry.Grade` (already serialised over the wire).
+   */
+  grade?: string | null;
   summary: string;
   model: string;
   cliType: string;

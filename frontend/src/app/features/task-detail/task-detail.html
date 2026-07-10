@@ -44,6 +44,10 @@
       (openEpic)="openEpicRequested.emit($event)" />
   }
 
+  @if (isEscalated()) {
+    <app-escalation-summary [detail]="detail()" />
+  }
+
   <app-command-deck
     [currentWatchPath]="detail().info.watchPath"
     [watchPaths]="watchPaths()"

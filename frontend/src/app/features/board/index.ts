@@ -33,6 +33,11 @@ export {
   projectAutoInfo,
   projectRunnerIndicator,
 } from './components/project-tabs/project-chip-view-model';
+export {
+  buildMergeSignal,
+  type MergeSignalView,
+  type MergeSignalSegment,
+} from './components/task-card/task-card-view-model';
 
 // utilities
 export { splitReadyByPhase } from './components/ready-lane-split.util';
