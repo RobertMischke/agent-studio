@@ -1,0 +1,10 @@
+{
+  "relatedTasks": [
+    {
+      "key": "AGT-2066",
+      "title": "KRITISCH: Clean-Context-Credentials - OAuth-Token-Roulette bei parallelen Refreshes",
+      "linkedAt": "2026-07-10T14:55:03.0061807Z",
+      "source": "auto"
+    }
+  ]
+}
