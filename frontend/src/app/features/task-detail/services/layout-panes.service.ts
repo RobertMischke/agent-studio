@@ -51,6 +51,27 @@ export class LayoutPanesService {
   // stays highlighted for the duration of the drag, not just on hover.
   readonly paneSplitterDragging = signal(false);
 
+  /**
+   * Cross-pane navigation intent: a prompt-pane tab id another pane wants to
+   * focus (e.g. the git pane's commit-row code-review rating badge jumping to
+   * `code-review`, AGT-1995). The prompt pane watches this and consumes it
+   * (clearing back to `null`) once applied. A signal + lazy consumption is
+   * used instead of a direct call so the switch survives the prompt pane
+   * being hidden: {@link openPromptTab} reveals it first, and the freshly
+   * rendered pane picks the request up on creation. Kept as a plain string so
+   * this layout service does not depend on the prompt pane's tab-id type.
+   */
+  readonly requestedPromptTab = signal<string | null>(null);
+
+  /**
+   * Reveal the prompt pane (if hidden) and ask it to focus `tab`. See
+   * {@link requestedPromptTab} for why this is signal-driven.
+   */
+  openPromptTab(tab: string): void {
+    if (!this.panesVisible().prompt) this.togglePane('prompt');
+    this.requestedPromptTab.set(tab);
+  }
+
   private layoutResizeBounds: DOMRect | null = null;
   private readonly layoutResizeMove = (e: PointerEvent) => this.resizeLayout(e);
   private readonly layoutResizeEnd = () => this.stopLayoutResize();

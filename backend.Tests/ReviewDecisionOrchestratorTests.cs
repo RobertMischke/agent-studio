@@ -962,6 +962,102 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public void BuildBranchDiffSummary_SteerFollowupEmptyWorkingDiff_ShowsBranchCommits()
+    {
+        // AGT-2022 test 3: a steer follow-up run leaves an empty working diff, but
+        // the task branch still carries its commits vs the base branch. The aspect
+        // reviewers must see that branch range so they never false-BLOCK the task
+        // as "deliverables missing".
+        var commits = new List<GitCommitInfo>
+        {
+            new("sha2222222", "sha2", DateTime.UtcNow, "dev", "feat: wire the endpoint", 3, 40, 5),
+            new("sha1111111", "sha1", DateTime.UtcNow.AddMinutes(-10), "dev", "feat: add the service", 2, 120, 0),
+        };
+
+        var summary = ReviewDecisionOrchestrator.BuildBranchDiffSummary("develop", "task/AGT-2022", commits);
+
+        Assert.Contains("task/AGT-2022", summary);
+        Assert.Contains("develop", summary);
+        Assert.Contains("2 commit(s) ahead", summary);
+        Assert.Contains("Total files changed: 5", summary);
+        Assert.Contains("+160/-5", summary);
+        Assert.Contains("feat: wire the endpoint", summary);
+        Assert.Contains("feat: add the service", summary);
+        Assert.Contains("Do NOT treat an empty working diff as missing work", summary);
+    }
+
+    [Fact]
+    public void SelectGradeDiff_EmptyWorkingDiff_FallsBackToBranchRange_AndLabelsIt()
+    {
+        // AGT-2022 fallback selection: post-squash/merge or steer follow-up leaves
+        // the run-window working diff empty. The grade must fall back to the
+        // task-branch-vs-base range so it never mis-grades a real, landed change as
+        // an empty diff, and the label must name the fallback source.
+        var branchSummary = "Task branch `task/AGT-2022` vs base `main`: 2 commit(s) ahead.";
+        var (diff, label) = ReviewDecisionOrchestrator.SelectGradeDiff(
+            workingDiff: "   ", scopeLabel: "abc1234", branchDiffFactory: () => branchSummary);
+
+        Assert.Equal(branchSummary, diff);
+        Assert.Equal("abc1234 (branch range vs base)", label);
+    }
+
+    [Fact]
+    public void SelectGradeDiff_NonEmptyWorkingDiff_WinsAndNeverConsultsBranchRange()
+    {
+        // The guard that keeps a normal run cheap and correct: a non-empty working
+        // diff is graded on exactly what the run changed, and the git-backed branch
+        // range is never resolved (the factory must not be called).
+        var (diff, label) = ReviewDecisionOrchestrator.SelectGradeDiff(
+            workingDiff: "diff --git a/x b/x\n+real change",
+            scopeLabel: "HEAD",
+            branchDiffFactory: () => throw new InvalidOperationException("branch range must not be resolved for a non-empty working diff"));
+
+        Assert.Contains("+real change", diff);
+        Assert.Equal("HEAD", label);
+    }
+
+    [Fact]
+    public void SelectGradeDiff_EmptyWorkingDiff_NoBranchRange_StaysEmpty()
+    {
+        // Genuinely empty deliverable: the working diff is blank AND no branch
+        // range exists (git unwired / no task branch / empty range). The diff
+        // selection stays empty and keeps the original scope label - the results/
+        // inventory and card-mode framing carry the read-only case in the prompt,
+        // not this fallback.
+        var (diff, label) = ReviewDecisionOrchestrator.SelectGradeDiff(
+            workingDiff: "", scopeLabel: "HEAD", branchDiffFactory: () => null);
+
+        Assert.Equal("", diff);
+        Assert.Equal("HEAD", label);
+    }
+
+    [Fact]
+    public void ComposeAspectDiffSummary_AppendsBranchRange_WhenPresent()
+    {
+        // The aspect diff summary always carries the branch range appended to the
+        // run-window summary so an empty run-window view still shows the real
+        // change set (AGT-2022).
+        var composed = ReviewDecisionOrchestrator.ComposeAspectDiffSummary(
+            baseSummary: "No commits attributed to this task.",
+            branchSummary: "Task branch `task/AGT-2022` vs base `main`: 2 commit(s) ahead.");
+
+        Assert.Contains("No commits attributed to this task.", composed);
+        Assert.Contains("Task branch `task/AGT-2022` vs base `main`", composed);
+        // The two evidence blocks are kept as separate paragraphs.
+        Assert.Contains("task.\n\nTask branch", composed);
+    }
+
+    [Fact]
+    public void ComposeAspectDiffSummary_NoBranchRange_ReturnsBaseUnchanged()
+    {
+        // Sequential runs never create a task branch, and an empty range yields
+        // no summary: the base run-window summary passes through untouched.
+        const string baseSummary = "Commits attributed to this task: 1\nTotal files changed: 3";
+        Assert.Equal(baseSummary, ReviewDecisionOrchestrator.ComposeAspectDiffSummary(baseSummary, null));
+        Assert.Equal(baseSummary, ReviewDecisionOrchestrator.ComposeAspectDiffSummary(baseSummary, "   "));
+    }
+
+    [Fact]
     public void BuildDiffSummary_AggregateEmptyButLegacyCommitPresent_FallsBackToLegacyView()
     {
         // Defensive fallback path: the aggregator could not be wired
@@ -1394,6 +1490,50 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task TaskDone_AspectVerdictInfraCrash_EscalatesEnvironmental_WithoutBudgetBurn()
+    {
+        // AGT-2021: the reviewing CLI dies on both the run and the single
+        // environmental retry, so no aspect produces a verdict. This is an
+        // INFRASTRUCTURE crash, not the card's unfinished work. The card must be
+        // escalated flagged environmental (InfraCrash), NEVER reissued or accepted,
+        // and the escalation must NOT burn the reissue budget (an Escalate record,
+        // never a Reissue).
+        SeedReviewJobWithDone("infra-crash-job");
+        var orchestrator = BuildOrchestratorWithAspects(aspectStub: _ => string.Empty);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // Lane: moved to 5e-escalated, never accepted (5-human-review) or
+        // reissued (2-ready).
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "infra-crash-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "infra-crash-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "infra-crash-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "infra-crash-job")));
+
+        // Decision journal: exactly one record, an Escalate (chain-ending, so no
+        // budget is charged) - and crucially NOT a Reissue.
+        var records = ReviewDecisionLog.ReadAll(_workspace, Project);
+        var record = Assert.Single(records);
+        Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
+        Assert.DoesNotContain(records, r => r.Kind == ReviewDecisionKind.Reissue);
+        Assert.StartsWith(ReviewDecisionOrchestrator.AspectInfraCrashReasonPrefix, record.Reason);
+        // No reissue in the chain -> the card's reissue budget is untouched.
+        Assert.Equal(0, ReviewDecisionOrchestrator.CountReissuesInCurrentChain(records, "infra-crash-job"));
+
+        // Outcome evidence is a post-processing failure (infra), not a work
+        // deficit reissue.
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.Escalated, "infra-crash-job");
+        Assert.Contains(outcomes, o => o.Outcome == PostProcessingOutcomes.FailedPostProcessing);
+
+        // Timeline carries the environmental + InfraCrash flags.
+        var events = ReadTimeline(TaskStates.Escalated, "infra-crash-job");
+        var escalate = Assert.Single(
+            events.Where(e => e.Kind == TimelineEventKinds.OrchestratorEscalated).ToList());
+        Assert.Equal("true", escalate.Details?["environmental"]);
+        Assert.Equal("InfraCrash", escalate.Details?["issueKind"]);
+    }
+
+    [Fact]
     public async Task TaskDone_AllAspectsPass_EmitsOrchestratorVerdictAcceptedTimelineEvent()
     {
         // ASS-566: the positive terminal of the completion loop must reach
@@ -1722,6 +1862,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
         aspectRunner.CliRunner = (aspectId, _, _, _, _, _) => Task.FromResult(aspectStub(aspectId));
+        // No real wall-clock wait on the AGT-2021 environmental retry path.
+        aspectRunner.VerdictRetryBackoff = _ => TimeSpan.Zero;
         var taskAccess = BuildTaskAccess(scanner, stateMachine, config);
         var orchestrator = new ReviewDecisionOrchestrator(
             scanner, stateMachine, taskAccess, chatLog, prompts, aspectRunner, statusSnapshot ?? new AutoReviewStatusSnapshot(), config,

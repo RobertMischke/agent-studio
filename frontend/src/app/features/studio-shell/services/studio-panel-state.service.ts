@@ -38,15 +38,18 @@ export class StudioPanelStateService {
   private readonly _activityBarSide = signal<'left' | 'right'>(
     (localStorage.getItem('atp.studio.activityBarSide') as 'left' | 'right' | null) ?? 'left',
   );
-  private readonly _chatRailOpen = signal<boolean>(
-    localStorage.getItem('atp.studio.chatRailOpen') === '1',
-  );
 
   readonly active = this._active.asReadonly();
   readonly visible = this._visible.asReadonly();
   readonly sidebarWidth = this._sidebarWidth.asReadonly();
   readonly activityBarSide = this._activityBarSide.asReadonly();
-  readonly chatRailOpen = this._chatRailOpen.asReadonly();
+
+  constructor() {
+    // AGT-2035 migration: the standalone "Project chat rail" was removed (its
+    // job is covered by the orchestrator multichat). Drop its stored flag so a
+    // stale value can never resurrect the rail.
+    try { localStorage.removeItem('atp.studio.chatRailOpen'); } catch { /* ignore */ }
+  }
 
   /**
    * VS-Code-style toggle: clicking the active icon hides the sidebar;
@@ -88,17 +91,6 @@ export class StudioPanelStateService {
     localStorage.setItem('atp.studio.activityBarSide', side);
   }
 
-  toggleChatRail(): void {
-    const next = !this._chatRailOpen();
-    this._chatRailOpen.set(next);
-    localStorage.setItem('atp.studio.chatRailOpen', next ? '1' : '0');
-  }
-
-  setChatRailOpen(open: boolean): void {
-    this._chatRailOpen.set(open);
-    localStorage.setItem('atp.studio.chatRailOpen', open ? '1' : '0');
-  }
-
   private persist(): void {
     writePanelState({
       active: this._active(),
@@ -113,9 +105,13 @@ function readPanelState(): StudioPanelPersistedState {
     const raw = window.localStorage?.getItem(PANEL_STATE_STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as Partial<StudioPanelPersistedState>;
-    const active = typeof parsed.active === 'string' && STUDIO_PANEL_KINDS.has(parsed.active as StudioPanelKind)
+    let active = typeof parsed.active === 'string' && STUDIO_PANEL_KINDS.has(parsed.active as StudioPanelKind)
       ? parsed.active as StudioPanelKind
       : undefined;
+    // AGT-2035 migration: the 'settings' sidebar panel was removed (settings is
+    // now a full editor tab). A persisted active:'settings' would land on the
+    // "Panel not implemented" fallback, so fall back to the Explorer.
+    if (active === 'settings') active = 'explorer';
     return {
       active,
       visible: typeof parsed.visible === 'boolean' ? parsed.visible : undefined,

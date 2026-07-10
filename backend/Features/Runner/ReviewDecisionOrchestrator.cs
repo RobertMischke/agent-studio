@@ -138,7 +138,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly IBuildTestGateRunner? _buildTestGateRunner;
     private readonly WikiMaintenancePostStepRunner? _wikiMaintenance;
     private readonly WikiLearningsPostStepRunner? _wikiLearnings;
+    private readonly WikiTaskCrossReferenceService? _wikiTaskCrossReferences;
     private readonly RegressionRadarService? _regressionRadar;
+    // The opt-in task-spawner post-step (AGT-2028). Optional so the many
+    // stand-alone test constructors keep compiling; production DI supplies it.
+    private readonly TaskSpawnerPostStepRunner? _taskSpawner;
 
     /// <summary>
     /// Regression-radar analysis injection point. Tests substitute a
@@ -171,6 +175,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     internal const string LintScssReissueReasonPrefix = "lint-scss reissue: ";
     internal const string BuildTestGateReissueReasonPrefix = "build-test-gate reissue: ";
 
+    /// <summary>
+    /// Stable prefix on the <c>Reason</c> field of the <see cref="ReviewDecisionKind.Escalate"/>
+    /// record the aspect-verdict InfraCrash path emits (AGT-2021). Lets a reader
+    /// tell an environmental infra crash apart from a real work-quality escalation.
+    /// </summary>
+    internal const string AspectInfraCrashReasonPrefix = "aspect-verdict infra crash: ";
+
     public ReviewDecisionOrchestrator(
         TaskScannerService scanner,
         TaskStateMachine stateMachine,
@@ -195,7 +206,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         HumanReviewEscalation? humanReviewEscalation = null,
         RegressionRadarService? regressionRadar = null,
         WorkspaceArtifactCommitService? workspaceArtifactCommits = null,
-        AgentStudio.Review.CodeReviewStepService? codeReviewStep = null)
+        AgentStudio.Review.CodeReviewStepService? codeReviewStep = null,
+        TaskSpawnerPostStepRunner? taskSpawner = null,
+        WikiTaskCrossReferenceService? wikiTaskCrossReferences = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -221,6 +234,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _regressionRadar = regressionRadar;
         _workspaceArtifactCommits = workspaceArtifactCommits;
         _codeReviewStep = codeReviewStep;
+        _taskSpawner = taskSpawner;
+        _wikiTaskCrossReferences = wikiTaskCrossReferences;
 
         _statusSnapshot.ConfigureEscalationRateAlert(
             _configuration.GetValue(
@@ -1468,7 +1483,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
         var (taskBody, recentLog) = LoadTaskContext(pending);
         var statusSummary = LoadStatusSummary(current.FolderPath);
-        var diffSummary = LoadDiffSummary(entry.Name, entry.Path, current);
+        var diffSummary = LoadDiffSummary(entry, current);
+        var resultsInventory = ResultsInventory.Render(current.FolderPath);
+        var cardMode = ReviewCardMode.Describe(current.Mode);
         WritePostProcessingOutcome(current, PostProcessingOutcomes.FindingsAdded,
             summary: "Orchestrator post-processing started.",
             performerCliType: CliTypes.Claude,
@@ -1483,7 +1500,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             TaskBody: taskBody,
             RecentLog: recentLog,
             DiffSummary: diffSummary,
-            StatusSummary: statusSummary);
+            StatusSummary: statusSummary)
+        {
+            ResultsInventory = resultsInventory,
+            CardMode = cardMode,
+        };
 
         // Bracket the aspect run with a pipeline-execution record so the
         // Overview pipeline view can show "ran 4 aspects in N ms, used X
@@ -1578,6 +1599,22 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         var report = await _aspectRunner.RunAsync(inputs, enabledAspects, cliBinary, aspectModel, perAspectTimeout, ct, modelForAspect, thinkingLevelForAspect, promptForAspect);
 
+        // Aspect-verdict infra crash (AGT-2021): one or more aspects produced no
+        // verdict because the reviewing CLI died - even after the aspect runner's
+        // single environmental retry. This is an INFRASTRUCTURE fault (the backend
+        // cut that killed the runner mid-run, AGT-1996), NOT the card's unfinished
+        // work. Short-circuit BEFORE the block/evidence/solution-quality routing
+        // and the remaining reporting-only post-steps: the card must not be
+        // accepted, reissued, or counted as a work deficit. Record an InfraCrash
+        // flagged environmental and hand to human review WITHOUT burning the
+        // reissue budget (an Escalate decision, which resets the attempt chain).
+        if (report.HasInfraFailure)
+        {
+            _pipelineLog?.Complete(current.FolderPath);
+            await HandleAspectInfraCrashAsync(workspace, entry, pending, current, report, ct);
+            return;
+        }
+
         // ASS-563: run the lint-scss post-step BEFORE the pipeline Complete
         // mark so its step record lands in pipeline-execution.json while
         // the file is still in its in-flight state. Skipped/Ok/Warn just
@@ -1605,6 +1642,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // is reporting-only and never changes the task lane decision.
         RunWikiLearningsPostStep(entry, current, report, statusSummary, diffSummary);
 
+        // AGT-2053: append bidirectional task/wiki associations after both wiki
+        // producers have settled. This is reporting-only and deliberately does
+        // not clean stale targets: missing pages/tasks remain useful history.
+        RunWikiTaskCrossReferenceStep(entry, current);
+
         // Code-review quality-grade post-step (ASS-1657): the first-class
         // automatic review that assigns an A/B/C/D grade to the task's change
         // set with a quality-first model (Opus by default), recorded on the
@@ -1613,6 +1655,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // lands in the in-flight pipeline-execution.json. Reporting only - the
         // grade never gates the lane decision below.
         await RunCodeReviewGradePostStepAsync(entry, current, taskBody, ct);
+
+        // Task-spawner post-step (AGT-2028): opt-in, quality-first relevance
+        // judgment that, on a conservative yes, spawns a follow-up card in a
+        // configured target project (e.g. "we changed X -> update the website").
+        // Reporting-only and deduped; it never gates the source task's decision.
+        // Runs after the aspects settle and before the Complete mark so its step
+        // record lands in the in-flight pipeline-execution.json.
+        await RunTaskSpawnerPostStepAsync(entry, current, report, taskBody, statusSummary, diffSummary, resultsInventory, ct);
 
         _pipelineLog?.Complete(current.FolderPath);
 
@@ -1869,6 +1919,104 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             current.FolderPath,
             moved.FolderPath);
     }
+
+    /// <summary>
+    /// Handle an aspect-verdict INFRA crash (AGT-2021): one or more aspects
+    /// produced no verdict because the reviewing CLI died, and the aspect runner's
+    /// single environmental retry did not recover it. This is an infrastructure
+    /// fault, never the card's unfinished work, so:
+    /// <list type="bullet">
+    ///   <item>the card is moved to <c>5e-escalated</c> flagged <c>environmental</c>
+    ///   (an honest human-review terminal - a human re-queues the infra blip),</item>
+    ///   <item>the decision is recorded as an <see cref="ReviewDecisionKind.Escalate"/>,
+    ///   which is a chain boundary: it does NOT append a Reissue record and it
+    ///   resets the attempt chain, so the card's reissue budget is not burned
+    ///   (<see cref="CountReissuesInCurrentChain"/>),</item>
+    ///   <item>the outcome / timeline carry <c>InfraCrash</c> + <c>environmental</c>
+    ///   so a reviewer reads it as an infra blip, not a failed change.</item>
+    /// </list>
+    /// </summary>
+    private async Task HandleAspectInfraCrashAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        TaskInfo current,
+        AspectRunReport report,
+        CancellationToken ct)
+    {
+        var crashedAspects = report.InfraFailures.Select(v => v.Aspect).ToList();
+        var aspectList = crashedAspects.Count == 0 ? "aspect review" : string.Join(", ", crashedAspects);
+        var noun = crashedAspects.Count == 1 ? "aspect" : "aspects";
+        var reason = AspectInfraCrashReasonPrefix +
+            $"the {aspectList} {noun} produced no verdict after an environmental retry (reviewing CLI died). " +
+            "Classified environmental (InfraCrash); the card's work is unaffected and its reissue budget is not charged.";
+
+        // Strip any stale concern chips a prior pass left behind; the infra-failure
+        // verdicts hang no concern tag of their own.
+        ConcernTagWriter.ReconcileConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
+
+        _chatLog.AppendSupervisor(current, "escalate",
+            $"Auto-review could not obtain an aspect verdict: the reviewing CLI died even after an environmental retry. " +
+            $"This is an infrastructure crash (InfraCrash), not a problem with the change. Promoted to {TaskStates.Escalated} flagged environmental.");
+
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to move {JobId} to escalated after aspect infra-crash: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+        }
+
+        var escalatedFolder = move.NewFolderPath ?? current.FolderPath;
+        var escalated = current with { FolderPath = escalatedFolder, State = TaskStates.Escalated };
+
+        RecordOrchestratorDecisionStep(escalatedFolder, PipelineStepStatus.Failed,
+            "environmental", reason);
+        WritePostProcessingOutcome(escalated, PostProcessingOutcomes.FailedPostProcessing,
+            summary: reason,
+            performerCliType: CliTypes.Claude,
+            stepId: PipelineCatalogue.OrchestratorDecisionStepId,
+            evidenceRef: "pipeline-execution.json",
+            findingRefs: report.InfraFailures.Select(v => $"aspect-{v.Aspect}.md").ToList());
+
+        EmitVerdictTimeline(escalatedFolder,
+            TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, reason,
+            BuildInfraCrashDetails(crashedAspects, reason));
+
+        // Escalate, NOT Reissue: a chain-ending verdict that resets the reissue
+        // budget, so the environmental infra crash never counts against the card.
+        AppendReviewDecision(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: reason,
+            Prompt: "(multi-aspect run; reviewing CLI produced no verdict after environmental retry)",
+            Response: AspectSummaryLine(report),
+            FollowUp: string.Empty),
+            current.FolderPath,
+            escalatedFolder);
+
+        _statusSnapshot.RecordEscalate();
+
+        _ = ct; // no async CLI work on this deterministic path; keep the signature uniform
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Timeline details for an aspect-verdict InfraCrash escalation (AGT-2021).
+    /// Carries the <c>environmental</c> + <c>InfraCrash</c> flags so the frontend
+    /// and any reviewer read it as an infra blip, not a failed change.
+    /// </summary>
+    private static Dictionary<string, string> BuildInfraCrashDetails(IReadOnlyList<string> crashedAspects, string reason)
+        => new()
+        {
+            ["cause"] = "aspect-verdict-infra-crash",
+            ["environmental"] = "true",
+            ["issueKind"] = RunIssueKind.InfraCrash.ToString(),
+            ["aspects"] = string.Join(", ", crashedAspects),
+            ["reason"] = Truncate(reason, 600),
+        };
 
     /// <summary>
     /// True when the LATEST run for this task produced no new commit - HEAD was
@@ -2483,6 +2631,25 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
     }
 
+    private void RunWikiTaskCrossReferenceStep(WatchPathEntry entry, TaskInfo current)
+    {
+        if (_wikiTaskCrossReferences == null) return;
+        var root = string.IsNullOrWhiteSpace(entry.RepositoryPath) ? entry.RootPath : entry.RepositoryPath;
+        if (string.IsNullOrWhiteSpace(root)) return;
+        try
+        {
+            _wikiTaskCrossReferences.LinkAuto(root!, current,
+                ResolveLatestRunChangedFiles(current, entry.Path) ?? Array.Empty<string>());
+            _scanner.InvalidateCache();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: wiki-task cross-reference step failed for {Project}/{JobId}",
+                entry.Name, current.Id);
+        }
+    }
+
     private void RecordBuildTestGateStep(
         string jobFolderPath,
         PipelineStepStatus status,
@@ -2759,7 +2926,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 ? null
                 : PipelineStepConfigResolver.ResolveThinkingLevel(projectSettings, catalogueStep, cli, model);
 
-            var (diff, commitLabel) = BuildGradeDiff(entry.Name, entry.Path, job);
+            var (diff, commitLabel) = BuildGradeDiff(entry, job);
 
             var request = new AgentStudio.Review.CodeReviewStepRequest(
                 Project: entry.Name,
@@ -2774,6 +2941,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 Mode = AgentStudio.Review.CodeReviewMode.Grade,
                 Commit = commitLabel,
                 ThinkingLevel = thinkingLevel,
+                ResultsInventory = ResultsInventory.Render(job.FolderPath),
+                CardMode = ReviewCardMode.Describe(job.Mode),
             };
 
             var report = await _codeReviewStep.RunAsync(request, ct);
@@ -2833,6 +3002,190 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     }
 
     /// <summary>
+    /// Drive the opt-in task-spawner post-step (AGT-2028). Resolves the
+    /// per-project enable flag + spawn config, asks the best available model
+    /// whether the settled change is relevant to the configured target project,
+    /// and - on a conservative yes that is not already deduped - creates a
+    /// follow-up card there. Reporting-only: it records a pipeline step + a
+    /// timeline entry on the SOURCE task and NEVER gates the source lane
+    /// decision. Never throws into the tick (except cancellation); any failure
+    /// records a skipped / failed row.
+    /// </summary>
+    private async Task RunTaskSpawnerPostStepAsync(
+        WatchPathEntry entry,
+        TaskInfo current,
+        AspectRunReport report,
+        string taskBody,
+        string statusSummary,
+        string diffSummary,
+        string resultsInventory,
+        CancellationToken ct)
+    {
+        if (_taskSpawner == null) return;
+
+        var stepId = PipelineCatalogue.TaskSpawnerStepId;
+        var settings = _projectSettings?.Get(entry.Name);
+        var catalogueStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
+            string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase));
+        var conditionCtx = new PipelineStepConditionContext
+        {
+            Aborted = false,
+            ExitCode = 0,
+            AnyAspectFailed = report.Overall == AspectStatus.Block,
+            TaskType = current.TaskType,
+            Tags = current.Tags,
+        };
+        var shouldRun = catalogueStep is null
+            ? PipelineStepConfigResolver.ShouldRun(settings, stepId, conditionCtx)
+            : PipelineStepConfigResolver.ShouldRun(settings, catalogueStep, conditionCtx);
+        if (!shouldRun)
+        {
+            RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "off", reason: "post-step disabled by config or condition");
+            return;
+        }
+
+        var config = settings?.TaskSpawner;
+        if (config == null || string.IsNullOrWhiteSpace(config.TargetProject))
+        {
+            RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "no-target", reason: "no TaskSpawner target project configured");
+            return;
+        }
+
+        // Only spawn from a run that is settling into accept / accept-with-concerns.
+        // A Block run is about to be reissued, so a follow-up would be premature;
+        // the dedup ledger will still let a later good run spawn exactly once.
+        if (report.Overall == AspectStatus.Block)
+        {
+            RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "source-blocked", reason: "source run blocked/reissued; not spawning");
+            return;
+        }
+
+        var startedAt = DateTime.UtcNow;
+        try
+        {
+            // Quality-first: the spawn evaluation defaults to the best available
+            // model at max effort, layered under any per-project override.
+            var (defaultModel, defaultCli, defaultThinking) = TaskSpawnerModelSelector.Resolve(
+                _configuration["TaskSpawnerStep:DefaultModel"],
+                _configuration["TaskSpawnerStep:DefaultCli"],
+                _configuration["TaskSpawnerStep:DefaultThinkingLevel"]);
+            var model = catalogueStep is null
+                ? defaultModel
+                : PipelineStepConfigResolver.ResolveModel(settings, catalogueStep, defaultModel);
+            var cli = PipelineStepConfigResolver.ResolveCliType(settings, stepId) ?? defaultCli;
+            var thinking = catalogueStep is null
+                ? defaultThinking
+                : PipelineStepConfigResolver.ResolveThinkingLevel(settings, catalogueStep, cli, model, defaultThinking);
+
+            var runCtx = new TaskSpawnerRunContext
+            {
+                Source = current,
+                SourceProjectName = entry.Name,
+                TargetProject = config.TargetProject!.Trim(),
+                RelevanceQuestion = config.RelevanceQuestion,
+                SpawnLane = string.IsNullOrWhiteSpace(config.SpawnLane) ? TaskStates.Backlog : config.SpawnLane!.Trim(),
+                MaxPerSourceTask = config.MaxPerSourceTask is > 0 ? config.MaxPerSourceTask.Value : 1,
+                TaskBody = taskBody,
+                StatusSummary = statusSummary,
+                DiffSummary = diffSummary,
+                ResultsInventory = resultsInventory,
+                Model = model,
+                Cli = cli,
+                ThinkingLevel = thinking,
+            };
+
+            var result = await _taskSpawner.RunAsync(runCtx, ct);
+            var durationMs = (long)(DateTime.UtcNow - startedAt).TotalMilliseconds;
+
+            switch (result.Verdict)
+            {
+                case TaskSpawnerVerdict.Spawned:
+                    RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Passed, durationMs,
+                        "spawned", result.Reason, result.Model,
+                        verdictSummary: $"{result.TargetKey} in {result.TargetProjectName}");
+                    WritePostProcessingOutcome(current, PostProcessingOutcomes.NeedsFollowUpTask,
+                        summary: $"Spawned {result.TargetKey} in {result.TargetProjectName}: {result.Reason}",
+                        performerCliType: cli,
+                        stepId: stepId,
+                        followUpTaskIds: string.IsNullOrWhiteSpace(result.TargetJobId)
+                            ? null
+                            : new[] { result.TargetJobId! });
+                    EmitVerdictTimeline(current.FolderPath, TimelineEventKinds.TaskSpawned, TimelineActors.Orchestrator,
+                        $"Spawned {result.TargetKey} in {result.TargetProjectName}",
+                        new Dictionary<string, string>
+                        {
+                            ["targetProject"] = result.TargetProjectName ?? config.TargetProject!,
+                            ["targetKey"] = result.TargetKey ?? string.Empty,
+                            ["targetJobId"] = result.TargetJobId ?? string.Empty,
+                            ["reason"] = result.Reason,
+                        });
+                    _logger.LogInformation(
+                        "task-spawner: project={Project} job={JobId} spawned={TargetKey} target={TargetProject} model={Model}",
+                        entry.Name, current.Id, result.TargetKey, result.TargetProjectName, result.Model);
+                    break;
+                case TaskSpawnerVerdict.NotRelevant:
+                    RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped, durationMs,
+                        "not-relevant", result.Reason, result.Model);
+                    break;
+                case TaskSpawnerVerdict.Deduped:
+                    RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped, durationMs,
+                        "deduped", result.Reason, result.Model);
+                    break;
+                case TaskSpawnerVerdict.Error:
+                    RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Failed, durationMs,
+                        "error", result.Reason, result.Model);
+                    break;
+                default:
+                    RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped, durationMs,
+                        "skipped", result.Reason, result.Model);
+                    break;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "task-spawner: post-step failed for {Project}/{JobId}; recording a skipped row",
+                entry.Name, current.Id);
+            RecordTaskSpawnerStep(current.FolderPath, PipelineStepStatus.Skipped,
+                (long)(DateTime.UtcNow - startedAt).TotalMilliseconds, "error",
+                "task-spawner step error: " + ex.Message);
+        }
+    }
+
+    private void RecordTaskSpawnerStep(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        long durationMs,
+        string verdictToken,
+        string? reason,
+        string? model = null,
+        string? verdictSummary = null)
+    {
+        if (_pipelineLog == null) return;
+        var now = DateTime.UtcNow;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.TaskSpawnerStepId,
+            Kind = StepKind.Orchestrator,
+            Status = status,
+            StartedAt = now - TimeSpan.FromMilliseconds(durationMs),
+            CompletedAt = now,
+            DurationMs = durationMs,
+            Model = model,
+            Verdict = verdictToken,
+            VerdictSummary = string.IsNullOrWhiteSpace(verdictSummary) ? null : verdictSummary,
+            Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+        });
+    }
+
+    /// <summary>
     /// Build the diff text the quality-grade pass reviews: the aggregate diff
     /// of every commit the task owns (the same per-task scoping the
     /// user-triggered code-review endpoint and the protocol-pane change set
@@ -2841,8 +3194,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// returns an empty diff with a "(no diff resolved)" label when git is not
     /// wired or resolution throws.
     /// </summary>
-    private (string Diff, string? CommitLabel) BuildGradeDiff(string project, string? watchPath, TaskInfo job)
+    private (string Diff, string? CommitLabel) BuildGradeDiff(WatchPathEntry entry, TaskInfo job)
     {
+        var project = entry.Name;
+        var watchPath = entry.Path;
         if (_git == null) return (string.Empty, null);
         try
         {
@@ -2873,7 +3228,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     _git.GetAggregateCommitDiff(job.Id, watchPath, scope.Shas, path: null),
                 _ => _git.GetCommitDiff(job.Id, watchPath, scope.Shas[0], path: null),
             };
-            return (diff, scope.Label);
+
+            // Post-squash/merge or steer follow-up: the run-window scope resolves
+            // no commits and the working tree is clean, so the grade would review
+            // an empty diff and mis-grade a real, landed change. Fall back to the
+            // task-branch-vs-base range so the grade sees the actual change set.
+            // The branch range is resolved lazily so a normal run (non-empty diff)
+            // never touches git for a fallback it does not need.
+            return SelectGradeDiff(diff, scope.Label, () => TryBuildBranchDiffSummary(entry, job));
         }
         catch (Exception ex)
         {
@@ -2884,6 +3246,41 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Pure selection for the code-review grade diff (AGT-2022): grade the
+    /// run-window <paramref name="workingDiff"/> whenever it is non-empty, but
+    /// fall back to the task-branch-vs-base range when it is blank - the
+    /// post-squash/merge or steer-follow-up case where the working tree is clean
+    /// yet the branch still carries the real, landed change set. The branch range
+    /// is produced by <paramref name="branchDiffFactory"/> and consulted ONLY on
+    /// the empty-working-diff path, so a normal run is graded on exactly what it
+    /// changed and never pays for a git range it does not need. When the fallback
+    /// fires, the label is annotated <c>(branch range vs base)</c> so the grade
+    /// record makes the source of the diff explicit. A genuinely empty
+    /// deliverable (blank working diff AND no branch range) stays empty here - the
+    /// results/ inventory and card-mode framing carry the read-only case in the
+    /// prompt, not this diff selection.
+    ///
+    /// <para>
+    /// Pure aside from the injected factory so a unit test can pin all three
+    /// branches (fallback fires / working diff wins / no branch available)
+    /// without a live repository.
+    /// </para>
+    /// </summary>
+    internal static (string Diff, string? CommitLabel) SelectGradeDiff(
+        string workingDiff, string? scopeLabel, Func<string?> branchDiffFactory)
+    {
+        if (string.IsNullOrWhiteSpace(workingDiff))
+        {
+            var branchSummary = branchDiffFactory();
+            if (!string.IsNullOrWhiteSpace(branchSummary))
+                return (branchSummary!, string.IsNullOrWhiteSpace(scopeLabel)
+                    ? "(branch range vs base)"
+                    : $"{scopeLabel} (branch range vs base)");
+        }
+        return (workingDiff, scopeLabel);
+    }
+
     private void WritePostProcessingOutcome(
         TaskInfo job,
         string outcome,
@@ -2892,6 +3289,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string? stepId = null,
         string? evidenceRef = null,
         IReadOnlyList<string>? findingRefs = null,
+        IReadOnlyList<string>? followUpTaskIds = null,
         string performer = PostProcessingPerformers.SupportingAgent)
     {
         if (!PostProcessingOutcomes.All.Contains(outcome, StringComparer.Ordinal))
@@ -2911,6 +3309,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Summary = string.IsNullOrWhiteSpace(summary) ? null : summary,
             EvidenceRef = evidenceRef,
             FindingRefs = findingRefs?.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal).ToList() ?? [],
+            FollowUpTaskIds = followUpTaskIds?.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal).ToList() ?? [],
         }, _logger);
 
         _logger.LogInformation(
@@ -3103,7 +3502,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         WikiMaintenanceResult result;
         try
         {
-            result = _wikiMaintenance.Run(current, entry);
+            var frameLanguage = WorkstreamFrameLanguageResolver.Resolve(entry.Name, settings?.WorkstreamFramePublic);
+            result = _wikiMaintenance.Run(current, entry, frameLanguage: frameLanguage);
         }
         catch (Exception ex)
         {
@@ -3192,7 +3592,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         try
         {
             var run = BuildWikiLearningsRun(report, current, statusSummary, diffSummary);
-            result = _wikiLearnings.Run(current, entry, run);
+            var frameLanguage = WorkstreamFrameLanguageResolver.Resolve(entry.Name, settings?.WorkstreamFramePublic);
+            result = _wikiLearnings.Run(current, entry, run, frameLanguage: frameLanguage);
         }
         catch (Exception ex)
         {
@@ -3640,11 +4041,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// both services from DI.
     /// </para>
     /// </summary>
-    private string LoadDiffSummary(string project, string? watchPath, TaskInfo job)
+    private string LoadDiffSummary(WatchPathEntry entry, TaskInfo job)
     {
+        var project = entry.Name;
+        var watchPath = entry.Path;
         if (_sessions == null || _git == null)
         {
-            return BuildDiffSummary(EmptyAggregate, job.Commit);
+            return AppendBranchDiffSummary(BuildDiffSummary(EmptyAggregate, job.Commit), entry, job);
         }
         try
         {
@@ -3660,15 +4063,90 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // (read as "corrupted / no work") for a genuine multi-line commit.
             aggregate = EnrichLineStats(aggregate,
                 sha => _git!.GetCommitStat(job.Id, watchPath, sha));
-            return BuildDiffSummary(aggregate, job.Commit);
+            return AppendBranchDiffSummary(BuildDiffSummary(aggregate, job.Commit), entry, job);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
                 "ReviewDecisionOrchestrator: full-range diff summary failed for {Project}/{JobId}; falling back to single-commit view",
                 project, job.Id);
-            return BuildDiffSummary(EmptyAggregate, job.Commit);
+            return AppendBranchDiffSummary(BuildDiffSummary(EmptyAggregate, job.Commit), entry, job);
         }
+    }
+
+    /// <summary>
+    /// Append the task-branch-vs-base commit range to the run-window diff summary.
+    /// The run-window aggregate can be empty even though the task changed the tree
+    /// - after a squash/merge or a steer follow-up run whose window produced no new
+    /// commits, the current run's working diff is empty. The branch range
+    /// (<c>base..task/&lt;id&gt;</c>) is the authoritative "what did this task change"
+    /// signal that survives those cases, so the aspect / review reviewers always
+    /// see the real change set (AGT-2022 / AGT-1915). Best-effort: returns the base
+    /// summary unchanged when git is unwired, the task branch is absent (sequential
+    /// runs never create one), or the range is empty.
+    /// </summary>
+    private string AppendBranchDiffSummary(string baseSummary, WatchPathEntry entry, TaskInfo job)
+        => ComposeAspectDiffSummary(baseSummary, TryBuildBranchDiffSummary(entry, job));
+
+    /// <summary>
+    /// Pure composition of the aspect diff summary (AGT-2022): the run-window
+    /// summary always carries the task-branch-vs-base range appended when one is
+    /// available, so an empty run-window diff never reads as "deliverables
+    /// missing" while the branch holds the real commits (squash/merge or steer
+    /// follow-up). Returns <paramref name="baseSummary"/> unchanged when no branch
+    /// range is available (git unwired, no task branch, or an empty range). Pure
+    /// so a unit test can pin the append / passthrough shapes without a live repo.
+    /// </summary>
+    internal static string ComposeAspectDiffSummary(string baseSummary, string? branchSummary)
+        => string.IsNullOrWhiteSpace(branchSummary) ? baseSummary : baseSummary + "\n\n" + branchSummary;
+
+    private string? TryBuildBranchDiffSummary(WatchPathEntry entry, TaskInfo job)
+    {
+        if (_git == null) return null;
+        var repoRoot = !string.IsNullOrWhiteSpace(entry.RepositoryPath) ? entry.RepositoryPath : entry.RootPath;
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+
+        try
+        {
+            var taskBranch = $"task/{job.Id}";
+            if (!_git.BranchExists(repoRoot, taskBranch)) return null;
+
+            var configuredBase = _projectSettings?.Get(entry.Name)?.IntegrationBranch;
+            var baseBranch = _git.ResolveIntegrationBranch(repoRoot, configuredBase);
+            var commits = _git.GetCommitsInRangeAtRoot(repoRoot, baseBranch, taskBranch);
+            if (commits.Count == 0) return null;
+
+            return BuildBranchDiffSummary(baseBranch, taskBranch, commits);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: task-branch diff summary failed for {Project}/{JobId}",
+                entry.Name, job.Id);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Pure renderer for the task-branch-vs-base commit range. Pure so a unit test
+    /// can pin the "steer follow-up: empty working diff but branch commits" shape
+    /// without a live repo.
+    /// </summary>
+    internal static string BuildBranchDiffSummary(string baseBranch, string taskBranch, IReadOnlyList<GitCommitInfo> commits)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"Task branch `{taskBranch}` vs base `{baseBranch}`: {commits.Count} commit(s) ahead.");
+        sb.AppendLine($"Total files changed: {commits.Sum(c => c.FilesChanged)}; lines +{commits.Sum(c => c.Added)}/-{commits.Sum(c => c.Removed)}.");
+        sb.AppendLine();
+        sb.AppendLine("Per commit (newest first):");
+        foreach (var c in commits)
+        {
+            var subject = string.IsNullOrWhiteSpace(c.Subject) ? "(no subject)" : c.Subject;
+            sb.AppendLine($"- {c.ShortSha} {subject} ({c.FilesChanged} files, +{c.Added}, -{c.Removed})");
+        }
+        sb.AppendLine();
+        sb.AppendLine("These branch commits are attributed to the task even when the current run's working diff is empty (post-squash/merge or steer follow-up). Do NOT treat an empty working diff as missing work when this range is non-empty.");
+        return sb.ToString().TrimEnd();
     }
 
     private static readonly TaskCommitsAggregate EmptyAggregate = new() { Count = 0, Commits = [] };
@@ -3790,9 +4268,53 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     }
 
     private static int CountPriorReissues(string workspace, string project, string jobId)
+        => CountReissuesInCurrentChain(ReviewDecisionLog.ReadAll(workspace, project), jobId);
+
+    /// <summary>
+    /// Count the reissues in the job's CURRENT attempt chain - the reissues
+    /// recorded SINCE the most recent chain-ending verdict
+    /// (<see cref="ReviewDecisionKind.Escalate"/> /
+    /// <see cref="ReviewDecisionKind.AcceptAsDone"/>), not the job's whole
+    /// lifetime total.
+    ///
+    /// <para>
+    /// A verdict that parks the card to human review or accepts it CLOSES the
+    /// chain: whatever happens next (a human reopens it, a follow-up moves it back
+    /// to <c>2-ready</c>) begins a fresh attempt chain that must get its own
+    /// reissue budget. Before this the count was sticky - it summed EVERY
+    /// <see cref="ReviewDecisionKind.Reissue"/> record the job ever accrued, so a
+    /// card whose budget was already spent on an earlier, already-resolved chain
+    /// could never pass a budget-gated check again: it escalated on the first new
+    /// concern instead of getting a fresh reissue (AGT-1935 sticky-budget belege).
+    /// Counting per-chain fixes that while leaving in-chain behaviour identical -
+    /// with no chain-ender in between, this returns exactly the old lifetime total.
+    /// </para>
+    ///
+    /// <para><see cref="ReviewDecisionKind.Skipped"/> is not a chain boundary: it
+    /// leaves the card for the normal sentinel path, so it neither counts nor
+    /// resets. Records are consumed in append (chronological) order, the order
+    /// <see cref="ReviewDecisionLog.ReadAll"/> returns them.</para>
+    /// </summary>
+    internal static int CountReissuesInCurrentChain(IEnumerable<ReviewDecisionRecord> records, string jobId)
     {
-        return ReviewDecisionLog.ReadAll(workspace, project)
-            .Count(r => r.JobId == jobId && r.Kind == ReviewDecisionKind.Reissue);
+        var count = 0;
+        foreach (var record in records)
+        {
+            if (record.JobId != jobId) continue;
+            switch (record.Kind)
+            {
+                case ReviewDecisionKind.Reissue:
+                    count++;
+                    break;
+                case ReviewDecisionKind.Escalate:
+                case ReviewDecisionKind.AcceptAsDone:
+                    // Chain boundary: the previous attempt chain is closed. Reset
+                    // so a reopened card gets a fresh reissue budget (AGT-1935).
+                    count = 0;
+                    break;
+            }
+        }
+        return count;
     }
 
     /// <summary>

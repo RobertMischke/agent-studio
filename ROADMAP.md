@@ -376,7 +376,13 @@ Queued at `agent-taskboard/2-ready/expanded-lifecycle-lanes-concept/`, `agent-ta
 
 Make large boards easier to understand:
 
-- Search across titles, prompts, metadata, and relevant task fields.
+- Global search V1 is delivered as a Ctrl+K palette across tasks, commits, and
+  working-branch files. Task results cover keys, titles, prompts, and status
+  text and target a warm response below 300 ms; repository results use cached
+  git primitives through `GET /api/search?q=...&domains=tasks,commits,files`.
+  Exact task-key matches rank first and domain failures preserve partial
+  results. The current contract is documented in
+  [docs/domains/frontend.md#global-search](docs/domains/frontend.md#global-search).
 - Project-level tags with defaults such as Backend, Frontend, UI Improvement, and Bugfix.
 - Better ordering interactions with stronger drag feedback and less visible internal bookkeeping.
 - Cleaner archive browsing for completed and historical work.
@@ -710,6 +716,8 @@ Planned capabilities:
 - Explicit fork semantics for research or speculative planning. The canonical project orchestrator remains the default chat partner.
 
 The redesign handoff is [docs/product/orchestrator-chat-redesign-handoff.md](./docs/product/orchestrator-chat-redesign-handoff.md). The load-bearing UI boundary is archived in [ADR-0036](./docs/architecture/decisions/adr-archive.md#adr-0036---session-mechanics-render-as-timeline-events-not-primary-chat-objects-2026-05-17): session mechanics are audit events, not the primary chat object.
+
+Delivered (Multichat, Concept §4): the side sheet follows the operator's navigation and can pin a context (MC-2), per-context transcript history is served by `GET/POST /api/runner/{contextKey}/orchestrator-chat` — a `task:<PROJ>/<KEY>` context keeps its own thread while `project:<PROJ>` resolves to the canonical board thread — and the side sheet reads and sends through the context-keyed route, so a pinned task now shows its own transcript in the app while the board is byte-for-byte unchanged. See [docs/product/orchestrator-chat.md](./docs/product/orchestrator-chat.md#per-context-chat-transcript).
 
 ### Focused UX
 

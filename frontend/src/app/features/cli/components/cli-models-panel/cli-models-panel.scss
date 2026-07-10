@@ -67,6 +67,34 @@
   font-family: var(--font-mono, monospace);
 }
 
+.cli-models__route { margin-bottom: var(--studio-spacing-3); }
+.cli-models__route-line {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  margin-bottom: var(--studio-spacing-2);
+}
+.cli-models__route-line--fallback { grid-template-columns: 58px 80px minmax(0, 1fr); }
+.cli-models__route select {
+  min-width: 0;
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 6px;
+  background: var(--studio-bg-surface);
+  color: var(--studio-fg);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  font-size: 11px;
+}
+.cli-models__fallback-tag {
+  color: var(--studio-accent-warn-strong);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.cli-models__saving { color: var(--studio-fg-dim); font-size: 10px; }
+.cli-models__route-help { margin: 0; color: var(--studio-fg-dim); font-size: 10px; }
+
 .cli-models__empty {
   font-size: 11px;
   color: var(--studio-fg-muted);

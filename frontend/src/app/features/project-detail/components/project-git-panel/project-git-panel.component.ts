@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { DiffContentComponent } from '../../../../components/diff-content/diff-content.component';
+import { ProjectGitCleanupComponent } from '../project-git-cleanup/project-git-cleanup.component';
 import { ProjectGitService } from '../../../../services/project-git.service';
 import { formatCompactDateTime } from '../../../../services/format.util';
 import { describeDiffSize, isLargeDiff } from '../../../../utils/large-diff-gate';
@@ -36,7 +37,7 @@ type GitSelection =
   selector: 'app-project-git-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DiffContentComponent],
+  imports: [DiffContentComponent, ProjectGitCleanupComponent],
   templateUrl: './project-git-panel.component.html',
   styleUrl: './project-git-panel.component.scss',
 })

@@ -66,6 +66,13 @@
                   <h4 class="run-detail__title">{{ prompt.label || ('Prompt #' + prompt.index) }}</h4>
                   <div class="run-detail__subtitle">
                     Run #{{ r.index }} · {{ intentLabel(r.intent) }} · started {{ formatTime(r.startedAt) }}
+                    @if (runnerAttribution(r); as rn) {
+                      · <span class="run-detail__runner"
+                              [class]="'run-detail__runner--' + rn.kind"
+                              [attr.data-testid]="'run-runner-' + r.index"
+                              [attr.data-runner-kind]="rn.kind"
+                              [cacTooltip]="rn.tooltip">@if (rn.glyph) {<span aria-hidden="true">{{ rn.glyph }}</span> }{{ rn.label }}</span>
+                    }
                   </div>
                 </div>
                 <button type="button"

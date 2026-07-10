@@ -39,17 +39,30 @@ because the new implementation is not wired.
 - **Commits under review:** `{{commit}}`
 - **Reviewer model:** `{{model}}`
 
+{{card_mode}}
+
 ## Task body (`prompt.md`)
 
 ```
 {{task_body}}
 ```
 
-## Diff under review
+## Diff under review (task branch vs base)
 
 ```
 {{diff}}
 ```
+
+## results/ folder inventory
+
+```
+{{results_inventory}}
+```
+
+Review against the full evidence: the branch diff AND the results/ artefacts. A
+read-only / concept / research card legitimately ships no code diff; do not
+`block` "deliverables missing" when the deliverable is a results/ artefact or a
+`docs/` commit.
 
 ## What you must emit
 

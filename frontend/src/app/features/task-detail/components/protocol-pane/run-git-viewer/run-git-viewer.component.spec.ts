@@ -79,7 +79,7 @@ describe('RunGitViewerComponent keyboard navigation', () => {
   }
 
   function press(c: RunGitViewerComponent, tree: HTMLElement, key: string): void {
-    c.onTreeKeydown({ key, preventDefault() {}, currentTarget: tree } as unknown as KeyboardEvent);
+    c.onTreeKeydown({ key, preventDefault: () => void 0, currentTarget: tree } as unknown as KeyboardEvent);
   }
 
   it('flattens the visible tree and defaults the roving path to the first row', async () => {

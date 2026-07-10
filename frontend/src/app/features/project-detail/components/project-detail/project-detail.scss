@@ -180,6 +180,37 @@
  * panel.
  */
 .proj-detail__group { margin-bottom: 28px; }
+
+/* PUB-1: publish badges - "NuGet 0.3.1 -> 4 tasks pending". Green for a
+   normal pending delta (something is ready to ship), violet for a website
+   delta, amber for a package that has never had a first publish. */
+.proj-detail__publish-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-1, 6px);
+}
+.publish-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid currentColor;
+  color: var(--studio-success);
+  background: color-mix(in srgb, var(--studio-success) 12%, transparent);
+}
+.publish-badge--website {
+  color: var(--severity-pending);
+  background: color-mix(in srgb, var(--severity-pending) 12%, transparent);
+}
+.publish-badge--first {
+  color: var(--studio-accent-warn);
+  background: color-mix(in srgb, var(--studio-accent-warn) 14%, transparent);
+}
+.publish-badge__manual { opacity: 0.75; font-weight: 500; }
 .proj-detail__group h3 {
   margin: 0 0 12px;
   padding-bottom: 6px;

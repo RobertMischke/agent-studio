@@ -6,6 +6,19 @@
   gap: var(--studio-spacing-3);
 }
 
+.cli-contracts__explainer {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--studio-fg-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cli-contracts__explainer code {
+  color: var(--studio-fg);
+  font-family: var(--font-mono, monospace);
+}
+
 .cli-contracts__error {
   grid-column: 1 / -1;
   background: var(--notify-error-tint);

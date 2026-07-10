@@ -52,6 +52,7 @@ import { EpicRollupPaneComponent } from './components/epic-rollup-pane/epic-roll
 import { EpicMembershipBannerComponent } from './components/epic-membership-banner/epic-membership-banner.component';
 import { LogOverlayComponent } from './components/log-overlay/log-overlay.component';
 import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane/protocol-pane.component';
+import { EscalationSummaryComponent } from './components/escalation-summary/escalation-summary.component';
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
 import { TriageActionPayload, laneLabelFor } from './state/triage-actions.model';
@@ -75,6 +76,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
     EpicMembershipBannerComponent,
     LogOverlayComponent,
     ProtocolPaneComponent,
+    EscalationSummaryComponent,
     DetailHeaderComponent,
     PaneToggleBarComponent,
     TooltipDirective,
@@ -215,6 +217,20 @@ export class TaskDetailComponent implements OnDestroy {
   readonly paneWeights = this.layout.paneWeights;
   readonly maximizedPane = this.layout.maximizedPane;
   readonly paneSplitterDragging = this.layout.paneSplitterDragging;
+  /**
+   * True when the open card is an escalation the operator must decide on, gating
+   * the prominent escalation summary panel. Mirrors the board's human-decision
+   * semantics (`buildHumanReviewBadge`): a card in the dedicated `5e-escalated`
+   * lane always qualifies, and an escalate-verdict card *parked in* 5-human-review
+   * qualifies too (the AGT-1994 case, where everything was merged but the
+   * escalation still blocked the delivery). Auto-review escalate verdicts are
+   * mid-decision and excluded until the card reaches a human-decision lane.
+   */
+  readonly isEscalated = computed(() => {
+    const info = this.detail().info;
+    if (info.state === TaskState.Escalated) return true;
+    return info.state === TaskState.HumanReview && info.orchestratorVerdict === 'escalate';
+  });
   readonly gitCommitCount = computed(() => gitCommitCount(this.detail().info));
   readonly gitToggleTooltip = computed(() => gitToggleTooltip(this.detail().info));
   // Live Claude session telemetry — owned by ClaudeSessionPollService
@@ -246,6 +262,15 @@ export class TaskDetailComponent implements OnDestroy {
   readonly generatingMsg = this.git.generatingMsg;
   /** Live-derived landed position of the task's work; null while unknown/loading. */
   readonly landedState = computed(() => this.git.provenance()?.landedState ?? null);
+  /**
+   * True while the graph-derived git provenance for the open job has not settled
+   * yet. Gates the detail-header's git-dependent acceptance primary so it cannot
+   * fire (or show a guessed "Merge into Develop" label) before the branch/merge
+   * truth is known (AGT-2006). Flips to `false` atomically with `landedState`
+   * resolving, so the button switches straight to its true label without a
+   * wrong -> right flicker.
+   */
+  readonly gitInfoLoading = computed(() => !this.git.provenanceLoaded());
   readonly commitActionsAvailable = computed(() => {
     const status = this.git.status();
     return this.git.viewMode() === 'worktree'
@@ -1294,7 +1319,7 @@ export class TaskDetailComponent implements OnDestroy {
       .subscribe({
         next: () => {
           if (fileName === 'prompt.md') this.editingPrompt.set(false);
-          this.artifactsService.reload(this.detail()?.info ?? null);
+          this.artifactsService.refresh();
           this.fileSaved.emit();
         },
         error: (err) => this.showError(err),

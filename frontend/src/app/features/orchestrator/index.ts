@@ -9,6 +9,7 @@ export type {
   OrchestratorLogEntry,
   OrchestratorTokenUsage,
   OrchestratorLogResponse,
+  GlobalOrchestratorFeedResponse,
   OrchestratorSession,
   OrchestratorSessionResponse,
   OrchestratorChatTurn,

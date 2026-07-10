@@ -138,6 +138,27 @@ public static class CliEndpoints
             });
         });
 
+        cliGroup.MapGet("/quota/model-routes", (CliQuotaFallbackService routes) =>
+            Results.Ok(new { profiles = routes.GetAll() }));
+
+        cliGroup.MapPut("/quota/model-routes", (SetCliModelRouteRequest req, CliQuotaFallbackService routes) =>
+        {
+            if (!CliTypes.IsValid(req.CliType))
+                return Results.BadRequest(new { error = $"Unknown cliType '{req.CliType}'" });
+            if (!string.IsNullOrWhiteSpace(req.FallbackCliType) && !CliTypes.IsValid(req.FallbackCliType))
+                return Results.BadRequest(new { error = $"Unknown fallbackCliType '{req.FallbackCliType}'" });
+            var saved = routes.Set(new CliModelRouteProfile
+            {
+                CliType = req.CliType,
+                PrimaryModel = req.PrimaryModel,
+                PrimaryThinkingLevel = req.PrimaryThinkingLevel,
+                FallbackCliType = req.FallbackCliType,
+                FallbackModel = req.FallbackModel,
+                FallbackThinkingLevel = req.FallbackThinkingLevel,
+            });
+            return Results.Ok(saved);
+        });
+
         // ── TEMPORARY: PTY slash-command probe for parser development ──
         // Spawns the requested CLI in a scratch dir, sends a slash command,
         // waits for output to settle, returns the ANSI-stripped snapshot.

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -20,6 +21,15 @@ public record GitStatusResult(
 public record GitCommitResult(bool Success, string? Sha, string? Error);
 public record GitPushResult(bool Success, string Sha, string Status, string? Error);
 public record GitDiffLookupResult(bool Success, string Diff, string? Error);
+
+/// <summary>
+/// Result of a single-file content lookup that backs the git-pane's
+/// rendered md/html preview (AGT-2008). <paramref name="Content"/> is the
+/// UTF-8 text of the file at the requested ref (working tree or commit);
+/// <paramref name="IsBinary"/> flags a NUL-containing blob so the UI can
+/// decline to render it as text instead of splattering control bytes.
+/// </summary>
+public record GitFileContentResult(bool Success, string Content, bool IsBinary, string? Error);
 
 /// <summary>
 /// ADR-0052: result of a worktree / integration primitive
@@ -108,6 +118,15 @@ public record GitRecentFileEdit(
     string Subject);
 
 /// <summary>
+/// The per-doc git provenance the wiki history panel renders, folded into one
+/// record so a single HEAD-keyed cache entry covers both reads (see
+/// <see cref="GitService.GetWikiDocGitInfoCached"/>): the file's commit history
+/// (newest first) and the model name that last touched it (from the latest
+/// commit's <c>Co-authored-by</c> trailer, or null for a hand-authored commit).
+/// </summary>
+public record WikiDocGitInfo(List<GitCommitInfo> Commits, string? Model);
+
+/// <summary>
 /// Per-commit enrichment for the deterministic commit-attribution step: the
 /// full commit body (<c>%B</c>, scanned for <c>Co-Authored-By:</c> trailers
 /// so an agent co-author is detected even when the operator is the author)
@@ -163,6 +182,17 @@ public record GitBranchEntry(
     string? LastCommitSubject,
     DateTime? LastCommitAtUtc,
     string? WorktreePath);
+
+/// <summary>
+/// One ref as emitted by <c>git for-each-ref</c>, used by the Git-Management
+/// cleanup analysis (<see cref="GitCleanupService"/>) to enumerate local
+/// <c>task/*</c> heads, <c>origin/task/*</c> remote-tracking refs, and the
+/// operational <c>refs/backups/*</c> safety net. <see cref="FullName"/> is the
+/// fully-qualified ref (e.g. <c>refs/backups/2026-07-09</c>) used for deletion
+/// via <c>update-ref -d</c>; <see cref="ShortName"/> is git's abbreviated form
+/// (e.g. <c>task/42</c>, <c>origin/task/42</c>) used for merge-base checks.
+/// </summary>
+public record GitRefLine(string FullName, string ShortName, string Sha, string ShortSha);
 
 /// <summary>
 /// Read-only branch + worktree + recent-history inventory for a single
@@ -269,7 +299,28 @@ public class GitService
         _prompts = prompts ?? new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         _usage = usage;
         _registry = registry ?? new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+        // Give the ambient git-spawn telemetry a logger for out-of-scope
+        // slow-spawn warnings (the per-request rollup uses its own logger).
+        GitProcessTelemetry.Logger ??= logger;
     }
+
+    // The git toplevel of a directory is immutable for the lifetime of the
+    // process - a checkout's work-tree root does not move - so it is safe to
+    // memoize unconditionally. ResolveGitToplevel sits on the hot path of
+    // essentially every git-info endpoint (status, diff, hygiene, provenance,
+    // inventory, commits...); caching it removes one ~70ms `rev-parse
+    // --show-toplevel` spawn (Windows) from every one of those requests once
+    // warm. Only successful resolutions are cached, so a path that is not yet a
+    // repository keeps being probed until it becomes one.
+    private static readonly ConcurrentDictionary<string, string> _toplevelCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Drops the memoized <c>rev-parse --show-toplevel</c> results. Tests that
+    /// recreate a repository at a path they previously probed call this so a
+    /// stale toplevel can't leak across fixtures; production never needs it.
+    /// </summary>
+    internal static void InvalidateToplevelCache() => _toplevelCache.Clear();
 
     private readonly object _summaryLock = new();
     private DateTime _summaryAt = DateTime.MinValue;
@@ -320,6 +371,108 @@ public class GitService
                 _shaRangeOrder.RemoveFirst();
                 _shaRangeCache.Remove(first.Value);
             }
+        }
+    }
+
+    // ---- HEAD-keyed git memoization (AGT-2013, shared primitive with AGT-2007) ----
+    //
+    // Git history under a branch is immutable while HEAD does not move: the
+    // recent-edits directory walk and the per-file history for a given path
+    // return the identical answer until a new commit lands. So those answers are
+    // memoized keyed by a logical key and validated by the repo's HEAD sha - HEAD
+    // unchanged => cache hit, no `git log` spawn - paying only a single cheap
+    // `rev-parse HEAD` (itself briefly TTL-cached below) to decide hit vs miss.
+    // This is the CACHE half of AGT-2013's wiki-history work and is deliberately
+    // a general primitive so the task-detail git-info surface (AGT-2007) can key
+    // its own history reads off HEAD the same way rather than duplicating a cache.
+
+    private readonly ConcurrentDictionary<string, (DateTime At, string? Sha)> _headShaCache =
+        new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan HeadShaTtl = TimeSpan.FromSeconds(2);
+
+    private const int HeadKeyedCacheLimit = 256;
+    private readonly object _headKeyedLock = new();
+    private readonly LinkedList<string> _headKeyedOrder = new();
+    private readonly Dictionary<string, (LinkedListNode<string> Node, string Head, object Value)> _headKeyedCache =
+        new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// HEAD sha at <paramref name="root"/>, cached for ~2s so a burst of wiki
+    /// requests (tree + recent + history when a page is opened) shares one
+    /// <c>rev-parse HEAD</c> spawn instead of one per call. Returns null when the
+    /// path is not a git repository. The spawn, when it does happen, still records
+    /// into the ambient <see cref="GitProcessTelemetry"/> scope.
+    /// </summary>
+    public string? GetHeadShaCached(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root)) return null;
+        if (_headShaCache.TryGetValue(root, out var cached) && DateTime.UtcNow - cached.At < HeadShaTtl)
+            return cached.Sha;
+        var sha = ReadHeadShaAt(root);
+        _headShaCache[root] = (DateTime.UtcNow, sha);
+        return sha;
+    }
+
+    /// <summary>
+    /// Serves <paramref name="compute"/>'s result from cache when the repo HEAD at
+    /// <paramref name="root"/> is unchanged since it was last computed for
+    /// <paramref name="logicalKey"/>, else recomputes and stores it. A new commit
+    /// moves HEAD and transparently invalidates every dependent entry. Bounded LRU.
+    /// When HEAD cannot be read (the path is not a repo) it falls back to a live
+    /// compute with no caching, so behaviour degrades to "always fresh", never to
+    /// a wrong cached hit. <paramref name="compute"/> must return a non-null
+    /// reference (a null result is not cached and is recomputed each call). The
+    /// compute runs outside the lock; a rare concurrent double-miss just computes
+    /// twice, which is harmless for these idempotent read-only lookups.
+    /// </summary>
+    public T MemoizeByHead<T>(string root, string logicalKey, Func<T> compute) where T : class
+    {
+        var head = GetHeadShaCached(root);
+        if (head == null) return compute();
+
+        lock (_headKeyedLock)
+        {
+            if (_headKeyedCache.TryGetValue(logicalKey, out var e) && e.Head == head && e.Value is T hit)
+            {
+                _headKeyedOrder.Remove(e.Node);
+                _headKeyedOrder.AddLast(e.Node);
+                return hit;
+            }
+        }
+
+        var value = compute();
+        if (value == null) return value;
+
+        lock (_headKeyedLock)
+        {
+            if (_headKeyedCache.TryGetValue(logicalKey, out var existing))
+            {
+                _headKeyedOrder.Remove(existing.Node);
+                _headKeyedCache.Remove(logicalKey);
+            }
+            var node = _headKeyedOrder.AddLast(logicalKey);
+            _headKeyedCache[logicalKey] = (node, head, value);
+            while (_headKeyedCache.Count > HeadKeyedCacheLimit && _headKeyedOrder.First is { } first)
+            {
+                _headKeyedOrder.RemoveFirst();
+                _headKeyedCache.Remove(first.Value);
+            }
+        }
+        return value;
+    }
+
+    /// <summary>
+    /// Drops the HEAD-sha and HEAD-keyed memo caches. Tests that commit into a
+    /// fixture repo and then re-query within the 2s HEAD TTL call this so the new
+    /// commit is observed immediately; production just lets HEAD roll over.
+    /// </summary>
+    internal void InvalidateHeadKeyedCaches()
+    {
+        _headShaCache.Clear();
+        lock (_headKeyedLock)
+        {
+            _headKeyedCache.Clear();
+            _headKeyedOrder.Clear();
         }
     }
 
@@ -435,6 +588,7 @@ public class GitService
     /// </summary>
     public GitHygieneStatus GetJobHygiene(string jobId, string? watchPath, bool isActiveJob = false)
     {
+        using var _t = GitProcessTelemetry.BeginRequest("tasks/git/hygiene", _logger);
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null)
         {
@@ -618,6 +772,7 @@ public class GitService
             }
         }
 
+        using var _t = GitProcessTelemetry.BeginRequest("git/inventory", _logger);
         var fresh = ComputeProjectInventory(projectName);
         lock (_inventoryLock)
         {
@@ -859,6 +1014,18 @@ public class GitService
         return ResolveGitToplevel(configured);
     }
 
+    /// <summary>
+    /// Public counterpart to <see cref="ResolveProjectRoot"/>: the git toplevel a
+    /// project's Git-Management surfaces read, resolved the same way
+    /// <see cref="GetProjectInventory"/> does (scanner entry -> configured
+    /// repository path -> <c>rev-parse --show-toplevel</c>). The cleanup service
+    /// (<see cref="GitCleanupService"/>) uses this so the branches it analyses and
+    /// prunes always come from the same checkout the Git View shows. Returns null
+    /// when the project is unknown, has no configured repository, or the folder is
+    /// not a git working tree.
+    /// </summary>
+    public string? ResolveProjectRepoRoot(string projectName) => ResolveProjectRoot(projectName);
+
     /// <summary>Resolve the repository root for a job.</summary>
     public string? ResolveRepoRoot(string jobId, string? watchPath)
     {
@@ -1001,6 +1168,10 @@ public class GitService
     {
         if (preferRunLocation)
         {
+            // Measure the endpoint-driven live status path (AGT-2007). Internal
+            // callers pass preferRunLocation=false and stay unmeasured to keep
+            // the rollup logs scoped to user-facing git-info requests.
+            using var _t = GitProcessTelemetry.BeginRequest("tasks/git/status", _logger);
             var loc = ResolveRunLocation(jobId, watchPath);
             if (loc == null)
                 return new GitStatusResult(false, null, 0, 0, 0, [], "Job not found or project has no RootPath configured.");
@@ -1032,11 +1203,22 @@ public class GitService
 
     private GitStatusResult ReadStatusAtRoot(string root, bool isWorktree = false)
     {
-        var (statusOut, statusErr, statusCode) = RunGit(root, "status --porcelain=v1");
+        // These four reads are independent: the porcelain status, the current
+        // branch, and the two numstat diffs share no state. Each is its own git
+        // process (~70-160ms of Windows spawn cost), so running them
+        // concurrently turns a serial ~500ms into roughly one spawn's wall-time
+        // (AGT-2007). Parsing below is unchanged - only the fetch is parallel.
+        var reads = RunGitParallel(
+            () => RunGitReadonly(root, "status --porcelain=v1"),
+            () => RunGitReadonly(root, "rev-parse --abbrev-ref HEAD"),
+            () => RunGitReadonly(root, "diff --numstat HEAD"),
+            () => RunGitReadonly(root, "diff --numstat"));
+
+        var (statusOut, statusErr, statusCode) = reads[0];
         if (statusCode != 0)
             return new GitStatusResult(true, null, 0, 0, 0, [], statusErr.Trim(), isWorktree);
 
-        var (branchOut, _, _) = RunGit(root, "rev-parse --abbrev-ref HEAD");
+        var (branchOut, _, _) = reads[1];
         var branch = branchOut.Trim();
 
         var statusByPath = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -1054,9 +1236,8 @@ public class GitService
         // even for files only changed unstaged. Untracked files won't appear in
         // diff output; we add zero counts for those.
         var numstat = new Dictionary<string, (int Added, int Removed)>(StringComparer.Ordinal);
-        foreach (var args in new[] { "diff --numstat HEAD", "diff --numstat" })
+        foreach (var (numOut, _, numCode) in new[] { reads[2], reads[3] })
         {
-            var (numOut, _, numCode) = RunGit(root, args);
             if (numCode != 0) continue;
             foreach (var line in numOut.Split('\n'))
             {
@@ -1110,6 +1291,9 @@ public class GitService
     public GitDiffLookupResult GetDiffResult(string jobId, string? watchPath, string? path, bool preferRunLocation = false)
     {
         string? root;
+        using var _t = preferRunLocation
+            ? GitProcessTelemetry.BeginRequest("tasks/git/diff", _logger)
+            : null;
         if (preferRunLocation)
         {
             var loc = ResolveRunLocation(jobId, watchPath);
@@ -1142,6 +1326,92 @@ public class GitService
             }
         }
         return new GitDiffLookupResult(true, output, null);
+    }
+
+    /// <summary>
+    /// Full text of a single tracked file, for the git-pane's rendered
+    /// md/html preview (AGT-2008). With a non-empty <paramref name="sha"/> the
+    /// content is read from that commit (<c>git show &lt;sha&gt;:&lt;path&gt;</c>)
+    /// so a historical / commit-mode preview matches the diff; otherwise the
+    /// live working-tree copy is read. <paramref name="preferRunLocation"/>
+    /// mirrors <see cref="GetDiffResult"/> so a per-task worktree run previews
+    /// its own file, never a sibling checkout's. A NUL-containing blob is
+    /// reported as binary (Success=true, IsBinary=true) so the caller can show
+    /// a "not previewable" note rather than raw bytes.
+    /// </summary>
+    public GitFileContentResult GetFileContentResult(
+        string jobId, string? watchPath, string? path, string? sha, bool preferRunLocation = false)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return new GitFileContentResult(false, "", false, "No file path given.");
+
+        var normalizedPath = path.Replace('\\', '/').TrimStart('/');
+        if (normalizedPath.Length == 0 || normalizedPath.Split('/').Contains(".."))
+            return new GitFileContentResult(false, "", false, "Invalid file path.");
+
+        // Historical preview: read the blob at a specific commit. Validated the
+        // same way as the diff endpoints so an arbitrary ref can't be shown.
+        if (!string.IsNullOrWhiteSpace(sha))
+        {
+            if (!IsLikelyShaOrRef(sha))
+                return new GitFileContentResult(false, "", false, "Invalid commit SHA.");
+            var commitRoot = ResolveRepoRoot(jobId, watchPath);
+            if (commitRoot == null) return new GitFileContentResult(false, "", false, "Could not resolve repo root.");
+            var (blob, blobErr, blobCode) = RunGitArgs(commitRoot, "show", $"{sha}:{normalizedPath}");
+            if (blobCode != 0)
+                return new GitFileContentResult(false, "", false,
+                    string.IsNullOrWhiteSpace(blobErr) ? "File not found in that commit." : blobErr.Trim());
+            return ClassifyContent(blob);
+        }
+
+        // Live preview: read the working-tree file at the run location.
+        string? root;
+        if (preferRunLocation)
+        {
+            var loc = ResolveRunLocation(jobId, watchPath);
+            if (loc?.Root == null) return new GitFileContentResult(false, "", false, "Could not resolve repo root.");
+            root = loc.Root;
+        }
+        else
+        {
+            var configured = ResolveRepoRoot(jobId, watchPath);
+            root = configured == null ? null : ResolveGitToplevel(configured) ?? configured;
+            if (root == null) return new GitFileContentResult(false, "", false, "Could not resolve repo root.");
+        }
+
+        var full = Path.GetFullPath(Path.Combine(root, normalizedPath));
+        var rootFull = Path.GetFullPath(root);
+        // Containment guard: never read outside the repo root even if the
+        // normalized path somehow re-escapes (belt-and-braces with the `..`
+        // reject above).
+        if (!full.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase))
+            return new GitFileContentResult(false, "", false, "Invalid file path.");
+        if (!File.Exists(full))
+            return new GitFileContentResult(false, "", false, "File is not present in the working tree.");
+        try
+        {
+            var bytes = File.ReadAllBytes(full);
+            return ClassifyContent(Encoding.UTF8.GetString(bytes), bytes);
+        }
+        catch (Exception ex)
+        {
+            return new GitFileContentResult(false, "", false, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Classify a fetched blob as text or binary. A NUL byte in the first
+    /// slice is git's own heuristic for "binary"; we mirror it so the preview
+    /// declines control-byte content instead of rendering garbage.
+    /// </summary>
+    private static GitFileContentResult ClassifyContent(string content, byte[]? rawBytes = null)
+    {
+        var probe = rawBytes is { Length: > 0 }
+            ? rawBytes.AsSpan(0, Math.Min(rawBytes.Length, 8000)).IndexOf((byte)0) >= 0
+            : content.AsSpan(0, Math.Min(content.Length, 8000)).IndexOf('\0') >= 0;
+        return probe
+            ? new GitFileContentResult(true, "", true, null)
+            : new GitFileContentResult(true, content, false, null);
     }
 
     /// <summary>
@@ -1746,6 +2016,75 @@ public class GitService
         return last ?? new GitPushResult(false, sha, "failed", "Push did not run.");
     }
 
+    /// <summary>
+    /// Pushes the integration branch itself (e.g. <c>develop</c>) to
+    /// <c>origin</c> so an accepted merge lands on the remote, not only in the
+    /// local checkout (AGT-1999). Companion to <see cref="PushShaAsync"/> - that
+    /// one pushes a completed task's commit SHA to a target branch; this one
+    /// pushes the local integration branch ref by name after
+    /// <see cref="MergeBranchIntoIntegration"/> has folded the task branch into
+    /// it. Never force-pushes: a diverged remote is reported
+    /// <c>remote-rejected</c> (the caller surfaces it, git leaves the remote
+    /// untouched). Status values mirror <see cref="PushShaAsync"/>:
+    /// <c>pushed</c> / <c>already-remote</c> / <c>remote-rejected</c> /
+    /// <c>failed</c>, plus <c>no-remote</c> (no <c>origin</c> configured -
+    /// a local-only project, treated as a benign skip, not a failure) and
+    /// <c>missing-branch</c> (the integration branch does not exist locally).
+    /// </summary>
+    public Task<GitPushResult> PushIntegrationBranchAsync(string repoRoot, string branch, CancellationToken ct = default)
+    {
+        if (ct.IsCancellationRequested)
+            return Task.FromResult(new GitPushResult(false, string.Empty, "cancelled", "Push cancelled."));
+
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return Task.FromResult(new GitPushResult(false, string.Empty, "repo-missing", "Could not resolve repo root."));
+
+        if (!IsLikelyBranchName(branch))
+            return Task.FromResult(new GitPushResult(false, string.Empty, "invalid-branch", $"Invalid integration branch '{branch}'."));
+
+        // Resolve the local branch tip for reporting / the ancestor short-circuit.
+        var (headRaw, headErr, headCode) = RunGitArgs(repoRoot, "rev-parse", "--verify", $"refs/heads/{branch}");
+        if (headCode != 0)
+            return Task.FromResult(new GitPushResult(false, string.Empty, "missing-branch", headErr.Trim()));
+        var sha = headRaw.Trim();
+
+        // A project without an origin remote is a local-only checkout; there is
+        // nothing to push. Treat as a benign skip so the step is not flagged as
+        // a failure.
+        if (!HasRemote(repoRoot, "origin"))
+            return Task.FromResult(new GitPushResult(true, sha, "no-remote", null));
+
+        RunGitArgs(repoRoot, "fetch", "origin", branch);
+
+        var (_, remoteErr, remoteCode) = RunGitArgs(repoRoot, "rev-parse", "--verify", $"origin/{branch}");
+        if (remoteCode == 0)
+        {
+            var (_, ancestorErr, ancestorCode) = RunGitArgs(repoRoot, "merge-base", "--is-ancestor", sha, $"origin/{branch}");
+            if (ancestorCode == 0)
+                return Task.FromResult(new GitPushResult(true, sha, "already-remote", null));
+            if (ancestorCode != 1)
+                _logger.LogInformation("Integration-branch push ancestor check for {Branch} returned {Code}: {Error}", branch, ancestorCode, ancestorErr.Trim());
+        }
+        else
+        {
+            _logger.LogInformation("Integration-branch push did not find origin/{Branch} before pushing: {Error}", branch, remoteErr.Trim());
+        }
+
+        // Non-force push of the branch ref. A non-fast-forward (diverged remote)
+        // is reported, never overwritten.
+        var (pushOut, pushErr, pushCode) = RunGitArgs(repoRoot, "push", "origin", $"refs/heads/{branch}:refs/heads/{branch}");
+        if (pushCode == 0)
+            return Task.FromResult(new GitPushResult(true, sha, "pushed", null));
+
+        var err = string.IsNullOrWhiteSpace(pushErr) ? pushOut.Trim() : pushErr.Trim();
+        var status = err.Contains("non-fast-forward", StringComparison.OrdinalIgnoreCase)
+            || err.Contains("fetch first", StringComparison.OrdinalIgnoreCase)
+            || err.Contains("rejected", StringComparison.OrdinalIgnoreCase)
+                ? "remote-rejected"
+                : "failed";
+        return Task.FromResult(new GitPushResult(false, sha, status, err));
+    }
+
     public GitWorktreeResult DeleteRemoteBranch(string repoRoot, string branch, string remote = "origin")
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
@@ -2321,6 +2660,89 @@ public class GitService
     }
 
     /// <summary>
+    /// Enumerates the refs under a fully-qualified namespace pattern (e.g.
+    /// <c>refs/heads/task</c>, <c>refs/remotes/origin/task</c>,
+    /// <c>refs/backups</c>) via <c>git for-each-ref</c>. Read-only: it backs the
+    /// Git-Management cleanup analysis, which needs the tip SHA of every candidate
+    /// ref to check whether it is already contained in the integration branch. The
+    /// pattern must start with <c>refs/</c> and is validated against the same
+    /// safe-name rules the mutating primitives use, so a crafted argument cannot
+    /// smuggle a flag into the git invocation. Returns an empty list when the
+    /// pattern is unsafe, the repo is missing, or nothing matches.
+    /// </summary>
+    public IReadOnlyList<GitRefLine> ListRefs(string repoRoot, string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return [];
+        if (!IsLikelyRefPattern(pattern)) return [];
+
+        const char US = '\x1f';
+        var fmt = string.Join(US.ToString(), new[]
+        {
+            "%(refname)", "%(refname:short)", "%(objectname)", "%(objectname:short)"
+        });
+        var (output, _, code) = RunGitArgs(repoRoot, "for-each-ref", $"--format={fmt}", pattern);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+
+        var list = new List<GitRefLine>();
+        foreach (var raw in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            var parts = raw.Split(US);
+            if (parts.Length < 4) continue;
+            var full = parts[0].Trim();
+            if (full.Length == 0) continue;
+            list.Add(new GitRefLine(full, parts[1].Trim(), parts[2].Trim(), parts[3].Trim()));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Typed <c>git worktree list --porcelain</c> for a repo root, reusing
+    /// <see cref="ParseWorktreePorcelain"/>. Read-only helper for the cleanup
+    /// analysis, which cross-references the registered worktrees against on-disk
+    /// folders to spot stale (orphaned) registrations and to keep branches that
+    /// are still checked out out of the delete set.
+    /// </summary>
+    public IReadOnlyList<GitWorktreeEntry> ListWorktrees(string repoRoot)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return [];
+        var (output, _, code) = RunGitArgs(repoRoot, "worktree", "list", "--porcelain");
+        return code == 0 ? ParseWorktreePorcelain(output) : [];
+    }
+
+    /// <summary>
+    /// Deletes a single fully-qualified ref via <c>git update-ref -d</c>. The
+    /// Git-Management cleanup uses this to drop <c>refs/backups/*</c> entries whose
+    /// commit is already contained in the integration branch (the operational
+    /// safety net has served its purpose). Guarded: the ref must start with
+    /// <c>refs/</c> and pass the safe-name check, so it can never be coaxed into
+    /// deleting a branch head or an arbitrary path. Deleting a missing ref is
+    /// treated as success (idempotent teardown).
+    /// </summary>
+    public GitWorktreeResult DeleteRef(string repoRoot, string fullRef)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitWorktreeResult(false, null, "Repo root does not exist.");
+        if (!IsLikelyRefPattern(fullRef) || !fullRef.StartsWith("refs/", StringComparison.Ordinal))
+            return new GitWorktreeResult(false, null, $"Invalid ref '{fullRef}'.");
+
+        var (_, err, code) = RunGitArgs(repoRoot, "update-ref", "-d", fullRef);
+        if (code == 0)
+        {
+            _logger.LogInformation("Deleted ref {Ref} at {Path}", fullRef, repoRoot);
+            return new GitWorktreeResult(true, null, null);
+        }
+
+        var error = err.Trim();
+        if (error.Contains("does not exist", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("cannot lock ref", StringComparison.OrdinalIgnoreCase) && error.Contains("unable to resolve", StringComparison.OrdinalIgnoreCase))
+            return new GitWorktreeResult(true, null, null);
+
+        _logger.LogWarning("Delete ref {Ref} failed at {Path}: {Error}", fullRef, repoRoot, error);
+        return new GitWorktreeResult(false, null, error);
+    }
+
+    /// <summary>
     /// Creates a fresh pooled worktree at <paramref name="worktreePath"/> on a
     /// DETACHED HEAD at <paramref name="atRef"/> (<c>git worktree add --detach</c>).
     /// The recycling pool (Slice A / ASS-1664) keeps idle worktrees on a detached
@@ -2867,6 +3289,28 @@ public class GitService
         return true;
     }
 
+    /// <summary>
+    /// True when <paramref name="s"/> is a safe fully-qualified ref namespace or
+    /// ref (e.g. <c>refs/heads/task</c>, <c>refs/remotes/origin/task</c>,
+    /// <c>refs/backups/2026-07-09</c>). Like <see cref="IsLikelyBranchName"/> it
+    /// allows the slashes a ref path needs while rejecting whitespace, shell
+    /// metacharacters, a leading dash (so the value can't be read as a flag), and
+    /// git's invalid <c>..</c> / <c>.lock</c> sequences. Defence in depth: the
+    /// value flows into a git argument list, not a shell.
+    /// </summary>
+    private static bool IsLikelyRefPattern(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        if (s[0] == '-' || s[0] == '/' || s[^1] == '/') return false;
+        if (s.Contains("..", StringComparison.Ordinal)) return false;
+        if (s.EndsWith(".lock", StringComparison.Ordinal)) return false;
+        foreach (var c in s)
+        {
+            if (!(char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '.' || c == '/')) return false;
+        }
+        return true;
+    }
+
     private static bool HasRemote(string repoRoot, string remote)
     {
         var (remotesOut, _, remotesCode) = RunGitArgs(repoRoot, "remote");
@@ -3019,6 +3463,43 @@ public class GitService
     }
 
     /// <summary>
+    /// Author dates (UTC, newest first) of up to <paramref name="maxCommits"/>
+    /// non-merge commits that touched any of <paramref name="repoRelPaths"/>.
+    /// Backs the wiki Pulse drift-grading heuristic (PULSE-1): how many code
+    /// commits have landed under the code roots since a knowledge page was last
+    /// refreshed. A single <c>git log</c> spawn that reads only the author date
+    /// (no diff / name walk) so it stays cheap even with the cap. Returns an
+    /// empty list when the repo or paths can't be resolved, mirroring the other
+    /// read-only git lookups on this service.
+    /// </summary>
+    public List<DateTime> GetCommitAuthorDatesUnderPaths(
+        string repoRoot, IReadOnlyCollection<string> repoRelPaths, int maxCommits = 500)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || repoRelPaths == null || repoRelPaths.Count == 0) return [];
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        if (!Directory.Exists(root)) return [];
+        if (maxCommits <= 0) maxCommits = 500;
+
+        var args = new List<string> { "log", "--no-merges", $"--max-count={maxCommits}", "--pretty=format:%aI", "--" };
+        foreach (var p in repoRelPaths)
+            if (!string.IsNullOrWhiteSpace(p)) args.Add(p.Replace('\\', '/'));
+        if (args[^1] == "--") return []; // no usable pathspec survived
+
+        var (output, _, code) = RunGitArgs(root, args.ToArray());
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+
+        var list = new List<DateTime>();
+        foreach (var line in output.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (DateTime.TryParse(line.Trim(), System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                out var ts))
+                list.Add(DateTime.SpecifyKind(ts, DateTimeKind.Utc));
+        }
+        return list;
+    }
+
+    /// <summary>
     /// Parses <c>git log --name-only --pretty=format:&lt;RS&gt;%H&lt;US&gt;...</c>
     /// output (see <see cref="GetRecentEditsUnderPath"/>) into per-file
     /// most-recent-commit records. Split out for unit testing.
@@ -3162,6 +3643,70 @@ public class GitService
 
         var (output, _, code) = RunGitArgs(root, "show", $"{sha}:{repoRelPath.Replace('\\', '/')}");
         return code == 0 ? output : null;
+    }
+
+    // ---- HEAD-cached wiki git reads (AGT-2013) ----
+    //
+    // The wiki dashboard + per-doc panels re-ask for the same recent-edits walk
+    // and file history on every navigation. These wrap the raw reads above in the
+    // HEAD-keyed memo so a warm (HEAD-unchanged) request serves them from memory
+    // with at most one `rev-parse HEAD` spawn instead of a fresh multi-hundred-ms
+    // `git log`. See <see cref="MemoizeByHead{T}"/>.
+
+    private const char CacheKeySep = '';
+
+    /// <summary>
+    /// The per-doc git provenance the wiki history panel needs: the file's commit
+    /// history (newest first) and the model that last touched it. Both raw reads
+    /// are folded into one HEAD-keyed memo entry so a warm history open costs zero
+    /// git spawns beyond the shared HEAD probe, instead of the two `git log`
+    /// spawns (history + trailer) it used to make on every open.
+    /// </summary>
+    public WikiDocGitInfo GetWikiDocGitInfoCached(string repoRoot, string repoRelPath, int limit = 50)
+    {
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        var key = string.Join(CacheKeySep, "wiki-hist", root, repoRelPath, limit);
+        return MemoizeByHead(root, key, () => new WikiDocGitInfo(
+            GetFileHistory(root, repoRelPath, limit),
+            GetLatestModelForPath(root, repoRelPath)));
+    }
+
+    /// <summary>
+    /// HEAD-independent cached <see cref="GetFileAtCommit"/>: a file's bytes at a
+    /// concrete commit are content-addressed and never change, so the result is
+    /// cached permanently (bounded LRU, reusing the SHA-range cache) keyed by
+    /// (root, sha, path). Only caches when <paramref name="sha"/> is an immutable
+    /// object name (hex), never a symbolic ref like a branch that could move.
+    /// </summary>
+    public string? GetFileAtCommitCached(string repoRoot, string sha, string repoRelPath)
+    {
+        if (string.IsNullOrWhiteSpace(sha) || !IsLikelyShaOrRef(sha)) return null;
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+        if (!LooksLikeImmutableSha(sha))
+            return GetFileAtCommit(root, sha, repoRelPath);
+
+        var key = string.Join(CacheKeySep, "wiki-rev", root, sha, repoRelPath.Replace('\\', '/'));
+        if (TryGetShaRangeCached<string>(key, out var cached)) return cached;
+        var content = GetFileAtCommit(root, sha, repoRelPath);
+        if (content != null) StoreShaRangeCached(key, content);
+        return content;
+    }
+
+    /// <summary>
+    /// True when <paramref name="sha"/> is a plain hex object name (a concrete,
+    /// immutable commit id), as opposed to a symbolic ref such as a branch or tag
+    /// whose target can move. Used to gate permanent caching of content-addressed
+    /// reads: an immutable sha is safe to cache forever; a movable ref is not.
+    /// </summary>
+    private static bool LooksLikeImmutableSha(string sha)
+    {
+        if (sha.Length is < 7 or > 40) return false;
+        foreach (var c in sha)
+        {
+            var isHex = c is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F';
+            if (!isHex) return false;
+        }
+        return true;
     }
 
     /// <summary>
@@ -3450,11 +3995,14 @@ public class GitService
     private static string? ResolveGitToplevel(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return null;
+        if (_toplevelCache.TryGetValue(path, out var cachedRoot)) return cachedRoot;
         var (output, _, code) = RunGit(path, "rev-parse --show-toplevel");
         if (code != 0) return null;
         var toplevel = output.Trim();
         if (string.IsNullOrEmpty(toplevel)) return null;
-        return toplevel.Replace('/', Path.DirectorySeparatorChar);
+        var normalized = toplevel.Replace('/', Path.DirectorySeparatorChar);
+        _toplevelCache[path] = normalized;
+        return normalized;
     }
 
     private static string? ResolveConfiguredRepositoryPath(WatchPathEntry entry)
@@ -3479,6 +4027,32 @@ public class GitService
         };
 
         return RunGitProcess(psi, stdin);
+    }
+
+    /// <summary>
+    /// Like <see cref="RunGit"/> but with <c>GIT_OPTIONAL_LOCKS=0</c>, so the
+    /// spawn never takes the optional <c>index.lock</c> or writes the refreshed
+    /// index back. Used for the read-only status/diff reads the live-status view
+    /// now fans out in parallel (AGT-2007): it guarantees a pure read - no
+    /// working-tree mutation even while a run agent is actively editing the same
+    /// checkout - and removes any index.lock contention between the concurrent
+    /// reads. Git treats the status index-refresh lock as optional, so this only
+    /// skips a stat-cache write; the porcelain/numstat output is unchanged.
+    /// </summary>
+    private static (string Out, string Err, int Code) RunGitReadonly(string cwd, string args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            Arguments = args,
+            WorkingDirectory = cwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        psi.EnvironmentVariables["GIT_OPTIONAL_LOCKS"] = "0";
+        return RunGitProcess(psi, null);
     }
 
     /// <summary>
@@ -3511,6 +4085,19 @@ public class GitService
 
     private static (string Out, string Err, int Code) RunGitProcess(ProcessStartInfo psi, string? stdin)
     {
+        // Time every spawn and record it against the ambient git-info request
+        // scope (if any). This is the per-subprocess half of the AGT-2007
+        // instrumentation; the scope rollup turns it into "N spawns, X ms".
+        var command = CommandLabel(psi);
+        var sw = Stopwatch.StartNew();
+        var result = RunGitProcessCore(psi, stdin);
+        sw.Stop();
+        GitProcessTelemetry.Record(command, sw.ElapsedMilliseconds, result.Code);
+        return result;
+    }
+
+    private static (string Out, string Err, int Code) RunGitProcessCore(ProcessStartInfo psi, string? stdin)
+    {
         try
         {
             using var p = Process.Start(psi)!;
@@ -3532,6 +4119,213 @@ public class GitService
         {
             return ("", ex.Message, -1);
         }
+    }
+
+    /// <summary>
+    /// A short, low-cardinality label for one git spawn - the git subcommand
+    /// (e.g. <c>status</c>, <c>merge-base</c>, <c>rev-parse</c>). Deliberately
+    /// the first token only: it groups spawns cleanly in the telemetry rollup
+    /// and never leaks a branch name, path, or commit message into the logs.
+    /// </summary>
+    private static string CommandLabel(ProcessStartInfo psi)
+    {
+        if (psi.ArgumentList.Count > 0)
+            return psi.ArgumentList[0];
+        var args = psi.Arguments;
+        if (string.IsNullOrWhiteSpace(args)) return "git";
+        var space = args.IndexOf(' ');
+        return space < 0 ? args : args[..space];
+    }
+
+    /// <summary>
+    /// Runs several independent git invocations concurrently and returns their
+    /// results in input order. Each git call is its own OS process, so on
+    /// Windows - where a bare spawn already costs ~70-100ms - fanning the
+    /// independent reads of a status/provenance request out across the thread
+    /// pool collapses a serial sum into a single max. The ambient
+    /// <see cref="GitProcessTelemetry"/> scope flows into each task (captured
+    /// ExecutionContext), so per-request spawn accounting still adds up. The
+    /// callbacks must not throw (the git helpers already swallow their own
+    /// failures); a throwing callback surfaces via <see cref="Task.WaitAll"/>.
+    /// </summary>
+    private static T[] RunGitParallel<T>(params Func<T>[] work)
+    {
+        if (work.Length == 0) return [];
+        if (work.Length == 1) return [work[0]()];
+        var tasks = new Task<T>[work.Length];
+        for (var i = 0; i < work.Length; i++)
+        {
+            var w = work[i];
+            tasks[i] = Task.Run(w);
+        }
+        Task.WaitAll(tasks);
+        var results = new T[work.Length];
+        for (var i = 0; i < work.Length; i++) results[i] = tasks[i].Result;
+        return results;
+    }
+
+    /// <summary>
+    /// The set of commit SHAs reachable from <paramref name="tipRef"/> but not
+    /// from <paramref name="baseSha"/> (<c>git rev-list base..tip</c>), as full
+    /// SHAs. ONE git call regardless of how many commits are in the range - the
+    /// batch replacement for calling <c>merge-base --is-ancestor</c> once per
+    /// commit when classifying a task branch's merge-set (AGT-2007). Empty on
+    /// any failure or when the ref does not exist, matching the conservative
+    /// "unknown -> not contained" behaviour of the per-commit checks it
+    /// replaces.
+    /// </summary>
+    public HashSet<string> GetReachableShaSet(string repoRoot, string baseSha, string tipRef)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return set;
+        if (!IsLikelyShaOrRef(baseSha) || !IsLikelyBranchName(tipRef)) return set;
+        var (output, _, code) = RunGitArgs(repoRoot, "rev-list", $"{baseSha}..{tipRef}");
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return set;
+        foreach (var line in output.Split('\n'))
+        {
+            var sha = line.Trim();
+            if (sha.Length > 0) set.Add(sha);
+        }
+        return set;
+    }
+
+    /// <summary>
+    /// The full set of commit SHAs reachable from <paramref name="tipRef"/>
+    /// (<c>git rev-list &lt;tip&gt;</c>) - i.e. every ancestor of the ref, tip
+    /// included. ONE git call regardless of history length. Membership in this
+    /// set is exactly "<c>sha</c> is an ancestor of (or equal to)
+    /// <paramref name="tipRef"/>", so the board can answer "is this task's anchor
+    /// in develop / main?" for MANY cards with an in-memory lookup instead of a
+    /// <c>merge-base --is-ancestor</c> spawn per card - the O(repos) batch that
+    /// keeps the board merge signal off the per-card spawn path (AGT-2046, same
+    /// spirit as <see cref="GetReachableShaSet"/> / AGT-2007). Empty on any
+    /// failure or when the ref does not exist, matching the conservative
+    /// "unknown -&gt; not contained" behaviour elsewhere.
+    /// </summary>
+    public HashSet<string> GetAncestorShaSet(string repoRoot, string tipRef)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return set;
+        if (!IsLikelyBranchName(tipRef)) return set;
+        var (output, _, code) = RunGitArgs(repoRoot, "rev-list", tipRef);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return set;
+        foreach (var line in output.Split('\n'))
+        {
+            var sha = line.Trim();
+            if (sha.Length > 0) set.Add(sha);
+        }
+        return set;
+    }
+
+    // ----- PUB-1: publish-target derivation primitives (read-only) -----
+
+    /// <summary>
+    /// The newest version tag (<c>v*</c>) in the repository, by descending
+    /// semantic-version order, or null when the package has never been tagged
+    /// (the "first publish pending" case). One <c>git tag</c> spawn. Returns the
+    /// raw tag name including the leading <c>v</c> (e.g. <c>v0.3.1</c>); callers
+    /// strip the prefix for display. Read-only; empty/failure yields null.
+    /// </summary>
+    public string? GetLatestVersionTag(string repoRoot)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        var (output, _, code) = RunGitArgs(repoRoot, "tag", "--list", "v[0-9]*", "--sort=-v:refname");
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return null;
+        foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            var tag = line.Trim();
+            if (tag.Length > 0) return tag;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// UTC author date of a ref's tip commit (e.g. a Pages deploy branch tip),
+    /// or null when the ref does not resolve. PUB-1 treats a <c>gh-pages</c> tip
+    /// date as the "last website deploy" instant when no release tag anchors the
+    /// website target. Read-only; one spawn.
+    /// </summary>
+    public DateTime? GetTipCommitDateUtc(string repoRoot, string tipRef)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        if (!IsLikelyBranchName(tipRef)) return null;
+        var (output, _, code) = RunGitArgs(repoRoot, "log", "-1", "--pretty=format:%aI", tipRef);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return null;
+        if (DateTime.TryParse(output.Trim(), System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                out var ts))
+            return DateTime.SpecifyKind(ts, DateTimeKind.Utc);
+        return null;
+    }
+
+    /// <summary>
+    /// First-parent (mainline) commits on <paramref name="branch"/> that touch a
+    /// publish target's path scope, newest first. Optionally bounded below by
+    /// <paramref name="sinceRef"/> (a tag or SHA: <c>sinceRef..branch</c>) and/or
+    /// <paramref name="sinceDateIso"/> (git <c>--since</c>). <c>--first-parent</c>
+    /// collapses each merged task branch to its single mainline commit, so the
+    /// result is "how many integrations touched this target since the reference",
+    /// not raw per-commit churn - the merge commit's SHA is exactly the anchor the
+    /// board records for that task, so a caller can answer "is task X publishable
+    /// to this target?" by set-membership without any per-task git spawn. Scope is
+    /// expressed as git pathspecs: <paramref name="includePrefixes"/> (empty =
+    /// whole tree) and <paramref name="excludePrefixes"/> (git <c>:(exclude)</c>
+    /// magic). Ref and path arguments are validated so a crafted value yields an
+    /// empty list rather than a smuggled flag. Read-only; one spawn.
+    /// </summary>
+    public List<GitCommitInfo> GetMainlineCommitsForScope(
+        string repoRoot,
+        string branch,
+        IReadOnlyList<string> includePrefixes,
+        IReadOnlyList<string> excludePrefixes,
+        string? sinceRef = null,
+        string? sinceDateIso = null)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return [];
+        if (!IsLikelyBranchName(branch)) return [];
+        if (!string.IsNullOrWhiteSpace(sinceRef) && !IsLikelyShaOrRef(sinceRef!)) return [];
+
+        const string fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
+        var args = new List<string> { "log", "--first-parent", "--shortstat", $"--pretty=format:{fmt}" };
+        if (!string.IsNullOrWhiteSpace(sinceDateIso)) args.Add($"--since={sinceDateIso}");
+        args.Add(string.IsNullOrWhiteSpace(sinceRef) ? branch : $"{sinceRef}..{branch}");
+
+        args.Add("--");
+        var addedInclude = false;
+        foreach (var inc in includePrefixes)
+        {
+            var p = NormalizePathspec(inc);
+            if (p == null) continue;
+            args.Add(p);
+            addedInclude = true;
+        }
+        if (!addedInclude) args.Add("."); // whole tree
+        foreach (var exc in excludePrefixes)
+        {
+            var p = NormalizePathspec(exc);
+            if (p == null) continue;
+            args.Add($":(exclude){p}");
+        }
+
+        var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+        return ParseLogBlocks(output);
+    }
+
+    /// <summary>
+    /// Validates and normalises a repo-relative path prefix used as a git
+    /// pathspec: forward slashes, no leading slash, no <c>..</c> traversal, no
+    /// pathspec-magic leader (<c>:</c>). Returns null for an unusable value so it
+    /// is dropped rather than passed to git. Internal for unit testing.
+    /// </summary>
+    internal static string? NormalizePathspec(string? prefix)
+    {
+        if (string.IsNullOrWhiteSpace(prefix)) return null;
+        var p = prefix.Replace('\\', '/').Trim();
+        if (p.Length == 0) return null;
+        if (p[0] == '/' || p[0] == ':') return null;
+        if (p.Contains("..", StringComparison.Ordinal)) return null;
+        return p;
     }
 
 }

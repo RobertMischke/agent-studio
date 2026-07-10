@@ -264,6 +264,12 @@ public sealed class CodeReviewStepService
             ["commit"] = request.Commit ?? "(HEAD)",
             ["diff"] = request.Diff,
             ["model"] = request.Model,
+            ["results_inventory"] = string.IsNullOrWhiteSpace(request.ResultsInventory)
+                ? "No results/ inventory available."
+                : request.ResultsInventory,
+            ["card_mode"] = string.IsNullOrWhiteSpace(request.CardMode)
+                ? AgentStudio.Runner.ReviewCardMode.Describe(null)
+                : request.CardMode,
         };
         var template = request.Mode == CodeReviewMode.Grade ? GradePromptTemplate : PromptTemplate;
         try
@@ -281,14 +287,24 @@ public sealed class CodeReviewStepService
 
     private static string BuildInlineFallbackPrompt(CodeReviewStepRequest request)
     {
+        var cardMode = string.IsNullOrWhiteSpace(request.CardMode)
+            ? AgentStudio.Runner.ReviewCardMode.Describe(null)
+            : request.CardMode;
+        var resultsInventory = string.IsNullOrWhiteSpace(request.ResultsInventory)
+            ? "No results/ inventory available."
+            : request.ResultsInventory;
+
         if (request.Mode == CodeReviewMode.Grade)
         {
             return
                 $"# Code review — quality grade\n\n" +
                 $"Grade the change set below for **{request.Project}/{request.JobId}** ({request.JobTitle}).\n" +
                 $"Commit: `{request.Commit ?? "(HEAD)"}`. Model: `{request.Model}`.\n\n" +
+                $"{cardMode}\n\n" +
                 $"## Task body\n\n```\n{request.TaskBody}\n```\n\n" +
-                $"## Diff\n\n```\n{request.Diff}\n```\n\n" +
+                $"## Diff (task branch vs base)\n\n```\n{request.Diff}\n```\n\n" +
+                $"## results/ folder inventory\n\n```\n{resultsInventory}\n```\n\n" +
+                "Treat deliverables as missing only when the diff has no branch changes, the results/ inventory is empty, and no external deliverable is documented.\n\n" +
                 "Assign a single quality grade using this rubric:\n" +
                 "- **A** — solves the goal clearly, complete, with tests / evidence.\n" +
                 "- **B** — solid, small gaps.\n" +
@@ -302,8 +318,11 @@ public sealed class CodeReviewStepService
             $"# Code review step\n\n" +
             $"Review the diff below for **{request.Project}/{request.JobId}** ({request.JobTitle}).\n" +
             $"Commit: `{request.Commit ?? "(HEAD)"}`. Model: `{request.Model}`.\n\n" +
+            $"{cardMode}\n\n" +
             $"## Task body\n\n```\n{request.TaskBody}\n```\n\n" +
-            $"## Diff\n\n```\n{request.Diff}\n```\n\n" +
+            $"## Diff (task branch vs base)\n\n```\n{request.Diff}\n```\n\n" +
+            $"## results/ folder inventory\n\n```\n{resultsInventory}\n```\n\n" +
+            "Treat deliverables as missing only when the diff has no branch changes, the results/ inventory is empty, and no external deliverable is documented. " +
             "Block clear task-goal misses, redundant reimplementations of already-present behavior, " +
             "regressions, broken types, and half-finished/stubbed work visible in the diff. " +
             "Use concerns only for shippable issues a human can review without another agent run.\n\n" +
@@ -470,6 +489,20 @@ public sealed record CodeReviewStepRequest(
     /// caller keeps its current behaviour unchanged.
     /// </summary>
     public CodeReviewMode Mode { get; init; } = CodeReviewMode.Verdict;
+
+    /// <summary>
+    /// Inventory of the job's <c>results/</c> folder (file list + short excerpts).
+    /// Completes the evidence source so the grade / verdict never reads an empty
+    /// diff as "deliverables missing" when the deliverable is a results/ artefact
+    /// (AGT-2022). Defaults to empty for existing callers.
+    /// </summary>
+    public string ResultsInventory { get; init; } = string.Empty;
+
+    /// <summary>
+    /// One-line framing of the card's execution mode so an empty code diff on a
+    /// read-only planning / research card is read as legitimate.
+    /// </summary>
+    public string CardMode { get; init; } = string.Empty;
 }
 
 /// <summary>Per-call report returned by <see cref="CodeReviewStepService.RunAsync"/>.</summary>

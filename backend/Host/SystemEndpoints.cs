@@ -119,6 +119,25 @@ public static class SystemEndpoints
             });
         });
 
+        // Git-Management cleanup (AGT-2009). Dry-run analysis of which merged
+        // task/* branches (local + remote), refs/backups/* refs and stale
+        // worktree registrations can be pruned against the integration branch.
+        // Read-only: nothing is deleted here.
+        app.MapGet("/api/git/cleanup/plan", (string project, GitCleanupService cleanup) =>
+            Results.Ok(cleanup.BuildPlan(project)));
+
+        // Executes an operator-confirmed subset of the cleanup plan. The service
+        // re-derives eligibility from a fresh plan and re-checks merge ancestry
+        // immediately before each delete, so only GEMERGTES is ever removed
+        // (AGT-1945). Returns the n-deleted / m-kept report.
+        app.MapPost("/api/git/cleanup/execute", (string project, GitCleanupRequest req, GitCleanupService cleanup) =>
+        {
+            var result = cleanup.Execute(project, req ?? new GitCleanupRequest([]));
+            return result.IsRepo
+                ? Results.Ok(result)
+                : Results.BadRequest(new { error = result.Error ?? "Could not run cleanup." });
+        });
+
         app.MapGet("/healthz", () => Results.Ok("ok"));
     }
 }

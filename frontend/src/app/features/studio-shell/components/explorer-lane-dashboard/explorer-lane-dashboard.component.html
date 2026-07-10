@@ -1,0 +1,31 @@
+@if (view() === 'numbers') {
+  <span class="studio-board-lane-counts"
+        [attr.data-testid]="'studio-explorer-project-board-counts-' + projectName()"
+        [attr.aria-label]="label()">
+    <span class="studio-board-lane-count studio-board-lane-count--ready"
+          [cacTooltip]="tooltips.ready" [attr.data-testid]="'studio-explorer-project-board-count-ready-' + projectName()"
+          aria-hidden="true">{{ counts().ready }}</span>
+    <span class="studio-board-lane-count studio-board-lane-count--progress"
+          [cacTooltip]="tooltips.progress" [attr.data-testid]="'studio-explorer-project-board-count-progress-' + projectName()"
+          aria-hidden="true">{{ counts().progress }}</span>
+    <span class="studio-board-lane-count studio-board-lane-count--human-review"
+          [cacTooltip]="tooltips.humanReview" [attr.data-testid]="'studio-explorer-project-board-count-human-review-' + projectName()"
+          aria-hidden="true">{{ counts().humanReview }}</span>
+  </span>
+} @else {
+  <span class="studio-board-lane-dots"
+        [attr.data-testid]="'studio-explorer-project-board-dots-' + projectName()"
+        [attr.aria-label]="label()"
+        [cacTooltip]="label()">
+    @for (lane of dots(); track $index) {
+      <span class="studio-board-lane-dot"
+            [class.studio-board-lane-dot--ready]="lane === 'ready'"
+            [class.studio-board-lane-dot--progress]="lane === 'progress'"
+            [class.studio-board-lane-dot--human-review]="lane === 'humanReview'"
+            [attr.data-lane]="lane" aria-hidden="true"></span>
+    }
+    @if (overflow() > 0) {
+      <span class="studio-board-lane-dots__overflow" aria-hidden="true">+{{ overflow() }}</span>
+    }
+  </span>
+}

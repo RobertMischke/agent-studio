@@ -165,3 +165,76 @@ describe('GitFileTreeComponent keyboard navigation', () => {
     ).toBe(true);
   });
 });
+
+describe('GitFileTreeComponent path disambiguation (AGT-2008)', () => {
+  // Two README.md in different folders — the reported "which is which" case.
+  const COLLIDING: GitFileChange[] = [
+    { status: 'M', path: 'README.md', added: 1, removed: 0 },
+    { status: 'M', path: 'docs/README.md', added: 2, removed: 1 },
+    { status: 'M', path: 'src/app.ts', added: 4, removed: 0 },
+  ];
+
+  async function mount(files: GitFileChange[]): Promise<ComponentFixture<GitFileTreeComponent>> {
+    await TestBed.configureTestingModule({
+      imports: [GitFileTreeComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(GitFileTreeComponent);
+    fixture.componentRef.setInput('files', files);
+    fixture.componentRef.setInput('selected', null);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('shows a directory hint only on files whose basename collides', async () => {
+    const fixture = await mount(COLLIDING);
+    const hints = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        '[data-testid="git-tree-dir-hint"]',
+      ),
+    ).map((el) => el.textContent?.trim());
+
+    // Both README.md rows disambiguate; the unique app.ts row gets no hint.
+    expect(hints).toContain('root');
+    expect(hints).toContain('docs/');
+    expect(hints.length).toBe(2);
+  });
+
+  it('exposes the full repo path as the file tooltip + parent-dir hint via the API', async () => {
+    const fixture = await mount(COLLIDING);
+    const cmp = fixture.componentInstance;
+    const fileNode = (path: string) => ({
+      path,
+      label: path.split('/').pop()!,
+      isFile: true,
+      status: 'M',
+      added: 0,
+      removed: 0,
+      count: 1,
+      children: [],
+      depth: 0,
+    });
+
+    expect(cmp.fileTooltip(fileNode('docs/README.md'))).toBe('docs/README.md');
+    expect(cmp.dirHint(fileNode('docs/README.md'))).toBe('docs/');
+    expect(cmp.dirHint(fileNode('README.md'))).toBe('root');
+    // Unique basename -> no hint even though the method is called per row.
+    expect(cmp.dirHint(fileNode('src/app.ts'))).toBe('');
+  });
+
+  it('adds no hint when every basename is unique', async () => {
+    const fixture = await mount([
+      { status: 'M', path: 'a/one.ts', added: 1, removed: 0 },
+      { status: 'M', path: 'b/two.ts', added: 1, removed: 0 },
+    ]);
+    const hints = (fixture.nativeElement as HTMLElement).querySelectorAll(
+      '[data-testid="git-tree-dir-hint"]',
+    );
+    expect(hints.length).toBe(0);
+  });
+});

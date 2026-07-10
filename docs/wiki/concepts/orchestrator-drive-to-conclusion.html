@@ -424,6 +424,62 @@
             <code>integration-error</code>, never silent.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-09</td>
+          <td><code>AGT-1944</code><br><span class="small">post-processing-outcome-taxonomie-und-environmental-retry</span></td>
+          <td>
+            Three drive-to-conclusion regressions in one night. (1) Transient host file locks (the MSBuild
+            <code>MSB3021/3026/3027</code> copy-lock family) and network blips parked runs to <span class="lane">5e</span> on
+            first detection though re-running after the lock released would have passed. (2) After backend restarts, session
+            resumes failed (<code>claude: "No conversation found"</code>, <code>codex: "no rollout found for thread id"</code>);
+            the <code>cli-launch-failed</code> category promised "rebuilding from disk on the next attempt" but routed straight
+            to 5e instead of making that attempt (belege <code>AGT-1945/1929/1930</code>, one lost cycle per restart). (3) The
+            reissue budget was sticky: <code>CountPriorReissues</code> summed EVERY reissue a job ever accrued, so a card with a
+            spent budget from an earlier, already-resolved chain could never pass a budget-gated check again (beleg
+            <code>AGT-1935</code>).
+          </td>
+          <td>
+            The gate/escalation path keyed off the raw process exit shape, not an outcome bucket:
+            <code>EnvironmentalTransient</code> and <code>CliLaunchFailed</code> had no retry-with-backoff before escalation,
+            environmental cycles counted toward the no-progress quarantine streak, and the shared reissue budget was counted over
+            the job's whole lifetime rather than the current attempt chain.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> a five-bucket post-processing outcome taxonomy
+            (<code>PostProcessingOutcomeTaxonomy</code>: success / code-defect / environmental / inconclusive-with-results /
+            inconclusive-empty) now drives routing. Transient environmental faults retry with exponential backoff
+            (30s/120s/300s, budget 2) and <code>cli-launch-failed</code> gets one automatic fresh-start retry before either
+            escalates flagged <code>environmental</code> / <code>cli-launch-failed</code>; environmental cycles no longer accrue
+            toward the quarantine streak; an inconclusive run that left files in <code>results/</code> escalates as
+            <code>inconclusive-with-results</code> (a "work to inspect" hint) rather than the bare park; and the reissue budget is
+            counted per attempt chain (reset on Escalate / AcceptAsDone), so a reopened card gets a fresh budget. See
+            <code>docs/contracts/run-outcome.md</code> &sect; "Post-processing outcome taxonomy".
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-10</td>
+          <td><code>AGT-2021</code><br><span class="small">aspect-verdict-ausfall-environmental-retry-statt-gate-item<br>(beleg <code>AGT-1996</code>, baut auf <code>AGT-1944</code>)</span></td>
+          <td>
+            A hard backend cut killed the aspect runner mid-run. The reviewing CLI produced no output, so the aspect verdict came
+            back as the gate item <em>"Aspect runner produced no parseable verdict"</em> - counted as the card's unfinished work and
+            escalated. That is an INFRASTRUCTURE outage, not a work deficit: exactly the fault class the AGT-1944 taxonomy handles for
+            CLI runs but did not yet cover for the ASPECT / post-review steps.
+          </td>
+          <td>
+            The aspect / post-step path had no environmental class of its own: a dead reviewer (CLI threw or returned nothing)
+            collapsed into the same deterministic <code>review:unparseable</code> concern as a genuine format violation, so a killed
+            runner read as the agent's opinion and reached a work-quality terminal.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> a missing / unparseable post-step verdict caused by a dead reviewer is now classified
+            environmental. The aspect runner reruns that step exactly once with the AGT-1944 backoff
+            (<code>PostProcessingOutcomeTaxonomy.DecidePostStepVerdictRetry</code>, budget 1); a second miss flags
+            <code>AspectVerdict.IsInfraFailure</code>, and <code>ReviewDecisionOrchestrator.HandleAspectInfraCrashAsync</code>
+            escalates the card flagged <code>environmental</code> + <code>InfraCrash</code> as a chain-ending <code>Escalate</code>
+            (no reissue-budget burn). A reviewer that DID reply keeps the existing <code>review:unparseable</code> concern; the other
+            post-steps (code-review-grade, wiki) already swallow a crash into a Skipped/Failed row and never gate the lane.
+          </td>
+        </tr>
       </tbody>
     </table>
 

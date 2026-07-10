@@ -1,0 +1,22 @@
+<section class="updates" data-testid="updates-settings">
+  <header class="updates__head">
+    <h2 class="updates__title">Updates</h2>
+    <p class="updates__desc">Keep this instance in sync with stable.</p>
+  </header>
+
+  <div class="updates__bar" [attr.data-state]="state()">
+    <span class="updates__dot" [attr.data-state]="state()" aria-hidden="true"></span>
+    <span class="updates__status"
+          data-testid="settings-update-status">{{ statusLine() }}</span>
+    <span class="updates__spacer"></span>
+    <button type="button"
+            class="updates__action"
+            data-testid="settings-update-trigger"
+            [disabled]="updateClient.isRunning()"
+            (click)="triggerUpdate()">{{ actionLabel() }}</button>
+    <button type="button"
+            class="updates__history"
+            data-testid="settings-update-open-center"
+            (click)="openUpdateCenter()">History</button>
+  </div>
+</section>

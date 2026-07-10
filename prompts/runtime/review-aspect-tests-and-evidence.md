@@ -33,17 +33,29 @@ is low-risk. When in doubt, `pass`.
 - **Id:** `{{job_id}}`
 - **Title:** {{job_title}}
 
+{{card_mode}}
+
 ## Task body (`prompt.md`)
 
 ```
 {{task_body}}
 ```
 
-## Diff summary
+## Diff summary (task branch vs base)
 
 ```
 {{diff_summary}}
 ```
+
+## results/ folder inventory
+
+```
+{{results_inventory}}
+```
+
+Screenshots, logs, and reports under results/ ARE evidence - check this
+inventory before flagging "no evidence". A read-only / concept card legitimately
+ships no code diff; its deliverable is the results/ artefact or a `docs/` commit.
 
 ## Status summary (the agent's own report)
 

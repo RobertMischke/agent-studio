@@ -57,7 +57,6 @@ export class KanbanFilterSidesheetComponent {
   readonly activeTagIds = input<ReadonlySet<string>>(new Set<string>());
   readonly owners = input<readonly ClientSummary[]>([]);
   readonly activeOwnerId = input<string | null>(null);
-  readonly compactCards = input<boolean>(false);
   readonly hitCount = input<number>(0);
   readonly totalCount = input<number>(0);
   readonly hasAnyFilter = input<boolean>(false);
@@ -66,7 +65,6 @@ export class KanbanFilterSidesheetComponent {
   readonly setType = output<string | null>();
   readonly toggleTag = output<string>();
   readonly setOwner = output<string | null>();
-  readonly toggleCompactCards = output<void>();
   readonly closed = output<void>();
   readonly clearAll = output<void>();
 
@@ -134,10 +132,6 @@ export class KanbanFilterSidesheetComponent {
 
   onSetOwner(id: string | null): void {
     this.setOwner.emit(id);
-  }
-
-  onToggleCompact(): void {
-    this.toggleCompactCards.emit();
   }
 
   onClearAll(): void {

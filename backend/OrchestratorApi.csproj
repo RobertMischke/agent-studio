@@ -32,9 +32,15 @@
   <!-- Block 6: the extracted public library, consumed as the published NuGet
        package. For co-development against a local checkout, temporarily swap
        back to the ProjectReference:
-       ..\..\..\coding-agent-runner\src\CodingAgentRunner\CodingAgentRunner.csproj -->
+       ..\..\..\coding-agent-runner\src\CodingAgentRunner\CodingAgentRunner.csproj
+
+       0.5.0 is CAR-2's extended thinking-level ladder (AGT-2025 coordination):
+       it teaches the ladder the gpt-5.6-* family (sol/terra/luna) and adds the
+       new `ultra` top level, so codex reasoning-effort flags for gpt-5.6 emit
+       xhigh/ultra instead of being normalized down to medium. This card
+       (detection + default + UI) builds on that ladder. -->
   <ItemGroup>
-    <PackageReference Include="CodingAgentRunner" Version="0.3.1" />
+    <PackageReference Include="CodingAgentRunner" Version="0.5.0" />
   </ItemGroup>
 
   <!-- Block 6: adopt the library's types by aliasing them to the names the app
@@ -91,6 +97,7 @@
     <Using Include="AgentStudio.Projection" />
     <Using Include="AgentStudio.Projects" />
     <Using Include="AgentStudio.Prompts" />
+    <Using Include="AgentStudio.Publishing" />
     <Using Include="AgentStudio.Registry" />
     <Using Include="AgentStudio.RegressionRadar" />
     <Using Include="AgentStudio.Review" />

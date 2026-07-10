@@ -96,6 +96,44 @@ These behaviours are real today and being reviewed. See the configuration analys
 - Parallelism coupling: `MaxParallelism` is perceived as a throughput knob, but flipping it `1 <-> >=2` also silently changes the commit target, merge timing/trigger, merge command and history shape, conflict handling, and what "Accept" means. `IntegrationBranch` and `IntegrationStrategy` are not exposed in the frontend.
 - Auto-commit on transition: in sequential mode the auto-commit lands directly on the shared checkout's current branch with no `task/<id>` branch, so the deferred "Merge into Develop" step often records `NoTaskBranch -> Skipped` even though the work already landed. The completed-push target can also diverge from the merge target. The exact on-transition git state is under review.
 
+## Branch cleanup (Project Hub Git-Management, AGT-2009)
+
+Over time a project repository accumulates dead refs: merged `task/*` branches
+(local and `origin/*`), operational `refs/backups/*` snapshots, and stale
+worktree registrations whose folders were removed out-of-band. The Project Hub
+Git View exposes an operator-driven cleanup that prunes only what has already
+landed.
+
+- Analysis is a read-only **dry-run plan** (`GitCleanupService.BuildPlan`, endpoint
+  `GET /api/git/cleanup/plan?project=<name>`). It classifies every `task/*` branch
+  (local + remote), every `refs/backups/*` ref and every stale worktree against the
+  project's `IntegrationBranch`: `merged` / `unmerged` / `stale`. Each row carries
+  its merge evidence and a keep/delete reason.
+- Execution (`GitCleanupService.Execute`, endpoint `POST /api/git/cleanup/execute`)
+  acts only on an operator-confirmed subset. It re-derives eligibility from a fresh
+  plan and re-checks `merge-base --is-ancestor` immediately before each branch/ref
+  delete, then dispatches the existing GitService primitives (`DeleteBranch`,
+  `DeleteRemoteBranch`, `DeleteRef`, `WorktreePrune`). The result reports
+  `n deleted / m kept` with per-item reasons.
+- **AGT-1945 invariant**: only GEMERGTES is ever deleted. Unmerged branches and
+  backup refs whose commit is not yet contained in the integration branch are never
+  touched, and a branch checked out in a live worktree is kept (remove the worktree
+  first). The guard is server-side, so a stale or crafted request cannot drop
+  unmerged work. `refs/backups/*` is dropped only when its commit is an ancestor of
+  the integration branch.
+- UI: `app-project-git-cleanup` (a collapsible section inside `project-git-panel`)
+  renders the plan with per-row checkboxes (eligible pre-selected, ineligible
+  disabled with the reason), a two-step confirm before deletion, and the result
+  report. Coverage: `GitCleanupServiceTests` (backend, temp repo) and
+  `project-git-cleanup.component.spec.ts` (frontend).
+- **Automation status**: cleanup is operator-triggered only. The optional
+  "auto-cleanup after a successful merge step" hook (the counterpart to the
+  push-on-merge from AGT-1999) is intentionally **not** wired yet - there is no
+  automatic ref deletion anywhere in the pipeline. When it is added it should reuse
+  `GitCleanupService.BuildPlan`/`Execute` unchanged (so the AGT-1945 guard keeps
+  holding) and gate on the same per-project setting as push-on-merge; until then,
+  removing merged refs is always an explicit operator action.
+
 ## See also
 
 - `docs/concepts/parallel-task-execution.md` - parallel execution model, integration strategies, merge-queue.

@@ -109,7 +109,7 @@ public sealed class SummaryGenerationService
             var truncated = TruncateTail(rawLog, MaxLogChars);
             runOutcome ??= TerminalRunOutcomeClassifier.TryClassifyRenderedLog(rawLog)?.Outcome;
             var prompt = _prompts.Render(RuntimePromptService.SummaryProtocol,
-                new Dictionary<string, string?> { ["log"] = truncated });
+                BuildSummarySlots(info, truncated, runOutcome?.ProtocolResult ?? "unknown"));
 
             var result = await RunHaikuAsync(prompt, info.FolderPath, ct);
             if (!result.Ok || string.IsNullOrWhiteSpace(result.Summary))
@@ -124,7 +124,7 @@ public sealed class SummaryGenerationService
                 summary = ApplyOutcomeResultLine(summary, runOutcome.ProtocolResult);
             }
 
-            summary = ApplyProtocolImageReferences(summary, rawLog, out var appendedImageCount);
+            summary = ApplyProtocolImageReferences(summary, rawLog, info.FolderPath, out var appendedImageCount);
             if (appendedImageCount > 0)
             {
                 _logger.LogInformation("Summary protocol image references appended for {JobId}: {ImageCount} references",
@@ -190,8 +190,10 @@ public sealed class SummaryGenerationService
         }
 
         var truncated = TruncateTail(rawLog, MaxLogChars);
+        // Interim peek: the run is still alive, so there is no terminal outcome
+        // to feed the classifier. Say so explicitly instead of guessing one.
         var prompt = _prompts.Render(RuntimePromptService.SummaryProtocol,
-            new Dictionary<string, string?> { ["log"] = truncated });
+            BuildSummarySlots(info, truncated, "in progress"));
 
         var sw = Stopwatch.StartNew();
         var result = await RunHaikuAsync(prompt, info.FolderPath, ct);
@@ -204,7 +206,7 @@ public sealed class SummaryGenerationService
             return InterimSummaryResult.Failure(result.Error ?? "Empty Haiku response");
         }
 
-        var markdown = ApplyProtocolImageReferences(result.Summary, rawLog, out var appendedImageCount);
+        var markdown = ApplyProtocolImageReferences(result.Summary, rawLog, info.FolderPath, out var appendedImageCount);
         _logger.LogInformation("Interim summary produced for {JobId} ({Bytes} bytes, {ElapsedMs}ms, {ImageCount} appended images)",
             info.Id, markdown.Length, sw.ElapsedMilliseconds, appendedImageCount);
         return InterimSummaryResult.Success(markdown, sw.ElapsedMilliseconds);
@@ -227,6 +229,26 @@ public sealed class SummaryGenerationService
         var tail = text[^maxChars..];
         return "[earlier output truncated]\n" + tail;
     }
+
+    /// <summary>
+    /// Builds the placeholder set for <c>summary-protocol.md</c>. Besides the
+    /// log tail, it feeds the task metadata (<c>taskType</c> / <c>mode</c>) and
+    /// the run <c>outcome</c> so the summarizer can pick the right result
+    /// <c>Case</c> and frame the overview honestly (a blocked run reads as
+    /// "where it stopped", not "shipped"). The frontend result view classifies
+    /// the same signals independently, so these slots only need to nudge the
+    /// model; a missing or wrong value degrades to the client-side heuristic.
+    /// Exposed for the prompt-contract test that pins this wiring without a
+    /// billable Haiku round-trip.
+    /// </summary>
+    public static Dictionary<string, string?> BuildSummarySlots(TaskInfo info, string log, string outcome)
+        => new()
+        {
+            ["log"] = log,
+            ["taskType"] = info.TaskType,
+            ["mode"] = info.Mode,
+            ["outcome"] = outcome,
+        };
 
     private async Task<HaikuSummaryResult> RunHaikuAsync(
         string prompt, string workingDirectory, CancellationToken ct)
@@ -441,15 +463,27 @@ public sealed class SummaryGenerationService
         return string.Join(Environment.NewLine, lines).TrimEnd() + Environment.NewLine;
     }
 
-    public static string ApplyProtocolImageReferences(string markdown, string log)
-        => ApplyProtocolImageReferences(markdown, log, out _);
+    public static string ApplyProtocolImageReferences(string markdown, string log, string taskFolder)
+        => ApplyProtocolImageReferences(markdown, log, taskFolder, out _);
 
-    public static string ApplyProtocolImageReferences(string markdown, string log, out int appendedCount)
+    /// <summary>
+    /// Injects a deterministic <c>## Images</c> section built from the image paths
+    /// mentioned in the run log. Every extracted path is resolved against
+    /// <paramref name="taskFolder"/> and kept only when it points at a file that
+    /// actually exists on disk (glob/wildcard patterns and paths that escape the
+    /// job folder are always dropped). This is what keeps example/glob paths that
+    /// litter a log - e.g. the Artifact-Upload card's <c>results/*.png</c> - out of
+    /// the protocol: with nothing left after filtering, no Images section is added
+    /// at all rather than a run of empty rows.
+    /// </summary>
+    public static string ApplyProtocolImageReferences(string markdown, string log, string taskFolder, out int appendedCount)
     {
         appendedCount = 0;
         if (string.IsNullOrWhiteSpace(markdown) || string.IsNullOrWhiteSpace(log)) return markdown;
 
-        var imageRefs = ExtractProtocolImageReferences(log);
+        var imageRefs = ExtractProtocolImageReferences(log)
+            .Where(path => ProtocolImageReferenceValidator.ResolvesToExistingFile(path, taskFolder))
+            .ToList();
         if (imageRefs.Count == 0) return markdown;
 
         var existing = new HashSet<string>(ExtractProtocolImageReferences(markdown), StringComparer.OrdinalIgnoreCase);

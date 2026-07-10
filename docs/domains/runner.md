@@ -56,6 +56,17 @@ state.
   state after process failure.
 - `backend/Services/Supervisor/*`: Layer 2 advisory loop, meta-cycle, and rare
   intervention primitives.
+- `runner/*`: the standalone remote runner (RM-5, Runner-Split C). A dependency-
+  free console process that runs one task on a Linux host against the Task Server
+  API only (fenced lease + heartbeat, git-origin checkout, log + artifact upload,
+  external-completion). Owns no task state and never pushes git. Operator runbook:
+  [docs/operations/setup/linux-runner-host.md](../operations/setup/linux-runner-host.md).
+- `TaskRunnerService.ProjectRunnerBadge` + `TaskEndpointHelpers.WithRuntime`
+  (AGT-2003): read-time projection of the active run lease onto `TaskInfo.Runner`
+  for `3-progress` cards, so the board can show which runner executes a card
+  (remote `⇥ <runner>` from the lease owner vs a quiet `lokal` in-process run).
+  A remote runner acquires the run lease; the local in-process runner uses the
+  disk pickup-lock and holds none, which is exactly the lokal-vs-remote signal.
 
 ## Invariants
 
@@ -64,10 +75,49 @@ state.
   `AgentOutcomeAnalyzer.SentinelRegex`.
 - The agent classifies its run. The rule engine decides reissue, stop,
   escalation, and lane movement.
+- Waits-on gate (AGT-2029): the ready-lane pickup gate
+  (`ProjectRunner.IsReadyPickupCandidate`) skips a `2-ready` card whose
+  `references.dependsOn` targets have not all reached `6-completed`/`7-archive`.
+  Fulfillment is resolved cross-project and archive-inclusive
+  (`TaskReferenceIndex` built from `ScanAllJobsWithArchive()`, shared with the
+  read-time card overlay via `WaitsOnEvaluator`). A skipped card falls out of the
+  candidate list and the tick picks the next eligible card - blocking is visible
+  (the card's waits-on chip), never a silent deadlock. A `dependsOn` cycle is a
+  configuration error: it is reported once per card (`waits-on-cycle` warning)
+  and skipped, never deadlocked.
 - A re-open starts a new run. It must rerun pre steps, core, post steps, and
   append run history instead of flattening earlier evidence.
 - Context overflow is non-retryable and routes to human review on first
   detection.
+- Post-processing classifies every run that did not sign off cleanly into one of
+  five outcome buckets (`success` / `code-defect` / `environmental` /
+  `inconclusive-with-results` / `inconclusive-empty`,
+  `PostProcessingOutcomeTaxonomy`), and the bucket - not the raw exit code -
+  drives what happens next. Environmental faults are never the change's fault:
+  a *transient* one (host file lock in the MSB302x copy-lock family, network
+  glitch, or a CLI launch/resume failure) retries with exponential backoff before
+  escalating; the retry budget is bounded per kind (`EnvironmentalTransient` 2,
+  `CliLaunchFailed` one fresh-start), and every environmental member that does
+  escalate is flagged `environmental` so a reviewer never reads an infra blip as
+  a failed change. An inconclusive run with files in `results/` routes to human
+  review with a "partial work to inspect" hint rather than a bare `5e` park. See
+  the taxonomy section of
+  [docs/contracts/run-outcome.md](../contracts/run-outcome.md).
+- Post-step (aspect / code-review) verdicts extend the same taxonomy: a missing /
+  unparseable verdict caused by the reviewing CLI dying is ENVIRONMENTAL, not the
+  card's work (AGT-2021, belege AGT-1996). The step reruns once with the
+  environmental backoff (`PostProcessingOutcomeTaxonomy.DecidePostStepVerdictRetry`,
+  `MaxPostStepVerdictRetries` = 1); a second miss records an `InfraCrash` flagged
+  `environmental` and escalates via a chain-ending `Escalate` decision, so the
+  card's reissue budget is never charged. See the pipeline domain map for the
+  aspect-runner / orchestrator wiring.
+- Environmental cycles do not count against progress or budget: a transient
+  environmental fault never accrues toward the no-progress quarantine streak
+  (`RunQuarantineBreaker.CountsAsNoProgressFailure`), and the shared reissue
+  budget is counted per attempt chain, not over the job's whole lifetime -
+  `ReviewDecisionOrchestrator.CountReissuesInCurrentChain` resets the count on the
+  most recent chain-ending verdict (`Escalate` / `AcceptAsDone`) so a reopened
+  card gets a fresh budget instead of escalating on the first new concern.
 - No-progress failures count across auto-pickup and `UserContinue` reissues
   until progress, review, or quarantine resets the streak.
 - Orchestrator session turns use the existing CLI session machinery. A context

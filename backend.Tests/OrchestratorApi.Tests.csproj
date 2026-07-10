@@ -28,6 +28,13 @@
     <ProjectReference Include="..\update-service\UpdateService.csproj">
       <Aliases>UpdSvc</Aliases>
     </ProjectReference>
+    <!-- Aliased so the standalone runner's WireModels (RunLeaseAcquireRequest,
+         LogIngestRequest, ArtifactIngestRequest, ...) do not collide with the
+         backend's same-named server records. The RM-5 end-to-end test reaches
+         them via `extern alias Runner;`. -->
+    <ProjectReference Include="..\runner\AgentRunner.csproj">
+      <Aliases>Runner</Aliases>
+    </ProjectReference>
   </ItemGroup>
 
   <!-- Block 6: same library-type aliases as the app, so tests resolve the adopted

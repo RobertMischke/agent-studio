@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { TaskService } from './task.service';
+import { TaskService, orchestratorContextChatSegment } from './task.service';
 import { ErrorDialogService } from './error-dialog.service';
 import { JobsHubClient, type JobsHubHandlers } from './jobs-hub-client.service';
 
@@ -214,6 +214,66 @@ describe('TaskService', () => {
     expect(req.request.params.has('search')).toBe(false);
     expect(req.request.params.has('watchPath')).toBe(false);
     req.flush({ items: [], total: 0, offset: 0, limit: 50 });
+  });
+
+  // MC-2 (Concept §4): per-context transcript history. The side sheet derives
+  // a `project:<PROJ>` / `task:<PROJ>/<KEY>` context key from navigation and
+  // reads it through GET /api/runner/{contextKey}/orchestrator-chat.
+  it('reads a project-context transcript by context key', () => {
+    let received: string[] = [];
+    service.getOrchestratorChatByContext('project:Agent Studio').subscribe((r) => {
+      received = r.turns.map((t) => t.text);
+    });
+
+    const req = http.expectOne('/api/runner/project:Agent%20Studio/orchestrator-chat');
+    expect(req.request.method).toBe('GET');
+    req.flush({
+      project: 'Agent Studio',
+      turns: [{ id: '1', ts: '2026-07-09T00:00:00Z', role: 'user', text: 'board' }],
+    });
+
+    expect(received).toEqual(['board']);
+  });
+
+  it('reads a task-context transcript with proj + key as separate segments', () => {
+    service.getOrchestratorChatByContext('task:Agent Studio/AGT-1916').subscribe();
+
+    const req = http.expectOne('/api/runner/task:Agent%20Studio/AGT-1916/orchestrator-chat');
+    expect(req.request.method).toBe('GET');
+    req.flush({ project: 'Agent Studio', turns: [] });
+  });
+
+  it('sends a task-context message to the context route so it lands in its own thread', () => {
+    let reply = '';
+    service
+      .sendOrchestratorChatByContext('task:Agent Studio/AGT-1916', { text: 'where do you stand?' })
+      .subscribe((r) => {
+        reply = r.reply.text ?? '';
+      });
+
+    const req = http.expectOne('/api/runner/task:Agent%20Studio/AGT-1916/orchestrator-chat');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ text: 'where do you stand?' });
+    req.flush({
+      project: 'Agent Studio',
+      reply: { id: '2', ts: '2026-07-09T00:00:01Z', role: 'orchestrator', text: 'on the header' },
+    });
+
+    expect(reply).toBe('on the header');
+  });
+});
+
+describe('orchestratorContextChatSegment', () => {
+  it('encodes each id part while preserving the prefix and structural slash', () => {
+    expect(orchestratorContextChatSegment('project:Agent Studio')).toBe('project:Agent%20Studio');
+    expect(orchestratorContextChatSegment('task:Agent Studio/AGT-1916')).toBe(
+      'task:Agent%20Studio/AGT-1916',
+    );
+  });
+
+  it('falls back to a single encoded segment for unrecognized shapes', () => {
+    expect(orchestratorContextChatSegment('global')).toBe('global');
+    expect(orchestratorContextChatSegment('task:no-slash')).toBe('task%3Ano-slash');
   });
 });
 

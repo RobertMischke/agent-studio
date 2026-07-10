@@ -1,4 +1,4 @@
-import { ApplicationConfig, ErrorHandler, provideBrowserGlobalErrorListeners, isDevMode } from '@angular/core';
+import { ApplicationConfig, ENVIRONMENT_INITIALIZER, ErrorHandler, inject, provideBrowserGlobalErrorListeners, isDevMode } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideServiceWorker } from '@angular/service-worker';
 import { provideCodingAgentChat } from 'coding-agent-chat';
@@ -7,6 +7,7 @@ import { clientIdInterceptor } from './services/client-id.interceptor';
 import { offlineGuardInterceptor } from './services/offline-guard.interceptor';
 import { TaskReferenceNavigationService } from './services/task-reference-navigation.service';
 import { MediaLightboxService } from './services/media-lightbox.service';
+import { TaskReferenceMicrocardHydratorService } from './services/task-reference-microcard-hydrator.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -19,6 +20,11 @@ export const appConfig: ApplicationConfig = {
       taskReferences: TaskReferenceNavigationService,
       mediaLightbox: MediaLightboxService,
     }),
+    {
+      provide: ENVIRONMENT_INITIALIZER,
+      multi: true,
+      useValue: () => inject(TaskReferenceMicrocardHydratorService).start(),
+    },
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
       registrationStrategy: 'registerWhenStable:30000',

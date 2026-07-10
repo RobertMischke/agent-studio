@@ -79,6 +79,8 @@ public static class TimelineEventKinds
     public const string PromptCreated = "prompt_created";
     /// <summary>One CLI invocation started (start / continue / recovery).</summary>
     public const string AgentRunStarted = "agent_run_started";
+    /// <summary>A run switched to its configured fallback because primary quota was exhausted.</summary>
+    public const string QuotaFallbackActivated = "quota_fallback_activated";
     /// <summary>
     /// ADR-0052: the parallel pick-gate admitted this task into a runner slot.
     /// <see cref="TimelineEvent.Summary"/> carries the occupancy
@@ -168,6 +170,18 @@ public static class TimelineEventKinds
     /// by the run-detail panel. Emitted by the runner at run-finish.
     /// </summary>
     public const string ExecutionContext = "execution_context";
+    /// <summary>
+    /// The task-spawner post-step judged this task's change set relevant to
+    /// another project and created a follow-up card there (AGT-2028). Emitted on
+    /// the SOURCE task so its history shows the hand-off ("Spawned WEB-123 in
+    /// Website"); <see cref="TimelineEvent.Summary"/> reads the spawned key +
+    /// target project and <see cref="TimelineEvent.Details"/> carries
+    /// <c>targetProject</c> / <c>targetKey</c> / <c>targetJobId</c> / <c>reason</c>.
+    /// The spawned card gets its own <see cref="PromptCreated"/> entry and a
+    /// <c>relatedTo</c> reference back to this task. Reporting-only: the spawn
+    /// never changes the source task's lane decision.
+    /// </summary>
+    public const string TaskSpawned = "task_spawned";
     /// <summary>
     /// The task was completed out-of-band (operator chat, external agent, a
     /// remote host) and reconciled through

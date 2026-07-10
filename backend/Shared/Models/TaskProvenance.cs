@@ -92,6 +92,48 @@ public record TaskProvenanceMerge
 }
 
 /// <summary>
+/// Compact, always-on board-card merge signal (AGT-2046): does this task's work
+/// live in the integration branch (develop) and/or the release branch (main)?
+///
+/// <para>
+/// Computed batched + cached per repository by <c>BoardMergeStatusService</c>
+/// (O(repos) git spawns, NOT per card) and folded onto the board payload via
+/// <c>TaskInfo.MergeSignal</c>, so the kanban card can render a two-segment
+/// <c>[develop|main]</c> indicator without the per-task graph query the detail
+/// header pays (<see cref="TaskProvenanceView"/>). Uses the same
+/// worktree -&gt; develop -&gt; main semantics as the detail landed-state
+/// (ASS-1724): "in develop" == the task's anchor commit is an ancestor of
+/// develop; "in main" == an ancestor of main. Never persisted.
+/// </para>
+/// </summary>
+public record TaskMergeSignal
+{
+    /// <summary>The task's worktree branch name, for the card's branch chip + tooltip.</summary>
+    public string Branch { get; init; } = "";
+
+    /// <summary>True when the task's work is folded into the integration branch (develop).</summary>
+    public bool InIntegration { get; init; }
+
+    /// <summary>True when the task's work has reached the release branch (main).</summary>
+    public bool InRelease { get; init; }
+
+    /// <summary>Integration branch name the signal was computed against (usually "develop").</summary>
+    public string IntegrationBranch { get; init; } = "develop";
+
+    /// <summary>Release branch name the signal was computed against (usually "main").</summary>
+    public string ReleaseBranch { get; init; } = "main";
+
+    /// <summary>
+    /// Short SHA that proves the develop membership - the recorded develop-merge
+    /// commit when present, else the contained anchor. Null when not in develop.
+    /// </summary>
+    public string? IntegrationSha { get; init; }
+
+    /// <summary>Short SHA of the task anchor that reached main. Null when not in main.</summary>
+    public string? ReleaseSha { get; init; }
+}
+
+/// <summary>
 /// String constants for the derived landed-state. Kept as constants (not an enum)
 /// so the wire format stays a literal string, consistent with
 /// <see cref="CommitAttributionKinds"/> and <see cref="TaskTypes"/>.

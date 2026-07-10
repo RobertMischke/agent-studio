@@ -11,19 +11,33 @@
  * orchestrator `[steer]` line parser.
  */
 import {
-  parseActivityLog,
+  parseActivityLog as parseActivityLogLib,
   buildConversationTurns,
   type ActivityLogGroup,
   type ActivityLogKind,
 } from 'coding-agent-chat/core';
 import { CliOutputLine } from '../../../models/task.model';
+import { sanitizeProjectionLines } from './conversation-projection';
+
+/**
+ * Host wrapper around the library grouper. It runs the conversation-projection
+ * guard over the raw line buffer FIRST, so a raw stream-json transport frame
+ * can never reach the library's fallback branch (which would otherwise render
+ * the raw JSON as a `message` group title). Every app surface consumes this
+ * wrapper - the legacy activity-log Conversation/Trace views, the live-status
+ * derivation below, and the protocol pane's `buildConversationTurns` call - so
+ * the guard applies uniformly. See {@link sanitizeProjectionLines}.
+ */
+export function parseActivityLog(lines: CliOutputLine[]): ActivityLogGroup[] {
+  return parseActivityLogLib(sanitizeProjectionLines(lines));
+}
 
 export {
-  parseActivityLog,
   buildConversationTurns,
   type ActivityLogGroup,
   type ActivityLogKind,
 };
+export { sanitizeProjectionLines, INTERNAL_EVENT_MARKER, isInternalEventLine } from './conversation-projection';
 
 /**
  * The library exports `buildConversationTurns` but keeps its row types

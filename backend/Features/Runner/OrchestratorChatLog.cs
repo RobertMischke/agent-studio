@@ -222,6 +222,13 @@ public enum OrchestratorMessageKind
     /// </summary>
     QuotaExhausted,
     /// <summary>
+    /// A transient environmental fault (host file lock / MSB302x copy-lock,
+    /// network glitch) failed the run. The condition clears on its own, so the
+    /// orchestrator retries the task with exponential backoff before escalating -
+    /// this line marks the automatic retry, not a give-up (AGT-1944).
+    /// </summary>
+    EnvironmentalRetry,
+    /// <summary>
     /// A worktree-isolated run modified the shared main checkout. The runner
     /// skipped integration and surfaced the harness integrity violation.
     /// </summary>
@@ -278,6 +285,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.Quarantined       => "quarantined",
         OrchestratorMessageKind.ModelInvalid      => "model-invalid",
         OrchestratorMessageKind.QuotaExhausted    => "quota-exhausted",
+        OrchestratorMessageKind.EnvironmentalRetry => "environmental-retry",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
         OrchestratorMessageKind.IntegrationConflict => "integration-conflict",
@@ -306,6 +314,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.Quarantined       => "quarantined",
         OrchestratorMessageKind.ModelInvalid      => "model-invalid",
         OrchestratorMessageKind.QuotaExhausted    => "quota-exhausted",
+        OrchestratorMessageKind.EnvironmentalRetry => "environmental-retry",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
         OrchestratorMessageKind.IntegrationConflict => "integration-conflict",

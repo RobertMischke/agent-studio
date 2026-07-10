@@ -26,7 +26,7 @@ import { CliModelSelectorComponent } from '../../../../../components/cli-model-s
 import type { RunRecord } from '../../../../../features/run-timeline';
 import { deriveWatchdogPill } from '../watchdog-state';
 import { ActivityLogViewComponent } from '../../activity-log-view/activity-log-view';
-import { buildConversationTurns, parseActivityLog } from '../../activity-log.parser';
+import { buildConversationTurns, parseActivityLog, sanitizeProjectionLines } from '../../activity-log.parser';
 import { classifyOutcome, OutcomeAssessment, QuickReply } from '../../agent-outcome.util';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
 import { ClaudeSessionPollService } from '../../../../polling/services/claude-session-poll.service';
@@ -55,6 +55,7 @@ import { projectConversation } from 'coding-agent-chat/core';
 import type { ContextUsageSnapshot } from '../../../../../models/task.model';
 import { toChatContextUsage } from '../../../context-usage.mapper';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
+import { ResultViewComponent } from '../result-view/result-view.component';
 import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
 import { SourceViewerComponent, type SourceViewerRequest } from '../../source-viewer/source-viewer.component';
 import { MenuComponent } from '../../../../../components/menu';
@@ -149,6 +150,7 @@ interface InterimSummaryState {
     RunGitViewerComponent,
     VerboseDebugOverlayComponent,
     BeautifulResultsComponent,
+    ResultViewComponent,
     FileSourceHistoryComponent,
     SourceViewerComponent,
     MenuComponent,
@@ -579,21 +581,21 @@ export class ProtocolPaneComponent implements OnDestroy {
    * Progressive spinner label so a slow Haiku call doesn't look frozen.
    * The backend caps the call at HaikuTimeoutSeconds = 90 s; we
    * intentionally mirror that constant here. Tiers:
-   *   < 30 s         "Generating protocol..."
-   *   30 s ... 60 s  "Generating protocol... (>=30 s)"
-   *   >= 60 s        "Generating protocol... (>=60 s, will time out)"
+   *   < 30 s         "Generating the result..."
+   *   30 s ... 60 s  "Generating the result... (>=30 s)"
+   *   >= 60 s        "Generating the result... (>=60 s, will time out)"
    * Re-evaluates on every NowTickService tick while summaryStatus is
    * 'generating'; falls back to the base label as soon as the state
    * flips to ready or failed.
    */
   readonly summarySpinnerLabel = computed<string>(() => {
-    if (this.summaryStatus() !== 'generating') return 'Generating protocol...';
+    if (this.summaryStatus() !== 'generating') return 'Generating the result...';
     const startedAtIso = this.detail().summaryState?.startedAt;
-    if (!startedAtIso) return 'Generating protocol...';
+    if (!startedAtIso) return 'Generating the result...';
     const elapsed = (this.nowTick() - new Date(startedAtIso).getTime()) / 1000;
-    if (elapsed >= 60) return 'Generating protocol... (>=60 s, will time out)';
-    if (elapsed >= 30) return 'Generating protocol... (>=30 s)';
-    return 'Generating protocol...';
+    if (elapsed >= 60) return 'Generating the result... (>=60 s, will time out)';
+    if (elapsed >= 30) return 'Generating the result... (>=30 s)';
+    return 'Generating the result...';
   });
 
   /**
@@ -1031,7 +1033,10 @@ export class ProtocolPaneComponent implements OnDestroy {
     }));
     return projectConversation({
       source: info.id,
-      lines: filtered,
+      // Guard the next-gen projection the same way the legacy path is guarded:
+      // strip raw stream-json transport frames before the library classifies
+      // them, so no raw JSON reaches the chat. See sanitizeProjectionLines.
+      lines: sanitizeProjectionLines(filtered),
       task: info,
       runTimeline: this.runTimeline(),
       tokenSummary: info.tokenSummary ?? null,

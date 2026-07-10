@@ -32,6 +32,16 @@ public sealed record OutcomeAction(
     public RunIssueKind IssueKind { get; init; } = RunIssueKind.None;
     public OrchestratorMessageKind MessageKind { get; init; } = OrchestratorMessageKind.Decision;
     public bool IsPreframedRetryPrompt { get; init; }
+
+    /// <summary>
+    /// How long the runner should wait before running a
+    /// <see cref="OutcomeActionKind.ReissueWithStrongerFraming"/> retry.
+    /// <see cref="TimeSpan.Zero"/> (the default) means retry immediately. Set for
+    /// environmental retries so a transient host file lock / network glitch gets
+    /// real wall-clock time to clear before the re-run (AGT-1944 environmental
+    /// retry-with-backoff). Ignored for non-reissue actions.
+    /// </summary>
+    public TimeSpan RetryBackoff { get; init; } = TimeSpan.Zero;
 }
 
 /// <summary>
@@ -257,21 +267,82 @@ public static class RunOutcomePolicy
             };
         }
 
+        if (outcome.IssueKind == RunIssueKind.EnvironmentalTransient)
+        {
+            // A transient host file lock (MSB302x copy-lock family) or network
+            // glitch. Unlike EnvironmentBlocker the condition clears on its own,
+            // so RETRY with exponential backoff before escalating: the code was
+            // not the problem, and re-running after the lock releases / the
+            // network recovers usually succeeds. Only once the bounded retry
+            // budget is spent do we route to human review, flagged environmental
+            // so a reviewer does not read an infra blip as a failed change
+            // (AGT-1944 environmental retry-with-backoff).
+            var retry = PostProcessingOutcomeTaxonomy.DecideEnvironmentalRetry(
+                RunIssueKind.EnvironmentalTransient, reissueAttempt);
+            if (retry.Action == EnvironmentalRetryAction.RetryWithBackoff)
+            {
+                return new OutcomeAction(
+                    Kind: OutcomeActionKind.ReissueWithStrongerFraming,
+                    MetaMessage: $"The run failed on a transient environmental fault (host file lock / network), not on the change. Retrying after a {FormatBackoff(retry.Backoff)} backoff (attempt {retry.Attempt}).",
+                    IsHeuristicFallback: false,
+                    FollowupRetryPrompt: BuildEnvironmentalRetryPrompt(outcome, priorCommits),
+                    RetryAttempt: retry.Attempt)
+                {
+                    IssueKind = RunIssueKind.EnvironmentalTransient,
+                    MessageKind = OrchestratorMessageKind.EnvironmentalRetry,
+                    IsPreframedRetryPrompt = true,
+                    RetryBackoff = retry.Backoff
+                };
+            }
+
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndStop,
+                MetaMessage: outcome.Summary
+                    ?? "A transient environmental fault (host file lock / network) persisted after automatic retries. Routing to human review flagged environmental.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.EnvironmentalTransient,
+                MessageKind = OrchestratorMessageKind.EnvironmentBlocker
+            };
+        }
+
         if (outcome.IssueKind == RunIssueKind.CliLaunchFailed)
         {
-            // The agent CLI failed to launch or its --resume target was
-            // rejected before any agent turn happened (exit != 0, ~0s, only a
-            // CLI error fragment). This is a recoverable host/CLI condition,
-            // NOT an agent decision and NEVER a terminal inconclusive
-            // FAILURE. The runner has already cleared the dead session id and
-            // marked the session chain for Recovery, so the next pickup
-            // rebuilds from disk. We accept the run quietly with a typed
-            // marker (no crash modal, no "could not classify" dead-end) and
-            // let that existing recovery machinery drive the rebuild.
+            // The agent CLI failed to launch or its --resume target was rejected
+            // before any agent turn happened (exit != 0, ~0s, only a CLI error
+            // fragment). This is a recoverable host/CLI condition (a dead session
+            // after a backend restart, a rejected resume id), NOT an agent
+            // decision. The category's own copy promises "rebuilding from disk on
+            // the next attempt" - so MAKE that next attempt instead of parking to
+            // 5e: one automatic fresh-start retry (the runner has already cleared
+            // the dead session id / marked the chain for Recovery, so the re-run
+            // rebuilds from disk), and escalate to human review only if the fresh
+            // start also fails. Fixes the belege where a resume loss after a
+            // restart cost a whole cycle by escalating on first detection
+            // (AGT-1945/1929/1930).
+            var retry = PostProcessingOutcomeTaxonomy.DecideEnvironmentalRetry(
+                RunIssueKind.CliLaunchFailed, reissueAttempt);
+            if (retry.Action == EnvironmentalRetryAction.RetryWithBackoff)
+            {
+                return new OutcomeAction(
+                    Kind: OutcomeActionKind.ReissueWithStrongerFraming,
+                    MetaMessage: outcome.Summary
+                        ?? "The agent CLI could not launch or resume the prior session. Rebuilding from disk and retrying once before escalating.",
+                    IsHeuristicFallback: false,
+                    FollowupRetryPrompt: BuildCliLaunchRetryPrompt(priorCommits),
+                    RetryAttempt: retry.Attempt)
+                {
+                    IssueKind = RunIssueKind.CliLaunchFailed,
+                    MessageKind = OrchestratorMessageKind.CliLaunchFailed,
+                    IsPreframedRetryPrompt = true
+                    // No backoff: a fresh start after a dead session should run
+                    // promptly; the launch failure is not a rate/resource fault.
+                };
+            }
+
             return new OutcomeAction(
-                Kind: OutcomeActionKind.NotifyUserAndAccept,
-                MetaMessage: outcome.Summary
-                    ?? "The agent CLI could not launch or resume the prior session. The orchestrator will rebuild from disk on the next attempt.",
+                Kind: OutcomeActionKind.NotifyUserAndStop,
+                MetaMessage: "The agent CLI could not launch or resume even after an automatic fresh-start retry. Routing to human review.",
                 IsHeuristicFallback: false)
             {
                 IssueKind = RunIssueKind.CliLaunchFailed,
@@ -584,6 +655,42 @@ public static class RunOutcomePolicy
          + "[[TASK_DONE]] (or [[TASK_BLOCKED:<short reason>]] if you truly cannot finish). "
          + $"The orchestrator's summary of your previous turn was: {outcome.Summary ?? "unclassified"}."
          + RenderPriorCommitsBlock(priorCommits);
+
+    /// <summary>
+    /// Retry prompt for a transient environmental fault (host file lock /
+    /// network glitch). Tells the agent the fault was the environment - not its
+    /// changes - and to resume the open work rather than redo committed work.
+    /// Kept next to the policy that decides to retry so they move together.
+    /// </summary>
+    public static string BuildEnvironmentalRetryPrompt(AgentOutcome outcome, IReadOnlyList<string>? priorCommits = null)
+        => DiffOnlySteeringRule + "\n\n"
+         + "The previous attempt failed on a TRANSIENT environmental fault (a host file lock or a network glitch), "
+         + "not on your changes. The condition has cleared. Resume the open work and finish it. "
+         + "When the work is genuinely complete, end with exactly one terminal sentinel on its own line: "
+         + "[[TASK_DONE]] (or [[TASK_BLOCKED:<short reason>]] if you truly cannot finish). "
+         + $"The previous run's diagnosis was: {outcome.Summary ?? "transient environmental fault"}."
+         + RenderPriorCommitsBlock(priorCommits);
+
+    /// <summary>
+    /// Fresh-start prompt for a CLI launch / resume failure. There is no
+    /// conversation history to resume, so the agent must rebuild its context from
+    /// the job folder on disk and carry out the task from there. Used for the one
+    /// automatic fresh-start retry before a launch failure escalates.
+    /// </summary>
+    public static string BuildCliLaunchRetryPrompt(IReadOnlyList<string>? priorCommits = null)
+        => DiffOnlySteeringRule + "\n\n"
+         + "The previous attempt could not launch or resume its CLI session, so there is no conversation history. "
+         + "Rebuild your context from the job folder on disk (prompt.md, status.md, logs/) and carry out the task it "
+         + "describes, end to end. Do not treat the missing history as a reason to stop. "
+         + "When you finish, end with exactly one terminal sentinel on its own line: "
+         + "[[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]]."
+         + RenderPriorCommitsBlock(priorCommits);
+
+    /// <summary>Human-readable backoff, e.g. "30 s" or "2 min", for a meta message.</summary>
+    private static string FormatBackoff(TimeSpan backoff)
+        => backoff.TotalSeconds >= 60
+            ? $"{backoff.TotalMinutes:0.#} min"
+            : $"{backoff.TotalSeconds:0} s";
 
     public static string BuildPermissionInterventionPrompt()
         => "The previous attempt hit one or more tool permission errors. "

@@ -68,6 +68,8 @@
                                        [content]="promptContent()"
                                        [dense]="true" />
             }
+          } @else if (isAspectJson(file) && aspectDoc(file); as doc) {
+            <app-aspect-json-card class="file-card__aspect-json" [doc]="doc" />
           } @else {
             @if (isLoading(file.name)) {
               <div class="file-card__loading">Loading…</div>
@@ -87,6 +89,13 @@
         <div class="file-card__preview">
           @if (isLoading(file.name)) {
             <div class="file-card__loading">Loading preview…</div>
+          } @else if (isAspectJson(file) && aspectDoc(file); as doc) {
+            <app-aspect-json-card class="file-card__aspect-json" [doc]="doc" [compact]="true" />
+            <button type="button" class="file-card__expand-link"
+                    [attr.data-testid]="'file-card-expand-' + file.name"
+                    (click)="toggleExpanded(file.name)">
+              Show details
+            </button>
           } @else if (preview(file); as text) {
             <div class="file-card__preview-rendered">
               <cac-markdown [source]="text" [dense]="true" />

@@ -14,7 +14,9 @@
      [attr.data-project]="job().projectName"
      [attr.data-running]="isRunning() ? 'true' : null"
      [attr.data-compact]="compact() ? 'true' : null"
-     (contextmenu)="openCardContextMenu($event)">
+     tabindex="0"
+     (contextmenu)="openCardContextMenu($event)"
+     (keydown)="onCardKeyDown($event)">
   <div class="task-card__header">
     <span class="task-card__key-chip" data-testid="task-card-key" [cacTooltip]="'Task key: ' + issueLabel()">
       {{ issueLabel() }}
@@ -54,12 +56,6 @@
       }
       </span>
   </div>
-  <button type="button"
-          class="task-card__delete"
-          data-testid="task-card-delete"
-          [cacTooltip]="'Delete task'"
-          aria-label="Delete task"
-          (click)="onDeleteClick($event)">🗑</button>
   <h3 class="task-card__title"
       [appTaskStatusPopover]="job()"
       data-testid="task-card-title">
@@ -108,12 +104,16 @@
         <span class="task-card__mode-glyph" aria-hidden="true">{{ mb.icon }}</span> {{ mb.label }}
       </span>
     }
-    @if (waitingOnLabel(); as wol) {
-      <span class="task-card__waiting-pill"
-            [cacTooltip]="waitingOnTooltip()"
-            data-testid="task-card-waiting-on">
-        ⏳ waiting on {{ wol }}
-      </span>
+    @if (dependencyChip(); as dep) {
+      <button type="button"
+              class="task-card__waiting-pill"
+              [class]="'task-card__waiting-pill--' + dep.tone"
+              [cacTooltip]="dep.tooltip"
+              [attr.data-tone]="dep.tone"
+              data-testid="task-card-waiting-on"
+              (click)="navigateToDependency(dep, $event)">
+        <span class="task-card__waiting-glyph" aria-hidden="true">{{ dep.glyph }}</span> {{ dep.label }}
+      </button>
     }
     @if (humanReviewBadge(); as hrb) {
       <span class="task-card__human-review-pill"
@@ -178,9 +178,10 @@
     @if (outcomeIssueBadge(); as oib) {
       <span class="task-card__issue-pill"
             [class]="'task-card__issue-pill--' + oib.tone"
+            [class.task-card__issue-pill--historical]="oib.historical"
             [cacTooltip]="oib.tooltip"
             data-testid="task-card-outcome-issue">
-        {{ oib.label }}
+        @if (oib.historical) { <span aria-hidden="true">↺</span> } {{ oib.label }}
       </span>
     }
     @if (codeReviewRunning()) {
@@ -216,6 +217,15 @@
         }
         <span class="task-card__effective-model-name">{{ effectiveModelChip().label }}</span>
       </span>
+      @if (runnerBadge(); as rn) {
+        <span class="task-card__runner-pill"
+              [class]="'task-card__runner-pill--' + rn.kind"
+              data-testid="task-card-runner"
+              [attr.data-runner-kind]="rn.kind"
+              [cacTooltip]="rn.tooltip">
+          @if (rn.glyph) { <span class="task-card__runner-glyph" aria-hidden="true">{{ rn.glyph }}</span> }{{ rn.label }}
+        </span>
+      }
       @if (externalDoneBadge(); as edb) {
         <span class="task-card__external-pill"
               [cacTooltip]="edb.tooltip"
@@ -310,11 +320,21 @@
               [class.task-card__tag-chip--ghost]="tg.ghost && !tg.concern && !tg.unparseable"
               [class.task-card__tag-chip--concern]="tg.concern"
               [class.task-card__tag-chip--unparseable]="tg.unparseable"
+              [class.task-card__tag-chip--historical]="tg.historical"
               [attr.data-tag-id]="tg.id"
+              [attr.data-history]="tg.historical ? 'true' : null"
               [attr.data-testid]="tg.concern ? 'task-card-concern-chip' : (tg.unparseable ? 'task-card-unparseable-chip' : null)"
               [style.--tag-color]="tg.color"
-              [cacTooltip]="tg.tooltip">@if (tg.concern) { <span class="task-card__tag-chip-warn" aria-hidden="true">⚠</span> } @else if (tg.unparseable) { <span class="task-card__tag-chip-unparseable-glyph" aria-hidden="true">📝</span> }{{ tg.label }}</span>
+              [cacTooltip]="tg.tooltip">@if (tg.concern) { <span class="task-card__tag-chip-warn" aria-hidden="true">⚠</span> } @else if (tg.unparseable) { <span class="task-card__tag-chip-unparseable-glyph" aria-hidden="true">📝</span> } @else if (tg.historyGlyph) { <span class="task-card__tag-chip-history-glyph" aria-hidden="true">{{ tg.historyGlyph }}</span> }{{ tg.label }}</span>
       }
+    </div>
+  }
+  @if (publishableChip(); as pub) {
+    <div class="task-card__publishable" data-testid="task-card-publishable">
+      <span class="task-card__publishable-chip"
+            [cacTooltip]="'Accepted task work is publishable via: ' + pub.text + '.'">
+        <span class="task-card__publishable-label">publishable:</span> {{ pub.text }}
+      </span>
     </div>
   }
   @if (isEpic() && epicExpanded()) {
@@ -354,10 +374,31 @@
          [cacTooltip]="ch.tooltip"
          data-testid="task-card-change-context">
       <div class="task-card__change-head">
+        @if (mergeSignal(); as ms) {
+          <span class="task-card__merge-signal"
+                data-testid="task-card-merge-signal"
+                [attr.data-develop]="ms.develop.merged ? 'true' : 'false'"
+                [attr.data-main]="ms.main.merged ? 'true' : 'false'"
+                role="img"
+                [attr.aria-label]="ms.ariaLabel"
+                [cacTooltip]="ms.tooltip">
+            <span class="task-card__merge-seg task-card__merge-seg--develop"
+                  [class.task-card__merge-seg--on]="ms.develop.merged"
+                  data-seg="develop"
+                  aria-hidden="true">{{ ms.develop.short }}</span>
+            <span class="task-card__merge-seg task-card__merge-seg--main"
+                  [class.task-card__merge-seg--on]="ms.main.merged"
+                  data-seg="main"
+                  aria-hidden="true">{{ ms.main.short }}</span>
+          </span>
+        }
         <span class="task-card__change-ref"
               [attr.data-testid]="ch.kind === 'worktree' ? 'task-card-git' : 'task-card-git-state'"
               [attr.data-git-state]="gitStateBadge()?.kind">
-          <span class="task-card__change-ref-label">{{ ch.label }}</span>
+          <span class="task-card__change-ref-icon"
+                [cacTooltip]="ch.refTooltip"
+                role="img"
+                [attr.aria-label]="ch.refTooltip">{{ ch.refIcon }}</span>
           @if (ch.value) {
             <span class="task-card__change-ref-value" data-truncatable>{{ ch.value }}</span>
           }

@@ -255,6 +255,12 @@ builder.Services.AddSingleton<AutoReviewPostProcessingQueue>();
 builder.Services.AddSingleton<IAutoReviewPostProcessingQueue>(sp =>
     sp.GetRequiredService<AutoReviewPostProcessingQueue>());
 builder.Services.AddSingleton<TaskProvenanceService>();
+builder.Services.AddSingleton<BoardMergeStatusService>();
+// PUB-1: read-only publish-target derivation (repo facts -> Hub badges + task
+// chips). PublishTargetService derives + caches per project; TaskPublishableService
+// folds the per-task chip signal onto accepted cards (O(projects), no per-card git).
+builder.Services.AddSingleton<PublishTargetService>();
+builder.Services.AddSingleton<TaskPublishableService>();
 builder.Services.AddSingleton<TaskTransitionService>();
 // Out-of-band task completion (docs/concepts/out-of-band-task-completion.md §3):
 // reconciles a task finished outside the runner in one atomic call.
@@ -341,6 +347,10 @@ builder.Services.AddSingleton<SystemKeepAwake>(sp =>
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<CrashRecoveryService>();
 builder.Services.AddSingleton<StaleProgressArchiver>();
+// Run-Liveness Slice A: the phase-aware "no zombie survives 60s" monitor
+// (boot adoption scan + uptime sweep). See
+// docs/concepts/run-liveness-and-slot-semantics.md.
+builder.Services.AddSingleton<RunLivenessMonitor>();
 builder.Services.AddSingleton<PickupFailureLog>();
 builder.Services.AddSingleton<InfraHaltLog>();
 builder.Services.AddSingleton<CrossSlugInfraCircuitBreaker>();
@@ -405,6 +415,12 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.IBuildTestGateRunner,
     AgentStudio.Pipeline.BuildTestGateRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiMaintenancePostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiLearningsPostStepRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.WikiTaskCrossReferenceService>();
+// Opt-in task-spawner post-step (AGT-2028): relevance judgment + follow-up
+// card creation into a configured target project. Injected into the review
+// orchestrator; default-OFF per project (ProjectSettings.TaskSpawner + the
+// post-task-spawner pipeline-step enable flag).
+builder.Services.AddSingleton<AgentStudio.Pipeline.TaskSpawnerPostStepRunner>();
 builder.Services.AddSingleton<AspectRunnerService>();
 builder.Services.AddSingleton<AgentStudio.Review.CodeReviewStepService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactCommitService>();
@@ -421,7 +437,9 @@ builder.Services.AddHostedService<AutoReviewPostProcessingWorker>();
 builder.Services.AddSingleton<IntakeRunner>();
 builder.Services.AddHostedService<IntakeHostedService>();
 builder.Services.AddSingleton<GitService>();
+builder.Services.AddSingleton<AgentStudio.Search.GlobalSearchService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
+builder.Services.AddSingleton<GitCleanupService>();
 // Slice P (ASS-1663): build-profile onboarding validation dry-run.
 builder.Services.AddSingleton<IBuildCommandRunner, ProcessBuildCommandRunner>();
 builder.Services.AddSingleton<BuildProfileValidationService>();
@@ -432,6 +450,13 @@ builder.Services.AddSingleton<BuildProfileValidationService>();
 builder.Services.AddSingleton<CompletedPushQueue>();
 builder.Services.AddHostedService<CompletedPushWorker>();
 builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
+// AGT-1999: the "Merge into Develop" post-step pushes the integration branch to
+// origin after a successful merge, off the accept-transition request path.
+// MergeIntoDevelopRunner enqueues here (instant); IntegrationPushWorker drains and
+// performs the git push with the AGT-1944 environmental retry. Same offload shape
+// as the completed-job workspace push above.
+builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
+builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
 // Periodic reap of orphaned CLI process trees (codex/node) that a finished or
 // crashed run left behind. Closes the days-long accumulation gap the startup
 // reaper alone cannot: those survivors hold job-folder handles and wedge the
@@ -441,6 +466,10 @@ builder.Services.AddHostedService<OrphanReaperHostedService>();
 // 3-progress folders; this closes the gap where a folder crosses the resume
 // window while the backend stays up.
 builder.Services.AddHostedService<StaleProgressSweepHostedService>();
+// Runtime run-liveness sweep (Run-Liveness Slice A). Demotes a 3-progress card
+// within the 60s budget when its owning run dies while the backend stays up;
+// the boot adoption scan below handles zombies already present at startup.
+builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();
 builder.Services.AddSingleton<AgentDocsReadAnalyticsService>();
@@ -455,6 +484,7 @@ builder.Services.AddSingleton<IQuotaProbe, AntigravityQuotaProbe>();
 builder.Services.AddSingleton<QuotaCacheStore>();
 builder.Services.AddSingleton<QuotaService>();
 builder.Services.AddSingleton<CliQuotaCapsService>();
+builder.Services.AddSingleton<CliQuotaFallbackService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskWatcherService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
 // F22: server-rendered conversation projection. The projector serves the
@@ -607,6 +637,25 @@ catch (Exception ex)
 // LaneMutexRegistry, so even an accidental reorder cannot produce a
 // concurrent rename against the same slug - the sequential ordering is
 // belt-and-braces.
+// Run-Liveness Slice A boot adoption scan (Rule 4, "no zombie survives 60s"):
+// every 3-progress card without a live run-heartbeat is acted on immediately.
+// This is the authoritative, PHASE-AWARE handler for the after-restart zombie
+// wave (belegt AGT-1811/1914/1941) and runs BEFORE CrashRecoveryService so the
+// blanket stale-lock requeue never mis-handles the AGT-1932 case (run finished
+// AND merged, only post-processing died): the adoption scan demotes an
+// interrupted execution run to 2-ready (clearing the resume pointer to break the
+// "No conversation found" launch-fail chain) but re-triggers post-processing for
+// a finished run instead of re-running the completed agent. Sync wait is
+// intentional: the runner must see the adopted state on its first scan.
+try
+{
+    app.Services.GetRequiredService<RunLivenessMonitor>().AdoptOnBootAsync().GetAwaiter().GetResult();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("RunLivenessMonitor.AdoptOnBoot", ex);
+}
+
 try
 {
     app.Services.GetRequiredService<CrashRecoveryService>().RecoverAsync().GetAwaiter().GetResult();
@@ -786,6 +835,40 @@ _ = app.Services.GetRequiredService<AgentStudio.TaskAccess.ITaskAccessHost>()
             warmupLogger.LogWarning("bus-warmup-failure project={Project} error={Error}", kv.Key, kv.Value);
         }
     }
+}
+
+// Best-effort Codex model-catalog warm-up (AGT-2025). Publishing the detected
+// default (gpt-5.6-* when the installed CLI advertises it) into
+// ModelMetadataRegistry makes new-task creation resolve the current default
+// before the first UI catalog fetch. Fire-and-forget so a slow or absent codex
+// CLI never delays boot; discovery's own disk-cache TTL means a warm cache
+// skips the PTY spawn, and any failure just leaves the gpt-5.5 baseline in
+// place. Skipped under the test host and when explicitly opted out so the
+// integration suite never spawns a real codex process.
+if (!app.Environment.IsEnvironment("Test")
+    && !app.Environment.IsEnvironment("Testing")
+    && app.Configuration.GetValue("CodexModels:WarmupOnBoot", true))
+{
+    _ = Task.Run(async () =>
+    {
+        var codexWarmupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var router = app.Services.GetRequiredService<CliRouter>();
+            var catalog = await router.Get(CliTypes.Codex).GetModelCatalogAsync(false, cts.Token);
+            codexWarmupLogger.LogInformation(
+                "codex-model-warmup-complete models={ModelCount} detectedDefault={DetectedDefault} source={Source}",
+                catalog.Models?.Count ?? 0,
+                ModelMetadataRegistry.DetectedCodexDefault ?? "<none>",
+                catalog.Source);
+        }
+        catch (Exception ex)
+        {
+            codexWarmupLogger.LogInformation(
+                "codex-model-warmup-skipped reason={Reason}", ex.GetType().Name + ": " + ex.Message);
+        }
+    });
 }
 
 // Wire TaskTransitionService move events to atomically clear the per-project

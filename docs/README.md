@@ -35,6 +35,7 @@ Use this page as the first stop when you need the right document quickly.
 | Pipeline | [domains/pipeline.md](domains/pipeline.md) |
 | Tasks | [domains/tasks.md](domains/tasks.md) |
 | Frontend | [domains/frontend.md](domains/frontend.md) |
+| Global search palette and API | [domains/frontend.md#global-search](domains/frontend.md#global-search) |
 | Frontend navigation style guide | [frontend/style-guide/navigation.md](frontend/style-guide/navigation.md) |
 | CLI | [domains/cli.md](domains/cli.md) |
 | Tokens | [domains/tokens.md](domains/tokens.md) |
@@ -43,7 +44,11 @@ Use this page as the first stop when you need the right document quickly.
 | Agent message bus | [architecture/bus/agent-message-bus.md](architecture/bus/agent-message-bus.md) |
 | UX doctrine | [product/design-principles.md](product/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](product/orchestrator-chat.md) |
-| Engineering Workstream frame | [concepts/engineering-workstream.md](concepts/engineering-workstream.md) |
+| Workstream frame (top wiki element; internal name engineering-workstream) | [concepts/engineering-workstream.md](concepts/engineering-workstream.md) |
+| Wiki Pulse dashboard (change feed + inbox + drift grading; PULSE-1) | [concepts/wiki-pulse-dashboard.md](concepts/wiki-pulse-dashboard.md) |
+| Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](concepts/run-liveness-and-slot-semantics.md) |
+| Result view and case templates | [concepts/result-view-and-case-templates.md](concepts/result-view-and-case-templates.md) |
+| Publishing workflows (publish-target derivation + pending badges; PUB-1) | [concepts/publishing-workflows.md](concepts/publishing-workflows.md) |
 | Wiki classification | [product/wiki-document-classification.md](product/wiki-document-classification.md) |
 | Wiki editing flow | [product/wiki-editing-and-branch-flow.md](product/wiki-editing-and-branch-flow.md) |
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](schemas/wiki-document-companion.schema.json) |
@@ -51,6 +56,7 @@ Use this page as the first stop when you need the right document quickly.
 | Supported CLIs | [cli/supported-clis.md](cli/supported-clis.md) |
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](operations/setup/getting-started.md) |
 | Setup | [operations/setup/README.md](operations/setup/README.md) |
+| Standalone remote runner (Linux host) | [operations/setup/linux-runner-host.md](operations/setup/linux-runner-host.md) |
 | Common problems | [wiki/common-problems/README.md](wiki/common-problems/README.md) |
 | API project identity / watchPath | [wiki/concepts/api-project-identity-and-watchpath.md](wiki/concepts/api-project-identity-and-watchpath.md) |
 | Orchestrator drive-to-conclusion & CLI-crash resilience | [wiki/concepts/orchestrator-drive-to-conclusion.html](wiki/concepts/orchestrator-drive-to-conclusion.html) |

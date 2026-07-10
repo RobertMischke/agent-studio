@@ -30,15 +30,26 @@ public sealed class MergeIntoDevelopRunner
     private readonly GitService _git;
     private readonly PipelineExecutionLog _pipelineLog;
     private readonly ILogger<MergeIntoDevelopRunner> _logger;
+    private readonly IntegrationPushQueue? _pushQueue;
+    private readonly ProjectSettingsService? _projectSettings;
+    private readonly Func<int, TimeSpan> _environmentalBackoff;
 
     public MergeIntoDevelopRunner(
         GitService git,
         PipelineExecutionLog pipelineLog,
-        ILogger<MergeIntoDevelopRunner> logger)
+        ILogger<MergeIntoDevelopRunner> logger,
+        IntegrationPushQueue? pushQueue = null,
+        ProjectSettingsService? projectSettings = null,
+        Func<int, TimeSpan>? environmentalBackoff = null)
     {
         _git = git;
         _pipelineLog = pipelineLog;
         _logger = logger;
+        _pushQueue = pushQueue;
+        _projectSettings = projectSettings;
+        // Default to the AGT-1944 environmental backoff (30s, 120s, cap 5min); a
+        // test injects a zero backoff so it does not sleep between retries.
+        _environmentalBackoff = environmentalBackoff ?? PostProcessingOutcomeTaxonomy.RetryBackoff;
     }
 
     /// <summary>
@@ -75,6 +86,17 @@ public sealed class MergeIntoDevelopRunner
                 "merge-into-develop project={Project} job={JobId} task={Task} integration={Integration} outcome={Outcome}",
                 project, jobId, taskBranch, branch, result.Outcome);
             Record(jobFolderPath, project, jobId, result, startedAt);
+
+            // AGT-1999: once the accepted task is folded into the integration
+            // branch, push that branch to origin so integration is never only
+            // local. Offloaded to the background worker (the same "not on the
+            // request path" strategy as the completed-job workspace push), so the
+            // accept transition never awaits the network round-trip.
+            if (result.Outcome is MergeIntoIntegrationOutcome.Merged or MergeIntoIntegrationOutcome.AlreadyMerged)
+            {
+                MaybeEnqueueIntegrationPush(project, jobId, jobFolderPath, watchPath, integrationBranch);
+            }
+
             return result;
         }
         catch (Exception ex)
@@ -85,6 +107,212 @@ public sealed class MergeIntoDevelopRunner
             return errored;
         }
     }
+
+    /// <summary>
+    /// Enqueues the integration-branch push onto the background
+    /// <see cref="IntegrationPushQueue"/> when one is wired (production) and the
+    /// push step is enabled for the project. No queue means no offload wiring
+    /// (the unit-test fixtures) - <see cref="Run"/> then stays merge-only and a
+    /// test drives <see cref="PushIntegrationBranchAsync"/> directly. Never
+    /// throws: the merge has already landed and the push is best-effort.
+    /// </summary>
+    private void MaybeEnqueueIntegrationPush(
+        string project, string jobId, string jobFolderPath, string? watchPath, string integrationBranch)
+    {
+        if (_pushQueue == null) return;
+        if (!IntegrationPushEnabled(project))
+        {
+            _logger.LogInformation(
+                "merge-into-develop push disabled for project={Project} job={JobId}; leaving origin unchanged",
+                project, jobId);
+            return;
+        }
+
+        var enqueued = _pushQueue.Enqueue(new IntegrationPushRequest(project, jobId, jobFolderPath, watchPath, integrationBranch));
+        if (enqueued)
+            _logger.LogInformation(
+                "merge-into-develop push enqueued for project={Project} job={JobId} branch={Branch}",
+                project, jobId, integrationBranch);
+        else
+            _logger.LogWarning(
+                "merge-into-develop push enqueue failed (queue closed) for project={Project} job={JobId}",
+                project, jobId);
+    }
+
+    /// <summary>
+    /// True unless the operator disabled the deferred push step for this project
+    /// (<see cref="PipelineCatalogue.MergeIntoDevelopPushStepId"/>, default on).
+    /// A missing settings service (legacy fixtures) defaults to on.
+    /// </summary>
+    private bool IntegrationPushEnabled(string project)
+    {
+        if (_projectSettings == null) return true;
+        try
+        {
+            var settings = _projectSettings.Get(project);
+            return PipelineStepConfigResolver.IsEnabled(settings, PipelineCatalogue.MergeIntoDevelopPushStepId);
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "MergeIntoDevelopRunner: push-enabled read is best-effort; default on");
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Pushes the integration branch to <c>origin</c> and records the deferred
+    /// <see cref="PipelineCatalogue.MergeIntoDevelopPushStepId"/> step outcome.
+    /// This is the offloaded body the <see cref="IntegrationPushWorker"/> runs
+    /// (and tests drive directly). A transient failure is classified environmental
+    /// and retried with backoff per the AGT-1944 taxonomy; once the retry budget
+    /// is spent the step is recorded <see cref="PipelineStepStatus.Failed"/>
+    /// flagged <c>environmental</c> so a reviewer does not read an infra blip as a
+    /// failed change. Never throws (except on cooperative cancellation).
+    /// </summary>
+    public async Task<GitPushResult> PushIntegrationBranchAsync(
+        string project,
+        string jobId,
+        string jobFolderPath,
+        string? watchPath,
+        string integrationBranch,
+        CancellationToken ct = default)
+    {
+        var startedAt = DateTime.UtcNow;
+        GitPushResult result;
+        var environmentalRetries = 0;
+        try
+        {
+            var repoRoot = _git.ResolveRepoRootForWatchPath(watchPath)
+                ?? (string.IsNullOrWhiteSpace(watchPath) ? null : watchPath);
+            if (string.IsNullOrWhiteSpace(repoRoot))
+            {
+                result = new GitPushResult(false, string.Empty, "repo-missing", "Could not resolve repository root for the integration push.");
+            }
+            else
+            {
+                var branch = _git.ResolveIntegrationBranch(repoRoot, integrationBranch);
+                while (true)
+                {
+                    result = await _git.PushIntegrationBranchAsync(repoRoot, branch, ct);
+                    if (result.Success) break;
+
+                    var issue = ClassifyPushFailure(result.Status);
+                    if (!PostProcessingOutcomeTaxonomy.IsRetryableEnvironmental(issue)) break;
+
+                    var decision = PostProcessingOutcomeTaxonomy.DecideEnvironmentalRetry(issue, environmentalRetries);
+                    if (decision.Action != EnvironmentalRetryAction.RetryWithBackoff) break;
+
+                    environmentalRetries = decision.Attempt;
+                    var backoff = _environmentalBackoff(environmentalRetries);
+                    _logger.LogWarning(
+                        "merge-into-develop push failed (environmental {Status}) project={Project} job={JobId} branch={Branch}; {Reason} (backoff {Backoff})",
+                        result.Status, project, jobId, branch, decision.Reason, backoff);
+                    if (backoff > TimeSpan.Zero)
+                    {
+                        try { await Task.Delay(backoff, ct); }
+                        catch (OperationCanceledException) { break; }
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "merge-into-develop push threw for project={Project} job={JobId}", project, jobId);
+            result = new GitPushResult(false, string.Empty, "error", ex.Message);
+        }
+
+        _logger.LogInformation(
+            "merge-into-develop-push project={Project} job={JobId} branch={Branch} status={Status} retries={Retries}",
+            project, jobId, integrationBranch, result.Status, environmentalRetries);
+        try { RecordPushStep(jobFolderPath, project, jobId, result, startedAt, environmentalRetries); }
+        catch (Exception ex) { SilentCatch.Note(ex, "MergeIntoDevelopRunner: push-step recording is best-effort"); }
+        return result;
+    }
+
+    /// <summary>
+    /// Maps a failed push status to the AGT-1944 issue kind that drives the
+    /// retry / escalation decision. A generic push failure is treated as a
+    /// transient environmental fault (network / remote availability) that retries;
+    /// a non-fast-forward rejection is a diverged remote - an environmental
+    /// blocker a blind retry cannot clear, so it escalates immediately (visible).
+    /// Anything else is a non-environmental hard error.
+    /// </summary>
+    private static RunIssueKind ClassifyPushFailure(string status) => status switch
+    {
+        "failed" => RunIssueKind.EnvironmentalTransient,
+        "remote-rejected" => RunIssueKind.EnvironmentBlocker,
+        _ => RunIssueKind.None,
+    };
+
+    private void RecordPushStep(
+        string jobFolderPath,
+        string project,
+        string jobId,
+        GitPushResult result,
+        DateTime startedAt,
+        int environmentalRetries)
+    {
+        if (_pipelineLog.Read(jobFolderPath) == null)
+        {
+            _pipelineLog.EnsureRun(jobFolderPath, PipelineCatalogue.Standard, project, jobId);
+        }
+
+        var completedAt = DateTime.UtcNow;
+        var (status, verdict, reason, summary) = ProjectPush(result, environmentalRetries);
+
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopPushStepId,
+            Kind = StepKind.Tool,
+            Status = status,
+            StartedAt = startedAt,
+            CompletedAt = completedAt,
+            DurationMs = (long)(completedAt - startedAt).TotalMilliseconds,
+            Verdict = verdict,
+            VerdictSummary = summary,
+            Reason = reason,
+        });
+    }
+
+    private static (PipelineStepStatus Status, string? Verdict, string? Reason, string? Summary) ProjectPush(
+        GitPushResult result, int environmentalRetries)
+    {
+        if (result.Success)
+        {
+            return result.Status switch
+            {
+                "pushed" => (PipelineStepStatus.Passed, "pushed", $"Pushed integration branch to origin{ShaSuffix(result.Sha)}.", null),
+                "already-remote" => (PipelineStepStatus.Passed, "already-remote", "Integration branch already up to date on origin; nothing to push.", null),
+                "no-remote" => (PipelineStepStatus.Skipped, "no-remote", "No origin remote configured; nothing to push.", null),
+                _ => (PipelineStepStatus.Passed, result.Status, "Integration branch push completed.", null),
+            };
+        }
+
+        var issue = ClassifyPushFailure(result.Status);
+        if (PostProcessingOutcomeTaxonomy.IsEnvironmental(issue))
+        {
+            // AGT-1944: flag the failure environmental so a reviewer does not read
+            // an infra blip / diverged remote as a failed change. Retryable
+            // transients reach here only after their retry budget is spent.
+            var retried = environmentalRetries > 0
+                ? $" after {environmentalRetries} retr{(environmentalRetries == 1 ? "y" : "ies")}"
+                : string.Empty;
+            return (
+                PipelineStepStatus.Failed,
+                "environmental",
+                $"Push of the integration branch to origin failed{retried} ({result.Status}); flagged environmental (AGT-1944).",
+                result.Error);
+        }
+
+        return (PipelineStepStatus.Failed, "error", $"Push of the integration branch to origin failed ({result.Status}).", result.Error);
+    }
+
+    private static string ShaSuffix(string? sha) =>
+        string.IsNullOrWhiteSpace(sha) ? string.Empty : $" ({Short(sha!)})";
 
     private void Record(
         string jobFolderPath,

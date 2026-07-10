@@ -97,9 +97,11 @@ test('Prompts rail hosts the prompt-admin surface', async ({ page }) => {
   await expect.poll(() => promptList.locator('[data-testid^="prompt-admin-group-"]').count()).toBeGreaterThan(0);
   await expect.poll(() => promptList.locator('[data-testid^="prompt-admin-item-"]').count()).toBeGreaterThan(0);
   await expect(promptList).not.toContainText('shipped');
-  await expect(promptList).not.toContainText('overridden');
+  await expect(promptList).toContainText(/\d+ overridden/);
+  await expect(promptList).toContainText(/\d+ inherited/);
   const overrideIcon = promptList.locator('[data-testid^="prompt-admin-override-"]').first();
   await expect(overrideIcon).toBeVisible();
+  await expect(overrideIcon).toContainText('Override');
   await overrideIcon.hover();
   await expect(page.getByTestId('cac-tooltip').locator('.cac-tooltip__body')).toContainText('Local override active');
   const firstGroup = promptList.locator('[data-testid^="prompt-admin-group-"]').first();

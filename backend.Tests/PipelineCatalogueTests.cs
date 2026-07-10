@@ -37,9 +37,10 @@ public class PipelineCatalogueTests
         // Post includes the deterministic review/build gates, four aspects,
         // implemented tool steps (incl. the opt-in wiki-maintenance and
         // wiki-learnings distillation steps), the deferred operator-triggered
-        // "Merge into Develop" step, the automatic code-review quality-grade
-        // step, final orchestrator decision, and opt-in drift dimensions.
-        Assert.Equal(22, p.Post.Count);
+        // "Merge into Develop" step and its integration-branch push twin, the
+        // automatic code-review quality-grade step, the opt-in task-spawner step,
+        // final orchestrator decision, and opt-in drift dimensions.
+        Assert.Equal(24, p.Post.Count);
     }
 
     [Fact]
@@ -274,6 +275,50 @@ public class PipelineCatalogueTests
     }
 
     [Fact]
+    public void StandardPipeline_MergeIntoDevelopPush_IsDeferredGitStep_RightAfterTheMerge()
+    {
+        // AGT-1999: the integration-branch push ships as a deferred,
+        // operator-triggered Tool post-step placed immediately after the
+        // "Merge into Develop" step - the push only makes sense once the merge
+        // has landed. Like the merge it is Deferred (runs on the accept trigger,
+        // off the request path) and default-on, and it is a git step so the
+        // read-only pipeline drops it.
+        var p = PipelineCatalogue.Standard;
+        var push = p.Post.First(s => s.Id == PipelineCatalogue.MergeIntoDevelopPushStepId);
+
+        Assert.Equal("post-merge-into-develop-push", push.Id);
+        Assert.Equal("Push develop to origin", push.DisplayName);
+        Assert.Equal(StepKind.Tool, push.Kind);
+        Assert.Equal(StepRunMode.Sequential, push.RunMode);
+        Assert.True(push.Deferred, "merge-into-develop push must be a deferred (operator-triggered) step");
+        Assert.False(push.Stub, "merge-into-develop push is implemented, not a stub");
+        Assert.True(push.Idempotent);
+        Assert.True(push.DefaultEnabled);
+        Assert.Contains(PipelineCatalogue.MergeIntoDevelopStepId, push.DependsOn);
+
+        // Ordered immediately after the merge step.
+        var mergeIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.MergeIntoDevelopStepId);
+        var pushIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.MergeIntoDevelopPushStepId);
+        Assert.True(mergeIndex >= 0 && pushIndex >= 0);
+        Assert.Equal(mergeIndex + 1, pushIndex);
+
+        // It is a git step (read-only pipeline drops it).
+        Assert.Contains(PipelineCatalogue.MergeIntoDevelopPushStepId, PipelineCatalogue.GitStepIds);
+        Assert.DoesNotContain(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.MergeIntoDevelopPushStepId);
+
+        // Default-on, but an operator can disable it per project.
+        Assert.True(PipelineStepConfigResolver.IsEnabled((ProjectSettings?)null, PipelineCatalogue.MergeIntoDevelopPushStepId));
+        var disabled = new ProjectSettings
+        {
+            PipelineSteps = new Dictionary<string, PipelineStepSetting>
+            {
+                [PipelineCatalogue.MergeIntoDevelopPushStepId] = new() { Enabled = false },
+            },
+        };
+        Assert.False(PipelineStepConfigResolver.IsEnabled(disabled, PipelineCatalogue.MergeIntoDevelopPushStepId));
+    }
+
+    [Fact]
     public void StandardPipeline_WorktreeIntegrationSteps_AreVisibleGitSteps()
     {
         var p = PipelineCatalogue.Standard;
@@ -428,6 +473,55 @@ public class PipelineCatalogueTests
             PipelineSteps = new Dictionary<string, PipelineStepSetting>
             {
                 [PipelineCatalogue.WikiLearningsStepId] = new() { Enabled = true },
+            },
+        };
+        Assert.True(PipelineStepConfigResolver.IsEnabled(settings, step));
+    }
+
+    [Fact]
+    public void StandardPipeline_TaskSpawner_IsOptInOrchestratorStep_AfterAspects_BeforeDecision()
+    {
+        // AGT-2028: the task-spawner ships as an opt-in Orchestrator post-step
+        // (an LLM relevance judgment, like the grade/decision steps) that defaults
+        // OFF - spawning a follow-up card in another project is an explicit
+        // per-project activation. It reads the settled change set, so it depends
+        // on every aspect and is ordered after them but before the final decision.
+        var p = PipelineCatalogue.Standard;
+        var step = p.Post.First(s => s.Id == PipelineCatalogue.TaskSpawnerStepId);
+        Assert.Equal("post-task-spawner", step.Id);
+        Assert.Equal(StepKind.Orchestrator, step.Kind);
+        Assert.Equal(StepRunMode.Sequential, step.RunMode);
+        Assert.False(step.Stub);
+        Assert.False(step.Deferred);
+        Assert.True(step.Idempotent);
+        Assert.False(step.DefaultEnabled); // opt-in (Default aus)
+        foreach (var aspectId in PipelineCatalogue.AspectStepIds)
+        {
+            Assert.Contains(aspectId, step.DependsOn);
+        }
+
+        var spawnerIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.TaskSpawnerStepId);
+        var decisionIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.OrchestratorDecisionStepId);
+        Assert.True(spawnerIndex < decisionIndex,
+            $"task-spawner (idx {spawnerIndex}) must precede orchestrator-decision (idx {decisionIndex})");
+        foreach (var aspectId in PipelineCatalogue.AspectStepIds)
+        {
+            var aspectIndex = p.Post.FindIndex(s => s.Id == aspectId);
+            Assert.True(aspectIndex < spawnerIndex,
+                $"aspect {aspectId} (idx {aspectIndex}) must precede task-spawner (idx {spawnerIndex})");
+        }
+
+        // It is not a git step, so the read-only pipeline keeps it.
+        Assert.DoesNotContain(PipelineCatalogue.TaskSpawnerStepId, PipelineCatalogue.GitStepIds);
+        Assert.Contains(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.TaskSpawnerStepId);
+
+        // Opt-in gate: default off, but a per-project override turns it on.
+        Assert.False(PipelineStepConfigResolver.IsEnabled((ProjectSettings?)null, step));
+        var settings = new ProjectSettings
+        {
+            PipelineSteps = new Dictionary<string, PipelineStepSetting>
+            {
+                [PipelineCatalogue.TaskSpawnerStepId] = new() { Enabled = true },
             },
         };
         Assert.True(PipelineStepConfigResolver.IsEnabled(settings, step));

@@ -146,7 +146,25 @@ public enum RunIssueKind
     /// per-task no-progress quarantine streak. This is the AGT-1918/1919/1920
     /// signature (claude-sonnet-5 five-hour session limit on 2026-07-07).
     /// </summary>
-    QuotaExhausted
+    QuotaExhausted,
+    /// <summary>
+    /// A TRANSIENT environmental fault that is neither the task's code nor a
+    /// provider account problem: a host file lock (the MSBuild <c>MSB3021</c> /
+    /// <c>MSB3026</c> / <c>MSB3027</c> copy-lock family, "the process cannot
+    /// access the file … because it is being used by another process") or a
+    /// network glitch (DNS "could not resolve host" / "temporary failure in name
+    /// resolution", <c>ECONNRESET</c> / <c>ETIMEDOUT</c> / <c>EAI_AGAIN</c>,
+    /// "connection reset by peer", a 502/503/504 gateway blip). Unlike
+    /// <see cref="EnvironmentBlocker"/> (host-permission / sandbox faults the
+    /// agent cannot resolve and that only a human can fix) this class CLEARS on
+    /// its own on a retry: the lock releases, the network recovers. So it is
+    /// RETRYABLE - the orchestrator retries it with exponential backoff instead
+    /// of escalating, and only routes it to human review (flagged
+    /// <c>environmental</c>) once the bounded retry budget is spent. This is the
+    /// MSB302x-lock / network signature from the post-processing outcome-taxonomy
+    /// (AGT-1944; belege AGT-1945/1929/1930 backend-restart cycles).
+    /// </summary>
+    EnvironmentalTransient
 }
 
 /// <summary>
@@ -402,6 +420,31 @@ public static class AgentOutcomeAnalyzer
                 OutputLineCount: lineCount,
                 DurationSeconds: durationSeconds)
             { IssueKind = RunIssueKind.QuotaExhausted };
+        }
+
+        // 1.48) Transient environmental fault. A failed run whose output carries
+        //    a host file-lock (MSB302x copy-lock family / "being used by another
+        //    process") or a network glitch (DNS failure, ECONNRESET/ETIMEDOUT,
+        //    502/503/504) signal is TRANSIENT: unlike an EnvironmentBlocker the
+        //    condition clears on its own, so re-running the same task after a
+        //    short backoff usually succeeds. Typed distinctly so the runner
+        //    retries it with backoff instead of escalating, and so it does not
+        //    accrue toward the per-task no-progress quarantine streak. Gated on
+        //    `failed`, and checked BEFORE the CLI-launch / heuristic paths so it
+        //    is not swallowed by them. Kept below quota/model so a provider
+        //    account problem is not mislabelled as a transient blip.
+        if (failed && IsEnvironmentalTransient(rawText))
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: BuildEnvironmentalTransientSummary(rawText),
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "transient environmental fault (host file lock / network) detected in CLI output",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.EnvironmentalTransient };
         }
 
         // 1.5) CLI launch / resume failure. A failed run that produced no
@@ -838,6 +881,84 @@ public static class AgentOutcomeAnalyzer
         return reset != null
             ? $"The agent CLI rejected the run: the account's usage/session budget is exhausted. \"{reset}\" This is transient - re-queue after the quota window resets."
             : "The agent CLI rejected the run because the account's usage/session/rate-limit budget is exhausted. This is transient - re-queue after the quota window resets.";
+    }
+
+    /// <summary>
+    /// Host file-lock signatures. The MSBuild copy-lock family (MSB3021 "Unable
+    /// to copy file", MSB3026/MSB3027 "Could not copy … exceeded retry count")
+    /// and the underlying Windows sharing-violation text all mean a build output
+    /// was momentarily locked by a lingering process (an antivirus scan, a
+    /// still-exiting test host, a parallel build). The lock releases on its own,
+    /// so a retry after a short backoff clears it. Kept specific so a match is an
+    /// unambiguous transient signal, not incidental prose.
+    /// </summary>
+    private static readonly string[] HostFileLockNeedles =
+    {
+        "msb3021",
+        "msb3026",
+        "msb3027",
+        "being used by another process",
+        "the process cannot access the file",
+        "used by another process",
+        "sharing violation",
+    };
+
+    /// <summary>
+    /// Network-glitch signatures. DNS resolution failures, reset/timed-out
+    /// sockets, and transient 5xx gateway responses are host/provider blips that
+    /// clear on their own, so a retry usually succeeds. Kept specific (concrete
+    /// error codes / phrases, not the bare word "network") so a match combined
+    /// with a <c>failed</c> status is an unambiguous transient signal.
+    /// </summary>
+    private static readonly string[] NetworkGlitchNeedles =
+    {
+        "temporary failure in name resolution",
+        "could not resolve host",
+        "name or service not known",
+        "getaddrinfo enotfound",
+        "getaddrinfo eai_again",
+        "eai_again",
+        "econnreset",
+        "connection reset by peer",
+        "etimedout",
+        "connection timed out",
+        "enetunreach",
+        "network is unreachable",
+        "econnrefused",
+        "connection refused",
+        "socket hang up",
+        "tls handshake timeout",
+        "502 bad gateway",
+        "503 service unavailable",
+        "504 gateway time-out",
+        "504 gateway timeout",
+    };
+
+    /// <summary>
+    /// True when the run output carries a recognised transient environmental
+    /// signal (host file lock or network glitch). Callers must only invoke this
+    /// for a <c>failed</c> run so an agent that merely quotes one of these
+    /// phrases in a healthy turn does not trip it.
+    /// </summary>
+    private static bool IsEnvironmentalTransient(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return false;
+        foreach (var needle in HostFileLockNeedles)
+            if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+        foreach (var needle in NetworkGlitchNeedles)
+            if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private static string BuildEnvironmentalTransientSummary(string rawText)
+    {
+        var isLock = HostFileLockNeedles.Any(n => rawText.Contains(n, StringComparison.OrdinalIgnoreCase));
+        var kind = isLock ? "a host file lock (MSB302x / file-in-use)" : "a network glitch (DNS / reset / gateway)";
+        var detail = ExtractFirstMatchingLine(rawText, isLock ? "process cannot access" : "resolve")
+                     ?? ExtractFirstMatchingLine(rawText, isLock ? "msb30" : "econn");
+        return detail != null
+            ? $"The run failed on {kind}: \"{detail}\" This is transient - the orchestrator retries it with backoff before escalating."
+            : $"The run failed on {kind}. This is transient - the orchestrator retries it with backoff before escalating.";
     }
 
     /// <summary>Pull a provider error <c>message</c> value out of a JSON-ish

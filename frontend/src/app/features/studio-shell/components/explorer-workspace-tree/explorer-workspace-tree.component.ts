@@ -24,7 +24,17 @@ import { MenuComponent, type MenuItem, type MenuItemClickEvent } from '../../../
 import { ProjectDragDropService } from '../../../shell';
 import { ExplorerSectionsService } from '../../services/explorer-sections.service';
 import { ExplorerProjectActionsService } from '../../services/explorer-project-actions.service';
-import { BOARD_LANE_COUNT_TOOLTIPS, boardLaneCountsLabel, laneCountsFor, type ExplorerLaneCounts } from '../../studio-shell.project-rows';
+import { boardLaneCountsLabel, laneCountsFor, type ExplorerLaneCounts } from '../../studio-shell.project-rows';
+import { ExplorerLaneDashboardComponent, type ExplorerTreeMetricView } from '../explorer-lane-dashboard/explorer-lane-dashboard.component';
+import {
+  aggregatePulse,
+  aggregatePulseTooltip,
+  pulseAriaLabel,
+  pulseTooltip,
+  type ExplorerPulseAggregate,
+  type ProjectPulseState,
+} from '../../studio-shell.pulse';
+import { ExplorerAutoPulseComponent } from '../explorer-auto-pulse/explorer-auto-pulse.component';
 
 /** Flat project row as computed by the shell (`ProjectSidebarRow`). */
 export interface ExplorerProjectRow {
@@ -60,8 +70,7 @@ export interface ExplorerWorkspaceGroup {
   projects: ExplorerProjectNode[];
 }
 
-export type ExplorerProjectSurface = 'board' | 'hub' | 'wiki' | 'backlog' | 'epics';
-
+export type ExplorerProjectSurface = 'board' | 'hub' | 'wiki' | 'epics';
 function folderTail(path: string): string {
   const parts = path.split(/[\\/]+/).filter(Boolean);
   return parts.length ? parts[parts.length - 1] : path;
@@ -85,7 +94,7 @@ function normalizeStorage(path: string): string {
 @Component({
   selector: 'app-explorer-workspace-tree',
   standalone: true,
-  imports: [SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective, MenuComponent],
+  imports: [SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective, MenuComponent, ExplorerAutoPulseComponent, ExplorerLaneDashboardComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './explorer-workspace-tree.component.html',
@@ -101,6 +110,12 @@ export class ExplorerWorkspaceTreeComponent {
   readonly expandedProjects = input<ReadonlySet<string>>(new Set());
   readonly showAllActive = input(false);
   readonly activeProjectSurface = input<ExplorerProjectSurface | null>(null);
+  /** Experimental active-work visualization. Numbers remain the default. */
+  readonly metricView = input<ExplorerTreeMetricView>('numbers');
+  /** AGT-2031 — project name → auto-pickup pulse state. Missing entries are
+   *  treated as `off`. Feeds the subtle activity indicator on each project row
+   *  and the aggregated pulse on collapsed workspace / tree nodes. */
+  readonly projectPulseByName = input<ReadonlyMap<string, ProjectPulseState>>(new Map());
 
   readonly showAll = output<void>();
   readonly toggleExpanded = output<string>();
@@ -108,8 +123,6 @@ export class ExplorerWorkspaceTreeComponent {
   readonly openHubRequest = output<string>();
   /** Open the project's Project Hub deep-linked to its Wiki rail. */
   readonly openWikiRequest = output<string>();
-  /** Project-scoped backlog triage open for the named project (ASS-658). */
-  readonly openBacklogRequest = output<string>();
   /** Project-scoped epic overview open for the named project (ASS-658). */
   readonly openEpicsRequest = output<string>();
   /** Open the project onboarding modal preselected to this workspace. */
@@ -292,8 +305,28 @@ export class ExplorerWorkspaceTreeComponent {
 
   readonly laneCountsFor = laneCountsFor;
   readonly boardLaneCountsLabel = boardLaneCountsLabel;
-  /** Per-lane hover help for the three board counters (see {@link BOARD_LANE_COUNT_TOOLTIPS}). */
-  readonly laneCountTooltips = BOARD_LANE_COUNT_TOOLTIPS;
+
+  // ── AGT-2031: auto-pickup pulse indicator (logic in studio-shell.pulse) ───
+
+  /** Pulse state for a single project row (`off` when unknown / not on auto). */
+  pulseStateFor(name: string): ProjectPulseState {
+    return this.projectPulseByName().get(name) ?? 'off';
+  }
+
+  readonly pulseTooltip = pulseTooltip;
+  readonly pulseAriaLabel = pulseAriaLabel;
+  readonly aggregatePulseTooltip = aggregatePulseTooltip;
+
+  /** Roll a workspace group's project pulses up into one aggregate. */
+  wsPulseAggregate(g: ExplorerWorkspaceGroup): ExplorerPulseAggregate {
+    return aggregatePulse(g.projects.map(p => p.name), this.projectPulseByName());
+  }
+
+  /** Whole-tree aggregate, shown on the panel header when the tree is collapsed. */
+  readonly allPulseAggregate = computed<ExplorerPulseAggregate>(() => {
+    const pulses = this.projectPulseByName();
+    return aggregatePulse([...pulses.keys()], pulses);
+  });
 
   /** Enter inline-rename for a real workspace header (synthetic groups no-op). */
   startRenameWorkspace(g: ExplorerWorkspaceGroup): void {

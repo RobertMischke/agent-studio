@@ -134,7 +134,7 @@ Per-project shell with rails for the workstreams that matter beyond a single tas
 
 ### CLI integration: four agents through one boundary
 
-Claude Code, Codex, GitHub Copilot, Gemini. Per-CLI model catalogue from `/api/cli/{type}/models`. Per-CLI quota visualisation in two forms: a compact donut strip in the status bar (at-a-glance "do I have headroom") and a denser sidesheet view (full per-CLI per-project session listing). Per-CLI admin panel for usage caps. Cross-CLI fallback when a session is stuck on one provider.
+Claude Code, Codex, GitHub Copilot, Gemini. Per-CLI model catalogue from `/api/cli/{type}/models`. The status bar provides a compact quota glance. Workspace Settings is the single management destination: its CLI Management section combines models, environments, completion contracts, sessions, usage caps, and token spend at `#/workspace/settings/caps`. Cross-CLI fallback is available when a session is stuck on one provider.
 
 ### Live data: visibility-aware polling
 

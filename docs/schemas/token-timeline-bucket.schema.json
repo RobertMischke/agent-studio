@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-taskboard.local/schemas/token-timeline-bucket.schema.json",
   "title": "TokenTimelineBucket",
-  "description": "One (project, time-bucket) cell in the workspace token timeline served by GET /api/workspace/tokens/timeline. Sibling of token-aggregate.schema.json: same fields, finer time slice. Bucketed live from the orchestrator log (logs/.orchestrator/orchestrator.jsonl on each watched project), so the values reflect orchestrator LLM calls only - per-task agent CLI usage stays on the per-card token bubble. Total token counts are authoritative; dollars are a theoretical Anthropic-rate estimate, not the user's bill.",
+  "description": "One (project, time-bucket) cell in the workspace token timeline served by GET /api/workspace/tokens/timeline. Sibling of token-aggregate.schema.json: same fields, finer time slice. Bucketed live from the workspace bus across every participant on the project, so the values reflect the project's full inference spend: coding-agent runs (agentTokens), supporting analysis loops (supportingTokens), and orchestrator meta-turns (orchestratorTokens). Those three add up to total. Total token counts are authoritative; dollars are a theoretical Anthropic-rate estimate, not the user's bill.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -15,7 +15,10 @@
     "cacheRead",
     "cacheWrite",
     "total",
-    "allModelsPriced"
+    "allModelsPriced",
+    "agentTokens",
+    "supportingTokens",
+    "orchestratorTokens"
   ],
   "properties": {
     "project": {
@@ -36,7 +39,7 @@
     "calls": {
       "type": "integer",
       "minimum": 0,
-      "description": "Number of orchestrator LLM calls that fell into this bucket for this project."
+      "description": "Number of LLM calls (agent + supporting + orchestrator) that fell into this bucket for this project."
     },
     "input": {
       "type": "integer",
@@ -71,6 +74,21 @@
     "allModelsPriced": {
       "type": "boolean",
       "description": "True when every call in this bucket used a model in the pricing catalog. False means the dollar number is partial; consumers should annotate the cell."
+    },
+    "agentTokens": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Portion of total spent by coding-agent runs (participant agent:*). Part of the Total = Agent + Supporting + Orchestrator split."
+    },
+    "supportingTokens": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Portion of total spent by supporting analysis loops / post-processing aspects (participant support:*)."
+    },
+    "orchestratorTokens": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Portion of total spent by orchestrator meta-turns (participant orchestrator:*). Surfaced separately in the UI so the orchestrator overhead is legible."
     }
   }
 }

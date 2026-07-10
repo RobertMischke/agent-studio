@@ -216,6 +216,77 @@ public record ProjectSettings
     /// <c>project-settings.json</c>.
     /// </summary>
     public bool? EpicSubTasksToReady { get; init; }
+
+    /// <summary>
+    /// AGT-2024: language of the self-provisioned Workstream frame shells a
+    /// wiki-writing pipeline step seeds into this project's <c>docs/</c>. True
+    /// (a public / open-source repo) forces English; false opts the project into
+    /// the localized frame. Null uses the heuristic default (English) resolved by
+    /// <see cref="AgentStudio.Docs.WorkstreamFrameLanguageResolver"/>. It only
+    /// affects shells created from now on - existing shells are never rewritten.
+    /// Persisted in <c>project-settings.json</c>.
+    /// </summary>
+    public bool? WorkstreamFramePublic { get; init; }
+
+    /// <summary>
+    /// AGT-2028: per-project configuration for the opt-in <c>post-task-spawner</c>
+    /// pipeline step. When set (and the step is enabled via
+    /// <see cref="PipelineSteps"/>), a completed task whose change set the best
+    /// available model judges relevant spawns a follow-up card in
+    /// <see cref="TaskSpawnerConfig.TargetProject"/>. Null means "no spawn target
+    /// configured" - the step records a skipped row and never fires. Kept a
+    /// dedicated typed object (mirroring <see cref="BuildProfile"/> /
+    /// <see cref="EpicPlanningModel"/>) rather than overloading the shared
+    /// <see cref="PipelineStepSetting"/>, because the spawn target + lane + policy
+    /// are specific to this step. The step's enablement, model, and CLI still flow
+    /// through the standard <see cref="PipelineSteps"/> resolver. Persisted in
+    /// <c>project-settings.json</c>.
+    /// </summary>
+    public TaskSpawnerConfig? TaskSpawner { get; init; }
+}
+
+/// <summary>
+/// Per-project spawn target + policy for the <c>post-task-spawner</c> pipeline
+/// step (AGT-2028). Deliberately generic (not website-hardwired): any project's
+/// pipeline can point at any other project and phrase its own relevance
+/// question. The best available model evaluates relevance and generates the
+/// follow-up prompt; the spawned card is worked by the target project's default
+/// model.
+/// </summary>
+public record TaskSpawnerConfig
+{
+    /// <summary>
+    /// Where a relevant change spawns a follow-up card. A filesystem watch path
+    /// or a stable <c>PROJ-NNN</c> id (the id survives a folder move; both are
+    /// accepted by the create path). Null/blank disables the step for the
+    /// project even when the pipeline step itself is enabled.
+    /// </summary>
+    public string? TargetProject { get; init; }
+
+    /// <summary>
+    /// The operator's relevance question, injected into the evaluation prompt,
+    /// e.g. "Is this change relevant to the public website (new feature,
+    /// removed capability, changed behaviour)?". Null falls back to a generic
+    /// relevance framing in the template.
+    /// </summary>
+    public string? RelevanceQuestion { get; init; }
+
+    /// <summary>
+    /// Lane the spawned card lands in: <see cref="TaskStates.Backlog"/>
+    /// (default, triage - auto-pickup never reaches it) or
+    /// <see cref="TaskStates.Ready"/> (queued to auto-run). Any other value is
+    /// clamped to backlog (a freshly minted card must never land in a review
+    /// lane).
+    /// </summary>
+    public string? SpawnLane { get; init; }
+
+    /// <summary>
+    /// Dedup budget: the maximum number of cards this step spawns per source
+    /// task, across re-runs (default 1). The append-only spawn ledger in the
+    /// source job's <c>.metadata/spawned-tasks.jsonl</c> enforces it, so a task
+    /// re-processed by the reissue loop never double-spawns.
+    /// </summary>
+    public int? MaxPerSourceTask { get; init; }
 }
 
 /// <summary>

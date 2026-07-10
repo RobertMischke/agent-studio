@@ -153,6 +153,28 @@ public static class PipelineCatalogue
     /// from <c>TaskTransitionService</c>.
     /// </summary>
     public const string MergeIntoDevelopStepId = "post-merge-into-develop";
+
+    /// <summary>
+    /// Deferred, operator-triggered post-step that pushes the integration branch
+    /// (<c>develop</c>) to <c>origin</c> after <see cref="MergeIntoDevelopStepId"/>
+    /// has folded an accepted task branch into it (AGT-1999). Closes the
+    /// "integration nur lokal" gap: without it the platform pushed every
+    /// <c>task/*</c> branch but never the integration branch, so <c>origin/develop</c>
+    /// drifted stale, develop-push CI and the remote verification host tested an
+    /// old tree, and there was no remote backup. Like the merge step it is
+    /// <see cref="PipelineStep.Deferred"/> (runs only on the accept trigger, never
+    /// automatically) and ordered right after it. The push runs off the request
+    /// path (the same offload strategy as the completed-job workspace push, via
+    /// <c>IntegrationPushQueue</c> / <c>IntegrationPushWorker</c>): a transient
+    /// failure retries with backoff per the AGT-1944 environmental-retry taxonomy
+    /// and, once the budget is spent, is recorded as a visible
+    /// <see cref="PipelineStepStatus.Failed"/> step flagged <c>environmental</c>
+    /// rather than silently dropped. It is a git step (the read-only pipeline
+    /// drops it) and default-on; opt out per project via the same
+    /// <see cref="ProjectSettings.PipelineSteps"/> override the other steps use.
+    /// Implemented by <c>MergeIntoDevelopRunner.PushIntegrationBranchAsync</c>.
+    /// </summary>
+    public const string MergeIntoDevelopPushStepId = "post-merge-into-develop-push";
     /// <summary>
     /// Deterministic post-step that compiles the changed repository state before
     /// the orchestrator trusts any self-reported Success. It runs after the
@@ -261,6 +283,27 @@ public static class PipelineCatalogue
     public const string CodeReviewGradeStepId = "post-code-review-grade";
 
     /// <summary>
+    /// Opt-in post-step (AGT-2028) that, after a task settles, asks the best
+    /// available model whether the change set is relevant to another project
+    /// (a new feature, a removed capability, ...) and, on a conservative yes,
+    /// SPAWNS a follow-up card there with a generated prompt and a
+    /// <c>relatedTo</c> reference back to the source task. The relevance +
+    /// prompt-generation model is quality-first (defaults to the catalogue's best
+    /// Claude, currently Opus 4.8, at <c>max</c> effort); the spawned card is
+    /// worked by the target project's default model. Generic, not
+    /// website-hardwired: the target project, relevance question, and spawn lane
+    /// come from <c>ProjectSettings.TaskSpawner</c>. Reporting-only - it never
+    /// gates the source task's lane decision. It is
+    /// <see cref="PipelineStep.DefaultEnabled"/> = false (an operator turns it on
+    /// per project, same opt-in switch the drift / wiki steps use) and, because it
+    /// makes a per-task LLM judgment plus writes a card, it dedupes via the source
+    /// job's <c>.metadata/spawned-tasks.jsonl</c> ledger (max 1 per source task by
+    /// default). Implemented by <c>TaskSpawnerPostStepRunner</c>, driven from
+    /// <c>ReviewDecisionOrchestrator</c>.
+    /// </summary>
+    public const string TaskSpawnerStepId = "post-task-spawner";
+
+    /// <summary>
     /// Display name for the post-core completeness check
     /// (<see cref="OrchestratorReviewStepId"/>): the EARLY gate that runs straight
     /// after the core run, before the aspect verdicts. It is deliberately distinct
@@ -342,6 +385,7 @@ public static class PipelineCatalogue
         IntegrateMergeStepId,
         ConflictResolutionStepId,
         MergeIntoDevelopStepId,
+        MergeIntoDevelopPushStepId,
     };
 
     private static readonly TaskPipeline StandardPipeline = BuildStandardPipeline();
@@ -537,6 +581,20 @@ public static class PipelineCatalogue
                 },
                 new PipelineStep
                 {
+                    Id = MergeIntoDevelopPushStepId,
+                    DisplayName = "Push develop to origin",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    // Runs only once the merge into develop has actually landed.
+                    DependsOn = [MergeIntoDevelopStepId],
+                    // Re-runnable: an already-pushed branch is an ancestor no-op.
+                    Idempotent = true,
+                    // Same acceptance trigger as the merge, off the request path:
+                    // stays "pending" until the operator accepts the task.
+                    Deferred = true,
+                },
+                new PipelineStep
+                {
                     Id = LintScssStepId,
                     DisplayName = "Frontend stylelint",
                     Kind = StepKind.Tool,
@@ -594,6 +652,23 @@ public static class PipelineCatalogue
                     // Every pipelined task carries a grade (ASS-1657), so on by
                     // default; an operator can still disable it per project.
                     DefaultEnabled = true,
+                },
+                new PipelineStep
+                {
+                    Id = TaskSpawnerStepId,
+                    DisplayName = "Task spawner",
+                    // An LLM relevance judgment that consumes the change set and
+                    // emits a spawn/no-spawn verdict, the same shape as the grade
+                    // step, so it reuses StepKind.Orchestrator rather than the
+                    // Aspect kind (pinned to the four aspect-runner ids).
+                    Kind = StepKind.Orchestrator,
+                    RunMode = StepRunMode.Sequential,
+                    // Reads the full settled change set after the aspects have run.
+                    DependsOn = [.. AspectStepIds],
+                    Idempotent = true,
+                    // Opt-in: a project turns it on only when it wants a follow-up
+                    // card auto-created in another project (Default aus). No spam.
+                    DefaultEnabled = false,
                 },
                 new PipelineStep
                 {

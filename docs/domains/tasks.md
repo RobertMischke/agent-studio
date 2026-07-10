@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-06-09
+Version: 2026-07-10
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -48,6 +48,20 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
 - [../wiki/concepts/auto-review-evidence-gate-analysis.html](../wiki/concepts/auto-review-evidence-gate-analysis.html):
   why auto-review reissues good work ("Needs rework") and the evidence-gate fix.
 
+## Epic lifecycle
+
+- Epics are `kind=epic` task records; membership is the child's `epicId`.
+- `GET /api/epics` is archive-inclusive. A finished epic remains queryable when
+  all of its children are in `6-completed` or `7-archive`.
+- The Epic overview separates active and completed rollups, shows `x / y done`,
+  and expands to child lane status plus project identity.
+- Manual Epic creation requires a title and goal description. If a planning
+  run parses no sub-tasks, the runner records the failed decomposition and
+  returns the Epic to `0-backlog` instead of leaving an empty completion.
+- Empty Epic cleanup uses the Task API to move records to `7-archive`; it never
+  deletes the task folder. Archived zero-member cleanup records are omitted
+  from the overview, while completed Epics with historical children remain.
+
 ## Key Code
 
 - `backend/Endpoints/Tasks/*`: task CRUD, runner, files, git, review evidence,
@@ -74,7 +88,15 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   Processing.
 - `5-human-review` is where the user gets the final say. The orchestrator does
   not move a task directly from auto-review to completed.
-- Only `2-ready` and `3-progress` tasks can be started.
+- Only `2-ready` and `3-progress` tasks can be started. A `2-ready` card is
+  additionally held back from auto-pickup while its `references.dependsOn`
+  ("waits-on") targets are unfulfilled (AGT-2029); see the waits-on gate in
+  [runner.md](./runner.md) and the `references` field in
+  [../contracts/filesystem.md](../contracts/filesystem.md).
+- Rendered task references resolve through `POST /api/tasks/reference-status`.
+  The endpoint accepts up to 200 keys, filters them by registry shortcode, and
+  returns one compact live or ghost projection. Merge reachability is computed
+  once for the batch through the existing cached board merge service.
 - Successful CLI runs move from `3-progress` to `4-auto-review` through
   application code. Failed or stopped runs remain inspectable.
 - Direct filesystem access by app code is restricted to the bounded service

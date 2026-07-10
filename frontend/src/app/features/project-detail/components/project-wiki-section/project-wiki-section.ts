@@ -23,7 +23,7 @@ import {
   WikiFileSaveResult,
   WikiFileHistory,
   WikiNodeType,
-  WikiRecentEdit,
+  WikiPulse,
   WikiTree,
   WikiTreeMetadata,
   WikiTreeNode,
@@ -35,11 +35,8 @@ import { MenuItem, MenuItemClickEvent } from '../../../../components/menu/menu.t
 import { StudioIconComponent, type StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
-import {
-  WikiDashboardDriftRow,
-  WikiDashboardOpenRequest,
-  WikiDashboardRecentRow,
-} from './wiki-dashboard/wiki-dashboard.component';
+import { WikiPulseComponent, WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
+import { StudioTabStateService } from '../../../studio-shell/services/studio-tab-state.service';
 import {
   WikiTreeRow,
   collectFolderIds,
@@ -69,6 +66,13 @@ interface WikiPersistedState {
   navWidth?: number;
   contextWidth?: number;
   expandedIds?: string[];
+  /**
+   * Per-page collapse memory for the right meta rail, keyed by the page's
+   * relPath. A page absent from the map falls back to `contextCollapsed`
+   * (the landing / default state), so an operator who folds the meta of one
+   * page does not silently fold it for every other page.
+   */
+  metaCollapsedByPage?: Record<string, boolean>;
 }
 
 interface WikiResizeState {
@@ -121,6 +125,7 @@ interface WikiMetricChip {
     StudioIconComponent,
     TooltipDirective,
     WikiDocHistoryComponent,
+    WikiPulseComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-wiki-section.html',
@@ -135,11 +140,13 @@ export class ProjectWikiSectionComponent {
   private readonly catalog = inject(CliCatalogStore);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly tabs = inject(StudioTabStateService);
 
   readonly cliTypes = CLI_TYPES;
 
   readonly tree = signal<WikiTree | null>(null);
-  readonly recentEdits = signal<WikiRecentEdit[]>([]);
+  readonly pulse = signal<WikiPulse | null>(null);
+  readonly pulseLoading = signal(false);
   readonly loading = signal(false);
   readonly busy = signal(false);
   readonly filter = signal('');
@@ -148,7 +155,13 @@ export class ProjectWikiSectionComponent {
   readonly expanded = signal<ReadonlySet<string>>(new Set());
   readonly focusedRowId = signal<string | null>(null);
   readonly navCollapsed = signal(false);
+  // `contextCollapsed` is the *effective* meta-rail state for whatever is on
+  // screen right now (the open page, or the landing view). Its per-page memory
+  // lives in `metaCollapsedByPage`; `defaultMetaCollapsed` is the fallback for a
+  // page with no stored preference and for the landing view.
   readonly contextCollapsed = signal(false);
+  private readonly metaCollapsedByPage = signal<Record<string, boolean>>({});
+  private readonly defaultMetaCollapsed = signal(false);
   readonly navWidth = signal(WIKI_NAV_DEFAULT_WIDTH);
   readonly contextWidth = signal(WIKI_CONTEXT_DEFAULT_WIDTH);
   readonly navWidthStyle = computed(() => `${this.navWidth()}px`);
@@ -211,6 +224,12 @@ export class ProjectWikiSectionComponent {
   private resizeState: WikiResizeState | null = null;
 
   protected readonly nodeId = nodeId;
+
+  openRelatedTask(key: string): void {
+    const target = this.tasks.jobs().find(task =>
+      (task.key ?? task.id).toUpperCase() === key.toUpperCase());
+    if (target) this.tabs.open({ kind: 'task', taskKey: target.taskKey });
+  }
 
   constructor() {
     effect(() => {
@@ -351,69 +370,24 @@ export class ProjectWikiSectionComponent {
 
   readonly docLinks = computed<WikiDocLink[]>(() => this.extractLinks(this.displayContent()));
 
+  /**
+   * Compact drift grade for the open page, surfaced in the meta rail's toggle
+   * head so the Wiki-grading verdict reads at a glance even while the rail is
+   * collapsed. Derived from the same companion metadata that feeds the tree's
+   * drift chip; null when the page has no companion metadata yet.
+   */
+  readonly metaGradeBadge = computed<{ display: string; label: string; tone: WikiMetricTone } | null>(() => {
+    const meta = this.openedNode()?.metadata;
+    if (!meta) return null;
+    const chip = this.driftChip(meta);
+    return { display: chip.display, label: chip.label, tone: chip.tone };
+  });
+
   readonly firstDoc = computed(() => this.findFirstDoc(this.roots()));
 
-  readonly suggestedDocs = computed(() => this.collectDocs(this.roots()).slice(0, 6));
-
-  // Dashboard: recently-edited rows (git author + time). Titles are taken from
-  // the tree node when the path still resolves there (matches the nav label),
-  // else from the git-reported title.
-  readonly dashboardRecentRows = computed<WikiDashboardRecentRow[]>(() => {
-    const byPath = new Map(this.collectDocs(this.roots()).map(d => [d.relPath, d]));
-    return this.recentEdits().map(e => {
-      const node = e.relPath ? byPath.get(e.relPath) : undefined;
-      return {
-        relPath: e.relPath,
-        title: node?.title || e.title || e.relPath,
-        author: e.author,
-        authorDateUtc: e.authorDateUtc,
-        type: node?.type ?? this.typeFromRelPath(e.relPath),
-      };
-    });
-  });
-
-  // Dashboard: pages a companion sidecar flags as drifting, worst first (grade
-  // D, then by descending drift score). Derived entirely from tree metadata -
-  // no extra fetch - so it stays in sync with the tree's own drift chips.
-  readonly dashboardDriftRows = computed<WikiDashboardDriftRow[]>(() => {
-    const rows = this.collectDocs(this.roots())
-      .filter(d => d.relPath && d.metadata?.hasDrift === true)
-      .map(d => {
-        const meta = d.metadata!;
-        const grade = this.cleanGrade(meta.driftGrade);
-        return {
-          relPath: d.relPath!,
-          title: d.title,
-          type: d.type,
-          grade,
-          score: meta.driftScore ?? null,
-          tone: (grade === 'D' ? 'bad' : 'warn') as 'warn' | 'bad',
-          summary: meta.summary?.trim() || null,
-        };
-      });
-    rows.sort((a, b) => this.driftRank(b) - this.driftRank(a));
-    return rows.slice(0, 8);
-  });
-
-  /** Sort key for high-drift rows: grade D outranks others, then drift score. */
-  private driftRank(row: WikiDashboardDriftRow): number {
-    const gradeWeight = row.grade === 'D' ? 4 : row.grade === 'C' ? 3 : row.grade === 'B' ? 2 : row.grade === 'A' ? 1 : 0;
-    return gradeWeight * 1000 + Math.round((row.score ?? 0) * 100);
-  }
-
-  private typeFromRelPath(relPath: string): WikiNodeType {
-    const ext = relPath.toLowerCase().split('.').pop() ?? '';
-    if (ext === 'html' || ext === 'htm') return 'html';
-    if (ext === 'json') return 'json';
-    return 'md';
-  }
-
-  onDashboardOpen(req: WikiDashboardOpenRequest): void {
+  /** Open a page picked from the Pulse feed or inbox. */
+  onPulseOpen(req: WikiPulseOpenRequest): void {
     this.openFile(req.relPath, req.type);
-  }
-
-  onDashboardOpenDrift(req: WikiDashboardOpenRequest): void {
-    this.openFile(req.relPath, req.type, 'report', 'why-drift');
   }
 
   readonly rootFolderLabel = computed(() => {
@@ -460,11 +434,19 @@ export class ProjectWikiSectionComponent {
       },
       error: () => this.loading.set(false),
     });
-    // Recent edits are git-backed and only feed the landing dashboard, so they
-    // load independently and never block the tree render.
-    this.docs.getWikiRecentEdits(p, 8).subscribe({
-      next: r => this.recentEdits.set(r.edits ?? []),
-      error: () => this.recentEdits.set([]),
+    // The Pulse landing view is git-backed and only shown when no page is open,
+    // so it loads independently and never blocks the tree render. One composed
+    // call (feed + inbox + drift) keeps the landing off the per-doc git fan-out.
+    this.pulseLoading.set(true);
+    this.docs.getWikiPulse(p, 12).subscribe({
+      next: r => {
+        this.pulse.set(r);
+        this.pulseLoading.set(false);
+      },
+      error: () => {
+        this.pulse.set(null);
+        this.pulseLoading.set(false);
+      },
     });
   }
 
@@ -474,6 +456,7 @@ export class ProjectWikiSectionComponent {
     this.expandAncestors(rel);
     this.focusedRowId.set(rel);
     this.openedRel.set(rel);
+    this.contextCollapsed.set(this.metaCollapsedFor(rel));
     this.openedType.set(type);
     this.viewerTab.set(tab);
     this.openedContent.set('');
@@ -512,6 +495,7 @@ export class ProjectWikiSectionComponent {
 
   closeFile(): void {
     this.openedRel.set(null);
+    this.contextCollapsed.set(this.defaultMetaCollapsed());
     this.openedContent.set('');
     this.reportContent.set('');
     this.reportAnchor.set(null);
@@ -627,8 +611,30 @@ export class ProjectWikiSectionComponent {
   }
 
   toggleContext(): void {
-    this.contextCollapsed.update(v => !v);
+    this.setContextCollapsed(!this.contextCollapsed());
+  }
+
+  /**
+   * Records the meta-rail collapse state. When a page is open the choice is
+   * remembered against that page's relPath; on the landing view it becomes the
+   * default for pages without their own stored preference.
+   */
+  private setContextCollapsed(collapsed: boolean): void {
+    this.contextCollapsed.set(collapsed);
+    const rel = this.openedRel();
+    if (rel) {
+      this.metaCollapsedByPage.update(map => ({ ...map, [rel]: collapsed }));
+    } else {
+      this.defaultMetaCollapsed.set(collapsed);
+    }
     this.persistState();
+  }
+
+  /** Effective collapse state for a page: its stored choice, else the default. */
+  private metaCollapsedFor(rel: string | null): boolean {
+    if (!rel) return this.defaultMetaCollapsed();
+    const map = this.metaCollapsedByPage();
+    return rel in map ? map[rel] === true : this.defaultMetaCollapsed();
   }
 
   startPanelResize(event: PointerEvent, panel: WikiResizablePanel): void {
@@ -932,8 +938,10 @@ export class ProjectWikiSectionComponent {
         break;
       case 'history':
         if (t.relPath) {
-          this.contextCollapsed.set(false);
+          // Viewing history implies wanting the meta rail visible: open the
+          // page, then force the rail expanded and remember that for the page.
           this.openFile(t.relPath, t.type);
+          this.setContextCollapsed(false);
         }
         break;
       case 'new-page':
@@ -1079,7 +1087,16 @@ export class ProjectWikiSectionComponent {
   private restorePersistedState(projectName: string): void {
     const state = this.readPersistedState(projectName);
     this.navCollapsed.set(state?.navCollapsed === true);
-    this.contextCollapsed.set(state?.contextCollapsed === true);
+    // Compute the default from the parsed state (a plain local), never by
+    // reading a signal: restorePersistedState runs inside the constructor
+    // effect, so a signal read here would make the effect re-fire (and refetch)
+    // every time the meta rail is toggled on the landing view.
+    const defaultCollapsed = state?.contextCollapsed === true;
+    this.defaultMetaCollapsed.set(defaultCollapsed);
+    this.metaCollapsedByPage.set(state?.metaCollapsedByPage ?? {});
+    // Effective state starts at the landing default; restorePendingOpen ->
+    // openFile applies the per-page override once a page is reopened.
+    this.contextCollapsed.set(defaultCollapsed);
     this.navWidth.set(this.clampNavWidth(state?.navWidth ?? WIKI_NAV_DEFAULT_WIDTH));
     this.contextWidth.set(this.clampContextWidth(state?.contextWidth ?? WIKI_CONTEXT_DEFAULT_WIDTH));
     this.expanded.set(new Set(state?.expandedIds ?? []));
@@ -1119,12 +1136,13 @@ export class ProjectWikiSectionComponent {
     if (!projectName) return;
     const state: WikiPersistedState = {
       navCollapsed: this.navCollapsed(),
-      contextCollapsed: this.contextCollapsed(),
+      contextCollapsed: this.defaultMetaCollapsed(),
       openedRel: this.openedRel(),
       viewerTab: this.viewerTab(),
       navWidth: this.navWidth(),
       contextWidth: this.contextWidth(),
       expandedIds: [...this.expanded()],
+      metaCollapsedByPage: this.metaCollapsedByPage(),
     };
     this.writePersistedState(projectName, state);
   }
@@ -1142,6 +1160,7 @@ export class ProjectWikiSectionComponent {
         navWidth: this.readStoredWidth(parsed.navWidth, WIKI_NAV_MIN_WIDTH, WIKI_NAV_MAX_WIDTH),
         contextWidth: this.readStoredWidth(parsed.contextWidth, WIKI_CONTEXT_MIN_WIDTH, WIKI_CONTEXT_MAX_WIDTH),
         expandedIds: this.readStoredExpandedIds(parsed.expandedIds),
+        metaCollapsedByPage: this.readStoredMetaCollapsed(parsed.metaCollapsedByPage),
       };
     } catch {
       return null;
@@ -1211,6 +1230,15 @@ export class ProjectWikiSectionComponent {
   private readStoredExpandedIds(value: unknown): string[] | undefined {
     if (!Array.isArray(value)) return undefined;
     return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  }
+
+  private readStoredMetaCollapsed(value: unknown): Record<string, boolean> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const out: Record<string, boolean> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (key.trim().length > 0 && typeof val === 'boolean') out[key] = val;
+    }
+    return out;
   }
 
   private resolveDriftProjectContext(after: () => void): void {
@@ -1342,18 +1370,6 @@ ${basePrompt || '(Prompt not loaded yet. Use the project architecture model, doc
       next.add(parts.slice(0, i).join('/'));
     }
     this.expanded.set(next);
-  }
-
-  private collectDocs(nodes: readonly WikiTreeNode[]): WikiTreeNode[] {
-    const docs: WikiTreeNode[] = [];
-    const walk = (items: readonly WikiTreeNode[]): void => {
-      for (const node of items) {
-        if (node.type === 'folder') walk(node.children);
-        else docs.push(node);
-      }
-    };
-    walk(nodes);
-    return docs;
   }
 
   private extractLinks(content: string): WikiDocLink[] {

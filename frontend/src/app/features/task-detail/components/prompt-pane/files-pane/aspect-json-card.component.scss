@@ -1,0 +1,131 @@
+:host { display: block; }
+
+// Self-contained aspect card: reads only Tier-2 semantic tokens (--studio-*,
+// --severity-*) so it flips light/dark with the app and needs no per-fragment
+// theme bridge (same contract as the Result view / verdict banner).
+.aspect-json {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  &__meta-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  &__title {
+    font-weight: 600;
+    color: var(--studio-fg-strong);
+  }
+
+  &__model {
+    margin-left: auto;
+    font-size: 11px;
+    font-family: var(--font-mono, monospace);
+    color: var(--studio-fg-dim);
+  }
+
+  // Tone-coloured status badge — colours come exclusively from the central
+  // severity tokens so the badge matches every other aspect surface and
+  // flips with the theme (ASS-737).
+  &__badge {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--studio-bg-hover);
+    border: 1px solid var(--studio-border);
+    color: var(--studio-fg-dim);
+
+    &--ok {
+      color: var(--severity-pass);
+      background: color-mix(in srgb, var(--severity-pass) 14%, transparent);
+      border-color: color-mix(in srgb, var(--severity-pass) 40%, transparent);
+    }
+
+    &--warn {
+      color: var(--severity-warn);
+      background: color-mix(in srgb, var(--severity-warn) 14%, transparent);
+      border-color: color-mix(in srgb, var(--severity-warn) 40%, transparent);
+    }
+
+    &--danger {
+      color: var(--severity-high);
+      background: color-mix(in srgb, var(--severity-high) 14%, transparent);
+      border-color: color-mix(in srgb, var(--severity-high) 40%, transparent);
+    }
+
+    &--neutral {
+      color: var(--studio-fg-dim);
+    }
+  }
+
+  &__summary {
+    margin: 0;
+    color: var(--studio-fg);
+    line-height: 1.5;
+    word-break: break-word;
+  }
+
+  &__metrics {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  &__metric {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--studio-bg-hover);
+    border: 1px solid var(--studio-border);
+    font-size: 11px;
+  }
+
+  &__metric-key {
+    color: var(--studio-fg-dim);
+    text-transform: lowercase;
+  }
+
+  &__metric-value {
+    font-weight: 600;
+    color: var(--studio-fg-strong);
+  }
+
+  &__details {
+    border-top: 1px solid var(--studio-border);
+    padding-top: 6px;
+  }
+
+  &__details-summary {
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--studio-fg-dim);
+    user-select: none;
+
+    &:hover { color: var(--studio-fg); }
+  }
+
+  &__details-body {
+    margin-top: 6px;
+  }
+
+  &--compact {
+    gap: 6px;
+  }
+}

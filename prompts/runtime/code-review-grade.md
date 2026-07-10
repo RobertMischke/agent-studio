@@ -42,17 +42,30 @@ product on the old path because the new implementation is not wired.
 - **Commits under review:** `{{commit}}`
 - **Reviewer model:** `{{model}}`
 
+{{card_mode}}
+
 ## Task body (`prompt.md`)
 
 ```
 {{task_body}}
 ```
 
-## Diff under review
+## Diff under review (task branch vs base)
 
 ```
 {{diff}}
 ```
+
+## results/ folder inventory
+
+```
+{{results_inventory}}
+```
+
+Grade against the full evidence: the branch diff AND the results/ artefacts. A
+read-only / concept / research card legitimately ships no code diff; do not grade
+it **D** for an empty diff when its deliverable is the results/ artefact or a
+`docs/` commit.
 
 ## What you must emit
 

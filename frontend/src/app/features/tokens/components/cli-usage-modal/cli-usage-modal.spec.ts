@@ -64,4 +64,49 @@ describe('CliUsageModalComponent', () => {
     expect(c.subtitle()).toBe('No data yet');
     expect(c.windows()).toHaveLength(0);
   });
+
+  /**
+   * Regression for the Codex "%-limit = 100%" bug (2026-07-10). The live
+   * Codex payload reports its windows as `unit: "%"` with both `used` and
+   * `limit` null and only `usedPct` set. The Limit column must show the
+   * implied 100% cap, not a bare "n/a" placeholder.
+   */
+  const codexRow: CliUsageQuotaRow = {
+    cliType: 'codex',
+    icon: '🟪',
+    label: 'Codex',
+    plan: 'Pro',
+    fetchedAt: new Date().toISOString(),
+    freshness: 'updated just now',
+    stale: false,
+    source: '/status',
+    error: null,
+    windows: [
+      { label: 'Current session (5h)', usedPct: 66, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '02:33' },
+      { label: 'Weekly', usedPct: 12, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '21:33 on 3 May' },
+      { label: 'Spark 5-hour', usedPct: 0, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '21:25' },
+      { label: 'Spark Weekly', usedPct: 4, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '16:25 on 14 Jun' },
+    ],
+    primary: null,
+    primaryPct: 66,
+    primaryTone: 'ok',
+  };
+
+  it('shows the implied 100% cap for "%" windows with a null limit (Codex)', async () => {
+    const fixture = await build(codexRow);
+    const c = fixture.componentInstance;
+    expect(c.windows()).toHaveLength(4);
+    // Every window is unit "%" with a null limit -> implied cap 100%, not "n/a".
+    for (const w of c.windows()) {
+      expect(c.limitText(w)).toBe('100%');
+    }
+  });
+
+  it('still returns "n/a" when a window carries no usable number at all', async () => {
+    const fixture = await build(codexRow);
+    const c = fixture.componentInstance;
+    expect(
+      c.limitText({ label: 'x', usedPct: null, used: null, limit: null, unit: null, resetAt: null, resetLabel: null }),
+    ).toBe('n/a');
+  });
 });

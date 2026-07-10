@@ -15,35 +15,57 @@
     }
 
     <section class="cum__panel">
-      <h5 class="cum__panel-title">Quota windows</h5>
-      @if (windows().length === 0) {
+      <div class="cum__panel-head">
+        <h5 class="cum__panel-title">Quota windows</h5>
+        @if (row()?.plan; as plan) {
+          <span class="cum__plan">{{ plan }}</span>
+        }
+      </div>
+      @if (windowViews().length === 0) {
         <p class="cum__empty">No quota window data.</p>
       } @else {
-        <table class="cum__table" data-testid="cli-usage-modal-windows">
-          <thead>
-            <tr>
-              <th>Window</th>
-              <th class="cum__num">Used</th>
-              <th>Limit</th>
-              <th>Reset</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (w of windows(); track w.label) {
-              <tr>
-                <td>{{ w.label }}</td>
-                <td class="cum__num">{{ w.usedPct === null ? '?' : w.usedPct + '%' }}</td>
-                <td>{{ limitText(w) }}</td>
-                <td>{{ w.resetLabel ?? 'n/a' }}</td>
-              </tr>
-            }
-          </tbody>
-        </table>
+        <ul class="cum__windows" data-testid="cli-usage-modal-windows">
+          @for (w of windowViews(); track w.label) {
+            <li class="cum__win" data-testid="cli-usage-window" [attr.data-tone]="w.tone">
+              <div class="cum__win-top">
+                <span class="cum__win-label" [title]="w.label">{{ w.label }}</span>
+                <span class="cum__win-pct">{{ w.pctLabel }}</span>
+              </div>
+              <div class="cum__gauge">
+                <span class="cum__gauge-fill" [style.width.%]="w.barPct"></span>
+              </div>
+              <div class="cum__win-foot">
+                @if (w.limit) {
+                  <span class="cum__win-limit">of {{ w.limit }}</span>
+                } @else {
+                  <span class="cum__win-limit">used</span>
+                }
+                @if (w.reset) {
+                  <span class="cum__win-reset" [cacTooltip]="'Window resets ' + w.reset">
+                    ⟳ {{ w.reset }}
+                  </span>
+                }
+              </div>
+            </li>
+          }
+        </ul>
       }
     </section>
 
     <section class="cum__panel">
-      <h5 class="cum__panel-title">Top models</h5>
+      <div class="cum__panel-head">
+        <h5 class="cum__panel-title">Top models</h5>
+        <div class="cum__totals">
+          <span class="cum__total">
+            <span class="cum__total-label">Tokens</span>
+            <span class="cum__total-value">{{ formatTokens(totals().tokens) }}</span>
+          </span>
+          <span class="cum__total cum__total--cost">
+            <span class="cum__total-label">Est. cost</span>
+            <span class="cum__total-value">{{ totals().anyPriced ? formatUsd(totals().costUsd) : 'n/a' }}</span>
+          </span>
+        </div>
+      </div>
       @if (modelRows().length === 0) {
         <p class="cum__empty">No model usage attributed.</p>
       } @else {
@@ -51,19 +73,35 @@
           <thead>
             <tr>
               <th>Model</th>
-              <th class="cum__num">Tokens</th>
+              <th class="cum__num">In</th>
+              <th class="cum__num">Out</th>
+              <th class="cum__num">Cache</th>
               <th class="cum__num">Cost</th>
             </tr>
           </thead>
           <tbody>
             @for (m of modelRows(); track m.source + ':' + m.model) {
               <tr>
-                <td><code>{{ m.model }}</code><span class="cum__muted"> {{ m.source }}</span></td>
-                <td class="cum__num">{{ formatTokens(totalTokens(m)) }}</td>
-                <td class="cum__num">{{ costLabel(m.estimatedApiCostUsd, m.modelPriced) }}</td>
+                <td>
+                  <code>{{ m.model }}</code>
+                  <span class="cum__src" [attr.data-src]="m.source">{{ m.source }}</span>
+                </td>
+                <td class="cum__num">{{ formatTokens(m.inputTokens) }}</td>
+                <td class="cum__num">{{ formatTokens(m.outputTokens) }}</td>
+                <td class="cum__num cum__num--muted">{{ formatTokens(cacheTokens(m)) }}</td>
+                <td class="cum__num cum__num--cost">{{ costLabel(m.estimatedApiCostUsd, m.modelPriced) }}</td>
               </tr>
             }
           </tbody>
+          @if (modelRows().length > 1) {
+            <tfoot>
+              <tr>
+                <td>Total · {{ totals().models }} models</td>
+                <td class="cum__num" colspan="3">{{ formatTokens(totals().tokens) }}</td>
+                <td class="cum__num cum__num--cost">{{ totals().anyPriced ? formatUsd(totals().costUsd) : 'n/a' }}</td>
+              </tr>
+            </tfoot>
+          }
         </table>
       }
     </section>

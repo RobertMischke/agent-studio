@@ -1,0 +1,185 @@
+<section class="wsm" data-testid="workspace-management">
+  <header class="wsm__head">
+    <h2 class="wsm__title">Workspaces</h2>
+    <p class="wsm__desc">
+      Every workspace and its projects. Rename, recolor, reorder, move projects
+      between workspaces, archive, or delete. Managed globally, applies to all.
+    </p>
+  </header>
+
+  <app-section-header title="Workspaces"
+                      [count]="registryWorkspaces().length"
+                      testid="settings-workspaces-head" />
+
+  <div class="studio-settings-workspaces"
+       data-testid="settings-workspaces"
+       [attr.aria-busy]="registryWorkspacesLoading() ? 'true' : null">
+    @if (registryWorkspacesError(); as err) {
+      <div class="wsm__note wsm__note--error"
+           data-testid="settings-workspaces-error">{{ err }}</div>
+    }
+    @if (registryWorkspacesLoading() && registryWorkspaces().length === 0) {
+      <div class="wsm__note">Loading workspaces…</div>
+    } @else if (registryWorkspaces().length === 0) {
+      <div class="wsm__note" data-testid="settings-workspaces-empty">
+        No workspaces registered yet. Use "+ New workspace" below or add a
+        <code>WatchPaths</code> entry to <code>backend/appsettings.Local.json</code>
+        and restart the backend; the first boot will seed the default workspace and
+        one project per entry.
+      </div>
+    } @else {
+      <ul class="studio-settings-workspaces__list"
+          data-testid="settings-workspaces-list">
+        @for (ws of registryWorkspaces(); track ws.id) {
+          <li class="studio-settings-workspace-row"
+              data-testid="settings-workspace-row"
+              [attr.data-workspace-id]="ws.id"
+              [class.studio-settings-workspace-row--busy]="registryWorkspaceBusyId() === ws.id"
+              [class.studio-settings-workspace-row--drop-target]="wsSettings.isDragOver(ws.id)"
+              (dragover)="wsSettings.onWorkspaceDragOver($event, ws.id)"
+              (dragleave)="wsSettings.onWorkspaceDragLeave(ws.id)"
+              (drop)="wsSettings.onWorkspaceDrop($event, ws.id, ws.displayName)">
+            <span class="studio-settings-workspace-color"
+                  [style.background]="ws.color || 'var(--studio-fg-muted)'"
+                  aria-hidden="true"></span>
+            @if (wsSettings.isRenaming(ws.id)) {
+              <input #renameInput
+                     type="text"
+                     class="studio-settings-workspace-name studio-settings-workspace-name--input"
+                     data-testid="settings-workspace-rename-input"
+                     [attr.maxlength]="64"
+                     [attr.aria-invalid]="wsSettings.renameError() ? 'true' : null"
+                     [attr.aria-label]="'Rename workspace ' + ws.displayName"
+                     [ngModel]="wsSettings.renameDraft()"
+                     (ngModelChange)="wsSettings.updateRenameDraft($event)"
+                     (keydown.enter)="wsSettings.commitRename(ws.displayName); $event.preventDefault()"
+                     (keydown.escape)="wsSettings.cancelRename(); $event.preventDefault()"
+                     (blur)="wsSettings.commitRename(ws.displayName)" />
+              @if (wsSettings.renameError(); as err) {
+                <span class="studio-settings-workspace-name-error"
+                      data-testid="settings-workspace-rename-error"
+                      role="alert">{{ err }}</span>
+              }
+            } @else {
+              <button type="button"
+                      class="studio-settings-workspace-name studio-settings-workspace-name--btn"
+                      data-testid="settings-workspace-rename"
+                      [cacTooltip]="'Click to rename'"
+                      (click)="renameRegistryWorkspace(ws)">{{ ws.displayName }}</button>
+            }
+            <span class="studio-settings-workspace-id mono">{{ ws.id }}</span>
+            <span class="studio-settings-workspace-count">
+              {{ ws.projects.length }} {{ ws.projects.length === 1 ? 'project' : 'projects' }}
+            </span>
+            <div class="studio-settings-workspace-actions">
+              <button type="button"
+                      class="studio-settings-workspace-action"
+                      data-testid="settings-workspace-edit-color"
+                      [cacTooltip]="'Set color'"
+                      [disabled]="registryWorkspaceBusyId() === ws.id"
+                      (click)="editRegistryWorkspaceColor(ws)">🎨</button>
+              <button type="button"
+                      class="studio-settings-workspace-action"
+                      data-testid="settings-workspace-move-up"
+                      [cacTooltip]="'Move up'"
+                      [disabled]="!canMoveWorkspaceUp(ws) || registryWorkspaceBusyId() === ws.id"
+                      (click)="moveRegistryWorkspace(ws, -1)">▲</button>
+              <button type="button"
+                      class="studio-settings-workspace-action"
+                      data-testid="settings-workspace-move-down"
+                      [cacTooltip]="'Move down'"
+                      [disabled]="!canMoveWorkspaceDown(ws) || registryWorkspaceBusyId() === ws.id"
+                      (click)="moveRegistryWorkspace(ws, 1)">▼</button>
+              <span class="studio-settings-workspace-action-wrap"
+                    [cacTooltip]="workspaceDeleteTooltip(ws)">
+                <button type="button"
+                        class="studio-settings-workspace-action studio-settings-workspace-action--danger"
+                        data-testid="settings-workspace-delete"
+                        [attr.aria-disabled]="!canDeleteWorkspace(ws)"
+                        [disabled]="!canDeleteWorkspace(ws) || registryWorkspaceBusyId() === ws.id"
+                        (click)="deleteRegistryWorkspace(ws)">×</button>
+              </span>
+            </div>
+            @if (ws.projects.length > 0) {
+              <ul class="studio-settings-projects"
+                  data-testid="settings-projects-list"
+                  [attr.data-workspace-id]="ws.id">
+                @for (p of ws.projects; track p.id) {
+                  <li class="studio-settings-project-row"
+                      data-testid="settings-project-row"
+                      [attr.data-project-id]="p.id"
+                      [attr.draggable]="true"
+                      [class.studio-settings-project-row--busy]="registryProjectBusyId() === p.id"
+                      [class.studio-settings-project-row--archived]="p.archived"
+                      [class.studio-settings-project-row--dragging]="wsSettings.draggingProjectId() === p.id"
+                      (dragstart)="wsSettings.onProjectDragStart($event, p.id, ws.id)"
+                      (dragend)="wsSettings.onProjectDragEnd()">
+                    <span class="studio-settings-project-color"
+                          [style.background]="p.color || 'var(--studio-fg-muted)'"
+                          aria-hidden="true"></span>
+                    <span class="studio-settings-project-id mono">{{ p.id }}</span>
+                    <span class="studio-settings-project-code mono">{{ p.shortCode }}</span>
+                    <span class="studio-settings-project-name">{{ p.displayName }}</span>
+                    @if (p.archived) { <span class="studio-settings-project-tag">archived</span> }
+                    <div class="studio-settings-project-actions">
+                      <button type="button"
+                              class="studio-settings-workspace-action"
+                              data-testid="settings-project-rename"
+                              [cacTooltip]="'Rename project'"
+                              [disabled]="registryProjectBusyId() === p.id"
+                              (click)="renameRegistryProject(p.id, p.displayName)">✎</button>
+                      <button type="button"
+                              class="studio-settings-workspace-action"
+                              data-testid="settings-project-short-code"
+                              [cacTooltip]="'Edit short code'"
+                              [disabled]="registryProjectBusyId() === p.id"
+                              (click)="editRegistryProjectShortCode(p.id, p.shortCode)">#</button>
+                      <button type="button"
+                              class="studio-settings-workspace-action"
+                              data-testid="settings-project-color"
+                              [cacTooltip]="'Set project color'"
+                              [disabled]="registryProjectBusyId() === p.id"
+                              (click)="editRegistryProjectColor(p.id, p.color)">🎨</button>
+                      <button type="button"
+                              class="studio-settings-workspace-action"
+                              data-testid="settings-project-workspace"
+                              [cacTooltip]="'Change workspace'"
+                              [disabled]="registryProjectBusyId() === p.id"
+                              (click)="changeRegistryProjectWorkspace(p.id, p.workspaceId)">⇄</button>
+                      <button type="button"
+                              class="studio-settings-workspace-action studio-settings-workspace-action--danger"
+                              data-testid="settings-project-archive"
+                              [cacTooltip]="p.archived ? 'Un-archive' : 'Archive'"
+                              [disabled]="registryProjectBusyId() === p.id"
+                              (click)="toggleRegistryProjectArchived(p.id, p.archived)">
+                        {{ p.archived ? '↺' : '🗄' }}
+                      </button>
+                    </div>
+                  </li>
+                }
+              </ul>
+            }
+          </li>
+        }
+      </ul>
+    }
+    <div class="studio-settings-workspaces__footer">
+      <button type="button"
+              class="wsm__btn studio-settings-workspaces__create"
+              data-testid="settings-workspace-create"
+              (click)="createRegistryWorkspace()">+ New workspace</button>
+      <button type="button"
+              class="wsm__toggle"
+              data-testid="settings-workspace-show-archived"
+              [class.wsm__toggle--on]="showArchivedProjects()"
+              (click)="toggleShowArchivedProjects()">
+        Archived: {{ showArchivedProjects() ? 'shown' : 'hidden' }}
+      </button>
+    </div>
+    <p class="wsm__note wsm__note--muted"
+       data-testid="settings-workspaces-note">
+      F45b mutation surface (ADR-0042). Click a workspace or project name to rename;
+      use the action buttons for color, reorder, workspace move, archive, and delete.
+    </p>
+  </div>
+</section>

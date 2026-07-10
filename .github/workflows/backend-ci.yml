@@ -60,9 +60,24 @@ jobs:
       #     (concurrency invariant), ProjectChatMigration (perf budget),
       #     TaskFolderAccessIsolation (Directory.Delete governance guard). Track
       #     these as their own fix-ups.
-      # continue-on-error STAYS until those residuals are cleared and a real
-      # Linux run is confirmed green (any Linux-only path singles surface only
-      # off-Windows); only then drop it to make the gate sharp.
+      # Real Linux verification 2026-07-09 (Ubuntu 24.04, agent-runner, against
+      # develop @ ad50bb1d which contains this task's trait/skip changes, same
+      # Category!=MachineBound filter): Passed 3404 / Skipped 30 / Failed 9
+      # (1m07s). This closes the off-Windows gap: the MachineBound exclusion and
+      # the non-Windows Skip.If on the UpdateService suite fired as designed
+      # (skips rose 13→30), and NONE of the four target clusters
+      # (ProjectRepoResolution, MergeEndpoints, UpdateService path tests,
+      # AgainstLiveDevCheckout) failed — no Linux-only path "singles" surfaced.
+      # The 9 Linux failures are the same out-of-scope pre-existing residuals
+      # enumerated above (the deterministic set; load flakes that need a
+      # saturated run don't reproduce in Linux's fast 1m07s pass), not path
+      # assumptions this task owns.
+      # DECISION (final, no longer deferred): continue-on-error STAYS. With 9
+      # out-of-scope residuals still failing on Linux the canary is not green, so
+      # dropping the flag now would turn the gate red on every push for reasons
+      # outside this classification task. Make the gate sharp only once those
+      # residuals are cleared in their own fix-ups and a Linux run reports 0
+      # failures.
       - name: Test
         continue-on-error: true
         run: dotnet test agent-taskboard.sln --no-build --filter "Category!=MachineBound" --logger "console;verbosity=minimal"

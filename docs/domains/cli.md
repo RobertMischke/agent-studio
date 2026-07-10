@@ -52,6 +52,15 @@ CLI execution tests.
   permission block behind a generic failure.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
+- Workspace CLI Management owns the model-routing policy. Each CLI has one
+  primary model and may have a fallback CLI, model, and thinking level in
+  `cli-model-routing.json`. `CliQuotaFallbackService` resolves that policy
+  against the latest quota snapshot for every new run; it must not rewrite the
+  task's configured CLI or model.
+- A quota fallback is run-scoped and must never be silent. Keep the
+  `quota_fallback_activated` timeline event, task chat note, task-card badge,
+  and status-bar warning aligned. When the primary is below its cap again, the
+  next run uses it automatically. Cross-CLI fallback starts a fresh session.
 
 ## Verification
 

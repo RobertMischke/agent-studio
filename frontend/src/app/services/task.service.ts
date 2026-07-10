@@ -78,6 +78,12 @@ import { JobsHubClient } from './jobs-hub-client.service';
 export interface CodeReviewListEntry {
   fileName: string;
   verdict: string;
+  /**
+   * Quality grade `A`/`B`/`C`/`D` from the automatic grade pass; null for the
+   * older user-triggered verdict reviews that carry no grade. Mirrors backend
+   * `CodeReviewListEntry.Grade` (already serialised over the wire).
+   */
+  grade?: string | null;
   summary: string;
   model: string;
   cliType: string;
@@ -85,6 +91,16 @@ export interface CodeReviewListEntry {
   commit?: string | null;
   runAt: string;
   generation?: FileGenerationMeta | null;
+}
+
+/**
+ * Reply from `GET /api/tasks/{id}/git/file` (and the commit-scoped variant).
+ * `content` is the file's UTF-8 text; `isBinary` is true for a NUL-containing
+ * blob, in which case `content` is empty and the pane declines to preview it.
+ */
+export interface GitFileContentResponse {
+  content: string;
+  isBinary: boolean;
 }
 
 /** Reply from `GET /api/tasks/code-review/defaults` (see backend `CodeReviewDefaultsResponse`). */
@@ -130,6 +146,32 @@ const STATE_TO_LANE: Record<string, LaneKey> = {
   [TaskState.Completed]: 'completed',
   [TaskState.Archive]: 'archive',
 };
+
+/**
+ * Turn an orchestrator context key (`project:<PROJ>` or `task:<PROJ>/<KEY>`,
+ * mirroring the backend `OrchestratorContextKey`) into the URL path segment(s)
+ * for the `/api/runner/{contextKey}/orchestrator-chat` route. Each id part is
+ * URL-encoded on its own so a project name with spaces stays valid while the
+ * literal `task:`/`project:` prefix and the `<proj>/<key>` slash — which the
+ * backend routes match structurally — are preserved. Unrecognized shapes fall
+ * back to encoding the whole key as one segment.
+ */
+export function orchestratorContextChatSegment(contextKey: string): string {
+  const taskPrefix = 'task:';
+  const projectPrefix = 'project:';
+  if (contextKey.startsWith(taskPrefix)) {
+    const rest = contextKey.slice(taskPrefix.length);
+    const slash = rest.indexOf('/');
+    if (slash >= 0) {
+      const proj = rest.slice(0, slash);
+      const key = rest.slice(slash + 1);
+      return `task:${encodeURIComponent(proj)}/${encodeURIComponent(key)}`;
+    }
+  } else if (contextKey.startsWith(projectPrefix)) {
+    return `project:${encodeURIComponent(contextKey.slice(projectPrefix.length))}`;
+  }
+  return encodeURIComponent(contextKey);
+}
 
 @Injectable({ providedIn: 'root' })
 export class TaskService {
@@ -680,17 +722,19 @@ export class TaskService {
   }
 
   /**
-   * F34: replace-all write of a task's cross-references. Each list becomes the
-   * full set for its relation kind; the backend validates (keys must exist, no
-   * self-reference, dependsOn stays a DAG) and returns 400 with a per-edge
-   * `errors[]` body on rejection. Returns the persisted references on success.
+   * F34 / AGT-2029: replace-all write of a task's cross-references. Each list
+   * becomes the full set for its relation kind. Hard errors (self-reference,
+   * dependsOn cycle) return 400 with a per-edge `errors[]` body. An unknown key
+   * is NOT a hard failure - the waits-on target may be created later - so the
+   * write persists and the unknown edges come back as `warnings[]`. Returns the
+   * `{ references, warnings }` envelope on success.
    */
   setTaskReferences(
     jobId: string,
     references: import('../models/task.model').TaskReferences,
     watchPath?: string,
   ) {
-    return this.http.put<import('../models/task.model').TaskReferences>(
+    return this.http.put<import('../models/task.model').SetTaskReferencesResponse>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/references`,
       references,
       this.withWatchPath(watchPath),
@@ -1043,6 +1087,31 @@ export class TaskService {
     return this.http.get<{ diff: string }>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/diff`,
       opts,
+    );
+  }
+
+  /**
+   * Full working-tree text of one file, for the git-pane's rendered md/html
+   * preview (AGT-2008). Returns `{ content, isBinary }`; a binary blob comes
+   * back with empty content + `isBinary: true` so the pane shows a
+   * "not previewable" note instead of raw bytes.
+   */
+  getGitFileContent(jobId: string, path: string, watchPath?: string) {
+    return this.http.get<GitFileContentResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/git/file`,
+      this.withWatchPathAndPath(watchPath, path),
+    );
+  }
+
+  /**
+   * File text at a specific commit in this task's chain, for the commit-mode
+   * md/html preview. Mirrors {@link getGitFileContent}; the SHA is validated
+   * server-side as a known job commit.
+   */
+  getJobCommitFileBySha(jobId: string, sha: string, path: string, watchPath?: string) {
+    return this.http.get<GitFileContentResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/file`,
+      this.withWatchPathAndPath(watchPath, path),
     );
   }
 
@@ -1427,6 +1496,13 @@ export class TaskService {
   getOrchestratorLog(projectName: string) {
     return this.http.get<OrchestratorLogResponse>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-log`,
+    );
+  }
+
+  /** Read the newest orchestrator events across every watched project. */
+  getGlobalOrchestratorFeed() {
+    return this.http.get<import('../features/orchestrator').GlobalOrchestratorFeedResponse>(
+      `${this.baseUrl}/runner/orchestrator-feed`,
     );
   }
 
@@ -1839,6 +1915,21 @@ export class TaskService {
   }
 
   /**
+   * MC-2 (Concept §4): read the transcript for a specific navigation context.
+   * The side sheet derives a `project:<PROJ>` or `task:<PROJ>/<KEY>` context
+   * key from where the operator is (board vs. task page); this hits
+   * `GET /api/runner/{contextKey}/orchestrator-chat` so a pinned task and the
+   * board no longer share one history. A `project:` context resolves to the
+   * same canonical per-project thread {@link getOrchestratorChat} returns, so
+   * the board's chat is unchanged.
+   */
+  getOrchestratorChatByContext(contextKey: string) {
+    return this.http.get<OrchestratorChatResponse>(
+      `${this.baseUrl}/runner/${orchestratorContextChatSegment(contextKey)}/orchestrator-chat`,
+    );
+  }
+
+  /**
    * Send a user message to the project's orchestrator chat. The backend
    * resumes the global orchestrator session, persists both user and
    * orchestrator turns, and returns the orchestrator's reply turn.
@@ -1858,6 +1949,33 @@ export class TaskService {
   ) {
     return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat`,
+      body,
+    );
+  }
+
+  /**
+   * MC-2 (Concept §4): send a user message scoped to a navigation context.
+   * Hits `POST /api/runner/{contextKey}/orchestrator-chat` so a task context's
+   * turns land in — and are read back from — its own thread, while a `project:`
+   * context resolves to the same canonical per-project thread
+   * {@link sendOrchestratorChat} writes to. The resumed orchestrator session,
+   * prompt, and usage accounting stay project-level regardless of context.
+   */
+  sendOrchestratorChatByContext(
+    contextKey: string,
+    body: {
+      text: string;
+      attachments?: {
+        alt: string;
+        relativePath: string;
+        inlineBase64?: string | null;
+        mimeType?: string | null;
+      }[];
+      navigationContext?: import('../features/orchestrator').ChatNavigationContext | null;
+    },
+  ) {
+    return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(
+      `${this.baseUrl}/runner/${orchestratorContextChatSegment(contextKey)}/orchestrator-chat`,
       body,
     );
   }

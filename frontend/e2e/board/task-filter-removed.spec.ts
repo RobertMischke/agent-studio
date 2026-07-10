@@ -63,10 +63,11 @@ test.describe('Task filter axis removed from filter list', () => {
     await expect(page.getByRole('heading', { name: 'Task type' })).toBeVisible();
     await expect(page.getByTestId('kanban-filter-type-bug')).toBeVisible();
 
-    // Tag + Owner + Visibility axes stay.
+    // Tag + Owner axes stay. (AGT-2035 removed the Visibility / compact-cards
+    // axis along with the abolished card-density feature.)
     await expect(page.getByTestId('kanban-filter-tag-list').or(page.getByText('No tags on this board.'))).toBeVisible();
     await expect(page.getByTestId('kanban-filter-owner-list').or(page.getByText('No owners registered.'))).toBeVisible();
-    await expect(page.getByTestId('kanban-filter-visibility-compact')).toBeVisible();
+    await expect(page.getByTestId('kanban-filter-visibility-compact')).toHaveCount(0);
 
     // No standalone "Task" filter axis: there is no `kanban-filter-task-*`
     // element (the type chips are `kanban-filter-type-*`, deliberately not

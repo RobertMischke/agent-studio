@@ -13,13 +13,72 @@ public static class TaskCrudEndpoints
 {
     public static void MapTaskCrudEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration) =>
+        // AGT-2050: one lightweight read for every task reference on a rendered
+        // document/chat turn. The scanner and merge reachability service are both
+        // cached, and merge membership is calculated once for the whole requested
+        // set, never once per key.
+        group.MapPost("/reference-status", (TaskReferenceStatusRequest req,
+            TaskScannerService scanner,
+            BoardMergeStatusService mergeStatus,
+            AgentStudio.Registry.ProjectRegistry projects,
+            ILoggerFactory loggerFactory) =>
+        {
+            var started = Stopwatch.GetTimestamp();
+            var requested = (req.Keys ?? [])
+                .Where(k => !string.IsNullOrWhiteSpace(k))
+                .Select(k => k.Trim().ToUpperInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(200)
+                .ToArray();
+
+            var registry = projects.List();
+            var knownCodes = registry
+                .Where(p => !string.IsNullOrWhiteSpace(p.ShortCode))
+                .ToDictionary(p => p.ShortCode, StringComparer.OrdinalIgnoreCase);
+            var jobs = scanner.ScanAllJobsWithArchive();
+            var byKey = jobs
+                .Where(j => !string.IsNullOrWhiteSpace(j.Key))
+                .GroupBy(j => j.Key!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+            var matched = requested.Where(byKey.ContainsKey).Select(k => byKey[k]).ToArray();
+            var merges = mergeStatus.BuildLookup(matched);
+
+            var items = requested.Select(key =>
+            {
+                var dash = key.LastIndexOf('-');
+                var code = dash > 0 ? key[..dash] : "";
+                if (!knownCodes.TryGetValue(code, out var project)) return null;
+                if (!byKey.TryGetValue(key, out var job))
+                    return TaskReferenceStatusItem.Ghost(key, project.Id, project.DisplayName, project.Color);
+
+                merges.TryGetValue(job.TaskKey, out var merge);
+                var grade = job.Tags
+                    .FirstOrDefault(t => t.StartsWith("code-review:grade-", StringComparison.OrdinalIgnoreCase))?
+                    .Split('-').LastOrDefault()?.ToUpperInvariant();
+                return new TaskReferenceStatusItem(
+                    key, true, job.TaskKey, job.Title, job.State,
+                    project.Id, project.DisplayName, project.Color, merge, grade);
+            }).Where(x => x is not null).ToArray();
+
+            loggerFactory.CreateLogger("TaskReferenceStatus")
+                .LogInformation("task-reference-status-batch requested={Requested} returned={Returned} elapsedMs={ElapsedMs}",
+                    requested.Length, items.Length, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            return Results.Ok(new TaskReferenceStatusResponse(items!));
+        });
+
+        group.MapGet("/", (bool? includeFixtures, HttpContext ctx, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
         {
             var raw = scanner.ScanAllJobs();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
-            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup)).ToList();
+            var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
+            var mergeLookup = mergeStatus.BuildLookup(raw);
+            var publishLookup = publishStatus.BuildLookup(raw);
+            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup))
+                          .WithMergeSignal(mergeLookup)
+                          .WithPublishSignal(publishLookup)
+                          .ToList();
             if (TaskQueryRequest.FromQuery(ctx.Request.Query) is { IsActive: true } query)
             {
                 var response = TaskQueryEngine.Execute(jobs, query);
@@ -30,13 +89,19 @@ public static class TaskCrudEndpoints
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (bool? includeFixtures, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings) =>
+        group.MapGet("/grouped", (bool? includeFixtures, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
         {
             var raw = scanner.ScanAllJobs();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
-            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup)).ToList();
+            var waitsOnLookup = BuildWaitsOnLookup(raw, scanner);
+            var mergeLookup = mergeStatus.BuildLookup(raw);
+            var publishLookup = publishStatus.BuildLookup(raw);
+            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, waitsOnLookup))
+                          .WithMergeSignal(mergeLookup)
+                          .WithPublishSignal(publishLookup)
+                          .ToList();
             // F35: each lane is sorted using a per-project strategy. The kanban
             // mixes projects inside one lane, so the sort groups by project,
             // applies that project's resolved strategy, then concatenates the
@@ -175,7 +240,7 @@ public static class TaskCrudEndpoints
             });
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? watchPath, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions) =>
+        group.MapGet("/{jobId}", (string jobId, string? watchPath, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions, BoardMergeStatusService mergeStatus, TaskPublishableService publishStatus) =>
         {
             var detail = scanner.GetJobDetail(jobId, watchPath);
             if (detail is null) return Results.NotFound();
@@ -188,7 +253,19 @@ public static class TaskCrudEndpoints
             detail = JobCommitsAggregation.WithReconstructedInProgressCommits(detail, sessions, watchPath, git);
             var tokenLookup = BuildTokenLookup(new[] { detail.Info }, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(new[] { detail.Info }, configuration);
-            return Results.Ok(WithRuntime(detail, router, runners, tokenLookup, verdictLookup));
+            var waitsOnLookup = BuildWaitsOnLookup(new[] { detail.Info }, scanner);
+            var withRuntime = WithRuntime(detail, router, runners, tokenLookup, verdictLookup, waitsOnLookup);
+            // AGT-2046: fold the batched merge signal onto the detail's info too, so
+            // a card opened from the board keeps the same [develop|main] indicator.
+            var mergeLookup = mergeStatus.BuildLookup(new[] { withRuntime.Info });
+            if (mergeLookup.TryGetValue(withRuntime.Info.TaskKey, out var signal))
+                withRuntime = withRuntime with { Info = withRuntime.Info with { MergeSignal = signal } };
+            // PUB-1: fold the per-task publish chip signal so a completed card opened
+            // from the board shows "publishable: npm, website" in its detail too.
+            var publishLookup = publishStatus.BuildLookup(new[] { withRuntime.Info });
+            if (publishLookup.TryGetValue(withRuntime.Info.TaskKey, out var publishSignal))
+                withRuntime = withRuntime with { Info = withRuntime.Info with { PublishSignal = publishSignal } };
+            return Results.Ok(withRuntime);
         });
 
         // Promote a finished planning task to a pre-filled coding task. Returns
@@ -457,12 +534,14 @@ public static class TaskCrudEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        // F34: replace-all write of the structured cross-reference object.
-        // Validated against the whole workspace before persisting: every
-        // referenced key must exist, a task may not reference itself, and the
-        // dependsOn graph must stay a DAG (no cycles). A validation failure
-        // returns 400 with a per-edge error list so the FE can mark the
-        // offending chip. The 200 body echoes the normalised references.
+        // F34 / AGT-2029: replace-all write of the structured cross-reference
+        // object. Validated against the whole workspace (archive-inclusive so an
+        // already-completed/archived waits-on target still resolves): a task may
+        // not reference itself and the dependsOn graph must stay a DAG (no
+        // cycles) - both hard errors returning 400 with a per-edge list. An
+        // unknown key is NOT a hard failure (AGT-2029): the waits-on target may
+        // be created later, so the write persists and the unknown edges come
+        // back as `warnings` for the FE to surface as an open dependency chip.
         group.MapPut("/{jobId}/references", (string jobId, string? watchPath, SetTaskReferencesRequest req,
             TaskScannerService scanner, TaskMutationService mutations) =>
         {
@@ -470,7 +549,7 @@ public static class TaskCrudEndpoints
             if (info == null) return Results.NotFound();
 
             var proposed = (req ?? new SetTaskReferencesRequest()).ToReferences();
-            var index = TaskReferenceIndex.Build(scanner.ScanAllJobs());
+            var index = TaskReferenceIndex.Build(scanner.ScanAllJobsWithArchive());
             var validation = TaskReferenceValidator.Validate(
                 info.Key ?? "", proposed, index.KnownKeys, index.DependsOnGraph);
 
@@ -488,7 +567,18 @@ public static class TaskCrudEndpoints
                 });
 
             var success = mutations.SetTaskReferences(jobId, proposed, watchPath);
-            return success ? Results.Ok(proposed) : Results.NotFound();
+            if (!success) return Results.NotFound();
+            return Results.Ok(new
+            {
+                references = proposed,
+                warnings = validation.Warnings.Select(w => new
+                {
+                    code = w.Code.ToString(),
+                    kind = w.Kind,
+                    target = w.Target,
+                    message = w.Message
+                })
+            });
         });
 
         // F34 reverse-index: tasks that reference this one. Optional ?kind=
@@ -528,4 +618,24 @@ public static class TaskCrudEndpoints
 
         return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", TaskStates.All)}");
     }
+}
+
+public sealed record TaskReferenceStatusRequest(IReadOnlyList<string>? Keys);
+
+public sealed record TaskReferenceStatusResponse(IReadOnlyList<TaskReferenceStatusItem> Items);
+
+public sealed record TaskReferenceStatusItem(
+    string Key,
+    bool Exists,
+    string? TaskKey,
+    string? Title,
+    string? Lane,
+    string ProjectId,
+    string ProjectName,
+    string? ProjectColor,
+    TaskMergeSignal? Merge,
+    string? ReviewGrade)
+{
+    public static TaskReferenceStatusItem Ghost(string key, string projectId, string projectName, string? projectColor) =>
+        new(key, false, null, null, null, projectId, projectName, projectColor, null, null);
 }

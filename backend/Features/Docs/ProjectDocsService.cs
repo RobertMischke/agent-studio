@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -54,11 +56,44 @@ public class ProjectDocsService
         [".ico"] = "image/x-icon",
     };
 
+    // ---- Wiki performance caches (AGT-2013) ----
+    //
+    // Building the wiki tree opens one file per doc-node to sniff its title and
+    // parses every companion sidecar - O(N) file reads with no memoization, so
+    // every navigation re-read the whole docs/ tree from disk. Two cache layers
+    // fix that: a per-file title memo so an unchanged doc is never re-opened, and
+    // a whole-tree memo validated by a cheap enumerate-only signature so a warm
+    // request that finds nothing changed returns the assembled tree (and its
+    // ETag) without opening a single file. Both key on the project name; the
+    // signature is what makes them self-invalidating on any docs/ change.
+
+    // path -> (mtimeTicks, size, sniffed title). Survives across tree rebuilds so
+    // a single-file edit re-reads only that one file, not all N.
+    private readonly ConcurrentDictionary<string, (long Mtime, long Size, string? Title)> _titleCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // projectName -> (docs signature, assembled tree, ETag). A signature hit means
+    // the docs/ tree is provably unchanged, so the cached tree is served verbatim.
+    private readonly ConcurrentDictionary<string, (string Signature, WikiTree Tree, string ETag)> _treeCache =
+        new(StringComparer.Ordinal);
+
     public ProjectDocsService(TaskScannerService scanner, ProjectRegistry registry, ILogger<ProjectDocsService> logger)
     {
         _scanner = scanner;
         _registry = registry;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Drops the in-memory wiki title + tree caches. Tests that mutate a fixture
+    /// docs/ tree in place (without an mtime-visible change, or faster than the
+    /// filesystem timestamp resolution) call this to force a cold rebuild;
+    /// production relies on the docs signature to self-invalidate.
+    /// </summary>
+    internal void InvalidateWikiTreeCache()
+    {
+        _titleCache.Clear();
+        _treeCache.Clear();
     }
 
     /// <summary>
@@ -195,6 +230,7 @@ public class ProjectDocsService
     {
         var full = ResolveWikiPath(projectName, relPath, requireDoc: true);
         if (full == null || !File.Exists(full)) return null;
+        GitProcessTelemetry.RecordFileRead();
         return new WikiFileContent(relPath.Replace('\\', '/'), File.ReadAllText(full));
     }
 
@@ -267,24 +303,92 @@ public class ProjectDocsService
     /// document nodes (<c>.md</c>, <c>.html</c>, and <c>.json</c>). Siblings are
     /// sorted folders first, then files; an optional leading <c>NN-</c> numeric
     /// prefix on a name controls ordering and is stripped from the displayed
-    /// title. No git is invoked here, so building the tree stays cheap even for
-    /// a large docs folder (per-file commit metadata is fetched lazily on open).
+    /// title. No git is invoked here, and a warm cache serves the whole tree
+    /// without opening a file (see <see cref="GetWikiTreeResult"/>).
     /// </summary>
-    public WikiTree? GetWikiTree(string projectName)
+    public WikiTree? GetWikiTree(string projectName) => GetWikiTreeResult(projectName)?.Tree;
+
+    /// <summary>
+    /// <see cref="GetWikiTree"/> plus the tree's ETag, and the caching that makes
+    /// both cheap. Cold, the tree is built by opening one file per doc-node to
+    /// sniff its title; that per-file title read is memoized. Warm, a cheap
+    /// enumerate-only signature over docs/ (every file's path + mtime + size, no
+    /// content reads) is compared against the last build: an unchanged signature
+    /// returns the cached tree and ETag with zero file reads, which is what keeps
+    /// the wiki entry under target. Any add / remove / rename / edit bumps the
+    /// signature and triggers a rebuild that re-reads only the changed files.
+    /// The whole call is measured under a <see cref="GitProcessTelemetry"/> scope
+    /// so the rollup shows how many files a request actually opened.
+    /// </summary>
+    public WikiTreeResult? GetWikiTreeResult(string projectName)
     {
         var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return null;
 
+        using var _t = GitProcessTelemetry.BeginRequest("wiki/tree", _logger);
+
         var wikiDir = Path.Combine(baseDir, WikiRel);
         var exists = Directory.Exists(wikiDir);
-        var root = exists
-            ? BuildTreeNodes(
-                new DirectoryInfo(wikiDir),
-                Path.GetFullPath(wikiDir),
-                LoadWikiMetadataIndex(wikiDir))
-            : [];
-        return new WikiTree(projectName, wikiDir, exists, root);
+        if (!exists)
+            return new WikiTreeResult(new WikiTree(projectName, wikiDir, false, []), FormatETag("wiki-tree-empty"));
+
+        var fullWikiDir = Path.GetFullPath(wikiDir);
+        var signature = ComputeDocsSignature(fullWikiDir);
+
+        if (signature != null
+            && _treeCache.TryGetValue(projectName, out var cached)
+            && cached.Signature == signature)
+        {
+            return new WikiTreeResult(cached.Tree, cached.ETag);
+        }
+
+        var root = BuildTreeNodes(
+            new DirectoryInfo(wikiDir),
+            fullWikiDir,
+            LoadWikiMetadataIndex(wikiDir),
+            _titleCache);
+        var tree = new WikiTree(projectName, wikiDir, true, root);
+        var etag = FormatETag("wiki-tree-" + (signature ?? "nosig"));
+
+        if (signature != null)
+            _treeCache[projectName] = (signature, tree, etag);
+
+        return new WikiTreeResult(tree, etag);
     }
+
+    /// <summary>
+    /// Enumerate-only fingerprint of the docs/ tree: every file's full path,
+    /// last-write time, and size, hashed. Deliberately reads no file contents -
+    /// it is the cheap "did anything change" probe that gates the expensive
+    /// title-sniffing rebuild. A doc edit bumps its mtime; an add / remove /
+    /// rename changes the set; either way the hash changes. Returns null if the
+    /// tree can't be enumerated, which the caller treats as "always rebuild".
+    /// </summary>
+    private static string? ComputeDocsSignature(string fullWikiDir)
+    {
+        try
+        {
+            var di = new DirectoryInfo(fullWikiDir);
+            var sb = new StringBuilder();
+            foreach (var f in di.EnumerateFiles("*", SearchOption.AllDirectories)
+                                .OrderBy(f => f.FullName, StringComparer.Ordinal))
+            {
+                sb.Append(f.FullName).Append('')
+                  .Append(f.LastWriteTimeUtc.Ticks).Append('')
+                  .Append(f.Length).Append('\n');
+            }
+            var hash = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
+            return Convert.ToHexString(hash).ToLowerInvariant();
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectDocsService: docs signature enumeration failed; rebuilding tree uncached.");
+            return null;
+        }
+    }
+
+    /// <summary>Formats a cache token as a quoted strong HTTP entity tag.</summary>
+    internal static string FormatETag(string token) => "\"" + token + "\"";
 
     /// <summary>
     /// The most-recently-edited wiki documents for the dashboard "recent edits"
@@ -297,19 +401,54 @@ public class ProjectDocsService
     /// can't be resolved so the surface degrades to "no recent edits".
     /// </summary>
     public WikiRecentEdits? GetWikiRecentEdits(string projectName, GitService git, int limit = 12)
+        => GetWikiRecentEditsResult(projectName, git, limit)?.Edits;
+
+    /// <summary>
+    /// <see cref="GetWikiRecentEdits"/> plus its ETag, and the HEAD-keyed caching
+    /// that makes it cheap. The recent-edits list is a view over committed git
+    /// history, so it is invariant while HEAD does not move: the whole assembled
+    /// payload (including the per-row title reads) is memoized keyed by the wiki
+    /// branch HEAD sha. A new commit moves HEAD and refreshes it; until then a
+    /// warm request pays only the cheap HEAD probe (itself briefly TTL-cached)
+    /// instead of the multi-hundred-ms <c>git log</c> walk that dominated the
+    /// dashboard landing. Measured under a <see cref="GitProcessTelemetry"/> scope.
+    /// </summary>
+    public WikiRecentEditsResult? GetWikiRecentEditsResult(string projectName, GitService git, int limit = 12)
     {
         var baseDir = ResolveBaseDir(projectName);
         if (baseDir == null) return null;
         if (limit <= 0) limit = 12;
 
+        using var _t = GitProcessTelemetry.BeginRequest("wiki/recent", _logger);
+
         var wikiDir = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
         var exists = Directory.Exists(wikiDir);
-        if (!exists) return new WikiRecentEdits(projectName, wikiDir, false, []);
+        if (!exists)
+            return new WikiRecentEditsResult(
+                new WikiRecentEdits(projectName, wikiDir, false, []), FormatETag("wiki-recent-nodir"));
 
         var repoRoot = git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot))
-            return new WikiRecentEdits(projectName, wikiDir, true, []);
+            return new WikiRecentEditsResult(
+                new WikiRecentEdits(projectName, wikiDir, true, []), FormatETag("wiki-recent-norepo"));
 
+        var head = git.GetHeadShaCached(repoRoot);
+        var key = string.Join('', "wiki-recent-payload", repoRoot, wikiDir, limit);
+        var payload = git.MemoizeByHead(repoRoot, key,
+            () => BuildRecentEdits(projectName, git, repoRoot, wikiDir, limit));
+        var etag = FormatETag("wiki-recent-" + (head ?? "nohead") + "-" + limit);
+        return new WikiRecentEditsResult(payload, etag);
+    }
+
+    /// <summary>
+    /// Assembles the recent-edits payload from a fresh <c>git log</c> walk under
+    /// docs/ and per-row title sniffs. Split out so <see cref="MemoizeByHead"/>
+    /// only invokes it on a HEAD-miss; the loop, filtering, and title reads are
+    /// unchanged from the original inline implementation.
+    /// </summary>
+    private WikiRecentEdits BuildRecentEdits(
+        string projectName, GitService git, string repoRoot, string wikiDir, int limit)
+    {
         var docsRepoRel = Path.GetRelativePath(repoRoot, wikiDir).Replace('\\', '/');
         // Ask git for more distinct files than we need: some will be filtered
         // out as companions, deletions, or non-doc files below.
@@ -344,6 +483,410 @@ public class ProjectDocsService
         return new WikiRecentEdits(projectName, wikiDir, true, results);
     }
 
+    // -------- Wiki Pulse (PULSE-1: change-feed + inbox + drift grading) --------
+
+    // Top-level repo directories that are code (not knowledge) but are never a
+    // "code root" for the drift heuristic: the wiki root itself plus build
+    // output / tooling folders whose churn is not a system-behaviour signal.
+    // Everything else at the repo root is treated as a code root.
+    private static readonly HashSet<string> CodeRootDenyList =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "node_modules", "dist", "build", "bin", "obj", "out", "target",
+            "coverage", "test-results", "playwright-report", "packages-lock",
+            ".git", ".vs", ".vscode", ".idea", ".github",
+        };
+
+    // Conventional wiki landing files that legitimately sit at the docs root, so
+    // they are not flagged as unfiled "inbox" fragments.
+    private static readonly HashSet<string> RootIndexNames =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "README.md", "index.md", "index.html", "index.htm", "home.md",
+        };
+
+    // A task key stamped into a commit subject / page frontmatter, e.g. AGT-2014.
+    private static readonly Regex TaskKeyRegex =
+        new(@"\b([A-Z][A-Z0-9]{1,9}-\d{1,6})\b", RegexOptions.Compiled);
+
+    /// <summary>
+    /// The wiki Pulse landing payload (PULSE-1): the generated entry view shown
+    /// when the wiki opens, composed from three deterministic sources so it never
+    /// multiplies the slow per-doc git calls (two <c>git log</c> spawns total):
+    /// <list type="number">
+    ///   <item><b>Change feed</b> - the recently-edited pages (git author + when),
+    ///   each enriched with its Workstream frame-area badge and a task key parsed
+    ///   from the page frontmatter or the commit subject.</item>
+    ///   <item><b>Inbox</b> - loose / unfiled knowledge pages that sit at the wiki
+    ///   root or inside the frame but under no area; an empty inbox is the healthy
+    ///   state.</item>
+    ///   <item><b>Drift grading v1</b> - per frame area, how many commits landed
+    ///   under the code roots since each page was last updated, banded
+    ///   Fresh (0-9) / Aging (10-49) / Stale (50+); the area grade is its worst
+    ///   page.</item>
+    /// </list>
+    /// Each section degrades to an "unavailable" state carrying a reason rather
+    /// than failing, so a missing docs folder or repository never blank-screens
+    /// the view. Returns <c>null</c> only when the project itself is unknown.
+    /// </summary>
+    public WikiPulse? GetWikiPulse(string projectName, GitService git, int feedLimit = 12)
+    {
+        var baseDir = ResolveBaseDir(projectName);
+        if (baseDir == null) return null;
+        feedLimit = Math.Clamp(feedLimit, 1, 50);
+
+        var wikiDir = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
+        var generatedAt = DateTime.UtcNow.ToString("o");
+
+        if (!Directory.Exists(wikiDir))
+        {
+            const string reason = "No docs/ folder for this project yet.";
+            return new WikiPulse(projectName, wikiDir, false, generatedAt,
+                new WikiPulseFeed(false, reason, []),
+                new WikiPulseInbox(false, reason, 0, []),
+                WikiPulseDrift.Unavailable(reason));
+        }
+
+        // Inbox is a pure filesystem read (no git), so it works even when the
+        // project has no resolvable repository.
+        var allDocs = ListWikiDocs(wikiDir);
+        var inbox = BuildPulseInbox(allDocs);
+
+        var repoRoot = git.ResolveRepoRootForProject(projectName);
+        if (string.IsNullOrWhiteSpace(repoRoot))
+        {
+            const string reason = "No git repository resolved for this project.";
+            return new WikiPulse(projectName, wikiDir, true, generatedAt,
+                new WikiPulseFeed(false, reason, []),
+                inbox,
+                WikiPulseDrift.Unavailable(reason));
+        }
+
+        var docsRepoRel = Path.GetRelativePath(repoRoot, wikiDir).Replace('\\', '/');
+        // One git walk backs BOTH the feed (top N, newest first) and the drift
+        // heuristic's per-page "last updated" map, so Pulse costs one docs log.
+        var rawRecent = git.GetRecentEditsUnderPath(repoRoot, docsRepoRel, limit: 2000, commitScan: 1500);
+
+        var feedItems = new List<WikiPulseFeedItem>();
+        var lastUpdateByRel = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in rawRecent)
+        {
+            var full = Path.GetFullPath(Path.Combine(repoRoot, e.RepoRelPath));
+            if (!full.StartsWith(wikiDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                && !full.Equals(wikiDir, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var docsRel = Path.GetRelativePath(wikiDir, full).Replace('\\', '/');
+            var ext = Path.GetExtension(full);
+            if (!WikiDocExtensions.Contains(ext)) continue;
+            if (IsWikiCompanionFile(docsRel)) continue;
+            if (!File.Exists(full)) continue; // a deletion in the log
+
+            lastUpdateByRel[docsRel] = e.AuthorDateUtc;
+
+            if (feedItems.Count < feedLimit)
+            {
+                var title = ExtractDocTitle(full, ext)
+                    ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(full));
+                var area = EngineeringWorkstreamFrame.AreaForPath(docsRel);
+                feedItems.Add(new WikiPulseFeedItem(
+                    RelPath: docsRel,
+                    Title: title,
+                    Author: e.Author,
+                    AuthorDateUtc: e.AuthorDateUtc,
+                    Sha: e.Sha,
+                    ShortSha: e.ShortSha,
+                    Subject: e.Subject,
+                    FrameAreaSlug: area?.Slug,
+                    FrameAreaTitle: area?.Title,
+                    TaskKey: ExtractPulseTaskKey(full, ext, e.Subject)));
+            }
+        }
+
+        var feed = new WikiPulseFeed(true, feedItems.Count == 0 ? "No recent edits in git history." : null, feedItems);
+
+        var codeRoots = ResolveCodeRoots(repoRoot);
+        var drift = BuildPulseDrift(allDocs, lastUpdateByRel, repoRoot, codeRoots, git);
+
+        return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift);
+    }
+
+    /// <summary>
+    /// Task key for a Pulse feed row: the page's own frontmatter <c>task-key</c>
+    /// wins (authoritative for markdown pages), else a key parsed from the commit
+    /// subject. Null when neither carries one.
+    /// </summary>
+    private static string? ExtractPulseTaskKey(string fullPath, string ext, string? subject)
+    {
+        if (ext.Equals(".md", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var fromMeta = ParseWikiMetadata(File.ReadAllText(fullPath)).TaskKey;
+                if (!string.IsNullOrWhiteSpace(fromMeta)) return fromMeta.Trim();
+            }
+            catch (Exception __ex)
+            {
+                SilentCatch.Note(__ex, "ProjectDocsService: unreadable page for Pulse task-key; falling back to subject.");
+            }
+        }
+        return ExtractTaskKeyFromSubject(subject);
+    }
+
+    /// <summary>Parses the first task key (e.g. <c>AGT-2014</c>) from a commit subject.</summary>
+    internal static string? ExtractTaskKeyFromSubject(string? subject)
+    {
+        if (string.IsNullOrWhiteSpace(subject)) return null;
+        var m = TaskKeyRegex.Match(subject);
+        return m.Success ? m.Groups[1].Value : null;
+    }
+
+    /// <summary>
+    /// Loose / unfiled knowledge pages for the Pulse inbox: a knowledge doc that
+    /// sits directly at the wiki root (and is not a conventional landing file), or
+    /// one dropped inside the Workstream frame root but under no area. Both are
+    /// "needs sorting" signals; an empty list is the healthy state.
+    /// </summary>
+    private static WikiPulseInbox BuildPulseInbox(IReadOnlyList<WikiFileEntry> docs)
+    {
+        var items = new List<WikiPulseInboxItem>();
+        foreach (var doc in docs)
+        {
+            var rel = doc.RelPath;
+            string? reason = null;
+            if (!rel.Contains('/', StringComparison.Ordinal) && !RootIndexNames.Contains(rel))
+            {
+                reason = "Loose page at the wiki root - not filed under a category.";
+            }
+            else if (EngineeringWorkstreamFrame.IsWithinFrame(rel)
+                     && !EngineeringWorkstreamFrame.IsFrameShell(rel)
+                     && EngineeringWorkstreamFrame.AreaForPath(rel) == null)
+            {
+                reason = "Inside the Workstream frame but not filed under one of the five areas.";
+            }
+            if (reason == null) continue;
+            items.Add(new WikiPulseInboxItem(rel, doc.Title, TypeFromExtension(rel), reason));
+        }
+        items.Sort((a, b) => string.Compare(a.RelPath, b.RelPath, StringComparison.OrdinalIgnoreCase));
+        return new WikiPulseInbox(true, null, items.Count, items);
+    }
+
+    /// <summary>
+    /// Deterministic drift grade bar (PULSE-1, no LLM): for each Workstream frame
+    /// area, count how many commits under the code roots landed after each page's
+    /// last update, band each page Fresh / Aging / Stale, and grade the area by
+    /// its worst page. Areas with no filed pages report <c>Empty</c>. A page whose
+    /// last-update timestamp is unknown (outside the git scan window) is left
+    /// Unknown and excluded from the counts.
+    /// </summary>
+    private static WikiPulseDrift BuildPulseDrift(
+        IReadOnlyList<WikiFileEntry> docs,
+        IReadOnlyDictionary<string, DateTime> lastUpdateByRel,
+        string repoRoot,
+        IReadOnlyList<string> codeRoots,
+        GitService git)
+    {
+        if (codeRoots.Count == 0)
+            return WikiPulseDrift.Unavailable("No code roots found to grade drift against.");
+
+        // Descending author dates of recent code commits; counting how many are
+        // newer than a page's last update is the deterministic drift score.
+        var codeTimes = git.GetCommitAuthorDatesUnderPaths(repoRoot, codeRoots, maxCommits: 500);
+
+        var areas = new List<WikiPulseDriftArea>();
+        int totalFresh = 0, totalAging = 0, totalStale = 0, totalGraded = 0;
+        var worstOverall = DriftGradeRank("Empty");
+        string overall = "Empty";
+
+        foreach (var area in EngineeringWorkstreamFrame.Areas)
+        {
+            var pages = docs.Where(d =>
+                    !EngineeringWorkstreamFrame.IsFrameShell(d.RelPath)
+                    && EngineeringWorkstreamFrame.AreaForPath(d.RelPath)?.Slug == area.Slug)
+                .ToList();
+
+            int fresh = 0, aging = 0, stale = 0, worstCount = 0;
+            var areaWorst = DriftGradeRank("Empty");
+            string areaGrade = "Empty";
+            foreach (var page in pages)
+            {
+                if (!lastUpdateByRel.TryGetValue(page.RelPath, out var lastUpdate)) continue; // Unknown
+                var since = codeTimes.Count(t => t > lastUpdate);
+                if (since > worstCount) worstCount = since;
+                var band = DriftBand(since);
+                switch (band)
+                {
+                    case "Fresh": fresh++; break;
+                    case "Aging": aging++; break;
+                    case "Stale": stale++; break;
+                }
+                if (DriftGradeRank(band) > areaWorst)
+                {
+                    areaWorst = DriftGradeRank(band);
+                    areaGrade = band;
+                }
+            }
+
+            var graded = fresh + aging + stale;
+            totalFresh += fresh; totalAging += aging; totalStale += stale; totalGraded += graded;
+            if (areaWorst > worstOverall)
+            {
+                worstOverall = areaWorst;
+                overall = areaGrade;
+            }
+
+            areas.Add(new WikiPulseDriftArea(
+                Slug: area.Slug,
+                Title: area.Title,
+                Grade: areaGrade,
+                PageCount: pages.Count,
+                GradedPageCount: graded,
+                WorstCommitCount: worstCount,
+                FreshCount: fresh,
+                AgingCount: aging,
+                StaleCount: stale));
+        }
+
+        var reason = totalGraded == 0
+            ? "No knowledge pages filed under the Workstream frame yet."
+            : null;
+        return new WikiPulseDrift(true, reason, overall, areas,
+            new WikiPulseDriftCounts(totalFresh, totalAging, totalStale, totalGraded));
+    }
+
+    /// <summary>Drift band for a code-commits-since-update count (0-9 / 10-49 / 50+).</summary>
+    internal static string DriftBand(int commitsSinceUpdate) =>
+        commitsSinceUpdate >= 50 ? "Stale" : commitsSinceUpdate >= 10 ? "Aging" : "Fresh";
+
+    /// <summary>Ordinal severity so the worst page/area can be selected (higher = worse).</summary>
+    private static int DriftGradeRank(string grade) => grade switch
+    {
+        "Stale" => 3,
+        "Aging" => 2,
+        "Fresh" => 1,
+        _ => 0, // Empty / Unknown
+    };
+
+    /// <summary>
+    /// The repo-root-relative directories treated as "code roots" for the drift
+    /// heuristic: every top-level directory except the wiki root, build output,
+    /// and tooling folders (see <see cref="CodeRootDenyList"/>). Deterministic and
+    /// project-agnostic - it discovers whatever source folders a repo actually has.
+    /// </summary>
+    private static List<string> ResolveCodeRoots(string repoRoot)
+    {
+        var roots = new List<string>();
+        if (!Directory.Exists(repoRoot)) return roots;
+        var wikiTop = WikiRel.Split('/', '\\')[0]; // "docs"
+        foreach (var dir in Directory.EnumerateDirectories(repoRoot))
+        {
+            var name = Path.GetFileName(dir);
+            if (string.IsNullOrEmpty(name) || name.StartsWith('.')) continue;
+            if (name.Equals(wikiTop, StringComparison.OrdinalIgnoreCase)) continue;
+            if (CodeRootDenyList.Contains(name)) continue;
+            roots.Add(name);
+        }
+        roots.Sort(StringComparer.OrdinalIgnoreCase);
+        return roots;
+    }
+
+    private static string TypeFromExtension(string relPath)
+    {
+        var ext = Path.GetExtension(relPath);
+        if (ext.Equals(".html", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".htm", StringComparison.OrdinalIgnoreCase)) return "html";
+        if (ext.Equals(".json", StringComparison.OrdinalIgnoreCase)) return "json";
+        return "md";
+    }
+
+    /// <summary>
+    /// Per-doc history + provenance payload for the wiki history panel, with its
+    /// ETag, and the HEAD-keyed caching behind it. The file's commit history and
+    /// last-touching model are folded into one HEAD-keyed git memo (see
+    /// <see cref="GitService.GetWikiDocGitInfoCached"/>); the frontmatter is parsed
+    /// from the live on-disk file (one read, so the ETag folds in the file mtime).
+    /// Returns null when the doc can't be resolved or is missing, matching the
+    /// endpoint's 404 contract. Measured under a telemetry scope.
+    /// </summary>
+    public WikiHistoryResult? GetWikiHistory(string projectName, string relPath, GitService git)
+    {
+        using var _t = GitProcessTelemetry.BeginRequest("wiki/history", _logger);
+
+        var full = ResolveWikiDocFullPath(projectName, relPath);
+        if (full == null || !File.Exists(full)) return null;
+
+        var repoRoot = git.ResolveRepoRootForProject(projectName);
+        List<GitCommitInfo> commits = [];
+        string? trailerModel = null;
+        string? head = null;
+        if (!string.IsNullOrWhiteSpace(repoRoot))
+        {
+            head = git.GetHeadShaCached(repoRoot);
+            var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
+            var info = git.GetWikiDocGitInfoCached(repoRoot, repoRel, 50);
+            commits = info.Commits;
+            trailerModel = info.Model;
+        }
+
+        GitProcessTelemetry.RecordFileRead();
+        var meta = ParseWikiMetadata(File.ReadAllText(full));
+        var model = !string.IsNullOrWhiteSpace(meta.Model) ? meta.Model : trailerModel;
+        var relatedTasks = ReadRelatedTasks(full + ".meta.json");
+        var knownKeys = _scanner.ScanAllJobsWithArchive()
+            .Select(t => t.Key ?? t.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        relatedTasks = relatedTasks
+            .Select(t => t with { Exists = knownKeys.Contains(t.Key) })
+            .ToList();
+        var payload = new WikiFileHistory(relPath.Replace('\\', '/'), model, meta, commits, relatedTasks);
+
+        // History depends on HEAD (the git side) and the live file's frontmatter
+        // (the model/why can change with an uncommitted edit before HEAD moves),
+        // so the validator folds both HEAD and the file's mtime.
+        var mtime = File.GetLastWriteTimeUtc(full).Ticks;
+        var etag = FormatETag("wiki-hist-" + (head ?? "nohead") + "-" + mtime);
+        return new WikiHistoryResult(payload, etag);
+    }
+
+    private static List<RelatedTask> ReadRelatedTasks(string sidecarPath)
+    {
+        if (!File.Exists(sidecarPath)) return [];
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(sidecarPath));
+            if (!doc.RootElement.TryGetProperty("relatedTasks", out var refs) || refs.ValueKind != JsonValueKind.Array)
+                return [];
+            return JsonSerializer.Deserialize<List<RelatedTask>>(refs.GetRawText(), TaskJsonFile.ReadOpts) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Content of a wiki doc as it existed at an earlier commit, plus its ETag.
+    /// The bytes are content-addressed (a concrete sha + path never change), so
+    /// the read is served from a permanent cache and the ETag is simply the sha.
+    /// Returns null when the doc, repo, or revision can't be resolved. Measured
+    /// under a telemetry scope.
+    /// </summary>
+    public WikiRevisionResult? GetWikiRevision(string projectName, string sha, string relPath, GitService git)
+    {
+        using var _t = GitProcessTelemetry.BeginRequest("wiki/revision", _logger);
+
+        var full = ResolveWikiDocFullPath(projectName, relPath);
+        if (full == null) return null;
+        var repoRoot = git.ResolveRepoRootForProject(projectName);
+        if (string.IsNullOrWhiteSpace(repoRoot)) return null;
+
+        var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
+        var content = git.GetFileAtCommitCached(repoRoot, sha, repoRel);
+        if (content == null) return null;
+
+        var payload = new WikiRevisionContent(relPath.Replace('\\', '/'), sha, content);
+        return new WikiRevisionResult(payload, FormatETag("wiki-rev-" + sha));
+    }
+
     /// <summary>
     /// Recursively maps a docs directory into wiki tree nodes. Folders with no
     /// document descendants are dropped so the tree only surfaces navigable
@@ -352,18 +895,21 @@ public class ProjectDocsService
     private static List<WikiTreeNode> BuildTreeNodes(
         DirectoryInfo dir,
         string docsRoot,
-        IReadOnlyDictionary<string, WikiTreeMetadata> metadataByRelPath)
+        IReadOnlyDictionary<string, WikiTreeMetadata> metadataByRelPath,
+        ConcurrentDictionary<string, (long Mtime, long Size, string? Title)> titleCache)
     {
         var nodes = new List<WikiTreeNode>();
 
         foreach (var sub in dir.GetDirectories())
         {
             if (sub.Name.StartsWith('.')) continue;
-            var children = BuildTreeNodes(sub, docsRoot, metadataByRelPath);
+            var children = BuildTreeNodes(sub, docsRoot, metadataByRelPath, titleCache);
             if (children.Count == 0) continue; // prune empty folders
             var rel = Path.GetRelativePath(docsRoot, sub.FullName).Replace('\\', '/');
             nodes.Add(new WikiTreeNode(
-                sub.Name, StripOrderPrefix(sub.Name), rel, "folder", children, null,
+                sub.Name,
+                EngineeringWorkstreamFrame.DisplayTitle(rel) ?? StripOrderPrefix(sub.Name),
+                rel, "folder", children, null,
                 EngineeringWorkstreamFrame.IsStructural(rel)));
         }
 
@@ -378,7 +924,7 @@ public class ProjectDocsService
                 : ext.Equals(".json", StringComparison.OrdinalIgnoreCase)
                     ? "json"
                     : "html";
-            var title = ExtractDocTitle(file.FullName, ext)
+            var title = ResolveDocTitleCached(titleCache, file, ext)
                 ?? StripOrderPrefix(Path.GetFileNameWithoutExtension(file.Name));
             metadataByRelPath.TryGetValue(rel, out var metadata);
             nodes.Add(new WikiTreeNode(
@@ -388,6 +934,27 @@ public class ProjectDocsService
 
         nodes.Sort(CompareTreeNodes);
         return nodes;
+    }
+
+    /// <summary>
+    /// Sniffs a doc's title, memoized by (path, mtime, size). A cache hit returns
+    /// the previously-sniffed title without opening the file - the read that
+    /// dominated tree building. The actual read (on a miss) happens inside
+    /// <see cref="ExtractDocTitle"/>, which is where the file-read is recorded
+    /// against the ambient telemetry scope, so the rollup's file count reflects
+    /// only genuine disk work.
+    /// </summary>
+    private static string? ResolveDocTitleCached(
+        ConcurrentDictionary<string, (long Mtime, long Size, string? Title)> cache,
+        FileInfo file, string ext)
+    {
+        var mtime = file.LastWriteTimeUtc.Ticks;
+        var size = file.Length;
+        if (cache.TryGetValue(file.FullName, out var e) && e.Mtime == mtime && e.Size == size)
+            return e.Title;
+        var title = ExtractDocTitle(file.FullName, ext);
+        cache[file.FullName] = (mtime, size, title);
+        return title;
     }
 
     /// <summary>
@@ -406,6 +973,7 @@ public class ProjectDocsService
             try
             {
                 var companionRel = Path.GetRelativePath(wikiDir, file).Replace('\\', '/');
+                GitProcessTelemetry.RecordFileRead();
                 using var doc = JsonDocument.Parse(File.ReadAllText(file));
                 var root = doc.RootElement;
                 if (root.ValueKind != JsonValueKind.Object) continue;
@@ -532,6 +1100,7 @@ public class ProjectDocsService
 
         try
         {
+            GitProcessTelemetry.RecordFileRead();
             using var stream = File.OpenRead(sourceFull);
             var currentHash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
             return !string.Equals(currentHash, expectedHash.Trim().ToLowerInvariant(), StringComparison.Ordinal);
@@ -578,9 +1147,18 @@ public class ProjectDocsService
         return "medium";
     }
 
-    /// <summary>Folders before files; then by numeric order prefix; then name.</summary>
+    /// <summary>
+    /// Workstream frame root first (pinned as the top wiki element); then folders
+    /// before files; then by numeric order prefix; then name.
+    /// </summary>
     private static int CompareTreeNodes(WikiTreeNode a, WikiTreeNode b)
     {
+        // The Workstream frame is pinned to the top of the tree. Only the frame
+        // root matches (a top-level node), so nested siblings keep normal order.
+        var aPin = EngineeringWorkstreamFrame.IsFrameRoot(a.RelPath) ? 0 : 1;
+        var bPin = EngineeringWorkstreamFrame.IsFrameRoot(b.RelPath) ? 0 : 1;
+        if (aPin != bPin) return aPin - bPin;
+
         var aFolder = a.Type == "folder";
         var bFolder = b.Type == "folder";
         if (aFolder != bFolder) return aFolder ? -1 : 1;
@@ -621,7 +1199,7 @@ public class ProjectDocsService
     /// endpoints phrase the immutability rule identically.
     /// </summary>
     public static string FrameLockMessage(string relPath, string verb) =>
-        $"'{relPath}' is part of the fixed Engineering Workstream frame and cannot be {verb}. "
+        $"'{relPath}' is part of the fixed Workstream frame and cannot be {verb}. "
         + "Create or edit subpages under an area folder instead.";
 
     /// <summary>
@@ -743,9 +1321,15 @@ public class ProjectDocsService
         return results;
     }
 
-    /// <summary>Cheap label sniff for a nicer title than the file name.</summary>
+    /// <summary>
+    /// Cheap label sniff for a nicer title than the file name. Opens the file, so
+    /// it records one read against the ambient telemetry scope; the tree builder
+    /// only calls it on a title-cache miss, so the recorded count reflects genuine
+    /// disk work rather than every doc-node on every request.
+    /// </summary>
     private static string? ExtractDocTitle(string path, string extension)
     {
+        GitProcessTelemetry.RecordFileRead();
         if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
             return ExtractJsonTitle(path);
         if (extension.Equals(".html", StringComparison.OrdinalIgnoreCase)
@@ -975,6 +1559,20 @@ public record WikiTreeNode(
 /// <summary>The physical docs/ folder tree exposed to the wiki UI.</summary>
 public record WikiTree(string ProjectName, string BaseDir, bool Exists, List<WikiTreeNode> Root);
 
+/// <summary>
+/// A cached wiki payload plus the HTTP entity tag the GET endpoint uses to
+/// answer <c>If-None-Match</c> with a 304 when the client already holds the
+/// current version (AGT-2013). The <see cref="ETag"/> is a strong, content- or
+/// HEAD-derived validator, so a matching one guarantees the payload is current.
+/// </summary>
+public record WikiTreeResult(WikiTree Tree, string ETag);
+public record WikiRecentEditsResult(WikiRecentEdits Edits, string ETag);
+public record WikiHistoryResult(WikiFileHistory History, string ETag);
+public record WikiRevisionResult(WikiRevisionContent Revision, string ETag);
+
+/// <summary>Content of a wiki doc as it existed at an earlier commit.</summary>
+public record WikiRevisionContent(string RelPath, string Sha, string Content);
+
 /// <summary>Outcome of a wiki filesystem mutation (create/move/delete).</summary>
 public record WikiMutationResult(bool Success, string? FullPath, string? Error)
 {
@@ -989,7 +1587,12 @@ public record WikiSaveResult(bool Success, string? FullPath, bool Changed, strin
 }
 
 /// <summary>History + provenance payload for one wiki doc.</summary>
-public record WikiFileHistory(string RelPath, string? Model, WikiDocMetadata Metadata, List<GitCommitInfo> Commits);
+public record WikiFileHistory(
+    string RelPath,
+    string? Model,
+    WikiDocMetadata Metadata,
+    List<GitCommitInfo> Commits,
+    List<RelatedTask> RelatedTasks);
 
 /// <summary>One row in the wiki dashboard's "recent edits" list.</summary>
 public record WikiRecentEdit(
@@ -1003,6 +1606,82 @@ public record WikiRecentEdit(
 
 /// <summary>Recent-edits payload backing the wiki dashboard landing surface.</summary>
 public record WikiRecentEdits(string ProjectName, string BaseDir, bool Exists, List<WikiRecentEdit> Edits);
+
+// ---- Wiki Pulse (PULSE-1: the generated wiki landing view) ----
+
+/// <summary>
+/// The generated wiki Pulse landing view (PULSE-1): a read-only, non-editable
+/// composition of the change feed, the sort-needed inbox, and the deterministic
+/// drift grade bar. Each section carries its own availability + reason so a
+/// missing docs folder or repository degrades to an empty state, never an error.
+/// </summary>
+public record WikiPulse(
+    string ProjectName,
+    string BaseDir,
+    bool Exists,
+    string GeneratedAtUtc,
+    WikiPulseFeed Feed,
+    WikiPulseInbox Inbox,
+    WikiPulseDrift Drift);
+
+/// <summary>Change-feed section: recently-edited pages, newest first.</summary>
+public record WikiPulseFeed(bool Available, string? Reason, List<WikiPulseFeedItem> Items);
+
+/// <summary>
+/// One change-feed row: a recently-edited page plus its owning Workstream frame
+/// area (the badge) and a task key parsed from frontmatter or the commit subject.
+/// </summary>
+public record WikiPulseFeedItem(
+    string RelPath,
+    string Title,
+    string Author,
+    DateTime AuthorDateUtc,
+    string Sha,
+    string ShortSha,
+    string Subject,
+    string? FrameAreaSlug,
+    string? FrameAreaTitle,
+    string? TaskKey);
+
+/// <summary>Inbox section: loose / unfiled pages that need sorting.</summary>
+public record WikiPulseInbox(bool Available, string? Reason, int Count, List<WikiPulseInboxItem> Items);
+
+/// <summary>One unfiled page plus the reason it landed in the inbox.</summary>
+public record WikiPulseInboxItem(string RelPath, string Title, string Type, string Reason);
+
+/// <summary>
+/// Drift-grading section: the per-frame-area grade bar plus roll-up counts.
+/// <see cref="OverallGrade"/> is the worst area grade (Fresh / Aging / Stale /
+/// Empty).
+/// </summary>
+public record WikiPulseDrift(
+    bool Available,
+    string? Reason,
+    string OverallGrade,
+    List<WikiPulseDriftArea> Areas,
+    WikiPulseDriftCounts Counts)
+{
+    public static WikiPulseDrift Unavailable(string reason) =>
+        new(false, reason, "Empty", [], new WikiPulseDriftCounts(0, 0, 0, 0));
+}
+
+/// <summary>
+/// One frame area's drift grade. <see cref="Grade"/> is the worst page's band;
+/// <see cref="WorstCommitCount"/> is that page's code-commits-since-update count.
+/// </summary>
+public record WikiPulseDriftArea(
+    string Slug,
+    string Title,
+    string Grade,
+    int PageCount,
+    int GradedPageCount,
+    int WorstCommitCount,
+    int FreshCount,
+    int AgingCount,
+    int StaleCount);
+
+/// <summary>Roll-up of how many graded pages fall in each drift band.</summary>
+public record WikiPulseDriftCounts(int Fresh, int Aging, int Stale, int Graded);
 
 public record SecurityMeta(string? LastReviewDate, string? Rating, string? Summary);
 public record SecurityFileEntry(string Name, string RelPath, DateTime UpdatedAt, long Size);

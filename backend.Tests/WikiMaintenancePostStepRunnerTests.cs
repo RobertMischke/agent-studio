@@ -79,6 +79,37 @@ public sealed class WikiMaintenancePostStepRunnerTests : IDisposable
         Assert.Equal(1, Count(occurrences, "`task-1`"));
     }
 
+    [Fact]
+    public void Run_EmptyDocs_SelfProvisionsFrameThenWritesCommonProblem()
+    {
+        // Self-provisioning (AGT-2024): with a real signal to write, an empty
+        // docs/ tree no longer skips. The step seeds the Workstream frame and
+        // then bootstraps its own docs/wiki/common-problems home and writes.
+        var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "empty-docs")).FullName;
+        var jobFolder = Directory.CreateDirectory(Path.Combine(_root, "job2")).FullName;
+        var runner = new WikiMaintenancePostStepRunner(NullLogger<WikiMaintenancePostStepRunner>.Instance);
+        var task = Task(jobFolder) with
+        {
+            OutcomeIssue = new TaskOutcomeIssue
+            {
+                Kind = "missing-terminal-sentinel",
+                Label = "Missing terminal sentinel",
+                Severity = "Warn",
+                Summary = "The run ended without a terminal sentinel."
+            }
+        };
+
+        var result = runner.Run(task, Entry(projectRoot), new DateTime(2026, 06, 08, 10, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(WikiMaintenanceVerdict.Created, result.Verdict);
+        Assert.True(
+            File.Exists(Path.Combine(projectRoot, "docs", "engineering-workstream", "00-overview.html")),
+            "frame overview shell was not seeded");
+        Assert.True(
+            File.Exists(Path.Combine(projectRoot, "docs", "wiki", "common-problems", "missing-terminal-sentinel", "README.md")),
+            "common-problems entry was not written");
+    }
+
     private string PrepareProjectWiki()
     {
         var projectRoot = Directory.CreateDirectory(Path.Combine(_root, "project")).FullName;

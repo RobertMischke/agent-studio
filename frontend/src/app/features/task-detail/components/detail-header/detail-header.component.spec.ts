@@ -85,4 +85,79 @@ describe('DetailHeaderComponent (smoke)', () => {
     expect(rows.map(item => item.label)).toContain('Add Commit...');
     expect(rows.find(item => item.id === 'add-commit')?.hint).toBe('Draft ready');
   });
+
+  // AGT-2006: the human-review acceptance primary (mark-done) depends on the
+  // live git landed status. While that status is still loading it must stay
+  // disabled + skeletoned and refuse to fire, then switch atomically once the
+  // truth is known.
+  async function mountHeader() {
+    await TestBed.configureTestingModule({
+      imports: [DetailHeaderComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(DetailHeaderComponent);
+    fixture.componentRef.setInput('info', taskInfo);
+    return fixture;
+  }
+
+  it('holds the git-dependent acceptance primary while git status is loading', async () => {
+    const fixture = await mountHeader();
+    fixture.componentRef.setInput('gitInfoLoading', true);
+    fixture.detectChanges();
+
+    const cmp = fixture.componentInstance;
+    expect(cmp.triagePrimary()?.id).toBe('mark-done');
+    expect(cmp.primaryAwaitingGit()).toBe(true);
+
+    let emitted = 0;
+    cmp.triageAction.subscribe(() => emitted++);
+    cmp.onPrimaryClick();
+    cmp.triggerPrimary();
+    expect(emitted).toBe(0);
+
+    const btn: HTMLButtonElement | null = fixture.nativeElement.querySelector(
+      '[data-testid="triage-action-mark-done"]',
+    );
+    expect(btn).toBeTruthy();
+    expect(btn!.disabled).toBe(true);
+    expect(btn!.getAttribute('data-git-loading')).toBe('true');
+    expect(fixture.nativeElement.querySelector('.detail__triage-primary-skeleton')).toBeTruthy();
+  });
+
+  it('releases the acceptance primary once git status has loaded', async () => {
+    const fixture = await mountHeader();
+    fixture.componentRef.setInput('gitInfoLoading', false);
+    fixture.detectChanges();
+
+    const cmp = fixture.componentInstance;
+    expect(cmp.primaryAwaitingGit()).toBe(false);
+
+    let emitted = 0;
+    cmp.triageAction.subscribe(() => emitted++);
+    cmp.onPrimaryClick();
+    expect(emitted).toBe(1);
+
+    const btn: HTMLButtonElement | null = fixture.nativeElement.querySelector(
+      '[data-testid="triage-action-mark-done"]',
+    );
+    expect(btn!.disabled).toBe(false);
+    expect(btn!.getAttribute('data-git-loading')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Merge into Develop');
+  });
+
+  it('never gates a non-git primary (Ready "Run now") on git loading', async () => {
+    const fixture = await mountHeader();
+    fixture.componentRef.setInput('info', { ...taskInfo, state: '2-ready' });
+    fixture.componentRef.setInput('gitInfoLoading', true);
+    fixture.detectChanges();
+
+    const cmp = fixture.componentInstance;
+    expect(cmp.triagePrimary()?.id).toBe('run-now');
+    expect(cmp.primaryAwaitingGit()).toBe(false);
+  });
 });

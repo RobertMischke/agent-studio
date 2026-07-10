@@ -59,6 +59,7 @@ export class PromptAdminPanelComponent implements OnInit {
   readonly busy = signal(false);
   readonly actionError = signal<string | null>(null);
   readonly collapsedGroups = signal<ReadonlySet<string>>(new Set());
+  readonly onlyOverrides = signal(false);
   /** Toggles the read-only "shipped default" comparison block. */
   readonly showDefault = signal(false);
 
@@ -81,6 +82,22 @@ export class PromptAdminPanelComponent implements OnInit {
     for (const item of cat.items) if (!seen.includes(item.group)) seen.push(item.group);
     return seen.map((name) => ({ name, items: buckets.get(name)! }));
   });
+
+  readonly visibleGroups = computed<PromptGroup[]>(() => {
+    const groups = this.groups();
+    if (!this.onlyOverrides()) return groups;
+    return groups
+      .map((group) => ({ ...group, items: group.items.filter((item) => item.hasOverride) }))
+      .filter((group) => group.items.length > 0);
+  });
+
+  readonly overrideCount = computed(() =>
+    this.catalog()?.items.filter((item) => item.hasOverride).length ?? 0
+  );
+
+  readonly inheritedCount = computed(() =>
+    (this.catalog()?.items.length ?? 0) - this.overrideCount()
+  );
 
   readonly dirty = computed(() => {
     const d = this.detail();
@@ -111,7 +128,7 @@ export class PromptAdminPanelComponent implements OnInit {
     this.previewResult.set(null);
     this.slotValues.set({});
     try {
-      const detail = await this.api.getDetail(name);
+      const detail = this.withRegistryArrays(await this.api.getDetail(name));
       this.selectedName.set(name);
       this.detail.set(detail);
       this.draft.set(detail.effectiveContent);
@@ -194,7 +211,7 @@ export class PromptAdminPanelComponent implements OnInit {
     this.busy.set(true);
     this.actionError.set(null);
     try {
-      const detail = await op();
+      const detail = this.withRegistryArrays(await op());
       this.detail.set(detail);
       this.draft.set(detail.effectiveContent);
       await this.api.loadCatalog();
@@ -308,6 +325,17 @@ export class PromptAdminPanelComponent implements OnInit {
 
   private splitLines(text: string): string[] {
     return text.replace(/\r\n/g, '\n').split('\n');
+  }
+
+  /** Older prompt registries did not return these read-only metadata arrays.
+   *  Normalize at the API boundary so opening System prompts cannot escape as
+   *  a global template error while a backend and frontend version overlap. */
+  private withRegistryArrays(detail: PromptDetail): PromptDetail {
+    return {
+      ...detail,
+      slots: Array.isArray(detail.slots) ? detail.slots : [],
+      usages: Array.isArray(detail.usages) ? detail.usages : [],
+    };
   }
 
   private describe(err: unknown, fallback: string): string {

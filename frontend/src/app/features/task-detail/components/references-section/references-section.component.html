@@ -1,4 +1,4 @@
-@if (totalCount() > 0) {
+@if (hasAnyReferences()) {
   <section class="refs" data-testid="references-section">
     <div class="refs__head">
       <h3 class="refs__title">References</h3>
@@ -57,6 +57,52 @@
             </div>
           </div>
         }
+      }
+
+      <!-- AGT-2029 reverse direction: tasks that wait on this one. Read-only,
+           always shown when present so both dependency directions are visible
+           from the detail view. -->
+      @if (blocking().length > 0) {
+        <div class="refs__row" data-testid="references-row-blocking">
+          <span class="refs__label"
+                [cacTooltip]="'These tasks wait on this one — they are held back until this task completes.'">
+            Blocking
+          </span>
+          <div class="refs__chips">
+            @for (link of blocking(); track link.sourceJobId) {
+              <span class="refs__chip"
+                    [attr.data-testid]="'blocking-chip-' + (link.sourceKey ?? link.sourceJobId)">
+                <button
+                  type="button"
+                  class="refs__chip-link"
+                  [cacTooltip]="link.sourceTitle || (link.sourceKey ?? link.sourceJobId)"
+                  (click)="navigateToBlocking(link)">
+                  {{ blockingLabel(link) }}
+                </button>
+              </span>
+            }
+          </div>
+        </div>
+      }
+
+      @if (wikiPages().length > 0) {
+        <div class="refs__row" data-testid="references-row-wiki">
+          <span class="refs__label">Wiki pages</span>
+          <div class="refs__chips">
+            @for (page of wikiPages(); track page.relPath) {
+              <span class="refs__chip"
+                    [class.refs__chip--ghost]="page.exists === false"
+                    [attr.data-testid]="'wiki-reference-' + page.relPath">
+                <button type="button" class="refs__chip-link"
+                      [disabled]="page.exists === false"
+                      (click)="openWikiPage(page.relPath)"
+                      [cacTooltip]="page.exists === false ? 'Reference existed; target no longer exists' : page.relPath">
+                  {{ page.title || page.relPath }}
+                </button>
+              </span>
+            }
+          </div>
+        </div>
       }
     </div>
 

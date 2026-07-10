@@ -85,9 +85,47 @@ export class BeautifulResultsComponent {
   private readonly highlightEffect = effect(() => {
     this.bodyHtml();
     queueMicrotask(() => {
-      void applyHighlighting(this.bodyRef?.nativeElement ?? null);
+      const root = this.bodyRef?.nativeElement ?? null;
+      void applyHighlighting(root);
+      this.markBrokenImages(root);
     });
   });
+
+  /**
+   * Replaces any `<figure data-results-image>` whose `<img>` failed to load
+   * (missing/unresolvable file) with a compact "missing" placeholder that names
+   * the reference, so a broken screenshot link never renders as a silently empty
+   * row. The `error` event does not bubble, so we bind it in the capture phase.
+   */
+  private markBrokenImages(root: HTMLElement | null): void {
+    if (!root) return;
+    const figures = root.querySelectorAll<HTMLElement>('figure.results-figure[data-results-image]');
+    figures.forEach((figure) => {
+      const img = figure.querySelector<HTMLImageElement>('img.results-figure__img');
+      if (!img) return;
+      if (img.complete && img.naturalWidth === 0) {
+        // Already failed before the listener attached (cached 404).
+        this.replaceWithMissingPlaceholder(figure);
+        return;
+      }
+      img.addEventListener(
+        'error',
+        () => this.replaceWithMissingPlaceholder(figure),
+        { once: true },
+      );
+    });
+  }
+
+  private replaceWithMissingPlaceholder(figure: HTMLElement): void {
+    if (figure.dataset['resultsImageMissing'] === 'true') return;
+    figure.dataset['resultsImageMissing'] = 'true';
+    const path = figure.getAttribute('data-results-image') ?? '';
+    const span = document.createElement('span');
+    span.className = 'results-figure__missing';
+    span.setAttribute('data-testid', 'results-image-missing');
+    span.textContent = path ? `missing: ${path}` : 'missing image';
+    figure.replaceChildren(span);
+  }
 
   /**
    * The renderer emits `<button data-results-copy>` headers above `<pre>`

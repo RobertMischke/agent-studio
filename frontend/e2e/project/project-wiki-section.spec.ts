@@ -145,9 +145,15 @@ test.describe('Project detail - Knowledge section', () => {
     await page.getByTestId('project-wiki-toggle-nav').click();
     await expect(tree).toBeVisible();
 
-    await page.getByTestId('project-wiki-toggle-context').click();
-    await expect(page.getByTestId('project-wiki-workspace-meta')).toHaveCount(0);
-    await page.getByTestId('project-wiki-toggle-context').click();
+    // The meta rail folds via its own labelled head toggle. The rail stays
+    // mounted (slim strip); only the body hides, and the head reports state.
+    const metaToggle = page.getByTestId('project-wiki-meta-toggle');
+    await expect(metaToggle).toHaveAttribute('aria-expanded', 'true');
+    await metaToggle.click();
+    await expect(metaToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('project-wiki-workspace-meta')).toBeHidden();
+    await metaToggle.click();
+    await expect(metaToggle).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByTestId('project-wiki-workspace-meta')).toBeVisible();
 
     const firstFile = tree.locator('[data-testid^="project-wiki-file-"]').first();
@@ -269,8 +275,9 @@ test.describe('Project detail - Knowledge section', () => {
 
     await page.getByTestId('project-wiki-toggle-nav').click();
     await expect(page.getByTestId('project-wiki-tree')).toHaveCount(0);
-    await page.getByTestId('project-wiki-toggle-context').click();
-    await expect(page.getByTestId('project-wiki-meta-panel')).toHaveCount(0);
+    await page.getByTestId('project-wiki-meta-toggle').click();
+    await expect(page.getByTestId('project-wiki-meta-toggle')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('project-wiki-meta-panel')).toBeHidden();
     await page.getByTestId('project-wiki-tab-source').click();
     await expect(page.getByTestId('project-wiki-source-editor')).toBeVisible();
     await page.getByTestId('project-shell-back').click();
@@ -281,7 +288,8 @@ test.describe('Project detail - Knowledge section', () => {
     await expect(page.getByTestId('project-wiki-viewer-path')).toContainText(pathBefore);
     await expect(page.getByTestId('project-wiki-source-editor')).toBeVisible();
     await expect(page.getByTestId('project-wiki-tree')).toHaveCount(0);
-    await expect(page.getByTestId('project-wiki-meta-panel')).toHaveCount(0);
+    await expect(page.getByTestId('project-wiki-meta-toggle')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByTestId('project-wiki-meta-panel')).toBeHidden();
     await expect(page.getByTestId('project-shell-sidebar-header')).toHaveCount(0);
     await expect(page.getByTestId('project-shell-expand-nav')).toBeVisible();
   });

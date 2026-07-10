@@ -66,7 +66,14 @@ Lines may contain:
 # Status
 
 - Result: <Success|Failed|NoOp|Blocked|NeedsInput|Partial>
+- Case: <bugfix|feature|refactor|docs|forensics|ui-cleanup|blocked|generic>
 - Duration: <for example, 4 min>
+- Files: <files changed, e.g. 5; optional, omit when the log proves no count>
+- Tests: <e.g. 12 passed or 11/12 passed; optional, omit when no test run appears>
+
+## Overview
+- Problem: <one sentence naming the goal or the defect this run addressed>
+- Solution: <one sentence naming what was done and the outcome, shareable on its own>
 
 ## What Was Done
 - 3 to 7 concrete bullets with actions, files, commands, and results.
@@ -81,15 +88,20 @@ Lines may contain:
 - ![](../results/<name>.png) or ![](../attachments/<name>.png). Omit this section when no images appear in the log.
 ```
 
+The `Case` and `## Overview` block feed the case-based, overview-first **Result** view (the UI surface formerly labelled "Protocol"; the artefact/file stays `status.md`). See [concepts/result-view-and-case-templates.md](../concepts/result-view-and-case-templates.md) for the layered view and the client-side case classifier. Both are additive and optional: the frontend synthesizes an overview from the task title and the first `What Was Done` bullet and heuristically infers a case when either is missing, so every legacy `status.md` still renders.
+
+The optional `- Files:` and `- Tests:` header lines feed the two quality-head metric chips (files changed, tests passed). They are honest-or-absent: the summarizer emits a line only when the run log proves a real count (a `git diff`/`--stat` file count, a test-runner tally); a missing line renders no chip. Never hand-write a number the log does not support.
+
 Hard rules:
 
-- No `# Status` is omitted. No extra `H1`s are added.
+- No `# Status` is omitted. No extra `H1`s are added (`## Overview` is an H2 and leads the body).
+- `Case` is one of the eight ids above; a run that did not fully land (Blocked / NeedsInput / Partial / Failed) uses `blocked` whatever the underlying work was.
 - Total prose is at most 250 words. Images do not count.
 - Paths and commands in single backticks.
 - No marketing tone, no recap of what the user already asked for.
 - No em dashes.
 - A deterministically-appended `## Images` bullet may carry a plain-text source hint (`(source: real|mocked|composite ...)`); the grammar and where it comes from are in §4.4.
-- The application enforces the `Result` line from the deterministic run-outcome contract after summarization, so the protocol, lane routing, and failure toast share one classification.
+- The application enforces the `Result` line from the deterministic run-outcome contract after summarization, so the protocol, lane routing, and failure toast share one classification. The `Case` is a hint only; the client's `blocked` framing still wins from the enforced `Result` even if the model mislabels it.
 
 If you change the prompt, mirror the change here and bump the example.
 

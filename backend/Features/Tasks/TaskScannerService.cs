@@ -192,6 +192,33 @@ public class TaskScannerService : ITaskScanner
     }
 
     /// <summary>
+    /// AGT-2029 — the live board snapshot plus the terminal <c>7-archive</c>
+    /// lane, in one list. <see cref="ScanAllJobs"/> deliberately omits archive
+    /// (hundreds of terminal cards would bloat every poll), but a waits-on
+    /// dependency is fulfilled once its target reaches <c>6-completed</c> OR
+    /// <c>7-archive</c>, so cross-project fulfillment resolution must be able to
+    /// see archived targets. Cache-backed: O(1) read of the two partitions the
+    /// index cache already built; without a cache a single raw walk already
+    /// includes archive, so this avoids the double disk walk that
+    /// <c>ScanAllJobs().Concat(ScanArchivedJobs())</c> would cost in tests.
+    /// </summary>
+    public List<TaskInfo> ScanAllJobsWithArchive()
+    {
+        if (_indexCache != null)
+        {
+            var live = _indexCache.GetSnapshot();
+            var archived = _indexCache.GetArchiveSnapshot();
+            var combined = new List<TaskInfo>(live.Count + archived.Count);
+            combined.AddRange(live);
+            combined.AddRange(archived);
+            return combined;
+        }
+        // No cache (tests / recovery): the raw disk walk already slim-hydrates
+        // the 7-archive lane, so it is archive-inclusive by construction.
+        return ScanAllJobsRaw();
+    }
+
+    /// <summary>
     /// The uncached disk walk. Always reads from disk; used by
     /// <see cref="TaskIndexCache"/> for refresh and by callers that want to
     /// bypass the cache (tests, recovery paths).
@@ -390,6 +417,7 @@ public class TaskScannerService : ITaskScanner
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),
                 References = ReadReferences(raw),
+                RelatedWikiPages = ReadRelatedWikiPages(raw, entry),
                 Provenance = ReadProvenance(raw),
                 ExternalCompletion = ReadExternalCompletion(raw)
             };
@@ -734,6 +762,30 @@ public class TaskScannerService : ITaskScanner
         catch
         {
             return new TaskReferences();
+        }
+    }
+
+    private static List<RelatedWikiPage> ReadRelatedWikiPages(JsonElement raw, WatchPathEntry entry)
+    {
+        if (!raw.TryGetProperty("relatedWikiPages", out var refs) || refs.ValueKind != JsonValueKind.Array)
+            return [];
+        try
+        {
+            var pages = JsonSerializer.Deserialize<List<RelatedWikiPage>>(refs.GetRawText(), TaskJsonFile.ReadOpts) ?? [];
+            var root = string.IsNullOrWhiteSpace(entry.RepositoryPath) ? entry.RootPath : entry.RepositoryPath;
+            return pages
+                .Where(p => !string.IsNullOrWhiteSpace(p.RelPath))
+                .GroupBy(p => p.RelPath, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First() with
+                {
+                    Exists = !string.IsNullOrWhiteSpace(root)
+                        && File.Exists(Path.Combine(root!, g.First().RelPath.Replace('/', Path.DirectorySeparatorChar)))
+                })
+                .ToList();
+        }
+        catch
+        {
+            return [];
         }
     }
 
@@ -1169,10 +1221,14 @@ public class TaskScannerService : ITaskScanner
             return null;
 
         // Editable / always-known files plus any *.md file the agents / operators
-        // drop in the job root (surfaced by the Files tab).
+        // drop in the job root (surfaced by the Files tab). Structured aspect
+        // verdicts also ship as `aspect-*.json`; those are served too so the
+        // Files tab can fetch and render them structurally.
         var allowed = new[] { "prompt.md", "status.md", "task.json" };
         var isMarkdown = fileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
-        if (!allowed.Contains(fileName) && !isMarkdown) return null;
+        var isAspectJson = fileName.StartsWith("aspect-", StringComparison.OrdinalIgnoreCase)
+            && fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+        if (!allowed.Contains(fileName) && !isMarkdown && !isAspectJson) return null;
 
         return ReadFileOrNull(Path.Combine(info.FolderPath, fileName));
     }
@@ -1195,25 +1251,30 @@ public class TaskScannerService : ITaskScanner
         var generated = _fileGenerationIndex?.ReadForJob(dir)
             ?? new Dictionary<string, FileGenerationMeta>(StringComparer.OrdinalIgnoreCase);
         var artifacts = new List<TaskArtifact>();
+
+        // Structured aspect JSON is the preferred (source-of-truth) artefact:
+        // list it, and remember its stem so the markdown twin below is
+        // suppressed — one card per aspect, not two. Legacy runs that only
+        // wrote the markdown still surface it (their stem is never recorded).
+        var suppressedMdTwins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in Directory.EnumerateFiles(dir, "aspect-*.json", SearchOption.TopDirectoryOnly))
+        {
+            var name = Path.GetFileName(path);
+            var artifact = BuildArtifact(path, name, generated);
+            if (artifact is null) continue;
+            artifacts.Add(artifact);
+            suppressedMdTwins.Add(Path.GetFileNameWithoutExtension(name) + ".md"); // aspect-x.json -> aspect-x.md
+        }
+
         foreach (var path in Directory.EnumerateFiles(dir, "*.md", SearchOption.TopDirectoryOnly))
         {
             var name = Path.GetFileName(path);
             if (string.Equals(name, "status.md", StringComparison.OrdinalIgnoreCase)) continue;
+            if (suppressedMdTwins.Contains(name)) continue;
 
-            var (kind, aspectName) = ClassifyArtifact(name);
-            FileInfo fi;
-            try { fi = new FileInfo(path); }
-            catch { continue; }
-
-            artifacts.Add(new TaskArtifact
-            {
-                Name = name,
-                SizeBytes = fi.Length,
-                Mtime = fi.LastWriteTimeUtc,
-                Kind = kind,
-                AspectName = aspectName,
-                Generation = generated.GetValueOrDefault(name),
-            });
+            var artifact = BuildArtifact(path, name, generated);
+            if (artifact is null) continue;
+            artifacts.Add(artifact);
         }
 
         artifacts.Sort(CompareArtifactsForFilesTab);
@@ -1221,16 +1282,44 @@ public class TaskScannerService : ITaskScanner
         return new TaskArtifactsResponse { JobId = jobId, Files = artifacts };
     }
 
+    private static TaskArtifact? BuildArtifact(
+        string path, string name, IReadOnlyDictionary<string, FileGenerationMeta> generated)
+    {
+        var (kind, aspectName) = ClassifyArtifact(name);
+        FileInfo fi;
+        try { fi = new FileInfo(path); }
+        catch { return null; }
+
+        return new TaskArtifact
+        {
+            Name = name,
+            SizeBytes = fi.Length,
+            Mtime = fi.LastWriteTimeUtc,
+            Kind = kind,
+            AspectName = aspectName,
+            Generation = generated.GetValueOrDefault(name),
+        };
+    }
+
     private static (TaskArtifactKind Kind, string? AspectName) ClassifyArtifact(string fileName)
     {
         if (string.Equals(fileName, "prompt.md", StringComparison.OrdinalIgnoreCase))
             return (TaskArtifactKind.Prompt, null);
 
-        if (fileName.StartsWith("aspect-", StringComparison.OrdinalIgnoreCase) &&
-            fileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+        // Aspect verdicts ship as a structured `.json` source of truth plus a
+        // human-readable `.md` twin; both classify as Aspect so the Files tab
+        // renders either shape (structured card for JSON, markdown for legacy).
+        if (fileName.StartsWith("aspect-", StringComparison.OrdinalIgnoreCase))
         {
-            var aspect = fileName.Substring("aspect-".Length, fileName.Length - "aspect-".Length - ".md".Length);
-            return (TaskArtifactKind.Aspect, aspect);
+            foreach (var ext in new[] { ".json", ".md" })
+            {
+                if (fileName.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+                {
+                    var aspect = fileName.Substring(
+                        "aspect-".Length, fileName.Length - "aspect-".Length - ext.Length);
+                    return (TaskArtifactKind.Aspect, aspect);
+                }
+            }
         }
 
         if (fileName.StartsWith("code-review-", StringComparison.OrdinalIgnoreCase) &&

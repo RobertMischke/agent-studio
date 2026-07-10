@@ -2,9 +2,9 @@ import { test, expect } from '../fixtures/dev-backend';
 import type { CliCompletionContract } from '../../src/app/features/cli';
 
 /**
- * Admin/CLI page (T7a): the model-catalog, completion-contract, and
- * working-memory sections folded into the workspace Settings "Usage caps"
- * panel.
+ * Admin/CLI page (T7a): the model-catalog and completion-contract sections in
+ * the workspace Settings "Usage caps" panel. AGT-2035 extracted Working memory
+ * into its own settings section and added a completion-contracts explainer.
  *
  * Verifies:
  *   1. GET /api/cli/contracts returns the real per-CLI completion contract
@@ -48,7 +48,7 @@ test.describe('Admin/CLI page — models & completion contracts', () => {
     expect(byType.get('copilot')!.typed).toBe(false);
   });
 
-  test('CLI page renders models, contracts, and working-memory sections', async ({ page }) => {
+  test('Usage caps renders models + contracts (with explainer); Working memory is its own section', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('status-bar-settings').click();
     await page.getByTestId('workspace-settings-rail-caps').click();
@@ -61,11 +61,19 @@ test.describe('Admin/CLI page — models & completion contracts', () => {
 
     const contracts = overlay.getByTestId('cli-admin-contracts');
     await expect(contracts).toBeVisible();
+    // AGT-2035: the completion-contracts surface now carries a short explainer.
+    await expect(contracts.getByTestId('cli-admin-contracts-explainer')).toBeVisible();
     await expect(contracts.getByTestId('cli-contract-card-claude')).toBeVisible();
     await expect(contracts.getByTestId('cli-contract-typed-copilot')).toContainText('exit-based');
+    await expect(contracts.getByTestId('cli-contracts-explainer')).toContainText('read-only registry');
+    await expect(contracts.getByTestId('cli-contracts-explainer')).toContainText('not configuration');
 
-    await expect(overlay.getByTestId('cli-admin-working-memory')).toBeVisible();
+    // Working memory was extracted from Usage caps into its own section.
+    await expect(overlay.getByTestId('cli-admin-working-memory')).toHaveCount(0);
+    await page.getByTestId('workspace-settings-rail-working-memory').click();
+    await expect(page.getByTestId('workspace-working-memory')).toBeVisible();
 
+    await page.getByTestId('workspace-settings-rail-caps').click();
     await overlay.screenshot({ path: '../results/cli-admin-types-models-contracts--real.png' });
   });
 });

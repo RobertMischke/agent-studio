@@ -121,6 +121,14 @@ public static class ModelIds
     /// account"); <c>gpt-5.5</c> is the account-valid model per
     /// <c>~/.codex/config.toml</c> and live test (AGT-1941).</summary>
     public const string Gpt55 = "gpt-5.5";
+    /// <summary>Flagship Codex model id once the installed codex CLI advertises
+    /// it. gpt-5.6 is intentionally NOT a static catalog entry: its
+    /// availability follows the live CLI via <c>CodexModelDiscovery</c> (house
+    /// rule: convention/derivation over a hardcoded list, AGT-2025). This
+    /// constant only names the well-known id for detection defaults and
+    /// tests; <see cref="ModelMetadataRegistry.DefaultForCli"/> returns it when
+    /// discovery has detected it, otherwise it falls back to <see cref="Gpt55"/>.</summary>
+    public const string Gpt56Sol = "gpt-5.6-sol";
     public const string Gpt5Codex = "gpt-5-codex";
     public const string Gpt41 = "gpt-4.1";
     public const string Gpt4o = "gpt-4o";
@@ -184,6 +192,24 @@ public static class ModelMetadataRegistry
         .SelectMany(e => new[] { e.Id }.Concat(e.Aliases ?? []).Select(id => (id, e)))
         .ToDictionary(x => x.id, x => x.e, StringComparer.OrdinalIgnoreCase);
 
+    // Detection-driven Codex default id, published by CodexModelDiscovery after
+    // a live catalog fetch (house rule: derive from the installed CLI, do not
+    // hardcode a catalog - AGT-2025). Volatile because it is read on request
+    // threads and written from the discovery gate. Null => CLI not yet probed,
+    // unavailable, or no gpt-5.6 detected => the static gpt-5.5 baseline holds.
+    private static volatile string? _detectedCodexDefaultId;
+
+    /// <summary>
+    /// Publish the Codex default model derived from the installed CLI. Pass null
+    /// to clear (CLI unavailable / no gpt-5.6 detected) so
+    /// <see cref="DefaultForCli"/> falls back to the static gpt-5.5 baseline.
+    /// </summary>
+    public static void SetDetectedCodexDefault(string? modelId)
+        => _detectedCodexDefaultId = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
+
+    /// <summary>The last Codex default detected from the installed CLI, or null.</summary>
+    public static string? DetectedCodexDefault => _detectedCodexDefaultId;
+
     public static IReadOnlyList<ModelMetadata> All => Entries;
 
     public static IReadOnlyList<ModelMetadata> ForVendor(string vendor)
@@ -191,11 +217,46 @@ public static class ModelMetadataRegistry
 
     public static string? DefaultForCli(string? cliType)
     {
+        // Codex follows the installed CLI: once discovery detects a newer top
+        // model (gpt-5.6-*), it is published here and becomes the product
+        // default everywhere Gpt55 was drawn (task creation, cli-type switch,
+        // client-default materialization). Null => static gpt-5.5 baseline.
+        if (CliTypes.IsValid(cliType) && CliTypes.Normalize(cliType) == CliTypes.Codex
+            && _detectedCodexDefaultId is { Length: > 0 } detected)
+            return detected;
+
         var vendor = VendorForCli(cliType);
         if (vendor == null) return null;
         var models = ForVendor(vendor).Where(e => e.Available && !e.Deprecated).ToList();
         return models.FirstOrDefault(e => e.IsDefault)?.Id ?? models.FirstOrDefault()?.Id;
     }
+
+    /// <summary>
+    /// Product default reasoning level for a CLI+model when the user/owner did
+    /// not pick one. For codex the operator directive (AGT-2025) is the biggest
+    /// reasoning value the installed CLI advertises for the model: the top of
+    /// the CLI-derived thinking-level ladder (gpt-5.6 -> ultra, gpt-5.5 ->
+    /// xhigh, gpt-5-codex -> high). Other CLIs keep the ladder's native default.
+    /// </summary>
+    public static string? DefaultThinkingLevelForCli(string? cliType, string? model)
+    {
+        if (CliTypes.IsValid(cliType) && CliTypes.Normalize(cliType) == CliTypes.Codex)
+        {
+            var top = CliThinkingLevels.For(cliType, model).LastOrDefault();
+            if (!string.IsNullOrWhiteSpace(top)) return top;
+        }
+        return CliThinkingLevels.DefaultFor(cliType, model);
+    }
+
+    /// <summary>
+    /// Resolve the effective reasoning level: an explicit or owner-provided
+    /// choice wins (normalized to the model's ladder); otherwise fall back to
+    /// the product default for the CLI (<see cref="DefaultThinkingLevelForCli"/>).
+    /// </summary>
+    public static string? ResolveThinkingLevel(string? cliType, string? model, string? requested)
+        => string.IsNullOrWhiteSpace(requested)
+            ? DefaultThinkingLevelForCli(cliType, model)
+            : CliThinkingLevels.Normalize(cliType, model, requested);
 
     public static bool IsCompatibleWithCli(string? cliType, string? model)
     {
@@ -251,7 +312,7 @@ public static class ModelMetadataRegistry
             Available = metadata.Available && !metadata.Deprecated,
             Deprecated = metadata.Deprecated,
             ThinkingLevels = CliThinkingLevels.For(cliType, metadata.Id).ToList(),
-            DefaultThinkingLevel = CliThinkingLevels.DefaultFor(cliType, metadata.Id)
+            DefaultThinkingLevel = DefaultThinkingLevelForCli(cliType, metadata.Id)
         };
 
     public static CliModelInfo UnknownCliModel(string id, string? label, string? vendor, string cliType)
@@ -265,7 +326,7 @@ public static class ModelMetadataRegistry
             Deprecated = false,
             AvailabilityNote = "Discovered from CLI; missing registry metadata.",
             ThinkingLevels = CliThinkingLevels.For(cliType, id).ToList(),
-            DefaultThinkingLevel = CliThinkingLevels.DefaultFor(cliType, id)
+            DefaultThinkingLevel = DefaultThinkingLevelForCli(cliType, id)
         };
 
     private static ModelMetadata Claude(

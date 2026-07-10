@@ -15,6 +15,7 @@ test('captures light-theme screenshot of Settings Workspaces section', async ({ 
   await page.waitForLoadState('domcontentloaded');
   await page.waitForTimeout(400);
   await page.getByTestId('studio-ab-settings').click();
+  await page.getByTestId('workspace-settings-rail-workspaces').click({ timeout: 10_000 });
   await expect(page.getByTestId('settings-workspaces')).toBeVisible({ timeout: 10_000 });
   await page.waitForFunction(
     () => document.querySelector('[data-testid="settings-workspaces"]')?.getAttribute('aria-busy') !== 'true',
@@ -22,7 +23,7 @@ test('captures light-theme screenshot of Settings Workspaces section', async ({ 
     { timeout: 5_000 },
   ).catch(() => { /* capture anyway */ });
   await expect(page.getByTestId('settings-workspaces-list')).toBeVisible();
-  await page.getByTestId('studio-sidebar').screenshot({
+  await page.getByTestId('workspace-management').screenshot({
     path: `${JOB_RESULTS}\\f47-settings-workspaces-light.png`,
   });
 });
@@ -35,6 +36,7 @@ test('captures dark-theme screenshot of Settings Workspaces section', async ({ p
   await page.waitForLoadState('domcontentloaded');
   await page.waitForTimeout(400);
   await page.getByTestId('studio-ab-settings').click();
+  await page.getByTestId('workspace-settings-rail-workspaces').click({ timeout: 10_000 });
   await expect(page.getByTestId('settings-workspaces')).toBeVisible({ timeout: 10_000 });
   await page.waitForFunction(
     () => document.querySelector('[data-testid="settings-workspaces"]')?.getAttribute('aria-busy') !== 'true',
@@ -42,7 +44,7 @@ test('captures dark-theme screenshot of Settings Workspaces section', async ({ p
     { timeout: 5_000 },
   ).catch(() => { /* capture anyway */ });
   await expect(page.getByTestId('settings-workspaces-list')).toBeVisible();
-  await page.getByTestId('studio-sidebar').screenshot({
+  await page.getByTestId('workspace-management').screenshot({
     path: `${JOB_RESULTS}\\f47-settings-workspaces-dark.png`,
   });
 });

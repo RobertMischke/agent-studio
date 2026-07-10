@@ -4,5 +4,10 @@ export { StudioDiffViewComponent } from './components/diff-tab-view/diff-tab-vie
 export { StudioActivityViewComponent } from './components/activity-tab-view/activity-tab-view.component';
 export { StudioTabStateService } from './services/studio-tab-state.service';
 export { StudioPanelStateService } from './services/studio-panel-state.service';
+export { ThemeService } from './services/theme.service';
+// NB: AppearanceSettingsComponent is intentionally NOT re-exported here. The
+// consolidated settings view (shell feature) mounts it via a direct path so it
+// does not pull StudioShellComponent through this barrel and re-form the
+// shell <-> studio-shell import cycle (AGT-2035).
 export { studioTabKey } from './studio-shell.types';
 export type { StudioTab, StudioTabKind, StudioPanelKind } from './studio-shell.types';

@@ -10,8 +10,9 @@ import { TaskState } from '../../../../models/task.model';
 /**
  * Focused "create an epic" modal opened from the epic overview screen
  * (empty-state invitation or the header "+ New epic" button). Unlike the
- * full create-task dialog, an epic only needs a title and an optional
- * description, so this surface stays intentionally small.
+ * full create-task dialog, this surface stays intentionally small. A goal
+ * description is required so an epic cannot be created as an unexplained,
+ * permanently empty placeholder.
  *
  * The new epic is a {@link CreateTaskRequest} with `kind=epic`, landed in
  * `0-backlog` so its creation never trips the pickup gate into an
@@ -49,7 +50,9 @@ export class EpicCreateDialogComponent implements AfterViewInit {
   @ViewChild('titleInput') private titleInputRef?: ElementRef<HTMLInputElement>;
 
   readonly canSubmit = computed(() =>
-    this.draftTitle().trim().length > 0 && !this.submitting(),
+    this.draftTitle().trim().length > 0 &&
+    this.draftDescription().trim().length > 0 &&
+    !this.submitting(),
   );
 
   ngAfterViewInit(): void {

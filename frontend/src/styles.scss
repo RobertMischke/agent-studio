@@ -140,7 +140,6 @@ html[data-studio-theme='light'] {
       0 0 0 1px var(--studio-card-state-border),
       var(--studio-card-shadow-hover);
   }
-  .backlog-triage__row,
   .epic-board__subtask-button {
     background: var(--studio-card-bg);
     border-color: var(--studio-card-state-border);
@@ -166,12 +165,6 @@ html[data-studio-theme='light'] {
     background: rgba(0, 0, 0, 0.05);
     border-color: rgba(0, 0, 0, 0.10);
     color: #3a3a3a;
-  }
-  .task-card__delete { color: var(--studio-fg-muted); }
-  .task-card__delete:hover {
-    background: rgba(220, 38, 38, 0.08);
-    border-color: rgba(220, 38, 38, 0.30);
-    color: #b91c1c;
   }
   // Card title now reads var(--studio-fg) component-side which already
   // resolves to dark in light theme — no bridge override needed.
@@ -786,4 +779,12 @@ select option:checked,
 select option:hover {
   background-color: #45475a;
   color: #ffffff;
+}
+/* Active work is warm across cards, chips, and the board lane header. */
+.column[data-state='3-progress'] .column__header {
+  border-bottom-color: color-mix(in srgb, var(--lane-progress) 55%, var(--studio-border));
+}
+.column[data-state='3-progress'] .column__icon,
+.column[data-state='3-progress'] .column__title {
+  color: var(--lane-progress);
 }

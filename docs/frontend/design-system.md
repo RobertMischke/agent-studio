@@ -271,8 +271,10 @@ type / motion rules. New components should be added to this list.
   [frontend/src/app/features/studio-shell/studio-shell.component.html](../../frontend/src/app/features/studio-shell/studio-shell.component.html)
   — brand logo, project pills, search box, command actions, theme
   toggle. Always renders.
-- **Activity bar** — vertical 48 px column with the project switcher
-  (board, runs, files, search) plus the chat rail toggle.
+- **Activity bar** — vertical 48 px column with the panel switcher
+  (Explorer, Filters, Agents / CLI, Activity, Runbook) plus a settings
+  gear that opens the one consolidated Workspace-settings view as an
+  editor tab (AGT-2035; the standalone chat-rail toggle was removed).
 - **Sidebar** — resizable panel projected via
   `<ng-content select="[studioSidebar]">`. Hosts the Explorer
   (workspaces / projects tree), search results, or other navigation

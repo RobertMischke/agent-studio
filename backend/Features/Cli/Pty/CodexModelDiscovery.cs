@@ -46,14 +46,14 @@ public sealed class CodexModelDiscovery
         if (!forceRefresh)
         {
             if (_memCache != null && DateTime.UtcNow - _memCacheAt < Ttl)
-                return WithActiveModelApplied(_memCache);
+                return Publish(WithActiveModelApplied(_memCache));
 
             var fromDisk = TryLoadDisk();
             if (fromDisk != null && DateTime.UtcNow - fromDisk.FetchedAt < Ttl)
             {
                 _memCache = fromDisk;
                 _memCacheAt = fromDisk.FetchedAt;
-                return WithActiveModelApplied(fromDisk);
+                return Publish(WithActiveModelApplied(fromDisk));
             }
         }
 
@@ -61,7 +61,7 @@ public sealed class CodexModelDiscovery
         try
         {
             if (!forceRefresh && _memCache != null && DateTime.UtcNow - _memCacheAt < Ttl)
-                return WithActiveModelApplied(_memCache);
+                return Publish(WithActiveModelApplied(_memCache));
 
             try
             {
@@ -69,20 +69,23 @@ public sealed class CodexModelDiscovery
                 _memCache = fresh;
                 _memCacheAt = fresh.FetchedAt;
                 TrySaveDisk(fresh);
-                return fresh;
+                return Publish(fresh);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Codex PTY model discovery failed; falling back to cached catalog");
-                if (_memCache != null) return WithSource(WithActiveModelApplied(_memCache), "pty-failed-mem-cache");
+                if (_memCache != null) return Publish(WithSource(WithActiveModelApplied(_memCache), "pty-failed-mem-cache"));
                 var fromDisk = TryLoadDisk();
                 if (fromDisk != null)
                 {
                     _memCache = fromDisk;
                     _memCacheAt = fromDisk.FetchedAt;
-                    return WithSource(WithActiveModelApplied(fromDisk), "pty-failed-disk-cache");
+                    return Publish(WithSource(WithActiveModelApplied(fromDisk), "pty-failed-disk-cache"));
                 }
-                throw;
+                // Task item 1: when the CLI cannot be queried and there is no
+                // cache, fall back to today's static registry list rather than
+                // failing the model surface (mirrors ClaudeModelDiscovery).
+                return Publish(FallbackCatalog("pty-failed-registry-fallback"));
             }
         }
         finally { _gate.Release(); }
@@ -169,7 +172,7 @@ public sealed class CodexModelDiscovery
                 Vendor = GuessVendor(id),
                 IsDefault = string.Equals(id, activeModel, StringComparison.OrdinalIgnoreCase),
                 ThinkingLevels = CliThinkingLevels.For(CliTypes.Codex, id).ToList(),
-                DefaultThinkingLevel = CliThinkingLevels.DefaultFor(CliTypes.Codex, id)
+                DefaultThinkingLevel = ModelMetadataRegistry.DefaultThinkingLevelForCli(CliTypes.Codex, id)
             }, priority, index++));
         }
 
@@ -192,10 +195,73 @@ public sealed class CodexModelDiscovery
         var models = cat.Models.Select(m => m with
         {
             ThinkingLevels = CliThinkingLevels.For(CliTypes.Codex, m.Id).ToList(),
-            DefaultThinkingLevel = CliThinkingLevels.DefaultFor(CliTypes.Codex, m.Id)
+            DefaultThinkingLevel = ModelMetadataRegistry.DefaultThinkingLevelForCli(CliTypes.Codex, m.Id)
         }).ToList();
 
         return cat with { Models = models };
+    }
+
+    /// <summary>
+    /// Registry-backed static catalog used when the codex CLI cannot be queried
+    /// and no cache exists (task item 1's "fall back to today's static list").
+    /// Mirrors <c>ClaudeModelDiscovery.FallbackCatalog</c>. Contains no gpt-5.6
+    /// (that is detection-only), so a Publish of this catalog keeps the default
+    /// on the account-valid gpt-5.5 baseline.
+    /// </summary>
+    public static CliModelCatalog FallbackCatalog(string source = "registry-fallback")
+    {
+        var models = ModelMetadataRegistry.ForVendor("openai")
+            .Select(m => ModelMetadataRegistry.ToCliModelInfo(m, CliTypes.Codex))
+            .Where(m => m.Available)
+            .ToList();
+        if (models.Count > 0 && models.All(m => !m.IsDefault))
+            models[0] = models[0] with { IsDefault = true };
+        return new CliModelCatalog
+        {
+            Models = models,
+            Source = source,
+            FetchedAt = DateTime.UtcNow
+        };
+    }
+
+    private static bool IsGpt56(string? id)
+        => id != null && id.StartsWith("gpt-5.6", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Derive the Codex product default from a live/cached catalog: as soon as
+    /// the installed CLI lists a gpt-5.6-* model, that becomes the default
+    /// (following the CLI's own active model when it is already a gpt-5.6, else
+    /// the highest-priority gpt-5.6 in the list). Returns null when no gpt-5.6
+    /// is present so the caller keeps the static gpt-5.5 baseline (AGT-2025).
+    /// </summary>
+    internal static string? PickDetectedDefault(CliModelCatalog cat)
+    {
+        var models = cat.Models;
+        if (models == null || models.Count == 0) return null;
+
+        // Follow the CLI's own default when it already points at a gpt-5.6 model.
+        var flagged = models.FirstOrDefault(m => m.IsDefault && IsGpt56(m.Id));
+        if (flagged != null) return flagged.Id;
+
+        // Otherwise: the models are priority-ordered, so the first gpt-5.6 is the
+        // highest-priority one the CLI advertises.
+        return models.FirstOrDefault(m => IsGpt56(m.Id))?.Id;
+    }
+
+    /// <summary>
+    /// Publish the detected Codex default into the shared registry so task
+    /// creation, cli-type switches, and client-default materialization all
+    /// follow the CLI, then return the catalog unchanged. Called on every path
+    /// that yields a catalog (fresh, mem-cache, disk-cache) so a null result
+    /// (no gpt-5.6) correctly clears back to the gpt-5.5 baseline.
+    /// </summary>
+    private CliModelCatalog Publish(CliModelCatalog cat)
+    {
+        var detected = PickDetectedDefault(cat);
+        ModelMetadataRegistry.SetDetectedCodexDefault(detected);
+        _logger.LogDebug("Codex detected default published: {Detected} (source={Source})",
+            detected ?? "<none>", cat.Source);
+        return cat;
     }
 
     private CliModelCatalog WithActiveModelApplied(CliModelCatalog cat)

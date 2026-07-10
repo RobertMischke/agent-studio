@@ -9,6 +9,15 @@
     [count]="totalProjectCount()"
     testid="studio-explorer-workspace-head"
     (collapsedChange)="setCollapsed('workspace', $event)">
+    <!-- AGT-2031: whole tree collapsed → workspace-wide aggregate pulse. -->
+    @if (isCollapsed('workspace') && allPulseAggregate().state !== 'off') {
+      <app-explorer-auto-pulse actions
+        [state]="allPulseAggregate().state"
+        [aggregate]="true"
+        [tooltip]="aggregatePulseTooltip(allPulseAggregate())"
+        [ariaLabel]="aggregatePulseTooltip(allPulseAggregate())"
+        testid="studio-explorer-workspace-pulse" />
+    }
     <button actions
             type="button"
             class="studio-sidebar-header__action studio-sidebar-header__action--inline"
@@ -65,6 +74,7 @@
              testid + aria-expanded contract is preserved for the F46
              specs. -->
         <div class="studio-explorer-tree__ws-head">
+          @let wsAgg = wsPulseAggregate(g);
           <app-tree-row
             level="root"
             glyph="folder"
@@ -76,7 +86,18 @@
             (chevronClick)="onWsHeaderToggle(g)"
             (selectRequest)="onWsHeaderToggle(g)"
             (secondary)="startRenameWorkspace(g)"
-            (contextmenu)="openWsContextMenu($event, g)" />
+            (contextmenu)="openWsContextMenu($event, g)">
+            <!-- AGT-2031: collapsed workspace → aggregate pulse (names on auto
+                 in the tooltip); expanded → the per-project dots carry it. -->
+            @if (isCollapsed('ws:' + g.id) && wsAgg.state !== 'off') {
+              <app-explorer-auto-pulse
+                [state]="wsAgg.state"
+                [aggregate]="true"
+                [tooltip]="aggregatePulseTooltip(wsAgg)"
+                [ariaLabel]="aggregatePulseTooltip(wsAgg)"
+                [testid]="'studio-explorer-ws-pulse-' + g.id" />
+            }
+          </app-tree-row>
           @if (g.id !== '__all__' && g.id !== '__unassigned__') {
             <button type="button"
                     class="studio-explorer-tree__row-action"
@@ -102,7 +123,7 @@
                (contextmenu)="onProjectContextMenu($event, p)"
                (dragstart)="onDragStart($event, p)"
                (dragend)="onDragEnd()">
-            @if (projectActions.renamingProjectId() === p.projectId) {
+            @if (p.projectId && projectActions.renamingProjectId() === p.projectId) {
               <!-- Inline rename: registry displayName only; PROJ id + storage
                    stay put. Enter commits, Escape / blur cancels. -->
               <div class="studio-explorer-tree__ws-rename">
@@ -132,6 +153,13 @@
                             (chevronClick)="toggleExpanded.emit(p.name)"
                             (selectRequest)="toggleExpanded.emit(p.name)"
                             (secondary)="openBoardRequest.emit(p.name)">
+                <!-- AGT-2031: subtle auto-pickup pulse (reserved slot → no
+                     reflow when auto toggles). -->
+                <app-explorer-auto-pulse
+                  [state]="pulseStateFor(p.name)"
+                  [tooltip]="pulseTooltip(pulseStateFor(p.name))"
+                  [ariaLabel]="pulseAriaLabel(pulseStateFor(p.name))"
+                  [testid]="'studio-explorer-project-pulse-' + p.name" />
                 <button type="button"
                         class="studio-tree-row__hub-link"
                         cacTooltip="Open Project Hub"
@@ -142,55 +170,36 @@
               </app-tree-row>
             }
             @if (isExpanded(p.name)) {
-              <!-- ASS-658/ASS-597: five fixed per-project rows, all
-                   project-scoped — Board (kanban), Project Hub, Wiki, Backlog
-                   (triage), and Epics (overview) — followed by 0..N dynamic
-                   Project URL rows (see the @for below). Per-lane children stay
-                   retired; lanes are reachable from the board itself. -->
+              <!-- Fixed project-scoped rows for Board (kanban), Project Hub,
+                   Wiki, and Epics (overview), followed by 0..N dynamic
+                   Project URL rows (see the @for below). The workspace is the
+                   first navigation level; project rows and their destinations
+                   share the second-level inset. Per-lane children stay retired. -->
               <div class="studio-tree-children">
-                <app-tree-row level="child" glyph="grid"
+                <app-tree-row level="root" glyph="grid"
                               label="Board"
                               [ariaLabel]="'Board, ' + boardLaneCountsLabel(p)"
                               [active]="p.isActive && activeProjectSurface() === 'board'"
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'board' ? 'page' : null"
                               [testid]="'studio-explorer-project-board-' + p.name"
                               (selectRequest)="openBoardRequest.emit(p.name)">
-                  <span class="studio-board-lane-counts"
-                        [attr.data-testid]="'studio-explorer-project-board-counts-' + p.name"
-                        [attr.aria-label]="boardLaneCountsLabel(p)">
-                    <span class="studio-board-lane-count studio-board-lane-count--ready"
-                          [cacTooltip]="laneCountTooltips.ready"
-                          [attr.data-testid]="'studio-explorer-project-board-count-ready-' + p.name"
-                          aria-hidden="true">{{ laneCountsFor(p).ready }}</span>
-                    <span class="studio-board-lane-count studio-board-lane-count--progress"
-                          [cacTooltip]="laneCountTooltips.progress"
-                          [attr.data-testid]="'studio-explorer-project-board-count-progress-' + p.name"
-                          aria-hidden="true">{{ laneCountsFor(p).progress }}</span>
-                    <span class="studio-board-lane-count studio-board-lane-count--human-review"
-                          [cacTooltip]="laneCountTooltips.humanReview"
-                          [attr.data-testid]="'studio-explorer-project-board-count-human-review-' + p.name"
-                          aria-hidden="true">{{ laneCountsFor(p).humanReview }}</span>
-                  </span>
+                  <app-explorer-lane-dashboard
+                    [counts]="laneCountsFor(p)" [view]="metricView()"
+                    [projectName]="p.name" />
                 </app-tree-row>
-                <app-tree-row level="child" glyph="layout"
+                <app-tree-row level="root" glyph="layout"
                               label="Project Hub"
                               [active]="p.isActive && activeProjectSurface() === 'hub'"
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'hub' ? 'page' : null"
                               [testid]="'studio-explorer-project-hub-' + p.name"
                               (selectRequest)="openHubRequest.emit(p.name)" />
-                <app-tree-row level="child" glyph="book"
+                <app-tree-row level="root" glyph="book"
                               label="Wiki"
                               [active]="p.isActive && activeProjectSurface() === 'wiki'"
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'wiki' ? 'page' : null"
                               [testid]="'studio-explorer-project-wiki-' + p.name"
                               (selectRequest)="openWikiRequest.emit(p.name)" />
-                <app-tree-row level="child" glyph="list"
-                              label="Backlog"
-                              [active]="p.isActive && activeProjectSurface() === 'backlog'"
-                              [ariaCurrent]="p.isActive && activeProjectSurface() === 'backlog' ? 'page' : null"
-                              [testid]="'studio-explorer-project-backlog-' + p.name"
-                              (selectRequest)="openBacklogRequest.emit(p.name)" />
-                <app-tree-row level="child" glyph="book"
+                <app-tree-row level="root" glyph="book"
                               label="Epics"
                               [active]="p.isActive && activeProjectSurface() === 'epics'"
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'epics' ? 'page' : null"
@@ -203,7 +212,7 @@
                      these are plain external links, NOT tabs, so they do not go
                      through the StudioTabStateService @Output() emitters. -->
                 @for (u of p.urls; track u.id) {
-                  <app-tree-row level="child" glyph="link"
+                  <app-tree-row level="root" glyph="link"
                                 [label]="u.label"
                                 [ariaLabel]="u.label + ', opens ' + u.url + ' in a new tab'"
                                 [cacTooltip]="u.url"

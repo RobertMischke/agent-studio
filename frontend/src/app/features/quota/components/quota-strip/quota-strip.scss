@@ -53,7 +53,7 @@
 .qcard {
   border: 1px solid var(--studio-border);
   border-radius: 8px;
-  background: var(--studio-bg-hover);
+  background: linear-gradient(180deg, var(--studio-bg-elevated), var(--studio-bg-hover));
   padding: 8px 10px;
 }
 .qcard__head {
@@ -94,19 +94,21 @@
 .qwin__pct.crit  { color: var(--severity-high); }
 .qwin__bar {
   margin-top: 4px;
-  height: 6px;
-  background: var(--studio-bg-elevated);
+  height: 7px;
+  background: color-mix(in srgb, var(--studio-fg-muted) 20%, transparent);
   border-radius: 999px;
   overflow: hidden;
 }
 .qwin__fill {
   display: block;
   height: 100%;
+  min-width: 3px;
+  border-radius: inherit;
   transition: width 0.4s ease;
-  background: var(--severity-pass);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--severity-pass) 65%, transparent), var(--severity-pass));
 }
-.qwin__fill.warn { background: var(--severity-warn); }
-.qwin__fill.crit { background: var(--severity-high); }
+.qwin__fill.warn { background: linear-gradient(90deg, color-mix(in srgb, var(--severity-warn) 65%, transparent), var(--severity-warn)); }
+.qwin__fill.crit { background: linear-gradient(90deg, color-mix(in srgb, var(--severity-high) 65%, transparent), var(--severity-high)); }
 .qwin__meta {
   margin-top: 4px;
   display: flex;

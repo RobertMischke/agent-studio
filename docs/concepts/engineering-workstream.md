@@ -1,215 +1,172 @@
-# Workstream — orientation in the running development stream
+# Workstream
 
-**Status:** concept v3, 2026-07-09 — renamed by the operator from
-"Engineering Workstream" to just **Workstream**; it is the **top element**
-of the wiki content tree, and above it the wiki opens on the generated
-**Pulse** dashboard — see
-[`wiki-pulse-dashboard.md`](wiki-pulse-dashboard.md). v2 was finalized from
-the operator's refinement of
-[`project-chartroom-concept.md`](project-chartroom-concept.md) (now
-superseded; entry page
-**Current Development State**). Related: AGT-1984 (wiki own checkout,
-branch-bound), [`multichat-orchestrator.md`](multichat-orchestrator.md)
-(collector/curator are orchestrator contexts),
-[`post-processing-immediacy-and-parallelism.md`](post-processing-immediacy-and-parallelism.md)
-(collector hook is a pipeline step).
+Status: Concept (living). Slice EW-1 implemented.
 
-## 1. Purpose — deliberately re-weighted
+> Naming (operator decision 2026-07-09): user-facing, this frame is called
+> **Workstream** and is pinned as the **top** element of every project wiki's
+> content tree. The internal identifiers, the concept file name, and the physical
+> folder (`docs/engineering-workstream/`) keep the historical
+> `engineering-workstream` name so existing checkouts do not break; only the
+> displayed label was remapped (see [§8](#8-display-name-and-tree-position)).
 
-The core is **not** "Dokumentation des Projekts" but **Orientierung im
-laufenden Entwicklungsstrom**. No second Kanban, no onboarding wiki, no
-project plan, no Project Brief / System Overview / Target State / Roadmap
-entry page. It answers: *"Wo steht die Entwicklung gerade, was ist relevant,
-was wiederholt sich, und wo braucht es Aufmerksamkeit?"*
+The Workstream is a fixed frame in every project's wiki that keeps
+the development story in the same five places, in the same order, forever. It is
+the answer to "where does knowledge about how this project is being built
+actually live?" — so that operators and agents never have to guess, and never
+reorganise it away.
 
-> Das Kanban-Board bleibt für Arbeit. Der Workstream bleibt für
-> Orientierung.
+## 1. Problem
 
-## 2. The fixed frame
+Project knowledge tends to scatter. Status lives in one person's head, drift
+notes land wherever, decisions are implicit, and the running history is a chat
+log nobody re-reads. Every project re-invents its own layout, so moving between
+projects means re-learning where things are. Worse, agents editing the wiki can
+quietly delete or restructure the very scaffolding that made the knowledge
+findable.
 
-```
-(Pulse dashboard — wiki landing, generated view, not a page)
-Workstream                       <- oberstes Element des Wiki-Baums
-├── Current Development State   <- zentrale Startseite
-├── Development Signals
-├── System Knowledge
-├── Decision Log
-└── Workstream Log
-```
+## 2. The fixed five-area frame
 
-**Frame rules (hard):**
+The frame is five areas that exist in every project wiki, always in this order:
 
-1. The outer frame is **given and immutable** — frame pages cannot be
-   deleted or structurally edited (not by agents, not by accident).
-2. **Sub-pages** may be created beneath frame pages; they carry **history**
-   and follow the same logic (aggregators create them and link them).
-3. Every frame page is **prompt-known**: the collector/aggregator knows the
-   page exists and has the *duty* to write into it — filling happens
-   automatically through the pipeline, never as a manual setup step.
-   **Creation works the same way (operator decision 2026-07-10):** every
-   wiki-writing pipeline step runs an idempotent *ensure-frame* before
-   writing, so activating the steps for a project **is** the frame
-   onboarding — no manual bootstrap action, no "not onboarded" state
-   (AGT-2024). Public/open-source repos get English frame pages.
-4. **Anti-overgrowth is a first-class rule** (§5).
-5. Pages are **HTML, not Markdown** — the operator wants a strong, punchy
-   ("knallig") layout for fast orientation: self-contained HTML in the wiki
-   checkout, shared design tokens, generous visual hierarchy, linked
-   sub-pages. Markdown only as interim before the HTML renderer lands.
-
-## 3. The five areas (operator-authored templates = the spec)
-
-### 3.1 Current Development State — die verdichtete Lageansicht
-
-Kein vollständiger Statusbericht, keine Projektbeschreibung: ein
-**verdichteter Arbeitskontext**. Wird bei jedem Refresh **ersetzt**, nicht
-erweitert.
-
-```
-# Current Development State
-## Current Focus
-What currently shapes the development work.
-## Active Signals
-Recurring problems, patterns, risks, or inconsistencies that currently matter.
-## Human Attention
-Topics that require review, clarification, or a decision by a developer.
-## Open Questions
-Questions that are currently unresolved or cannot be answered from existing knowledge.
-## Recent Relevant Changes
-Changes that affect how the system should currently be understood.
-## References
-- Related Development Signals / Decisions / System Knowledge pages / Kanban items
-```
-
-### 3.2 Development Signals — wiederkehrende Auffälligkeiten
-
-Probleme, Muster, Risiken, Inkonsistenzen, Wissenslücken, technische
-Auffälligkeiten, unklare Anforderungen, architektonische Spannungen. Der
-Wert: das LLM erkennt aus vielen Aufgaben *"da tritt etwas wiederholt auf,
-das ist relevant, das sollte ein Mensch sehen."*
-
-```
-# Development Signal: Name
-## Type
-Problem / Pattern / Risk / Knowledge Gap / Inconsistency
-## Summary
-Short description of the signal.
-## Evidence
-Related Kanban items, task summaries, commits, incidents, or notes.
-## Impact
-What this affects.
-## Frequency
-Once / Repeated / Frequent / Systemic
-## Current Interpretation
-What this signal currently seems to indicate.
-## Human Action
-What should be reviewed, clarified, decided, or monitored.
-## Status
-Observed / Active / Under Review / Mitigated / Resolved
-```
-
-### 3.3 System Knowledge — stabiles Wissen, aktualisiert statt erweitert
-
-Keine Aufgaben, keine Statusmeldungen: Konzepte, Komponenten, Workflows,
-Schnittstellen, Datenmodelle, technische/fachliche Regeln, Constraints.
-**Kernregel: bestehende Seiten verbessern — keine Wissenssplitter pro Task.**
-
-```
-# Concept / Component: Name
-## Current Understanding
-Consolidated knowledge about this concept or component.
-## Responsibilities
-What this part is responsible for.
-## Relevant Details
-Important behavior, rules, constraints, or implementation notes.
-## Related Signals
-Signals that affect this concept or component.
-## Related Decisions
-Decisions that explain why it is currently designed this way.
-## Last Updated From
-References to Kanban items, workstream log entries, or manual updates.
-```
-
-### 3.4 Decision Log — Zustand mit Begründung
-
-Ohne Decision Log wird LLM-generierte Doku schnell "aktueller Zustand ohne
-Begründung".
-
-```
-# Decision: Title
-## Status
-Proposed / Accepted / Rejected / Superseded
-## Context
-What made this decision necessary.
-## Decision
-What was decided.
-## Rationale
-Why this decision was made.
-## Consequences
-Expected impact, trade-offs, or constraints.
-## Related Signals
-## Related Knowledge
-## Date
-YYYY-MM-DD
-```
-
-### 3.5 Workstream Log — verdichteter Verlauf
-
-Kein Backlog, keine Ticketliste, kein klassisches Changelog: was aus
-Aufgaben **für den Entwicklungsstrom relevant** wurde.
-
-```
-# Workstream Log Entry
-## Source
-Kanban item, task, pull request, incident, or manual note.
-## Summary
-What happened.
-## Knowledge Updates
-Which System Knowledge pages were created, changed, or refined.
-## Signals
-Which Development Signals were created, confirmed, changed, or resolved.
-## Decisions
-Which decisions were created, confirmed, or affected.
-## Human-Relevant Impact
-Why this matters for the ongoing development work.
-```
-
-## 4. Mechanics (carried from Chartroom v1, re-anchored)
-
-1. **Collector (pipeline step, automatic):** on task onboarding/completion,
-   writes a Workstream Log entry and updates Signals / System Knowledge /
-   Decision Log; refreshes Current Development State when enough changed.
-   The prompt carries the frame map + area rules (prompt-known pages, duty
-   to fill, sub-pages allowed and linked).
-2. **Curator (periodic orchestrator context):** verifies signal claims,
-   merges duplicates, condenses the State page, prunes stale sub-pages —
-   the anti-overgrowth enforcement pass.
-3. **Pull:** read API so any orchestrator/multichat context can pull the
-   Current Development State or a signal dossier as working context.
-
-## 5. Anti-overgrowth guardrails (hard rules for collector + curator)
-
-- Current Development State is **replaced**, never appended.
-- Signals are **merged by identity**: same phenomenon = Frequency hochzählen
-  plus neue Evidence — nie duplizieren.
-- System Knowledge: **update in place**; neue Seite nur für genuin neues
-  Konzept/Komponente; `Last Updated From` ist Pflicht.
-- Sub-page depth max. 2; per-area Seitenbudgets (Start: Signals max. 30
-  aktiv, Knowledge max. 50); über Budget muss der Kurator erst
-  mergen/verdichten, bevor Neues entsteht.
-- Frame pages immutable — technisch erzwungen, nicht Konvention.
-
-## 6. Storage & rendering
-
-Lives in the project wiki space — i.e. the wiki's **own checkout**
-(AGT-1984), branch-bound (working branch, typically develop). HTML pages,
-self-contained, consistent design tokens, both themes; sub-pages linked from
-their frame page. History = git history of the checkout.
-
-## 7. Implementation slices
-
-| Slice | Scope | Gate |
+| # | Area | Purpose |
 |---|---|---|
-| **EW-1 frame** | fixed 5-area frame in the wiki area: HTML shell, immutability enforcement, sub-page mechanics with history, navigation | **implemented 2026-07-09** (AGT-1986, merged) |
-| **EW-2 collector** | pipeline step on onboarding/completion writing Log/Signals/Knowledge/State per §4.1 with §5 rules; prompt template with frame map | EW-1 |
-| **EW-3 retro-pilot + curator** | one-shot retroactive generation for Agent Studio (validates the approach on real history — tonight alone yields signals like "post-processing robustness" and "restart resume orphans"), then the periodic curator | EW-2 |
+| 01 | **Current Development State** | What is actively being built right now: in-flight streams, their intent, and where they stand. |
+| 02 | **Development Signals** | The health readout: drift, regressions, recurring failures, and the metrics worth watching. |
+| 03 | **System Knowledge** | How the system actually works: durable architecture, contracts, and hard-won operational lessons. |
+| 04 | **Decision Log** | Why the system is shaped the way it is: decisions taken, alternatives rejected, and their triggers. |
+| 05 | **Workstream Log** | The running narrative of the engineering workstream: what happened, in order, over time. |
+
+Together they answer, in order: what now, how healthy, how it works, why it is
+so, and what happened. The frame is deliberately small and never grows — five
+areas is the whole vocabulary.
+
+## 3. Physical model — the frame is real folders
+
+Consistent with the wiki tree contract ([../contracts/wiki-tree.md](../contracts/wiki-tree.md)),
+the frame is a real folder structure under the wiki root, not a virtual grouping
+layer:
+
+```
+docs/engineering-workstream/
+  00-overview.html                       <- frame orientation shell
+  10-current-development-state/index.html
+  20-development-signals/index.html
+  30-system-knowledge/index.html
+  40-decision-log/index.html
+  50-workstream-log/index.html
+```
+
+Each area is a folder holding a landing **HTML shell** (`index.html`). The shells
+are self-contained: inline design tokens mirroring the studio design system,
+both light and dark via `prefers-color-scheme` (the wiki renders HTML in a
+script-disabled sandboxed iframe, so theming must be CSS-only), and a bold
+orientation layout that states each area's purpose and its place in the frame.
+
+## 4. Immutability — the frame's shape is locked
+
+The frame's shape is immutable, and the rule is enforced server-side so it holds
+even when the request comes from an agent, not just the UI. Two tiers:
+
+- **Structural lock** — the frame root, the five area folders, and the landing
+  shells cannot be moved, renamed, or deleted. This keeps the five areas present
+  and in order.
+- **Content lock** — the landing shells additionally cannot be overwritten,
+  because their orientation layout *is* the frame.
+
+The single source of truth is
+[`backend/Features/Docs/EngineeringWorkstreamFrame.cs`](../../backend/Features/Docs/EngineeringWorkstreamFrame.cs).
+The wiki move, delete, and save endpoints consult it and reject blocked
+mutations (`409 Conflict` for move/delete, a rejected save for content), and the
+wiki tree tags each frame node with an `immutable` flag so the UI shows a lock
+affordance and hides rename/delete/move.
+
+## 5. Subpages — where the actual content goes
+
+Everything below an area folder is an ordinary wiki page with full git history.
+Operators and agents add, edit, move, and delete subpages freely; only the frame
+scaffolding is fixed. A decision is a subpage under `40-decision-log/`; a drift
+write-up is a subpage under `20-development-signals/`. The frame gives the
+address; the subpages carry the payload.
+
+## 6. AGT-1984 — relocation into the wiki's own checkout
+
+The wiki is moving to its own branch-bound checkout (AGT-1984) so wiki edits do
+not entangle with source branches. The frame is built to move with it:
+
+- The frame is anchored by a single wiki-root-relative constant
+  (`EngineeringWorkstreamFrame.FrameRootRel`) and reasons only about
+  wiki-root-relative paths. It never hard-codes the `docs/` prefix or an absolute
+  checkout path.
+- Resolving where the wiki root physically lives is already isolated in
+  `ProjectDocsService` (the `WikiRel` base + `ProjectRepoResolver`). When the wiki
+  gains its own checkout, only that resolution changes; the frame definition,
+  its area slugs, and its immutability rules move unchanged.
+
+In other words, the frame is checkout-agnostic by construction: it is a set of
+relative paths plus rules over them, which is exactly what survives a relocation.
+
+## 7. Slices
+
+- **EW-1:** the fixed five-area frame - immutable folders and
+  landing shells, the self-contained HTML orientation shells, the tree
+  `immutable` flag, server-side move/delete/save enforcement, and navigation. No
+  automated authoring of subpage content yet.
+- **AGT-2024 (this slice): self-provisioning the frame into target projects.**
+  The frame is materialized into a watched project's `docs/` automatically, the
+  first time a wiki-writing pipeline step runs for it. There is no manual
+  bootstrap action and no "onboarded" flag (operator decision 2026-07-10):
+  activating a wiki-writing step is what creates the structure. See
+  [§9](#9-self-provisioning-agt-2024).
+- **Later:** subpage authoring conventions per area, and wiring
+  signals/decisions/log entries from pipeline output (EW-2 collector, curator).
+
+## 8. Display name and tree position
+
+The 2026-07-09 rename is a presentation-layer change, deliberately kept off the
+frame's identity so it stays relocatable (see [§6](#6-agt-1984--relocation-into-the-wikis-own-checkout)):
+
+- **Display name.** The frame root's wiki-tree label is
+  `EngineeringWorkstreamFrame.RootDisplayName` (`"Workstream"`), applied in
+  `ProjectDocsService.BuildTreeNodes` via `EngineeringWorkstreamFrame.DisplayTitle`.
+  Only the root is relabelled; the five areas keep the titles derived from their
+  own folder names.
+- **Physical folder unchanged.** The on-disk folder stays
+  `docs/engineering-workstream/` (`FrameRootRel`), so existing checkouts, the
+  immutability rules, and every wiki-root-relative path keep working. A physical
+  folder rename, if ever wanted, is a separate migration and is out of scope here.
+- **Top of the tree.** The frame root is pinned first in
+  `ProjectDocsService.CompareTreeNodes` (`EngineeringWorkstreamFrame.IsFrameRoot`
+  sorts ahead of all other `docs/` siblings), so the Workstream always leads the
+  wiki content tree regardless of alphabetical order.
+
+## 9. Self-provisioning (AGT-2024)
+
+The frame is not something an operator bootstraps by hand, and there is no
+"not onboarded" state to leave. Instead the frame is **self-provisioned**: when a
+wiki-writing pipeline step is active for a project, that step creates the frame
+structure the first time it runs (operator decision 2026-07-10).
+
+- **The ensure-frame primitive.** `EngineeringWorkstreamFrameSeeder.EnsureFrame`
+  idempotently materializes the whole frame (the five area folders, their landing
+  shells, and the overview shell) into a target project's `docs/`. It only ever
+  creates the six known shells and their folders, so foreign files are always
+  untouched; it never overwrites an existing shell, so a partial frame is
+  completed and a full frame is a no-op; and it never throws, so a seed hiccup can
+  never break the step that called it.
+- **Wired into the steps.** Every wiki-writing step calls the primitive before its
+  own writes: today `WikiMaintenancePostStepRunner` and
+  `WikiLearningsPostStepRunner`, later the EW-2 collector and curator. Because the
+  step being enabled is the provisioning trigger, the old "skip when the project
+  has no wiki" guard is gone: an enabled step now bootstraps its own home under
+  `docs/`.
+- **Content source.** The seeded shells are rendered by
+  `EngineeringWorkstreamFrameContent` from `EngineeringWorkstreamFrame.Areas`, so
+  the seeded frame can never drift from the declared frame identity and meets the
+  same self-contained / both-themes / orientation-layout invariants as the
+  hand-authored EW-1 shells (`EngineeringWorkstreamFrameContentTests`).
+- **Language.** Frame pages for public / open-source repos are English throughout;
+  an internal project may opt into a localized frame. The choice is the
+  `ProjectSettings.WorkstreamFramePublic` setting with a heuristic default
+  (English), resolved by `WorkstreamFrameLanguageResolver`. The five area
+  identities (folder slugs and titles) stay a fixed English vocabulary in every
+  language; only the orientation copy is localized.

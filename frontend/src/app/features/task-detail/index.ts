@@ -28,6 +28,8 @@ export {
 export { HygieneStripComponent } from './components/hygiene-strip/hygiene-strip/hygiene-strip.component';
 export { ProjectHygieneBadgeComponent } from './components/hygiene-strip/project-hygiene-badge/project-hygiene-badge.component';
 export { ActivityLogViewComponent } from './components/activity-log-view/activity-log-view';
+export { ResultViewComponent } from './components/protocol-pane/result-view/result-view.component';
+export type { ProtocolVerdict } from './components/protocol-pane/protocol-verdict';
 export {
   parseActivityLog,
   buildConversationTurns,

@@ -67,27 +67,42 @@ public static class ProjectDocsEndpoints
         });
 
         // The physical docs/ folder hierarchy (folders + .md/.html/.json files)
-        // that backs the wiki navigation tree. No git is touched here so loading
-        // it stays cheap; per-doc commit metadata is fetched lazily via /history.
-        app.MapGet("/api/projects/{projectName}/wiki/tree", (string projectName, ProjectDocsService docs) =>
+        // that backs the wiki navigation tree. No git is touched here, and a warm
+        // cache serves it without opening a file (AGT-2013); the ETag lets a
+        // frontend reload skip the payload entirely with a 304. Per-doc commit
+        // metadata is still fetched lazily via /history.
+        app.MapGet("/api/projects/{projectName}/wiki/tree", (string projectName, ProjectDocsService docs, HttpContext http) =>
         {
-            var tree = docs.GetWikiTree(projectName);
-            return tree == null
+            var res = docs.GetWikiTreeResult(projectName);
+            return res == null
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
-                : Results.Ok(tree);
+                : ConditionalOk(http, res.ETag, res.Tree);
         });
 
         // Recently-edited wiki pages (page / git author / timestamp), newest
         // first, for the dashboard landing surface. Touches git (one log walk),
-        // so it is a separate call from the cheap /tree. `limit` is clamped
-        // server-side. Sits before the /files catch-all for path precedence.
-        app.MapGet("/api/projects/{projectName}/wiki/recent", (string projectName, ProjectDocsService docs, GitService git, int? limit) =>
+        // memoized on the wiki branch HEAD so a warm request skips the walk
+        // (AGT-2013); `limit` is clamped server-side. Sits before the /files
+        // catch-all for path precedence.
+        app.MapGet("/api/projects/{projectName}/wiki/recent", (string projectName, ProjectDocsService docs, GitService git, HttpContext http, int? limit) =>
         {
             var n = Math.Clamp(limit ?? 12, 1, 50);
-            var recent = docs.GetWikiRecentEdits(projectName, git, n);
-            return recent == null
+            var res = docs.GetWikiRecentEditsResult(projectName, git, n);
+            return res == null
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
-                : Results.Ok(recent);
+                : ConditionalOk(http, res.ETag, res.Edits);
+        });
+
+        // The generated wiki Pulse landing view (PULSE-1): change feed + inbox +
+        // deterministic drift grade bar, composed server-side so the landing
+        // surface costs two git walks instead of the tree + recent + per-doc
+        // history fan-out. Sits before the /files catch-all for path precedence.
+        app.MapGet("/api/projects/{projectName}/wiki/pulse", (string projectName, ProjectDocsService docs, GitService git, int? feedLimit) =>
+        {
+            var pulse = docs.GetWikiPulse(projectName, git, feedLimit ?? 12);
+            return pulse == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(pulse);
         });
 
         app.MapGet("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs) =>
@@ -135,46 +150,29 @@ public static class ProjectDocsEndpoints
 
         // Per-doc provenance + history: which model last touched it (frontmatter
         // `model:` wins, else the latest commit's Co-authored-by trailer), plus
-        // the file's git log (when / why / who, newest first). `history/` sits
-        // before the catch-all so it isn't swallowed by /wiki/files/{**relPath}.
-        app.MapGet("/api/projects/{projectName}/wiki/history/{**relPath}", (string projectName, string relPath, ProjectDocsService docs, GitService git) =>
+        // the file's git log (when / why / who, newest first). Memoized on HEAD
+        // so a re-open costs no git spawn (AGT-2013); the ETag lets a reload 304.
+        // `history/` sits before the catch-all so it isn't swallowed by
+        // /wiki/files/{**relPath}.
+        app.MapGet("/api/projects/{projectName}/wiki/history/{**relPath}", (string projectName, string relPath, ProjectDocsService docs, GitService git, HttpContext http) =>
         {
-            var full = docs.ResolveWikiDocFullPath(projectName, relPath);
-            if (full == null || !File.Exists(full))
-                return Results.NotFound(new { error = "File not found or path rejected" });
-
-            var repoRoot = git.ResolveRepoRootForProject(projectName);
-            List<GitCommitInfo> commits = [];
-            string? trailerModel = null;
-            if (!string.IsNullOrWhiteSpace(repoRoot))
-            {
-                var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
-                commits = git.GetFileHistory(repoRoot, repoRel, 50);
-                trailerModel = git.GetLatestModelForPath(repoRoot, repoRel);
-            }
-
-            var meta = ProjectDocsService.ParseWikiMetadata(File.ReadAllText(full));
-            var model = !string.IsNullOrWhiteSpace(meta.Model) ? meta.Model : trailerModel;
-            return Results.Ok(new WikiFileHistory(relPath.Replace('\\', '/'), model, meta, commits));
+            var res = docs.GetWikiHistory(projectName, relPath, git);
+            return res == null
+                ? Results.NotFound(new { error = "File not found or path rejected" })
+                : ConditionalOk(http, res.ETag, res.History);
         });
 
         // Content of a wiki doc as it existed at an earlier commit, so the
-        // history panel can preview an old revision. Sits before the /files
-        // catch-all for the same precedence reason as /history.
-        app.MapGet("/api/projects/{projectName}/wiki/revisions/{sha}/{**relPath}", (string projectName, string sha, string relPath, ProjectDocsService docs, GitService git) =>
+        // history panel can preview an old revision. The bytes are content-
+        // addressed, so the read is cached permanently and the ETag is the sha
+        // (AGT-2013). Sits before the /files catch-all for the same precedence
+        // reason as /history.
+        app.MapGet("/api/projects/{projectName}/wiki/revisions/{sha}/{**relPath}", (string projectName, string sha, string relPath, ProjectDocsService docs, GitService git, HttpContext http) =>
         {
-            var full = docs.ResolveWikiDocFullPath(projectName, relPath);
-            if (full == null)
-                return Results.NotFound(new { error = "File not found or path rejected" });
-            var repoRoot = git.ResolveRepoRootForProject(projectName);
-            if (string.IsNullOrWhiteSpace(repoRoot))
-                return Results.NotFound(new { error = "Repository not found" });
-
-            var repoRel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
-            var content = git.GetFileAtCommit(repoRoot, sha, repoRel);
-            return content == null
-                ? Results.NotFound(new { error = "Revision not found" })
-                : Results.Ok(new { relPath = relPath.Replace('\\', '/'), sha, content });
+            var res = docs.GetWikiRevision(projectName, sha, relPath, git);
+            return res == null
+                ? Results.NotFound(new { error = "Revision not found or path rejected" })
+                : ConditionalOk(http, res.ETag, res.Revision);
         });
 
         // ---- Wiki mutations (commit-backed create / move / delete) ----
@@ -262,6 +260,28 @@ public static class ProjectDocsEndpoints
             var d = docs.GetArchitectureDecision(projectName, id);
             return d == null ? Results.NotFound(new { error = "Decision not found" }) : Results.Ok(d);
         });
+    }
+
+    /// <summary>
+    /// Emits an <c>ETag</c> + <c>Cache-Control: no-cache</c> response, honouring a
+    /// matching <c>If-None-Match</c> with <c>304 Not Modified</c> so a frontend
+    /// reload of an unchanged wiki payload skips the body entirely (AGT-2013).
+    /// The ETag is a strong validator derived from the docs signature / HEAD sha /
+    /// commit sha, so a match provably means the client already holds the current
+    /// version. <c>no-cache</c> tells the browser to store the response but always
+    /// revalidate, which is what turns the next reload into a conditional GET.
+    /// </summary>
+    internal static IResult ConditionalOk(HttpContext http, string etag, object payload)
+    {
+        http.Response.Headers.ETag = etag;
+        http.Response.Headers.CacheControl = "no-cache";
+
+        foreach (var candidate in http.Request.Headers.IfNoneMatch)
+        {
+            if (candidate == "*" || candidate == etag)
+                return Results.StatusCode(StatusCodes.Status304NotModified);
+        }
+        return Results.Ok(payload);
     }
 
     /// <summary>Trims and forward-slashes a client path; null when blank.</summary>

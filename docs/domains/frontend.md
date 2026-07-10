@@ -1,11 +1,32 @@
 # Frontend Domain Map
 
-Version: 2026-06-09
+Version: 2026-07-10
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
 kanban, project pages, frontend polling, model selectors, menus, or Playwright
 coverage.
+
+## Global Search
+
+The title-bar search opens a Ctrl+K command palette. V1 covers tasks (key,
+title, prompt, and status text), commit messages and SHA prefixes, and file names
+or paths on each project's working branch. Task matches are ranked immediately
+from the in-memory board snapshot, with an exact task key first and a warm
+response target below 300 ms.
+
+Repository-backed results use
+`GET /api/search?q=<query>&domains=tasks,commits,files&limit=<count>`. The
+`domains` value is a comma-separated subset of `tasks`, `commits`, and `files`;
+`limit` is optional and bounded by the backend. The JSON response contains the
+normalized `query`, an array for each requested domain, per-domain `errors`,
+and `durationMs`. Git commit and file lookup reuse the HEAD-keyed cache rather
+than maintaining a search index.
+
+Results are grouped by domain and carry project identity. Commit results open
+the diff surface, documentation files open the Wiki, and other files open the
+project Git view. Queries shorter than two characters return empty result
+groups, and a failed domain reports an error without hiding successful domains.
 
 ## Entry Points
 
@@ -48,8 +69,17 @@ coverage.
   catalog cache.
 - `frontend/src/app/components/menu/`: text-only menu component.
 - `frontend/src/app/components/cli-model-selector/`: shared CLI/model picker.
+- `frontend/src/app/components/task-reference-microcard/`: compact, accessible
+  task reference control shared by Wiki and coding-agent-chat markdown. The
+  host hydrator batches bare registry-key candidates and owns task-tab
+  navigation; code blocks and unknown shortcodes remain plain text.
 - `frontend/src/app/features/polling/`: bounded polling services for detail
   panes and runtime data.
+- `frontend/src/app/features/shell/components/workspace-overlays/`: the global
+  Workspace Settings home. Its rail is the single navigation surface for CLI
+  Management, system prompts, token usage, visual evidence, and the workspace
+  summary. Legacy CLI-admin and usage links resolve to the CLI Management
+  section at `#/workspace/settings/caps`.
 
 ## Invariants
 
@@ -64,6 +94,14 @@ coverage.
 - Before adding visual variants, check the style guide and update it if a new
   pattern is truly needed.
 - Use stable `data-testid` hooks for Playwright selectors.
+- Workspace-level CLI administration is not a separate sheet. Model and
+  environment management, completion contracts, sessions, usage caps, and
+  token spend belong to Workspace Settings under CLI Management.
+- Backlog Triage is not a project navigation surface. Do not add a project
+  Backlog tab, Explorer entry, activity-bar entry, or project-scoped board
+  filter coupling. Persisted legacy `backlog` studio tabs are discarded during
+  tab-state restoration. This does not affect the Board's `0-backlog` lane,
+  which remains the lifecycle landing lane for new tasks.
 
 ## Verification
 

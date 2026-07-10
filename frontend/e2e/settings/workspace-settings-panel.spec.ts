@@ -1,21 +1,20 @@
 import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 /**
- * F47 / ADR-0042 — Settings panel "Workspaces" section.
+ * F47 / ADR-0042 — Workspaces management section.
  *
- * Now interactive (F45b mutation endpoints shipped). This spec pins:
- *   1. Opening the Settings panel renders the new section.
- *   2. The listing reflects the workspaces returned by GET /api/workspaces.
- *   3. Action buttons are enabled (only default-workspace delete + boundary
- *      reorder buttons stay disabled).
- *   4. The ADR-0042 / F45b note is visible.
- *   5. A round-trip create → rename → delete works end-to-end against the
- *      live backend, with the UI reflecting each step.
- *
- * The spec hits `/api/workspaces` directly to stay independent of the
- * operator's local appsettings.
+ * AGT-2035 folded this out of the studio-shell sidebar Settings panel into the
+ * "Workspaces" section (Global group) of the one consolidated Settings view.
+ * The gear opens the view on Overview; this helper then navigates the rail to
+ * the Workspaces section. All the row test ids are preserved.
  */
-test.describe('Settings panel — Workspaces section (F47)', () => {
+async function openWorkspacesSection(page: Page): Promise<void> {
+  await page.getByTestId('studio-ab-settings').click();
+  await page.getByTestId('workspace-settings-rail-workspaces').click({ timeout: 10_000 });
+}
+
+test.describe('Settings — Workspaces section (F47)', () => {
   test('renders one row per registry workspace with interactive action buttons', async ({ page, request }) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
@@ -29,9 +28,9 @@ test.describe('Settings panel — Workspaces section (F47)', () => {
       projects: Array<unknown>;
     }>;
 
-    await page.getByTestId('studio-ab-settings').click();
+    await openWorkspacesSection(page);
     await expect(page.getByTestId('settings-workspaces')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId('settings-workspaces-head')).toHaveText('Workspaces');
+    await expect(page.getByTestId('settings-workspaces-head')).toContainText('Workspaces');
 
     if (apiWorkspaces.length === 0) {
       await expect(page.getByTestId('settings-workspaces-empty')).toBeVisible();
@@ -94,7 +93,7 @@ test.describe('Settings panel — Workspaces section (F47)', () => {
 
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
-    await page.getByTestId('studio-ab-settings').click();
+    await openWorkspacesSection(page);
     await expect(page.getByTestId('settings-workspaces')).toBeVisible({ timeout: 10_000 });
 
     const deleteIn = (wsId: string) =>
@@ -164,7 +163,7 @@ test.describe('Settings panel — Workspaces section (F47)', () => {
     try {
       await page.goto('/');
       await page.waitForLoadState('domcontentloaded');
-      await page.getByTestId('studio-ab-settings').click();
+      await openWorkspacesSection(page);
       const row = page.locator(`[data-workspace-id="${wsId}"]`);
       await expect(row).toBeVisible({ timeout: 10_000 });
       await expect(row.getByTestId('settings-workspace-rename')).toHaveText(initialName);
@@ -176,7 +175,7 @@ test.describe('Settings panel — Workspaces section (F47)', () => {
       expect(renamedRes.ok()).toBeTruthy();
       await page.reload();
       await page.waitForLoadState('domcontentloaded');
-      await page.getByTestId('studio-ab-settings').click();
+      await openWorkspacesSection(page);
       await expect(page.locator(`[data-workspace-id="${wsId}"]`).getByTestId('settings-workspace-rename'))
         .toHaveText(renamed, { timeout: 10_000 });
     } finally {

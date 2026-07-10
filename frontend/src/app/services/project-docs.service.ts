@@ -9,6 +9,7 @@ import {
   WikiFileHistory,
   WikiFileSaveResult,
   WikiOverview,
+  WikiPulse,
   WikiRecentEdits,
   WikiRevisionContent,
   WikiTree
@@ -67,6 +68,17 @@ export class ProjectDocsService {
   getWikiRecentEdits(projectName: string, limit = 12) {
     return this.http.get<WikiRecentEdits>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/recent?limit=${limit}`
+    );
+  }
+
+  /**
+   * The generated wiki Pulse landing view (PULSE-1): change feed + inbox +
+   * drift grade bar, composed server-side in one call so the landing surface
+   * does not multiply the per-doc git lookups.
+   */
+  getWikiPulse(projectName: string, feedLimit = 12) {
+    return this.http.get<WikiPulse>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/pulse?feedLimit=${feedLimit}`
     );
   }
 

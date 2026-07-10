@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mergeAcceptViewFor, overflowActionsFor, primaryActionFor } from './triage-actions.model';
 import { TaskState } from '../../../models/task.model';
 import type { TaskInfo } from '../../../models/task.model';
-import type { LandedState, TaskProvenanceRecord } from '../../../features/git';
+import type { TaskProvenanceRecord } from '../../../features/git';
 
 function reviewJob(provenance: TaskProvenanceRecord | null = null): TaskInfo {
   return {

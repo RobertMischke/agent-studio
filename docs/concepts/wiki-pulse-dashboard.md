@@ -1,107 +1,117 @@
-# Wiki Pulse — the dashboard above the Workstream
+# Wiki Pulse dashboard
 
-**Status:** concept v1, 2026-07-09 — operator-requested. Naming settled:
-the Engineering Workstream is renamed **Workstream** (product name; see
-[`engineering-workstream.md`](engineering-workstream.md), retitled), and the
-wiki no longer opens on a tree or a page but on a generated dashboard:
-**Pulse**. Mockup: [`mockups/wiki-pulse-dashboard.html`](mockups/wiki-pulse-dashboard.html).
+Status: Concept (living). Slice PULSE-1 implemented (2026-07-10).
 
-Supersedes the archived card ASS-1768 (wiki dashboard: recent edits +
-quick nav) — its "recent edits" half already exists in the backend
-(`GetWikiRecentEdits`, `/api/projects/{p}/wiki/recent`) and becomes one tile
-of Pulse.
+> Operator intent (2026-07-09): "When you open the wiki, you should see a history
+> of the last changes: warnings, which things need to be sorted, what is being
+> worked on - drift-grading stuff." PULSE is the generated entry view that answers
+> that: it opens first, is not a wiki page, and is never editable.
 
-## 1. Operator intent (anchors, 2026-07-09)
+Mockup: [mockups/wiki-pulse-dashboard.html](mockups/wiki-pulse-dashboard.html).
 
-- "Umbenennen in nur **Workstream**. Es sollte das **oberste Element** sein."
-- "Darüber wollen wir noch ein **Dashboard** haben … wenn man auf das Wiki
-  einsteigt, soll man eine **Historie der letzten Änderungen** sehen:
-  **Warnings**, welche Sachen **müssen sortiert werden**, was **gemacht
-  wird** — quasi **Drift-Grading**-Zeug."
+## 1. What Pulse is
 
-## 2. Position — a view above the tree, not a page in it
+Pulse is the landing surface the wiki opens on. It is a **generated view**, not a
+stored page: it does not live in the [Workstream frame](engineering-workstream.md),
+it is not part of the docs tree, it cannot be edited, and it is not prompt-known.
+It is composed on demand from git history and the docs tree and degrades to an
+empty state per section when a source is missing - never an error page.
 
-```
-Wiki entry ──►  PULSE            <- generated dashboard, the wiki landing
-                Workstream       <- top element of the content tree
-                ├── Current Development State
-                ├── Development Signals
-                ├── System Knowledge
-                ├── Decision Log
-                └── Workstream Log
-                (remaining docs/ areas below)
-```
+It is served by a single endpoint,
+`GET /api/projects/{project}/wiki/pulse`, so the landing surface costs **two git
+walks** rather than the tree + recent + per-doc-history fan-out. That keeps Pulse
+inside the "< 1s warm, do not multiply the slow calls" budget from the
+wiki-performance work.
 
-**Hard property:** Pulse is a *view*, not a wiki page. It is computed from
-git history + frame metadata on request, is never stored in the checkout,
-is not editable, and is **not prompt-known** — collector/curator have no
-duty toward it and cannot write into it. That keeps the anti-overgrowth
-story clean: Pulse renders state, it never adds state.
+## 2. The three sections (PULSE-1)
 
-## 3. The five tiles
+### 2.1 Change feed
 
-### 3.1 Änderungs-Feed (history of last changes)
-Recent wiki edits, newest first, grouped by day: page title, frame-area
-badge, author, source task key (parsed from the commit subject/trailer),
-commit subject. One click → the page, with the revision preselected.
-*Source:* `/wiki/recent` exists; extend entries with area + task-key.
+The recently-edited wiki pages (git author + timestamp, newest first), grouped by
+day in the UI. Each row is enriched with:
 
-### 3.2 Warnings (needs a human now)
-- Development Signals with `Human Action` set and status Observed/Active.
-- Frame violations: structural pages missing or edited outside the rules.
-- Broken internal links between wiki pages.
-- Areas over their page budget (Workstream §5 anti-overgrowth) — the
-  curator is behind.
+- a **frame-area badge** - which Workstream area the page lives under
+  (`EngineeringWorkstreamFrame.AreaForPath`), or none for a page outside the frame;
+- a **task key** (e.g. `AGT-2014`) parsed from the page's frontmatter `task-key`
+  first, then from the commit subject.
 
-### 3.3 Sortierbedarf (inbox)
-Pages that landed **outside the frame** (unfiled fragments, orphaned
-sub-pages, `docs/` strays) that the curator must merge or file. Count +
-direct links. Empty inbox is the healthy state and is shown as such.
+Clicking a row opens the page in the reader.
 
-### 3.4 In Arbeit (what is being worked on)
-Live runs whose working diff touches `docs/**` (task key, lane, runtime),
-plus outcome + timestamp of the last collector/curator pass. Answers "wird
-gerade am Wiki gearbeitet, und lief die Pflege zuletzt durch?"
+### 2.2 Inbox (needs sorting)
 
-### 3.5 Drift-Grading (where does the wiki lie?)
-Per frame area (and per System Knowledge page) a freshness grade comparing
-**page age against development activity since**: commits under the
-project's code roots since the page's last update.
+Loose / unfiled knowledge pages that need a home. Deterministic detection:
 
-- v1 heuristic, fully deterministic: `0–9` commits since update → **Fresh**,
-  `10–49` → **Aging**, `50+` → **Stale**. Area grade = worst page grade +
-  counts.
-- The point is honest orientation: a Stale badge on System Knowledge says
-  "read with care, the code has moved on" — and is the curator's work queue.
+- a knowledge doc that sits **directly at the wiki root** and is not a
+  conventional landing file (`README.md`, `index.*`, `home.md`);
+- a knowledge doc dropped **inside the Workstream frame root but under no area**
+  (the frame knows its own structure, so anything filed there but not in one of
+  the five areas is stray).
 
-**v1.1 (operator, 2026-07-10): LLM-graded page reports on top.** Every page
-gets a machine-written assessment report ("Meter-Dokument": grade + short
-feedback) stored in its `.meta.json` sidecar. A **global trigger on this
-dashboard** runs the grading over all pages with an operator-chosen,
-relatively strong model (model picked at trigger time; default from a new
-workspace "maintenance model" setting — deliberately NOT the project
-pipeline models). Critically graded pages surface in the Warnings/Drift
-tiles next to the deterministic heuristic. Implementation: AGT-2051 (run +
-reports + tile), AGT-2052 (meta panel expand/collapse UX), AGT-2053
-(bidirectional wiki↔task cross-references in JSON metadata, tolerant of
-deletions — dangling refs render as "existed once", no integrity jobs).
+An **empty inbox is the healthy state** and is shown as such.
 
-## 4. Mechanics
+### 2.3 Drift grading v1 (deterministic, no LLM)
 
-1. **Pure deterministic aggregation — no LLM in v1.** Data sources: git log
-   (cached), `EngineeringWorkstreamFrame` metadata, signal page frontmatter,
-   last curator report. Everything read-only.
-2. **Performance is a prerequisite:** Pulse must load **< 1s warm**. It sits
-   on the same measurement/caching layer as the wiki-performance work (tree
-   title cache, git-log memoization keyed on HEAD) — see the wiki
-   performance card; without it, Pulse would multiply today's slow calls.
-3. **Degrades gracefully:** any tile whose source is unavailable renders an
-   empty state with a reason, never an error page.
+Per Workstream frame area, how much has the code moved since each knowledge page
+was last refreshed. For every page under an area (its immutable landing shell
+excluded):
 
-## 5. Slices
+1. take the page's **last update** from git history;
+2. count how many commits under the **code roots** landed after that timestamp;
+3. band the count: **Fresh** (0-9), **Aging** (10-49), **Stale** (50+).
 
-| Slice | Scope | Gate |
-|---|---|---|
-| **WS-R rename** | Engineering Workstream → **Workstream** everywhere it is user-visible (nav label, frame root, docs); Workstream pinned as top element of the wiki tree | none (small) |
-| **PULSE-1** | dashboard as wiki landing: Feed + Inbox + Drift v1 (deterministic), empty states | WS-R; wiki-perf caching |
-| **PULSE-2** | Warnings from signals, "In Arbeit" live view, curator integration | PULSE-1; EW-2 collector |
+The **area grade is its worst page** and the bar reports the worst page's commit
+count. An area with no filed pages reads **Empty**. The overall grade is the worst
+area. The grade bar sits at the top of Pulse.
+
+**Code roots** are every top-level repository directory except the wiki root
+(`docs/`) and build-output / tooling folders (`node_modules`, `dist`, `bin`,
+`obj`, `.git`, ...). This is project-agnostic: it discovers whatever source
+folders a repo actually has (`backend/`, `frontend/`, `runner/`, ...) rather than
+hard-coding a list.
+
+The whole heuristic is one `git log` over the code roots for author dates plus one
+docs walk for per-page last-update, so it is cheap and fully reproducible.
+
+## 3. Empty states
+
+Every section carries its own `available` + `reason`:
+
+| Missing source | Feed | Inbox | Drift |
+|---|---|---|---|
+| No `docs/` folder | unavailable (reason) | unavailable (reason) | unavailable (reason) |
+| No git repository | unavailable (reason) | available (filesystem) | unavailable (reason) |
+| No pages under the frame | "no recent edits" if empty | healthy / listed | `Empty` grades + reason |
+
+The UI renders the reason, never a stack trace or blank screen.
+
+## 4. Scope boundary
+
+In PULSE-1: the change feed, the inbox, and the drift grade bar.
+
+**Not** in PULSE-1 (these are PULSE-2): a Warnings tile and an "In progress"
+(live-runs) tile. Pulse is deliberately deterministic in v1 - no LLM, no live
+run state.
+
+## 5. Where it lives
+
+- Backend: `ProjectDocsService.GetWikiPulse` composes the payload;
+  `EngineeringWorkstreamFrame.AreaForPath` maps a page to its area;
+  `GitService.GetCommitAuthorDatesUnderPaths` backs the drift count. Endpoint in
+  `ProjectDocsEndpoints` (before the `/wiki/files` catch-all).
+- Frontend: `app-wiki-pulse` (`features/project-detail/.../wiki-pulse/`) renders
+  the view; the wiki section opens on it when no page is selected.
+- Tests: `backend.Tests/WikiPulseTests.cs` (real temp git repo),
+  `wiki-pulse.component.spec.ts`, and the wiki-section spec.
+
+## v1.1 (operator, 2026-07-10): LLM-graded page reports on top
+
+Every page gets a machine-written assessment report ("Meter-Dokument":
+grade + short feedback) stored in its `.meta.json` sidecar. A **global
+trigger on this dashboard** runs the grading over all pages with an
+operator-chosen, relatively strong model (picked at trigger time; default
+from a new workspace "maintenance model" setting - deliberately NOT the
+project pipeline models). Critically graded pages surface in the
+Warnings/Drift tiles next to the deterministic heuristic. Implementation:
+AGT-2051 (run + reports + tile), AGT-2052 (meta panel expand/collapse UX,
+merged), AGT-2053 (bidirectional wiki-task cross-references in JSON
+metadata, tolerant of deletions - dangling refs render as "existed once").

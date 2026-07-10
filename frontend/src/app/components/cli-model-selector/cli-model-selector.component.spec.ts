@@ -82,6 +82,24 @@ describe('CliModelSelectorComponent (library adapter)', () => {
     expect(chip.textContent).toContain('opus 4.7');
   });
 
+  it('surfaces a codex gpt-5.6 catalog with its display label and ultra ladder (AGT-2025)', async () => {
+    const codexModels: CliModelInfo[] = [
+      { id: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', multiplier: null, vendor: 'openai', isDefault: true, thinkingLevels: ['minimal', 'low', 'medium', 'high', 'xhigh', 'ultra'], defaultThinkingLevel: 'ultra' },
+      { id: 'gpt-5.5', label: 'GPT-5.5', multiplier: null, vendor: 'openai', isDefault: false, thinkingLevels: ['minimal', 'low', 'medium', 'high', 'xhigh'], defaultThinkingLevel: 'xhigh' },
+    ];
+    const store = createStoreMock();
+    store.modelsFor.mockReturnValue(codexModels);
+    store.ensure.mockReturnValue(of(codexModels));
+    const { fixture, child } = await create({ cliType: 'codex', model: 'gpt-5.6-sol' }, store);
+
+    openPicker(fixture);
+    await fixture.whenStable();
+    const sol = child.draftAvailableModels().find((m) => m.id === 'gpt-5.6-sol');
+    expect(sol).toBeTruthy();
+    expect(sol!.label).toBe('GPT-5.6-Sol');
+    expect(sol!.thinkingLevels).toContain('ultra');
+  });
+
   it('serves a fresh catalog from the store and schedules the silent picker-open refresh', async () => {
     const { fixture, child, store } = await create({ cliType: 'claude', model: 'claude-opus-4-7' });
     openPicker(fixture);

@@ -165,4 +165,40 @@ test.describe('Project Hub · Git View (mocked)', () => {
     await page.locator('[data-testid="git-branch-row"][data-branch="task/1"]').click();
     await expect(page.getByTestId('git-detail-card')).toContainText('task/1');
   });
+
+  // AGT-2011: the Git View is a full-bleed tool surface — it must fill the whole
+  // Project Hub panel (no shared max-width cap, no outer panel padding) so the
+  // tree + diff use the entire viewport. Regression guard for the project-shell
+  // `data-rail-key='git'` opt-in; without it the panel reverts to the padded,
+  // 1280px-capped prose column that left the lower half of the view empty.
+  test('git panel fills the whole hub panel (no max-width cap, no padding gap)', async ({ page }) => {
+    // Wide viewport so the panel itself is comfortably wider than the shared
+    // 1280px content cap — that is the only regime where the cap would bite.
+    await page.setViewportSize({ width: 2000, height: 1000 });
+    await installRoutes(page);
+    await page.goto('/');
+    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: BOOT_TIMEOUT });
+    await openHubOnGit(page);
+
+    const panel = page.getByTestId('project-shell-panel-git');
+    const gitPanel = page.getByTestId('project-git-panel');
+    await expect(gitPanel).toBeVisible({ timeout: 15_000 });
+
+    const panelBox = await panel.boundingBox();
+    const gitBox = await gitPanel.boundingBox();
+    expect(panelBox).not.toBeNull();
+    expect(gitBox).not.toBeNull();
+
+    // Sanity: the panel is wide enough that a 1280px cap would leave a visible gap.
+    expect(panelBox!.width).toBeGreaterThan(1300);
+    // Fills the full width: the panel drops its inline padding and the shared
+    // 1280px content cap for this rail, so the git surface spans the panel edge
+    // to edge (allow a few px for sub-pixel rounding).
+    expect(gitBox!.width).toBeGreaterThan(panelBox!.width - 4);
+    // Proof the cap is gone (a capped surface would pin at ≈1280).
+    expect(gitBox!.width).toBeGreaterThan(1300);
+    // Fills the full height: the panes reach the bottom instead of leaving the
+    // lower half of the viewport empty.
+    expect(gitBox!.height).toBeGreaterThan(panelBox!.height - 4);
+  });
 });

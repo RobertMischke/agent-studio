@@ -92,8 +92,9 @@
 }
 
 .proj-shell__mini-item--active {
-  background: color-mix(in srgb, var(--studio-accent) 14%, var(--studio-bg-selected));
+  background: var(--studio-nav-active-bg);
   color: var(--studio-accent-strong);
+  box-shadow: inset 3px 0 0 0 var(--studio-nav-active-bar);
 }
 
 .proj-shell__splitter {
@@ -183,14 +184,20 @@
   max-width: var(--studio-panel-content-max);
 }
 
+// Full-bleed tool surfaces: the Git View is a tree + diff workbench, not a
+// prose column, so it must fill the whole panel (no shared max-width cap, no
+// outer panel padding) and own its own internal scroll — the same contract the
+// Wiki / Steering / Prompts doc views already use (AGT-2011).
 .proj-shell__panel[data-rail-key='wiki'],
-.proj-shell__panel[data-rail-key='steering'] {
+.proj-shell__panel[data-rail-key='steering'],
+.proj-shell__panel[data-rail-key='git'] {
   overflow: hidden;
   padding: 0;
 }
 
 .proj-shell__panel[data-rail-key='wiki'] .proj-shell__panel-content,
 .proj-shell__panel[data-rail-key='steering'] .proj-shell__panel-content,
+.proj-shell__panel[data-rail-key='git'] .proj-shell__panel-content,
 .proj-shell__panel[data-rail-key='prompts'] .proj-shell__panel-content {
   width: 100%;
   height: 100%;

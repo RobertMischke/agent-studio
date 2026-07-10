@@ -36,7 +36,7 @@ export const ALL_TASK_STATES: readonly TaskStateKey[] = Object.values(TaskState)
 // live under their own `features/X/models/` and are accessed via the
 // feature barrel. The two `import type` lines below let TaskInfo's
 // own field types reference feature-owned shapes without copying them.
-import type { TaskCommitInfo, TaskProvenanceRecord } from '../features/git';
+import type { TaskCommitInfo, TaskProvenanceRecord, TaskMergeSignal } from '../features/git';
 import type { TaskTokenSummary } from '../features/tokens';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orchestrator';
 
@@ -78,6 +78,14 @@ export interface TaskReferences {
   supersedes: string[];
 }
 
+export interface RelatedWikiPage {
+  relPath: string;
+  title: string;
+  linkedAt: string;
+  source: 'auto' | 'manual';
+  exists?: boolean | null;
+}
+
 /** The four F34 relation kinds, in display order. */
 export type TaskReferenceKind = 'dependsOn' | 'relatedTo' | 'blockedBy' | 'supersedes';
 export const TASK_REFERENCE_KINDS: TaskReferenceKind[] = [
@@ -100,6 +108,46 @@ export interface TaskReferenceLink {
   sourceState: string;
   sourceWatchPath: string;
   kind: TaskReferenceKind | string;
+}
+
+/**
+ * AGT-2029: one resolved (or unresolved) waits-on dependency. Mirrors backend
+ * `WaitsOnItem`. Carries enough of the target task for the card chip to render
+ * its state and route to it - including targets in lanes the board snapshot
+ * omits (e.g. archived), which is why the backend resolves this server-side.
+ */
+export interface WaitsOnItem {
+  key: string;
+  resolved: boolean;
+  fulfilled: boolean;
+  targetJobId?: string | null;
+  targetTitle?: string | null;
+  targetState?: string | null;
+  targetWatchPath?: string | null;
+}
+
+/**
+ * AGT-2029: read-time waits-on status derived from `references.dependsOn`
+ * against the whole workspace (all projects, all lanes incl. archive). Mirrors
+ * backend `WaitsOnStatus`. Present only on cards that have dependsOn edges;
+ * drives the state-aware, navigable dependency chip on the board card.
+ */
+export interface WaitsOnStatus {
+  items: WaitsOnItem[];
+  /** At least one dependency is not yet fulfilled (open or unknown). */
+  blocked: boolean;
+  /** The card sits on a dependsOn cycle - a configuration error. */
+  cycleDetected: boolean;
+}
+
+/**
+ * Response body of `PUT /api/tasks/{id}/references` (AGT-2029). The write now
+ * persists even when a referenced key is unknown; those edges come back as
+ * `warnings` (the target may be created later) rather than a 400.
+ */
+export interface SetTaskReferencesResponse {
+  references: TaskReferences;
+  warnings: { code: string; kind: string; target: string; message: string }[];
 }
 
 export interface TaskInfo {
@@ -127,6 +175,11 @@ export interface TaskInfo {
   model: string | null;
   thinkingLevel?: string | null;
   cliType: CliType | null;
+  quotaFallback?: {
+    cliType: string;
+    model: string | null;
+    reason: string | null;
+  } | null;
   /**
    * Card kind. `epic` cards are containers for sub-tasks; `task` (the default
    * when omitted) is an ordinary card. See backend `TaskKinds`.
@@ -245,6 +298,16 @@ export interface TaskInfo {
    * detail-view reference section and the card `waiting on KEY` badge.
    */
   references?: TaskReferences;
+  /** Wiki pages accumulated by completion post-processing. Missing targets are retained as ghosts. */
+  relatedWikiPages?: RelatedWikiPage[];
+  /**
+   * AGT-2029: read-time waits-on status derived from `references.dependsOn`
+   * against the whole workspace (all projects, all lanes incl. archive). Mirrors
+   * backend `TaskInfo.WaitsOn`. Present (non-null) only on cards that carry
+   * dependsOn edges; drives the state-aware, clickable dependency chip on the
+   * board card. Null/absent means "no dependencies".
+   */
+  waitsOn?: WaitsOnStatus | null;
   /**
    * Append-only commit-provenance record (ASS-1724). Mirrors backend
    * `TaskInfo.Provenance` and ships on every board card so the git-state pill
@@ -253,6 +316,25 @@ export interface TaskInfo {
    * guessing from the lane. Null on legacy `task.json` that predate the field.
    */
   provenance?: TaskProvenanceRecord | null;
+
+  /**
+   * AGT-2046: compact, always-on merge signal (is the work in develop / main?).
+   * Mirrors backend `TaskInfo.MergeSignal`; computed batched + cached per repo
+   * on the backend and folded onto the board payload so the card can render a
+   * two-segment `[develop|main]` indicator without a per-task graph query. Null
+   * on cards with no committed/merged anchor yet.
+   */
+  mergeSignal?: TaskMergeSignal | null;
+
+  /**
+   * PUB-1: read-time "publishable to" signal for accepted (6-completed) cards -
+   * which publish targets (npm / NuGet / website) this task's merged work
+   * touches, so the card / detail renders a "publishable: npm, website" chip.
+   * Computed batched per project on the backend by set-membership of the task's
+   * mainline anchor against each target's pending set. Null on non-accepted
+   * cards and cards whose work touches no derived publish target.
+   */
+  publishSignal?: TaskPublishSignal | null;
 
   /**
    * ASS-1751: read-time run-activity classification for `3-progress` cards,
@@ -272,6 +354,36 @@ export interface TaskInfo {
    * docs/concepts/out-of-band-task-completion.md §3.
    */
   externalCompletion?: ExternalCompletionInfo | null;
+
+  /**
+   * AGT-2003: runner holding this task's active run lease, folded on by the
+   * read overlay only while the task is `3-progress` and a lease is held; null
+   * otherwise. Mirrors backend `TaskInfo.Runner`. A remote runner acquires the
+   * run lease before it spawns its CLI (a local in-process run holds none), so
+   * a non-null value with `isRemote` is the signal the board card uses to show
+   * "→ <runner>" next to the CLI badge instead of the quiet local presentation.
+   */
+  runner?: TaskRunnerInfo | null;
+}
+
+/**
+ * Card-renderable projection of the runner that holds a task's active run lease
+ * (AGT-2003). Mirrors backend `TaskRunnerInfo`. Sourced from the in-memory
+ * run-lease record; `runnerName` + `isRemote` drive the badge, the lease id /
+ * fencing token ride along for the tooltip.
+ */
+export interface TaskRunnerInfo {
+  runnerId: string;
+  /** Human-facing runner name shown on the badge (e.g. `agent-runner-01`). */
+  runnerName: string;
+  hostname: string;
+  backendName: string;
+  /** True when the lease owner is a different runner than this backend — a remote host. */
+  isRemote: boolean;
+  leaseId: string;
+  fencingToken: number;
+  /** UTC ISO instant the active lease was acquired. */
+  acquiredAt: string;
 }
 
 /**
@@ -942,6 +1054,15 @@ export interface CliOutputLine {
   timestamp: string;
   stream: string;
   text: string;
+  /**
+   * Set by the host conversation-projection guard
+   * (`features/task-detail/components/conversation-projection.ts`) when `text`
+   * was redacted to the `[internal event]` marker because the original line was
+   * a raw stream-json transport frame. Holds the original raw JSON so Trace /
+   * Verbose-Debug can disclose it on demand; the readable chat only ever shows
+   * the marker.
+   */
+  internalDetail?: string;
 }
 
 export interface ProjectRunnerStatus {
@@ -949,6 +1070,8 @@ export interface ProjectRunnerStatus {
   mode: string;
   activeJobId: string | null;
   activeExecution: CliExecution | null;
+  quotaFallbackModel?: string | null;
+  quotaFallbackReason?: string | null;
   queuedJobIds: string[];
   /**
    * Human-readable reason recorded the last time the runner mode changed
@@ -1045,7 +1168,51 @@ export interface ProjectSnapshot {
   orchestratorSession: OrchestratorSession | null;
   reviewDecisionsPending: { jobId: string; title: string; reason: string | null }[];
   runnerPendingDecisions: { jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }[];
+  /** PUB-1: derived publish targets + pending deltas for the Hub publish badges. */
+  publishTargets: PublishTarget[];
   queueHealth: ProjectQueueHealth;
+}
+
+/**
+ * PUB-1 - a derived publish target for a project, rendered as a Hub badge like
+ * "NuGet 0.3.1 -> 4 tasks pending". Repo-fact-derived and read-only. A package
+ * that has never been released carries `firstPublishPending` (no version, no
+ * count); `pendingCount === 0` is a quiet state (no badge). `pendingCount` is
+ * null when no baseline could be derived from git (see `referenceKind === 'none'`).
+ */
+export interface PublishTarget {
+  /** Stable id: 'package:npm', 'package:nuget', or 'website'. */
+  id: string;
+  /** Wire value is the camelCase enum name (JsonStringEnumConverter). */
+  kind: 'package' | 'website';
+  /** 'npm' | 'nuget' for packages; null for websites. */
+  ecosystem: string | null;
+  /** Short label the badge renders: 'npm', 'NuGet', 'Website'. */
+  label: string;
+  /** Package id/name (e.g. 'coding-agent-chat'); null for websites / unknown. */
+  packageName: string | null;
+  /** Current published version (e.g. '0.3.1'); null when never released. */
+  currentVersion: string | null;
+  /** A package with a release workflow but no tag: never published. */
+  firstPublishPending: boolean;
+  /** Merged commits since the reference touching this target's scope; null = no baseline. */
+  pendingCount: number | null;
+  /** How the baseline was set: 'tag' | 'release-tag' | 'pages-branch' | 'none'. */
+  referenceKind: string;
+  /** The reference the baseline resolves to (tag name or date); null for 'none'. */
+  reference: string | null;
+}
+
+/**
+ * PUB-1 - per-task publish chip signal folded onto an accepted task
+ * (`TaskInfo.publishSignal`): which publish targets the task's merged work is
+ * publishable to. Renders "publishable: npm, website" on the card / detail.
+ */
+export interface TaskPublishSignal {
+  /** Target ids the task is publishable to ('package:npm', 'website', ...). */
+  targetIds: string[];
+  /** Short labels for the chip, in target order (e.g. 'npm', 'Website'). */
+  labels: string[];
 }
 
 export interface CrashRecoveryPending {

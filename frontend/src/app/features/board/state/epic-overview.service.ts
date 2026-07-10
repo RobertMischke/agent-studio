@@ -4,7 +4,7 @@ const HASH_ROUTE = '#/epics';
 
 /**
  * State + URL-hash sync for the dedicated epic overview screen at
- * `#/epics`. Mirrors {@link BacklogTriageService}: a signal holds the
+ * `#/epics`. A signal holds the
  * open/close state, the shell wires a `hashchange` listener that calls
  * `syncFromHash`, and imperative open/close mutate both the hash and the
  * signal.

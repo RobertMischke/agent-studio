@@ -5,7 +5,7 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ProjectWikiSectionComponent } from './project-wiki-section';
-import type { WikiFileHistory, WikiTree } from '../../../../models/project-docs.model';
+import type { WikiFileHistory, WikiPulse, WikiTree } from '../../../../models/project-docs.model';
 
 const TREE: WikiTree = {
   projectName: 'Demo',
@@ -45,6 +45,57 @@ const TREE: WikiTree = {
   ],
 };
 
+const PULSE: WikiPulse = {
+  projectName: 'Demo',
+  baseDir: '/repo/docs',
+  exists: true,
+  generatedAtUtc: '2026-07-10T09:00:00Z',
+  feed: {
+    available: true,
+    reason: null,
+    items: [
+      {
+        relPath: 'concepts/overview.md',
+        title: 'Concept overview',
+        author: 'Alice',
+        authorDateUtc: '2026-07-10T08:00:00Z',
+        sha: 'abc1234',
+        shortSha: 'abc1234',
+        subject: 'AGT-2014 refine overview',
+        frameAreaSlug: null,
+        frameAreaTitle: null,
+        taskKey: 'AGT-2014',
+      },
+    ],
+  },
+  inbox: {
+    available: true,
+    reason: null,
+    count: 1,
+    items: [
+      {
+        relPath: 'stray.md',
+        title: 'Stray note',
+        type: 'md',
+        reason: 'Loose page at the wiki root - not filed under a category.',
+      },
+    ],
+  },
+  drift: {
+    available: true,
+    reason: null,
+    overallGrade: 'Aging',
+    areas: [
+      { slug: '10-current-development-state', title: 'Current Development State', grade: 'Aging', pageCount: 1, gradedPageCount: 1, worstCommitCount: 12, freshCount: 0, agingCount: 1, staleCount: 0 },
+      { slug: '20-development-signals', title: 'Development Signals', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
+      { slug: '30-system-knowledge', title: 'System Knowledge', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
+      { slug: '40-decision-log', title: 'Decision Log', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
+      { slug: '50-workstream-log', title: 'Workstream Log', grade: 'Empty', pageCount: 0, gradedPageCount: 0, worstCommitCount: 0, freshCount: 0, agingCount: 0, staleCount: 0 },
+    ],
+    counts: { fresh: 0, aging: 1, stale: 0, graded: 1 },
+  },
+};
+
 async function setup(tree: WikiTree = TREE) {
   await TestBed.configureTestingModule({
     imports: [ProjectWikiSectionComponent],
@@ -62,19 +113,18 @@ async function setup(tree: WikiTree = TREE) {
   fixture.detectChanges();
 
   http.expectOne('/api/projects/Demo/wiki/tree').flush(tree);
-  flushWikiRecent(http);
+  flushWikiPulse(http);
   fixture.detectChanges();
   return { fixture, http };
 }
 
 /**
- * refresh() fetches the git-backed dashboard recent-edits list alongside the
- * tree. Every refresh (initial load and post-mutation re-read) issues it, so the
- * fake backend must answer it or verify() trips on the dangling request.
+ * refresh() fetches the git-backed Pulse landing view alongside the tree. Every
+ * refresh (initial load and post-mutation re-read) issues it, so the fake
+ * backend must answer it or verify() trips on the dangling request.
  */
-function flushWikiRecent(http: HttpTestingController): void {
-  http.expectOne(r => r.url.includes('/wiki/recent'))
-    .flush({ projectName: 'Demo', baseDir: '/repo/docs', exists: true, edits: [] });
+function flushWikiPulse(http: HttpTestingController, pulse: WikiPulse = PULSE): void {
+  http.expectOne(r => r.url.includes('/wiki/pulse')).flush(pulse);
 }
 
 const el = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
@@ -289,7 +339,7 @@ describe('ProjectWikiSectionComponent', () => {
     });
     http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
     http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
-    flushWikiRecent(http);
+    flushWikiPulse(http);
     fixture.detectChanges();
 
     expect(fixture.componentInstance.openedContent()).toBe('# Changed\n');
@@ -329,12 +379,14 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
-  it('renders a functional default workspace page and collapses side panels', async () => {
+  it('opens on the generated Pulse landing view and collapses side panels', async () => {
     const { fixture, http } = await setup();
     const root = el(fixture);
 
+    // The wiki opens on Pulse (not a page), with its two quick actions + aside.
     expect(root.querySelector('[data-testid="project-wiki-viewer-empty"]')!.textContent)
-      .toContain('Root folder');
+      .toContain('Pulse');
+    expect(root.querySelector('[data-testid="project-wiki-pulse"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="project-wiki-open-first"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="project-wiki-workspace-meta"]')).toBeTruthy();
 
@@ -342,41 +394,41 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.detectChanges();
     expect(root.querySelector('[data-testid="project-wiki-tree"]')).toBeNull();
 
-    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-toggle-context"]')!.click();
+    // The meta rail folds via its own labelled head toggle (not a top-bar
+    // mini-icon): the rail stays mounted as a slim strip, the body hides.
+    const metaToggle = root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-meta-toggle"]')!;
+    expect(metaToggle, 'meta toggle head').toBeTruthy();
+    expect(metaToggle.getAttribute('aria-expanded')).toBe('true');
+    metaToggle.click();
     fixture.detectChanges();
-    expect(root.querySelector('[data-testid="project-wiki-workspace-meta"]')).toBeNull();
+    expect(metaToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('#project-wiki-meta-body')!.hasAttribute('hidden')).toBe(true);
     http.verify();
   });
 
-  it('shows sidecar chips on suggested root cards and opens the report from there', async () => {
+  it('renders the Pulse feed, inbox, and drift bar and opens a feed page', async () => {
     const { fixture, http } = await setup();
     const root = el(fixture);
 
-    const card = root.querySelector('[data-testid="project-wiki-suggested-card-concepts/overview.md"]');
-    expect(card?.textContent).toContain('B');
-    expect(card?.textContent).toContain('Now');
-    expect(card?.textContent).not.toContain('D:');
-    expect(card?.textContent).not.toContain('Dir:');
-    expect(card?.textContent).not.toContain('DriftB');
-    expect(card?.textContent).not.toContain('DirectionCurrent');
+    // Change feed row carries its task key + area/drift segment renders.
+    expect(root.querySelector('[data-testid="project-wiki-pulse-task-concepts/overview.md"]')?.textContent)
+      .toContain('AGT-2014');
+    expect(root.querySelector('[data-testid="project-wiki-pulse-area-10-current-development-state"]')?.textContent)
+      .toContain('Aging');
+    // Inbox lists the loose page; overall drift chip shows the worst grade.
+    expect(root.querySelector('[data-testid="project-wiki-pulse-inbox-open-stray.md"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-pulse-overall"]')?.textContent).toContain('Aging');
 
-    root.querySelector<HTMLButtonElement>(
-      '[data-testid="project-wiki-suggested-metric-concepts/overview.md-drift"]'
-    )!.click();
+    // Clicking a feed row opens the page in the reader.
+    root.querySelector<HTMLButtonElement>('[data-testid="project-wiki-pulse-feed-open-concepts/overview.md"]')!.click();
     fixture.detectChanges();
-
     http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
       .flush({ relPath: 'concepts/overview.md', content: '# Hello wiki\n\nBody text.' });
     http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
-    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md.report.html')
-      .flush({
-        relPath: 'concepts/overview.md.report.html',
-        content: '<!doctype html><html><body><h2 id="why-drift">Why drift?</h2></body></html>',
-      });
     fixture.detectChanges();
 
-    expect(root.querySelector('[data-testid="project-wiki-tab-report"]')?.className)
-      .toContain('pwiki__tab--active');
+    expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')?.textContent)
+      .toContain('concepts/overview.md');
     http.verify();
   });
 
@@ -399,12 +451,90 @@ describe('ProjectWikiSectionComponent', () => {
 
     const root = el(fixture);
     expect(root.querySelector('[data-testid="project-wiki-tree"]')).toBeNull();
-    expect(root.querySelector('[data-testid="project-wiki-meta-panel"]')).toBeNull();
+    // The collapsed rail stays mounted (grade badge remains visible); only the
+    // meta body folds, and the head reports the collapsed state via aria.
+    expect(root.querySelector('[data-testid="project-wiki-meta-panel"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="project-wiki-meta-toggle"]')!.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('#project-wiki-meta-body')!.hasAttribute('hidden')).toBe(true);
     expect(root.querySelector('[data-testid="project-wiki-source-editor"]')!.textContent).toContain('# Restored');
     expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent).toContain('concepts/overview.md');
     expect(fixture.componentInstance.navWidth()).toBe(340);
     expect(fixture.componentInstance.contextWidth()).toBe(360);
     expect(JSON.parse(localStorage.getItem(wikiStorageKey()) ?? '{}').expandedIds).toContain('concepts');
+    http.verify();
+  });
+
+  it('surfaces the page drift grade in the meta head, visible even when the rail is collapsed', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Hello\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    // The grade lifted from the drift-metadata card into the head reads the
+    // companion driftGrade (B, "warn" tone) so it is legible at a glance.
+    const grade = el(fixture).querySelector('[data-testid="project-wiki-meta-grade"]')!;
+    expect(grade.textContent).toContain('B');
+    expect(grade.getAttribute('data-tone')).toBe('warn');
+
+    // Collapsing the rail keeps the grade badge mounted in the (now vertical) head.
+    fixture.componentInstance.toggleContext();
+    fixture.detectChanges();
+    const toggle = el(fixture).querySelector('[data-testid="project-wiki-meta-toggle"]')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(el(fixture).querySelector('[data-testid="project-wiki-meta-grade"]')!.textContent).toContain('B');
+    expect(el(fixture).querySelector('#project-wiki-meta-body')!.hasAttribute('hidden')).toBe(true);
+    http.verify();
+  });
+
+  it('remembers the meta-rail collapse state per page', async () => {
+    const { fixture, http } = await setup();
+    expandConcepts(fixture);
+    const cmp = fixture.componentInstance;
+
+    const openReadmeHistory = () => http.expectOne('/api/projects/Demo/wiki/history/README.md').flush({
+      relPath: 'README.md', model: null,
+      metadata: { model: null, updatedAt: null, reason: null, taskKey: null, status: null, runCount: null, hasFrontmatter: false },
+      commits: [],
+    });
+
+    // Open overview.md and fold its meta rail.
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Overview\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+    expect(cmp.contextCollapsed()).toBe(false);
+    cmp.toggleContext();
+    expect(cmp.contextCollapsed()).toBe(true);
+
+    // A different page keeps its own state (default: expanded).
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-README.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/README.md')
+      .flush({ relPath: 'README.md', content: '# Readme\n' });
+    openReadmeHistory();
+    fixture.detectChanges();
+    expect(cmp.contextCollapsed()).toBe(false);
+
+    // Reopening overview.md restores its remembered collapsed state.
+    el(fixture).querySelector<HTMLElement>('[data-testid="project-wiki-file-concepts/overview.md"]')!.click();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/wiki/files/concepts/overview.md')
+      .flush({ relPath: 'concepts/overview.md', content: '# Overview\n' });
+    http.expectOne('/api/projects/Demo/wiki/history/concepts/overview.md').flush(HISTORY);
+    fixture.detectChanges();
+    expect(cmp.contextCollapsed()).toBe(true);
+
+    // The per-page choice is persisted for a later session.
+    const stored = JSON.parse(localStorage.getItem(wikiStorageKey()) ?? '{}');
+    expect(stored.metaCollapsedByPage?.['concepts/overview.md']).toBe(true);
+    // README was only viewed, never toggled, so it keeps the default (no entry).
+    expect(stored.metaCollapsedByPage?.['README.md']).toBeUndefined();
     http.verify();
   });
 
@@ -615,7 +745,7 @@ describe('ProjectWikiSectionComponent', () => {
 
     // The mutation triggers a refresh of the physical tree.
     http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
-    flushWikiRecent(http);
+    flushWikiPulse(http);
     fixture.detectChanges();
     http.verify();
   });
@@ -641,7 +771,7 @@ describe('ProjectWikiSectionComponent', () => {
     post.flush({ from: 'README.md', to: 'concepts/README.md', sha: 'abc1234' });
 
     http.expectOne('/api/projects/Demo/wiki/tree').flush(TREE);
-    flushWikiRecent(http);
+    flushWikiPulse(http);
     fixture.detectChanges();
     http.verify();
   });
@@ -721,7 +851,11 @@ describe('ProjectWikiSectionComponent', () => {
     exists: true,
     root: [
       {
-        name: 'engineering-workstream', title: 'engineering-workstream',
+        // Backend relabels the frame root to "Workstream" (folder stays
+        // engineering-workstream) and pins it first - see ProjectDocsService /
+        // EngineeringWorkstreamFrame.DisplayTitle. The tree the component renders
+        // therefore already carries the display title.
+        name: 'engineering-workstream', title: 'Workstream',
         relPath: 'engineering-workstream', type: 'folder', immutable: true, children: [
           {
             name: '40-decision-log', title: 'decision-log',
@@ -737,7 +871,7 @@ describe('ProjectWikiSectionComponent', () => {
             ],
           },
           {
-            name: '00-overview.html', title: 'Engineering Workstream',
+            name: '00-overview.html', title: 'Workstream',
             relPath: 'engineering-workstream/00-overview.html', type: 'html', immutable: true, children: [],
           },
         ],
@@ -750,6 +884,24 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.componentInstance.toggleExpand('engineering-workstream/40-decision-log');
     fixture.detectChanges();
   }
+
+  it('renders the frame root labelled "Workstream" as the first tree node', async () => {
+    const { fixture, http } = await setup(FRAME_TREE);
+    const root = el(fixture);
+
+    // The frame root node carries the relabelled display title...
+    const frameRow = root.querySelector<HTMLElement>(
+      '[data-testid="project-wiki-node-engineering-workstream"]');
+    expect(frameRow, 'frame root row').toBeTruthy();
+    expect(frameRow!.querySelector('.pwiki__label-text')!.textContent!.trim())
+      .toBe('Workstream');
+
+    // ...and it is the first top-level row rendered (pinned to the top).
+    const firstRow = root.querySelector<HTMLElement>('[data-testid^="project-wiki-node-"]');
+    expect(firstRow!.getAttribute('data-testid'))
+      .toBe('project-wiki-node-engineering-workstream');
+    http.verify();
+  });
 
   it('marks frame folders and shells with a lock affordance, subpages without', async () => {
     const { fixture, http } = await setup(FRAME_TREE);

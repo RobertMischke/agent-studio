@@ -164,13 +164,69 @@ Codex has a stronger structured-protocol story than Claude: the cloned `openai-c
 
 Next stale-session probes for Codex should mirror Claude's: fresh run, short resume, backend-restart resume, deliberately missing session id, and accepted stale resume with an observable edit or protocol update.
 
-## Model handling — live discovery
+## Model handling: live discovery + detection-driven default (ADR-0060)
 
-[`CodexModelDiscovery`](../../../backend/Services/Cli/CodexModelDiscovery.cs) queries the CLI for its current model list and caches the result. `GetModelCatalogAsync` is a thin wrapper.
+[`CodexModelDiscovery`](../../../backend/Features/Cli/Pty/CodexModelDiscovery.cs)
+spawns the CLI in a PTY (`codex debug models`), parses the `visibility: list`
+models in priority order, and caches the catalog on disk + in memory with a TTL
+(`CodexModelsCacheMinutes`, default 60). `GetModelCatalogAsync` is the thin
+wrapper. To refresh, the user clicks the side-sheet refresh button, which calls
+`/api/cli/codex/models?forceRefresh=true`.
 
-To refresh the cache, the user clicks the side-sheet refresh button which calls `/api/cli/codex/models?forceRefresh=true`.
+**The catalog follows the installed CLI, not a hardcoded list.** This is the
+house rule (convention/derivation over settings). The flagship `gpt-5.6-*`
+family is deliberately **not** a static `ModelMetadataRegistry` entry: it
+appears only when the live CLI advertises it. Models the CLI does not list stay
+hidden rather than being hard-wired.
 
-When a CLI version bump changes the output format, the regression shows up as `Source = "live-discovery-failed"` in the catalog and the dropdown empties. Tests in `CodexModelDiscoveryTests.cs` lock the parser shape.
+**Detection-driven product default.** Every catalog path (`fresh`, `mem-cache`,
+`disk-cache`, and the fallback below) runs through `Publish`, which calls
+`PickDetectedDefault` and writes the result to
+`ModelMetadataRegistry.SetDetectedCodexDefault`:
+
+- `PickDetectedDefault` returns the CLI's own active model when it is already a
+  `gpt-5.6-*`, else the highest-priority `gpt-5.6-*` the CLI lists, else `null`.
+- `ModelMetadataRegistry.DefaultForCli("codex")` then returns the detected
+  `gpt-5.6` when present, otherwise the account-valid `gpt-5.5` baseline
+  (AGT-1941: a ChatGPT-account spawn rejects `gpt-5-codex` with a 400). A `null`
+  detection correctly clears back to `gpt-5.5` (the baseline never sticks to a
+  stale detection).
+- This is the single lever every default site already routes through: task
+  creation, `PUT /cli-type` / `PUT /model` (`SetJobCliType`/`SetJobModel`),
+  owner/client-default materialization (`BackfillAgentDefaults`,
+  `AgentDefaultsMaterialization`), and the invocation-time floor in
+  `BuiltInCliBehaviors.DefaultCodexModel`.
+
+**Reasoning-level default.** For codex the product default reasoning level is
+the **top of the CLI-derived ladder** (`DefaultThinkingLevelForCli` →
+`CliThinkingLevels.For(...).Last()`): `gpt-5.6` → `ultra`, `gpt-5.5` → `xhigh`,
+`gpt-5-codex` → `high`. `ultra` is the CLI's new top tier and requires the
+`CodingAgentRunner` **0.5.0** ladder (it added the `gpt-5.6-*` family +
+`ultra`); on the older 0.3.1 ladder `gpt-5.6` was unknown and `xhigh` normalized
+down to `medium`. An explicit or owner-supplied level still wins and is
+normalized to the selected model's ladder (`ResolveThinkingLevel`).
+
+**Cache / TTL / fallback.** When the CLI cannot be queried and no cache exists,
+discovery returns a registry-backed `FallbackCatalog` (the static OpenAI models,
+`gpt-5.5` default, **no** `gpt-5.6`) rather than emptying the model surface,
+mirroring `ClaudeModelDiscovery.FallbackCatalog`. Because that catalog also runs
+through `Publish`, the fallback keeps the default on the `gpt-5.5` baseline.
+
+**Boot warm-up.** A best-effort, fire-and-forget warm-up in
+[`Program.cs`](../../../backend/Host/Program.cs) triggers one discovery on start
+so new-task defaults resolve to the current model before the first UI fetch. It
+is gated off under the Test host and via `CodexModels:WarmupOnBoot`, honors the
+disk-cache TTL (a warm cache skips the PTY spawn), and emits
+`codex-model-warmup-complete` / `codex-model-warmup-skipped` structured logs;
+`Publish` logs `Codex detected default published`.
+
+When a CLI version bump changes the output format, the regression shows up as an
+empty parse (discovery falls back to cache, then `FallbackCatalog`) and the
+dropdown shows only the static list. Tests in
+[`CodexModelDiscoveryTests.cs`](../../../backend.Tests/CodexModelDiscoveryTests.cs)
+lock the parser shape (5.6 reported / not reported, priority ordering, fallback)
+and [`CodexDetectedDefaultTests.cs`](../../../backend.Tests/CodexDetectedDefaultTests.cs)
+locks default resolution in both cases plus vendor isolation.
 
 ## Quirks (and what to do about them)
 
@@ -305,8 +361,8 @@ To extend it for a new frame or `item.type`:
 ### "Live model discovery returned an empty list"
 
 1. Check `CodexModelDiscoveryTests.cs` for the latest expected output format.
-2. Run `codex models list` (or whatever the current command is) by hand to capture current output.
-3. Update the parser; lock with a new fixture row.
+2. Run `codex debug models` by hand to capture the current output (this is the exact command `CodexModelDiscovery` spawns).
+3. Update `ParseDebugModelsJson`; lock with a new fixture row.
 
 ### "Add a regression test for a new frame shape"
 

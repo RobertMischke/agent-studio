@@ -8,25 +8,18 @@ import { test, expect, type Page } from '@playwright/test';
  * The cross-project "All projects" board (`board:__all__`) is now an
  * ordinary, closable tab like every other tab — it carries a close X, no
  * pin glyph, and no `data-sticky` marker. The "no dead end" guarantee is
- * preserved by two recovery paths that do not depend on an un-closable tab:
+ * preserved by a recovery path that does not depend on an un-closable tab:
  *
  *   1. Closing every tab does NOT drop the user into blank limbo. The
  *      editor surface renders the creative idle empty-state
  *      (`studio-empty-state`) inside the welcome screen, which offers
  *      explicit ways back in (pick a project board / add a task).
- *   2. Ctrl+B (Cmd+B on macOS) is a global board<->backlog-triage toggle:
- *      from a plain tab it opens the triage screen, and pressing it again
- *      closes triage and re-activates the All-projects board. So Ctrl+B
- *      always leads back to the board, regardless of the starting view
- *      (outside a text input).
- *
  * The activity bar no longer carries a dedicated Board button (removed so
  * the cross-project "All projects" board opens only via the grid button in
  * the Explorer panel header). That entry point is covered by
  * `activity-bar-board-removed.spec.ts`.
  *
- * This spec exercises both remaining paths so a regression in either one
- * fails loudly.
+ * This spec exercises that recovery path so a regression fails loudly.
  */
 
 const ALL_BOARD_KEY = 'board:__all__';
@@ -162,39 +155,6 @@ test.describe('studio-shell · navigation has no dead end', () => {
     await epicsTab.locator('.studio-tab__close').click();
     await expect(epicsTab).toHaveCount(0);
     // Closing Epics falls back to the trailing tab, the All-projects board.
-    await expect(tabBy(page, ALL_BOARD_KEY)).toHaveClass(/studio-tab--active/);
-  });
-
-  test('Ctrl+B toggles through the backlog triage and back to the All-projects board', async ({ page }) => {
-    await bootStudio(page);
-    await page.evaluate(() => {
-      const payload = {
-        v: 1,
-        tabs: [
-          { kind: 'board', projectName: '__all__' },
-          { kind: 'task', taskKey: 'fake-jobkey-shortcut' },
-        ],
-        activeKey: 'task:fake-jobkey-shortcut',
-      };
-      localStorage.setItem('atp.studio.tabs.v1', JSON.stringify(payload));
-    });
-    await page.reload();
-    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: 15_000 });
-    await expect(tabBy(page, 'task:fake-jobkey-shortcut')).toHaveClass(/studio-tab--active/);
-
-    // Fire Ctrl+B against the document body so the listener on `window`
-    // catches it. Ctrl+B is a toggle. From a plain task tab the first press
-    // opens the backlog triage screen (it does NOT jump straight to board).
-    await page.locator('body').focus();
-    await page.keyboard.press('Control+B');
-    await expect(page.getByTestId('backlog-triage-screen')).toBeVisible();
-    await expect(tabBy(page, ALL_BOARD_KEY)).not.toHaveClass(/studio-tab--active/);
-
-    // The second press closes triage and re-activates the All-projects board,
-    // so Ctrl+B still always leads back to the board — no dead end.
-    await page.locator('body').focus();
-    await page.keyboard.press('Control+B');
-    await expect(page.getByTestId('backlog-triage-screen')).toHaveCount(0);
     await expect(tabBy(page, ALL_BOARD_KEY)).toHaveClass(/studio-tab--active/);
   });
 

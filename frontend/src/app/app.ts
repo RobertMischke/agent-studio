@@ -15,8 +15,6 @@ import {
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import {
-  BacklogTriageScreenComponent,
-  BacklogTriageService,
   BoardFiltersService,
   CreateTaskDialogComponent,
   EpicGroupBoardComponent,
@@ -176,7 +174,6 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     KanbanFilterSidesheetComponent,
     TooltipDirective,
     MenuComponent,
-    BacklogTriageScreenComponent,
     EpicOverviewScreenComponent,
     StudioShellComponent,
     ProjectHubViewComponent,
@@ -345,7 +342,6 @@ export class App implements OnInit, OnDestroy {
   readonly workspaceManager = inject(WorkspaceManagerService);
   readonly workspaceTokensOpen = this.workspaceOverlays.tokensOpen;
   readonly workspaceScreenshotsOpen = this.workspaceOverlays.screenshotsOpen;
-  readonly workspaceSummaryOpen = this.workspaceOverlays.summaryOpen;
   readonly cliAdminOpen = this.workspaceOverlays.cliAdminOpen;
   /**
    * Drives the status-bar Settings button's pressed/active state. Excludes
@@ -359,9 +355,7 @@ export class App implements OnInit, OnDestroy {
       && this.workspaceOverlays.section() !== 'caps'
     : this.workspaceOverlays.anyOpenExceptUsage());
   private hashListener: (() => void) | null = null;
-  private initialHashSyncComplete = false;
   private kanbanKeyListener: ((ev: KeyboardEvent) => void) | null = null;
-  private boardShortcutListener: ((ev: KeyboardEvent) => void) | null = null;
   readonly watchPaths = signal<WatchPathEntry[]>([]);
   /**
    * Cycle 9 / ADR-0034: search query, four faceted filters, URL hash +
@@ -371,7 +365,6 @@ export class App implements OnInit, OnDestroy {
    * existing template bindings keep working unchanged.
    */
   private readonly boardFilters = inject(BoardFiltersService);
-  readonly backlogTriage = inject(BacklogTriageService);
   private readonly tagRegistryStore = inject(TagRegistryStore);
   private readonly cliCatalogStore = inject(CliCatalogStore);
   readonly activeProjects = this.boardFilters.activeProjects;
@@ -409,14 +402,6 @@ export class App implements OnInit, OnDestroy {
   readonly collapsedLanes = this.laneCollapse.collapsedLanes;
   readonly focusedContainer = this.laneCollapse.focusedContainer;
   readonly taskNavCollapsed = this.uiPrefs.taskNavCollapsed;
-  /**
-   * Compact-card mode trades the full per-card metadata (model badge,
-   * agent line, git pill, commit pill, last-activity line) for a dense
-   * one-row title with a small CLI icon and a relative timestamp. Lets
-   * the user fit many more cards on screen when they're scanning for a
-   * task by name. Persisted across reloads.
-   */
-  readonly compactCards = this.uiPrefs.compactCards;
 
   /**
    * Board "Gruppieren nach Epic" toggle. When on, the board case renders the
@@ -437,35 +422,11 @@ export class App implements OnInit, OnDestroy {
   readonly epicBoardTasks = computed(() => flattenGrouped(this.filteredGrouped()));
 
   /**
-   * F4: effective compact mode for board cards. The user's persisted
-   * `compactCards` preference still controls the default; when the
-   * orchestrator rail is open, we force-engage compact rendering so
-   * the lanes don't clip behind the 640 px panel. Closing the rail
-   * reverts to the persisted preference automatically.
-   *
-   * F43: the rail-forced compact rule yields when the user explicitly
-   * toggles to "Full" while the rail is open (`userOverridesCompactWhileRail`).
-   * The override clears the next time the rail closes (see the
-   * `clearCompactOverrideOnRailClose` effect below) so re-opening the
-   * rail re-engages the auto-compact rule.
+   * Card density was abolished (AGT-2035): job cards always render full. This
+   * stays as a constant `false` so the remaining `[compact]` bindings resolve
+   * to full rendering without threading the removed preference everywhere.
    */
-  readonly effectiveCompactCards = computed<boolean>(() => {
-    if (this.compactCards()) return true;
-    const railOpen = this.orchSideSheetSig()?.open() ?? false;
-    if (!railOpen) return false;
-    return !this.uiPrefs.userOverridesCompactWhileRail();
-  });
-
-  /**
-   * F43: tooltip text for the toolbar compact toggle. Derived from
-   * `effectiveCompactCards` (not the persisted pref) so the hover text
-   * always matches what the user actually sees on the cards: when the
-   * rail forces compact, the tooltip still says "Show full cards"
-   * because the next click will actually flip the cards to Full.
-   */
-  readonly compactToggleTooltip = computed<string>(() =>
-    this.effectiveCompactCards() ? 'Show full cards' : 'Show compact cards (titles only)',
-  );
+  readonly effectiveCompactCards = computed<boolean>(() => false);
   readonly showE2ECleanup = signal(false);
   readonly showTagManager = signal(false);
   readonly devToolsMenuOpen = signal(false);
@@ -979,7 +940,6 @@ export class App implements OnInit, OnDestroy {
         case 'hub':
           project = tab.projectName;
           break;
-        case 'backlog':
         case 'epics':
           project = tab.projectName;
           break;
@@ -1077,7 +1037,6 @@ export class App implements OnInit, OnDestroy {
       const open = this.workspaceOverlays.settingsOpen();
       untracked(() => {
         if (tab?.kind === 'workspace-settings') {
-          this.studioPanelState.open('settings');
           if (!open) this.workspaceOverlays.open(this.workspaceOverlays.section());
         } else if (open) {
           this.workspaceOverlays.close();
@@ -1127,22 +1086,6 @@ export class App implements OnInit, OnDestroy {
       });
     });
 
-    // F43: clear the user's rail-open compact override the moment the
-    // rail closes. Without this, opening the rail a second time would
-    // skip the auto-compact rule because the override flag from the
-    // previous rail-open session was still latched. The override is
-    // intentionally per-tab and ephemeral.
-    effect(() => {
-      const ref = this.orchSideSheetSig();
-      const railOpen = ref?.open() ?? false;
-      if (railOpen) return;
-      untracked(() => {
-        if (this.uiPrefs.userOverridesCompactWhileRail()) {
-          this.uiPrefs.userOverridesCompactWhileRail.set(false);
-        }
-      });
-    });
-
     // External lane change: when the open job's state diverges from
     // `triageLaneState` and we did NOT initiate the move (no actingId
     // in flight), keep the user on this job but shrink the pager
@@ -1156,18 +1099,6 @@ export class App implements OnInit, OnDestroy {
       untracked(() =>
         this.triage.handleExternalLaneChange(lane, sel.info.taskKey),
       );
-    });
-
-    // Keep the backlog triage screen's scope in lock-step with the active
-    // backlog tab. Each backlog tab carries its own projectName (key
-    // `backlog:<project|__all__>`), so switching to a differently-scoped
-    // backlog tab re-narrows the triage list without going through the hash.
-    effect(() => {
-      const tab = this.studioTabState.activeTab();
-      if (tab?.kind === 'backlog') {
-        untracked(() => this.backlogTriage.scopedProject.set(tab.projectName));
-      }
-      untracked(() => this.reconcileBacklogHashForActiveTab(tab));
     });
 
   }
@@ -1204,12 +1135,9 @@ export class App implements OnInit, OnDestroy {
         this.openWorkspaceSettingsInStudio(this.workspaceOverlays.section());
       }
       this.applyProjectShellHash();
-      this.syncBacklogTabFromHash();
       this.syncEpicsTabFromHash();
     };
     applyHash();
-    this.initialHashSyncComplete = true;
-    this.reconcileBacklogHashForActiveTab(this.studioTabState.activeTab());
     this.hashListener = applyHash;
     window.addEventListener('hashchange', this.hashListener);
 
@@ -1223,7 +1151,6 @@ export class App implements OnInit, OnDestroy {
       if (this.showCreate()) return;
       if (this.workspaceOverlays.settingsOpen()) return;
       if (this.projectShellName() !== null) return;
-      if (this.studioTabState.activeTab()?.kind === 'backlog') return;
       if (this.studioTabState.activeTab()?.kind === 'epics') return;
       const target = ev.target as HTMLElement | null;
       if (target) {
@@ -1263,25 +1190,6 @@ export class App implements OnInit, OnDestroy {
     };
     window.addEventListener('keydown', this.kanbanKeyListener);
 
-    // Global Ctrl+B (Cmd+B on macOS): toggle between the dedicated backlog
-    // triage screen at #/backlog and the kanban board. Suppressed inside
-    // text inputs so Ctrl+B keeps its bold behaviour in markdown editors.
-    this.boardShortcutListener = (ev: KeyboardEvent) => {
-      if (ev.defaultPrevented) return;
-      if (!this.featureFlags.vsCodeLayout()) return;
-      const mod = ev.ctrlKey || ev.metaKey;
-      if (!mod || ev.altKey || ev.shiftKey) return;
-      if (ev.key.toLowerCase() !== 'b') return;
-      const target = ev.target as HTMLElement | null;
-      if (target) {
-        const tag = target.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-        if (target.isContentEditable) return;
-      }
-      this.toggleBacklogTriage();
-      ev.preventDefault();
-    };
-    window.addEventListener('keydown', this.boardShortcutListener);
   }
 
   ngOnDestroy() {
@@ -1292,10 +1200,6 @@ export class App implements OnInit, OnDestroy {
     if (this.kanbanKeyListener) {
       window.removeEventListener('keydown', this.kanbanKeyListener);
       this.kanbanKeyListener = null;
-    }
-    if (this.boardShortcutListener) {
-      window.removeEventListener('keydown', this.boardShortcutListener);
-      this.boardShortcutListener = null;
     }
     if (this.nowMsTickHandle !== null) {
       clearInterval(this.nowMsTickHandle);
@@ -1360,6 +1264,19 @@ export class App implements OnInit, OnDestroy {
     if (!p) return '';
     return this.studioMergeAcceptView()?.acceptLabel ?? p.label;
   });
+  /**
+   * True while the studio Human Review acceptance primary (`mark-done`) depends
+   * on git status that has not loaded yet. Until the graph-derived provenance
+   * settles, `landedState` is `null` and the label would guess "Merge into
+   * Develop" (an actionable merge) before flipping to "Accept" once the work is
+   * revealed as already merged - the race Robert reported (AGT-2006). The button
+   * stays disabled + skeletoned while this holds, then switches atomically.
+   */
+  readonly studioPrimaryAwaitingGit = computed(() => {
+    const p = this.studioTriagePrimary();
+    if (!p || p.id !== 'mark-done') return false;
+    return this.jobDetailSig()?.gitInfoLoading() ?? false;
+  });
   readonly studioTriageHasActions = computed(
     () => this.studioTriagePrimary() !== null || this.studioTriageOverflow().length > 0 || this.studioCommitActionsAvailable(),
   );
@@ -1402,6 +1319,9 @@ export class App implements OnInit, OnDestroy {
     const sel = this.selectedJob();
     const p = this.studioTriagePrimary();
     if (!sel || !p) return;
+    // Hold git-dependent acceptance until the branch/merge status has loaded, so
+    // a click cannot trigger a merge while the label is still a guess (AGT-2006).
+    if (this.studioPrimaryAwaitingGit()) return;
     this.dispatchStudioTriage(sel.info, p);
   }
 
@@ -1532,39 +1452,6 @@ export class App implements OnInit, OnDestroy {
   }
   onArchiveAll() {
     this.boardMutations.archiveAllCompleted(this.filteredGrouped().completed);
-  }
-
-  private currentBacklogScopeProject(): string | null {
-    const tab = this.studioTabState.activeTab();
-    if (tab?.kind === 'board' && tab.projectName !== '__all__') return tab.projectName;
-    if (tab?.kind === 'hub') return tab.projectName;
-    if (tab?.kind === 'task' || tab?.kind === 'activity') {
-      const job = this.jobService.jobs().find((j) => j.taskKey === tab.taskKey);
-      if (job?.projectName) return job.projectName;
-    }
-    const active = [...this.activeProjects()];
-    return active.length === 1 ? active[0] : null;
-  }
-
-  onBacklogNewTask(): void { this.openCreate(TaskState.Backlog); }
-
-  /**
-   * Ctrl+B toggle between the kanban board and the dedicated backlog triage
-   * tab. The triage screen is a first-class editor tab (equivalent to Board
-   * / Epics), so opening it focuses a `backlog` tab rather than layering an
-   * overlay over the active tab; closing it falls back to the sticky board.
-   * The `#/backlog` deep-link hash is kept in sync via the triage service so
-   * a reload / shared URL reopens the tab.
-   */
-  toggleBacklogTriage(): void {
-    if (this.studioTabState.activeTab()?.kind === 'backlog') {
-      this.backlogTriage.closeTriage();
-      this.studioTabState.activateAllProjectsBoard();
-    } else {
-      const project = this.currentBacklogScopeProject();
-      this.backlogTriage.openTriage(project);
-      this.studioTabState.open({ kind: 'backlog', projectName: project });
-    }
   }
 
   /**
@@ -2136,36 +2023,6 @@ export class App implements OnInit, OnDestroy {
     this.projectOverlays.syncFeedFromHash(this.watchPaths());
   }
 
-  /**
-   * Deep-link sync for `#/backlog`: when the URL is on the backlog hash,
-   * open (or focus) the backlog tab so a bookmark / shared link / reload
-   * lands on the triage screen with the tab bar showing Backlog active.
-   * Read-only with respect to closing — leaving the hash is driven by the
-   * explicit toggle, mirroring `syncEpicsTabFromHash`.
-   */
-  private syncBacklogTabFromHash(): void {
-    const onBacklog = this.backlogTriage.syncFromHash(this.currentBacklogScopeProject());
-    if (onBacklog) {
-      this.studioTabState.open({ kind: 'backlog', projectName: this.backlogTriage.scopedProject() });
-    }
-  }
-
-  /**
-   * Keep the Backlog deep-link hash aligned with the active editor tab after
-   * startup hash routes have had their chance to open explicit deep links.
-   * Without this, a stale `#/backlog` segment survives a Board / Hub / task
-   * navigation and wins the next F5 before tab persistence can restore the
-   * active surface.
-   */
-  private reconcileBacklogHashForActiveTab(tab: StudioTab | null): void {
-    if (!this.initialHashSyncComplete) return;
-    if (tab?.kind === 'backlog') {
-      this.backlogTriage.openTriage(tab.projectName);
-      return;
-    }
-    this.backlogTriage.closeTriage();
-  }
-
   private syncEpicsTabFromHash(): void {
     const rawHash = window.location.hash || '';
     if (!rawHash.startsWith('#epics')) return;
@@ -2177,19 +2034,19 @@ export class App implements OnInit, OnDestroy {
   }
 
   private openWorkspaceSettingsInStudio(section: WorkspaceSettingsSection): void {
+    // AGT-2035: settings is now purely an editor tab; it no longer also opens a
+    // sidebar "Settings" panel (that panel was removed and folded into here).
     this.workspaceOverlays.open(section);
-    this.studioPanelState.open('settings');
     this.studioTabState.open({ kind: 'workspace-settings' });
   }
 
   private toggleWorkspaceSettingsInStudio(section: WorkspaceSettingsSection): void {
     const alreadyActive =
       this.studioTabState.activeTab()?.kind === 'workspace-settings' &&
-      this.workspaceOverlays.section() === section &&
-      this.studioPanelState.active() === 'settings' &&
-      this.studioPanelState.visible();
+      this.workspaceOverlays.section() === section;
     if (alreadyActive) {
-      this.studioPanelState.setVisible(false);
+      this.studioTabState.close(studioTabKey({ kind: 'workspace-settings' }));
+      this.workspaceOverlays.close();
       return;
     }
     this.openWorkspaceSettingsInStudio(section);
@@ -2238,23 +2095,6 @@ export class App implements OnInit, OnDestroy {
       return;
     }
     this.workspaceOverlays.toggleScreenshots();
-  }
-  openWorkspaceSummary(): void {
-    if (this.featureFlags.vsCodeLayout()) {
-      this.openWorkspaceSettingsInStudio('summary');
-      return;
-    }
-    this.workspaceOverlays.openSummary();
-  }
-  closeWorkspaceSummary(): void {
-    this.workspaceOverlays.closeSummary();
-  }
-  toggleWorkspaceSummary(): void {
-    if (this.featureFlags.vsCodeLayout()) {
-      this.toggleWorkspaceSettingsInStudio('summary');
-      return;
-    }
-    this.workspaceOverlays.toggleSummary();
   }
   openCliAdmin(): void {
     if (this.featureFlags.vsCodeLayout()) {
@@ -2565,31 +2405,6 @@ export class App implements OnInit, OnDestroy {
   // Cycle 9: UI-pref methods delegate to UiPreferencesService.
   setTaskNavCollapsed(collapsed: boolean): void {
     this.uiPrefs.setTaskNavCollapsed(collapsed);
-  }
-  /**
-   * F43: toggle the card-density preference, honouring the user's
-   * intent even when the orchestrator rail is auto-forcing compact.
-   *
-   * Pre-F43 the toolbar toggle just flipped the persisted pref. With
-   * the rail open the pref no longer drove the effective density, so
-   * "Use full cards" felt broken: pref flipped to false, cards stayed
-   * compact, only a toast hinted that the click had landed somewhere.
-   *
-   * Now: write the pref to the value the user *intends* to see
-   * (`nextEffective`), and register a per-tab override that overrides
-   * the rail-forced compact rule for the rest of this rail-open
-   * session. The override is cleared by the effect below when the
-   * rail closes so re-opening it re-engages the auto-compact rule.
-   */
-  toggleCompactCards(): void {
-    const railOpen = this.orchSideSheetSig()?.open() ?? false;
-    const nextEffective = !this.effectiveCompactCards();
-    this.uiPrefs.setCompactCards(nextEffective);
-    if (railOpen && !nextEffective) {
-      this.uiPrefs.userOverridesCompactWhileRail.set(true);
-    } else if (!railOpen) {
-      this.uiPrefs.userOverridesCompactWhileRail.set(false);
-    }
   }
   startResize(event: MouseEvent): void {
     this.uiPrefs.startResize(event);

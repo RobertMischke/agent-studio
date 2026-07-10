@@ -46,6 +46,8 @@ public record TaskInfo
     public string? ThinkingLevel { get; init; }
     /// <summary>Which CLI backend executes this job: <c>claude</c>, <c>codex</c>, or <c>gemini</c>. Defaults to <c>claude</c>.</summary>
     public string? CliType { get; init; }
+    /// <summary>Effective fallback for the current run; null outside a quota-routed run.</summary>
+    public QuotaFallbackStatus? QuotaFallback { get; init; }
     /// <summary>
     /// Card kind: <c>task</c> (default, a runnable unit of work) or <c>epic</c>
     /// (a container grouping sub-tasks under one overarching goal). An epic is
@@ -250,6 +252,26 @@ public record TaskInfo
     public TaskReferences References { get; init; } = new();
 
     /// <summary>
+    /// Wiki pages associated with this task. The list is append-only and
+    /// deliberately survives deletion of a target page; <c>Exists</c> is a
+    /// read-time rendering hint and is never required for persistence.
+    /// </summary>
+    public List<RelatedWikiPage> RelatedWikiPages { get; init; } = [];
+
+    /// <summary>
+    /// AGT-2029 — read-time "waits-on" projection derived from
+    /// <see cref="References"/>.<c>DependsOn</c> against the whole workspace
+    /// (all projects, all lanes including archive). Tells the card which
+    /// dependencies are fulfilled vs still open, whether the card is blocked,
+    /// and whether it sits on a dependency cycle. Never persisted to
+    /// <c>task.json</c>; folded on by the endpoint read overlay
+    /// (<c>TaskEndpointHelpers.WithRuntime</c>) and computed independently by
+    /// the runner pickup gate. Null when the task has no dependsOn edges. See
+    /// <see cref="WaitsOnEvaluator"/>.
+    /// </summary>
+    public WaitsOnStatus? WaitsOn { get; init; }
+
+    /// <summary>
     /// Append-only commit-provenance record (ASS-1724): the task's worktree
     /// branch, its fork-point base, the per-lane-transition anchors, and the
     /// develop-merge block. Written by the single recording hook in
@@ -258,6 +280,29 @@ public record TaskInfo
     /// legacy <c>task.json</c> files that predate the field.
     /// </summary>
     public TaskProvenance? Provenance { get; init; }
+
+    /// <summary>
+    /// AGT-2046 — compact, always-on board merge signal: is this task's work
+    /// folded into the integration branch (develop) and/or the release branch
+    /// (main)? Computed batched + cached per repository by
+    /// <c>BoardMergeStatusService</c> (O(repos) git spawns, never per card) and
+    /// folded onto the board payload so the kanban card renders a two-segment
+    /// [develop|main] indicator without a per-card graph query. Never persisted
+    /// to <c>task.json</c>; null on cards with no committed/merged anchor yet.
+    /// </summary>
+    public TaskMergeSignal? MergeSignal { get; init; }
+
+    /// <summary>
+    /// PUB-1 — read-time "publishable to" projection for accepted (6-completed)
+    /// tasks: which publish targets (npm / NuGet / website) this task's merged work
+    /// touches, so the card / task-detail renders a "publishable: npm, website"
+    /// chip. Computed batched per project by <c>TaskPublishableService</c> by
+    /// set-membership of the task's mainline anchor against each target's pending
+    /// commit set (O(projects), never per card) and folded onto the board payload.
+    /// Never persisted to <c>task.json</c>; null on non-accepted cards and on cards
+    /// whose work touches no derived publish target.
+    /// </summary>
+    public TaskPublishSignal? PublishSignal { get; init; }
 
     /// <summary>
     /// Read-time visibility projection (ASS-1751) for <c>3-progress</c> tasks
@@ -279,6 +324,50 @@ public record TaskInfo
     /// <c>docs/concepts/out-of-band-task-completion.md</c> §3.
     /// </summary>
     public ExternalCompletionInfo? ExternalCompletion { get; init; }
+
+    /// <summary>
+    /// AGT-2003 — read-time projection of the runner holding this task's active
+    /// <b>run lease</b> (ADR-0060, <see cref="AgentStudio.Runner.RunLeaseService"/>).
+    /// Folded on by <c>TaskEndpointHelpers.WithRuntime</c> only while the task is
+    /// in <see cref="TaskStates.Progress"/> and a lease is held; null otherwise.
+    /// Never persisted to <c>task.json</c>. A remote runner acquires the run
+    /// lease before it spawns a CLI (the local in-process runner still uses the
+    /// disk pickup-lock and holds no run lease), so a non-null value with
+    /// <see cref="TaskRunnerInfo.IsRemote"/> is the signal the board card uses to
+    /// show "executed by &lt;runner&gt;" instead of a plain local run. Drives the
+    /// runner badge next to the CLI badge and the task-detail run header.
+    /// </summary>
+    public TaskRunnerInfo? Runner { get; init; }
+}
+
+/// <summary>
+/// Card-renderable projection of the runner that holds a task's active run lease
+/// (AGT-2003). Sourced from the in-memory run-lease record; the fencing token and
+/// lease id ride along for the tooltip / audit trail but the card only needs
+/// <see cref="RunnerName"/> and <see cref="IsRemote"/>.
+/// </summary>
+public record TaskRunnerInfo
+{
+    /// <summary>Stable runner id that acquired the lease (e.g. <c>dev@host</c> or a remote runner id).</summary>
+    public string RunnerId { get; init; } = "";
+    /// <summary>Human-facing runner name shown on the badge (e.g. <c>agent-runner-01</c>). Falls back to the id when unset.</summary>
+    public string RunnerName { get; init; } = "";
+    /// <summary>Host the runner runs on. Empty when the lease did not carry one.</summary>
+    public string Hostname { get; init; } = "";
+    /// <summary>Backend-name the lease owner reported (dev / stable / a remote backend name).</summary>
+    public string BackendName { get; init; } = "";
+    /// <summary>
+    /// True when the lease owner is a different runner than this backend's own
+    /// identity — i.e. the task is executing on a remote host, not in-process.
+    /// The card shows the remote runner name only when this is true.
+    /// </summary>
+    public bool IsRemote { get; init; }
+    /// <summary>Opaque lease id of the active grant (audit / tooltip only).</summary>
+    public string LeaseId { get; init; } = "";
+    /// <summary>Monotonic fencing token of the active grant (audit / tooltip only).</summary>
+    public long FencingToken { get; init; }
+    /// <summary>UTC instant the active lease was acquired.</summary>
+    public DateTime AcquiredAt { get; init; }
 }
 
 /// <summary>

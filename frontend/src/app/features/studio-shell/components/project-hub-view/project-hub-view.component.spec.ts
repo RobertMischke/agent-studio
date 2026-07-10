@@ -75,4 +75,30 @@ describe('ProjectHubViewComponent (smoke)', () => {
     expect(fixture.componentInstance.activeRail()).toBe('security');
     expect(tabState.activeTab()).toEqual({ kind: 'hub', projectName: 'Alpha', section: 'security' });
   });
+
+  it('follows a section change on the tab payload (Wiki -> Overview)', async () => {
+    window.localStorage?.removeItem('atp.studio.tabs.v1');
+    await TestBed.configureTestingModule({
+      imports: [ProjectHubViewComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ProjectHubViewComponent);
+    fixture.componentRef.setInput('projectName', 'Alpha');
+    fixture.componentRef.setInput('initialSection', 'wiki');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.activeRail()).toBe('wiki');
+
+    // Re-opening the Hub on "Project" rebinds the section on the shared tab
+    // payload; the rail must follow it back to Overview instead of "doing
+    // nothing" (AGT-2023).
+    fixture.componentRef.setInput('initialSection', 'overview');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.activeRail()).toBe('overview');
+  });
 });

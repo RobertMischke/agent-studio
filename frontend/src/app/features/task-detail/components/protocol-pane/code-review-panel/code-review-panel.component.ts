@@ -19,6 +19,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 import { cleanStepResultMarkdown } from '../../prompt-pane/pipeline-step-result/pipeline-step-result.util';
 import { CLAUDE_FALLBACK_MODEL_ID } from '../../../../cli';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
+import { codeReviewVerdictTone, type CodeReviewVerdictTone } from '../../code-review-verdict.util';
 import { describeDiffSize, isLargeDiff } from '../../../../../utils/large-diff-gate';
 import { formatDateTimeUtc } from '../../../../../services/format.util';
 
@@ -247,12 +248,8 @@ export class CodeReviewPanelComponent implements OnInit {
     this.expandedBodyRevealed.set(true);
   }
 
-  verdictTone(v: string): 'pass' | 'concerns' | 'block' | 'unknown' {
-    const lower = (v ?? '').toLowerCase();
-    if (lower === 'pass') return 'pass';
-    if (lower === 'concerns') return 'concerns';
-    if (lower === 'block') return 'block';
-    return 'unknown';
+  verdictTone(v: string): CodeReviewVerdictTone {
+    return codeReviewVerdictTone(v);
   }
 
   trackByFile(_index: number, entry: CodeReviewListEntry): string {

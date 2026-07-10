@@ -13,6 +13,7 @@ import {
   buildAutoReviewProcessBadge,
   buildCardCtxMenuItems,
   buildCodeReviewGradeBadge,
+  buildDependencyChip,
   buildCommitChainTooltip,
   buildCommitChainView,
   buildCommitEmptyBadge,
@@ -22,6 +23,7 @@ import {
   buildHumanReviewBadge,
   buildExternalDoneBadge,
   buildLoopTooltip,
+  buildMergeSignal,
   buildModeBadge,
   buildOutcomeIssueBadge,
   buildOwnerChip,
@@ -29,15 +31,18 @@ import {
   buildPhaseBadge,
   buildPipelineDots,
   buildReviewBadge,
+  buildRunnerBadge,
   buildTagChips,
   buildTaskTypeChip,
   buildTokenBubble,
+  resolveDependencyTarget,
   cardNeedsAttention,
   commitChainVariant,
   formatTokens,
   EPIC_ASSIGN_PREFIX,
   EPIC_DETACH_ID,
   FILTER_DEPENDENTS_ID,
+  DELETE_ID,
   type CommitChainView,
   type CommitEmptyBadge,
 } from './task-card-view-model';
@@ -52,6 +57,8 @@ import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { stateLabel } from '../../../../services/format.util';
 import { BoardFiltersService } from '../../state/board-filters.service';
 import { EpicExpansionStore } from '../../state/epic-expansion.service';
+import { TaskSelectionService } from '../../../task-detail';
+import type { DependencyChip } from './task-card-view-model';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
@@ -135,10 +142,17 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   readonly tagChips = computed(() => buildTagChips(this.job().tags, this.tagRegistry.byId(), this.job().state));
 
-  onDeleteClick(event: Event) {
-    event.stopPropagation();
-    this.deleteRequested.emit(this.job());
-  }
+  /**
+   * PUB-1: "publishable: npm, website" chip for accepted (6-completed) cards.
+   * The backend folds `publishSignal` only onto completed tasks whose merged
+   * work touches a derived publish target, so the presence of labels is the
+   * whole gate - no card renders it otherwise (Ruhe by default).
+   */
+  readonly publishableChip = computed(() => {
+    const labels = this.job().publishSignal?.labels ?? [];
+    if (labels.length === 0) return null;
+    return { labels, text: labels.join(', ') };
+  });
 
   /** True for cards where "Pick next" makes sense (front-of-queue promotion). */
   readonly canPickNext = computed(() => this.job().state === TaskState.Ready);
@@ -259,8 +273,18 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     const displayGitState = displayLive ? null : gitState;
     const sharedCheckout = displayGitState?.label === 'main checkout';
     const kind = displayLive || sharedCheckout ? 'worktree' : displayGitState?.kind === 'tagged' ? 'archive' : 'branch';
+    // `label` stays the compact semantic code ('WT' / 'BR' / 'TAG') consumed by
+    // the change-context specs, but it is NO LONGER rendered on the card: the
+    // operator could not decode "BR" (AGT-2046). The card now shows a branch /
+    // archive icon plus the branch name and a plain-text tooltip instead.
     const label = displayLive || sharedCheckout ? 'WT' : displayGitState?.kind === 'tagged' ? 'TAG' : 'BR';
+    const refIcon = kind === 'archive' ? '🏷' : '⎇';
     const value = displayLive?.branch || displayGitState?.label || '';
+    const refTooltip = kind === 'archive'
+      ? `Archived${value ? `: ${value}` : ''} — out of the active git flow.`
+      : kind === 'worktree'
+        ? `Working tree${value ? `: ${value}` : ''}`
+        : `Branch${value ? `: ${value}` : ''}`;
     const summary = displayLive
       ? displayLive.filesChanged === 0 ? 'clean' : `${displayLive.filesChanged} ${displayLive.filesChanged === 1 ? 'file' : 'files'}`
       : commits ? `${commits.totalCount} ${commits.totalCount === 1 ? 'commit' : 'commits'}`
@@ -274,8 +298,15 @@ export class TaskCardComponent implements OnInit, OnDestroy {
       empty?.tooltip ?? null,
     ].filter((part): part is string => !!part).join('\n\n');
 
-    return { kind, label, value, summary, stat, tooltip };
+    return { kind, label, refIcon, refTooltip, value, summary, stat, tooltip };
   });
+
+  /**
+   * AGT-2046 two-segment merge signal ([develop|main]). Always shown on cards
+   * that carry git work so the operator can scan "gemerged in develop / main" at
+   * a glance. Null on pre-work cards with no anchor. See {@link buildMergeSignal}.
+   */
+  readonly mergeSignal = computed(() => buildMergeSignal(this.job()));
 
   /**
    * Host-level "this card needs a human" flag. Drives the red uniform ring +
@@ -284,7 +315,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
    */
   readonly needsAttention = computed(() => cardNeedsAttention(this.job()));
 
-  readonly outcomeIssueBadge = computed(() => buildOutcomeIssueBadge(this.job().outcomeIssue));
+  readonly outcomeIssueBadge = computed(() => buildOutcomeIssueBadge(this.job()));
 
   /**
    * Card-level "code review running" flag. Reads the shared
@@ -329,6 +360,13 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   readonly effectiveModelChip = computed(() =>
     buildEffectiveModelChip(this.job(), this.clients.resolve(this.job().ownerClientId))
   );
+
+  /**
+   * AGT-2003 runner badge next to the CLI badge: "→ <runner>" when a remote
+   * runner holds the run lease, a quiet "lokal" chip for an in-process run,
+   * null otherwise. See {@link buildRunnerBadge}.
+   */
+  readonly runnerBadge = computed(() => buildRunnerBadge(this.job()));
 
   readonly identity = computed(() => projectIdentity(this.job().projectName));
 
@@ -385,40 +423,10 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   );
 
   /**
-   * F34: dependsOn targets that are known and not yet complete. Drives the
-   * card's `waiting on KEY` badge. Cards with no dependsOn edges short-circuit
-   * before reading the board snapshot, so they never depend on `jobs()` and
-   * the O(N) state lookup is paid only by the few cards that have dependencies.
-   * Targets absent from the current board view are skipped (no false positive),
-   * and completed/archived targets are satisfied.
+   * AGT-2029 waits-on dependency chip from the backend-computed `waitsOn`
+   * status (fulfilled/open per target, blocked, cycle). Null when no deps.
    */
-  readonly waitingOn = computed<string[]>(() => {
-    const deps = this.job().references?.dependsOn ?? [];
-    if (deps.length === 0) return [];
-    const stateByKey = new Map<string, string>();
-    for (const t of this.jobs.jobs()) {
-      const k = (t.key ?? '').trim();
-      if (k) stateByKey.set(k.toUpperCase(), t.state);
-    }
-    return deps.filter((dep) => {
-      const st = stateByKey.get(dep.trim().toUpperCase());
-      if (st === undefined) return false;
-      return st !== TaskState.Completed && st !== TaskState.Archive;
-    });
-  });
-
-  /** Compact badge label: first waiting key, with a "+N" suffix for the rest. */
-  readonly waitingOnLabel = computed<string | null>(() => {
-    const waiting = this.waitingOn();
-    if (waiting.length === 0) return null;
-    return waiting.length === 1 ? waiting[0] : `${waiting[0]} +${waiting.length - 1}`;
-  });
-
-  readonly waitingOnTooltip = computed(() => {
-    const waiting = this.waitingOn();
-    if (waiting.length === 0) return '';
-    return `Waiting on ${waiting.join(', ')} to complete before this task is workable.`;
-  });
+  readonly dependencyChip = computed(() => buildDependencyChip(this.job().waitsOn));
 
   readonly relativeActivity = computed(() => {
     const dateStr = this.job().lastActivity;
@@ -435,6 +443,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   // Context menu: copy actions + epic assignment (way 2).
   private readonly notifications = inject(NotificationService);
   private readonly jobs = inject(TaskService);
+  private readonly selection = inject(TaskSelectionService);
   private readonly boardFilters = inject(BoardFiltersService);
   readonly cardContextMenu = signal<{ x: number; y: number } | null>(null);
   /** Epics in this card's project, loaded on right-click for the assign submenu. */
@@ -444,10 +453,46 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     buildCardCtxMenuItems(this.job(), this.isEpic(), this.epicsForMenu(), this.subTaskEpicId()),
   );
 
+  /** AGT-2029: open the dependency this card is waiting on (see resolveDependencyTarget). */
+  navigateToDependency(chip: DependencyChip, event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const target = resolveDependencyTarget(chip, this.jobs.jobs());
+    if (target) {
+      this.selection.openDetail(target);
+      return;
+    }
+    this.notifications.info(
+      chip.targetKey
+        ? `${chip.targetKey} is not loaded in the current workspace view.`
+        : 'That dependency could not be opened.',
+    );
+  }
+
   openCardContextMenu(event: MouseEvent): void {
     event.preventDefault();
     event.stopPropagation();
-    this.cardContextMenu.set({ x: event.clientX, y: event.clientY });
+    this.openCardMenuAt(event.clientX, event.clientY);
+  }
+
+  /**
+   * A11y: keep the card actions (incl. Delete) reachable without a mouse now
+   * that the hover trash button is gone. The Menu/Application key and Shift+F10
+   * are the platform convention for "open the context menu on the focused
+   * element"; we anchor the menu to the focused card's top-left corner.
+   */
+  onCardKeyDown(event: KeyboardEvent): void {
+    const isContextMenuKey = event.key === 'ContextMenu'
+      || (event.shiftKey && event.key === 'F10');
+    if (!isContextMenuKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = this.hostRef.nativeElement.getBoundingClientRect();
+    this.openCardMenuAt(rect.left + 12, rect.top + 12);
+  }
+
+  private openCardMenuAt(x: number, y: number): void {
+    this.cardContextMenu.set({ x, y });
     // Refresh the assign list each open (only for task cards). Best-effort:
     // the section just shows "No epics" on failure.
     if (!this.isEpic()) {
@@ -466,6 +511,12 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   onCardCtxMenuItemClick(ev: MenuItemClickEvent): void {
     const job = this.job();
 
+    if (ev.id === DELETE_ID) {
+      // Same flow as the old hover trash button: emit and let the parent own
+      // the confirm/undo prompt. Delete semantics are unchanged.
+      this.deleteRequested.emit(job);
+      return;
+    }
     if (ev.id.startsWith(EPIC_ASSIGN_PREFIX)) {
       const epicId = ev.id.slice(EPIC_ASSIGN_PREFIX.length);
       if (epicId === this.subTaskEpicId()) return; // already in this epic

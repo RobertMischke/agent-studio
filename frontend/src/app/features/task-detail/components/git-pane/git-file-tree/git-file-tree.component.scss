@@ -44,7 +44,12 @@
   text-align: center;
 }
 .git-tree__label {
-  flex: 1;
+  // Do not grow: the filename + optional dir-hint cluster on the left, and
+  // the count / +/- stat are pushed to the right edge via `margin-left: auto`.
+  // (Previously `flex: 1`, which stretched the filename and stranded the hint
+  // over by the stats.)
+  flex: 0 1 auto;
+  min-width: 0;
   color: var(--studio-fg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -54,13 +59,34 @@
   color: var(--studio-accent-3-strong);
   font-weight: 500;
 }
+// Directory disambiguator shown next to a file whose basename collides with
+// another changed file (e.g. two README.md). Dim + compact so it reads as
+// secondary context, never competing with the filename. The full repo path
+// is on the row's hover tooltip.
+.git-tree__dir-hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--studio-fg-muted);
+  opacity: 0.85;
+}
 .git-tree__count {
+  margin-left: auto;
   font-family: var(--font-mono, monospace);
   font-size: 11px;
   color: var(--studio-fg-dim);
 }
 .git-tree__stat {
+  margin-left: auto;
   font-family: var(--font-mono, monospace);
   font-size: 11px;
   color: var(--studio-fg-dim);
 }
+// When both count and stat are present (folder rows) only the first pushes
+// to the right; the stat then trails the count naturally.
+.git-tree__count + .git-tree__stat { margin-left: 8px; }

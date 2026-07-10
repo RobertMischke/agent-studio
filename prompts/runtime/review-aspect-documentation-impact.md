@@ -28,17 +28,30 @@ You must form an opinion. Use:
 - **Id:** `{{job_id}}`
 - **Title:** {{job_title}}
 
+{{card_mode}}
+
 ## Task body (`prompt.md`)
 
 ```
 {{task_body}}
 ```
 
-## Diff summary
+## Diff summary (task branch vs base)
 
 ```
 {{diff_summary}}
 ```
+
+## results/ folder inventory
+
+```
+{{results_inventory}}
+```
+
+A read-only / concept / research card legitimately ships no code diff; its
+deliverable is the results/ artefact or a `docs/` commit. Judge documentation
+impact against the branch diff and results/ inventory above, not an empty
+working diff.
 
 ## Status summary
 

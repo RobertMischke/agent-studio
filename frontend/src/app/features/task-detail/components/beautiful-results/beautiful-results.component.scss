@@ -166,6 +166,29 @@ $ctp-crust:     #11111b;
   font-style: italic;
 }
 
+/* Compact fallback for a broken/missing image reference. Replaces the empty
+ * <img> so a bad path reads as an explicit "missing" chip instead of a blank
+ * row (see BeautifulResultsComponent.markBrokenImages). */
+.results-figure__missing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px dashed rgba($ctp-overlay0, 0.6);
+  border-radius: 4px;
+  background: rgba($ctp-surface0, 0.4);
+  color: $ctp-subtext0;
+  font-size: 12.5px;
+  font-family: var(--font-mono, monospace);
+  word-break: break-all;
+
+  &::before {
+    content: '🖼';
+    filter: grayscale(1);
+    opacity: 0.7;
+  }
+}
+
 /* The lightbox UI moved to the shared `app-media-lightbox` mounted at
  * the app shell. Figures still emit `data-results-lightbox`; the
  * `cacMarkdownLightbox` directive on the body forwards clicks. */

@@ -162,12 +162,18 @@ public record RunnerStatus
     public Dictionary<string, ProjectRunnerStatus> Projects { get; init; } = new();
 }
 
+public sealed record QuotaFallbackStatus(string CliType, string? Model, string? Reason);
+
 public record ProjectRunnerStatus
 {
     public string ProjectName { get; init; } = "";
     public string Mode { get; init; } = "manual";
     public string? ActiveJobId { get; init; }
     public CliExecution? ActiveExecution { get; init; }
+    /// <summary>Effective fallback model while an active run is quota-routed.</summary>
+    public string? QuotaFallbackModel { get; init; }
+    /// <summary>Quota window/cap explanation for the active fallback.</summary>
+    public string? QuotaFallbackReason { get; init; }
     public List<string> QueuedJobIds { get; init; } = [];
     /// <summary>
     /// Reason recorded the last time the runner mode changed. Mirrors the

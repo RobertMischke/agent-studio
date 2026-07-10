@@ -587,6 +587,8 @@ export class ProjectPipelinePanelComponent {
         return 'Attributes commits to the task so review and merge screens know which changes belong together.';
       case 'post-merge-into-develop':
         return 'Operator-triggered delivery step that merges accepted task work into develop.';
+      case 'post-merge-into-develop-push':
+        return 'Pushes the integration branch to origin after the merge so integration is never only local.';
       case 'post-lint-scss':
         return 'Runs frontend stylelint for SCSS quality and can warn or fail depending on gate mode.';
       case 'post-regression-radar':

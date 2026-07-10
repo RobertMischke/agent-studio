@@ -3,8 +3,8 @@
     <div>
       <h2 class="wtt__title">Workspace token usage</h2>
       <p class="wtt__sub">
-        Orchestrator LLM calls across every watched project, bucketed
-        on the wall clock.
+        All LLM token usage across every watched project - agent runs,
+        supporting loops, and orchestrator turns - bucketed on the wall clock.
         @if (timeline(); as t) {
           <span class="wtt__sub-stats">
             · {{ totalCalls() }} call{{ totalCalls() === 1 ? '' : 's' }}
@@ -36,6 +36,34 @@
       </button>
     </div>
   </header>
+
+  @if (timeline() && grandTotalTokens() > 0) {
+    <div class="wtt__composition" data-testid="wtt-composition">
+      <div class="wtt__comp-bar"
+           role="img"
+           aria-label="Token split by category">
+        <span class="wtt__comp-seg wtt__cat--agent"
+              [style.width.%]="pct(categoryTotals().agent)"></span>
+        <span class="wtt__comp-seg wtt__cat--supporting"
+              [style.width.%]="pct(categoryTotals().supporting)"></span>
+        <span class="wtt__comp-seg wtt__cat--orchestrator"
+              [style.width.%]="pct(categoryTotals().orchestrator)"></span>
+      </div>
+      <div class="wtt__comp-legend">
+        @for (m of categoryMeta; track m.key) {
+          <span class="wtt__cat-chip" [attr.data-testid]="'wtt-cat-' + m.key">
+            <span class="wtt__cat-dot" [class]="m.cls"></span>
+            <span class="wtt__cat-name">{{ m.label }}</span>
+            <span class="wtt__cat-num">{{ formatTokens(categoryTotals()[m.key]) }}</span>
+          </span>
+        }
+        <span class="wtt__cat-total" data-testid="wtt-cat-total">
+          <span class="wtt__cat-name">Total</span>
+          <span class="wtt__cat-num">{{ formatTokens(grandTotalTokens()) }}</span>
+        </span>
+      </div>
+    </div>
+  }
 
   <div class="wtt__chart" data-testid="wtt-chart" (mouseleave)="hoverCell.set(null)">
     @if (loading() && !timeline()) {
@@ -105,6 +133,15 @@
             }
             <div><span class="wtt__pop-lbl">total</span><span class="wtt__pop-num">{{ formatTokens(c.total) }}</span></div>
             <div><span class="wtt__pop-lbl">calls</span><span class="wtt__pop-num">{{ c.calls }}</span></div>
+            @if (c.agentTokens > 0) {
+              <div><span class="wtt__pop-lbl"><span class="wtt__pop-cat wtt__cat--agent"></span>agent</span><span class="wtt__pop-num">{{ formatTokens(c.agentTokens) }}</span></div>
+            }
+            @if (c.supportingTokens > 0) {
+              <div><span class="wtt__pop-lbl"><span class="wtt__pop-cat wtt__cat--supporting"></span>supporting</span><span class="wtt__pop-num">{{ formatTokens(c.supportingTokens) }}</span></div>
+            }
+            @if (c.orchestratorTokens > 0) {
+              <div><span class="wtt__pop-lbl"><span class="wtt__pop-cat wtt__cat--orchestrator"></span>orchestrator</span><span class="wtt__pop-num">{{ formatTokens(c.orchestratorTokens) }}</span></div>
+            }
             <div>
               <span class="wtt__pop-lbl">$ theoretical</span>
               <span class="wtt__pop-num">
@@ -148,21 +185,33 @@
         <tr>
           <th>Project</th>
           <th class="wtt__num">Calls</th>
-          <th class="wtt__num">Total tokens</th>
+          <th class="wtt__num">Total</th>
+          <th class="wtt__num wtt__col-cat">
+            <span class="wtt__col-dot wtt__cat--agent"></span>Agent
+          </th>
+          <th class="wtt__num wtt__col-cat">
+            <span class="wtt__col-dot wtt__cat--supporting"></span>Supporting
+          </th>
+          <th class="wtt__num wtt__col-cat">
+            <span class="wtt__col-dot wtt__cat--orchestrator"></span>Orchestrator
+          </th>
           <th class="wtt__num">$ theoretical</th>
-          <th>Peak bucket</th>
           <th>Last activity</th>
         </tr>
       </thead>
       <tbody>
         @for (p of t.projects; track p.project) {
-          <tr [class.wtt__row--off]="isProjectDisabled(p.project)">
+          <tr [class.wtt__row--off]="isProjectDisabled(p.project)"
+              [attr.data-testid]="'wtt-row-' + p.project">
             <td>
               <span class="wtt__row-dot" [style.background]="colorFor(p.project)"></span>
               {{ p.project }}
             </td>
             <td class="wtt__num">{{ p.calls }}</td>
-            <td class="wtt__num">{{ formatTokens(p.total) }}</td>
+            <td class="wtt__num wtt__num--strong">{{ formatTokens(p.total) }}</td>
+            <td class="wtt__num">{{ formatTokens(p.agentTokens) }}</td>
+            <td class="wtt__num">{{ formatTokens(p.supportingTokens) }}</td>
+            <td class="wtt__num">{{ formatTokens(p.orchestratorTokens) }}</td>
             <td class="wtt__num">
               @if (p.dollars !== null) {
                 {{ formatUsd(p.dollars) }}
@@ -171,14 +220,6 @@
                 }
               } @else {
                 <span class="wtt__na">n/a</span>
-              }
-            </td>
-            <td>
-              @if (p.peakBucketStart) {
-                {{ formatTime(p.peakBucketStart) }}
-                <span class="wtt__row-sub">{{ formatTokens(p.peakBucketTotal) }}</span>
-              } @else {
-                <span class="wtt__na">none</span>
               }
             </td>
             <td>
@@ -191,6 +232,29 @@
           </tr>
         }
       </tbody>
+      @if (tableTotals().anyActive) {
+        <tfoot>
+          <tr class="wtt__foot" data-testid="wtt-table-total">
+            <td>Total</td>
+            <td class="wtt__num">{{ tableTotals().calls }}</td>
+            <td class="wtt__num wtt__num--strong">{{ formatTokens(tableTotals().total) }}</td>
+            <td class="wtt__num">{{ formatTokens(tableTotals().agent) }}</td>
+            <td class="wtt__num">{{ formatTokens(tableTotals().supporting) }}</td>
+            <td class="wtt__num">{{ formatTokens(tableTotals().orchestrator) }}</td>
+            <td class="wtt__num">
+              @if (tableTotals().dollars !== null) {
+                {{ formatUsd(tableTotals().dollars!) }}
+                @if (!tableTotals().allPriced) {
+                  <span class="wtt__pop-partial">(partial)</span>
+                }
+              } @else {
+                <span class="wtt__na">n/a</span>
+              }
+            </td>
+            <td></td>
+          </tr>
+        </tfoot>
+      }
     </table>
 
     <p class="wtt__disc">{{ t.disclaimer }}</p>

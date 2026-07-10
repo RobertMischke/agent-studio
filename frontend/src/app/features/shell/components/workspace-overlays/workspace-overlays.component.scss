@@ -117,12 +117,16 @@
   font: inherit;
   font-size: 0.85rem;
 }
-.ws-settings__rail-item:hover { background: var(--studio-bg-selected); color: var(--studio-fg-strong); }
+.ws-settings__rail-item:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
+.ws-settings__rail-item:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -2px; }
+// Unified active side-menu item (AGT-2010): shared accent band + side bar.
 .ws-settings__rail-item--active {
-  background: var(--studio-bg-selected);
-  color: var(--studio-fg-strong);
+  background: var(--studio-nav-active-bg);
+  color: var(--studio-nav-active-fg);
   font-weight: 600;
+  box-shadow: inset 3px 0 0 0 var(--studio-nav-active-bar);
 }
+.ws-settings__rail-item--active:hover { background: var(--studio-nav-active-bg-hover); }
 .ws-settings__rail-icon { width: 18px; text-align: center; }
 
 .ws-settings__panel {
@@ -153,6 +157,15 @@
   color: var(--studio-fg-dim);
   font-size: 0.85rem;
   max-width: 64ch;
+}
+
+// Section wrapper used by simple sections that just need a heading + body
+// (e.g. Working memory) rendered inline in the panel.
+.ws-settings__section {
+  display: block;
+}
+.ws-settings__section-head {
+  margin-bottom: var(--studio-spacing-3);
 }
 
 .ws-settings__cards {
@@ -228,10 +241,13 @@
   padding: var(--studio-spacing-2) var(--studio-spacing-3);
 }
 
+// Inline (workspace-settings home) rail keeps the same unified active band as
+// the standalone rail; only the flush square corners differ.
 .ws-settings--inline .ws-settings__rail-item--active {
-  background: color-mix(in srgb, var(--studio-accent) 12%, var(--studio-bg-selected));
-  color: var(--studio-accent-strong);
+  background: var(--studio-nav-active-bg);
+  color: var(--studio-nav-active-fg);
 }
+.ws-settings--inline .ws-settings__rail-item--active:hover { background: var(--studio-nav-active-bg-hover); }
 
 .ws-settings--inline .ws-settings__panel {
   min-height: 0;

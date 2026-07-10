@@ -1,0 +1,27 @@
+.gallery {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+  color: var(--studio-fg);
+  font-family: var(--font-ui);
+}
+
+.gallery__title {
+  font-size: 1rem;
+  color: var(--studio-fg-strong);
+  margin-bottom: 1.5rem;
+}
+
+.gallery__card-heading {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--studio-fg-muted);
+  margin: 1.75rem 0 0.5rem;
+}
+
+.gallery__frame {
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--studio-border);
+  background: var(--studio-surface, var(--studio-bg-elevated));
+}

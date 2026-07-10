@@ -140,6 +140,28 @@ public static class CompletionGate
         )",
         RegexOptions.Compiled);
 
+    // An explicitly pre-existing / out-of-scope disclaimer the run attached to a
+    // status line, saying the item is NOT work this change is responsible for.
+    // The completion gate must not count these as unfinished work: doing so
+    // escalated fully-merged runs that had honestly annotated a pre-existing
+    // failure as such (AGT-1986; the run marked an item "Pre-existing (not caused
+    // by this change)" and the static scan treated it as open work).
+    //
+    // Defined marker syntax (kept deliberately explicit so a genuine actionable
+    // item that merely uses the adjective - e.g. "Fix the pre-existing bug in X"
+    // - is NOT suppressed):
+    //   - a bracketed / parenthesised tag: "[pre-existing]", "(out of scope)",
+    //     "(pre-existing, not caused by this change)";
+    //   - an inline disclaimer: "... not caused by this change",
+    //     "... not introduced by these changes";
+    //   - a labelled prefix: "Pre-existing: ...", "Out-of-scope: ...".
+    private static readonly Regex PreExistingOutOfScopeRegex = new(
+        @"(?ix)
+        (?: [\[(] \s* (?: pre[-\s]?existing | out[-\s]?of[-\s]?scope | not \s+ (?:caused|introduced) ) [^\])]* [\])] )
+      | \b not \s+ (?: caused | introduced ) \s+ by \s+ (?: this | these | the ) \s+ change(?:s)? \b
+      | ^ \s* (?: pre[-\s]?existing | out[-\s]?of[-\s]?scope ) \b [^:]* :",
+        RegexOptions.Compiled);
+
     public enum CompletionGateAction
     {
         Pass,
@@ -348,6 +370,10 @@ public static class CompletionGate
             // are identifiers/comments in printed source, not the run's own
             // close-out claims. See ToolSourceEchoRegex.
             if (ToolSourceEchoRegex.IsMatch(line)) continue;
+            // Drop items the run explicitly disclaimed as pre-existing /
+            // out-of-scope: they are not unfinished work this change owns
+            // (AGT-1986). See PreExistingOutOfScopeRegex.
+            if (PreExistingOutOfScopeRegex.IsMatch(line)) continue;
             yield return line;
         }
     }
@@ -373,6 +399,10 @@ public static class CompletionGate
         if (string.IsNullOrWhiteSpace(text)) return false;
         var firstSentence = text.Split('.', 2)[0];
         if (NoOpOpenItemRegex.IsMatch(firstSentence)) return true;
+        // Explicitly pre-existing / out-of-scope items are not work this change
+        // owns, so they can never be "closed" by the run - treat them as no-op so
+        // the gate does not escalate a fully-merged run over them (AGT-1986).
+        if (PreExistingOutOfScopeRegex.IsMatch(text)) return true;
         // Non-actionable commit/push delegation: the platform owns the commit
         // boundary, so the agent can never close such an item. Scanned over the
         // full text (the delegation clause may be the second sentence).

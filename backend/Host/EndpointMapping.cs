@@ -1,4 +1,6 @@
 
+using AgentStudio.Search;
+
 namespace AgentStudio.Host;
 
 /// <summary>
@@ -50,6 +52,7 @@ public static class EndpointMapping
         app.MapProjectTokenUsageEndpoints();
         app.MapReviewDecisionsEndpoints();
         app.MapProjectSnapshotEndpoints();
+        app.MapPublishEndpoints();
         app.MapFilesystemLayerEndpoints();
         app.MapSystemEndpoints();
         app.MapCliEndpoints();
@@ -69,5 +72,6 @@ public static class EndpointMapping
         app.MapTagEndpoints();
         app.MapProjectChatEndpoints();
         app.MapConceptDocsEndpoints();
+        app.MapGlobalSearchEndpoints();
     }
 }

@@ -85,7 +85,7 @@ public class TaskMutationService
         TaskJsonFile.UpdateField(
             info.FolderPath,
             "thinkingLevel",
-            CliThinkingLevels.Normalize(info.CliType, normalizedModel, info.ThinkingLevel) ?? "",
+            ModelMetadataRegistry.ResolveThinkingLevel(info.CliType, normalizedModel, info.ThinkingLevel) ?? "",
             _logger);
         AppendModelChangeMarker(info, previousModel, normalizedModel);
         return Updated();
@@ -167,7 +167,7 @@ public class TaskMutationService
         TaskJsonFile.UpdateField(
             info.FolderPath,
             "thinkingLevel",
-            CliThinkingLevels.Normalize(normalized, normalizedModel, info.ThinkingLevel) ?? "",
+            ModelMetadataRegistry.ResolveThinkingLevel(normalized, normalizedModel, info.ThinkingLevel) ?? "",
             _logger);
         // Keep the parallel `agent` field in lockstep with `cliType`. The two
         // were originally meant to address different layers (which CLI vs.
@@ -671,7 +671,7 @@ public class TaskMutationService
             ? req.Model.Trim()
             : ownerIdentity?.DefaultModel;
         effectiveModel = ModelMetadataRegistry.NormalizeForCli(effectiveCliType, effectiveModel);
-        var effectiveThinkingLevel = CliThinkingLevels.Normalize(
+        var effectiveThinkingLevel = ModelMetadataRegistry.ResolveThinkingLevel(
             effectiveCliType,
             effectiveModel,
             !string.IsNullOrWhiteSpace(req.ThinkingLevel)
@@ -1109,7 +1109,7 @@ public class TaskMutationService
                 : null;
             var model = owner.DefaultModel;
             model = ModelMetadataRegistry.NormalizeForCli(cliType, model);
-            var thinkingLevel = CliThinkingLevels.Normalize(cliType, model, owner.DefaultThinkingLevel);
+            var thinkingLevel = ModelMetadataRegistry.ResolveThinkingLevel(cliType, model, owner.DefaultThinkingLevel);
 
             if (cliType == null && model == null && thinkingLevel == null) continue;
 

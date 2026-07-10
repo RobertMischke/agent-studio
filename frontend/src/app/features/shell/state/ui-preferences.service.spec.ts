@@ -26,83 +26,41 @@ describe('UiPreferencesService', () => {
     });
   });
 
-  it('reads compactCards from localStorage on construction', () => {
+  it('AGT-2035 migration: clears the abolished compactCards key on construction', () => {
     localStorage.setItem('compactCards', '1');
-    const svc = TestBed.inject(UiPreferencesService);
-    expect(svc.compactCards()).toBe(true);
+    TestBed.inject(UiPreferencesService);
+    expect(localStorage.getItem('compactCards')).toBeNull();
   });
 
-  it('toggleCompactCards writes to localStorage and updates the signal', () => {
+  it('defaults tree metrics to numbers and persists the experimental dot view', () => {
     const svc = TestBed.inject(UiPreferencesService);
-    expect(svc.compactCards()).toBe(false);
-    svc.toggleCompactCards();
-    expect(svc.compactCards()).toBe(true);
-    expect(localStorage.getItem('compactCards')).toBe('1');
-    svc.toggleCompactCards();
-    expect(svc.compactCards()).toBe(false);
-    expect(localStorage.getItem('compactCards')).toBe('0');
+    expect(svc.treeMetricView()).toBe('numbers');
+    svc.setTreeMetricView('dots');
+    expect(svc.treeMetricView()).toBe('dots');
+    expect(localStorage.getItem('atp.studio.explorer.metrics')).toBe('dots');
   });
 
-  it('setCompactCards persists an explicit value (F43 callers that know the next effective state)', () => {
+  it('mirrors a sibling tab tree metric write via the storage event', () => {
     const svc = TestBed.inject(UiPreferencesService);
-    svc.setCompactCards(true);
-    expect(svc.compactCards()).toBe(true);
-    expect(localStorage.getItem('compactCards')).toBe('1');
-    svc.setCompactCards(false);
-    expect(svc.compactCards()).toBe(false);
-    expect(localStorage.getItem('compactCards')).toBe('0');
-    // Idempotent: setting the same value twice keeps both the signal
-    // and the storage row stable.
-    svc.setCompactCards(false);
-    expect(svc.compactCards()).toBe(false);
-    expect(localStorage.getItem('compactCards')).toBe('0');
-  });
-
-  it('userOverridesCompactWhileRail is in-memory only, not persisted, not storage-synced (F43)', () => {
-    const svc = TestBed.inject(UiPreferencesService);
-    // Default: no override.
-    expect(svc.userOverridesCompactWhileRail()).toBe(false);
-    // Set it — signal updates, but no localStorage row is written. A
-    // sibling tab whose rail is closed should not inherit the override.
-    svc.userOverridesCompactWhileRail.set(true);
-    expect(svc.userOverridesCompactWhileRail()).toBe(true);
-    expect(localStorage.getItem('userOverridesCompactWhileRail')).toBeNull();
-    // A sibling tab dispatching a storage event for the override key is
-    // ignored — the service only mirrors the documented persistent keys.
-    window.dispatchEvent(
-      new StorageEvent('storage', {
-        key: 'userOverridesCompactWhileRail',
-        newValue: '0',
-        oldValue: '1',
-        storageArea: localStorage,
-      }),
-    );
-    expect(svc.userOverridesCompactWhileRail()).toBe(true);
-  });
-
-  it('mirrors a sibling tab compactCards write via the storage event', () => {
-    const svc = TestBed.inject(UiPreferencesService);
-    expect(svc.compactCards()).toBe(false);
+    expect(svc.treeMetricView()).toBe('numbers');
 
     window.dispatchEvent(
       new StorageEvent('storage', {
-        key: 'compactCards',
-        newValue: '1',
-        oldValue: '0',
+        key: 'atp.studio.explorer.metrics',
+        newValue: 'dots',
         storageArea: localStorage,
       }),
     );
-    expect(svc.compactCards()).toBe(true);
+    expect(svc.treeMetricView()).toBe('dots');
 
     window.dispatchEvent(
       new StorageEvent('storage', {
-        key: 'compactCards',
-        newValue: '0',
-        oldValue: '1',
+        key: 'atp.studio.explorer.metrics',
+        newValue: 'numbers',
         storageArea: localStorage,
       }),
     );
-    expect(svc.compactCards()).toBe(false);
+    expect(svc.treeMetricView()).toBe('numbers');
   });
 
   it('mirrors a sibling tab taskNavCollapsed write via the storage event', () => {
@@ -136,9 +94,9 @@ describe('UiPreferencesService', () => {
   it('ignores storage events targeting unrelated keys', () => {
     const svc = TestBed.inject(UiPreferencesService);
     const before = {
-      compact: svc.compactCards(),
       nav: svc.taskNavCollapsed(),
       width: svc.sideSheetWidth(),
+      metrics: svc.treeMetricView(),
     };
     window.dispatchEvent(
       new StorageEvent('storage', {
@@ -147,8 +105,8 @@ describe('UiPreferencesService', () => {
         storageArea: localStorage,
       }),
     );
-    expect(svc.compactCards()).toBe(before.compact);
     expect(svc.taskNavCollapsed()).toBe(before.nav);
     expect(svc.sideSheetWidth()).toBe(before.width);
+    expect(svc.treeMetricView()).toBe(before.metrics);
   });
 });

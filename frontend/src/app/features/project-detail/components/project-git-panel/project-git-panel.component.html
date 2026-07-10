@@ -25,6 +25,7 @@
       }
     </div>
   } @else {
+    <app-project-git-cleanup class="git__cleanup" [projectName]="projectName()" />
     <div class="git__panes">
       <aside class="git__tree" data-testid="git-tree">
         @for (group of tree(); track group.id) {

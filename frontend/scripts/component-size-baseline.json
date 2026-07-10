@@ -19,10 +19,10 @@
       "total": 750
     },
     "src/app/features/board/components/task-card/task-card.component.ts": {
-      "typeScript": 442,
-      "template": 382,
-      "styles": 1242,
-      "total": 2066
+      "typeScript": 533,
+      "template": 435,
+      "styles": 1608,
+      "total": 2576
     },
     "src/app/features/board/components/task-column/task-column.ts": {
       "typeScript": 729,
@@ -72,6 +72,12 @@
       "styles": 399,
       "total": 1060
     },
+    "src/app/features/studio-shell/components/explorer-workspace-tree/explorer-workspace-tree.component.ts": {
+      "typeScript": 500,
+      "template": 284,
+      "styles": 154,
+      "total": 938
+    },
     "src/app/features/studio-shell/studio-shell.component.ts": {
       "typeScript": 1333,
       "template": 838,
@@ -85,10 +91,10 @@
       "total": 1436
     },
     "src/app/features/task-detail/components/git-pane/git-pane/git-pane.component.ts": {
-      "typeScript": 244,
-      "template": 262,
-      "styles": 552,
-      "total": 1058
+      "typeScript": 541,
+      "template": 382,
+      "styles": 866,
+      "total": 1789
     },
     "src/app/features/task-detail/components/prompt-pane/overview-pane/overview-pane.component.ts": {
       "typeScript": 1904,
@@ -102,11 +108,23 @@
       "styles": 1035,
       "total": 2812
     },
+    "src/app/features/task-detail/components/protocol-pane/run-timeline/run-timeline.component.ts": {
+      "typeScript": 488,
+      "template": 264,
+      "styles": 224,
+      "total": 976
+    },
     "src/app/features/task-detail/task-detail.ts": {
       "typeScript": 1510,
       "template": 208,
       "styles": 1284,
       "total": 3002
+    },
+    "src/app/features/tokens/components/workspace-token-timeline/workspace-token-timeline.ts": {
+      "typeScript": 432,
+      "template": 264,
+      "styles": 313,
+      "total": 1009
     },
     "src/app/features/verbose-debug/components/verbose-debug-overlay/verbose-debug-overlay.component.ts": {
       "typeScript": 608,

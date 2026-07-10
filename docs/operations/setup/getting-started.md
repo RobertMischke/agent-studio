@@ -123,6 +123,8 @@ Two cases the dialog doesn't cover, still documented in [onboard-a-project.md](.
 - **Legacy `WatchPaths` bootstrap** (kept for reference / scripted setups) - editing `appsettings.Local.json` directly and restarting.
 - **Repo root differs from the CLI working directory** (monorepo, app nested under a parent repo) - set `RepositoryPath` via `PUT /api/projects/{id}` after creating the project, so Git status/diff/commits resolve from the right folder.
 
+That's the whole onboarding step: **register the project, and (if you want the project wiki) enable a wiki-writing pipeline step.** There is no separate "bootstrap the wiki" action and no "not-onboarded" state to clear. The fixed **Workstream** frame (the five immutable areas plus their landing pages, under the project's `docs/engineering-workstream/`) is *self-provisioned* - it is materialized automatically the first time a wiki-writing step (`post-wiki-maintenance` or `post-wiki-learnings`) runs for the project, then completed idempotently on later runs and never overwritten. Frame pages default to English for public / open-source repos; set `WorkstreamFramePublic` to `false` in `project-settings.json` to seed a localized frame. Details: [onboard-a-project.md](./onboard-a-project.md#the-workstream-wiki-frame-is-self-provisioned) and the frame itself in [engineering-workstream.md](../../concepts/engineering-workstream.md).
+
 ## 4. Run your first task
 
 Full walkthrough, including what to queue and what to watch for: [your-first-task.md](./your-first-task.md). Short version:

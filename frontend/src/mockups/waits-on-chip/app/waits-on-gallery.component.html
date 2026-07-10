@@ -1,0 +1,35 @@
+<div class="harness">
+  <header class="harness__bar">
+    <h1 class="harness__title">AGT-2029 — Waits-on dependency chip (real TaskCardComponent)</h1>
+    <div class="harness__themes" role="group" aria-label="Theme">
+      <button type="button"
+              class="harness__theme"
+              data-testid="harness-theme-dark"
+              [class.harness__theme--active]="theme() === 'dark'"
+              (click)="setTheme('dark')">Dark</button>
+      <button type="button"
+              class="harness__theme"
+              data-testid="harness-theme-light"
+              [class.harness__theme--active]="theme() === 'light'"
+              (click)="setTheme('light')">Light</button>
+    </div>
+  </header>
+
+  <p class="harness__hint">
+    The dependency chip is computed server-side from <code>waitsOn</code>
+    (cross-project, archive-inclusive) and rendered on the board card. It states
+    what the task waits on, in which state, and routes to the target on click.
+    The runner's pickup gate uses the same evaluation, so the card the operator
+    sees matches the scheduler's own decision.
+  </p>
+
+  <div class="harness__stage" data-testid="waits-on-stage">
+    @for (s of scenarios; track s.id) {
+      <div class="harness__col" [attr.data-scenario]="s.id">
+        <span class="harness__label">{{ s.label }}</span>
+        <app-task-card [job]="s.job"></app-task-card>
+        <span class="harness__note">{{ s.note }}</span>
+      </div>
+    }
+  </div>
+</div>

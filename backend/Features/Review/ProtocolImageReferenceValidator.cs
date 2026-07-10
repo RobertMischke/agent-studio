@@ -30,6 +30,41 @@ public static class ProtocolImageReferenceValidator
     private static readonly string[] ImageExtensions =
         [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"];
 
+    // Glob / wildcard metacharacters. A reference carrying any of these is a
+    // pattern (e.g. a doc example like `results/*.png`), never a concrete file,
+    // so it is always rejected before an existence check.
+    private static readonly char[] GlobChars = ['*', '?', '['];
+
+    /// <summary>
+    /// True when <paramref name="reference"/> is a job-local image reference that
+    /// resolves to a file which actually exists under <paramref name="jobFolder"/>.
+    /// Glob/wildcard patterns, external URLs, <c>data:</c> URIs, rooted/absolute
+    /// paths, traversals that escape the job folder, and non-image extensions all
+    /// return <c>false</c>. Used by the summary generator so only real, on-disk
+    /// screenshots are injected into the protocol's Images section.
+    /// </summary>
+    public static bool ResolvesToExistingFile(string? reference, string jobFolder)
+    {
+        if (string.IsNullOrWhiteSpace(reference) || string.IsNullOrWhiteSpace(jobFolder)) return false;
+
+        var raw = reference.Trim();
+        if (ContainsGlobChars(raw)) return false;
+
+        var relative = NormalizeJobLocalReference(raw);
+        if (relative == null) return false;
+
+        string jobRoot;
+        try { jobRoot = Path.GetFullPath(jobFolder); }
+        catch { return false; }
+
+        var combined = ResolveWithinJob(jobRoot, relative);
+        return combined != null && File.Exists(combined);
+    }
+
+    /// <summary>True when the reference carries a glob/wildcard metacharacter (<c>* ? [</c>).</summary>
+    public static bool ContainsGlobChars(string reference)
+        => !string.IsNullOrEmpty(reference) && reference.IndexOfAny(GlobChars) >= 0;
+
     /// <summary>
     /// Returns the distinct job-local image references in <paramref name="markdown"/>
     /// whose target file does not exist under <paramref name="jobFolder"/>, in

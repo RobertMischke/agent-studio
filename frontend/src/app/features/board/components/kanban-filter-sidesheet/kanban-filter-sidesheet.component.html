@@ -142,21 +142,6 @@
     }
   </section>
 
-  <section class="sheet__section">
-    <h3 class="sheet__section-title">Visibility</h3>
-    <ul class="sheet__list">
-      <li>
-        <label class="sheet__checkbox" data-testid="kanban-filter-visibility-compact">
-          <input type="checkbox"
-                 [checked]="compactCards()"
-                 (change)="onToggleCompact()" />
-          <span class="sheet__swatch sheet__swatch--blank" aria-hidden="true">▤</span>
-          <span class="sheet__checkbox-label">Compact cards (titles only)</span>
-        </label>
-      </li>
-    </ul>
-  </section>
-
   <!-- Inline-mode footer rendered as a normal section row (the right-
        sidesheet mode renders its own footer via the @else branch
        above, projected into <app-sidesheet>[footer]). -->

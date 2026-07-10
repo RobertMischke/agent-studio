@@ -13,6 +13,7 @@ namespace AgentStudio.Tests;
 /// next to the old text label (from <c>agent</c>), producing a "Claude
 /// label, Codex icon" visual drift. The fix keeps both fields in lockstep.
 /// </summary>
+[Collection(CodexDetectedDefaultCollection.Name)]
 public class SetJobCliTypeSyncsAgentTests : IDisposable
 {
     private readonly string _workspace;
@@ -21,6 +22,8 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
 
     public SetJobCliTypeSyncsAgentTests()
     {
+        // No gpt-5.6 detected here: codex defaults resolve to the gpt-5.5 baseline.
+        ModelMetadataRegistry.SetDetectedCodexDefault(null);
         _workspace = Path.Combine(Path.GetTempPath(), "rdo-clitype-sync-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspace, "projects", Project);
         Directory.CreateDirectory(_watchPath);
@@ -28,6 +31,7 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
 
     public void Dispose()
     {
+        ModelMetadataRegistry.SetDetectedCodexDefault(null);
         try { Directory.Delete(_workspace, recursive: true); } catch { /* best-effort */ }
     }
 
@@ -151,7 +155,10 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
         // Remapping a foreign model back to the codex CLI default now yields
         // gpt-5.5 (the account-valid default), not the retired gpt-5-codex.
         Assert.Equal(ModelIds.Gpt55, info.Model);
-        Assert.Equal("medium", info.ThinkingLevel);
+        // The task was created on codex/gpt-5-codex, whose ladder tops at high,
+        // so the create-time default reasoning is high (AGT-2025 top-of-ladder);
+        // the model remap keeps that valid level on gpt-5.5.
+        Assert.Equal("high", info.ThinkingLevel);
     }
 
     private (TaskStateMachine machine, TaskScannerService scanner, TaskMutationService mutations) Build()

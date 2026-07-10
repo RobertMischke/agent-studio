@@ -127,6 +127,7 @@ public class ProjectRunner
     private readonly AgentStudio.Registry.OrchestratorDefaultsProvider? _orchestratorDefaults;
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
+    private readonly CliQuotaFallbackService? _quotaFallback;
     private readonly GitService _git;
     private readonly PickupFailureLog _pickupFailures;
     private readonly CrossSlugInfraCircuitBreaker _infraBreaker;
@@ -395,7 +396,8 @@ public class ProjectRunner
         HumanReviewEscalation? humanReviewEscalation = null,
         PostAbortReviewStepService? postAbortReview = null,
         AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null,
-        AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null)
+        AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null,
+        CliQuotaFallbackService? quotaFallback = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -416,6 +418,7 @@ public class ProjectRunner
         _orchestratorDefaults = orchestratorDefaults;
         _quotaService = quotaService;
         _quotaCaps = quotaCaps;
+        _quotaFallback = quotaFallback;
         _git = git;
         _pickupFailures = pickupFailures;
         _infraBreaker = infraBreaker;
@@ -682,6 +685,12 @@ public class ProjectRunner
         var jobId = _activeJobId;
         var cliType = _activeCliType;
         if (jobId == null || string.IsNullOrWhiteSpace(cliType)) return CapEvaluation.NotBlocked;
+        var active = _activeRuns.Single;
+        // A same-CLI fallback is explicitly allowed to run past the primary
+        // model's cap. Cross-CLI fallbacks remain guarded by their own quota.
+        if (active?.FallbackFromCliType != null &&
+            string.Equals(active.FallbackFromCliType, cliType, StringComparison.OrdinalIgnoreCase))
+            return CapEvaluation.NotBlocked;
         var ev = EvaluateQuotaCap(cliType);
         if (!ev.Blocked) return CapEvaluation.NotBlocked;
 
@@ -715,12 +724,15 @@ public class ProjectRunner
         {
             activeExec = _router.Get(_activeCliType).GetExecution(activeJobKey);
         }
+        var activeRun = _activeRuns.Single;
         return new ProjectRunnerStatus
         {
             ProjectName = ProjectName,
             Mode = _mode,
             ActiveJobId = _activeJobId,
             ActiveExecution = activeExec,
+            QuotaFallbackModel = activeRun?.FallbackFromCliType == null ? null : activeExec?.Model,
+            QuotaFallbackReason = activeRun?.QuotaFallbackReason,
             QueuedJobIds = queued,
             Role = RunnerRoles.Format(_role),
             PendingMode = _pendingMode,
@@ -1772,20 +1784,20 @@ public class ProjectRunner
             var info = _scanner.FindJob(jobId, Entry.Path);
             if (info == null) return RunOutcome.Reject(new RunRejection(RunRejectReason.TaskNotFound, "Job not found"));
 
-            // Quota cap gate: refuse to start when the CLI is past its
-            // configured per-window cap. Auto-pickup will retry on the next
-            // tick (and the next, ...) until the user lifts the cap or the
-            // window resets - this is intentional: the user wants the job
-            // queued, not failed.
-            var capBlock = EvaluateQuotaCap(info.CliType);
-            if (capBlock.Blocked)
+            // Resolve the workspace route from the latest cached quota. The
+            // decision is per-run and never mutates job.json, so a reset makes
+            // the next invocation return to primary automatically.
+            var route = _quotaFallback?.Resolve(
+                info.CliType, info.Model, info.ThinkingLevel, EvaluateQuotaCap);
+            var capBlock = route?.PrimaryCap ?? EvaluateQuotaCap(info.CliType);
+            if (capBlock.Blocked && route?.IsFallback != true)
             {
                 _logger.LogInformation(
                     "[taskboard] {Intent} for job {JobId} blocked by quota cap: {Reason}",
                     intent, jobId, capBlock.DescribeReason());
                 return RunOutcome.Reject(new RunRejection(
                     Reason: RunRejectReason.QuotaCapExceeded,
-                    Message: $"Quota cap exceeded: {capBlock.DescribeReason()}"));
+                    Message: $"Quota cap exceeded: {route?.Reason ?? capBlock.DescribeReason()}"));
             }
 
             // Auto-pickup consumes a saved pending-intent if there is one,
@@ -1808,22 +1820,40 @@ public class ProjectRunner
                 }
             }
 
-            var cli = GetCliFor(info);
+            var cli = route == null ? GetCliFor(info) : _router.Get(route.CliType);
             var initialState = info.State;
             var promptPath = Path.Combine(info.FolderPath, "prompt.md");
             var jobFolder = info.FolderPath;
 
+            // Session ids are CLI-owned. A cross-CLI fallback, and the later
+            // return to primary, must start a fresh session even when both CLIs
+            // happen to use UUID-shaped ids.
+            var sessionNameForPlan = info.SessionName;
+            IReadOnlyList<string>? sessionChainForPlan = info.SessionChain;
+            try
+            {
+                var latestSessionCli = _sessions.ReadSessionEvents(jobId, Entry.Path)
+                    .LastOrDefault(e => !string.IsNullOrWhiteSpace(e.Cli))?.Cli;
+                if (!string.IsNullOrWhiteSpace(latestSessionCli)
+                    && !string.Equals(latestSessionCli, cli.CliType, StringComparison.OrdinalIgnoreCase))
+                {
+                    sessionNameForPlan = null;
+                    sessionChainForPlan = [];
+                }
+            }
+            catch (Exception ex) { _logger.LogDebug(ex, "Could not validate session CLI for {JobId}; planner will use recorded session", jobId); }
+
             var plan = RunPlanner.PlanRun(
                 intent,
                 initialState,
-                info.SessionName,
+                sessionNameForPlan,
                 cli.CliType,
                 cli.IsCompatibleSessionName,
                 jobId,
                 promptPath,
                 jobFolder,
                 followupPrompt,
-                info.SessionChain,
+                sessionChainForPlan,
                 continueMode: mode);
 
             // Pick<->Start atomicity (ASS-1655): remember whether THIS call is the
@@ -1866,8 +1896,8 @@ public class ProjectRunner
             // A user continue on an epic is the user steering the plan, not a
             // fresh decomposition, so it is left on the normal path.
             var isEpicPlanningRun = EpicRunPolicy.IsPlanningRun(info.Kind, intent);
-            var runModel = info.Model;
-            var runThinkingLevel = info.ThinkingLevel;
+            var runModel = route?.Model ?? info.Model;
+            var runThinkingLevel = route?.ThinkingLevel ?? info.ThinkingLevel;
             if (isEpicPlanningRun)
             {
                 plan = plan with { PromptTemplate = RuntimePromptService.EpicDecomposition, PromptOverride = null };
@@ -1982,6 +2012,34 @@ public class ProjectRunner
             NotifyStatus();
 
             Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
+
+            if (route?.IsFallback == true)
+            {
+                if (_activeRuns.Get(jobId) is { } fallbackRun)
+                {
+                    fallbackRun.FallbackFromCliType = info.CliType ?? CliTypes.Claude;
+                    fallbackRun.QuotaFallbackReason = route.Reason;
+                }
+                var fallbackNote = $"Fallback: {route.CliType}/{route.Model}; reason: quota ({route.Reason})";
+                _logger.LogWarning(
+                    "cli_quota_fallback_activated jobId={JobId} primaryCli={PrimaryCli} fallbackCli={FallbackCli} fallbackModel={FallbackModel} reason={Reason}",
+                    jobId, info.CliType, route.CliType, route.Model, route.Reason);
+                _chatLog.Append(info, OrchestratorMessageKind.Decision, "[quota-fallback] " + fallbackNote);
+                _timeline?.Append(
+                    info.FolderPath,
+                    TimelineEventKinds.QuotaFallbackActivated,
+                    TimelineActors.System,
+                    summary: fallbackNote,
+                    details: new()
+                    {
+                        ["primaryCli"] = info.CliType ?? string.Empty,
+                        ["primaryModel"] = info.Model ?? string.Empty,
+                        ["fallbackCli"] = route.CliType,
+                        ["fallbackModel"] = route.Model ?? string.Empty,
+                        ["reason"] = "quota",
+                        ["quotaDetail"] = route.Reason ?? string.Empty,
+                    });
+            }
 
             // Diagnostic logs - surface the planner's decision in one place so
             // operators reading the log can tell which branch fired without
@@ -2130,6 +2188,9 @@ public class ProjectRunner
                 details: new()
                 {
                     ["cli"] = cli.CliType ?? string.Empty,
+                    ["model"] = runModel ?? string.Empty,
+                    ["quotaFallback"] = route?.IsFallback == true ? "true" : "false",
+                    ["fallbackReason"] = route?.Reason ?? string.Empty,
                     ["intent"] = plan.EventKind ?? string.Empty,
                     ["resumed"] = plan.ResumeFlag ? "true" : "false",
                 });
@@ -2850,6 +2911,14 @@ public class ProjectRunner
         DateTime? backoffUntil = _rapidCrashBackoffUntil.TryGetValue(jobId, out var until) ? until : null;
         var failures = _consecutiveFailNoProgress.TryGetValue(jobId, out var n) ? n : 0;
         return new RunActivityFacts(slotActive, backoffUntil, failures);
+    }
+
+    public QuotaFallbackStatus? GetQuotaFallback(string jobId)
+    {
+        var run = _activeRuns.Get(jobId);
+        if (run?.FallbackFromCliType == null || string.IsNullOrWhiteSpace(run.CliType)) return null;
+        var execution = _router.Get(run.CliType).GetExecution(GetJobKey(jobId));
+        return new QuotaFallbackStatus(run.CliType, execution?.Model, run.QuotaFallbackReason);
     }
 
     /// <summary>
@@ -4478,8 +4547,17 @@ public class ProjectRunner
             // so the retries before the park are spaced, not saturating.
             var isRapidCrash = !deliberateStop
                 && RapidCrashBreaker.IsRapidCrash(execution.Status ?? "", execution.DurationSeconds ?? 0.0, commitsDuringRun);
+            // A transient environmental fault (host file lock / network / dead
+            // CLI session) is never the task's fault and has its own bounded
+            // retry-with-backoff budget, so an environmental cycle must not accrue
+            // toward the per-task no-progress quarantine streak - not even when it
+            // happens to crash fast enough to look "rapid" (AGT-1944). The
+            // rapid-crash backoff still applies to genuine tight-looping crashes.
+            var isRetryableEnvironmental = action != null
+                && PostProcessingOutcomeTaxonomy.IsRetryableEnvironmental(action.IssueKind);
             if (action != null && activeInfo != null
                 && !movedToReview && !deliberateStop && commitsDuringRun == 0
+                && !isRetryableEnvironmental
                 && (RunQuarantineBreaker.CountsAsNoProgressFailure(action.IssueKind) || isRapidCrash))
             {
                 var fails = _consecutiveFailNoProgress.AddOrUpdate(jobId, 1, (_, n) => n + 1);
@@ -4571,10 +4649,22 @@ public class ProjectRunner
                         ? action.FollowupRetryPrompt!
                         : RunOutcomePolicy.BuildReissueFollowupPrompt(action.FollowupRetryPrompt!, recoveryContext: wasRecovery);
                     var retryAttempt = action.RetryAttempt;
+                    // Environmental retries carry a backoff so a transient host
+                    // file lock / network glitch gets real wall-clock time to
+                    // clear before the re-run (AGT-1944). Zero for every other
+                    // reissue, so ordinary continuations still run promptly.
+                    var retryBackoff = action.RetryBackoff;
                     _ = Task.Run(async () =>
                     {
                         try
                         {
+                            if (retryBackoff > TimeSpan.Zero)
+                            {
+                                _logger.LogInformation(
+                                    "[environmental-retry] {JobId} backing off {Backoff} before retry (attempt {Attempt})",
+                                    jobId, retryBackoff, retryAttempt);
+                                await Task.Delay(retryBackoff, CancellationToken.None);
+                            }
                             await RunCliAsync(jobId, RunIntent.UserContinue, retryPrompt, retryAttempt, ContinueModes.Continue, CancellationToken.None);
                         }
                         catch (Exception ex)
@@ -4709,7 +4799,7 @@ public class ProjectRunner
                     TeardownWorktreeForJob(jobId);
                     var move = await _humanReviewEscalation.EscalateAsync(
                         jobId, activeInfo.WatchPath, ProjectName,
-                        ToEscalationCategory(action.IssueKind),
+                        ResolveEscalationCategory(action.IssueKind, activeInfo.FolderPath),
                         action.MetaMessage ?? ToIssueTopic(action.IssueKind),
                         CancellationToken.None);
                     if (move.Status != MoveJobStatus.Success)
@@ -5000,11 +5090,11 @@ public class ProjectRunner
 
         if (!result.HasSubTasks)
         {
-            _logger.LogInformation(
+            _logger.LogWarning(
                 "[taskboard] epic {EpicId} decomposition produced no sub-tasks: {Reason}",
                 epic.Id, result.Error ?? "unknown");
             _chatLog.Append(epic, OrchestratorMessageKind.Decision,
-                $"[epic] Decomposition run produced no sub-tasks ({result.Error ?? "no plan found"}). Re-run with a clearer goal or add sub-tasks manually.");
+                $"[epic] Decomposition produced no sub-tasks ({result.Error ?? "no plan found"}). The epic returns to Backlog so it cannot become a ghost completion. Clarify its goal before retrying.");
             _timeline?.Append(
                 epic.FolderPath,
                 TimelineEventKinds.EpicDecomposed,
@@ -5015,7 +5105,21 @@ public class ProjectRunner
                 {
                     ["created"] = "0",
                     ["reason"] = result.Error ?? "no plan found",
+                    ["recoveryState"] = TaskStates.Backlog,
                 });
+
+            // The normal success path has already moved the run to review by
+            // the time its plan is parsed. Undo that transition when the plan
+            // is empty: an epic with no concrete children is not completed
+            // work and must remain visible/actionable in Backlog.
+            var recovery = _states.MoveJob(epic.Id, TaskStates.Backlog, epic.WatchPath,
+                cause: "epic_decomposition_empty");
+            if (recovery.Status != MoveJobStatus.Success)
+            {
+                _logger.LogError(
+                    "[taskboard] epic {EpicId} empty-decomposition recovery to {State} failed: {Status} {Error}",
+                    epic.Id, TaskStates.Backlog, recovery.Status, recovery.Message);
+            }
             return;
         }
 
@@ -5050,6 +5154,12 @@ public class ProjectRunner
                      // catch-all (AGT-1941: codex model-invalid / claude quota).
                      or RunIssueKind.ModelInvalid
                      or RunIssueKind.QuotaExhausted
+                     // A transient environmental fault that persisted after the
+                     // bounded retry-with-backoff, and a CLI launch/resume failure
+                     // that persisted after the fresh-start retry, both reach human
+                     // review with their own honest category (AGT-1944).
+                     or RunIssueKind.EnvironmentalTransient
+                     or RunIssueKind.CliLaunchFailed
                      or RunIssueKind.Quarantined
                      or RunIssueKind.AgentGitViolation
                      // Drive-to-conclusion: a failed run the deterministic
@@ -5102,6 +5212,7 @@ public class ProjectRunner
         RunIssueKind.ContextOverflow          => "context-overflow",
         RunIssueKind.ModelInvalid             => "model-invalid",
         RunIssueKind.QuotaExhausted           => "quota-exhausted",
+        RunIssueKind.EnvironmentalTransient   => "environmental",
         RunIssueKind.Quarantined              => "quarantined",
         RunIssueKind.AgentGitViolation        => "agent-git-violation",
         _                                     => "none"
@@ -5115,6 +5226,8 @@ public class ProjectRunner
         RunIssueKind.WatchdogTimeout    => HumanReviewEscalationCategories.WatchdogKill,
         RunIssueKind.PermissionBlocked  => HumanReviewEscalationCategories.PermissionBlocked,
         RunIssueKind.EnvironmentBlocker => HumanReviewEscalationCategories.EnvironmentBlocker,
+        RunIssueKind.EnvironmentalTransient => HumanReviewEscalationCategories.Environmental,
+        RunIssueKind.CliLaunchFailed    => HumanReviewEscalationCategories.CliLaunchFailed,
         RunIssueKind.EmptyFastExit      => HumanReviewEscalationCategories.EmptyFastExit,
         RunIssueKind.ContextOverflow    => HumanReviewEscalationCategories.ContextOverflow,
         RunIssueKind.ModelInvalid       => HumanReviewEscalationCategories.ModelInvalid,
@@ -5125,6 +5238,57 @@ public class ProjectRunner
         RunIssueKind.OrchestratorInconclusive => HumanReviewEscalationCategories.OrchestratorInconclusive,
         _                               => HumanReviewEscalationCategories.AutoFailurePark
     };
+
+    /// <summary>
+    /// Results-aware escalation category. For an inconclusive run (the contract
+    /// could not map it to a terminal verdict) that nonetheless left files in
+    /// <c>results/</c>, this returns the distinct
+    /// <see cref="HumanReviewEscalationCategories.InconclusiveWithResults"/>
+    /// category so the board routes it to human review WITH a "there is partial
+    /// work to inspect" hint rather than the bare inconclusive park. Only an
+    /// inconclusive run with an EMPTY results/ dir keeps the plain category
+    /// (AGT-1944 taxonomy: inconclusive-with-results vs inconclusive-empty).
+    /// Every other issue kind is unchanged.
+    ///
+    /// <para>The inconclusive-with-results decision is delegated to
+    /// <see cref="PostProcessingOutcomeTaxonomy.Classify"/> so the taxonomy
+    /// classifier is the single source of truth for "no terminal verdict but left
+    /// work to inspect", rather than a parallel inline probe that could drift from
+    /// the bucket definition. The delegation is gated on the same inconclusive
+    /// kinds this method already handled, so it is behaviour-preserving: Classify
+    /// returns <see cref="PostProcessingOutcome.InconclusiveWithResults"/> for an
+    /// inconclusive kind iff its results/ dir is non-empty.</para>
+    /// </summary>
+    private string ResolveEscalationCategory(RunIssueKind issueKind, string? jobFolderPath)
+    {
+        var isInconclusive = issueKind is RunIssueKind.OrchestratorInconclusive or RunIssueKind.InfraCrash;
+        if (isInconclusive)
+        {
+            var outcome = PostProcessingOutcomeTaxonomy.Classify(
+                issueKind, terminalKind: null, hasResults: HasNonEmptyResults(jobFolderPath));
+            if (outcome == PostProcessingOutcome.InconclusiveWithResults)
+                return HumanReviewEscalationCategories.InconclusiveWithResults;
+        }
+        return ToEscalationCategory(issueKind);
+    }
+
+    /// <summary>True when the task's <c>results/</c> dir holds at least one file.
+    /// Best-effort and fails closed (no results claim on an unreadable dir).</summary>
+    private static bool HasNonEmptyResults(string? jobFolderPath)
+    {
+        if (string.IsNullOrWhiteSpace(jobFolderPath)) return false;
+        try
+        {
+            var resultsDir = TaskPaths.ResultsDir(jobFolderPath);
+            return Directory.Exists(resultsDir)
+                && Directory.EnumerateFiles(resultsDir, "*", SearchOption.AllDirectories).Any();
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "ProjectRunner: best-effort results probe for the inconclusive escalation category.");
+            return false;
+        }
+    }
 
     private static bool IsAgentGitMutationAllowed(TaskInfo info)
         => info.Tags.Any(tag => string.Equals(tag, "allow-agent-git-mutation", StringComparison.OrdinalIgnoreCase));
@@ -5808,21 +5972,33 @@ public class ProjectRunner
 
     private sealed record DisplayedPickupCandidate(string State, TaskInfo? Info, ProgressPickupCandidate? Progress);
 
+    // AGT-2029: dedup waits-on cycle warnings. A dependency cycle is a
+    // configuration error that persists until the operator fixes it, so it must
+    // be reported (Issue) but only ONCE per card, not on every idle pickup tick.
+    private readonly HashSet<string> _waitsOnCycleWarned = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _waitsOnCycleGate = new();
+
     private List<TaskInfo> ListReadyPickupCandidatesInDisplayedOrder()
     {
-        var intakeEnabled = _projectSettings.Get(ProjectName).IntakeEnabled == true;
         var settings = _projectSettings.Get(ProjectName);
+        var intakeEnabled = settings.IntakeEnabled == true;
+        var all = _scanner.ScanAllJobs();
+        // AGT-2029 waits-on gate: resolve dependency fulfillment across ALL
+        // projects and lanes. A dependency is satisfied once its target reaches
+        // 6-completed OR 7-archive, and ScanAllJobs omits the archive lane, so
+        // the gate index is built from the archive-inclusive snapshot. Built
+        // once per candidate-list computation, not per card.
+        var waitsOnIndex = TaskReferenceIndex.Build(_scanner.ScanAllJobsWithArchive());
         return LaneSortApplier.Sort(
-                _scanner.ScanAllJobs()
-                    .Where(j => j.ProjectName == ProjectName
+                all.Where(j => j.ProjectName == ProjectName
                                 && j.State == TaskStates.Ready
-                                && IsReadyPickupCandidate(j, intakeEnabled)),
+                                && IsReadyPickupCandidate(j, intakeEnabled, waitsOnIndex)),
                 TaskStates.Ready,
                 _ => settings)
             .ToList();
     }
 
-    private bool IsReadyPickupCandidate(TaskInfo job, bool intakeEnabled)
+    private bool IsReadyPickupCandidate(TaskInfo job, bool intakeEnabled, TaskReferenceIndex waitsOnIndex)
         => AgentTypes.IsAutoPickupEligible(job.Agent)
            // Epics are containers, not work items: their sub-tasks flow through
            // the pipeline, the epic card never code-executes. Skip it hard so it
@@ -5837,7 +6013,57 @@ public class ProjectRunner
            // Rapid-crash backoff: skip a task that just crashed fast until
            // its exponential cooldown elapses (RapidCrashBreaker).
            && !IsInRapidCrashBackoff(job.Id)
-           && IsPickupAllowed(job, intakeEnabled);
+           && IsPickupAllowed(job, intakeEnabled)
+           // AGT-2029: don't pull a card whose waits-on (dependsOn) targets are
+           // not yet fulfilled, or that sits on a dependency cycle. The card
+           // falls out of the candidate list and stays visibly "waiting" on the
+           // board; the tick moves to the next candidate, so a blocked/cyclic
+           // dependency never deadlocks the runner.
+           && !IsBlockedByWaitsOn(job, waitsOnIndex);
+
+    /// <summary>
+    /// AGT-2029 waits-on pickup gate. Returns true when <paramref name="job"/>
+    /// must not be auto-picked because a dependency it waits on is unfulfilled
+    /// (its target has not reached 6-completed/7-archive, or the key is unknown
+    /// / not yet created) or because its dependsOn edges form a cycle. A cycle
+    /// is a configuration error that can never be satisfied: it is reported once
+    /// per card (structured warning + the card's waits-on status drives an error
+    /// chip in the UI) and the card is skipped rather than deadlocking the tick.
+    /// Cross-project + archive-inclusive resolution comes from
+    /// <paramref name="waitsOnIndex"/>.
+    /// </summary>
+    private bool IsBlockedByWaitsOn(TaskInfo job, TaskReferenceIndex waitsOnIndex)
+    {
+        if (job.References == null || job.References.DependsOn.Count == 0) return false;
+
+        var status = waitsOnIndex.EvaluateWaitsOn(job);
+        var cardKey = job.Key ?? job.Id;
+
+        if (status.CycleDetected)
+        {
+            bool firstReport;
+            lock (_waitsOnCycleGate) firstReport = _waitsOnCycleWarned.Add(cardKey);
+            if (firstReport)
+                _logger.LogWarning(
+                    "[taskboard] waits-on cycle on {Job} ({Project}): its dependsOn chain forms a cycle and can never be fulfilled - skipping auto-pickup (configuration error). Fix the dependency chain via the task's references.",
+                    cardKey, ProjectName);
+            return true;
+        }
+
+        // Not cyclic anymore: allow a future warning if a cycle recurs.
+        lock (_waitsOnCycleGate) _waitsOnCycleWarned.Remove(cardKey);
+
+        if (status.Blocked)
+        {
+            var open = string.Join(", ", status.Items.Where(i => !i.Fulfilled).Select(i => i.Key));
+            _logger.LogDebug(
+                "[taskboard] waits-on hold on {Job} ({Project}): waiting on {Open} to reach completed/archive before auto-pickup",
+                cardKey, ProjectName, open);
+            return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// True when a card must never be auto-picked because it is an epic

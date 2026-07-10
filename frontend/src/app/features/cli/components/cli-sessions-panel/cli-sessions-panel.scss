@@ -111,8 +111,16 @@
   padding: 6px 8px;
   font-size: 12px;
 }
-.session:hover,
-.session--active { background: rgba(96,165,250,.14); color: #f8fafc; }
+.session:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
+.session:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -2px; }
+// Unified active side-menu item (AGT-2010): shared accent band + side bar,
+// replacing the former hard-coded off-brand blue that ignored the theme.
+.session--active {
+  background: var(--studio-nav-active-bg);
+  color: var(--studio-nav-active-fg);
+  box-shadow: inset 3px 0 0 0 var(--studio-nav-active-bar);
+}
+.session--active:hover { background: var(--studio-nav-active-bg-hover); }
 .session__id {
   overflow: hidden;
   text-overflow: ellipsis;

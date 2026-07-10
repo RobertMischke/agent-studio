@@ -13,6 +13,7 @@ namespace AgentStudio.Tests;
 ///   3. BackfillAgentDefaults migrates legacy triple idempotently
 ///   4. Auto-pickup skips agent:"human" jobs
 /// </summary>
+[Collection(CodexDetectedDefaultCollection.Name)]
 public class AgentDefaultsMaterializationTests : IDisposable
 {
     private readonly string _workspace;
@@ -21,6 +22,9 @@ public class AgentDefaultsMaterializationTests : IDisposable
 
     public AgentDefaultsMaterializationTests()
     {
+        // Start from the "no gpt-5.6 detected" baseline so codex defaults resolve
+        // to the account-valid gpt-5.5 unless a test opts into detection.
+        ModelMetadataRegistry.SetDetectedCodexDefault(null);
         _workspace = Path.Combine(Path.GetTempPath(), "rdo-agent-defaults-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspace, "projects", Project);
         Directory.CreateDirectory(_watchPath);
@@ -28,6 +32,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
 
     public void Dispose()
     {
+        ModelMetadataRegistry.SetDetectedCodexDefault(null);
         try { Directory.Delete(_workspace, recursive: true); } catch { /* best-effort */ }
     }
 
@@ -130,7 +135,35 @@ public class AgentDefaultsMaterializationTests : IDisposable
         Assert.Equal("codex", info!.Agent);
         Assert.Equal("codex", info.CliType);
         Assert.Equal(ModelIds.Gpt55, info.Model);
-        Assert.Equal("medium", info.ThinkingLevel);
+        // Codex default reasoning is now the biggest value the CLI ladder
+        // advertises for the model (AGT-2025); with no gpt-5.6 detected the
+        // fallback default is gpt-5.5, whose ladder tops out at xhigh.
+        Assert.Equal("xhigh", info.ThinkingLevel);
+    }
+
+    [Fact]
+    public void CreateJob_Codex_UsesDetectedGpt56Default_WhenCliReportsIt()
+    {
+        // Detection on: a codex task created with no model follows the CLI to
+        // gpt-5.6-sol + ultra (AGT-2025), everywhere gpt-5.5 was drawn before.
+        var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-8");
+        ModelMetadataRegistry.SetDetectedCodexDefault(ModelIds.Gpt56Sol);
+
+        mutations.CreateJob(new CreateTaskRequest
+        {
+            Id = "task-codex-56",
+            Title = "Codex gpt-5.6",
+            WatchPath = _watchPath,
+            Agent = "codex",
+            CliType = "codex",
+            TargetState = TaskStates.Ready
+        });
+
+        var info = scanner.FindJob("task-codex-56", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("codex", info!.CliType);
+        Assert.Equal(ModelIds.Gpt56Sol, info.Model);
+        Assert.Equal("ultra", info.ThinkingLevel);
     }
 
     [Fact]

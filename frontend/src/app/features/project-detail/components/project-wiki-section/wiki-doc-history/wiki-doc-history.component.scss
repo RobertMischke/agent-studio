@@ -47,6 +47,27 @@
 }
 
 .wdh__commits { display: flex; flex-direction: column; gap: 6px; }
+.wdh__related { display: flex; flex-direction: column; gap: 6px; }
+.wdh__task-cards { display: flex; flex-direction: column; gap: 5px; }
+.wdh__task-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-elevated);
+  font-size: 0.78rem;
+  color: inherit;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.wdh__task-card:hover:not(:disabled) { border-color: var(--studio-accent); }
+.wdh__task-card:disabled { cursor: default; }
+.wdh__task-card strong { color: var(--studio-accent); }
+.wdh__task-card small { grid-column: 1 / -1; color: var(--studio-fg-muted); }
+.wdh__task-card--ghost { opacity: 0.58; border-style: dashed; }
 .wdh__commits-label {
   font-size: 0.72rem;
   text-transform: uppercase;

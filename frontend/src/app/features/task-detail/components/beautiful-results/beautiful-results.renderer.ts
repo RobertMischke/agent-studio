@@ -174,12 +174,16 @@ function buildMarkedExtension(context: BeautifulRendererContext): MarkedExtensio
       // existing resolver and wrap in a zoom-capable figure. Captions
       // come from the alt text when present.
       image(token: Tokens.Image): string {
-        const resolved = resolveProtocolImageSrc(token.href, context.jobId, context.watchPath);
+        const original = token.href ?? '';
+        const resolved = resolveProtocolImageSrc(original, context.jobId, context.watchPath);
         const alt = token.text ?? '';
         const caption = alt
           ? `<figcaption class="results-figure__caption">${escapeHtml(alt)}</figcaption>`
           : '';
-        return `<figure class="results-figure">`
+        // `data-results-image` tags the original reference so the host can swap
+        // a broken/unresolvable image (missing file → <img> error) for a compact
+        // "missing" placeholder instead of leaving a silently empty row.
+        return `<figure class="results-figure" data-results-image="${escapeAttr(original)}">`
           + `<button type="button" class="results-figure__btn" data-results-lightbox="${escapeAttr(resolved)}" data-results-alt="${escapeAttr(alt)}" aria-label="Open image">`
           + `<img class="results-figure__img" src="${escapeAttr(resolved)}" alt="${escapeAttr(alt)}" loading="lazy">`
           + `</button>${caption}</figure>`;

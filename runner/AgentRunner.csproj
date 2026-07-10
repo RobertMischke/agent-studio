@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Standalone remote runner (RM-5, Runner-Split C). A single self-contained
+    console process that runs on a Linux host and consumes the local Studio's
+    Task-Server API only (REST + lease/heartbeat + log/artifact upload). It owns
+    no task state: code arrives via git origin, results leave via the upload +
+    external-completion endpoints. See docs/operations/setup/linux-runner-host.md.
+
+    Deliberately dependency-free (no OrchestratorApi reference): the runner ships
+    to a different host than the server, so it re-declares the small wire contract
+    it needs (WireModels.cs) instead of dragging the whole backend across the wire.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AgentRunner</RootNamespace>
+    <AssemblyName>agent-runner</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!--
+    The backend integration test (backend.Tests/RemoteRunnerEndToEndTests.cs)
+    drives this runner's real TaskServerClient against the in-process backend to
+    prove the RM-3/RM-4 wire contract end-to-end. It references the internal
+    HttpClient test-seam constructor via this grant. Nothing in the shipped
+    runner binary changes.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="OrchestratorApi.Tests" />
+  </ItemGroup>
+
+</Project>

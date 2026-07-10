@@ -51,7 +51,7 @@ under `frontend/`.
 
 | Area | Read first | Owns |
 |---|---|---|
-| Runner | [docs/domains/runner.md](./docs/domains/runner.md) | Pickup, CLI run loop, outcome policy, supervisor loops. |
+| Runner | [docs/domains/runner.md](./docs/domains/runner.md) | Pickup, CLI run loop, outcome policy, supervisor loops, and the standalone remote runner (`runner/`, [runbook](./docs/operations/setup/linux-runner-host.md)). |
 | Pipeline | [docs/domains/pipeline.md](./docs/domains/pipeline.md) | Pre/core/post steps, pipeline history, step contracts. |
 | Tasks | [docs/domains/tasks.md](./docs/domains/tasks.md) | Job folders, lane states, API mutations, task access. |
 | Frontend | [docs/domains/frontend.md](./docs/domains/frontend.md) | Angular surfaces, design system, Playwright proof. |

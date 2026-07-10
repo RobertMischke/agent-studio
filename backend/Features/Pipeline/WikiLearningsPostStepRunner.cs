@@ -61,18 +61,25 @@ public sealed class WikiLearningsPostStepRunner
         _logger = logger;
     }
 
-    public WikiLearningsResult Run(TaskInfo task, WatchPathEntry entry, WikiLearningsRun run, DateTime? nowUtc = null)
+    public WikiLearningsResult Run(
+        TaskInfo task,
+        WatchPathEntry entry,
+        WikiLearningsRun run,
+        DateTime? nowUtc = null,
+        EngineeringWorkstreamFrameLanguage? frameLanguage = null)
     {
         var now = nowUtc ?? DateTime.UtcNow;
         if (string.IsNullOrWhiteSpace(entry.RootPath))
             return new WikiLearningsResult(WikiLearningsVerdict.Skipped, "project root is not configured");
 
-        // Only write where a wiki convention already exists (docs/wiki); the
-        // learnings/ subtree is bootstrapped under it. This keeps the opt-in
-        // step from scattering docs into a project that has no wiki at all.
-        var wikiBase = Path.Combine(entry.RootPath, "docs", "wiki");
-        if (!Directory.Exists(wikiBase))
-            return new WikiLearningsResult(WikiLearningsVerdict.Skipped, "project docs/wiki is missing");
+        // Self-provisioning (AGT-2024): ensure the Workstream frame exists before
+        // this step writes. Activating the step for a project is what creates the
+        // structure - the old "skip when docs/wiki is missing" gate is gone, since
+        // an enabled step now bootstraps its own home under docs/. Idempotent and
+        // never overwriting.
+        var docsRoot = Path.Combine(entry.RootPath, "docs");
+        var language = frameLanguage ?? WorkstreamFrameLanguageResolver.Resolve(entry.Name, isPublicOverride: null);
+        EnsureWorkstreamFrame(docsRoot, language, task, entry);
 
         var slug = PageSlug(task);
         if (string.IsNullOrWhiteSpace(slug))
@@ -80,7 +87,7 @@ public sealed class WikiLearningsPostStepRunner
 
         try
         {
-            var learningsRoot = Path.Combine(wikiBase, "learnings");
+            var learningsRoot = Path.Combine(docsRoot, "wiki", "learnings");
             Directory.CreateDirectory(learningsRoot);
 
             var pagePath = Path.Combine(learningsRoot, slug + ".md");
@@ -103,6 +110,23 @@ public sealed class WikiLearningsPostStepRunner
                 "Wiki learnings failed for {Project}/{JobId} slug={Slug}",
                 entry.Name, task.Id, slug);
             return new WikiLearningsResult(WikiLearningsVerdict.Error, ex.Message, slug);
+        }
+    }
+
+    /// <summary>
+    /// Runs the shared ensure-frame primitive and logs only when it actually
+    /// materialized (or failed to materialize) frame shells, so a warm project
+    /// where the frame already exists stays quiet.
+    /// </summary>
+    private void EnsureWorkstreamFrame(
+        string docsRoot, EngineeringWorkstreamFrameLanguage language, TaskInfo task, WatchPathEntry entry)
+    {
+        var result = EngineeringWorkstreamFrameSeeder.EnsureFrame(docsRoot, language);
+        if (result.CreatedAnything || result.Failed.Count > 0)
+        {
+            _logger.LogInformation(
+                "Workstream frame ensured for {Project}/{JobId} lang={Language} {Summary} created=[{Created}]",
+                entry.Name, task.Id, language, result.Summary, string.Join(", ", result.Created));
         }
     }
 

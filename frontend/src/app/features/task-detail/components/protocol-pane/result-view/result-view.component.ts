@@ -1,0 +1,57 @@
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { TooltipDirective } from 'coding-agent-chat/shared';
+import type { TaskDetail } from '../../../../../models/task.model';
+import type { ProtocolVerdict } from '../protocol-verdict';
+import { buildResultDocument } from '../result-document';
+import { RESULT_CASE_META } from '../result-case';
+import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
+
+/**
+ * The Result view (Protocol -> Result redesign).
+ *
+ * Renders a finished run in the layered, shareable shape the operator asked
+ * for, top to bottom:
+ *
+ *   1. **metric head** - the case badge plus verdict / grade / duration /
+ *      tokens / commits chips, so "is this fine and how big is it?" answers
+ *      at a glance;
+ *   2. **overview** - a "problem -> solution" card with case-tuned labels,
+ *      the one thing worth sharing;
+ *   3. **detail** - the existing rich markdown body (What Was Done / Open
+ *      Items / Notes / Images), delegated to <app-beautiful-results> so the
+ *      redesign adds zero regression to source links, diffs, and image
+ *      lightboxes.
+ *
+ * All structure/parse logic lives in the pure {@link buildResultDocument};
+ * this component is a thin, OnPush projection of that document. Backward
+ * compatible by construction: it builds the document from `status.md` + task
+ * metadata, so every historical run renders without a backend change.
+ */
+@Component({
+  selector: 'app-result-view',
+  standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [TooltipDirective, BeautifulResultsComponent],
+  templateUrl: './result-view.component.html',
+  styleUrl: './result-view.component.scss',
+})
+export class ResultViewComponent {
+  readonly detail = input.required<TaskDetail>();
+  readonly verdict = input.required<ProtocolVerdict>();
+
+  /** Bubbled up from the detail body so the host opens the source viewer. */
+  readonly openSource = output<{ path: string; line: number | null }>();
+
+  readonly doc = computed(() => buildResultDocument(this.detail(), this.verdict()));
+  readonly caseMeta = computed(() => RESULT_CASE_META[this.doc().case.case]);
+
+  /** True when the overview carries at least one usable line. */
+  readonly hasOverview = computed<boolean>(() => {
+    const o = this.doc().overview;
+    return !!(o.problem || o.solution);
+  });
+
+  onOpenSource(ref: { path: string; line: number | null }): void {
+    this.openSource.emit(ref);
+  }
+}

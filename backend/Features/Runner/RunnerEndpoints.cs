@@ -1,4 +1,4 @@
-
+using AgentStudio.Orchestrator;
 
 namespace AgentStudio.Runner;
 
@@ -30,6 +30,35 @@ public static class RunnerEndpoints
             {
                 var session = store.Read();
                 return Results.Ok(new { project = "(global)", session });
+            });
+
+        // Workspace-wide activity feed. Keep the project on every row so the
+        // client can group and navigate without issuing one request per watch
+        // path. The result is capped after the merge: a noisy project cannot
+        // force every other project out before timestamps are compared.
+        runnerGroup.MapGet("/orchestrator-feed",
+            (TaskScannerService scanner, OrchestratorLog log) =>
+            {
+                var entries = scanner.GetWatchPaths()
+                    .SelectMany(project => log.Read(project.Path).Select(entry => new
+                    {
+                        project = project.Name,
+                        watchPath = project.Path,
+                        entry.Ts,
+                        entry.Kind,
+                        entry.Topic,
+                        entry.Summary,
+                        entry.Reasoning,
+                        entry.JobId,
+                        entry.ParticipantId,
+                        entry.TokenUsage,
+                        entry.UserOverride
+                    }))
+                    .OrderByDescending(entry => entry.Ts)
+                    .Take(500)
+                    .ToList();
+
+                return Results.Ok(new { entries });
             });
 
         runnerGroup.MapPut("/{projectName}/mode", (string projectName, SetRunnerModeRequest req, TaskRunnerService runner, TaskScannerService scanner) =>
@@ -268,6 +297,60 @@ public static class RunnerEndpoints
                 var reply = await chatService.SendAsync(projectName, entry.Path, req, clientId, ct);
                 return Results.Ok(new { project = projectName, reply });
             });
+
+        // Per-context transcript history (MC-2, Concept §4). The side sheet's
+        // context follows the operator's navigation — the board yields a
+        // `project:<PROJ>` context, a task page a `task:<PROJ>/<KEY>` one — and
+        // the contextKey mirrors OrchestratorContextKey. A task context reads
+        // and writes its own thread so a pinned task and the board no longer
+        // share one history; a project context resolves to the same canonical
+        // per-project thread the bare-project route above serves, so existing
+        // project chats are byte-for-byte unaffected. The literal-prefixed
+        // routes are strictly more specific than `{projectName}`, so routing
+        // prefers them without ambiguity (same pattern as the orchestrator
+        // session-turn endpoints).
+        static IResult ReadContextChat(string rawContextKey, TaskScannerService scanner, OrchestratorChatService chatService)
+        {
+            if (!OrchestratorContextKey.TryParse(rawContextKey, out var key))
+                return Results.BadRequest(new { error = "Invalid orchestrator context key." });
+            var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == key.ProjectId);
+            if (entry == null) return Results.NotFound(new { error = $"Unknown project '{key.ProjectId}'" });
+            var turns = chatService.Read(entry.Path, key);
+            return Results.Ok(new { contextKey = key.Value, project = key.ProjectId, turns });
+        }
+
+        static async Task<IResult> SendContextChat(
+            string rawContextKey, SendOrchestratorChatRequest req, HttpContext ctx,
+            TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct)
+        {
+            if (req == null || string.IsNullOrWhiteSpace(req.Text))
+                return Results.BadRequest(new { error = "text is required" });
+            if (!OrchestratorContextKey.TryParse(rawContextKey, out var key))
+                return Results.BadRequest(new { error = "Invalid orchestrator context key." });
+            var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == key.ProjectId);
+            if (entry == null) return Results.NotFound(new { error = $"Unknown project '{key.ProjectId}'" });
+
+            // Forward the registered X-Client-Id so the orchestrator's per-turn
+            // USER PREFERENCES block resolves to the live defaults of the user
+            // who is actually chatting (matches the per-project route above).
+            var clientId = ctx.Items["ClientId"] as string;
+            var reply = await chatService.SendAsync(key.ProjectId!, entry.Path, req, clientId, key, ct);
+            return Results.Ok(new { contextKey = key.Value, project = key.ProjectId, reply });
+        }
+
+        runnerGroup.MapGet("/project:{projectId}/orchestrator-chat",
+            (string projectId, TaskScannerService scanner, OrchestratorChatService chatService) =>
+                ReadContextChat($"project:{projectId}", scanner, chatService));
+        runnerGroup.MapGet("/task:{projectId}/{taskKey}/orchestrator-chat",
+            (string projectId, string taskKey, TaskScannerService scanner, OrchestratorChatService chatService) =>
+                ReadContextChat($"task:{projectId}/{taskKey}", scanner, chatService));
+
+        runnerGroup.MapPost("/project:{projectId}/orchestrator-chat",
+            (string projectId, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
+                SendContextChat($"project:{projectId}", req, ctx, scanner, chatService, ct));
+        runnerGroup.MapPost("/task:{projectId}/{taskKey}/orchestrator-chat",
+            (string projectId, string taskKey, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
+                SendContextChat($"task:{projectId}/{taskKey}", req, ctx, scanner, chatService, ct));
 
         // Image upload + serving for the orchestrator chat composer.
         // Files land under <watchPath>/.orchestrator/chat-attachments/.

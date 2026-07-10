@@ -83,7 +83,6 @@
           [activeTagIds]="activeTagFilter()"
           [owners]="clientService.clients()"
           [activeOwnerId]="activeClientFilter()"
-          [compactCards]="effectiveCompactCards()"
           [hitCount]="filteredTaskCount()"
           [totalCount]="totalTaskCount()"
           [hasAnyFilter]="hasActiveFiltersOrSearch()"
@@ -91,7 +90,6 @@
           (setType)="onSetType($event)"
           (toggleTag)="toggleTagFilter($event)"
           (setOwner)="setClientFilter($event)"
-          (toggleCompactCards)="toggleCompactCards()"
           (clearAll)="onSidesheetClearAll()" />
         <!-- Per-tab actions land in the tab bar via this slot. The board
              tab gets filter + compact + add-task; task tabs reuse the
@@ -108,16 +106,6 @@
                       (click)="toggleGroupByEpic()">
                 <app-studio-icon [name]="groupByEpic() ? 'epic' : 'grid'" [size]="14"></app-studio-icon>
                 <span>{{ groupByEpic() ? 'Epics' : 'Lanes' }}</span>
-              </button>
-              <button type="button"
-                      class="studio-tab-action studio-tab-action--toggle"
-                      [class.studio-tab-action--active]="effectiveCompactCards()"
-                      [attr.aria-pressed]="effectiveCompactCards()"
-                      data-testid="studio-board-compact-toggle"
-                      [cacTooltip]="compactToggleTooltip()"
-                      (click)="toggleCompactCards()">
-                <span aria-hidden="true">{{ effectiveCompactCards() ? '▤' : '▥' }}</span>
-                <span>{{ effectiveCompactCards() ? 'Compact' : 'Full' }}</span>
               </button>
               <span class="studio-tab-actions-sep" aria-hidden="true"></span>
               <button type="button"
@@ -226,11 +214,22 @@
                 @if (studioTriagePrimary(); as primary) {
                   <button type="button"
                           class="studio-tab-action studio-tab-action--primary"
+                          [class.studio-tab-action--git-loading]="studioPrimaryAwaitingGit()"
                           [attr.data-testid]="'studio-triage-action-' + primary.id"
                           [attr.data-action-id]="primary.id"
-                          [disabled]="updateClient.mutationsBlocked()"
-                          [cacTooltip]="(studioMergeAcceptView()?.statusTooltip || studioPrimaryLabel()) + ' (Enter)'"
-                          (click)="onStudioTriagePrimary()">{{ studioPrimaryLabel() }}</button>
+                          [attr.data-git-loading]="studioPrimaryAwaitingGit() ? 'true' : null"
+                          [disabled]="updateClient.mutationsBlocked() || studioPrimaryAwaitingGit()"
+                          [cacTooltip]="studioPrimaryAwaitingGit()
+                            ? 'Checking git status — action available once loaded.'
+                            : (studioMergeAcceptView()?.statusTooltip || studioPrimaryLabel()) + ' (Enter)'"
+                          (click)="onStudioTriagePrimary()">
+                    @if (studioPrimaryAwaitingGit()) {
+                      <span class="studio-tab-action__skeleton" aria-hidden="true"></span>
+                      <span class="visually-hidden">Checking git status…</span>
+                    } @else {
+                      {{ studioPrimaryLabel() }}
+                    }
+                  </button>
                 }
                 <button type="button"
                         class="studio-tab-action studio-tab-action--icon"
@@ -326,10 +325,6 @@
                 }
               </main>
               }
-            }
-            @case ('backlog') {
-              <app-backlog-triage-screen
-                (newTaskRequested)="onBacklogNewTask()" />
             }
             @case ('task') {
               @if (selectedJob(); as detail) {
@@ -586,15 +581,6 @@
             [activeTagIds]="activeTagFilter()"
             (setType)="onSetType($event)"
             (toggleTag)="toggleTagFilter($event)" />
-          <button class="btn btn--compact-toggle"
-                  data-testid="compact-cards-toggle"
-                  [class.btn--compact-toggle--active]="effectiveCompactCards()"
-                  [attr.aria-pressed]="effectiveCompactCards()"
-                  [cacTooltip]="compactToggleTooltip()"
-                  (click)="toggleCompactCards()">
-            <span aria-hidden="true">{{ effectiveCompactCards() ? '▤' : '▥' }}</span>
-            <span class="btn--compact-toggle__label">{{ effectiveCompactCards() ? 'Compact' : 'Full' }}</span>
-          </button>
           <button class="btn btn--create" (click)="openCreate()">
             ＋ Add Task
           </button>

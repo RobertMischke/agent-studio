@@ -168,7 +168,7 @@ async function mount() {
 }
 
 describe('PromptAdminPanelComponent', () => {
-  it('renders the inventory grouped by source with quiet defaults and override icons', async () => {
+  it('renders quiet inherited prompts, highlighted overrides, and an override-only filter', async () => {
     const fixture = await mount();
     const host = fixture.nativeElement as HTMLElement;
     const list = host.querySelector<HTMLElement>('[data-testid="prompt-admin-list"]')!;
@@ -182,9 +182,24 @@ describe('PromptAdminPanelComponent', () => {
     expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)?.classList).toContain('tree-row--active');
 
     expect(list.textContent).not.toContain('shipped');
-    expect(list.textContent).not.toContain('overridden');
+    expect(list.textContent).toContain('1 overridden');
+    expect(list.textContent).toContain('1 inherited');
+    expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)?.parentElement?.classList)
+      .toContain('prompts__item--inherited');
+    expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)?.getAttribute('aria-label'))
+      .toBe('Runner: fresh start, inherited');
+    expect(host.querySelector(`[data-testid="prompt-admin-item-${DRIFT}"]`)?.getAttribute('aria-label'))
+      .toBe('Aspect: code quality, overridden');
     expect(host.querySelector(`[data-testid="prompt-admin-override-${DRIFT}"]`)).not.toBeNull();
+    expect(host.querySelector(`[data-testid="prompt-admin-override-${DRIFT}"]`)?.textContent).toContain('Override');
     expect(host.querySelector(`[data-testid="prompt-admin-drift-${DRIFT}"]`)).toBeNull();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="prompt-admin-only-overrides"]')!.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)).toBeNull();
+    expect(host.querySelector(`[data-testid="prompt-admin-item-${DRIFT}"]`)).not.toBeNull();
+    expect(host.querySelector('[data-testid="prompt-admin-only-overrides"]')?.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('collapses prompt groups through the shared section header control', async () => {
@@ -215,6 +230,22 @@ describe('PromptAdminPanelComponent', () => {
     const usage = host.querySelector('[data-testid="prompt-admin-usage"]');
     expect(usage).not.toBeNull();
     expect(usage!.textContent).toContain('ProjectRunner');
+  });
+
+  it('keeps the settings rail usable when an older prompt-detail response omits registry arrays', async () => {
+    const fixture = await mount();
+    const api = TestBed.inject(PromptAdminService) as unknown as FakePromptAdminService;
+    api.getDetail = () => Promise.resolve({
+        ...freshDetail(),
+        slots: undefined,
+        usages: undefined,
+      } as unknown as PromptDetail);
+
+    await fixture.componentInstance.select(FRESH);
+    expect(() => fixture.detectChanges()).not.toThrow();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.textContent).toContain('No named slots');
+    expect(host.textContent).toContain('No recorded usage');
   });
 
   it('renders the inline-migration coverage rollup with a covered / total count', async () => {

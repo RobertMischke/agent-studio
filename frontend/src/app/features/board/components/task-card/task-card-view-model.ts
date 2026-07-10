@@ -282,7 +282,7 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-export type EffectiveModelSource = 'run' | 'explicit' | 'default' | 'human' | 'unknown';
+export type EffectiveModelSource = 'fallback' | 'run' | 'explicit' | 'default' | 'human' | 'unknown';
 
 export interface EffectiveModelChip {
   icon: string;
@@ -313,7 +313,15 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
   let source: EffectiveModelSource;
   let isDefault: boolean;
 
-  if (execution?.status === 'running' && execution.model) {
+  if (job.quotaFallback) {
+    const cli = isCliType(job.quotaFallback.cliType) ? job.quotaFallback.cliType : null;
+    icon = cli ? cliTypeIcon(cli) : '\u{26A0}';
+    label = `fallback: ${shortModelName(job.quotaFallback.model)}`;
+    fullModel = job.quotaFallback.model;
+    cliLbl = cli ? cliTypeLabel(cli) : null;
+    source = 'fallback';
+    isDefault = false;
+  } else if (execution?.status === 'running' && execution.model) {
     const cli = jobCli ?? ownerCli;
     icon = cli ? cliTypeIcon(cli) : '\u{1F916}';
     label = shortModelName(execution.model);
@@ -367,14 +375,18 @@ function buildModelTooltip(
   const lines: string[] = [];
 
   const jobCli = isCliType(job.cliType) ? job.cliType : null;
-  const effectiveCli = jobCli ?? ownerCli;
-  const effectiveModel = source === 'run'
+  const fallbackCli = isCliType(job.quotaFallback?.cliType) ? job.quotaFallback.cliType : null;
+  const effectiveCli = source === 'fallback' ? fallbackCli : jobCli ?? ownerCli;
+  const effectiveModel = source === 'fallback'
+    ? job.quotaFallback?.model
+    : source === 'run'
     ? job.execution?.model ?? job.model ?? ownerModel
     : job.model ?? ownerModel;
 
   lines.push(`<b>Model:</b> ${escapeHtml(effectiveModel ?? 'none')}${source === 'default' ? ' <i>(client default)</i>' : source === 'run' ? ' <i>(running)</i>' : ''}`);
   lines.push(`<b>CLI:</b> ${effectiveCli ? escapeHtml(cliTypeLabel(effectiveCli)) : 'none'}${!jobCli && ownerCli ? ' <i>(client default)</i>' : ''}`);
   lines.push(`<b>Agent:</b> ${escapeHtml(job.agent || 'none')} <i>(pickup permission)</i>`);
+  if (source === 'fallback') lines.push(`<b>Reason:</b> quota (${escapeHtml(job.quotaFallback?.reason ?? 'cap reached')})`);
 
   const ownerLabel = owner.displayName || owner.id;
   const defaultParts: string[] = [];
@@ -385,7 +397,7 @@ function buildModelTooltip(
   lines.push(`<b>Defaults:</b> ${escapeHtml(defaultsStr)}`);
 
   return {
-    title: source === 'run' ? 'Running model' : source === 'default' ? 'Effective model (client default)' : 'Effective model',
+    title: source === 'fallback' ? 'Quota fallback active' : source === 'run' ? 'Running model' : source === 'default' ? 'Effective model (client default)' : 'Effective model',
     body: lines.join('<br>'),
   };
 }
@@ -397,6 +409,8 @@ export interface TaskTagChip {
   ghost: boolean;
   concern: boolean;
   unparseable: boolean;
+  historical: boolean;
+  historyGlyph: string | null;
   tooltip: string;
 }
 
@@ -436,7 +450,19 @@ const LANE_MIRROR_CARD_TAG_TEXT: Record<string, readonly string[]> = {
   [TaskState.Archive]: ['archive', 'archived'],
 };
 
-const REISSUE_AUTO_REVIEW_TAG_ID = 'reissue:autoreview';
+const HISTORY_TAG_RE = /^(?:reissue|abort-review):(.+)$/i;
+const HISTORY_PRESENTATION_LANES = new Set<string>([
+  TaskState.HumanReview,
+  TaskState.Completed,
+  TaskState.Archive,
+]);
+
+function historyTagDetails(id: string): { kind: 'reissue' | 'abort'; reason: string } | null {
+  const match = HISTORY_TAG_RE.exec(id);
+  if (!match) return null;
+  const kind = id.toLowerCase().startsWith('reissue:') ? 'reissue' : 'abort';
+  return { kind, reason: match[1].replace(/[-_]+/g, ' ').trim() };
+}
 
 function compactTagText(value: string): string {
   return value
@@ -474,15 +500,24 @@ export function buildTagChips(
   return list.flatMap((id) => {
     const entry = byId.get(id);
     if (isSuppressedCardTag(id, entry, state)) return [];
-    if (id.toLowerCase() === REISSUE_AUTO_REVIEW_TAG_ID) {
+    const history = historyTagDetails(id);
+    const historical = history !== null && state !== undefined && HISTORY_PRESENTATION_LANES.has(state);
+    if (history) {
+      const label = entry?.label ?? (history.kind === 'reissue' ? 'Reissue' : 'Abort review');
+      const reason = entry?.description || history.reason || 'No reason recorded';
+      const occurrences = list.filter((candidate) => historyTagDetails(candidate)?.kind === history.kind).length;
       return {
         id,
-        label: 'Reissue',
-        color: '#f59e0b',
+        label,
+        color: historical ? 'var(--studio-fg-dim)' : (entry?.color ?? (history.kind === 'reissue' ? '#f59e0b' : '#ef4444')),
         ghost: false,
         concern: false,
         unparseable: false,
-        tooltip: 'Auto-review sent this task back for another attempt.'
+        historical,
+        historyGlyph: historical ? '↺' : null,
+        tooltip: historical
+          ? `History only: ${label}. When: before the task reached its current ${state} lane. Recorded occurrences: ${occurrences} tag${occurrences === 1 ? '' : 's'}. Reason: ${reason}. Open the task timeline for the exact run time and full context.`
+          : `${label} is active in the ${state ?? 'current'} lane. Reason: ${reason}.`
       };
     }
     if (entry) {
@@ -493,6 +528,8 @@ export function buildTagChips(
         ghost: false,
         concern: false,
         unparseable: false,
+        historical: false,
+        historyGlyph: null,
         tooltip: entry.description ? `${entry.label}: ${entry.description}` : entry.label
       };
     }
@@ -503,7 +540,9 @@ export function buildTagChips(
       ghost: true,
       concern: false,
       unparseable: false,
-        tooltip: `Unknown tag '${id}'; registry entry was removed`
+      historical: false,
+      historyGlyph: null,
+      tooltip: `Unknown tag '${id}'; registry entry was removed`
       };
   });
 }
@@ -719,6 +758,143 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
     tooltip:
       "Git state: pre-merge — this is a sequential run working directly in the shared main checkout; no isolated task/<id> worktree was created. Its work is not yet integrated into develop.",
   };
+}
+
+/**
+ * AGT-2046 — the always-on two-segment merge signal shown on every board card
+ * that carries git work: "gemerged in develop / gemerged in main". The operator
+ * scans the board for these two facts, so the card renders a compact
+ * `[d|m]` indicator whose segments read filled/green when merged and muted/empty
+ * when not.
+ *
+ * Primary source is the backend-computed {@link TaskInfo.mergeSignal} (batched +
+ * cached per repo, so no per-card graph query). When that is absent (an older
+ * payload, or a surface that doesn't compute it) the develop segment degrades
+ * gracefully from the persisted merge fact / terminal lane; main needs the graph
+ * and stays "unknown" (shown as not-merged) until the signal arrives.
+ *
+ * Semantics + colours match the detail-header landed-state (ASS-1724 / AGT-1989):
+ * develop and main are the same worktree -> develop -> main ladder rungs.
+ */
+export interface MergeSignalSegment {
+  key: 'develop' | 'main';
+  /** One-letter scan glyph: `d` (develop) / `m` (main). */
+  short: 'd' | 'm';
+  /** Full branch label for the tooltip ("develop" / "main"). */
+  label: string;
+  merged: boolean;
+  /** Short SHA that proves the membership, when known. */
+  sha: string | null;
+}
+
+export interface MergeSignalView {
+  branch: string | null;
+  develop: MergeSignalSegment;
+  main: MergeSignalSegment;
+  /** Plain-text tooltip: branch + merge-target status in Klartext. */
+  tooltip: string;
+  /** Compact aria label for screen readers ("in develop, not in main"). */
+  ariaLabel: string;
+}
+
+function shortShaOf(sha: string | null | undefined): string | null {
+  if (!sha) return null;
+  const s = sha.trim();
+  if (s.length === 0) return null;
+  return s.length > 7 ? s.slice(0, 7) : s;
+}
+
+/**
+ * True when the card carries any git anchor at all (a backend signal, a recorded
+ * merge, a task-branch tip, or an attributed commit). Cards with nothing
+ * committed yet get no merge signal so the pre-work lanes stay quiet.
+ */
+function hasGitAnchor(job: TaskInfo): boolean {
+  if (job.mergeSignal) return true;
+  const prov = job.provenance ?? null;
+  if (prov?.merge?.mergeCommit) return true;
+  if (prov?.transitions?.some((t) => !!t.branchTip)) return true;
+  if ((job.commits?.length ?? 0) > 0) return true;
+  return !!job.commit;
+}
+
+/**
+ * Build the two-segment merge signal for a card. Returns null when the card has
+ * no git anchor to describe (pre-work lanes with nothing committed).
+ */
+export function buildMergeSignal(job: TaskInfo): MergeSignalView | null {
+  if (!hasGitAnchor(job)) return null;
+
+  const sig = job.mergeSignal ?? null;
+  const prov = job.provenance ?? null;
+  const mergeSha = prov?.merge?.mergeCommit ?? null;
+
+  let inDevelop: boolean;
+  let inMain: boolean;
+  let developSha: string | null;
+  let mainSha: string | null;
+  let branch: string | null;
+  let integrationLabel: string;
+  let releaseLabel: string;
+
+  if (sig) {
+    inDevelop = sig.inIntegration;
+    inMain = sig.inRelease;
+    developSha = sig.integrationSha ?? null;
+    mainSha = sig.releaseSha ?? null;
+    branch = sig.branch || prov?.branch || null;
+    integrationLabel = sig.integrationBranch || 'develop';
+    releaseLabel = sig.releaseBranch || 'main';
+  } else {
+    // Graceful degradation: the persisted develop-merge fact and the terminal
+    // Completed lane both prove develop; main is unknown without the graph.
+    inDevelop = !!mergeSha || job.state === TaskState.Completed;
+    inMain = false;
+    developSha = shortShaOf(mergeSha);
+    mainSha = null;
+    branch = prov?.branch || null;
+    integrationLabel = 'develop';
+    releaseLabel = 'main';
+  }
+
+  const develop: MergeSignalSegment = {
+    key: 'develop',
+    short: 'd',
+    label: integrationLabel,
+    merged: inDevelop,
+    sha: developSha,
+  };
+  const main: MergeSignalSegment = {
+    key: 'main',
+    short: 'm',
+    label: releaseLabel,
+    merged: inMain,
+    sha: mainSha,
+  };
+
+  const developLine = inDevelop
+    ? developSha
+      ? `In ${integrationLabel} since ${developSha}`
+      : `In ${integrationLabel}`
+    : `Not yet in ${integrationLabel}`;
+  const mainLine = inMain
+    ? mainSha
+      ? `In ${releaseLabel} (${mainSha})`
+      : `In ${releaseLabel}`
+    : `Not in ${releaseLabel}`;
+
+  const tooltip = [
+    branch ? `Branch: ${branch}` : null,
+    'Merge status:',
+    `• ${developLine}`,
+    `• ${mainLine}`,
+  ].filter((l): l is string => l !== null).join('\n');
+
+  const ariaLabel =
+    `Merge status: ${inDevelop ? `in ${integrationLabel}` : `not in ${integrationLabel}`}, ` +
+    `${inMain ? `in ${releaseLabel}` : `not in ${releaseLabel}`}`;
+
+  return { branch, develop, main, tooltip, ariaLabel };
 }
 
 export type PipelineDotStatus = 'done' | 'active' | 'pending' | 'blocked';
@@ -998,6 +1174,52 @@ export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
   }
 }
 
+export interface RunnerBadge {
+  /** `remote` renders the arrow + runner name; `local` renders the quiet "lokal" chip. */
+  kind: 'remote' | 'local';
+  /** Arrow glyph for the remote case; empty for local. */
+  glyph: string;
+  label: string;
+  tooltip: string;
+}
+
+/**
+ * AGT-2003 runner badge shown next to the CLI badge on a running card. A remote
+ * runner acquires the task's run lease (ADR-0060) before it spawns its CLI, so
+ * `job.runner.isRemote` means the work is executing on another host: render
+ * "→ <runner-name>". A local in-process run holds no run lease (it uses the disk
+ * pickup-lock), so a running Progress card with no remote lease renders a quiet
+ * "lokal" chip — the operator's "Abgleich im Stable Board" (lokal vs remote).
+ * Returns null on non-running cards so the board stays quiet everywhere else.
+ *
+ * Recognizable-pattern sibling of the git-state / branch-context signal
+ * (AGT-1984): a glyph + short label chip that reads at a glance.
+ */
+export function buildRunnerBadge(job: TaskInfo): RunnerBadge | null {
+  const running = job.state === TaskState.Progress && job.execution?.status === 'running';
+  const runner = job.runner ?? null;
+
+  if (runner && runner.isRemote) {
+    const name = (runner.runnerName || runner.runnerId || 'remote runner').trim();
+    const host = (runner.hostname || '').trim();
+    const parts = [`Executed by remote runner ${name}${host ? ` on ${host}` : ''}.`];
+    parts.push('This task is running on another host, not in-process (holds the run lease).');
+    return { kind: 'remote', glyph: '⇥', label: name, tooltip: parts.join('\n') };
+  }
+
+  // Local: only assert "lokal" while the card is genuinely running in-process
+  // (or a same-backend lease is held). Nothing to show once it stops.
+  if (running || runner) {
+    return {
+      kind: 'local',
+      glyph: '',
+      label: 'lokal',
+      tooltip: 'Running in-process on the local backend (no remote run lease held).',
+    };
+  }
+  return null;
+}
+
 export interface ExternalDoneBadge { label: string; tooltip: string; }
 
 /**
@@ -1076,19 +1298,142 @@ export function buildCodeReviewGradeBadge(tags: readonly string[] | undefined): 
   return null;
 }
 
-export interface OutcomeIssueBadge { label: string; tone: 'info' | 'warn' | 'high'; tooltip: string; }
+export interface OutcomeIssueBadge { label: string; tone: 'info' | 'warn' | 'high'; historical: boolean; tooltip: string; }
 
-export function buildOutcomeIssueBadge(issue: TaskInfo['outcomeIssue']): OutcomeIssueBadge | null {
+export function buildOutcomeIssueBadge(job: TaskInfo): OutcomeIssueBadge | null {
+  const issue = job.outcomeIssue;
   if (!issue) return null;
   const severity = (issue.severity ?? '').toLowerCase();
-  const tone = severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
+  const issueAt = issue.lastSeenAt ? Date.parse(issue.lastSeenAt) : Number.NaN;
+  const acceptedAt = job.lastActivity ? Date.parse(job.lastActivity) : Number.NaN;
+  const historical = HISTORY_PRESENTATION_LANES.has(job.state)
+    && job.orchestratorVerdict === 'accept'
+    && Number.isFinite(issueAt)
+    && Number.isFinite(acceptedAt)
+    && issueAt < acceptedAt;
+  const tone = historical ? 'info' : severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
   const seen = issue.lastSeenAt ? `\nLast seen: ${formatShortTime(issue.lastSeenAt)}` : '';
   const summary = issue.summary ? `\n\n${issue.summary}` : '';
   return {
     label: issue.label || issue.kind,
     tone,
-    tooltip: `Runner outcome issue: ${issue.kind}${seen}${summary}`
+    historical,
+    tooltip: historical
+      ? `History only: this runner issue predates the later accepted run.${seen}${summary}`
+      : `Runner outcome issue: ${issue.kind}${seen}${summary}`
   };
+}
+
+/**
+ * AGT-2029 waits-on dependency chip. Consumes the backend-computed
+ * `waitsOn` status (fulfilled/open per target, blocked, cycle) so the card
+ * shows what the task is waiting on, in which state, and can route to the
+ * target - matching the scheduler's own decision (the runner uses the same
+ * evaluation to gate auto-pickup). Null when the task has no dependencies.
+ *
+ * States: `open` (⏳, at least one dependency not yet complete - the card is
+ * held back from auto-pickup), `ready` (✓, all complete - the card is
+ * workable), `cycle` (⚠, a dependsOn cycle that can never be fulfilled -
+ * a configuration error).
+ */
+export interface DependencyChip {
+  glyph: string;
+  label: string;
+  tone: 'open' | 'ready' | 'cycle';
+  tooltip: string;
+  /** F33 key the chip navigates to on click (first open target, else the first). */
+  targetKey: string | null;
+  /** Direct nav target resolved by the backend (works across lanes/projects, incl. archive). */
+  targetJobId: string | null;
+  targetWatchPath: string | null;
+}
+
+export function buildDependencyChip(waitsOn: TaskInfo['waitsOn']): DependencyChip | null {
+  if (!waitsOn || waitsOn.items.length === 0) return null;
+  const items = waitsOn.items;
+  const tooltip = dependencyTooltip(items, waitsOn.cycleDetected);
+
+  if (waitsOn.cycleDetected) {
+    const primary = items[0];
+    return {
+      glyph: '⚠',
+      label: 'dep cycle',
+      tone: 'cycle',
+      tooltip,
+      targetKey: primary?.key ?? null,
+      targetJobId: primary?.targetJobId ?? null,
+      targetWatchPath: primary?.targetWatchPath ?? null,
+    };
+  }
+
+  const open = items.filter((i) => !i.fulfilled);
+  if (open.length > 0) {
+    const primary = open[0];
+    const extra = open.length - 1;
+    return {
+      glyph: '⏳',
+      label: `waits: ${primary.key}${extra > 0 ? ` +${extra}` : ''}`,
+      tone: 'open',
+      tooltip,
+      targetKey: primary.key,
+      targetJobId: primary.targetJobId ?? null,
+      targetWatchPath: primary.targetWatchPath ?? null,
+    };
+  }
+
+  const primary = items[0];
+  const extra = items.length - 1;
+  return {
+    glyph: '✓',
+    label: `${primary.key}${extra > 0 ? ` +${extra}` : ''}`,
+    tone: 'ready',
+    tooltip,
+    targetKey: primary.key,
+    targetJobId: primary.targetJobId ?? null,
+    targetWatchPath: primary.targetWatchPath ?? null,
+  };
+}
+
+/**
+ * AGT-2029: resolve the task a dependency chip should open. Prefers the
+ * backend-resolved target (jobId + watchPath — correct across projects and
+ * lanes the board snapshot omits, e.g. an archived target), falling back to the
+ * F33 key against the current board snapshot. Null when it is not loaded.
+ */
+export function resolveDependencyTarget(
+  chip: DependencyChip,
+  jobs: readonly TaskInfo[],
+): TaskInfo | null {
+  if (chip.targetJobId) {
+    const byId = jobs.find(
+      (t) => t.id === chip.targetJobId && (!chip.targetWatchPath || t.watchPath === chip.targetWatchPath),
+    );
+    if (byId) return byId;
+  }
+  if (chip.targetKey) {
+    const upper = chip.targetKey.toUpperCase();
+    const byKey = jobs.find((t) => (t.key ?? '').toUpperCase() === upper);
+    if (byKey) return byKey;
+  }
+  return null;
+}
+
+function dependencyTooltip(
+  items: NonNullable<TaskInfo['waitsOn']>['items'],
+  cycle: boolean,
+): string {
+  const lines = items.map((i) => {
+    const mark = i.fulfilled ? '✓' : '◦';
+    const state = i.fulfilled ? 'done' : i.resolved ? 'open' : 'not created yet';
+    const title = i.targetTitle ? ` — ${i.targetTitle.slice(0, 40)}` : '';
+    return `${mark} ${i.key} (${state})${title}`;
+  });
+  const head = cycle
+    ? 'Dependency cycle: this task can never be auto-picked until the chain is fixed via its references.'
+    : items.every((i) => i.fulfilled)
+      ? 'All dependencies complete — this task is workable.'
+      : 'Waiting on these to reach completed/archive before pickup:';
+  return `${head}\n${lines.join('\n')}`;
 }
 
 export function buildLoopTooltip(al: AutoLoopSnapshot): string {
@@ -1115,6 +1460,13 @@ export function buildPendingTooltip(pi: PendingIntent): string {
 export const EPIC_ASSIGN_PREFIX = 'epic-assign:';
 export const EPIC_DETACH_ID = 'epic-detach';
 export const FILTER_DEPENDENTS_ID = 'filter-dependents';
+/**
+ * Destructive "Delete task" context-menu row. Replaces the hover trash button
+ * that used to sit on every card (fehlklick-risk right where you click/drag).
+ * Clicking it drives the same `deleteRequested` flow — the parent still owns
+ * the confirm/undo semantics.
+ */
+export const DELETE_ID = 'delete-task';
 
 /**
  * Right-click context-menu rows for a card: copy actions + (for non-epic cards)
@@ -1161,5 +1513,16 @@ export function buildCardCtxMenuItems(
       }
     }
   }
+
+  // Destructive delete lives at the very end behind a separator so it never
+  // sits next to the everyday copy/assign rows. Present on every card — for an
+  // epic card it may be the only actionable row, which the operator accepted.
+  items.push({ kind: 'separator' });
+  items.push({
+    kind: 'row',
+    id: DELETE_ID,
+    label: isEpic ? 'Delete epic' : 'Delete task',
+    danger: true,
+  });
   return items;
 }

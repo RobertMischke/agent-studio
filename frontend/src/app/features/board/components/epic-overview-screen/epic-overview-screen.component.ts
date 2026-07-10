@@ -29,7 +29,7 @@ export interface EpicOverviewScope {
  * "where do my epics stand" surface, so the only mutation it surfaces is
  * navigation: clicking an epic or a sub-task opens that card's detail.
  *
- * Mirrors {@link BacklogTriageScreenComponent}: the host owns the route
+ * The host owns the route
  * (`EpicOverviewService`) and the detail-open flow; this component fetches,
  * renders, and emits navigation requests.
  */
@@ -67,8 +67,25 @@ export class EpicOverviewScreenComponent implements OnInit {
   readonly visibleEpics = computed(() => {
     const scope = this.scopedProject();
     const all = this.epics();
-    return scope ? all.filter((e) => e.projectName === scope.name) : all;
+    const scoped = scope ? all.filter((e) => e.projectName === scope.name) : all;
+    // Archived zero-member epics are deliberate cleanup records, not useful
+    // history. Completed epics remain visible because their member rollup is
+    // the history operators need to inspect.
+    return scoped.filter((e) => e.subTaskTotal > 0 || e.state !== '7-archive');
   });
+
+  readonly activeEpics = computed(() =>
+    this.visibleEpics().filter((e) => e.subTaskTotal === 0 || e.completed < e.subTaskTotal),
+  );
+
+  readonly completedEpics = computed(() =>
+    this.visibleEpics().filter((e) => e.subTaskTotal > 0 && e.completed === e.subTaskTotal),
+  );
+
+  readonly epicSections = computed(() => [
+    { id: 'active', label: 'Active', epics: this.activeEpics() },
+    { id: 'completed', label: 'Completed', epics: this.completedEpics() },
+  ].filter((section) => section.epics.length > 0));
 
   readonly totalEpics = computed(() => this.visibleEpics().length);
   /** Create is only offered when a single project is in scope. */

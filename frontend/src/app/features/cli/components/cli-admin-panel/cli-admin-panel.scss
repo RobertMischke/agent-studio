@@ -44,6 +44,18 @@
   text-transform: uppercase; color: var(--studio-fg-dim); font-weight: 600;
 }
 .cli-admin__hint { font-size: 10px; color: var(--studio-fg-dim); }
+// Read-only explainer sitting above the completion-contracts registry.
+.cli-admin__explainer {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--studio-fg-dim);
+  background: var(--studio-bg-elevated);
+  border-left: 2px solid var(--studio-accent);
+  border-radius: 2px;
+  max-width: 72ch;
+}
 .cli-admin__empty {
   font-size: 12px; color: var(--studio-fg-dim);
   padding: 12px 14px;

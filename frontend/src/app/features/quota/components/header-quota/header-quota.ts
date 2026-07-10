@@ -255,7 +255,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       const baseKey = this.windowKey(w.label);
       const count = seen.get(baseKey) ?? 0;
       seen.set(baseKey, count + 1);
-      const pct = w.usedPct == null ? null : Math.round(w.usedPct);
+      const pct = this.effectiveUsedPct(w);
       const windowKey = count === 0 ? baseKey : `${baseKey}-${count + 1}`;
       return {
         windowKey,
@@ -271,7 +271,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   private buildWindowDisplay(windows: QuotaWindow[], kind: 'five_hour' | 'weekly'): QuotaWindowDisplay | undefined {
     const w = this.findWindow(windows, kind);
     if (!w) return undefined;
-    const pct = w.usedPct == null ? null : Math.round(w.usedPct);
+    const pct = this.effectiveUsedPct(w);
     const tone = this.toneFor(pct);
     const value = pct == null ? '—' : `${pct}%`;
     const barPct = Math.max(0, Math.min(100, pct ?? 0));
@@ -309,12 +309,12 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   }
 
   private buildPrimaryDisplay(windows: QuotaWindow[]): QuotaPrimaryDisplay {
-    const ranked = [...windows].sort((a, b) => (b.usedPct ?? -1) - (a.usedPct ?? -1));
+    const ranked = [...windows].sort((a, b) => (this.effectiveUsedPct(b) ?? -1) - (this.effectiveUsedPct(a) ?? -1));
     const w = ranked[0];
-    if (!w || w.usedPct == null) {
+    const pct = w ? this.effectiveUsedPct(w) : null;
+    if (!w || pct == null) {
       return { value: '—', tag: w ? this.windowTag(w.label) : '', barPct: 0, hasValue: false, tone: 'unknown' };
     }
-    const pct = Math.round(w.usedPct);
     return {
       value: `${pct}%`,
       tag: this.windowTag(w.label),
@@ -361,6 +361,30 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     if (real.length === 0) return `${label} quota: no data yet`;
     const parts = real.map(c => (c.label ? `${c.label} ${c.value}` : c.tag ? `${c.tag} ${c.value}` : c.value));
     return `${label} quota: ${parts.join(', ')} used`;
+  }
+
+  /**
+   * Effective used-percentage for a window, applying the operator's
+   * "%-limit" rule so a card is never dropped or blanked just because a
+   * CLI omits an explicit numeric cap:
+   *
+   *  - `usedPct` set (Codex / Claude report this directly) wins.
+   *  - A numeric `used` + `limit` pair is turned into a percentage.
+   *  - unit `"%"` with a null `limit` means the limit IS 100% (the CLI
+   *    says "66% used", not "66 of null"), so a `used` given under that
+   *    unit is already the progress against 100.
+   *
+   * Returns null only when the window carries no usable number at all, so
+   * a fresh Codex snapshot (4 windows, `used`/`limit` null, `usedPct` set)
+   * always yields real chips instead of empty "—" placeholders.
+   */
+  private effectiveUsedPct(w: QuotaWindow): number | null {
+    if (w.usedPct != null) return Math.round(w.usedPct);
+    if (w.used != null && w.limit != null && w.limit > 0) {
+      return Math.round((w.used / w.limit) * 100);
+    }
+    if (w.unit === '%' && w.used != null) return Math.round(w.used);
+    return null;
   }
 
   private toneFor(pct: number | null): Tone {

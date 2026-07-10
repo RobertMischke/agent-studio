@@ -86,6 +86,11 @@
 .run-detail__head { display: flex; align-items: flex-start; gap: var(--studio-spacing-2); border-bottom: 1px solid var(--studio-border); padding-bottom: var(--studio-spacing-2); }
 .run-detail__title { margin: 0; font-size: 14px; line-height: 1.25; color: var(--studio-fg-strong); }
 .run-detail__subtitle { margin-top: var(--studio-spacing-1); color: var(--studio-fg-dim); font-size: 11.5px; }
+/* AGT-2003 runner attribution chip in the run-detail header: which runner
+   executed this run (remote lease owner / out-of-band source), or "lokal". */
+.run-detail__runner { font-weight: 600; cursor: help; }
+.run-detail__runner--remote { color: var(--studio-accent-strong); }
+.run-detail__runner--local { color: var(--studio-fg-muted); font-weight: 500; }
 .run-detail__snapshots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--studio-spacing-2); }
 .run-detail__snapshot { min-width: 0; border-left: 2px solid var(--studio-border); padding: var(--studio-spacing-2); display: flex; flex-direction: column; gap: var(--studio-spacing-1); }
 .run-detail__snapshot-label { color: var(--studio-fg-dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }

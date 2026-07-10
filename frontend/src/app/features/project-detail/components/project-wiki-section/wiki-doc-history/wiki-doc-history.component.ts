@@ -23,10 +23,12 @@ export class WikiDocHistoryComponent {
 
   /** Emits the SHA of a commit whose historic content the parent should preview. */
   readonly viewRevision = output<string>();
+  readonly openTask = output<string>();
 
   readonly model = computed(() => this.history()?.model ?? null);
   readonly meta = computed(() => this.history()?.metadata ?? null);
   readonly commits = computed(() => this.history()?.commits ?? []);
+  readonly relatedTasks = computed(() => this.history()?.relatedTasks ?? []);
 
   /** True when there is at least one provenance fact worth a header row. */
   readonly hasProvenance = computed(() => {

@@ -177,9 +177,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * Navigation-derived context kind and canonical context key. A task
    * context needs both an id and a title in scope; anything else is the
    * project (board) context. The key mirrors the backend registry shape
-   * (`project:<PROJ>` / `task:<PROJ>/<KEY>`, see OrchestratorContextKey) so
-   * it is ready to address the per-context session once a transcript read
-   * endpoint exists; today the chat body still reads the project thread.
+   * (`project:<PROJ>` / `task:<PROJ>/<KEY>`, see OrchestratorContextKey) and
+   * the chat body reads and writes through it (see {@link readChat} and the
+   * context-aware send in {@link onSubmit}), so a task page and the board no
+   * longer share one history.
    */
   readonly contextKind = computed<'task' | 'project'>(() =>
     this.effectiveJobId() && this.effectiveJobTitle() ? 'task' : 'project');
@@ -385,11 +386,15 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   });
 
   constructor() {
-    // MC-2: reload when the *effective* project changes — pinning freezes
+    // MC-2: reload when the *effective context* changes — pinning freezes
     // the scope, so following the effective value (not the raw picker)
-    // keeps a pinned sheet on its frozen thread while nav moves on.
+    // keeps a pinned sheet on its frozen thread while nav moves on. We track
+    // contextKey() (not just the project) so navigating between the board and
+    // a task in the same project — a project↔task context switch that leaves
+    // effectiveProject() unchanged — still swaps the visible transcript.
     effect(() => {
       const proj = this.effectiveProject();
+      this.contextKey();
       this.open();
       if (this.open() && proj) {
         this.localTurns.set([]);
@@ -745,11 +750,26 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.openVerboseDebug.emit({ jobId, watchPath, jobTitle: this.effectiveJobTitle() });
   }
 
+  /**
+   * MC-2 (Concept §4): read the transcript for the *current navigation
+   * context*, not just the project. On a task page the sheet reads the
+   * `task:<PROJ>/<KEY>` thread; on the board it reads `project:<PROJ>`, which
+   * the backend resolves to the same canonical per-project log the plain
+   * project route serves. Falling back to the project read when no context
+   * key is derivable keeps the board's behaviour byte-for-byte unchanged.
+   */
+  private readChat(proj: string) {
+    const key = this.contextKey();
+    return key
+      ? this.jobService.getOrchestratorChatByContext(key)
+      : this.jobService.getOrchestratorChat(proj);
+  }
+
   refresh(silent = false): void {
     const proj = this.effectiveProject();
     if (!proj) return;
     if (!silent) this.loading.set(true);
-    this.jobService.getOrchestratorChat(proj).subscribe({
+    this.readChat(proj).subscribe({
       next: (resp) => {
         this.turns.set(resp.turns ?? []);
         this.errorMsg.set(null);
@@ -861,11 +881,19 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         })
       : null;
 
-    this.jobService.sendOrchestratorChat(proj, {
+    // MC-2: route the send to the current context thread so a task page's
+    // turns accumulate in — and read back from — their own history. A
+    // project/board context falls through to the per-project route.
+    const contextKey = this.contextKey();
+    const sendBody = {
       text: text || (uploaded.length > 0 ? '(attachments)' : ''),
       attachments: uploaded.length > 0 ? uploaded : undefined,
       navigationContext: contextPayload
-    }).subscribe({
+    };
+    const send$ = contextKey
+      ? this.jobService.sendOrchestratorChatByContext(contextKey, sendBody)
+      : this.jobService.sendOrchestratorChat(proj, sendBody);
+    send$.subscribe({
       next: () => {
         if (shouldShipContext) {
           this.lastSentContextSignature.set(contextSignature);
@@ -890,7 +918,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         // momentarily. Once preloads resolve we drop the local turn and
         // revoke its blob URLs; the server turn takes over with the
         // cached image and the user perceives no swap.
-        this.jobService.getOrchestratorChat(proj).subscribe({
+        this.readChat(proj).subscribe({
           next: async (resp) => {
             this.turns.set(resp.turns ?? []);
             this.errorMsg.set(null);

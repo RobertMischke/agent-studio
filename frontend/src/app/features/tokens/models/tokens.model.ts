@@ -173,6 +173,10 @@ export interface TokenTimelineCell {
   total: number;
   dollars: number | null;
   allModelsPriced: boolean;
+  /** Category split; agentTokens + supportingTokens + orchestratorTokens === total. */
+  agentTokens: number;
+  supportingTokens: number;
+  orchestratorTokens: number;
 }
 
 export interface TokenTimelineProject {
@@ -188,6 +192,15 @@ export interface TokenTimelineProject {
   peakBucketStart: string | null;
   peakBucketTotal: number;
   lastActivity: string | null;
+  /**
+   * Per-project token split. `agentTokens` is coding-agent runs, `supportingTokens`
+   * is post-processing / aspect loops, `orchestratorTokens` is orchestrator
+   * meta-turns. They add up to `total` so the table can carry a
+   * Total / davon Agent / davon Orchestrator breakdown (AGT-2038).
+   */
+  agentTokens: number;
+  supportingTokens: number;
+  orchestratorTokens: number;
 }
 
 export interface WorkspaceExpensiveJobsResponse {

@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CLI_TYPES, type CliType } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../../features/cli';
 import { CliCatalogStore } from '../../../../services/cli-catalog.store';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
+import { QuotaApiService, type CliModelRouteProfile } from '../../../quota';
 
 interface CliModelGroup {
   cliType: CliType;
@@ -30,6 +31,10 @@ interface CliModelGroup {
 })
 export class CliModelsPanelComponent implements OnInit {
   private readonly catalog = inject(CliCatalogStore);
+  private readonly routesApi = inject(QuotaApiService);
+  readonly routes = signal<Record<string, CliModelRouteProfile>>({});
+  readonly savingCli = signal<string | null>(null);
+  readonly cliTypes = CLI_TYPES;
 
   /** One group per known CLI. Recomputes when the store's catalog map updates. */
   readonly groups = computed<CliModelGroup[]>(() =>
@@ -47,6 +52,9 @@ export class CliModelsPanelComponent implements OnInit {
 
   ngOnInit(): void {
     this.catalog.hydrateAll();
+    this.routesApi.getModelRoutes().subscribe({
+      next: (response) => this.routes.set(response.profiles ?? {}),
+    });
   }
 
   refresh(cliType: CliType): void {
@@ -55,5 +63,64 @@ export class CliModelsPanelComponent implements OnInit {
 
   thinkingSummary(m: CliModelInfo): string {
     return m.thinkingLevels?.length ? m.thinkingLevels.join(' · ') : '';
+  }
+
+  primaryModel(cliType: CliType): string {
+    return this.routes()[cliType]?.primaryModel
+      ?? this.catalog.modelsFor(cliType).find((m) => m.isDefault)?.id
+      ?? '';
+  }
+
+  fallbackCli(cliType: CliType): CliType {
+    return (this.routes()[cliType]?.fallbackCliType as CliType | null) ?? cliType;
+  }
+
+  fallbackModels(cliType: CliType): readonly CliModelInfo[] {
+    return this.catalog.modelsFor(this.fallbackCli(cliType));
+  }
+
+  setPrimary(cliType: CliType, primaryModel: string): void {
+    this.save(cliType, { primaryModel: primaryModel || null });
+  }
+
+  setFallbackCli(cliType: CliType, fallbackCliType: string): void {
+    const target = fallbackCliType as CliType;
+    this.catalog.ensure(target).subscribe({ error: () => void 0 });
+    this.save(cliType, { fallbackCliType: target, fallbackModel: null, fallbackThinkingLevel: null });
+  }
+
+  setFallbackModel(cliType: CliType, fallbackModel: string): void {
+    this.save(cliType, { fallbackModel: fallbackModel || null });
+  }
+
+  setFallbackThinking(cliType: CliType, fallbackThinkingLevel: string): void {
+    this.save(cliType, { fallbackThinkingLevel: fallbackThinkingLevel || null });
+  }
+
+  fallbackThinkingLevels(cliType: CliType): readonly string[] {
+    const selected = this.routes()[cliType]?.fallbackModel;
+    return this.fallbackModels(cliType).find((m) => m.id === selected)?.thinkingLevels ?? [];
+  }
+
+  private save(cliType: CliType, changes: Partial<CliModelRouteProfile>): void {
+    const existing = this.routes()[cliType];
+    const profile: CliModelRouteProfile = {
+      cliType,
+      primaryModel: existing?.primaryModel ?? (this.primaryModel(cliType) || null),
+      primaryThinkingLevel: existing?.primaryThinkingLevel ?? null,
+      fallbackCliType: existing?.fallbackCliType ?? cliType,
+      fallbackModel: existing?.fallbackModel ?? null,
+      fallbackThinkingLevel: existing?.fallbackThinkingLevel ?? null,
+      ...changes,
+    };
+    this.routes.update((all) => ({ ...all, [cliType]: profile }));
+    this.savingCli.set(cliType);
+    this.routesApi.setModelRoute(profile).subscribe({
+      next: (saved) => {
+        this.routes.update((all) => ({ ...all, [cliType]: saved }));
+        this.savingCli.set(null);
+      },
+      error: () => this.savingCli.set(null),
+    });
   }
 }

@@ -55,13 +55,6 @@
         <app-studio-icon name="folder" [size]="12"></app-studio-icon>
         <span>Category</span>
       </button>
-      <button class="pwiki__chrome-btn"
-              type="button"
-              data-testid="project-wiki-toggle-context"
-              [cacTooltip]="contextCollapsed() ? 'Show context panels' : 'Hide context panels'"
-              (click)="toggleContext()">
-        <app-studio-icon name="panelRight" [size]="14"></app-studio-icon>
-      </button>
     }
   </header>
 
@@ -215,7 +208,7 @@
                 <span class="pwiki__lock"
                       aria-label="Fixed frame page"
                       [attr.data-testid]="'project-wiki-lock-' + nodeId(row.node)"
-                      cacTooltip="Fixed Engineering Workstream frame page. It cannot be renamed, moved, or deleted. Add subpages under it instead.">
+                      cacTooltip="Fixed Workstream frame page. It cannot be renamed, moved, or deleted. Add subpages under it instead.">
                   <app-studio-icon name="pin" [size]="11"></app-studio-icon>
                 </span>
               }
@@ -401,14 +394,15 @@
               }
             </article>
 
-            @if (!contextCollapsed()) {
             <div class="pwiki__splitter pwiki__splitter--context"
                  role="separator"
-                 tabindex="0"
                  aria-controls="project-wiki-context"
                  aria-orientation="vertical"
                  data-testid="project-wiki-context-splitter"
                  [class.pwiki__splitter--active]="resizingPanel() === 'context'"
+                 [class.pwiki__splitter--hidden]="contextCollapsed()"
+                 [attr.tabindex]="contextCollapsed() ? -1 : 0"
+                 [attr.aria-hidden]="contextCollapsed() ? 'true' : null"
                  [attr.aria-label]="'Resize page context panels'"
                  [attr.aria-valuemin]="contextMinWidth"
                  [attr.aria-valuemax]="contextMaxWidth"
@@ -421,7 +415,35 @@
                  (keydown)="onPanelSplitterKeydown($event, 'context')">
               <span aria-hidden="true"></span>
             </div>
-            <aside class="pwiki__aside" id="project-wiki-context" data-testid="project-wiki-context-panel" aria-label="Page context">
+            <aside class="pwiki__aside"
+                   [class.pwiki__aside--collapsed]="contextCollapsed()"
+                   id="project-wiki-context"
+                   data-testid="project-wiki-context-panel"
+                   aria-label="Page meta">
+              <button class="pwiki__meta-toggle" type="button"
+                      data-testid="project-wiki-meta-toggle"
+                      [attr.aria-expanded]="!contextCollapsed()"
+                      aria-controls="project-wiki-meta-body"
+                      [cacTooltip]="contextCollapsed() ? 'Show page meta' : 'Hide page meta'"
+                      (click)="toggleContext()">
+                <span class="pwiki__meta-toggle-chevron" aria-hidden="true">
+                  <app-studio-icon [name]="contextCollapsed() ? 'chevronLeft' : 'chevronRight'" [size]="15"></app-studio-icon>
+                </span>
+                <span class="pwiki__meta-toggle-label">Meta</span>
+                <span class="pwiki__meta-toggle-spacer"></span>
+                @if (metaGradeBadge(); as badge) {
+                  <span class="pwiki__meta-grade"
+                        [attr.data-tone]="badge.tone"
+                        data-testid="project-wiki-meta-grade"
+                        [cacTooltip]="badge.label">{{ badge.display }}</span>
+                } @else {
+                  <span class="pwiki__meta-grade pwiki__meta-grade--empty"
+                        data-tone="muted"
+                        data-testid="project-wiki-meta-grade"
+                        aria-hidden="true">·</span>
+                }
+              </button>
+              <div class="pwiki__meta-body" id="project-wiki-meta-body" [hidden]="contextCollapsed()">
               <section class="pwiki__panel" data-testid="project-wiki-meta-panel">
                 <div class="pwiki__panel-head">
                   <span>Page info</span>
@@ -469,6 +491,7 @@
                                       data-testid="project-wiki-history"
                                       [history]="history()"
                                       [loading]="loadingHistory()"
+                                      (openTask)="openRelatedTask($event)"
                                       (viewRevision)="onViewRevision($event)" />
               </section>
 
@@ -535,9 +558,8 @@
                   <p class="pwiki__panel-empty">No page links detected.</p>
                 }
               </section>
-
+              </div>
             </aside>
-            }
           </div>
         } @else {
           <header class="pwiki__viewer-head" data-testid="project-wiki-tabs-empty">
@@ -546,9 +568,9 @@
                       role="tab"
                       aria-selected="true"
                       data-testid="project-wiki-tab-home">
-                <app-studio-icon name="book" [size]="13"></app-studio-icon>
-                <span>Root</span>
-                <small>Home</small>
+                <app-studio-icon name="activity" [size]="13"></app-studio-icon>
+                <span>Pulse</span>
+                <small>Generated</small>
               </button>
             </div>
           </header>
@@ -558,11 +580,11 @@
                [style.--pwiki-context-width]="contextWidthStyle()">
             <article class="pwiki__reader pwiki__landing" data-testid="project-wiki-viewer-empty">
               <header class="pwiki__landing-head">
-                <span class="pwiki__doc-kind">Root folder</span>
-                <h2 class="pwiki__doc-title">Read, connect, and verify project knowledge.</h2>
+                <span class="pwiki__doc-kind">Pulse</span>
+                <h2 class="pwiki__doc-title">What changed, what needs sorting, and how stale the knowledge is.</h2>
                 <p>
-                  Start at the root folder, browse categories, open Markdown or HTML pages, inspect links and history,
-                  or start a drift check when a page may no longer match the current system.
+                  A generated entry view over this wiki - the recent-edits feed, the unfiled inbox, and
+                  deterministic drift grading per Workstream area. It is not a wiki page and cannot be edited.
                 </p>
               </header>
 
@@ -581,77 +603,52 @@
                 </button>
               </div>
 
-              <section class="pwiki__landing-grid" aria-label="Suggested pages">
-                @for (doc of suggestedDocs(); track doc.relPath) {
-                  <article class="pwiki__doc-card"
-                           [attr.data-testid]="'project-wiki-suggested-card-' + doc.relPath">
-                    <button class="pwiki__doc-card-main" type="button"
-                            [attr.data-testid]="'project-wiki-suggested-' + doc.relPath"
-                            (click)="openFile(doc.relPath!, doc.type)">
-                      <span class="pwiki__doc-card-kind">
-                        {{ doc.type === 'html' ? 'HTML' : doc.type === 'json' ? 'JSON' : 'MD' }}
-                      </span>
-                      <strong>{{ doc.title }}</strong>
-                      <code>{{ doc.relPath }}</code>
-                    </button>
-                    <span class="pwiki__metric-strip pwiki__metric-strip--card"
-                          [attr.data-testid]="'project-wiki-suggested-ratings-' + doc.relPath">
-                      @for (chip of documentMetricChips(doc); track chip.key) {
-                        @if (chip.reportAnchor) {
-                          <button class="pwiki__metric"
-                                  type="button"
-                                  [attr.data-tone]="chip.tone"
-                                  [attr.data-kind]="chip.key"
-                                  [attr.data-testid]="'project-wiki-suggested-metric-' + doc.relPath + '-' + chip.key"
-                                  [attr.aria-label]="chip.label"
-                                  [cacTooltip]="chip.tooltip"
-                                  (click)="openReportSection($event, doc, chip.reportAnchor)">
-                            <span class="pwiki__metric-value">
-                              <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
-                              <span>{{ chip.display }}</span>
-                            </span>
-                          </button>
-                        } @else {
-                          <span class="pwiki__metric"
-                                [attr.data-tone]="chip.tone"
-                                [attr.data-kind]="chip.key"
-                                [attr.data-testid]="'project-wiki-suggested-metric-' + doc.relPath + '-' + chip.key"
-                                [attr.aria-label]="chip.label"
-                                [cacTooltip]="chip.tooltip">
-                            <span class="pwiki__metric-value">
-                              <app-studio-icon [name]="chip.icon" [size]="10"></app-studio-icon>
-                              <span>{{ chip.display }}</span>
-                            </span>
-                          </span>
-                        }
-                      }
-                    </span>
-                  </article>
-                }
-              </section>
+              <app-wiki-pulse
+                  class="pwiki__pulse"
+                  [pulse]="pulse()"
+                  [loading]="pulseLoading()"
+                  (openPage)="onPulseOpen($event)" />
             </article>
 
-            @if (!contextCollapsed()) {
-              <div class="pwiki__splitter pwiki__splitter--context"
-                   role="separator"
-                   tabindex="0"
-                   aria-controls="project-wiki-context"
-                   aria-orientation="vertical"
-                   data-testid="project-wiki-context-splitter"
-                   [class.pwiki__splitter--active]="resizingPanel() === 'context'"
-                   [attr.aria-label]="'Resize root context panels'"
-                   [attr.aria-valuemin]="contextMinWidth"
-                   [attr.aria-valuemax]="contextMaxWidth"
-                   [attr.aria-valuenow]="contextWidth()"
-                   cacTooltip="Drag to resize the root context panels"
-                   (pointerdown)="startPanelResize($event, 'context')"
-                   (pointermove)="resizePanel($event)"
-                   (pointerup)="finishPanelResize($event)"
-                   (pointercancel)="finishPanelResize($event)"
-                   (keydown)="onPanelSplitterKeydown($event, 'context')">
-                <span aria-hidden="true"></span>
-              </div>
-              <aside class="pwiki__aside pwiki__aside--landing" id="project-wiki-context" data-testid="project-wiki-context-panel" aria-label="Root context">
+            <div class="pwiki__splitter pwiki__splitter--context"
+                 role="separator"
+                 aria-controls="project-wiki-context"
+                 aria-orientation="vertical"
+                 data-testid="project-wiki-context-splitter"
+                 [class.pwiki__splitter--active]="resizingPanel() === 'context'"
+                 [class.pwiki__splitter--hidden]="contextCollapsed()"
+                 [attr.tabindex]="contextCollapsed() ? -1 : 0"
+                 [attr.aria-hidden]="contextCollapsed() ? 'true' : null"
+                 [attr.aria-label]="'Resize root context panels'"
+                 [attr.aria-valuemin]="contextMinWidth"
+                 [attr.aria-valuemax]="contextMaxWidth"
+                 [attr.aria-valuenow]="contextWidth()"
+                 cacTooltip="Drag to resize the root context panels"
+                 (pointerdown)="startPanelResize($event, 'context')"
+                 (pointermove)="resizePanel($event)"
+                 (pointerup)="finishPanelResize($event)"
+                 (pointercancel)="finishPanelResize($event)"
+                 (keydown)="onPanelSplitterKeydown($event, 'context')">
+              <span aria-hidden="true"></span>
+            </div>
+            <aside class="pwiki__aside pwiki__aside--landing"
+                   [class.pwiki__aside--collapsed]="contextCollapsed()"
+                   id="project-wiki-context"
+                   data-testid="project-wiki-context-panel"
+                   aria-label="Root meta">
+              <button class="pwiki__meta-toggle" type="button"
+                      data-testid="project-wiki-meta-toggle"
+                      [attr.aria-expanded]="!contextCollapsed()"
+                      aria-controls="project-wiki-meta-body"
+                      [cacTooltip]="contextCollapsed() ? 'Show project meta' : 'Hide project meta'"
+                      (click)="toggleContext()">
+                <span class="pwiki__meta-toggle-chevron" aria-hidden="true">
+                  <app-studio-icon [name]="contextCollapsed() ? 'chevronLeft' : 'chevronRight'" [size]="15"></app-studio-icon>
+                </span>
+                <span class="pwiki__meta-toggle-label">Meta</span>
+                <span class="pwiki__meta-toggle-spacer"></span>
+              </button>
+              <div class="pwiki__meta-body" id="project-wiki-meta-body" [hidden]="contextCollapsed()">
                 <section class="pwiki__panel" data-testid="project-wiki-workspace-meta">
                   <div class="pwiki__panel-head">
                     <span>Root folder</span>
@@ -689,8 +686,8 @@
                     </button>
                   </div>
               </section>
+              </div>
             </aside>
-            }
           </div>
         }
       </div>

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { of } from 'rxjs';
 
-import { ProjectWorkflowSectionComponent } from '../../../app/features/project-detail/components/project-workflow-section/project-workflow-section';
+import { ProjectWorkflowSectionComponent } from '../../../app/features/project-detail';
 import { TaskService } from '../../../app/services/task.service';
 
 /**
@@ -99,44 +99,7 @@ const STUB: Partial<TaskService> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ProjectWorkflowSectionComponent],
   providers: [{ provide: TaskService, useValue: STUB }],
-  template: `
-    <div class="harness">
-      <header class="harness__head">
-        <h1>Workflow / Lanes — Stage 1 (T6a)</h1>
-        <p>
-          Backend-free render of the shipped read-only transparency surface:
-          lane list in board order, relocated per-lane sort controls, the live
-          transition view (auto-commit / attribution / gates / auto-push), and
-          the inert stage 2/3 placeholders. Seeded from a stub TaskService.
-        </p>
-      </header>
-      <app-project-workflow-section projectName="Agent Task Processor" />
-    </div>
-  `,
-  styles: [
-    `
-      .harness {
-        max-width: 1100px;
-        margin: 0 auto;
-        padding: 24px;
-        color: var(--studio-text, #e7e7ea);
-      }
-      .harness__head {
-        margin-bottom: 20px;
-        padding-bottom: 16px;
-        border-bottom: 1px solid var(--studio-border, #2a2a31);
-      }
-      .harness__head h1 {
-        margin: 0 0 8px;
-        font-size: 1.35rem;
-      }
-      .harness__head p {
-        margin: 0;
-        max-width: 70ch;
-        line-height: 1.5;
-        opacity: 0.8;
-      }
-    `,
-  ],
+  templateUrl: './workflow-lanes-gallery.component.html',
+  styleUrl: './workflow-lanes-gallery.component.scss',
 })
 export class WorkflowLanesGalleryComponent {}

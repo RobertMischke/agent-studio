@@ -8,6 +8,8 @@ import type { TaskArtifact, TaskArtifactKind } from '../../../../../models/task.
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
 import { NowTickService } from '../../../../../services/now-tick.service';
 import { formatRelativeTime } from '../../../../../services/format.util';
+import { AspectJsonCardComponent } from './aspect-json-card.component';
+import { parseAspectDocument, type AspectDocument } from './aspect-document.model';
 
 /**
  * Files tab body. Renders every `.md` file directly in the job folder
@@ -36,7 +38,7 @@ import { formatRelativeTime } from '../../../../../services/format.util';
   selector: 'app-files-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FileSourceHistoryComponent, MarkdownRichEditorComponent, MarkdownViewComponent, TooltipDirective],
+  imports: [FileSourceHistoryComponent, MarkdownRichEditorComponent, MarkdownViewComponent, TooltipDirective, AspectJsonCardComponent],
   templateUrl: './files-pane.component.html',
   styleUrl: './files-pane.component.scss',
 })
@@ -61,6 +63,13 @@ export class FilesPaneComponent {
   private readonly editingPrompt = signal(false);
   /** Tracks which file names we have already kicked off a fetch for, to avoid duplicate calls. */
   private readonly fetched = new Set<string>();
+  /**
+   * Memoised parse of structured `aspect-*.json` bodies, keyed by file name.
+   * Re-parsed only when the cached raw body changes, so the OnPush template
+   * can call {@link aspectDoc} per change-detection without re-running
+   * `JSON.parse` every cycle.
+   */
+  private readonly aspectDocCache = new Map<string, { raw: string; doc: AspectDocument | null }>();
 
   readonly onlyPrompt = computed(() => {
     const list = this.artifacts();
@@ -130,6 +139,28 @@ export class FilesPaneComponent {
 
   isLoading(name: string): boolean {
     return this.loading().has(name);
+  }
+
+  /** True for a structured `aspect-*.json` artefact (rendered as a card). */
+  isAspectJson(file: TaskArtifact): boolean {
+    return file.kind === 'aspect' && file.name.toLowerCase().endsWith('.json');
+  }
+
+  /**
+   * Parsed structured aspect document for an `aspect-*.json` file, or `null`
+   * when its body has not loaded yet or is not a valid aspect document (in
+   * which case the caller falls back to the markdown renderer). Memoised on
+   * the raw body so repeat calls during change detection are cheap.
+   */
+  aspectDoc(file: TaskArtifact): AspectDocument | null {
+    if (!this.isAspectJson(file)) return null;
+    const raw = this.bodyFor(file);
+    if (raw == null) return null;
+    const cached = this.aspectDocCache.get(file.name);
+    if (cached && cached.raw === raw) return cached.doc;
+    const doc = parseAspectDocument(raw);
+    this.aspectDocCache.set(file.name, { raw, doc });
+    return doc;
   }
 
   /** Renders the first ~12 lines of a file's content for the preview block. */

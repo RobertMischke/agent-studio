@@ -83,6 +83,22 @@ The frontend's model dropdown reads `/api/cli/{cliType}/models`. No CLI-specific
 
 **Aggregation.** [`QuotaService`](../../backend/Services/Quota/QuotaService.cs) aggregates all registered `IQuotaProbe`s and serves `/api/cli/quota`. New CLIs register via `services.AddSingleton<IQuotaProbe, XxxQuotaProbe>()` in `Program.cs`.
 
+**Quota fallback routing.** Workspace CLI Management persists one primary model
+and an optional fallback CLI/model/thinking level per CLI in
+`cli-model-routing.json`. Before each run, `CliQuotaFallbackService` evaluates
+the primary against the cached `/api/cli/quota` snapshot and configured usage
+caps. A blocked primary selects the fallback for that run only. The task's
+stored CLI/model is not rewritten, so a later snapshot below the cap returns
+new runs to primary automatically. Cross-CLI switches deliberately start a new
+session because session identifiers are CLI-owned. Every switch emits the
+`quota_fallback_activated` timeline event, a task chat note, an active task-card
+badge, and a status-bar warning; fallback selection is never silent.
+
+Before this routing was added, quota handling only rejected pickup with
+`QuotaCapExceeded` and the watchdog stopped an in-flight run that crossed its
+cap. Model catalog fallback referred only to discovery failure and did not
+change the launch model. There was no quota-triggered model or CLI router.
+
 **Refresh cadence.** Background refresh is automatic; the user can force a refresh per-CLI via the side-sheet button.
 
 ### 2.5 Logging & Activity Log

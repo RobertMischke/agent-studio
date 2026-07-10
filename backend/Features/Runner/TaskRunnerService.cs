@@ -27,6 +27,7 @@ public class TaskRunnerService : BackgroundService
     private readonly ProjectSettingsService _projectSettings;
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
+    private readonly CliQuotaFallbackService? _quotaFallback;
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
     private readonly OrchestratorRunner _orchestratorRunner;
@@ -67,6 +68,13 @@ public class TaskRunnerService : BackgroundService
     // workspace default. Optional: null when a test fixture builds the service
     // directly, in which case runners fall back to the project-only value.
     private readonly AgentStudio.Registry.OrchestratorDefaultsProvider? _orchestratorDefaults;
+    // AGT-2003: the server-authoritative run-lease authority + this backend's own
+    // runner identity, used only to project the active lease owner onto a task's
+    // read-time DTO (ResolveRunnerBadge). Both are DI singletons; null only when a
+    // test fixture builds the service directly, in which case no runner badge is
+    // surfaced (the card falls back to the plain local-run presentation).
+    private readonly RunLeaseService? _runLeases;
+    private readonly RunnerIdentity? _runnerIdentity;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -121,7 +129,10 @@ public class TaskRunnerService : BackgroundService
         AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null,
         SystemKeepAwake? keepAwake = null,
         AgentStudio.Registry.ProjectRegistry? projectRegistry = null,
-        AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null)
+        AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null,
+        RunLeaseService? runLeases = null,
+        RunnerIdentity? runnerIdentity = null,
+        CliQuotaFallbackService? quotaFallback = null)
     {
         _config = config;
         _logger = logger;
@@ -137,6 +148,7 @@ public class TaskRunnerService : BackgroundService
         _projectSettings = projectSettings;
         _quotaService = quotaService;
         _quotaCaps = quotaCaps;
+        _quotaFallback = quotaFallback;
         _chatLog = chatLog;
         _orchestratorLog = orchestratorLog;
         _orchestratorRunner = orchestratorRunner;
@@ -157,6 +169,8 @@ public class TaskRunnerService : BackgroundService
         _keepAwake = keepAwake;
         _projectRegistry = projectRegistry;
         _orchestratorDefaults = orchestratorDefaults;
+        _runLeases = runLeases;
+        _runnerIdentity = runnerIdentity;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -231,6 +245,52 @@ public class TaskRunnerService : BackgroundService
     public StuckLoopBudget StuckLoopBudget => _stuckLoopBudget;
     private StuckLoopBudget _stuckLoopBudget = StuckLoopBudget.Default;
 
+    /// <summary>
+    /// AGT-2003 — project the runner holding this task's active run lease onto a
+    /// card-renderable <see cref="AgentStudio.Shared.TaskRunnerInfo"/>, or null when
+    /// no lease is held (the common local-run case: the in-process runner uses the
+    /// disk pickup-lock, not the run lease). O(1) in-memory peek, so it is safe to
+    /// call once per job in the read overlay; the caller gates it on the Progress
+    /// lane. <see cref="AgentStudio.Shared.TaskRunnerInfo.IsRemote"/> compares the
+    /// lease owner against this backend's own runner id, so a lease taken by the
+    /// local backend (should one ever acquire it) still reads as a local run.
+    /// </summary>
+    public AgentStudio.Shared.TaskRunnerInfo? ResolveRunnerBadge(string taskKey)
+    {
+        if (_runLeases == null || string.IsNullOrWhiteSpace(taskKey)) return null;
+        var peek = _runLeases.Peek(taskKey);
+        return ProjectRunnerBadge(peek.Lease, _runnerIdentity?.RunnerId);
+    }
+
+    /// <summary>
+    /// Pure projection of a peeked run-lease record + this backend's own runner id
+    /// into a card-renderable <see cref="AgentStudio.Shared.TaskRunnerInfo"/>. Null
+    /// when no lease is held. <c>IsRemote</c> is true when the lease owner differs
+    /// from <paramref name="localRunnerId"/> (a remote host executes it); a blank
+    /// local id is treated as "cannot prove local" and reads as remote so a real
+    /// remote lease is never hidden. Extracted from <see cref="ResolveRunnerBadge"/>
+    /// so the lokal-vs-remote decision is unit-testable without the runner's DI graph.
+    /// </summary>
+    public static AgentStudio.Shared.TaskRunnerInfo? ProjectRunnerBadge(
+        AgentStudio.Shared.RunLeaseInfoDto? lease, string? localRunnerId)
+    {
+        if (lease is null) return null;
+        var isRemote = string.IsNullOrWhiteSpace(localRunnerId)
+            || !string.Equals(lease.RunnerId, localRunnerId, StringComparison.OrdinalIgnoreCase);
+        var name = string.IsNullOrWhiteSpace(lease.RunnerName) ? lease.RunnerId : lease.RunnerName;
+        return new AgentStudio.Shared.TaskRunnerInfo
+        {
+            RunnerId = lease.RunnerId,
+            RunnerName = name,
+            Hostname = lease.Hostname,
+            BackendName = lease.BackendName,
+            IsRemote = isRemote,
+            LeaseId = lease.LeaseId,
+            FencingToken = lease.FencingToken,
+            AcquiredAt = lease.AcquiredAt
+        };
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Initialize runners for each watch path
@@ -275,7 +335,8 @@ public class TaskRunnerService : BackgroundService
                 humanReviewEscalation: _humanReviewEscalation,
                 postAbortReview: _postAbortReview,
                 sessionInspector: _sessionInspector,
-                orchestratorDefaults: _orchestratorDefaults);
+                orchestratorDefaults: _orchestratorDefaults,
+                quotaFallback: _quotaFallback);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
@@ -758,6 +819,14 @@ public class TaskRunnerService : BackgroundService
         return _runners.TryGetValue(projectName, out var runner)
             ? runner.GetRunActivity(jobId)
             : default;
+    }
+
+    public QuotaFallbackStatus? GetQuotaFallbackForJob(string jobId, string projectName)
+    {
+        if (string.IsNullOrEmpty(projectName)) return null;
+        return _runners.TryGetValue(projectName, out var runner)
+            ? runner.GetQuotaFallback(jobId)
+            : null;
     }
 
     private static WatchdogConfig LoadWatchdogConfig(IConfiguration cfg)
