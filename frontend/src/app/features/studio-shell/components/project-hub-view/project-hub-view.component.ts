@@ -140,6 +140,15 @@ export class ProjectHubViewComponent {
     this.overlays.openAnalysisReport(this.projectName(), report.reportId);
   }
 
+  /**
+   * AGT-2067 — open a configured URL as an embedded preview tab from the
+   * Project URLs management page. Same `url-preview` tab the Explorer row
+   * opens (open-or-focus by key), so both entry points land on one tab.
+   */
+  openUrlPreview(url: { id: string }): void {
+    this.tabState.open({ kind: 'url-preview', projectName: this.projectName(), urlId: url.id });
+  }
+
   /** Hub closes when the user closes the editor tab; the in-rail button only collapses navigation. */
   closeShell(): void {
     /* legacy output hook: ProjectShell owns navigation collapse internally */

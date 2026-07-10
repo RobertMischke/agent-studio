@@ -224,6 +224,7 @@ export class StudioTabStateService {
       if (t.kind === 'board' && t.projectName !== ALL_PROJECTS) return validNames.has(t.projectName);
       if (t.kind === 'epics' && t.projectName !== null) return validNames.has(t.projectName);
       if (t.kind === 'hub') return validNames.has(t.projectName);
+      if (t.kind === 'url-preview') return validNames.has(t.projectName);
       return true;
     });
     if (after.length === before.length) return;
@@ -307,6 +308,8 @@ export class StudioTabStateService {
         return { kind: 'diff', commitSha: tab.commitSha };
       case 'activity':
         return { kind: 'activity', taskKey: tab.taskKey };
+      case 'url-preview':
+        return { kind: 'url-preview', projectName: tab.projectName, urlId: tab.urlId };
       case 'workspace-settings':
         return { kind: 'workspace-settings' };
       case 'welcome':

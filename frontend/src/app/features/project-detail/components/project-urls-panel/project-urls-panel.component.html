@@ -64,8 +64,14 @@
               </div>
             </div>
             <div class="project-urls__actions">
-              <button type="button" cacTooltip="Open in browser"
-                      aria-label="Open in browser"
+              <button type="button" cacTooltip="Open embedded preview"
+                      aria-label="Open embedded preview"
+                      [attr.data-testid]="'project-urls-embed-' + u.id"
+                      (click)="openEmbedded(u)">
+                <app-studio-icon name="link" [size]="13" />
+              </button>
+              <button type="button" cacTooltip="Open in external browser"
+                      aria-label="Open in external browser"
                       [attr.data-testid]="'project-urls-open-' + u.id"
                       (click)="openUrl(u)">
                 <app-studio-icon name="send" [size]="13" />

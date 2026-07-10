@@ -444,6 +444,16 @@
                 }
               }
             }
+            @case ('url-preview') {
+              @if (studioTabState.activeTab(); as tab) {
+                @if (tab.kind === 'url-preview') {
+                  <app-project-url-preview-tab
+                    [projectName]="tab.projectName"
+                    [urlId]="tab.urlId"
+                    (openSettings)="onOpenUrlPreviewSettings($event)" />
+                }
+              }
+            }
             @case ('workspace-settings') {
               <app-workspace-overlays [inline]="true"
                                       (openTask)="onOpenTaskFromReel($event)"

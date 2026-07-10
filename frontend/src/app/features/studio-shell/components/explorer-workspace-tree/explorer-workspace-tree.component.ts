@@ -121,6 +121,8 @@ export class ExplorerWorkspaceTreeComponent {
   readonly toggleExpanded = output<string>();
   readonly openBoardRequest = output<string>();
   readonly openHubRequest = output<string>();
+  /** AGT-2067 — open a URL row's embedded preview tab (project + url id). */
+  readonly openUrlPreviewRequest = output<{ projectName: string; urlId: string }>();
   /** Open the project's Project Hub deep-linked to its Wiki rail. */
   readonly openWikiRequest = output<string>();
   /** Project-scoped epic overview open for the named project (ASS-658). */
@@ -300,8 +302,16 @@ export class ExplorerWorkspaceTreeComponent {
     return this.expandedProjects().has(name);
   }
 
-  /** URL rows are plain external links: open directly, never a tab. */
-  openUrl(url: string): void { window.open(url, '_blank', 'noopener'); }
+  /** AGT-2067 — primary click on a URL row opens its embedded preview tab. */
+  openUrlPreview(projectName: string, urlId: string): void {
+    this.openUrlPreviewRequest.emit({ projectName, urlId });
+  }
+
+  /** Fallback escape hatch kept on the row: open the URL in a real browser tab. */
+  openUrlExternal(url: string, event?: Event): void {
+    event?.stopPropagation();
+    window.open(url, '_blank', 'noopener');
+  }
 
   readonly laneCountsFor = laneCountsFor;
   readonly boardLaneCountsLabel = boardLaneCountsLabel;

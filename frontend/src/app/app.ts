@@ -56,6 +56,7 @@ import {
   ProjectOverlaysComponent,
   ProjectOverlaysService,
   ProjectRailKey,
+  ProjectUrlPreviewTabComponent,
 } from './features/project-detail';
 import {
   AutoReviewIndicatorComponent,
@@ -179,6 +180,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     ProjectHubViewComponent,
     StudioDiffViewComponent,
     StudioActivityViewComponent,
+    ProjectUrlPreviewTabComponent,
     StudioIconComponent,
   ],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
@@ -2031,6 +2033,14 @@ export class App implements OnInit, OnDestroy {
       : '';
     const projectName = rawProject || null;
     this.studioTabState.open({ kind: 'epics', projectName });
+  }
+
+  /**
+   * AGT-2067 — settings-gear on the embedded URL preview deep-links to the
+   * Project Hub "Project URLs" management page for that project.
+   */
+  onOpenUrlPreviewSettings(e: { projectName: string }): void {
+    this.studioTabState.open({ kind: 'hub', projectName: e.projectName, section: 'project-urls' });
   }
 
   private openWorkspaceSettingsInStudio(section: WorkspaceSettingsSection): void {

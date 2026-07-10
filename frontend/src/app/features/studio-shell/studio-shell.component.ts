@@ -12,7 +12,7 @@ import {
   untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { TaskInfo, RegistryWorkspaceListItem, WatchPathEntry } from '../../models/task.model';
+import type { TaskInfo, RegistryWorkspaceListItem, WatchPathEntry, RegistryProjectUrl } from '../../models/task.model';
 import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { StudioSidebarHeaderComponent } from '../../components/studio-sidebar-header/studio-sidebar-header.component';
@@ -597,6 +597,16 @@ export class StudioShellComponent {
   }
 
   /**
+   * AGT-2067 — open (or focus) a Project URL's embedded preview tab. Replaces
+   * the old `window.open` browser jump on the Explorer URL row: the URL now
+   * renders inside a sandboxed iframe as its own editor tab (one tab per URL),
+   * so it docks beside the Orchestrator side sheet like every other surface.
+   */
+  openUrlPreview(e: { projectName: string; urlId: string }): void {
+    this.tabState.open({ kind: 'url-preview', projectName: e.projectName, urlId: e.urlId });
+  }
+
+  /**
    * Explorer "Wiki" link for a single project. Opens (or focuses) the
    * project's Project Hub tab deep-linked to its Wiki rail, so the wiki is
    * reachable as a top-level sidebar item under Project Hub.
@@ -1022,6 +1032,8 @@ export class StudioShellComponent {
         const job = this.findJob(tab.taskKey);
         return `Activity · ${job?.title || tab.taskKey}`;
       }
+      case 'url-preview':
+        return this.findProjectUrl(tab.projectName, tab.urlId)?.label || tab.urlId;
       case 'workspace-settings':
         return 'Workspace settings';
       case 'welcome':
@@ -1052,6 +1064,7 @@ export class StudioShellComponent {
     if (tab.kind === 'hub') {
       return this.railItemForSection(tab.section).railIcon ?? null;
     }
+    if (tab.kind === 'url-preview') return 'link';
     return null;
   }
 
@@ -1068,6 +1081,7 @@ export class StudioShellComponent {
         return tab.projectName === '__all__' ? null : tab.projectName;
       case 'epics':
       case 'hub':
+      case 'url-preview':
         return tab.projectName;
       case 'task':
       case 'activity':
@@ -1110,6 +1124,20 @@ export class StudioShellComponent {
     for (const lane of Object.values(grouped)) {
       for (const job of lane as TaskInfo[]) {
         if (job.taskKey === taskKey) return job;
+      }
+    }
+    return null;
+  }
+
+  /** AGT-2067 — resolve a Project URL record (for the preview tab's label)
+   *  from the already-loaded registry workspaces. Returns null until the
+   *  registry has loaded or when the URL was removed from the project. */
+  private findProjectUrl(projectName: string, urlId: string): RegistryProjectUrl | null {
+    for (const ws of this.registryWorkspaces()) {
+      for (const p of ws.projects) {
+        if (p.displayName !== projectName) continue;
+        const url = p.urls?.find(u => u.id === urlId);
+        if (url) return url;
       }
     }
     return null;

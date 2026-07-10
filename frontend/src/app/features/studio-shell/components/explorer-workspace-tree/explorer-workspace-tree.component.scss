@@ -22,6 +22,40 @@
   opacity: 0.6;
 }
 
+/* AGT-2067: hover-revealed "open in external browser" fallback on a URL row.
+   The primary click embeds the URL as a preview tab; this keeps the always-
+   available browser-jump escape hatch without stealing the primary target. */
+.studio-tree-row__url-ext {
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+
+  &:hover {
+    background: var(--studio-bg-hover);
+    color: var(--studio-accent);
+  }
+}
+
+.tree-row:hover .studio-tree-row__url-ext,
+.studio-tree-row__url-ext:focus-visible {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-tree-row__url-ext {
+    transition-duration: 0s;
+  }
+}
+
 /* Workspace folder header sits between the panel section header and the
    project rows; a small top gap separates one workspace group from the
    next so the two-level hierarchy reads at a glance. */
