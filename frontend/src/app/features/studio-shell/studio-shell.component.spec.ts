@@ -255,6 +255,31 @@ describe('StudioShellComponent titlebar breadcrumb', () => {
   });
 });
 
+describe('StudioShellComponent global search', () => {
+  it('renders the search input after the titlebar trigger is clicked', () => {
+    TestBed.configureTestingModule({
+      imports: [StudioShellComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const fixture = TestBed.createComponent(StudioShellComponent);
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const trigger = root.querySelector<HTMLButtonElement>('[data-testid="studio-global-search-trigger"]');
+    expect(trigger).not.toBeNull();
+
+    trigger!.click();
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="global-search-input"]')).not.toBeNull();
+  });
+});
+
 describe('StudioShellComponent project lane counts', () => {
   function configure(): { component: StudioShellComponent; taskService: TaskService } {
     localStorage.removeItem('atp.studio.tabs.v1');

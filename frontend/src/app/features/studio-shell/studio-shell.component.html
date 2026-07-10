@@ -83,7 +83,10 @@
       <span class="studio-titlebar__kbd">Ctrl K</span>
     </button>
 
-    <app-global-search [tasks]="globalSearchTasks()" [(open)]="globalSearchOpen"></app-global-search>
+    <app-global-search
+      [tasks]="globalSearchTasks()"
+      [open]="globalSearchOpen()"
+      (openChange)="globalSearchOpen.set($event)"></app-global-search>
 
     <div class="studio-titlebar__actions" data-testid="studio-titlebar-actions">
       <button type="button"

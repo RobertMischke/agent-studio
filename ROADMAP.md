@@ -376,7 +376,13 @@ Queued at `agent-taskboard/2-ready/expanded-lifecycle-lanes-concept/`, `agent-ta
 
 Make large boards easier to understand:
 
-- Search across titles, prompts, metadata, and relevant task fields.
+- Global search V1 is delivered as a Ctrl+K palette across tasks, commits, and
+  working-branch files. Task results cover keys, titles, prompts, and status
+  text and target a warm response below 300 ms; repository results use cached
+  git primitives through `GET /api/search?q=...&domains=tasks,commits,files`.
+  Exact task-key matches rank first and domain failures preserve partial
+  results. The current contract is documented in
+  [docs/domains/frontend.md#global-search](docs/domains/frontend.md#global-search).
 - Project-level tags with defaults such as Backend, Frontend, UI Improvement, and Bugfix.
 - Better ordering interactions with stronger drag feedback and less visible internal bookkeeping.
 - Cleaner archive browsing for completed and historical work.

@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures/dev-backend';
 
-test('global palette groups results and supports keyboard navigation in both themes', async ({ page, devBackend: _devBackend }) => {
+test('global palette groups results and supports keyboard navigation in both themes', async ({ page }) => {
   await page.route('**/api/search?**', route => route.fulfill({
     contentType: 'application/json',
     body: JSON.stringify({ query: 'README', tasks: [], commits: [], errors: {}, durationMs: 7, files: [{
@@ -18,6 +18,11 @@ test('global palette groups results and supports keyboard navigation in both the
   await expect(page.getByTestId('global-search-group-files')).toContainText('README.md');
   await page.keyboard.press('ArrowDown');
   await expect(page.locator('[role="option"][aria-selected="true"]')).toHaveCount(1);
+
+  // A backendless worktree serve can report runner-status startup noise after
+  // the palette has opened. Keep that unrelated global dialog out of the
+  // feature evidence frame.
+  await page.getByTestId('error-dialog-close').click({ timeout: 2_000 }).catch(() => {});
 
   const screenshotPath = process.env.GLOBAL_SEARCH_SCREENSHOT;
   if (screenshotPath) await page.screenshot({ path: screenshotPath, fullPage: true });

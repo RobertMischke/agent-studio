@@ -9,7 +9,24 @@ coverage.
 
 ## Global Search
 
-The title-bar search opens a Ctrl+K command palette. Task matches are ranked immediately from the in-memory board snapshot; commit and working-branch file matches come from `GET /api/search?q=...&domains=tasks,commits,files`. Results are grouped by domain and carry project identity. Commit results open the diff surface, documentation files open the Wiki, and other files open the project Git view. Queries shorter than two characters do not search, and a failed domain reports an error without hiding successful domains.
+The title-bar search opens a Ctrl+K command palette. V1 covers tasks (key,
+title, prompt, and status text), commit messages and SHA prefixes, and file names
+or paths on each project's working branch. Task matches are ranked immediately
+from the in-memory board snapshot, with an exact task key first and a warm
+response target below 300 ms.
+
+Repository-backed results use
+`GET /api/search?q=<query>&domains=tasks,commits,files&limit=<count>`. The
+`domains` value is a comma-separated subset of `tasks`, `commits`, and `files`;
+`limit` is optional and bounded by the backend. The JSON response contains the
+normalized `query`, an array for each requested domain, per-domain `errors`,
+and `durationMs`. Git commit and file lookup reuse the HEAD-keyed cache rather
+than maintaining a search index.
+
+Results are grouped by domain and carry project identity. Commit results open
+the diff surface, documentation files open the Wiki, and other files open the
+project Git view. Queries shorter than two characters return empty result
+groups, and a failed domain reports an error without hiding successful domains.
 
 ## Entry Points
 
