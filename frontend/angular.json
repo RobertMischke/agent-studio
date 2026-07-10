@@ -588,73 +588,6 @@
         }
       }
     },
-    "run-activity-pill-mockup": {
-      "projectType": "application",
-      "root": "",
-      "sourceRoot": "src",
-      "prefix": "mockup",
-      "architect": {
-        "build": {
-          "builder": "@angular/build:application",
-          "options": {
-            "browser": "src/mockups/run-activity-pill/main.ts",
-            "index": "src/mockups/run-activity-pill/index.html",
-            "tsConfig": "tsconfig.mockup.json",
-            "inlineStyleLanguage": "scss",
-            "outputPath": "dist/run-activity-pill-mockup",
-            "assets": [
-              {
-                "glob": "**/*",
-                "input": "public"
-              }
-            ],
-            "styles": [
-              "src/styles.scss",
-              "src/mockups/run-activity-pill/styles.scss"
-            ]
-          },
-          "configurations": {
-            "production": {
-              "budgets": [
-                {
-                  "type": "initial",
-                  "maximumWarning": "600kB",
-                  "maximumError": "1MB"
-                },
-                {
-                  "type": "anyComponentStyle",
-                  "maximumWarning": "40kB",
-                  "maximumError": "48kB"
-                }
-              ],
-              "outputHashing": "all"
-            },
-            "development": {
-              "optimization": false,
-              "extractLicenses": false,
-              "sourceMap": true
-            }
-          },
-          "defaultConfiguration": "production"
-        },
-        "serve": {
-          "builder": "@angular/build:dev-server",
-          "options": {
-            "port": 4025,
-            "host": "127.0.0.1"
-          },
-          "configurations": {
-            "production": {
-              "buildTarget": "run-activity-pill-mockup:build:production"
-            },
-            "development": {
-              "buildTarget": "run-activity-pill-mockup:build:development"
-            }
-          },
-          "defaultConfiguration": "development"
-        }
-      }
-    },
     "workflow-lanes-mockup": {
       "projectType": "application",
       "root": "",
@@ -716,6 +649,72 @@
             },
             "development": {
               "buildTarget": "workflow-lanes-mockup:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
+    },
+    "result-view-mockup": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "mockup",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/mockups/result-view/main.ts",
+            "index": "src/mockups/result-view/index.html",
+            "tsConfig": "tsconfig.mockup.json",
+            "inlineStyleLanguage": "scss",
+            "outputPath": "dist/result-view-mockup",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
+            "styles": [
+              "src/mockups/result-view/styles.scss"
+            ]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "600kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "40kB",
+                  "maximumError": "48kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "port": 4029,
+            "host": "127.0.0.1"
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "result-view-mockup:build:production"
+            },
+            "development": {
+              "buildTarget": "result-view-mockup:build:development"
             }
           },
           "defaultConfiguration": "development"

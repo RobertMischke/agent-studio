@@ -6,11 +6,15 @@ what kind of run it was. Ties together three moving parts that share one data
 source: the layered view, the summarizer prompt strategy, and the structured
 artefacts that feed both the view and the Files tab.
 
-> Status: partially shipped. The layered client view and the case classifier are
-> in the tree; the summarizer prompt now emits the structured header the view
-> reads. The structured-JSON artefact half (section 5) is designed here and
-> tracked as a follow-up, not yet built. This is a concept doc, not an ADR; it
-> becomes a domain map or ADR once the JSON artefact contract lands.
+> Status: shipped across two slices. Teil 1 landed the layered client view, the
+> case classifier, and the summarizer header. Teil 2 completed the deferred
+> remainder: the structured-JSON aspect artefact (section 5) is in the tree
+> (`aspect-{id}.json` written by `AspectRunnerService`, rendered by
+> `AspectJsonCardComponent`), the two quality-head metrics (files changed, tests
+> passed - section 2) now render from summarizer header lines, and the per-case
+> template divergence (section 3 / §8.3) reshapes the overview per case. This is
+> a concept doc, not an ADR; it becomes a domain map or ADR if the JSON artefact
+> contract grows load-bearing consumers.
 
 ## 1. Problem and goal
 
@@ -32,8 +36,13 @@ The middle pane of the task-detail split renders a finished run through
 `<app-result-view>` (`frontend/.../protocol-pane/result-view/`), top to bottom:
 
 - **Metric head** - a case badge plus at-a-glance chips (verdict, code-review
-  grade, duration, tokens, commits). Answers "is this fine, and how big is it?"
-  before any prose. Chips are emitted only when they carry real data.
+  grade, duration, **files changed**, **tests passed**, tokens, commits).
+  Answers "is this fine, and how big is it?" before any prose. Chips are emitted
+  only when they carry real data. Files and tests ride optional `# Status`
+  header lines (`- Files:` / `- Tests:`) that the summarizer emits only when the
+  run log proves a real count; `buildResultDocument` parses them and
+  `classifyTestsMetric` tones the tests chip (an `X/Y` tally with misses reads
+  `warn`, an all-green tally reads `ok`).
 - **Overview** - a "problem to solution" card with case-tuned labels (a bugfix
   reads Symptom/Fix, a feature reads Goal/What shipped, a blocked run reads
   Goal/Where it stopped). This is the shareable one-liner.
@@ -56,10 +65,15 @@ label, spinner) were renamed; see the follow-up list for the peripheral ones.
 
 Eight cases (`result-case.ts`): `bugfix`, `feature`, `refactor`, `docs`,
 `forensics`, `ui-cleanup`, `blocked`, `generic`. Each carries presentation
-metadata (`RESULT_CASE_META`): label, glyph, semantic tone, and the two
-overview labels. The current view is one template parameterised by case (tuned
-labels + a `data-case` styling hook + a tone accent), not eight separate
-markup blocks; growing the divergence per case is a tracked follow-up.
+metadata (`RESULT_CASE_META`): label, glyph, semantic tone, the two overview
+labels, a one-line intent `blurb`, and a `layout`. The view is one template
+whose overview reshapes per case via a `data-layout` hook (four arrangements:
+`standard` stacked, `sequence` stepped flow with a connector arrow,
+`before-after` two columns, `blocker` warn callout), plus the `data-case`
+styling hook and tone accent. This keeps the divergence visible per case
+without eight separate markup blocks; the arrangement lives in
+`RESULT_CASE_META.layout` + CSS, so a new case picks a layout by data, not new
+template code.
 
 `classifyResultCase` is pure and deterministic and layers four evidence sources,
 strongest first:
@@ -118,40 +132,44 @@ coverage - the prompt-contract tests in `TaskRunnerPromptTests` pin the emitted
 structure and the metadata wiring, and the client parse/classify specs
 (`result-document.spec.ts`, `result-case.spec.ts`) pin the read side.
 
-## 5. One data source, two renderings (designed, not yet built)
+## 5. One data source, two renderings (shipped)
 
-The brief's second half: the per-aspect result documents an agent/reviewer
-writes (`aspect-code-quality.md`, `aspect-documentation-impact.md`, ...) are
-today a YAML-ish frontmatter block plus a fenced markdown body
-(`AspectVerdictParsing.RenderReport`). The Files tab dumps that verbatim through
-the generic markdown viewer, frontmatter and all. The target is **one JSON
-source of truth, two presentations**:
+The brief's second half. The per-aspect result documents an agent/reviewer
+writes (`aspect-code-quality.md`, `aspect-documentation-impact.md`, ...) kept
+their YAML-ish frontmatter + fenced markdown body twin
+(`AspectVerdictParsing.RenderReport`) for every existing backend reader, and
+gained a **structured JSON source of truth** rendered as **one JSON source, two
+presentations**:
 
-1. **Producers write structured JSON**, not freetext markdown: `{ aspect,
-   status, summary, details, createdAt, model, metrics }`. The verdict sentinel
-   the reviewer already emits (`[[ASPECT_VERDICT: status=...; summary=...]]`)
-   becomes the parsed payload rather than an artefact left in a code fence.
-2. **Extract the metrics into the Result head.** The Result view's metric chips
-   (today: verdict, grade, duration, tokens, commits) gain files-changed and
-   tests-passed once the structured artefacts carry them - the same JSON that
-   the Files tab renders feeds the Result metrics.
-3. **Files tab renders the JSON structurally**: a meta header (aspect,
-   status badge, model, size) with the details collapsible, reusing the existing
-   `AspectFindingsListComponent` tone-chip vocabulary (pass/concerns/block)
-   rather than a raw text dump.
-4. **Backward compatible**: existing markdown aspect files keep rendering
-   through the markdown path; only new runs write JSON. The Files tab branches
-   on artefact shape (JSON vs markdown), not on run age.
+1. **Producers write structured JSON.** `AspectRunnerService.RunOneAspectAsync`
+   writes `aspect-{id}.json` next to the `.md` twin via
+   `AspectVerdictParsing.RenderJson`. The wire shape is `AspectDocument`:
+   `{ schemaVersion, aspect, status, summary, details, createdAt, model, tag,
+   metrics }`. The verdict sentinel the reviewer emits
+   (`[[ASPECT_VERDICT: status=...; summary=...]]`) is parsed into the payload
+   rather than left in a code fence.
+2. **The Result head carries files-changed and tests-passed.** These two chips
+   ship (section 2) sourced from the summarizer's optional `# Status` header
+   lines, so the metric head is complete without the Result view fetching and
+   merging four per-aspect files. The `AspectDocument.metrics` map stays the
+   reserved forward-compat carrier for richer per-aspect counts (empty on the
+   wire until a producer fills it).
+3. **Files tab renders the JSON structurally.** `AspectJsonCardComponent`
+   (parsed by `parseAspectDocument`) shows a meta header (aspect, status badge,
+   model) with the details collapsible and a metrics strip, reusing the
+   `aspectVerdictTone` / `aspectVerdictLabel` pass/concerns/block tone
+   vocabulary rather than a raw text dump.
+4. **Backward compatible.** Existing markdown aspect files keep rendering
+   through the markdown path; the Files tab branches on artefact shape (JSON vs
+   markdown), not on run age, and `TaskScannerService.ListArtifacts` prefers the
+   `.json` and suppresses its `.md` twin from the list.
 
-Precedent to follow: `.metadata/files.json` (`FileGenerationIndex`) and
-`pipeline-execution.json` already serialize typed records to camelCase JSON with
-atomic writes and read-time enrichment; `AspectVerdictParsing.SerializeFindings`
-already writes structured findings JSON that the frontend consumes. The pieces
-exist; the work is defining the aspect JSON schema, teaching the writer and
-Files tab to prefer it, and threading the two new metrics into the Result head.
-
-This half is deliberately deferred to keep the shipped slice coherent and
-reviewable (per the brief's "clean intermediate state, rest as findings").
+Precedent followed: `.metadata/files.json` (`FileGenerationIndex`) and
+`pipeline-execution.json` serialize typed records to camelCase JSON;
+`AspectVerdictParsing.RenderJson` reuses the same `CamelCase` +
+`WhenWritingNull` options. `AspectDocumentSchemaVersion` pins the wire format;
+`aspect-document.model.ts` mirrors the record on the client and must move with
+it.
 
 ## 6. Theming and self-contained fragments
 
@@ -184,17 +202,24 @@ frontend, so the metric head reuses the review grade (A-D from the
 
 ## 8. Follow-up scope
 
-Tracked for the follow-up card, not in the shipped slice:
+Delivered in Teil 2 (was follow-up in Teil 1):
 
-1. **Structured JSON aspect artefacts** (section 5) end to end: the aspect JSON
-   schema, `AspectRunnerService` writing it, the Files-tab structured renderer,
-   and backward-compat with markdown aspects.
-2. **Two new metric chips** (files changed, tests passed) once the structured
-   artefacts carry diff/test counts; today only a commits/`codeActivityDetected`
-   proxy exists at summary time.
-3. **Per-case template divergence** beyond tuned labels + tone, if review wants
-   visibly distinct layouts per case rather than one parameterised template.
-4. **Remaining "Protocol" rename** on peripheral surfaces: the log-overlay
-   parsed-entries heading (a different "protocol" concept - the parsed activity
-   log, not the run result) and the shell pane-toggle aria/tooltip
-   ("Protocol & chat"), left untouched to avoid conflating concepts.
+1. **Structured JSON aspect artefacts** (section 5) end to end: the
+   `AspectDocument` schema, `AspectRunnerService` writing `aspect-{id}.json`, the
+   `AspectJsonCardComponent` structured renderer, and backward-compat with
+   markdown aspects.
+2. **Two metric chips** (files changed, tests passed): shipped in the metric
+   head from summarizer `# Status` header lines (section 2).
+3. **Per-case template divergence**: the overview reshapes per case via
+   `RESULT_CASE_META.layout` + `data-layout` CSS (section 3).
+
+Still tracked, not in scope here:
+
+- **Per-aspect metrics in `AspectDocument.metrics`**: the reserved map is empty
+  on the wire until a producer plumbs real diff/test counts into the aspect
+  writer. The Result head does not depend on it (it reads the summarizer header
+  lines), so this is a pure enrichment, not a blocker.
+- **Remaining "Protocol" rename** on peripheral surfaces: the log-overlay
+  parsed-entries heading (a different "protocol" concept - the parsed activity
+  log, not the run result) and the shell pane-toggle aria/tooltip
+  ("Protocol & chat"), left untouched to avoid conflating concepts.

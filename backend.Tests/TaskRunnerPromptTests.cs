@@ -341,6 +341,11 @@ public class TaskRunnerPromptTests
         Assert.Contains("- Problem:", rendered);
         Assert.Contains("- Solution:", rendered);
         Assert.Contains("- Case:", rendered);
+        // The two quality-head metrics (Teil 2): the client parses these optional
+        // header lines into the Files / Tests metric chips. If a template refactor
+        // drops them, the chips silently disappear for every new run.
+        Assert.Contains("- Files:", rendered);
+        Assert.Contains("- Tests:", rendered);
         // The eight cases the client classifier (result-case.ts) understands.
         foreach (var caseId in new[] { "bugfix", "feature", "refactor", "docs", "forensics", "ui-cleanup", "blocked", "generic" })
         {

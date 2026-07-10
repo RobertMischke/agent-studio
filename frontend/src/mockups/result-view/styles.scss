@@ -1,0 +1,16 @@
+@use '../../styles/tokens-primitives';
+@use '../../styles/tokens-semantic';
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--studio-bg-editor);
+}
+
+* {
+  box-sizing: border-box;
+}

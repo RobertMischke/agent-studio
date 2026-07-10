@@ -78,13 +78,22 @@ describe('classifyResultCase', () => {
     expect(r.confidence).toBe('fallback');
   });
 
-  it('every case has presentation metadata', () => {
+  it('every case has presentation metadata including a valid layout', () => {
     const cases: ResultCase[] = ['bugfix', 'feature', 'refactor', 'docs', 'forensics', 'ui-cleanup', 'blocked', 'generic'];
+    const layouts = ['standard', 'sequence', 'before-after', 'blocker'];
     for (const c of cases) {
       expect(RESULT_CASE_META[c]).toBeTruthy();
       expect(RESULT_CASE_META[c].label.length).toBeGreaterThan(0);
       expect(RESULT_CASE_META[c].problemLabel.length).toBeGreaterThan(0);
       expect(RESULT_CASE_META[c].solutionLabel.length).toBeGreaterThan(0);
+      expect(layouts).toContain(RESULT_CASE_META[c].layout);
     }
+  });
+
+  it('picks a visibly distinct layout per case family (§8.3 template divergence)', () => {
+    expect(RESULT_CASE_META.bugfix.layout).toBe('sequence');
+    expect(RESULT_CASE_META['ui-cleanup'].layout).toBe('before-after');
+    expect(RESULT_CASE_META.blocked.layout).toBe('blocker');
+    expect(RESULT_CASE_META.feature.layout).toBe('standard');
   });
 });

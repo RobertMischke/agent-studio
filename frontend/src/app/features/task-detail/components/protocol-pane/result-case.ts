@@ -65,6 +65,22 @@ export interface ResultCaseInputs {
   body?: string | null;
 }
 
+/**
+ * How the overview's two lines are arranged. This is the per-case *template
+ * divergence* (concept doc §8.3): beyond tuned labels + tone, each case picks a
+ * visibly distinct layout so a bugfix, a UI cleanup, and a blocked run do not
+ * all read as the same stacked pair.
+ *
+ *   - `standard`     stacked problem then solution (feature / docs / generic).
+ *   - `sequence`     a stepped "A leads to B" flow with a connector arrow
+ *                    (bugfix symptom -> fix, forensics investigated -> finding).
+ *   - `before-after` two side-by-side columns with a "->" between them
+ *                    (ui-cleanup before | after, refactor shape change).
+ *   - `blocker`      the solution line is a prominent warn callout that leads
+ *                    with where the run stopped (blocked / partial).
+ */
+export type ResultCaseLayout = 'standard' | 'sequence' | 'before-after' | 'blocker';
+
 /** Presentation metadata for a case: how the Result head labels + tones it. */
 export interface ResultCaseMeta {
   /** Human label shown on the case badge. */
@@ -78,6 +94,8 @@ export interface ResultCaseMeta {
   /** Labels for the overview's two lines, tuned per case. */
   problemLabel: string;
   solutionLabel: string;
+  /** Visibly distinct overview arrangement for this case (concept doc §8.3). */
+  layout: ResultCaseLayout;
 }
 
 export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
@@ -88,6 +106,7 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     blurb: 'A defect was diagnosed and fixed.',
     problemLabel: 'Symptom',
     solutionLabel: 'Fix',
+    layout: 'sequence',
   },
   feature: {
     label: 'Feature',
@@ -96,6 +115,7 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     blurb: 'A new capability was added.',
     problemLabel: 'Goal',
     solutionLabel: 'What shipped',
+    layout: 'standard',
   },
   refactor: {
     label: 'Refactor',
@@ -104,6 +124,7 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     blurb: 'Structure changed while behaviour held.',
     problemLabel: 'Motivation',
     solutionLabel: 'Change',
+    layout: 'before-after',
   },
   docs: {
     label: 'Docs / Concept',
@@ -112,6 +133,7 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     blurb: 'Documentation or a concept was written.',
     problemLabel: 'Question',
     solutionLabel: 'Written',
+    layout: 'standard',
   },
   forensics: {
     label: 'Forensics',
@@ -120,6 +142,7 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     blurb: 'An investigation produced a finding.',
     problemLabel: 'Investigated',
     solutionLabel: 'Finding',
+    layout: 'sequence',
   },
   'ui-cleanup': {
     label: 'UI Cleanup',
@@ -128,6 +151,7 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     blurb: 'A visual or UX rough edge was polished.',
     problemLabel: 'Before',
     solutionLabel: 'After',
+    layout: 'before-after',
   },
   blocked: {
     label: 'Blocked / Partial',
@@ -136,6 +160,7 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     blurb: 'The run did not fully land. Read what stopped it.',
     problemLabel: 'Goal',
     solutionLabel: 'Where it stopped',
+    layout: 'blocker',
   },
   generic: {
     label: 'Result',
@@ -144,6 +169,7 @@ export const RESULT_CASE_META: Record<ResultCase, ResultCaseMeta> = {
     blurb: 'A run completed.',
     problemLabel: 'Problem',
     solutionLabel: 'Solution',
+    layout: 'standard',
   },
 };
 

@@ -57,6 +57,49 @@ export interface ResultDocument {
 
 const CODE_REVIEW_GRADE_RE = /^code-review:grade-([abcd])$/i;
 
+/**
+ * Pull an optional `# Status` header metric line (`- Files: 5`, `- Tests: 12
+ * passed`) out of the protocol. Only the header block matters - a later body
+ * bullet that happens to start with the same word must not be mistaken for the
+ * head metric - so the scan stops at the first `## ` section heading. Returns
+ * the trimmed value, or null when the line is absent or empty.
+ */
+export function parseHeaderMetric(markdown: string | null | undefined, key: string): string | null {
+  if (!markdown) return null;
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const re = new RegExp(`^\\s*[-*]?\\s*${key}\\s*:\\s*(.+)$`, 'i');
+  for (const line of lines) {
+    if (/^##\s+/.test(line)) break; // header block ends at the first H2
+    const m = re.exec(line);
+    if (m) {
+      const value = m[1].trim();
+      return value.length > 0 ? value : null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Turn a raw `- Tests:` value into a chip value + tone. Recognises an `X/Y`
+ * tally (some failed -> warn), a bare "N passed" (all green -> ok), and any
+ * value mentioning a failure (-> problem). Anything else renders neutrally with
+ * the text as-is so an unexpected phrasing still surfaces the number.
+ */
+export function classifyTestsMetric(raw: string): { value: string; tone: ResultMetric['tone'] } {
+  const text = raw.trim();
+  const lower = text.toLowerCase();
+  const ratio = /(\d+)\s*\/\s*(\d+)/.exec(text);
+  if (ratio) {
+    const passed = Number(ratio[1]);
+    const total = Number(ratio[2]);
+    const tone: ResultMetric['tone'] = passed < total ? 'warn' : 'ok';
+    return { value: `${passed}/${total}`, tone };
+  }
+  if (/\bfail|\bbroke|\berror/.test(lower)) return { value: text, tone: 'problem' };
+  if (/\bpass|\bgreen|\bok\b/.test(lower)) return { value: text, tone: 'ok' };
+  return { value: text, tone: 'neutral' };
+}
+
 const GRADE_META: Record<string, { tone: ResultMetric['tone']; tooltip: string }> = {
   A: { tone: 'ok', tooltip: 'Code review grade A - clean, ship it.' },
   B: { tone: 'ok', tooltip: 'Code review grade B - minor nits only.' },
@@ -190,7 +233,7 @@ function stripHeaderAndOverview(markdown: string): string {
   return out.slice(start).join('\n').trimEnd();
 }
 
-function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict): ResultMetric[] {
+function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: string): ResultMetric[] {
   const metrics: ResultMetric[] = [];
   const info = detail.info;
 
@@ -211,6 +254,36 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict): ResultMetri
 
   if (verdict.duration) {
     metrics.push({ id: 'duration', icon: '⏱', label: 'Duration', value: verdict.duration });
+  }
+
+  // Files changed + tests passed: the two quality-head metrics the Result
+  // redesign deferred in Teil 1. They ride optional `# Status` header lines the
+  // summarizer emits only when the run log proves a real number, so a chip
+  // appears exactly when there is honest data behind it.
+  const filesRaw = parseHeaderMetric(markdown, 'Files');
+  if (filesRaw) {
+    const n = Number(filesRaw.match(/\d+/)?.[0]);
+    const value = Number.isFinite(n) ? `${n} file${n === 1 ? '' : 's'}` : filesRaw;
+    metrics.push({
+      id: 'files',
+      icon: '📄',
+      label: 'Files',
+      value,
+      tooltip: 'Files changed by this task (from the run diff).',
+    });
+  }
+
+  const testsRaw = parseHeaderMetric(markdown, 'Tests');
+  if (testsRaw) {
+    const { value, tone } = classifyTestsMetric(testsRaw);
+    metrics.push({
+      id: 'tests',
+      icon: '🧪',
+      label: 'Tests',
+      value,
+      tone,
+      tooltip: `Test outcome reported by the run: ${testsRaw}.`,
+    });
   }
 
   const totalTokens = info.tokenSummary?.totalTokens ?? 0;
@@ -263,7 +336,7 @@ export function buildResultDocument(detail: TaskDetail, verdict: ProtocolVerdict
   return {
     case: caseResult,
     overview,
-    metrics: buildMetrics(detail, verdict),
+    metrics: buildMetrics(detail, verdict, markdown),
     detailMarkdown,
     openItemsCount: countBullets(sectionBody(markdown, 'Open Items')),
     imagesCount: countBullets(sectionBody(markdown, 'Images')),

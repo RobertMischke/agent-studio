@@ -79,6 +79,10 @@
 }
 
 // --- 2. Overview ------------------------------------------------------------
+// One card, four per-case arrangements (concept doc §8.3). The tone accent and
+// the outer card are shared; `data-layout` reshapes the inner flow so a bugfix
+// (sequence), a UI cleanup (before -> after), and a blocked run (warn callout)
+// read as visibly different templates, not the same stacked pair.
 .result__overview {
   display: flex;
   flex-direction: column;
@@ -93,6 +97,13 @@
   &[data-tone="warn"]    { --result-tone: var(--studio-accent-warn); }
   &[data-tone="info"]    { --result-tone: var(--studio-accent-3); }
   &[data-tone="neutral"] { --result-tone: var(--studio-fg-muted); }
+}
+
+// Rows + connector live in the flow wrapper so the layout switch is one rule.
+.result__overview-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .result__overview-row {
@@ -121,11 +132,58 @@
   font-weight: 600;
 }
 
+// The connector arrow between the two lines. Hidden by default; the sequence
+// and before-after layouts opt it in (and orient it) below.
+.result__overview-connector {
+  display: none;
+  align-self: center;
+  color: var(--result-tone);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.result__overview-blurb {
+  margin: 0;
+  color: var(--studio-fg-dim, var(--studio-fg-muted));
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .result__overview-hint {
   margin: 0;
   color: var(--studio-fg-muted);
   font-size: 10.5px;
   font-style: italic;
+}
+
+// --- 2a. Per-case layouts ---------------------------------------------------
+// sequence: a stepped "A leads to B" flow with a downward connector arrow.
+.result__overview[data-layout="sequence"] {
+  .result__overview-connector { display: block; transform: rotate(90deg); }
+}
+
+// before-after: two side-by-side columns with a horizontal arrow between them,
+// wrapping back to stacked when the pane is too narrow to hold both.
+.result__overview[data-layout="before-after"] .result__overview-flow {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+
+  .result__overview-row { flex: 1 1 140px; }
+  .result__overview-connector { display: block; align-self: center; }
+}
+
+// blocker: lead with where the run stopped. The solution line becomes a warn
+// callout so a partial/blocked run never reads like a clean landing.
+.result__overview[data-layout="blocker"] {
+  .result__overview-row--solution {
+    padding: 6px 8px;
+    border-radius: 5px;
+    border-left: 2px solid var(--result-tone);
+    background: color-mix(in srgb, var(--result-tone) 12%, transparent);
+  }
 }
 
 // --- 3. Detail --------------------------------------------------------------

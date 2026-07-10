@@ -20,6 +20,8 @@ Use exactly this structure:
 - Result: <Success|Failed|NoOp|Blocked|NeedsInput|Partial>
 - Case: <bugfix|feature|refactor|docs|forensics|ui-cleanup|blocked|generic>
 - Duration: <for example, 4 min>
+- Files: <number of files changed, e.g. 5, when the log shows a git diff/stat; omit this line entirely when the log carries no reliable count>
+- Tests: <pass tally the log proves, e.g. 12 passed or 11/12 passed; omit this line entirely when no test run appears in the log>
 
 ## Overview
 - Problem: <one sentence naming the goal or the defect this run addressed>
@@ -52,6 +54,7 @@ Choosing the `Case` (pick the single best fit; it selects the reviewer's result 
 Let the metadata above steer the pick: `bug` leans `bugfix`, `feature` leans `feature`, `research` leans `forensics`, `planning` leans `docs`.
 
 Rules:
+- `Files` and `Tests` are optional quality-head metrics: emit each line only when the log gives you a number you can stand behind (a `git diff`/`--stat` file count, a test-runner tally). Never estimate or invent one. A missing line renders no chip, which is correct.
 - No marketing tone.
 - No em dashes.
 - Put paths and commands in backticks.

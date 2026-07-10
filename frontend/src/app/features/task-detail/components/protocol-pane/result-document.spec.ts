@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskDetail } from '../../../../models/task.model';
 import type { ProtocolVerdict } from './protocol-verdict';
-import { buildResultDocument, codeReviewGradeFromTags, parseCaseHint } from './result-document';
+import {
+  buildResultDocument,
+  classifyTestsMetric,
+  codeReviewGradeFromTags,
+  parseCaseHint,
+  parseHeaderMetric,
+} from './result-document';
 
 function verdict(overrides: Partial<ProtocolVerdict> = {}): ProtocolVerdict {
   return {
@@ -98,6 +104,34 @@ describe('parseCaseHint', () => {
   });
 });
 
+describe('parseHeaderMetric', () => {
+  it('reads a header metric line from the # Status block', () => {
+    const md = '# Status\n\n- Result: Success\n- Files: 5\n- Tests: 12 passed\n\n## Overview';
+    expect(parseHeaderMetric(md, 'Files')).toBe('5');
+    expect(parseHeaderMetric(md, 'Tests')).toBe('12 passed');
+  });
+  it('stops at the first H2 so a body bullet cannot masquerade as a head metric', () => {
+    const md = '# Status\n\n- Result: Success\n\n## What Was Done\n- Files: touched everything\n';
+    expect(parseHeaderMetric(md, 'Files')).toBeNull();
+  });
+  it('returns null for an absent or empty value', () => {
+    expect(parseHeaderMetric('# Status\n- Result: Success', 'Files')).toBeNull();
+    expect(parseHeaderMetric('# Status\n- Files:   ', 'Files')).toBeNull();
+    expect(parseHeaderMetric(null, 'Files')).toBeNull();
+  });
+});
+
+describe('classifyTestsMetric', () => {
+  it('reads an X/Y tally and warns when some failed', () => {
+    expect(classifyTestsMetric('11/12 passed')).toEqual({ value: '11/12', tone: 'warn' });
+    expect(classifyTestsMetric('12/12 passed')).toEqual({ value: '12/12', tone: 'ok' });
+  });
+  it('tones a bare pass green and a failure red', () => {
+    expect(classifyTestsMetric('12 passed').tone).toBe('ok');
+    expect(classifyTestsMetric('2 failed').tone).toBe('problem');
+  });
+});
+
 describe('buildResultDocument', () => {
   it('parses an explicit ## Overview into problem/solution (not synthesized)', () => {
     const doc = buildResultDocument(detail({ statusMarkdown: STATUS_WITH_OVERVIEW }), verdict({ duration: '4 min' }));
@@ -152,6 +186,21 @@ describe('buildResultDocument', () => {
     expect(doc.metrics.find((x) => x.id === 'duration')?.value).toBe('4 min');
     expect(doc.metrics.find((x) => x.id === 'tokens')).toBeTruthy();
     expect(doc.metrics.find((x) => x.id === 'commits')?.value).toBe('2 commits');
+  });
+
+  it('adds files + tests chips from the # Status header lines', () => {
+    const md = `# Status\n\n- Result: Success\n- Files: 3\n- Tests: 11/12 passed\n\n## What Was Done\n- Did work.\n`;
+    const doc = buildResultDocument(detail({ statusMarkdown: md }), verdict());
+    expect(doc.metrics.find((x) => x.id === 'files')?.value).toBe('3 files');
+    const tests = doc.metrics.find((x) => x.id === 'tests');
+    expect(tests?.value).toBe('11/12');
+    expect(tests?.tone).toBe('warn');
+  });
+
+  it('omits the files + tests chips when the header carries no metric lines', () => {
+    const doc = buildResultDocument(detail({ statusMarkdown: STATUS_LEGACY }), verdict());
+    expect(doc.metrics.find((x) => x.id === 'files')).toBeUndefined();
+    expect(doc.metrics.find((x) => x.id === 'tests')).toBeUndefined();
   });
 
   it('renders a "no code change" commits chip when the scanner saw no activity', () => {

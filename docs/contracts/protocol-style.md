@@ -68,6 +68,8 @@ Lines may contain:
 - Result: <Success|Failed|NoOp|Blocked|NeedsInput|Partial>
 - Case: <bugfix|feature|refactor|docs|forensics|ui-cleanup|blocked|generic>
 - Duration: <for example, 4 min>
+- Files: <files changed, e.g. 5; optional, omit when the log proves no count>
+- Tests: <e.g. 12 passed or 11/12 passed; optional, omit when no test run appears>
 
 ## Overview
 - Problem: <one sentence naming the goal or the defect this run addressed>
@@ -87,6 +89,8 @@ Lines may contain:
 ```
 
 The `Case` and `## Overview` block feed the case-based, overview-first **Result** view (the UI surface formerly labelled "Protocol"; the artefact/file stays `status.md`). See [concepts/result-view-and-case-templates.md](../concepts/result-view-and-case-templates.md) for the layered view and the client-side case classifier. Both are additive and optional: the frontend synthesizes an overview from the task title and the first `What Was Done` bullet and heuristically infers a case when either is missing, so every legacy `status.md` still renders.
+
+The optional `- Files:` and `- Tests:` header lines feed the two quality-head metric chips (files changed, tests passed). They are honest-or-absent: the summarizer emits a line only when the run log proves a real count (a `git diff`/`--stat` file count, a test-runner tally); a missing line renders no chip. Never hand-write a number the log does not support.
 
 Hard rules:
 

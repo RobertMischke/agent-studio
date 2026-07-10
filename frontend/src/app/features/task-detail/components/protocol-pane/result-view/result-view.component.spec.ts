@@ -82,6 +82,14 @@ describe('ResultViewComponent', () => {
     expect(el.querySelector('[data-testid="result-metric-tokens"]')).not.toBeNull();
   });
 
+  it('renders files + tests chips when the header carries the metrics', async () => {
+    const md = `# Status\n\n- Result: Success\n- Files: 4\n- Tests: 12 passed\n\n## Overview\n- Problem: x\n- Solution: y\n`;
+    const fixture = await build(detail(md), verdict());
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="result-metric-files"]')?.textContent).toContain('4 files');
+    expect(el.querySelector('[data-testid="result-metric-tests"]')?.textContent).toContain('12 passed');
+  });
+
   it('marks a synthesized overview so the origin is honest', async () => {
     const legacy = `# Status\n\n- Result: Success\n\n## What Was Done\n- Did the thing.\n`;
     const fixture = await build(detail(legacy), verdict({ duration: null }));
@@ -102,5 +110,28 @@ describe('ResultViewComponent', () => {
     const article = el.querySelector('[data-testid="result-view"]');
     expect(article?.getAttribute('data-case')).toBe('blocked');
     expect(el.querySelector('[data-testid="result-case-badge"]')?.textContent).toContain('Blocked');
+  });
+
+  it('applies the per-case overview layout and renders a connector between the two lines', async () => {
+    // taskType bug -> bugfix -> sequence layout.
+    const fixture = await build(detail(HEAD_ONLY), verdict());
+    const el = fixture.nativeElement as HTMLElement;
+    const overview = el.querySelector('[data-testid="result-overview"]');
+    expect(overview?.getAttribute('data-layout')).toBe('sequence');
+    // Both problem and solution present -> the flow connector renders.
+    expect(el.querySelector('[data-testid="result-overview-connector"]')).not.toBeNull();
+  });
+
+  it('uses the blocker layout for a run that did not land', async () => {
+    const fixture = await build(detail(HEAD_ONLY), verdict({ kind: 'problem', label: 'Blocked', emoji: '🔴' }));
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="result-overview"]')?.getAttribute('data-layout')).toBe('blocker');
+  });
+
+  it('shows the case intent blurb when there is no detail body', async () => {
+    const fixture = await build(detail(HEAD_ONLY), verdict());
+    const el = fixture.nativeElement as HTMLElement;
+    // HEAD_ONLY has no body beyond the overview, so the blurb leads.
+    expect(el.querySelector('[data-testid="result-overview-blurb"]')).not.toBeNull();
   });
 });
