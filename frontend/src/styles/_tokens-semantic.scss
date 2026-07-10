@@ -52,6 +52,12 @@
   --studio-border:        var(--alpha-white-06);
   --studio-border-strong: var(--alpha-white-10);
   --studio-border-muted:  color-mix(in srgb, var(--studio-fg-dim) 18%, transparent);
+  // AGT-2034 — ring around the tab project-colour dot. On dark surfaces the
+  // 72%-lightness pastel already clears 5.7:1 against the tab, so the ring is
+  // just a subtle separator (--studio-border). The light block below overrides
+  // it with a defined dark edge because the same pastel drops below 3:1 on a
+  // white tab (see WCAG audit in results/contrast-audit.md).
+  --studio-tab-dot-ring:  var(--studio-border);
 
   // ---------------------------------------------------------------------------
   // Layout — theme-independent sizing contracts
@@ -551,6 +557,11 @@
   --studio-border:        var(--color-grey-400);
   --studio-border-strong: var(--color-grey-500);
   --studio-border-muted:  color-mix(in srgb, var(--studio-fg-muted) 22%, transparent);
+  // AGT-2034 — a defined dark edge so the pastel dot stays perceivable on the
+  // white/grey-200 tab surfaces. rgba(0,0,0,0.50) measures 3.95:1 against #fff
+  // and 3.84:1 against #ececec, clearing WCAG 1.4.11 (3:1 for non-text objects)
+  // regardless of the fill hue — the grey-400 border alone was only ~1.4:1.
+  --studio-tab-dot-ring:  var(--alpha-black-50);
 
   // Scrim — lighter overlay over a white shell.
   --studio-scrim:         var(--alpha-black-40);

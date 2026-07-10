@@ -1888,15 +1888,17 @@
 
   // AGT-2034 — small project-colour "Farbklecks" marking the tab's origin.
   // A rounded square (not a circle) so it stays distinct from status dots.
-  // The 1px ring lifts it off both the light and dark tab surfaces so the
-  // colour reads with contrast in either theme; colour is never the sole
-  // carrier because the shortCode / task-key text sits right beside it.
+  // The 1px ring gives the dot a perceivable edge in either theme: on dark
+  // the pastel fill already clears 5.7:1 against the tab so the ring is a
+  // subtle separator, on light the fill drops below 3:1 so the ring flips to
+  // a defined dark edge (--studio-tab-dot-ring, ~3.9:1 — WCAG 1.4.11). Colour
+  // is never the sole carrier: the shortCode / task-key text sits beside it.
   &__dot {
     flex: 0 0 auto;
     width: 8px;
     height: 8px;
     border-radius: 2px;
-    box-shadow: 0 0 0 1px var(--studio-border);
+    box-shadow: 0 0 0 1px var(--studio-tab-dot-ring);
   }
 
   &__num {
