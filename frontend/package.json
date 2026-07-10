@@ -38,7 +38,7 @@
   "packageManager": "npm@11.3.0",
   "dependencies": {
     "@angular/cdk": "^21.2.10",
-    "coding-agent-chat": "file:../../../coding-agent-chat/dist/coding-agent-chat",
+    "coding-agent-chat": "file:C:/Projects/coding-agent-chat/dist/coding-agent-chat",
     "@angular/common": "^21.2.0",
     "@angular/compiler": "^21.2.0",
     "@angular/core": "^21.2.0",
