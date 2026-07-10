@@ -186,6 +186,10 @@ describe('PromptAdminPanelComponent', () => {
     expect(list.textContent).toContain('1 inherited');
     expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)?.parentElement?.classList)
       .toContain('prompts__item--inherited');
+    expect(host.querySelector(`[data-testid="prompt-admin-item-${FRESH}"]`)?.getAttribute('aria-label'))
+      .toBe('Runner: fresh start, inherited');
+    expect(host.querySelector(`[data-testid="prompt-admin-item-${DRIFT}"]`)?.getAttribute('aria-label'))
+      .toBe('Aspect: code quality, overridden');
     expect(host.querySelector(`[data-testid="prompt-admin-override-${DRIFT}"]`)).not.toBeNull();
     expect(host.querySelector(`[data-testid="prompt-admin-override-${DRIFT}"]`)?.textContent).toContain('Override');
     expect(host.querySelector(`[data-testid="prompt-admin-drift-${DRIFT}"]`)).toBeNull();
