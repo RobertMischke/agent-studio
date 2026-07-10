@@ -132,8 +132,7 @@
     <app-references-section [info]="job()" (changed)="referencesChanged.emit()" />
   </div>
 
-  <!-- Pipeline block: ordered pre/core/post steps with per-step status,
-       model used, tokens and cost, plus the task total. Configuration of
+  <!-- Pipeline block: ordered steps with status, usage, and cost. Configuration of
        which steps run and on which model lives in project Settings; this
        block is the read-only "what ran, on which model, what did it cost"
        view the feature spec asks for. The completion loop (verdict / attempt
@@ -290,12 +289,6 @@
                [attr.data-tone]="group.tone"
                [attr.data-collapsed]="isGroupCollapsed(group) ? 'true' : 'false'"
                data-testid="overview-pipeline-group">
-            <!-- Collapsible section header (ASS-1914): the whole row is the
-                 toggle (a button, so keyboard collapse/expand is native). The
-                 aggregate tone rides on the left accent + status word, never on
-                 row content, and the collapsed summary keeps enough state
-                 (ran/step counts, concerns, disabled, tokens) to read the
-                 section without expanding it. -->
             <button type="button"
                     class="ov-pl-phase"
                     [attr.data-phase]="group.phaseKey"
@@ -358,21 +351,36 @@
                   aria-hidden="true">{{ stepStatusIcon(row.status) }}</span>
             <span class="ov-pl-step__kind"
                   [cacTooltip]="stepKindLabel(row.kind)"
-                  [attr.aria-label]="stepKindLabel(row.kind) + ' step'">{{ stepKindMarker(row.kind) }}</span>
+                  role="img"
+                  [attr.aria-label]="stepKindLabel(row.kind) + ' step'">
+              <app-studio-icon [name]="stepKindIcon(row.kind)" [size]="13" />
+            </span>
             <span class="ov-pl-step__name-cell">
               <span class="ov-pl-step__name"
                     data-testid="overview-pipeline-step-name"
                     [cacTooltip]="row.explanation">{{ row.label }}</span>
-              <app-task-prompt-popover
-                class="ov-pl-step__prompt"
-                [markdown]="stepPromptMarkdown(row.id)"
+              <app-pipeline-step-details
+                class="ov-pl-step__details"
+                [stepId]="row.id"
+                [label]="row.label"
+                [docs]="row.explanation.body"
+                [promptMarkdown]="stepPromptMarkdown(row.id)"
                 [jobId]="job().id"
                 [watchPath]="job().watchPath"
-                title="Step prompt"
-                triggerLabel="Prompt"
-                [triggerTooltip]="'Show the exact prompt this step sent to the CLI (raw .metadata/prompts.jsonl record)'"
-                [triggerTestid]="'overview-pipeline-step-prompt-' + row.id"
-                modalStackId="step-prompt-popover" />
+                [resultFile]="resultForRow(row)?.fileName ?? null"
+                [resultHeader]="resultForRow(row)?.header ?? null"
+                [concernTitle]="row.concernTooltip?.title ?? null"
+                [concernBody]="row.concernTooltip?.body ?? null" />
+              @if (selectedPipelineIsCurrent() && row.canDisable && !row.hasExecution) {
+                <app-pipeline-step-toggle
+                  class="ov-pl-step__toggle"
+                  [projectName]="job().projectName"
+                  [stepId]="row.id"
+                  [label]="row.label"
+                  [enabled]="row.enabled"
+                  [config]="row.config"
+                  (changed)="refreshPipeline()" />
+              }
             </span>
             @if (row.runMode === 'parallel') {
               <span class="ov-pl-step__parallel-note"
@@ -398,14 +406,14 @@
               </span>
             }
             @if (selectedPipelineIsCurrent() && row.kind === 'core' && agentRunCount() > 0) {
-              <button type="button"
-                      class="ov-pl-step__runs"
-                      data-testid="overview-pipeline-agent-runs"
-                      [attr.data-run-count]="agentRunCount()"
-                      [cacTooltip]="agentRunTooltip()"
-                      [attr.aria-label]="'Agent execution ran ' + agentRunCountLabel() + ' — focus or hover for run details'">
-                {{ agentRunCountLabel() }}
-              </button>
+              <app-pipeline-run-history
+                class="ov-pl-step__runs"
+                [job]="job()"
+                [runs]="runs()"
+                [runCount]="agentRunCount()"
+                [countLabel]="agentRunCountLabel()"
+                [promptMarkdown]="promptMarkdown() ?? null"
+                [tooltip]="agentRunTooltip()" />
             }
             @if (decisionBadgeForRow(row); as badge) {
               <!-- Compact decision badge (ASS-1706): the orchestrator's final
@@ -426,14 +434,6 @@
                     [cacTooltip]="row.concernTooltip"
                     [tooltipSeverity]="row.verdict === 'block' || row.verdict === 'loop-detected' ? 'error' : 'warn'"
                     data-testid="overview-pipeline-step-verdict">{{ row.verdict }}</span>
-            }
-            @if (resultForRow(row); as res) {
-              <app-pipeline-step-result class="ov-pl-step__result"
-                                        [header]="res.header"
-                                        [jobId]="job().id"
-                                        [watchPath]="job().watchPath"
-                                        [fileName]="res.fileName"
-                                        data-testid="overview-pipeline-step-result" />
             }
             @if (row.model) {
               <span class="ov-pl-step__model"

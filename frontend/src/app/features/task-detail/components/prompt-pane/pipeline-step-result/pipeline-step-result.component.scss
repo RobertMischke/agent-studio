@@ -70,11 +70,15 @@
     background: color-mix(in srgb, var(--studio-bg-hover) 54%, var(--studio-bg-elevated));
     border-bottom: 1px solid var(--studio-border);
 
-    // Outcome tone covers the header so state remains visible without a
-    // decorative edge stripe.
-    &[data-status='passed'] { background: color-mix(in srgb, var(--severity-pass) 8%, var(--studio-bg-elevated)); }
-    &[data-status='failed'] { background: color-mix(in srgb, var(--severity-high) 8%, var(--studio-bg-elevated)); }
-    &[data-status='skipped'] { background: var(--studio-bg-elevated); }
+    &[data-status='passed'] {
+      background: color-mix(in srgb, var(--severity-pass) 9%, var(--studio-bg-elevated));
+    }
+    &[data-status='failed'] {
+      background: color-mix(in srgb, var(--severity-high) 10%, var(--studio-bg-elevated));
+    }
+    &[data-status='skipped'] {
+      background: color-mix(in srgb, var(--studio-fg-muted) 7%, var(--studio-bg-elevated));
+    }
   }
 
   &__title {
@@ -193,5 +197,11 @@
       transform: none;
       width: min(520px, calc(100vw - 32px));
     }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-result__toggle {
+    transition-duration: 0s;
   }
 }

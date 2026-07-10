@@ -332,6 +332,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
 
     // The header appears once and carries all four captions.
     const header = page.getByTestId('overview-pipeline-header');
@@ -345,7 +346,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
     // against the core row, which has populated timing, tokens and cost. Wait
     // for the poll to populate the row content before measuring.
     const coreRow = page.locator('[data-step-id="core-agent-run"]');
-    await expect(coreRow.locator('.ov-pl-step__tokens')).toHaveText('248.0k');
+    await expect(coreRow.locator('.ov-pl-step__tokens')).toHaveText('248k');
 
     const align = await page.evaluate(() => {
       const right = (sel: string, root: ParentNode = document): number => {
@@ -443,17 +444,23 @@ test.describe('Pipeline: per-step metric column headers', () => {
       const phaseStyle = getComputedStyle(phase);
       const rowStyle = getComputedStyle(row);
       return {
-        phaseBackground: phaseStyle.background,
+        phaseBackground: phaseStyle.backgroundColor,
+        phaseBorderLeftWidth: phaseStyle.borderLeftWidth,
         phaseBoxShadow: phaseStyle.boxShadow,
-        rowBackground: rowStyle.background,
+        rowBackground: rowStyle.backgroundColor,
+        rowBorderLeftWidth: rowStyle.borderLeftWidth,
         rowBoxShadow: rowStyle.boxShadow,
       };
     });
 
-    expect(groupingStyle.phaseBackground).not.toBe('none');
-    expect(groupingStyle.phaseBoxShadow).not.toContain('inset');
-    expect(groupingStyle.rowBackground).not.toBe('none');
-    expect(groupingStyle.rowBoxShadow).not.toContain('inset');
+    // Aggregate state uses a whole-surface tint. R1 forbids decorative left
+    // borders and inset left-edge shadows on both phase headers and step rows.
+    expect(groupingStyle.phaseBackground).not.toMatch(/^(?:transparent|rgba\(0, 0, 0, 0\))$/);
+    expect(groupingStyle.phaseBorderLeftWidth).toBe('0px');
+    expect(groupingStyle.phaseBoxShadow).toBe('none');
+    expect(groupingStyle.rowBackground).not.toMatch(/^(?:transparent|rgba\(0, 0, 0, 0\))$/);
+    expect(groupingStyle.rowBorderLeftWidth).toBe('0px');
+    expect(groupingStyle.rowBoxShadow).toBe('none');
 
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
@@ -520,6 +527,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
 
     // All six phase rows must be present and populated before measuring.
     const steps = page.getByTestId('overview-pipeline-step');
@@ -577,6 +585,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
     await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(6);
 
     // The metric columns degrade off the pipeline block's own inline-size, not
@@ -655,6 +664,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
     await expect(overview).toBeVisible({ timeout: 10_000 });
     await expect(protocol).toBeVisible();
     await expect(pipeline).toBeVisible();
+    await expandAllPipelineSections(page);
 
     const geometry = await page.evaluate(() => {
       const box = (selector: string): DOMRect => {

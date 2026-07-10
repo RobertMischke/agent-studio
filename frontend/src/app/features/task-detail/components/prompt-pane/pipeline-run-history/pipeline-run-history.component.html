@@ -1,0 +1,28 @@
+<button type="button"
+        class="run-history__trigger"
+        data-testid="overview-pipeline-agent-runs"
+        [class.run-history__trigger--interactive]="runs().length > 1"
+        [attr.data-run-count]="runCount()"
+        [attr.aria-haspopup]="runs().length > 1 ? 'dialog' : null"
+        [attr.aria-expanded]="runs().length > 1 ? open() : null"
+        [attr.aria-label]="runs().length > 1 ? countLabel() + ', open run history' : countLabel()"
+        [cacTooltip]="tooltip()"
+        (click)="show()">
+  {{ countLabel() }}
+</button>
+
+@if (open()) {
+  <app-dialog eyebrow="Core agent work"
+              [title]="countLabel()"
+              subtitle="Chronological CLI invocation history"
+              role="dialog"
+              widthTier="lg"
+              testid="overview-pipeline-agent-run-history"
+              (closeRequest)="close()"
+              (backdropClick)="close()">
+    <app-run-timeline
+      [job]="job()"
+      [runs]="runs()"
+      [promptMarkdown]="promptMarkdown()" />
+  </app-dialog>
+}

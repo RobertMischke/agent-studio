@@ -49,6 +49,18 @@ public static class TaskPipelineEndpoints
                 ? null
                 : projectSettings.Get(info.ProjectName);
             var pipeline = ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(info.Mode), settings);
+            var resultFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var step in pipeline.AllSteps)
+            {
+                var relativePath = step.Kind switch
+                {
+                    StepKind.Core => "status.md",
+                    StepKind.Aspect => $"{step.Id}.md",
+                    _ => null,
+                };
+                if (relativePath is not null && File.Exists(Path.Combine(info.FolderPath, relativePath)))
+                    resultFiles[step.Id] = relativePath;
+            }
             var config = pipeline.AllSteps.ToDictionary(
                 step => step.Id,
                 step =>
@@ -59,13 +71,17 @@ public static class TaskPipelineEndpoints
                     // show which model each LLM-backed step WILL run on before the
                     // run, not just after. Null for deterministic / core steps.
                     var resolved = PipelineStepModelDefaults.Resolve(settings, step);
+                    var configured = PipelineStepConfigResolver.Lookup(settings, step.Id);
                     return new
                     {
                         enabled = PipelineStepConfigResolver.IsEnabled(settings, step),
-                        cliType = PipelineStepConfigResolver.Lookup(settings, step.Id)?.CliType ?? step.CliType,
-                        model = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Model,
-                        thinkingLevel = PipelineStepConfigResolver.Lookup(settings, step.Id)?.ThinkingLevel,
-                        mode = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Mode,
+                        canDisable = PipelineStepConfigResolver.CanDisable(step),
+                        cliType = configured?.CliType ?? step.CliType,
+                        model = configured?.Model,
+                        thinkingLevel = configured?.ThinkingLevel,
+                        mode = configured?.Mode,
+                        prompt = configured?.Prompt,
+                        condition = configured?.Condition,
                         resolvedModel = resolved?.Model,
                         modelSource = resolved?.Source,
                     };
@@ -79,6 +95,7 @@ public static class TaskPipelineEndpoints
                 cost,
                 tokensByModel,
                 config,
+                resultFiles,
             });
         });
 

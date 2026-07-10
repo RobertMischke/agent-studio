@@ -191,8 +191,8 @@ public static class ProjectSettingsEndpoints
                     // the pipeline step only mirrors its state, so it is not an
                     // opt-out toggle - making it disable-able would let a project
                     // hide a loop the breaker still acts on.
-                    canDisable = s.Kind != StepKind.Core
-                        && !string.Equals(s.Id, PipelineCatalogue.LoopGuardStepId, StringComparison.Ordinal),
+                    canDisable =
+                        PipelineStepConfigResolver.CanDisable(s),
                     // The drift post-steps default off (opt-in); every other step
                     // defaults on. The Settings UI uses this to render the toggle's
                     // initial state when the project has no explicit override.

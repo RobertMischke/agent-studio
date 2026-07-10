@@ -1,0 +1,18 @@
+<button
+  type="button"
+  class="pipeline-step-toggle"
+  role="switch"
+  [class.pipeline-step-toggle--enabled]="optimisticEnabled()"
+  [attr.aria-checked]="optimisticEnabled()"
+  [attr.aria-label]="label()"
+  [attr.aria-busy]="busy() ? 'true' : null"
+  [attr.data-testid]="'pipeline-step-toggle-' + stepId()"
+  [disabled]="busy()"
+  (click)="toggle($event)">
+  <span class="pipeline-step-toggle__track" aria-hidden="true">
+    <span class="pipeline-step-toggle__thumb"></span>
+  </span>
+  <span class="pipeline-step-toggle__state" aria-hidden="true">
+    {{ busy() ? 'Saving...' : (optimisticEnabled() ? 'On' : 'Off') }}
+  </span>
+</button>

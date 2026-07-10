@@ -199,11 +199,11 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
 
   const coreRow = page.locator('[data-step-id="core-agent-run"]');
   const aspectRow = page.locator('[data-step-id="aspect-code-quality"]');
-  await expect(coreRow.getByTestId('overview-pipeline-step-tokens')).toContainText('110.0k');
+  await expect(coreRow.getByTestId('overview-pipeline-step-tokens')).toContainText('110k');
   await expect(coreRow.getByTestId('overview-pipeline-step-cost')).toContainText('$0.75');
-  await expect(aspectRow.getByTestId('overview-pipeline-step-tokens')).toContainText('1.20M');
+  await expect(aspectRow.getByTestId('overview-pipeline-step-tokens')).toContainText('1.2m');
   await expect(aspectRow.getByTestId('overview-pipeline-step-cost')).toContainText('$2.00');
-  await expect(page.getByTestId('overview-pipeline-total-tokens')).toContainText('1.31M');
+  await expect(page.getByTestId('overview-pipeline-total-tokens')).toContainText('1.3m');
   await expect(page.getByTestId('overview-pipeline-total-cost')).toContainText('$2.75');
 
   await pipeline.screenshot({
@@ -215,10 +215,10 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Code quality');
   await expect(dialog).toContainText('Input');
-  await expect(dialog).toContainText('960.0k');
+  await expect(dialog).toContainText('960k');
   await expect(dialog).toContainText('Output');
-  await expect(dialog).toContainText('240.0k');
-  await expect(dialog).toContainText('1.20M');
+  await expect(dialog).toContainText('240k');
+  await expect(dialog).toContainText('1.2m');
 
   await saveShot(page, 'pipeline-step-usage-full.png');
 });
