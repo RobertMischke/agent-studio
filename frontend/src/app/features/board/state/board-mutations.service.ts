@@ -205,8 +205,6 @@ export class BoardMutationsService {
     });
   }
 
-  // ---------- lane change from the triage screen ----------
-
   // ---------- bulk archive ----------
 
   /**
