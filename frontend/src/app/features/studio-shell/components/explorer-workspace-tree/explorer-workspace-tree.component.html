@@ -123,7 +123,7 @@
                (contextmenu)="onProjectContextMenu($event, p)"
                (dragstart)="onDragStart($event, p)"
                (dragend)="onDragEnd()">
-            @if (projectActions.renamingProjectId() === p.projectId) {
+            @if (p.projectId && projectActions.renamingProjectId() === p.projectId) {
               <!-- Inline rename: registry displayName only; PROJ id + storage
                    stay put. Enter commits, Escape / blur cancels. -->
               <div class="studio-explorer-tree__ws-rename">
