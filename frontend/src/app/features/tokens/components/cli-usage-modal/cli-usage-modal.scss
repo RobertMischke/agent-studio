@@ -146,6 +146,12 @@
 // ---------------------------------------------------------------------------
 // Summary head over the model table — token + cost totals as stat tiles.
 // ---------------------------------------------------------------------------
+.cum__scope-note {
+  margin: calc(var(--studio-spacing-2) * -1) 0 var(--studio-spacing-3);
+  color: var(--studio-fg-dim);
+  font-size: 11px;
+}
+
 .cum__totals {
   display: inline-flex;
   gap: var(--studio-spacing-2);
@@ -230,8 +236,8 @@
   border-radius: 4px;
 }
 
-// Source tag — a subtle chip so "orchestrator" vs "ad-hoc" reads without
-// stealing weight from the model name.
+// Source tag — project-scoped runtime (agent + support + orchestrator) versus
+// workspace ad-hoc calls, without stealing weight from the model name.
 .cum__src {
   margin-left: 7px;
   font-size: 9.5px;

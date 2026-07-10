@@ -9,6 +9,9 @@ import type { AdHocUsageAggregate, TokenSummaryAggregate } from '../../models/to
 interface ModelUsageRow {
   model: string;
   source: string;
+  /** OpenAI reports cached input as a subset of input, while Anthropic
+   *  reports cache-read tokens as a separate category. */
+  cacheIncludedInInput: boolean;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -30,6 +33,7 @@ interface WindowView {
   label: string;
   pct: number | null;
   pctLabel: string;
+  remainingLabel: string | null;
   barPct: number;
   tone: WindowTone;
   /** Implied cap, or null when the window reports no usable limit. */
@@ -100,7 +104,8 @@ export class CliUsageModalComponent {
       return {
         label: w.label,
         pct,
-        pctLabel: pct === null ? '—' : `${pct}%`,
+        pctLabel: pct === null ? '—' : `${pct}% used`,
+        remainingLabel: pct === null ? null : `${Math.max(0, 100 - pct)}% left`,
         barPct,
         tone: this.toneForPct(pct),
         limit: limit === 'n/a' ? null : limit,
@@ -131,11 +136,13 @@ export class CliUsageModalComponent {
     const rows: ModelUsageRow[] = [];
     for (const m of this.tokens()?.byModel ?? []) {
       if (!this.modelBelongsToCli(m.model, cli)) continue;
-      rows.push({ ...m, source: 'orchestrator' });
+      const row = { ...m, source: 'project runtime', cacheIncludedInInput: cli === 'codex' };
+      if (this.totalTokens(row) > 0) rows.push(row);
     }
     for (const m of this.adhoc()?.byModel ?? []) {
       if (!this.modelBelongsToCli(m.model, cli)) continue;
-      rows.push({ ...m, source: 'ad-hoc' });
+      const row = { ...m, source: 'ad-hoc', cacheIncludedInInput: cli === 'codex' };
+      if (this.totalTokens(row) > 0) rows.push(row);
     }
     return rows.sort((a, b) => this.totalTokens(b) - this.totalTokens(a)).slice(0, 5);
   });
@@ -159,7 +166,10 @@ export class CliUsageModalComponent {
   }
 
   totalTokens(row: ModelUsageRow): number {
-    return row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheCreationTokens;
+    return row.inputTokens
+      + row.outputTokens
+      + row.cacheCreationTokens
+      + (row.cacheIncludedInInput ? 0 : row.cacheReadTokens);
   }
 
   /** Read + creation cache tokens folded into one "Cache" column value. */
