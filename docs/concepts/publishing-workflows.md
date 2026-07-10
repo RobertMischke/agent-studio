@@ -115,3 +115,15 @@ shepherding.
 | PUB-1 | target derivation + pending-delta detection + badges (project hub, accepted-task chips) — read-only | none |
 | PUB-2 | publish actions: semver proposal, version-bump commit, tag push, workflow-run tracking; website deploy trigger; automation ladder setting | PUB-1 |
 | PUB-3 | consumer-bump spawning via task-spawner + waitsOn | PUB-2, AGT-2028/2029 |
+
+## 9. Executed instances (log)
+
+- **2026-07-10 — CodingAgentRunner v0.5.0 → nuget.org** (release.yml, Trusted
+  Publishing; tag pushed by the night operator). Contents: `ultra` reasoning
+  level + gpt-5.6 family recognition (CAR-2), **CodingAgentRunner.Pricing**
+  price-history catalog + cost API (CAR-3), Workstream frame onboarding
+  (CAR-1). Consumer chain (manual until AGT-2028/2029 land): AGT-2025 bumps
+  the Studio PackageReference, AGT-2027 moves cost displays to the Pricing
+  API, WEB-4 updates the public website. This entry is exactly the kind of
+  record the Workstream Log will carry automatically once EW-2 (collector)
+  exists.
