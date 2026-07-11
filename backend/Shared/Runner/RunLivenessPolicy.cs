@@ -58,6 +58,16 @@ public static class RunLivenessPolicy
                 RunLivenessReasons.HeartbeatPresent,
                 "a live run-heartbeat owns this 3-progress card (active-run latch, live CLI process, or a live owning-runner lease)");
 
+        // A card may intentionally remain in 3-progress without a coding CLI
+        // only when that fact is explicit on the card. These phases do not own
+        // an execution slot; their dedicated continuation/timeout path owns the
+        // wake-up. This is the visible-wait half of the 60-second invariant.
+        if (facts.HasVisibleWaitingState)
+            return new RunLivenessDecision(
+                RunLivenessAction.VisibleWait,
+                RunLivenessReasons.VisibleWait,
+                "no live coding process, but the card carries an explicit loop-waiting or steer-pending phase");
+
         // No heartbeat, but the card only just went silent. During uptime a card
         // can sit heartbeat-less for a beat between the lane move and the run
         // claim/lock; do not demote inside that window. At boot the grace is 0,
@@ -113,7 +123,8 @@ public sealed record RunLivenessFacts(
     bool HasLiveRunHeartbeat,
     bool CoreRunFinished,
     double SecondsSinceActivity,
-    double GraceSeconds);
+    double GraceSeconds,
+    bool HasVisibleWaitingState = false);
 
 /// <summary>The pure verdict: what to do plus a taxonomy code and a human reason.</summary>
 public sealed record RunLivenessDecision(
@@ -126,6 +137,8 @@ public enum RunLivenessAction
 {
     /// <summary>A live run-heartbeat owns the card; leave it alone.</summary>
     Healthy,
+    /// <summary>No CLI slot is held, but an explicit waiting phase makes the state honest.</summary>
+    VisibleWait,
     /// <summary>No heartbeat yet but too fresh to judge; re-check next tick.</summary>
     WithinGrace,
     /// <summary>Execution interrupted (process-lost): demote to <c>2-ready</c> and clear the resume pointer.</summary>
@@ -139,6 +152,7 @@ public static class RunLivenessReasons
 {
     /// <summary>A live run-heartbeat is present; the card is healthy.</summary>
     public const string HeartbeatPresent = "heartbeat-present";
+    public const string VisibleWait = "visible-wait";
     /// <summary>No heartbeat but the card is inside the liveness grace window.</summary>
     public const string WithinGrace = "within-grace";
     /// <summary>The run process is lost and the agent run never finished (demote to 2-ready).</summary>

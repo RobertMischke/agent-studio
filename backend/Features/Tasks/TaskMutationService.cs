@@ -537,6 +537,8 @@ public class TaskMutationService
     {
         if (!Directory.Exists(folderPath)) return false;
         TaskJsonFile.UpdateField(folderPath, "phase", phase ?? "", _logger);
+        TaskJsonFile.UpdateField(folderPath, "phaseEnteredAt",
+            string.IsNullOrWhiteSpace(phase) ? "" : DateTime.UtcNow.ToString("o"), _logger);
         return Updated();
     }
 

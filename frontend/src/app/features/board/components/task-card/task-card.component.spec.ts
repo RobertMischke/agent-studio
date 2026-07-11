@@ -1594,6 +1594,14 @@ describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
   it('shows the bare steer-pending label when no wait-start is known', () => {
     expect(buildPhaseBadge('steer-pending')?.label).toBe('Waiting for answer');
   });
+
+  it('shows loop-waiting as a timed no-slot phase', () => {
+    const since = '2026-07-11T00:00:00.000Z';
+    const pill = buildPhaseBadge('loop-waiting', since, Date.parse(since) + 42_000);
+    expect(pill?.tone).toBe('loop-waiting');
+    expect(pill?.label).toBe('Waiting for loop continuation 0:42');
+    expect(pill?.tooltip).toContain('freed its execution slot');
+  });
 });
 
 describe('formatSteerWait', () => {

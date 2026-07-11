@@ -1006,6 +1006,7 @@ export type PhaseBadgeTone =
   | 'intake-running'
   | 'intake-blocked'
   | 'intake-passed'
+  | 'loop-waiting'
   | 'steer-pending'
   | 'post-processing-running'
   | 'post-processing-blocked'
@@ -1048,6 +1049,14 @@ export function buildPhaseBadge(
         : '';
       return { label: `Waiting for answer${suffix}`, tone: 'steer-pending',
                tooltip: 'The run asked a question and is waiting for an answer. If it stays unanswered it is auto-answered from the task context or escalated - it will not hang (Run-Liveness Slice B).' };
+    }
+    case 'loop-waiting': {
+      const since = steerPendingSince ? Date.parse(steerPendingSince) : NaN;
+      const suffix = Number.isFinite(since) && typeof nowMs === 'number'
+        ? ` ${formatSteerWait(nowMs - since)}`
+        : '';
+      return { label: `Waiting for loop continuation${suffix}`, tone: 'loop-waiting',
+               tooltip: 'The coding CLI has exited and freed its execution slot. The orchestrator is preparing a continuation, which must acquire a new slot before the CLI resumes.' };
     }
     case 'intake-running':
       return { label: 'Intake running', tone: 'intake-running',

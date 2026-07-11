@@ -308,6 +308,8 @@ export interface TaskInfo {
    * same field but are owned by the post-processing slice.
    */
   phase?: string | null;
+  /** UTC time at which the current lifecycle phase was entered. */
+  phaseEnteredAt?: string | null;
   /**
    * Run-Liveness Slice B: when this 3-progress card is waiting on an unanswered
    * steer / NeedsInput question (`phase === 'steer-pending'`), the ISO UTC time

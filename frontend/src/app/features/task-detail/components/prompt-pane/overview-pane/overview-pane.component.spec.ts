@@ -1773,6 +1773,20 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 
+  it('shows loop-waiting with elapsed time in task detail', async () => {
+    const fixture = await build(baseJob({
+      state: '3-progress',
+      phase: 'loop-waiting',
+      phaseEnteredAt: new Date(Date.now() - 42_000).toISOString(),
+    }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const phase = (fixture.nativeElement as HTMLElement)
+      .querySelector('[data-testid="overview-title-phase"]');
+    expect(phase?.textContent).toContain('Waiting for loop continuation 0:42');
+  });
+
   it('keeps overview content on reusable left-aligned measures', async () => {
     const fixture = await build(baseJob());
     TestBed.inject(TaskPipelinePollService).pipeline.set(agentPipeline());

@@ -48,6 +48,7 @@ interface JobInfoStub {
     }>;
   } | null;
   phase: string | null;
+  phaseEnteredAt?: string | null;
   tags: string[];
   taskType: string;
 }
@@ -77,6 +78,7 @@ function jobInfo(over: Partial<JobInfoStub> = {}): JobInfoStub {
     commits: [],
     ownerClientId: 'local-default',
     phase: over.phase ?? 'post-processing-running',
+    phaseEnteredAt: over.phaseEnteredAt ?? null,
     tags: [],
     taskType: 'feature',
     tokenSummary: over.tokenSummary ?? {
@@ -270,6 +272,14 @@ async function seedBoardTab(page: Page): Promise<void> {
   });
 }
 
+async function dismissRuntimeErrorOverlay(page: Page): Promise<void> {
+  const error = page.getByText('Unexpected application error', { exact: true });
+  if (await error.isVisible()) {
+    await page.keyboard.press('Escape');
+    await expect(error).toBeHidden();
+  }
+}
+
 test.describe('Post Processing lane identity', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -300,7 +310,33 @@ test.describe('Post Processing lane identity', () => {
     await expect(popover).toContainText('GPT-5 Codex');
     await expect(popover).toContainText('Claude Haiku 4.5');
 
+    await dismissRuntimeErrorOverlay(page);
     mkdirSync(SHOTS, { recursive: true });
-    await page.screenshot({ path: `${SHOTS}/post-processing-codex-claude.png`, fullPage: false });
+    await page.screenshot({ path: `${SHOTS}/post-processing-codex-claude--mocked.png`, fullPage: false });
+  });
+
+  test('shows a timed loop-waiting phase without claiming a runner slot', async ({ page }) => {
+    const job = jobInfo({
+      id: 'loop-waiting-card',
+      title: 'Waiting for orchestrator loop continuation',
+      state: '3-progress',
+      phase: 'loop-waiting',
+      phaseEnteredAt: new Date(Date.now() - 42_000).toISOString(),
+    });
+    await seedBoardTab(page);
+    await installRoutes(page, [job]);
+
+    await page.goto('/');
+    const card = page.locator('[data-testid="task-card"]', { hasText: job.title });
+    await expect(card).toBeVisible({ timeout: 10_000 });
+    await expect(card.getByTestId('task-card-phase'))
+      .toContainText(/Waiting for loop continuation 0:4[2-9]/);
+
+    await dismissRuntimeErrorOverlay(page);
+    mkdirSync(SHOTS, { recursive: true });
+    await page.screenshot({
+      path: `${SHOTS}/loop-waiting-phase--mocked.png`,
+      fullPage: false,
+    });
   });
 });

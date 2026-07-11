@@ -220,6 +220,9 @@ public record TaskInfo
     /// </summary>
     public string? Phase { get; init; }
 
+    /// <summary>UTC timestamp written whenever <see cref="Phase"/> changes.</summary>
+    public DateTime? PhaseEnteredAt { get; init; }
+
     /// <summary>
     /// Run-Liveness Slice B (concept Rule 2): when this <c>3-progress</c> card is
     /// waiting on an unanswered steer / NeedsInput question, the UTC time the wait

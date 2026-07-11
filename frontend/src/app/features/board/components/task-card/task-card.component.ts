@@ -226,7 +226,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   ngOnInit(): void { this.stopPolling = this.gitSummary.ensurePolling(); }
   ngOnDestroy(): void { this.stopPolling?.(); }
 
-  phaseBadge() { return buildPhaseBadge(this.job().phase, this.job().steerPendingSince, nowTick()); }
+  phaseBadge() { return buildPhaseBadge(this.job().phase, this.job().steerPendingSince ?? this.job().phaseEnteredAt, nowTick()); }
 
   executionBadge() { return buildExecutionBadge(this.job()); }
 

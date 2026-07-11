@@ -414,6 +414,10 @@ public class TaskScannerService : ITaskScanner
                 Fixture = raw.TryGetProperty("fixture", out var fix)
                     && fix.ValueKind is JsonValueKind.True,
                 Phase = ReadPhase(raw, resolvedState, jobDir),
+                PhaseEnteredAt = raw.TryGetProperty("phaseEnteredAt", out var phaseEntered)
+                    && phaseEntered.TryGetDateTime(out var phaseEnteredAt)
+                        ? phaseEnteredAt.ToUniversalTime()
+                        : null,
                 SteerPendingSince = ReadSteerPendingSince(jobDir, resolvedState),
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),

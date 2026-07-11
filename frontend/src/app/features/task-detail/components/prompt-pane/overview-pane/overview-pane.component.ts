@@ -50,6 +50,7 @@ import { TaskPromptPopoverComponent } from '../task-prompt-popover/task-prompt-p
 import { PipelineRunHistoryComponent } from '../pipeline-run-history/pipeline-run-history.component';
 import { PipelineStepDetailsComponent } from '../pipeline-step-details/pipeline-step-details.component';
 import { PipelineStepToggleComponent } from '../pipeline-step-toggle/pipeline-step-toggle.component';
+import { lifecyclePhaseLabel } from './lifecycle-phase.util';
 import {
   isSteeringKind,
   steeringInfoFromEvent,
@@ -1888,16 +1889,7 @@ export class OverviewPaneComponent {
     return cliTypeLabel(t);
   }
 
-  phaseLabel(phase: string | null | undefined): string | null {
-    if (!phase) return null;
-    switch (phase) {
-      case 'human-ready':              return 'Ready';
-      case 'intake-running':           return 'Intake Running';
-      case 'intake-blocked':           return 'Intake Blocked';
-      case 'intake-passed':            return 'Intake Passed';
-      case 'execution-running':        return 'Execution Running';
-      case 'post-processing-running':  return 'Post-Processing';
-      default:                         return phase;
-    }
+  phaseLabel(phase: string | null | undefined, entered?: string | null, steerSince?: string | null): string | null {
+    return lifecyclePhaseLabel(phase, entered, steerSince, this.now());
   }
 }

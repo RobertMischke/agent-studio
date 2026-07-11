@@ -1,7 +1,7 @@
 # Run-Liveness and Slot Semantics
 
-Status: Concept. Slice A implemented (2026-07-10); Slice B implemented
-(2026-07-11); Slice C is a follow-up card.
+Status: Implemented. Slice A implemented (2026-07-10); Slices B and C
+implemented (2026-07-11).
 
 ## Problem
 
@@ -174,10 +174,20 @@ to the card's timeline (`steer_timeout_resolved`).
 | `Runner:SteerTimeout:TimeoutSeconds` | `120` | Bounded wait before an unanswered steer times out. |
 | `Runner:SteerTimeout:IntervalSeconds` | `20` | Sweep cadence (clamped 5..55). |
 
-## Slice C (follow-up card)
+## Slice C (implemented)
 
-- **Slice C - Sub-states + slot accounting.** Make the `execution` /
-  `post-processing` sub-states first-class (the `steer-pending` phase Slice B
-  introduces is the first of these pulled forward) and reconcile the coding-slot
-  count against live run-heartbeats so a demoted/finished card frees its seat
-  exactly once.
+`execution-running`, `loop-waiting`, `steer-pending`, and
+`post-processing-running` are first-class lifecycle phases. The board and task
+detail show the phase; intentional waits include their elapsed time.
+
+Execution-slot ownership follows the coding CLI process, not `3-progress`
+membership. `ActiveRuns` retains the run record for finalisation after process
+exit but releases its execution seat exactly once. Loop waits, steer waits, and
+post-processing therefore occupy no coding slot. A loop continuation goes back
+through normal admission; if another live CLI won the seat, its pending intent
+is persisted and remains visibly `loop-waiting` until pickup acquires a slot.
+
+The liveness policy pins the complementary invariant: after the grace window a
+`3-progress` card without a live run heartbeat is legal only when it carries an
+explicit `loop-waiting` or `steer-pending` phase. Otherwise it is recovered as a
+zombie within the existing 60 second budget.

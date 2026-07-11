@@ -1934,15 +1934,6 @@ public class ProjectRunner
             var info = _scanner.FindJob(jobId, Entry.Path);
             if (info == null) return RunOutcome.Reject(new RunRejection(RunRejectReason.TaskNotFound, "Job not found"));
 
-            // Run-Liveness Slice B: a new run on this job ends any steer-pending
-            // wait (the user answered, the steer-timeout auto-answered, or a
-            // reissue took over). Clear the durable marker + its "waiting for
-            // answer" phase so the steer-timeout monitor stops tracking it and the
-            // card no longer shows the wait pill while it is actually running.
-            SteerPendingMarker.Clear(info.FolderPath, _logger);
-            if (string.Equals(info.Phase, LifecyclePhases.SteerPending, StringComparison.OrdinalIgnoreCase))
-                _mutations.SetJobPhase(info.FolderPath, null);
-
             // Resolve the workspace route from the latest cached quota. The
             // decision is per-run and never mutates job.json, so a reset makes
             // the next invocation return to primary automatically.
@@ -2126,7 +2117,9 @@ public class ProjectRunner
                 Followup = followupPrompt,
                 Plan = plan,
                 ReissueAttempt = reissueAttempt,
+                PickupLockFolder = _activePickupLockFolder,
             });
+            _activePickupLockFolder = null;
             // ASS-1732 "always-worktree": a CODING run mutates the source tree, so
             // it ALWAYS executes in its own isolated task/<id> worktree - the
             // primary/sequential slot included, and for every intent (fresh
@@ -2167,8 +2160,7 @@ public class ProjectRunner
                     // slot and serialize; the next auto-pickup tick retries once a
                     // worktree can be prepared/reused.
                     RecordWorktreePreparationFailure(jobId, prep.Error);
-                    _activeRuns.Release(jobId);
-                    ReleasePickupLockIfHeld();
+                    ReleaseRun(jobId);
                     _mutations.RollbackStashedPendingIntent(info.FolderPath);
                     // The run never started: roll the just-applied 3-progress move
                     // back to 2-ready so the deferred task does not linger as a
@@ -2265,8 +2257,7 @@ public class ProjectRunner
                         ["mainCheckout"] = Entry.RootPath ?? string.Empty,
                         ["mode"] = info.Mode ?? string.Empty,
                     });
-                _activeRuns.Release(jobId);
-                ReleasePickupLockIfHeld();
+                ReleaseRun(jobId);
                 _mutations.RollbackStashedPendingIntent(info.FolderPath);
                 if (movedToProgressThisCall)
                     RevertFailedStartFromProgress(jobId, info, intent);
@@ -2476,18 +2467,13 @@ public class ProjectRunner
 
             if (execution == null)
             {
-                _activeRuns.Release(jobId);
+                ReleaseRun(jobId);
                 // Mandatory diagnostic: a spawn failure used to leave ZERO
                 // trace in the job folder (no cli-output.log, empty logs/),
                 // so an operator could only guess why the run "finished
                 // failed". Write the reason into the job's cli-output.log
                 // before any other cleanup so the failure is never silent.
                 WriteSpawnFailureDiagnostic(info, cli.CliType, cliError);
-                // The OnCliFinished release path never runs (we never got an
-                // execution) so the on-disk pickup lock we just stamped would
-                // otherwise wedge the next auto-pickup tick. Drop it here so
-                // the spawn-failure retry on the next tick sees a clean slot.
-                ReleasePickupLockIfHeld();
                 NotifyStatus();
                 // Roll back the consumed pending-intent on spawn failure so
                 // the next auto-pickup retries instead of losing the user's
@@ -2513,11 +2499,8 @@ public class ProjectRunner
                 // so the budget decision sees this attempt.
                 if (movedToProgressThisCall)
                     RevertFailedStartFromProgress(jobId, info, intent);
-                // Spawn failure is the terminal end of this run's lifecycle:
-                // no OnCliFinishedAsync will fire, so release the pickup lock
-                // and drain any deferred mode change here so the project does
-                // not stay wedged on a stale lock or a never-applied pause.
-                ReleasePickupLockIfHeld();
+                // Spawn failure is the terminal end of this run's lifecycle;
+                // ReleaseRun above already dropped its per-run pickup lock.
                 ApplyPendingModeIfAny(jobId);
                 return RunOutcome.Reject(new RunRejection(
                     Reason: RunRejectReason.CliUnavailable,
@@ -2526,6 +2509,10 @@ public class ProjectRunner
 
             // Spawn succeeded; drop the stashed intent (we've consumed it).
             _mutations.DiscardStashedPendingIntent(info.FolderPath);
+            // Only a confirmed process start ends a visible no-slot wait. Early
+            // admission/quota/spawn failures intentionally leave the wait visible.
+            SteerPendingMarker.Clear(info.FolderPath, _logger);
+            _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.ExecutionRunning);
 
             // Mirror run-start onto the bus. Existing canonical signals
             // (session-events.jsonl + cli-output.log "[taskboard] Started ..."
@@ -3092,7 +3079,7 @@ public class ProjectRunner
     /// </summary>
     public RunActivityFacts GetRunActivity(string jobId)
     {
-        var slotActive = _activeRuns.Contains(jobId);
+        var slotActive = _activeRuns.HoldsExecutionSlot(jobId);
         DateTime? backoffUntil = _rapidCrashBackoffUntil.TryGetValue(jobId, out var until) ? until : null;
         var failures = _consecutiveFailNoProgress.TryGetValue(jobId, out var n) ? n : 0;
         return new RunActivityFacts(slotActive, backoffUntil, failures);
@@ -3402,7 +3389,7 @@ public class ProjectRunner
                 // live run behind it. Slice B then bounds the wait: the
                 // steer-timeout monitor escalates it after the timeout so it
                 // cannot hang forever.
-                _activeRuns.Release(jobId);
+                ReleaseRun(jobId);
                 NotifyStatus();
                 MarkSteerPending(info, jobId, SteerPendingKinds.BlockedDeferral, outcome.Summary, ask: null);
                 return;
@@ -3422,7 +3409,11 @@ public class ProjectRunner
 
             // Release the active-job latch so the orchestrator's spawned
             // Continue can claim it; we mirror the re-issue path's release.
-            _activeRuns.Release(jobId);
+            ReleaseRun(jobId);
+            _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.LoopWaiting);
+            _logger.LogInformation(
+                "run-loop-waiting project={Project} job={JobId} occupied={Occupied}/{Max}",
+                ProjectName, jobId, _activeRuns.Count, SlotMax());
             NotifyStatus();
 
             var promptPath = Path.Combine(info.FolderPath, "prompt.md");
@@ -3669,8 +3660,22 @@ public class ProjectRunner
             // existing path (RunPlanner picks Resume vs Recovery based on
             // captured session id), so this is structurally identical to
             // the user typing the same reply in the chat.
-            await RunCliAsync(jobId, RunIntent.UserContinue, reply, reissueAttempt: 0,
-                              mode: ContinueModes.Continue, CancellationToken.None);
+            var continuation = await RunCliAsync(jobId, RunIntent.UserContinue, reply, reissueAttempt: 0,
+                                                 mode: ContinueModes.Continue, CancellationToken.None);
+            if (continuation.Rejection?.Reason == RunRejectReason.ProjectBusy)
+            {
+                // Another live CLI won the freed seat. Persist the continuation
+                // on this still-visible loop-waiting card; the ordinary progress
+                // pickup path consumes it once admission has room again.
+                _mutations.SavePendingIntent(
+                    jobId, ContinueModes.Continue, reply,
+                    reason: "loop-continuation-slot-wait",
+                    activeJobId: continuation.Rejection.BusyJobId,
+                    watchPath: Entry.Path);
+                _logger.LogInformation(
+                    "loop-continuation-queued project={Project} job={JobId} busyJob={BusyJob} occupied={Occupied}/{Max}",
+                    ProjectName, jobId, continuation.Rejection.BusyJobId, _activeRuns.Count, SlotMax());
+            }
         }
         catch (Exception ex)
         {
@@ -4420,6 +4425,21 @@ public class ProjectRunner
             if (_activeRuns.Get(jobId) is not { } run) return;
             if (run.CliType != null && !string.Equals(cliType, run.CliType, StringComparison.OrdinalIgnoreCase)) return;
 
+            // Slot ownership follows process life, not lane membership. Keep the
+            // ActiveRun record for finalisation, but free its execution seat as
+            // soon as the CLI process exits. Integration, outcome analysis and
+            // review preparation are post-processing and may overlap another CLI.
+            if (_activeRuns.ReleaseExecutionSlot(jobId))
+            {
+                _mutations.SetJobPhase(
+                    _scanner.FindJob(jobId, Entry.Path)?.FolderPath ?? string.Empty,
+                    LifecyclePhases.PostProcessingRunning);
+                _logger.LogInformation(
+                    "execution-slot-released project={Project} job={JobId} phase={Phase} occupied={Occupied}/{Max}",
+                    ProjectName, jobId, LifecyclePhases.PostProcessingRunning, _activeRuns.Count, SlotMax());
+                NotifyStatus();
+            }
+
             // no-silent-death: every run's exit is logged with code + status +
             // duration on entry to finalization, so even if a downstream step
             // below throws (see the catch) the run's exit context is on record.
@@ -4929,7 +4949,7 @@ public class ProjectRunner
                     // Release the active-job latch on the original run so the
                     // re-issue can claim it. We then schedule the re-issue on
                     // the thread pool so OnCliFinished returns promptly.
-                    _activeRuns.Release(jobId);
+                    ReleaseRun(jobId);
                     NotifyStatus();
                     var wasRecovery = string.Equals(capturedPlan!.EventKind, "recovery", StringComparison.OrdinalIgnoreCase);
                     var retryPrompt = action.IsPreframedRetryPrompt
@@ -5045,7 +5065,7 @@ public class ProjectRunner
                     // Release the active-job latch so the re-issue can claim
                     // it, then schedule on the thread pool so OnCliFinished
                     // returns promptly (mirrors the abort-review rerun path).
-                    _activeRuns.Release(jobId);
+                    ReleaseRun(jobId);
                     NotifyStatus();
                     var retryPrompt = BuildCompletionRetriggerPrompt(activeInfo);
                     _ = Task.Run(async () =>
@@ -5334,8 +5354,7 @@ public class ProjectRunner
             // (one slot) and correct for N slots.
             if (_activeRuns.Contains(jobId))
             {
-                _activeRuns.Release(jobId);
-                ReleasePickupLockIfHeld();
+                ReleaseRun(jobId);
                 ApplyPendingModeIfAny(jobId);
                 NotifyStatus();
             }
@@ -5348,14 +5367,22 @@ public class ProjectRunner
     /// still owns the lock - foreign or stale locks are left in place so a
     /// late retry from the real holder cannot be silently clobbered.
     /// </summary>
-    private void ReleasePickupLockIfHeld()
+    private void ReleasePickupLockIfHeld(string? runFolder = null)
     {
         if (_pickupLock == null || _pickupLockOwner == null) return;
-        var folder = _activePickupLockFolder;
-        _activePickupLockFolder = null;
+        var folder = runFolder ?? _activePickupLockFolder;
+        if (runFolder == null) _activePickupLockFolder = null;
         if (string.IsNullOrEmpty(folder)) return;
         try { _pickupLock.Release(folder, _pickupLockOwner); }
         catch (Exception ex) { _logger.LogDebug(ex, "Pickup lock release failed for '{Folder}'", folder); }
+    }
+
+    private ActiveRun? ReleaseRun(string jobId, bool releasePickupLock = true)
+    {
+        var released = _activeRuns.Release(jobId);
+        if (releasePickupLock && released?.PickupLockFolder is { } folder)
+            ReleasePickupLockIfHeld(folder);
+        return released;
     }
 
     /// <summary>
@@ -5712,7 +5739,7 @@ public class ProjectRunner
                 // Release the active-job latch so the re-issue can claim it,
                 // then schedule on the thread pool so OnCliFinished returns
                 // promptly (mirrors the ReissueWithStrongerFraming path).
-                _activeRuns.Release(jobId);
+                ReleaseRun(jobId);
                 NotifyStatus();
                 var stronger = report.Action == PostAbortAction.RerunWithStrongerFraming;
                 var retryPrompt = BuildAbortReviewRerunPrompt(activeInfo, report, stronger);
@@ -6011,8 +6038,7 @@ public class ProjectRunner
             }
         }
 
-        _activeRuns.Release(jobId);
-        ReleasePickupLockIfHeld();
+        ReleaseRun(jobId);
         ApplyPendingModeIfAny(jobId);
 
         // Best-effort: drop a chat-log line on the moved folder so the

@@ -81,6 +81,12 @@ state.
 
 ## Invariants
 
+- Coding-slot occupancy follows live CLI processes, not lane membership. A
+  `3-progress` card in `loop-waiting`, `steer-pending`, or post-processing keeps
+  no execution seat; a continuation must pass admission again and remains
+  visibly queued when no seat is free. A heartbeat-less `3-progress` card may
+  survive the liveness grace only with one of the explicit waiting phases.
+
 - Remote pickup ownership lives in the project record (`executionRunner` plus
   `remoteExecutionEnabled`). The remote claim endpoint and local ProjectRunner
   consult the same record; assigned remote-capable projects are never locally

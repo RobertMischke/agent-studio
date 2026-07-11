@@ -35,6 +35,12 @@ public static class LifecyclePhases
     public const string ExecutionRunning = "execution-running";
     public const string ExecutionStalled = "execution-stalled";
     /// <summary>
+    /// The coding CLI has exited after asking for input and the orchestrator is
+    /// deciding whether/how to continue the loop. This is an intentional,
+    /// visible no-slot state; the next continuation must acquire a fresh slot.
+    /// </summary>
+    public const string LoopWaiting = "loop-waiting";
+    /// <summary>
     /// 3-progress substate for Run-Liveness Slice B (concept Rule 2): the run
     /// asked a steer / NeedsInput question in an auto mode and is waiting for an
     /// answer. Surfaces the "waiting for answer since mm:ss" pill so the wait is
@@ -49,7 +55,7 @@ public static class LifecyclePhases
     public static readonly string[] All =
     [
         HumanReady, IntakeRunning, IntakeBlocked, IntakePassed,
-        ExecutionRunning, ExecutionStalled, SteerPending,
+        ExecutionRunning, ExecutionStalled, LoopWaiting, SteerPending,
         PostProcessingRunning, PostProcessingBlocked, AwaitingReview
     ];
 
@@ -65,7 +71,7 @@ public static class LifecyclePhases
     public static readonly Dictionary<string, string[]> AllowedByState = new()
     {
         [TaskStates.Ready] = [HumanReady, IntakeRunning, IntakeBlocked, IntakePassed],
-        [TaskStates.Progress] = [ExecutionRunning, ExecutionStalled, SteerPending, PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
+        [TaskStates.Progress] = [ExecutionRunning, ExecutionStalled, LoopWaiting, SteerPending, PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
         [TaskStates.AutoReview] = [PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
     };
 
