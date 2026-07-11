@@ -283,7 +283,8 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.detectChanges();
     const reportFrame = el(fixture).querySelector<HTMLIFrameElement>('[data-testid="project-wiki-report-frame"]');
     expect(reportFrame, 'report iframe').toBeTruthy();
-    expect(reportFrame!.getAttribute('sandbox')).toBe('');
+    expect(reportFrame!.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(reportFrame!.getAttribute('sandbox')).not.toContain('allow-same-origin');
     expect(reportFrame!.getAttribute('srcdoc') ?? reportFrame!.srcdoc).toContain('Why drift');
 
     // History is no longer a document tab; it lives in the right context rail.
@@ -693,7 +694,7 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
-  it('renders an HTML doc inside a script-disabled sandboxed iframe', async () => {
+  it('renders an HTML doc inside a script-enabled opaque-origin sandboxed iframe', async () => {
     const { fixture, http } = await setup();
     expandConcepts(fixture);
     el(fixture)
@@ -712,8 +713,8 @@ describe('ProjectWikiSectionComponent', () => {
 
     const frame = el(fixture).querySelector<HTMLIFrameElement>('[data-testid="project-wiki-html-frame"]');
     expect(frame, 'html iframe').toBeTruthy();
-    // sandbox attribute is present and empty => no allow-scripts token.
-    expect(frame!.getAttribute('sandbox')).toBe('');
+    expect(frame!.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame!.getAttribute('sandbox')).not.toContain('allow-same-origin');
     const srcdoc = frame!.getAttribute('srcdoc') ?? frame!.srcdoc;
     expect(srcdoc).toContain('Sandboxed');
     http.verify();
@@ -975,7 +976,7 @@ describe('ProjectWikiSectionComponent', () => {
     });
   }
 
-  it('navigates between frame landing shells, rendering each in the script-disabled iframe', async () => {
+  it('navigates between frame landing shells, rendering each in the interactive isolated iframe', async () => {
     const { fixture, http } = await setup(FRAME_TREE);
     expandFrame(fixture);
     const root = el(fixture);
@@ -995,7 +996,8 @@ describe('ProjectWikiSectionComponent', () => {
 
     let frame = root.querySelector<HTMLIFrameElement>('[data-testid="project-wiki-html-frame"]');
     expect(frame, 'overview iframe').toBeTruthy();
-    expect(frame!.getAttribute('sandbox')).toBe(''); // no allow-scripts token
+    expect(frame!.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame!.getAttribute('sandbox')).not.toContain('allow-same-origin');
     expect(frame!.getAttribute('srcdoc') ?? frame!.srcdoc).toContain('The development story');
     expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
       .toContain('engineering-workstream/00-overview.html');

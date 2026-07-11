@@ -61,7 +61,20 @@ const STATUS_PAYLOAD = {
 };
 
 const README_MD = '# Project\n\nIntro paragraph added in commit 1.\n\n## Usage\n\n- one\n- two\n';
-const INDEX_HTML = '<!doctype html><html><body><h1>Landing page</h1><p>Sandboxed preview.</p></body></html>';
+const INDEX_HTML = `<!doctype html><html><body>
+  <h1>Landing page</h1><p>Interactive sandbox preview.</p>
+  <output id="script-status">waiting</output>
+  <script>
+    document.body.dataset.scriptRan = 'true';
+    document.querySelector('#script-status').textContent = 'switcher active';
+    try {
+      void window.parent.document.body;
+      document.body.dataset.parentAccess = 'allowed';
+    } catch {
+      document.body.dataset.parentAccess = 'blocked';
+    }
+  </script>
+</body></html>`;
 
 /**
  * AGT-2008: the git-diff surface gains (2) directory disambiguation for
@@ -108,7 +121,7 @@ test.describe('Git pane — preview, path disambiguation, and diff grouping (AGT
       await waitForDetailVisible(job.id, watchPath);
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
       await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
-      await page.getByTestId('pane-toggle-git').click();
+      await page.getByTestId('pane-toggle-git').dispatchEvent('click');
       await expect(page.getByTestId('pane-git')).toBeVisible();
 
       // (2) Path disambiguation: both README.md rows carry a parent-dir hint;
@@ -135,12 +148,17 @@ test.describe('Git pane — preview, path disambiguation, and diff grouping (AGT
       await page.getByTestId('git-preview-toggle').click();
       await expect(page.getByTestId('git-diff')).toBeVisible();
 
-      // (1) HTML preview: a scripts-disabled sandboxed iframe.
+      // (1) HTML preview: scripts run, while the opaque origin still blocks
+      // access to the Studio parent document.
       await tree.locator('[data-testid="git-tree-file"]').filter({ hasText: 'index.html' }).first().click();
       await page.getByTestId('git-preview-toggle').click();
       const frame = page.getByTestId('git-preview-html');
       await expect(frame).toBeVisible();
-      await expect(frame).toHaveAttribute('sandbox', '');
+      await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
+      const preview = page.frameLocator('[data-testid="git-preview-html"]');
+      await expect(preview.locator('body')).toHaveAttribute('data-script-ran', 'true');
+      await expect(preview.locator('body')).toHaveAttribute('data-parent-access', 'blocked');
+      await expect(preview.locator('#script-status')).toHaveText('switcher active');
     } finally {
       await api(`/api/tasks/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }

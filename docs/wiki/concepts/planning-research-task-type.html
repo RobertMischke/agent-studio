@@ -377,7 +377,7 @@
         <tr>
           <th scope="row">Deliverable</th>
           <td class="coding">A diff merged into <code>develop</code>; <code>status.md</code> is a summary.</td>
-          <td class="pr">A self-contained <code>results/report.html</code> (inline CSS, no network so it renders in <code>sandbox=""</code>), with <code>status.md</code> as the structured fallback. Required regions: header (confidence + scope), body, open-questions, plus Sources (research) and a Proposed-next-steps list for the continue parser. <span class="tag new">new</span></td>
+          <td class="pr">A self-contained <code>results/report.html</code> (inline CSS, no network so it renders in <code>sandbox="allow-scripts"</code> with an opaque origin), with <code>status.md</code> as the structured fallback. Required regions: header (confidence + scope), body, open-questions, plus Sources (research) and a Proposed-next-steps list for the continue parser. <span class="tag new">new</span></td>
         </tr>
         <tr>
           <th scope="row">Presentation</th>
@@ -463,7 +463,7 @@
       </li>
       <li>
         <span class="slice-title">Slice 1 &mdash; Report tab + verdict strip</span>
-        Add a Report inspector tab on task-detail that is the default tab for read-only tasks (coding unchanged). Render <code>results/report.html</code> in the wiki's existing sandboxed iframe pattern (<code>&lt;iframe sandbox="" [srcdoc]="trustedHtml()"&gt;</code> plus <code>DomSanitizer.bypassSecurityTrustHtml</code>). Fall back to <code>beautiful-results</code> over <code>status.md</code> when no HTML exists. Above the iframe, render a host (Angular) sticky verdict strip (sentinel banner + confidence chip or "undeclared" + open-questions counter), parsed from the sentinel and the fenced confidence block, not the HTML body.
+        Add a Report inspector tab on task-detail that is the default tab for read-only tasks (coding unchanged). Render <code>results/report.html</code> in the wiki's existing sandboxed iframe pattern (<code>&lt;iframe sandbox="allow-scripts" [srcdoc]="trustedHtml()"&gt;</code> plus <code>DomSanitizer.bypassSecurityTrustHtml</code>). Deliberately omit <code>allow-same-origin</code>. Fall back to <code>beautiful-results</code> over <code>status.md</code> when no HTML exists. Above the iframe, render a host (Angular) sticky verdict strip (sentinel banner + confidence chip or "undeclared" + open-questions counter), parsed from the sentinel and the fenced confidence block, not the HTML body.
         <div class="meta">Reuses <code>project-wiki-section.html</code> rendering and the <code>beautiful-results</code> renderer. Only new UI: one tab plus the strip.</div>
       </li>
       <li>
@@ -526,7 +526,7 @@
 
     <div class="qa">
       <p class="q">HTML richness vs sandbox</p>
-      <p class="note"><code>sandbox=""</code> disables scripts, so report HTML must be static (no interactive charts inside the iframe). A latency report wanting a graph must pre-render to static SVG/PNG. Is static-only acceptable, or is a constrained interactive mode needed (which weakens the security model)?</p>
+      <p class="note"><code>sandbox="allow-scripts"</code> supports self-contained interactive reports while the omitted <code>allow-same-origin</code> keeps an opaque origin. Reports that need same-origin or controlled network integration belong in the Workbench viewer.</p>
     </div>
 
     <div class="qa">

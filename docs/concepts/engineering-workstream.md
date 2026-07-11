@@ -59,7 +59,7 @@ docs/engineering-workstream/
 Each area is a folder holding a landing **HTML shell** (`index.html`). The shells
 are self-contained: inline design tokens mirroring the studio design system,
 both light and dark via `prefers-color-scheme` (the wiki renders HTML in a
-script-disabled sandboxed iframe, so theming must be CSS-only), and a bold
+opaque-origin sandboxed iframe, so theming must be self-contained), and a bold
 orientation layout that states each area's purpose and its place in the frame.
 
 ## 4. Immutability — the frame's shape is locked

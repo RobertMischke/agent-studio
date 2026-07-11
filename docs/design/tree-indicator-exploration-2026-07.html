@@ -195,6 +195,7 @@
     ];
     const stateTip = {active:'Active now: 3 moving, healthy flow',escalated:'Escalated: 2 current blockers, review needed',calm:'Quiet: no acute work',full:'Shelf full: capacity pressure, 9 waiting'};
     let current = new URLSearchParams(location.search).get('option') || 'dots';
+    function syncOptionQuery() { try { history.replaceState(null,'',`?option=${current}`); } catch {} }
 
     function indicator(p, id=current) {
       const aria = `aria-label="${stateTip[p.state]}" title="${stateTip[p.state]}"`;
@@ -218,7 +219,7 @@
       document.getElementById('switcher').innerHTML=options.map(x=>`<button class="option ${x.id===current?'active':''}" data-option="${x.id}"><kbd>${x.key}</kbd><strong>${x.name}</strong></button>`).join('');
       document.getElementById('option-title').textContent=`${o.key}. ${o.name}`; document.getElementById('option-tagline').textContent=o.tag; document.getElementById('option-rank').textContent=o.rank; document.getElementById('detail-copy').textContent=o.copy;
       document.getElementById('space-score').textContent=o.space; document.getElementById('glance-score').textContent=o.glance; document.getElementById('history-score').textContent=o.history; document.getElementById('learning-score').textContent=o.learning;
-      document.querySelectorAll('.option[data-option]').forEach(b=>b.onclick=()=>{current=b.dataset.option; history.replaceState(null,'',`?option=${current}`); render();});
+      document.querySelectorAll('.option[data-option]').forEach(b=>b.onclick=()=>{current=b.dataset.option; syncOptionQuery(); render();});
       document.body.dataset.option=current;
     }
     document.querySelectorAll('[data-theme-choice]').forEach(b=>b.onclick=()=>{document.documentElement.dataset.theme=b.dataset.themeChoice; document.querySelectorAll('[data-theme-choice]').forEach(x=>x.classList.toggle('active',x===b));});
@@ -230,10 +231,10 @@
       document.querySelectorAll('[data-decision]').forEach(button=>button.classList.toggle('selected',button.dataset.decision===value));
       document.getElementById('decision-status').textContent=value==='dots'?'Selected: A (proposed)':value==='pulse'?'Selected: E (liveness required)':'No selection recorded';
     }
-    document.querySelectorAll('[data-decision]').forEach(button=>button.onclick=()=>{const value=button.dataset.decision; saveDecision(value); current=value; history.replaceState(null,'',`?option=${current}`); render(); showDecision(value);});
+    document.querySelectorAll('[data-decision]').forEach(button=>button.onclick=()=>{const value=button.dataset.decision; saveDecision(value); current=value; syncOptionQuery(); render(); showDecision(value);});
     showDecision(savedDecision);
     document.getElementById('tree').onclick=event=>{const target=event.target.closest('.project-row'); if(!target)return; const project=target.closest('.project'); project.classList.toggle('collapsed'); target.setAttribute('aria-expanded',!project.classList.contains('collapsed'));};
-    addEventListener('keydown',e=>{const n=Number(e.key); if(n>=1&&n<=8){current=options[n-1].id; history.replaceState(null,'',`?option=${current}`); render();}});
+    addEventListener('keydown',e=>{const n=Number(e.key); if(n>=1&&n<=8){current=options[n-1].id; syncOptionQuery(); render();}});
     render();
   </script>
 </body>

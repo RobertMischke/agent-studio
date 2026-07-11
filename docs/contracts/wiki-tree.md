@@ -86,7 +86,9 @@ Returns the recursive physical docs tree.
 ### `GET /wiki/files/{relPath}`
 
 Reads a Markdown or HTML page from the physical docs tree. HTML pages are served
-as content and rendered by the frontend in a script-disabled sandboxed iframe.
+as content and rendered by the frontend in a script-enabled sandboxed iframe.
+The iframe grants only `allow-scripts`; without `allow-same-origin` it receives
+an opaque origin and cannot access Studio cookies, storage, DOM, or APIs.
 
 ### `GET /wiki/assets/{relPath}`
 

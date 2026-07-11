@@ -105,8 +105,8 @@ interface WikiMetricChip {
  * Project-level knowledge view backed by the physical docs/ folder hierarchy:
  * the tree is the real folders + .md/.html files on disk (no virtual
  * organisation layer). Categories expand/collapse; the right pane renders the
- * selected page (markdown inline, HTML inside a script-disabled sandboxed
- * iframe). The right context rail carries provenance, the file's git log, and
+ * selected page (markdown inline, HTML inside a script-enabled, opaque-origin
+ * sandboxed iframe). The right context rail carries provenance, the file's git log, and
  * old-revision previews so only one page is open at a time.
  *
  * Structural edits are real git commits in the project repo: a text-only
@@ -316,7 +316,7 @@ export class ProjectWikiSectionComponent {
   readonly displayContent = computed(() =>
     this.revisionSha() ? this.revisionContent() : this.openedContent());
 
-  /** Trusted srcdoc for an HTML doc — the iframe sandbox (no scripts) isolates it. */
+  /** `allow-scripts` enables interaction; omitted same-origin isolates Studio state and APIs. */
   readonly trustedHtml = computed<SafeHtml>(() =>
     this.sanitizer.bypassSecurityTrustHtml(this.displayContent()));
 

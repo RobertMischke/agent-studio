@@ -172,8 +172,8 @@ and viewer must never imply that content from one branch represents another.
 
 Because the files remain below `docs/`, they also stay visible in the physical
 Wiki tree and Git/Pulse history. The ordinary Wiki view renders the entrypoint
-as a static artifact. The Workbenches row is a narrow generated projection with
-lifecycle actions, not a second content tree.
+as an interactive but isolated artifact. The Workbenches row is a narrow
+generated projection with lifecycle actions, not a second content tree.
 
 Pulse may report recently changed, invalid, or decision-ready Workbenches, but
 Pulse does not own their list or lifecycle. Its role remains a generated entry
@@ -190,11 +190,18 @@ The Workbench view is host chrome around isolated content:
 +-------------+---------------------------------------+-----------------------+
 ```
 
-This requires a distinct viewer policy. Ordinary Wiki HTML is intentionally
-rendered in a script-disabled sandbox. Workbenches may need scripts, so the host
-loads sanitized content through `srcdoc` and can opt into `allow-scripts`
-while retaining an opaque origin. It must not receive `allow-same-origin`, top
-navigation, forms, downloads, modals, popups, clipboard access, or direct Agent
+Ordinary Wiki, Git-pane preview, and Files-tab HTML all use the same baseline
+viewer policy: `srcdoc` with `sandbox="allow-scripts"`. Scripts can power
+self-contained interactions, while the deliberate omission of
+`allow-same-origin` gives the document an opaque origin and prevents access to
+Studio cookies, storage, DOM, and APIs. The ordinary viewer does not promise
+same-origin integration or network-backed application behavior.
+
+The Workbench remains the distinct viewer for artifacts that need more than
+that baseline, including controlled network-backed previews or a future
+same-origin capability. Its host must not grant same-origin implicitly. It also
+must not receive top navigation, forms, downloads, modals, popups, clipboard
+access, or direct Agent
 Studio credentials. A restrictive Content Security Policy blocks network,
 frames, forms, and external assets by default while permitting only the inline
 CSS/script and data images required by the self-contained artifact.
