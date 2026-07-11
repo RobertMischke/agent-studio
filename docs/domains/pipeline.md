@@ -72,8 +72,11 @@ pipeline view.
   EW-2 collector pair. The pre-step publishes Current Development State at task
   onboarding; the completion step gives a one-shot model the fixed frame, known
   pages, and settled evidence, then server-validates and applies its JSON
-  proposal. Identity merges, frequency, provenance, budgets, and maximum depth
-  are backend rules, not model discretion.
+  proposal. The applied proposal appends the Workstream Log, merges Development
+  Signals by identity while updating frequency, updates System Knowledge in
+  place with mandatory `Last Updated From`, persists Decision Log entries, and
+  replaces Current Development State when proposed. Identity, provenance,
+  budgets, and maximum depth are backend rules, not model discretion.
 - `backend/Services/Pipeline/PipelineStepConfigResolver.cs`: effective model and
   step config resolution.
 - `backend/Services/Pipeline/PipelineStepConditionEvaluator.cs`: per-step

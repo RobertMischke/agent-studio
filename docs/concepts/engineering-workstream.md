@@ -1,6 +1,6 @@
 # Workstream
 
-Status: Concept (living). Slice EW-1 implemented.
+Status: Concept (living). Slices EW-1 and EW-2 implemented.
 
 > Naming (operator decision 2026-07-09): user-facing, this frame is called
 > **Workstream** and is pinned as the **top** element of every project wiki's
@@ -100,6 +100,11 @@ owns every filesystem write:
   `Last Updated From` provenance, falling back to the task key when omitted.
 - Decision Log changes only for an actual decision.
 - Current Development State is replaced when active state changes.
+
+These are implemented storage contracts, not future collector goals. In
+particular, Decision Log proposals are persisted by identity, System Knowledge
+cannot be written without the server-owned `Last Updated From` line, and the
+single Current Development State projection is replaced rather than appended.
 
 The two pipeline steps default off and are enabled per project. Activating
 either step self-provisions the EW-1 frame before writing.
