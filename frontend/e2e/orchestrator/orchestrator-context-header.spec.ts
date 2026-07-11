@@ -182,6 +182,8 @@ async function openSideSheet(page: Page) {
   await expect(toggle).toBeVisible({ timeout: 10_000 });
   await toggle.click();
   await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
+  await page.getByTestId('orch-context-badge').click();
+  await expect(page.getByTestId('orch-context-menu')).toBeVisible();
 }
 
 test.describe('Orchestrator context header · where am I', () => {

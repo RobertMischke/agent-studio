@@ -5,8 +5,8 @@ import { expect, test, type Page } from '@playwright/test';
  * after load and stays visible when a scroll fires while sticky at the
  * bottom — no blank area, no manual scroll (ASS-665, ASS-613 sibling).
  *
- * The default orchestrator side sheet renders the conversation through
- * `<app-chat [virtualised]="true">`. The virtual window is seeded sticky-to-
+ * The orchestrator side sheet renders the transcript through the canonical
+ * `<cac-conversation-view [virtualised]="true">`. The window is seeded sticky-to-
  * bottom on load, but `onBodyScroll` used to re-derive the window from the
  * fixed row-height estimate (120px) on *every* scroll event — including the
  * ones fired while still pinned at the bottom (scroll-anchoring reflow during
@@ -17,7 +17,7 @@ import { expect, test, type Page } from '@playwright/test';
  *
  * This spec stubs a deep history of short turns, opens the chat, fires a
  * scroll while sticky at the bottom, and asserts the newest turn stays
- * rendered + on-screen with no `chat-spacer-bottom`.
+ * rendered + on-screen with no `conversation-spacer-bottom`.
  *
  * NOTE ON COVERAGE: the deterministic fail-before/pass-after guard for this
  * fix lives in the unit spec (chat.component.spec.ts → "keeps the newest
@@ -93,7 +93,7 @@ async function openOrchestratorChat(page: Page) {
     })
     .toBeGreaterThan(300);
 
-  const body = page.getByTestId('chat-body');
+  const body = page.getByTestId('conversation-view');
   if (!(await body.count())) {
     test.skip(true, 'No watched project auto-selected — orchestrator chat body did not mount');
   }
@@ -101,7 +101,7 @@ async function openOrchestratorChat(page: Page) {
   // Wait for the stubbed turns to render. We do NOT wait on the newest
   // marker here: on the broken build it can already be windowed out, so
   // the precondition must be a turn that renders in both builds.
-  await expect(page.getByTestId('chat-msg-user').first()).toBeVisible();
+  await expect(page.getByTestId('conversation-message-message.user').first()).toBeVisible();
   return { sheet, body };
 }
 
@@ -129,13 +129,13 @@ test.describe('orchestrator chat — content stays visible after load', () => {
       await nextFrame();
 
       const rows = Array.from(
-        el.querySelectorAll('[data-testid^="chat-msg-"]')
+        el.querySelectorAll('[data-testid^="conversation-message-message."]')
       ) as HTMLElement[];
       const markerEl = rows.find((r) => (r.textContent ?? '').includes(marker));
       const containerRect = el.getBoundingClientRect();
       const rect = markerEl?.getBoundingClientRect();
       const spacer = el.querySelector(
-        '[data-testid="chat-spacer-bottom"]'
+        '[data-testid="conversation-spacer-bottom"]'
       ) as HTMLElement | null;
 
       return {

@@ -175,12 +175,12 @@ test.describe('Project chat — inline attachment render + lightbox', () => {
     // shipped the bubble before the image, the image would not be
     // visible until the server round-trip (1.5s + image fetch 600ms).
     const userBubble = page
-      .locator('[data-testid="chat-msg-user"]')
+      .locator('[data-testid="conversation-message-message.user"]')
       .filter({ hasText: 'screenshot for the bubble' })
       .first();
     await expect(userBubble).toBeVisible({ timeout: 1_000 });
 
-    const inlineImage = userBubble.locator('[data-testid="chat-msg-attachment-image"]').first();
+    const inlineImage = page.getByTestId('conversation-artifact-image-img').first();
     // Tight timeout — the image must be visible within 300 ms of the
     // bubble, well before the 1.5s POST or 600 ms GET could resolve.
     await expect(inlineImage).toBeVisible({ timeout: 300 });

@@ -134,7 +134,7 @@ function buildGroupedTasks(jobId: string, watchPath: string) {
   };
 }
 
-function buildRunTimeline(jobId: string) {
+function buildRunTimeline() {
   const startedAt = new Date(Date.now() - 12 * 60 * 1000).toISOString();
   const endedAt = new Date(Date.now() - 8 * 60 * 1000).toISOString();
   return {
@@ -279,7 +279,7 @@ async function installMocks(
   const summaryBody = JSON.stringify([buildJobSummary(target.id, target.watchPath)]);
   const groupedBody = JSON.stringify(buildGroupedTasks(target.id, target.watchPath));
   const outputBody = JSON.stringify(buildOutputBuffer());
-  const runsBody = JSON.stringify(buildRunTimeline(target.id));
+  const runsBody = JSON.stringify(buildRunTimeline());
   const screenshotsBody = JSON.stringify(buildScreenshots(target.id));
 
   await page.route('**/api/**', async (route) => {
@@ -501,7 +501,6 @@ test.describe('Verbose Debug overlay - project side sheet', () => {
     // Find any visible button that toggles the side sheet — the status bar
     // exposes one with a name matching "Project chat" or similar; fall back
     // to the side sheet's own close/open mechanism if not found.
-    const sideSheet = page.getByTestId('orch-side-sheet');
     // The side sheet host lives at the app shell, so we toggle it via the
     // status bar's emoji button. We surface it by clicking any button with
     // a 💬 label in the status bar; otherwise fall back to programmatic
@@ -518,9 +517,9 @@ test.describe('Verbose Debug overlay - project side sheet', () => {
       return;
     }
 
-    // The Debug button surfaces in the sidesheet header whenever a task
-    // detail is selected; the former task tab was removed in the
-    // 2026-05-16 sidesheet restructure.
+    // Debug lives in the context menu whenever a task detail is selected.
+    await page.getByTestId('orch-context-badge').click();
+    await expect(page.getByTestId('orch-context-menu')).toBeVisible();
     const bugBtn = page.getByTestId('orch-side-sheet-verbose-debug');
     if (await bugBtn.count() === 0) {
       test.skip(true, 'Bug button not rendered without an active task selection');
