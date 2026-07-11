@@ -25,6 +25,7 @@ public static class TaskExternalCompletionEndpoints
             ExternalCompletionRequest req,
             HttpContext ctx,
             ExternalCompletionService service,
+            AgentStudio.Clients.ClientIdentityStore clients,
             AgentStudio.Registry.ProjectRegistry projects,
             CancellationToken ct) =>
         {
@@ -34,11 +35,19 @@ public static class TaskExternalCompletionEndpoints
             // it drives the lane_changed ledger row. The completion *source*
             // (who actually did the work) is a separate field on the body.
             var clientId = ctx.Request.Headers["X-Client-Id"].FirstOrDefault();
-            var actor = string.IsNullOrWhiteSpace(clientId)
-                ? TimelineActors.External
-                : TimelineActors.Human(clientId!);
+            var identity = string.IsNullOrWhiteSpace(clientId) ? null : clients.Find(clientId!);
+            // Registered service identities are the remote runner boundary.
+            // Do not inspect the caller-controlled source string: operator chat
+            // may name a runner while still being a genuine out-of-band handoff.
+            var isRunnerCompletion = identity?.Kind == ClientIdentityKind.Service;
+            var actor = isRunnerCompletion
+                ? TimelineActors.Agent
+                : string.IsNullOrWhiteSpace(clientId)
+                    ? TimelineActors.External
+                    : TimelineActors.Human(clientId!);
 
-            var outcome = await service.CompleteAsync(jobId, watchPath, req, actor, ct);
+            var outcome = await service.CompleteAsync(
+                jobId, watchPath, req, actor, isRunnerCompletion, ct);
             return outcome.Status switch
             {
                 ExternalCompletionStatus.Success => Results.Ok(new ExternalCompletionResponse

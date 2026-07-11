@@ -30,6 +30,7 @@ public sealed class ExternalCompletionService
     private readonly TaskTransitionService _transitions;
     private readonly TimelineLog _timeline;
     private readonly WorkspaceArtifactCommitService _artifactCommits;
+    private readonly IAutoReviewPostProcessingQueue _autoReviewQueue;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ExternalCompletionService> _logger;
 
@@ -39,6 +40,7 @@ public sealed class ExternalCompletionService
         TaskTransitionService transitions,
         TimelineLog timeline,
         WorkspaceArtifactCommitService artifactCommits,
+        IAutoReviewPostProcessingQueue autoReviewQueue,
         IConfiguration configuration,
         ILogger<ExternalCompletionService> logger)
     {
@@ -47,6 +49,7 @@ public sealed class ExternalCompletionService
         _transitions = transitions;
         _timeline = timeline;
         _artifactCommits = artifactCommits;
+        _autoReviewQueue = autoReviewQueue;
         _configuration = configuration;
         _logger = logger;
     }
@@ -63,14 +66,20 @@ public sealed class ExternalCompletionService
         string? watchPath,
         ExternalCompletionRequest request,
         string actor,
+        bool isRunnerCompletion = false,
         CancellationToken ct = default)
     {
         if (request is null || string.IsNullOrWhiteSpace(request.Summary))
             return new ExternalCompletionOutcome(ExternalCompletionStatus.InvalidRequest, "summary is required.");
 
-        var targetState = string.IsNullOrWhiteSpace(request.TargetState)
-            ? TaskStates.HumanReview
-            : request.TargetState!.Trim();
+        // A registered runner completion must enter the same auto-review
+        // bracket as a local run. Human/operator out-of-band completions keep
+        // the deliberately light default and may still choose another lane.
+        var targetState = isRunnerCompletion
+            ? TaskStates.AutoReview
+            : string.IsNullOrWhiteSpace(request.TargetState)
+                ? TaskStates.HumanReview
+                : request.TargetState!.Trim();
         if (!TaskStates.All.Contains(targetState))
             return new ExternalCompletionOutcome(
                 ExternalCompletionStatus.InvalidRequest,
@@ -99,7 +108,8 @@ public sealed class ExternalCompletionService
             Summary = summary,
             CompletedAt = now,
         });
-        TerminalizeLifecycle(beforeFolder, targetState, source, now);
+        if (!isRunnerCompletion)
+            TerminalizeLifecycle(beforeFolder, targetState, source, now);
 
         // Append the external ingest entry to the unified timeline BEFORE the
         // move so it lands in the same folder as the rest of the evidence; the
@@ -123,12 +133,12 @@ public sealed class ExternalCompletionService
         {
             case MoveJobStatus.Success:
                 afterFolder = move.NewFolderPath ?? beforeFolder;
-                // Re-assert the terminal lifecycle into the moved folder: a move
-                // out of 3-progress runs EnterPostProcessingPhase, which would
-                // otherwise reset lifecycle.json to post-processing-running - the
-                // exact stuck state this endpoint exists to retire. Idempotent for
-                // every other source lane.
-                TerminalizeLifecycle(afterFolder, targetState, source, now);
+                // Human/operator reconciliation remains terminal. A registered
+                // runner instead keeps the post-processing-running lifecycle
+                // created by Progress -> AutoReview, whose transition also
+                // queues aspects, code-review grade, and the completion gate.
+                if (!isRunnerCompletion)
+                    TerminalizeLifecycle(afterFolder, targetState, source, now);
                 break;
             case MoveJobStatus.NotFound:
                 // Raced away between find and move; the evidence is already on
@@ -149,6 +159,27 @@ public sealed class ExternalCompletionService
             _logger.LogWarning(
                 "external-completion-evidence-commit-failed project={Project} job={JobId} error={Error}",
                 info.ProjectName, jobId, commit.Error);
+        }
+
+        // Progress -> AutoReview already queues through TaskTransitionService,
+        // exactly like a local run. A remotely completed card may have been
+        // moved out of Progress by recovery before its result arrived; keep
+        // that race on the same review path without double-queuing the normal
+        // case.
+        if (isRunnerCompletion && info.State != TaskStates.Progress)
+        {
+            var accepted = _autoReviewQueue.Enqueue(new AutoReviewPostProcessingRequest(
+                info.ProjectName,
+                jobId,
+                info.WatchPath,
+                DateTime.UtcNow,
+                "runner-external-completion"));
+            if (!accepted)
+            {
+                _logger.LogWarning(
+                    "auto-review-postprocessing-enqueue-failed project={Project} job={JobId} source=runner-external-completion",
+                    info.ProjectName, jobId);
+            }
         }
 
         _logger.LogInformation(

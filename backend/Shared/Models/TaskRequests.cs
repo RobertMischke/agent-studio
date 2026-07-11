@@ -31,7 +31,8 @@ public record CreateFollowupFromEvidenceResponse
 /// <c>docs/concepts/out-of-band-task-completion.md</c> §3: writes
 /// <c>status.md</c> + <c>results/deliverables.md</c>, terminalizes
 /// <c>lifecycle.json</c>, appends an <c>external</c> timeline entry, moves the
-/// lane, and commits the workspace evidence.
+/// lane, and commits the workspace evidence. Calls from a registered service
+/// identity are treated as remote runner completions and enter auto-review.
 /// </summary>
 public record ExternalCompletionRequest
 {
