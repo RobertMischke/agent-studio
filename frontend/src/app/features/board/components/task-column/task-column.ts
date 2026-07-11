@@ -170,7 +170,6 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
     const pendingMode = status?.pendingMode ?? null;
     const pendingAfter = status?.pendingModeWillApplyAfter ?? null;
     const pendingActiveCount = status?.pendingModeActiveTaskCount ?? (pendingAfter ? 1 : 0);
-    const pendingActiveTitle = status?.pendingModeActiveTaskTitle ?? null;
     const breakerState = status?.breakerState ?? null;
     const breakerCooldownUntil = status?.breakerCooldownUntil ?? null;
     const breakerReason = status?.breakerReason ?? null;
@@ -220,12 +219,9 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
     if (pendingMode) {
       const pendingPretty = pendingMode === 'paused' ? 'PAUSED' : pendingMode.toUpperCase();
       modeLabel = `${modeLabel} → ${pendingPretty}`;
-      const taskDetail = pendingActiveCount === 1
-        ? ` (${pendingActiveTitle ?? pendingAfter ?? 'active task'})`
-        : '';
+      const taskDetail = pendingActiveCount === 1 ? ` (${status?.pendingModeActiveTaskTitle ?? pendingAfter ?? 'active task'})` : '';
       modeTooltip = `Switches to ${pendingPretty} when ${pendingActiveCount} active task${pendingActiveCount === 1 ? '' : 's'} finish${taskDetail}.`;
     }
-
     // ADR-0044: test-subject backends never auto-pick. The label still
     // shows the configured mode (operators can leave it on auto for
     // future role flips), but we annotate the tooltip so the lane pill

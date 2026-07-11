@@ -23,7 +23,6 @@ import {
   WikiFileSaveResult,
   WikiFileHistory,
   WikiGradingRunStatus,
-  WikiMaintenanceModelConfig,
   WikiNodeType,
   WikiPulse,
   WikiTree,
@@ -39,7 +38,6 @@ import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
 import { WikiPulseComponent, WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
 import { WikiGradePanelComponent } from './wiki-grade-panel/wiki-grade-panel.component';
-import { StudioTabStateService } from '../../../studio-shell/services/studio-tab-state.service';
 import {
   WikiTreeRow,
   collectFolderIds,

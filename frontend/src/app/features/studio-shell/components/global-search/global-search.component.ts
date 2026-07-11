@@ -109,7 +109,8 @@ export class GlobalSearchComponent {
   onDocumentKeydown(event: KeyboardEvent): void {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();
-      this.open() ? this.close() : this.show();
+      if (this.open()) this.close();
+      else this.show();
       return;
     }
     if (!this.open()) return;
