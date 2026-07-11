@@ -11,8 +11,12 @@ import { Injectable, computed, signal } from '@angular/core';
  *     client registry and management sweeps — AGT-1924), `remote-hosts`,
  *     `orchestrator` (the platform-global supervisor / orchestrator lifecycle
  *     flags — AGT-1812 retired their standalone modal into this section).
- *   - Workspace defaults: `caps`, `working-memory` (extracted from caps),
- *     `prompts`, `tokens` (now the single usage area), `screenshots`.
+ *   - Workspace defaults: `caps` (the "CLI Management" hub - CLI catalog,
+ *     models/routes, usage caps and completion contracts), `cli-sessions`
+ *     and `cli-paths` (the encapsulated CLI-session inventory and per-CLI
+ *     filesystem-location pages split out of the CLI Management hub -
+ *     AGT-2101), `working-memory` (extracted from caps), `prompts`,
+ *     `tokens` (now the single usage area), `screenshots`.
  * `overview` is the landing rail item that links into each section.
  *
  * The `summary` section was removed (executive summary is a project-level
@@ -28,6 +32,8 @@ export type WorkspaceSettingsSection =
   | 'project-sources'
   | 'orchestrator'
   | 'caps'
+  | 'cli-sessions'
+  | 'cli-paths'
   | 'working-memory'
   | 'prompts'
   | 'tokens'
@@ -182,6 +188,8 @@ export class WorkspaceOverlaysService {
       case '#/workspace/screenshots': return 'screenshots';
       case '#/workspace/settings/caps':
       case '#/workspace/caps': return 'caps';
+      case '#/workspace/settings/cli-sessions': return 'cli-sessions';
+      case '#/workspace/settings/cli-paths': return 'cli-paths';
       case '#/workspace/settings/prompts':
       case '#/workspace/prompts': return 'prompts';
       case '#/workspace/settings/appearance': return 'appearance';
@@ -211,6 +219,8 @@ export class WorkspaceOverlaysService {
       case 'tokens': return '#/workspace/tokens';
       case 'screenshots': return '#/workspace/screenshots';
       case 'caps': return '#/workspace/settings/caps';
+      case 'cli-sessions': return '#/workspace/settings/cli-sessions';
+      case 'cli-paths': return '#/workspace/settings/cli-paths';
       case 'prompts': return '#/workspace/settings/prompts';
       case 'appearance': return '#/workspace/settings/appearance';
       case 'updates': return '#/workspace/settings/updates';
@@ -227,6 +237,8 @@ export class WorkspaceOverlaysService {
   private readonly ownHashes = new Set<string>([
     '#/workspace/settings',
     '#/workspace/settings/caps',
+    '#/workspace/settings/cli-sessions',
+    '#/workspace/settings/cli-paths',
     '#/workspace/settings/prompts',
     '#/workspace/settings/appearance',
     '#/workspace/settings/updates',

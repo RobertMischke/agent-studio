@@ -136,6 +136,8 @@ const SECTIONS: { key: string; overlayTestid: string; innerTestid: string }[] = 
   { key: 'updates', overlayTestid: 'workspace-updates-overlay', innerTestid: 'updates-settings' },
   { key: 'workspaces', overlayTestid: 'workspace-management-overlay', innerTestid: 'workspace-management' },
   { key: 'caps', overlayTestid: 'cli-admin-overlay', innerTestid: 'cli-admin-panel' },
+  { key: 'cli-sessions', overlayTestid: 'cli-sessions-overlay', innerTestid: 'cli-sessions-panel' },
+  { key: 'cli-paths', overlayTestid: 'cli-paths-overlay', innerTestid: 'cli-paths-panel' },
   { key: 'working-memory', overlayTestid: 'workspace-working-memory-overlay', innerTestid: 'workspace-working-memory' },
   { key: 'prompts', overlayTestid: 'prompt-admin-overlay', innerTestid: 'prompt-admin-panel' },
   { key: 'tokens', overlayTestid: 'workspace-tokens-overlay', innerTestid: 'token-usage-section' },
@@ -170,10 +172,11 @@ test.describe('Workspace settings home (Dach)', () => {
       await expect(page.getByTestId(`workspace-settings-card-${key}`)).toBeVisible();
       await expect(page.getByTestId(`workspace-settings-rail-${key}`)).toBeVisible();
     }
-    // AGT-2035: the consolidated rail labels this section "Usage caps" (the
-    // operator's directive-9 name); the CLI-admin panel it hosts is what used to
-    // be called "CLI Management". Assert the shipped rail label.
-    await expect(page.getByTestId('workspace-settings-rail-caps')).toContainText('Usage caps');
+    // AGT-2101: the rail entry for the CLI hub is now labelled "CLI Management"
+    // (was "Usage caps"), matching the panel's own heading. Session inventory
+    // and on-disk paths were split into their own "CLI sessions" / "CLI paths"
+    // rail pages.
+    await expect(page.getByTestId('workspace-settings-rail-caps')).toContainText('CLI Management');
 
     await page.screenshot({ path: join(SHOT_DIR, 'workspace-settings-overview--mocked.png'), fullPage: false });
   });
