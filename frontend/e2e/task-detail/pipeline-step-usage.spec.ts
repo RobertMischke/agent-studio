@@ -6,6 +6,8 @@ const JOB_ID = 'pipeline-step-usage-fixture';
 const WATCH_PATH = 'C:/fixtures/agent-taskboard';
 const RESULTS_DIR = process.env.JOB_RESULTS_DIR ?? '';
 
+test.use({ serviceWorkers: 'block' });
+
 function json(body: unknown) {
   return {
     status: 200,
@@ -174,6 +176,23 @@ async function installFixtureRoutes(page: Page) {
   await page.route(new RegExp(`/api/tasks/${id}/claude-session(\\?|$)`), route => route.fulfill(json(null)));
   await page.route(new RegExp(`/api/tasks/${id}/screenshots(\\?|$)`), route => route.fulfill(json([])));
   await page.route(new RegExp(`/api/tasks/${id}(\\?|$)`), route => route.fulfill(json(jobDetail())));
+  await page.route(/\/api\/token-pricing\/calculate/, route => route.fulfill(json({
+    provider: 'CodingAgentRunner (CAR)',
+    items: [{
+      model: 'claude-opus-4-8', label: 'Agent execution',
+      inputTokens: 88000, outputTokens: 22000, cacheReadTokens: 0, cacheWriteTokens: 0,
+      calculatedAt: '2026-06-09T10:00:00Z',
+      estimate: {
+        inputUsd: 4.8, outputUsd: 1.2, cacheReadUsd: 0, cacheWriteUsd: 0, total: 6,
+        modelId: 'claude-opus-4-8', modelKnown: true, status: 'resolved',
+        priceBasis: {
+          inputPerMillion: 5, outputPerMillion: 25, cacheReadPerMillion: 0.5,
+          cacheWritePerMillion: 6.25, currency: 'USD', validFrom: '2026-01-01T00:00:00Z',
+          source: 'Anthropic published pricing', note: null, unconfirmed: false,
+        },
+      },
+    }],
+  })));
 }
 
 async function saveShot(page: Page, name: string) {
@@ -196,6 +215,8 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
   const pipeline = page.getByTestId('overview-pipeline');
   await expect(pipeline).toBeVisible({ timeout: 10000 });
   await expect(page.getByTestId('overview-pipeline-tokens-by-model')).toHaveCount(0);
+  await page.getByText('CORE AGENT WORK', { exact: true }).click();
+  await page.getByText('ASPECT', { exact: true }).click();
 
   const coreRow = page.locator('[data-step-id="core-agent-run"]');
   const aspectRow = page.locator('[data-step-id="aspect-code-quality"]');
@@ -207,7 +228,7 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
   await expect(page.getByTestId('overview-pipeline-total-cost')).toContainText('$2.75');
 
   await pipeline.screenshot({
-    path: RESULTS_DIR ? join(RESULTS_DIR, 'pipeline-step-usage.png') : 'test-results/pipeline-step-usage.png',
+    path: RESULTS_DIR ? join(RESULTS_DIR, 'pipeline-step-usage--mocked.png') : 'test-results/pipeline-step-usage--mocked.png',
   });
 
   await aspectRow.getByTestId('overview-pipeline-step-tokens').click();
@@ -220,5 +241,17 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
   await expect(dialog).toContainText('240k');
   await expect(dialog).toContainText('1.2m');
 
-  await saveShot(page, 'pipeline-step-usage-full.png');
+  await dialog.getByRole('button', { name: 'Close' }).last().click();
+  await coreRow.getByTestId('overview-pipeline-step-cost').click();
+  const costDialog = page.getByTestId('cost-breakdown-dialog');
+  await expect(costDialog).toBeVisible();
+  await expect(costDialog).toContainText('claude-opus-4-8');
+  await expect(costDialog).toContainText('Input / 1M');
+  await expect(costDialog.getByTestId('cost-breakdown-formula')).toContainText('/ 1M × $5.00');
+  await expect(costDialog).toContainText('Anthropic published pricing');
+  await expect(costDialog).toContainText('Price effective date');
+  await saveShot(page, 'cost-breakdown-dialog-light--mocked.png');
+  await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'dark'; });
+  await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
+  await saveShot(page, 'cost-breakdown-dialog-dark--mocked.png');
 });

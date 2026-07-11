@@ -501,6 +501,49 @@ public sealed class AgentMessageBusBridge
     }
 
     /// <summary>
+    /// <summary>
+    /// Quota-snapshot observation for one run boundary (AGT-2100). Emitted at
+    /// run-start and run-end, this mirrors the currently CACHED quota snapshot
+    /// for the CLI that ran - all windows, plus the snapshot's age so a reader
+    /// can tell a fresh reading from a stale one. It never forces a fresh probe;
+    /// the caller passes whatever <see cref="QuotaService.GetCachedFor"/> holds
+    /// (null when nothing is cached). The compact payload is a
+    /// <see cref="QuotaSnapshotEvent"/> so downstream cap-forecast tooling reads
+    /// one line of stable-named JSON per event.
+    /// </summary>
+    public Task EmitQuotaSnapshotAsync(
+        string? project,
+        string? jobId,
+        string? runId,
+        string cliType,
+        string? model,
+        string? thinkingLevel,
+        string phase,
+        QuotaSnapshot? snapshot,
+        TimeSpan ttl,
+        DateTime? createdAt = null,
+        CancellationToken ct = default)
+    {
+        var now = _time.GetUtcNow().UtcDateTime;
+        var evt = QuotaSnapshotEventBuilder.Build(
+            phase, cliType, model, thinkingLevel, snapshot, ttl, now, runId, jobId);
+
+        var msg = NewMessage(
+            participantId: ParticipantRuntime,
+            role: "evidence",
+            kind: "observation",
+            severity: "Info",
+            project: project,
+            jobId: jobId,
+            runId: runId,
+            topic: "quota-snapshot",
+            summary: QuotaSnapshotEventBuilder.Summarize(evt),
+            createdAt: createdAt,
+            payload: evt,
+            tags: new[] { "quota-snapshot", $"phase:{evt.Phase}", $"cli:{cliType}" });
+        return EmitAsync(msg, ct);
+    }
+
     /// Free-form structured event emit. Awaitable, so tests and future
     /// producers that want backpressure can chain off the result. Production
     /// callers should discard the task (<c>_ = bridge.EmitAsync(...)</c>) so

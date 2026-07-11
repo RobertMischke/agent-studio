@@ -1,0 +1,43 @@
+<section class="visible-task" data-testid="visible-cli-task-card">
+  <header class="visible-task__header">
+    <div>
+      <span class="visible-task__eyebrow">CLI task</span>
+      <h3>{{ request().scope }}</h3>
+      <p>{{ request().reason }}</p>
+    </div>
+    <span class="visible-task__duration" data-testid="visible-cli-task-duration">
+      {{ request().expectedDuration ? 'Usually ' + request().expectedDuration : 'Duration estimate pending' }}
+    </span>
+  </header>
+
+  <div class="visible-task__prompt">
+    <span>CLI input</span>
+    <pre data-testid="visible-cli-task-prompt">{{ request().prompt }}</pre>
+  </div>
+
+  <div class="visible-task__footer">
+    <label>
+      <span>Project context</span>
+      <select data-testid="visible-cli-task-workspace" [ngModel]="selectedWatchPath()" (ngModelChange)="selectedWatchPath.set($event)">
+        @for (workspace of workspaces(); track workspace.path) {
+          <option [value]="workspace.path">{{ workspace.name }}</option>
+        }
+      </select>
+    </label>
+    <code>{{ request().command }}</code>
+    @if (created()) {
+      <span class="visible-task__state" data-testid="visible-cli-task-created"><span aria-hidden="true"></span>Task queued</span>
+      <button type="button" class="visible-task__button" data-testid="visible-cli-task-open" (click)="openTask()">Open task</button>
+    } @else {
+      <button type="button" class="visible-task__button" data-testid="visible-cli-task-start" [disabled]="running() || !selectedWatchPath()" (click)="start()">
+        {{ running() ? 'Creating task...' : 'Start visible CLI task' }}
+      </button>
+    }
+  </div>
+  @if (!workspaces().length) {
+    <p class="visible-task__notice">Add a project workspace before starting this CLI task.</p>
+  }
+  @if (error(); as message) {
+    <p class="visible-task__error" role="alert">{{ message }}</p>
+  }
+</section>

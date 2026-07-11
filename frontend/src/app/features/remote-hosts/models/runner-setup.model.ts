@@ -1,0 +1,112 @@
+import type { VisibleCliTaskRequest } from '../../visible-cli-task';
+import { isLocalUrl } from '../../task-server';
+import type { RemoteHost } from './remote-host.model';
+
+export type RunnerSetupConnectionMode = 'central' | 'lan' | 'tunnel';
+
+export interface RunnerSetupConfig {
+  sshTarget: string;
+  taskServerUrl: string;
+  connectionMode: RunnerSetupConnectionMode | '';
+  clientId: string;
+  gitRemote: string;
+}
+
+/** Validate the operator-owned values before a provisioning task can be queued. */
+export function runnerSetupIssues(config: RunnerSetupConfig): string[] {
+  const issues: string[] = [];
+  if (!config.sshTarget.trim()) issues.push('SSH target is required.');
+  if (!config.taskServerUrl.trim()) {
+    issues.push('Task Server URL is required.');
+  } else if (!isHttpUrl(config.taskServerUrl)) {
+    issues.push('Task Server URL must be an absolute HTTP or HTTPS URL.');
+  }
+  if (!config.connectionMode) issues.push('Choose how the remote host reaches the Task Server.');
+  if (!config.clientId.trim()) issues.push('Client identity is required.');
+  if (!config.gitRemote.trim()) issues.push('Git remote URL is required.');
+  if (config.taskServerUrl.trim() && isLocalUrl(config.taskServerUrl) && config.connectionMode !== 'tunnel') {
+    issues.push('A remote host cannot reach this loopback URL. Choose Tunnel or enter a central or LAN URL.');
+  }
+  return issues;
+}
+
+/** Build the durable CLI task that owns progress, operator input, and history. */
+export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupConfig): VisibleCliTaskRequest {
+  const sshTarget = config.sshTarget.trim();
+  const taskServerUrl = config.taskServerUrl.trim().replace(/\/+$/, '');
+  const clientId = config.clientId.trim();
+  const gitRemote = config.gitRemote.trim();
+  const connectionMode = config.connectionMode || 'not selected';
+  const healthUrl = `${taskServerUrl}/healthz`;
+  const controllerCommand = [
+    'bash scripts/remote-runner-onboard.sh',
+    `--host ${shellArg(sshTarget)}`,
+    `--server ${shellArg(taskServerUrl)}`,
+    `--topology ${shellArg(connectionMode)}`,
+    `--client-id ${shellArg(clientId)}`,
+    `--runner-name ${shellArg(host.name)}`,
+    `--git-remote ${shellArg(gitRemote)}`,
+  ].join(' ');
+
+  return {
+    title: `Set up runner on ${host.name}`,
+    scope: `Set up the remote runner on ${host.name}`,
+    reason: 'Provision the host idempotently, authenticate its agent CLIs, register its daemon, and prove one real remote task handoff.',
+    command: controllerCommand,
+    expectedDuration: '10 to 20 minutes plus operator login time',
+    cliType: 'codex',
+    context: {
+      host: host.name,
+      sshTarget,
+      taskServerUrl,
+      connectionMode,
+      clientId,
+      gitRemote,
+      executionBoundary: 'Run the controller agent locally; perform every host operation through SSH.',
+    },
+    prompt: [
+      `Set up remote host ${host.name}. Run every inspection and mutation through SSH target \`${sshTarget}\`; do not install or configure the runner on the operator workstation.`,
+      '',
+      'Treat this as an idempotent remote-host process that is safe to repeat after a wipe. Report each phase in the task conversation and fail with a concrete recovery instruction instead of waiting silently.',
+      '',
+      '1. Reachability gate (must run first)',
+      `- From the remote host, verify \`${healthUrl}\` with curl and the exact header \`X-Client-Id: ${clientId}\`.`,
+      `- Connection mode is \`${connectionMode}\`. If it is \`tunnel\`, verify the tunnel on the remote host before curl.`,
+      '- Do not install or start the runner until this remote curl succeeds. On failure, show whether the operator needs a central URL, LAN binding, or tunnel.',
+      '',
+      '2. Runner and source setup',
+      `- Run the product-owned controller exactly as recorded in the Execution contract: \`${controllerCommand}\`. Do not replace it with hand-written local installation steps.`,
+      '- Confirm .NET 10 is available.',
+      '- Install or update the NuGet global tool `CodingAgentRunner` with a version range of `[0.5.0,)`; verify the resolved version is at least 0.5.0.',
+      '- The controller intentionally fails if the published NuGet package is not a DotnetTool. Report that packaging failure; do not bypass it with a session process or copied binary.',
+      `- Configure the runner with Task Server URL \`${taskServerUrl}\` and client identity \`${clientId}\` so every request sends that exact X-Client-Id.`,
+      `- Configure code checkout/update from Git remote \`${gitRemote}\`; do not transfer a workstation working tree or credentials.`,
+      '- Create or update a systemd unit, run daemon-reload, enable it, and start it through systemd. Never leave the runner as a shell, tmux, nohup, or user-session process.',
+      '',
+      '3. Host-native CLI authentication',
+      '- Install Codex and Claude CLI on the host when missing, then report their versions.',
+      '- Run `codex login --device-auth`. Print the browser URL and device code verbatim in this task conversation, pause for the operator to complete the browser step locally, then run `codex login status` and report the logged-in identity.',
+      '- Run the supported Claude host login flow (`claude auth login`) and surface its browser URL or device code in this task conversation. Then run `claude auth status` and report the logged-in identity.',
+      '- Never copy, upload, or reuse credential files from the operator workstation. Credentials must be created and refreshed by each CLI on this host.',
+      '',
+      '4. Verification and real handoff',
+      '- Confirm the systemd service is active and enabled, the Task Server accepts the configured client identity, and the client registry shows a fresh LastSeen.',
+      '- Run the runner connection or health check and include the result.',
+      '- Queue and complete one real smoke task through this remote runner. Prove the remote lease/runner attribution and final task result; a local or synthetic no-op is not acceptance.',
+      '- Finish with the installed runner version, service state, Task Server reachability result, Codex and Claude login identities, refreshed LastSeen, and smoke-task key/result.',
+    ].join('\n'),
+  };
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function shellArg(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}

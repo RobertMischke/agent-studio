@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import type { TaskInfo } from '../../../../models/task.model';
 import type { OrchestratorContextSession } from '../../models/orchestrator.model';
 
@@ -21,8 +21,6 @@ export class ChatSwitcherRailComponent {
   readonly unreadContextKeys = input<ReadonlySet<string>>(new Set());
   readonly contextSelected = output<string>();
   readonly locationRequested = output<string>();
-
-  readonly expanded = signal(false);
 
   readonly rows = computed<RailRow[]>(() => {
     const byKey = new Map(this.sessions().map(session => [session.contextKey, session]));
@@ -47,7 +45,6 @@ export class ChatSwitcherRailComponent {
     }));
   });
 
-  readonly activeCount = computed(() => this.rows().filter(row => row.runtimeStatus === 'active' || row.runtimeStatus === 'queued').length);
   readonly globalRows = computed(() => this.rows().filter(row => row.kind === 'global'));
   readonly projectRows = computed(() => this.rows().filter(row => row.kind === 'project'));
   readonly taskRows = computed(() => this.rows().filter(row => row.kind === 'task'));

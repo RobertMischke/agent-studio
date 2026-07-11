@@ -48,11 +48,23 @@
 
   <div class="rh__list">
     @for (host of hosts(); track host.id) {
-      <app-remote-host-card [host]="host" [now]="now()" (action)="onAction($event)" />
+      <app-remote-host-card
+        [host]="host"
+        [now]="now()"
+        (action)="onAction($event)"
+        (setup)="openSetup($event)" />
     }
   </div>
 
   @if (wizardOpen()) {
     <app-add-host-wizard (cancelled)="closeWizard()" (completed)="completeWizard($event)" />
+  }
+
+  @if (setupHost(); as host) {
+    <app-runner-setup-dialog
+      [host]="host"
+      [workspaces]="workspaces()"
+      (cancelled)="closeSetup()"
+      (taskCreated)="onSetupTaskCreated($event)" />
   }
 </div>

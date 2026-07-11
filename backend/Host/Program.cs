@@ -222,6 +222,7 @@ builder.Services.AddSingleton<AgentStudio.Tasks.CompletedLaneAuditService>();
 builder.Services.AddSingleton<FixtureMigrationService>();
 builder.Services.AddSingleton<TaskSessionLog>();
 builder.Services.AddSingleton<TimelineLog>();
+builder.Services.AddSingleton<ProjectThroughputService>();
 // T2b (ASS-1740): the single per-task read layer. Loads all raw sources
 // (detail, session-events, cli-output, timeline ledger) once and projects the
 // run timeline + meshed ledger so the /runs and /timeline views stop
@@ -262,6 +263,8 @@ builder.Services.AddSingleton<BoardMergeStatusService>();
 // folds the per-task chip signal onto accepted cards (O(projects), no per-card git).
 builder.Services.AddSingleton<PublishTargetService>();
 builder.Services.AddSingleton<TaskPublishableService>();
+builder.Services.AddSingleton<PublishActionService>();
+builder.Services.AddSingleton<ProjectDeploymentSummaryService>();
 builder.Services.AddSingleton<TaskTransitionService>();
 // Out-of-band task completion (docs/concepts/out-of-band-task-completion.md §3):
 // reconciles a task finished outside the runner in one atomic call.
@@ -916,6 +919,16 @@ transitionsForRunner.OnJobMoved += (projectName, jobId, fromState, toState) =>
     runnerForTransitions.ClearActiveJobForProject(
         projectName, jobId,
         $"job moved out of 3-progress externally ({fromState} -> {toState})");
+};
+
+// PUB-2 automation ladder. Package targets are clamped to suggest; only the
+// website auto rung subscribes to acceptance and waits for the asynchronous
+// integration merge before dispatching the existing deploy workflow.
+var publishActionsForTransitions = app.Services.GetRequiredService<PublishActionService>();
+transitionsForRunner.OnJobMoved += (projectName, jobId, _, toState) =>
+{
+    if (toState == TaskStates.Completed)
+        publishActionsForTransitions.HandleTaskAccepted(projectName, jobId);
 };
 
 // Defensive: when a non-API folder change touches the watch tree (external

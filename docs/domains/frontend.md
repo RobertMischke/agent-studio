@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-07-10
+Version: 2026-07-11
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -79,6 +79,12 @@ groups, and a failed domain reports an error without hiding successful domains.
   operations, and shows a per-doc History panel (model / when / why + git log);
   its endpoints and tree contract are documented in
   [docs/contracts/wiki-tree.md](../contracts/wiki-tree.md).
+- `frontend/src/app/features/project-detail/components/project-overview-dashboard/`:
+  the operator-first Project Overview composition. It presents project outcomes,
+  important runtime entry points, deployment readiness, and work requiring
+  attention. It delegates URL status and start-in-place behavior to
+  `project-overview-urls/`, and delegates publishing actions to the existing
+  `project-publish-panel/` instead of introducing competing state or commands.
 - Project Settings owns the project-dedicated execution assignment. The
   execution card selects `local` or a healthy runner identity and persists it
   through the runtime-owned
@@ -107,6 +113,38 @@ groups, and a failed domain reports an error without hiding successful domains.
   summary. Legacy CLI-admin and usage links resolve to the CLI Management
   section at `#/workspace/settings/caps`.
 
+## Project Overview Contract
+
+The default `#/projects/<slug>` rail is an operator dashboard. It answers what
+was delivered, what changed, what is reachable, and what deserves attention.
+Machine configuration does not belong in this view. Watch path, working
+directory, repository path, CLI readiness and status, clean-context settings,
+and project sessions remain in Project Settings.
+Project regression signals remain available from the Test Quality rail rather
+than competing with the Overview's operator summary.
+
+The dashboard is a projection over existing domain truths:
+
+| Dashboard block | Read model or capability | Detail owner |
+|---|---|---|
+| Delivered work | `GET /api/projects/{projectName}/throughput`, including archived task history and exact rolling 24-hour and 7-day windows | Board and task history |
+| Token use | `GET /api/projects/{projectName}/token-usage/summary`, including rolling 24-hour and 7-day totals | Token Usage rail |
+| Project URLs | Embedded project URLs from `GET /api/workspaces`, live URL probes, and the existing `POST /api/projects/{projectId}/urls/{urlId}/start` action | Project URLs rail and registry |
+| Deployment readiness | `GET /api/projects/{projectName}/deployment/summary`, the shared DEP-1 read model for the last stable deployment and current pending commit delta | Deployment domain |
+| Wiki activity | `GET /api/projects/{projectName}/wiki/pulse?feedLimit=6` | Wiki rail |
+| Planning work | Active planning-mode tasks from the current board snapshot | Task detail and Board |
+| Publishing | Publish targets from `GET /api/projects/{projectName}/snapshot`, rendered by the existing publish panel | Publishing panel |
+
+The Overview limits URL, Wiki, planning-task, and commit lists to compact
+previews and links to the owning detail surface. Each data request fails
+independently so one unavailable source does not blank the dashboard. Numeric
+metrics use tabular figures.
+
+The production v1 does not own a Visual Evidence review queue or a deployment
+workflow. Those remain explicit follow-up slices. The deployment block is
+read-only, apart from the separately owned publishing controls, and must keep
+using the DEP-1 summary rather than parse deployment history in the frontend.
+
 ## Invariants
 
 - Angular components are standalone. Do not introduce NgModules.
@@ -129,6 +167,9 @@ groups, and a failed domain reports an error without hiding successful domains.
 - Workspace-level CLI administration is not a separate sheet. Model and
   environment management, completion contracts, sessions, usage caps, and
   token spend belong to Workspace Settings under CLI Management.
+- Project Overview remains operator-first. Do not add watch paths, repository
+  paths, working directories, CLI health, clean-context controls, or session
+  administration back to the Overview; those facts belong to Project Settings.
 - Backlog Triage is not a project navigation surface. Do not add a project
   Backlog tab, Explorer entry, activity-bar entry, or project-scoped board
   filter coupling. Persisted legacy `backlog` studio tabs are discarded during
@@ -145,3 +186,12 @@ groups, and a failed domain reports an error without hiding successful domains.
   `frontend/e2e/helpers/timing.ts`.
 - Pure frontend refactors still need component or unit tests when they move
   state, inputs, outputs, or service contracts.
+- The focused component contract for Project Overview is
+  `frontend/src/app/features/project-detail/components/project-overview-dashboard/project-overview-dashboard.spec.ts`.
+  Compact URL status, start gating, and project-switch safety are covered by
+  `frontend/src/app/features/project-detail/components/project-overview-urls/project-overview-urls.spec.ts`.
+  Its production dashboard navigation, URL start reuse, partial read models,
+  both themes, overflow guard, and review screenshots are covered by
+  `frontend/e2e/project/project-overview-dashboard.spec.ts`. The interactive
+  design contract is covered separately by
+  `frontend/e2e/mockups/project-overview-dashboard-mockup.spec.ts`.

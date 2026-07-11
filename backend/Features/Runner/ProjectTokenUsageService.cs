@@ -77,7 +77,7 @@ public class ProjectTokenUsageService
     }
 
     /// <summary>
-    /// Lifetime + last-24h totals with the Job / Supporting / Orchestrator
+    /// Lifetime + rolling 24h / 7d totals with the Job / Supporting / Orchestrator
     /// split. Returns an "empty" payload (HasData = false) when the
     /// project has not produced a single token-using orchestrator entry
     /// yet, so the panel can render its hide-when-empty branch (Hard
@@ -104,15 +104,19 @@ public class ProjectTokenUsageService
     {
         var now = (nowUtc ?? DateTime.UtcNow).ToUniversalTime();
         var since24h = now.AddHours(-24);
+        var since7d = now.AddDays(-7);
 
         var lifetime = new CategoryBucket();
         var last24h = new CategoryBucket();
+        var last7d = new CategoryBucket();
         long lifetimeTotal = 0;
         long last24hTotal = 0;
+        long last7dTotal = 0;
         DateTime? firstAt = null;
         DateTime? lastAt = null;
         int callsLifetime = 0;
         int callsLast24h = 0;
+        int callsLast7d = 0;
 
         foreach (var entry in entries)
         {
@@ -129,11 +133,17 @@ public class ProjectTokenUsageService
             if (firstAt == null || ts < firstAt) firstAt = ts;
             if (lastAt == null || ts > lastAt) lastAt = ts;
 
-            if (ts >= since24h)
+            if (ts >= since24h && ts <= now)
             {
                 last24h.Add(category, total);
                 last24hTotal += total;
                 callsLast24h++;
+            }
+            if (ts >= since7d && ts <= now)
+            {
+                last7d.Add(category, total);
+                last7dTotal += total;
+                callsLast7d++;
             }
         }
 
@@ -151,6 +161,11 @@ public class ProjectTokenUsageService
             Last24hSupportingTokens = last24h.Supporting,
             Last24hOrchestratorTokens = last24h.Orchestrator,
             Last24hCalls = callsLast24h,
+            Last7dTotalTokens = last7dTotal,
+            Last7dJobTokens = last7d.Job,
+            Last7dSupportingTokens = last7d.Supporting,
+            Last7dOrchestratorTokens = last7d.Orchestrator,
+            Last7dCalls = callsLast7d,
             FirstActivity = firstAt?.ToString("o"),
             LastActivity = lastAt?.ToString("o"),
             FetchedAt = DateTime.UtcNow.ToString("o"),
@@ -571,6 +586,11 @@ public sealed record ProjectTokenUsageSummary
     public long Last24hSupportingTokens { get; init; }
     public long Last24hOrchestratorTokens { get; init; }
     public int Last24hCalls { get; init; }
+    public long Last7dTotalTokens { get; init; }
+    public long Last7dJobTokens { get; init; }
+    public long Last7dSupportingTokens { get; init; }
+    public long Last7dOrchestratorTokens { get; init; }
+    public int Last7dCalls { get; init; }
     public string? FirstActivity { get; init; }
     public string? LastActivity { get; init; }
     public string FetchedAt { get; init; } = "";

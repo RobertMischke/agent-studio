@@ -1,0 +1,1225 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deployment as a first-class citizen - interactive concept mockup</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #e9eef4;
+      --shell: #f7f9fc;
+      --surface: #ffffff;
+      --surface-2: #f1f5f9;
+      --surface-3: #e7edf5;
+      --text: #172131;
+      --muted: #667489;
+      --faint: #8794a7;
+      --line: #d5dee9;
+      --line-strong: #b9c6d6;
+      --blue: #276fd2;
+      --blue-soft: rgba(39, 111, 210, .11);
+      --violet: #7357b6;
+      --violet-soft: rgba(115, 87, 182, .12);
+      --green: #167b59;
+      --green-soft: rgba(22, 123, 89, .11);
+      --amber: #95650d;
+      --amber-soft: rgba(179, 119, 14, .13);
+      --red: #b4423a;
+      --red-soft: rgba(180, 66, 58, .11);
+      --shadow: 0 18px 58px rgba(37, 55, 78, .17);
+      --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0c1119;
+      --shell: #111925;
+      --surface: #17212e;
+      --surface-2: #1d2938;
+      --surface-3: #263446;
+      --text: #edf3fa;
+      --muted: #9aa8bb;
+      --faint: #78879a;
+      --line: #2b394b;
+      --line-strong: #41536a;
+      --blue: #76a9f7;
+      --blue-soft: rgba(89, 146, 233, .16);
+      --violet: #b8a3ef;
+      --violet-soft: rgba(151, 122, 222, .17);
+      --green: #67c9a1;
+      --green-soft: rgba(68, 177, 136, .15);
+      --amber: #e1b45e;
+      --amber-soft: rgba(209, 151, 44, .16);
+      --red: #f07d73;
+      --red-soft: rgba(225, 90, 80, .15);
+      --shadow: 0 20px 64px rgba(0, 0, 0, .35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font: 13px/1.45 var(--sans);
+    }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }
+    [hidden] { display: none !important; }
+
+    .studio {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: 274px minmax(0, 1fr);
+      background: var(--bg);
+    }
+
+    /* Explorer */
+    .explorer {
+      min-width: 0;
+      overflow: auto;
+      background: var(--shell);
+      border-right: 1px solid var(--line);
+    }
+    .brand {
+      height: 54px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand-mark {
+      width: 27px;
+      height: 27px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font-weight: 800;
+      letter-spacing: -.04em;
+    }
+    .brand strong { font-size: 13px; }
+    .brand small { display: block; color: var(--muted); font-size: 10px; }
+    .grow { flex: 1; }
+    .icon-button {
+      width: 31px;
+      height: 31px;
+      display: grid;
+      place-items: center;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      color: var(--muted);
+      background: transparent;
+    }
+    .icon-button:hover { color: var(--text); background: var(--surface-2); }
+
+    .explorer-heading {
+      display: flex;
+      align-items: center;
+      padding: 14px 13px 7px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 760;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+    .tree { padding: 0 7px 16px; }
+    .tree-row {
+      width: 100%;
+      min-height: 34px;
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 7px;
+      border: 0;
+      border-radius: 7px;
+      color: var(--muted);
+      background: transparent;
+      text-align: left;
+    }
+    .tree-row:hover { color: var(--text); background: var(--surface-2); }
+    .tree-row.active, .tree-row[aria-current="page"] {
+      color: var(--text);
+      background: var(--blue-soft);
+    }
+    .tree-row.project {
+      min-height: 39px;
+      color: var(--text);
+      font-weight: 690;
+    }
+    .tree-row.child { padding-left: 25px; }
+    .tree-row .label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chevron {
+      width: 16px;
+      color: var(--faint);
+      text-align: center;
+      transition: transform .16s ease;
+    }
+    .collapsed > .tree-row .chevron { transform: rotate(-90deg); }
+    .project-badge {
+      width: 20px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      color: #fff;
+      background: #4778c7;
+      font-size: 10px;
+      font-weight: 800;
+    }
+    .count {
+      min-width: 21px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface-3);
+      font: 700 9px/1.4 var(--mono);
+      text-align: center;
+    }
+    .live-dot {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--green);
+      font-size: 9px;
+    }
+    .live-dot i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .project-children { display: block; }
+    .project-node.collapsed .project-children { display: none; }
+
+    /* Main */
+    .app-main {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 54px minmax(0, 1fr);
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--shell) 93%, transparent);
+    }
+    .crumbs {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .crumbs strong {
+      max-width: 30vw;
+      overflow: hidden;
+      color: var(--text);
+      text-overflow: ellipsis;
+    }
+    .mock-label {
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: var(--violet);
+      background: var(--violet-soft);
+      font-size: 9px;
+      font-weight: 760;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .view-switch {
+      display: inline-flex;
+      padding: 2px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--surface-2);
+    }
+    .view-switch button {
+      min-height: 28px;
+      padding: 0 11px;
+      border: 0;
+      border-radius: 7px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .view-switch button.active {
+      color: var(--text);
+      background: var(--surface);
+      box-shadow: 0 1px 3px rgba(31, 45, 64, .12);
+    }
+    .top-action {
+      min-height: 31px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--muted);
+      background: var(--surface);
+    }
+    .top-action:hover { color: var(--text); border-color: var(--line-strong); }
+
+    .view-scroll { min-width: 0; min-height: 0; overflow: auto; padding: 18px; }
+    .view[hidden] { display: none; }
+
+    .view-head { margin-bottom: 14px; }
+    .eyebrow {
+      margin-bottom: 3px;
+      color: var(--blue);
+      font-size: 9px;
+      font-weight: 780;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .view-head h1 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+    .view-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; max-width: 70ch; }
+
+    /* Shared panel */
+    .panel {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 46px;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .panel-header h2 { margin: 0; font-size: 13px; }
+    .panel-header p { margin: 2px 0 0; color: var(--muted); font-size: 10px; }
+    .surface-tag {
+      padding: 3px 6px;
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface-3);
+      font-size: 8px;
+      font-weight: 760;
+      letter-spacing: .04em;
+      white-space: nowrap;
+      text-transform: uppercase;
+    }
+    .surface-tag.derived { color: var(--green); background: var(--green-soft); }
+    .surface-tag.trusted { color: var(--blue); background: var(--blue-soft); }
+    .panel-body { padding: 14px; }
+
+    .primary-button, .secondary-button {
+      min-height: 34px;
+      padding: 0 13px;
+      border-radius: 8px;
+      font-weight: 680;
+      white-space: nowrap;
+    }
+    .primary-button {
+      border: 1px solid var(--blue);
+      color: #fff;
+      background: #276fd2;
+    }
+    html[data-theme="dark"] .primary-button { color: #0d1723; background: var(--blue); }
+    .primary-button:hover { filter: brightness(1.05); }
+    .primary-button:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+    .secondary-button {
+      border: 1px solid var(--line-strong);
+      color: var(--text);
+      background: var(--surface);
+    }
+    .secondary-button:hover { border-color: var(--blue); }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+    .status-chip i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .status-chip.ok { color: var(--green); background: var(--green-soft); }
+    .status-chip.running { color: var(--blue); background: var(--blue-soft); }
+    .status-chip.idle { color: var(--muted); background: var(--surface-3); }
+    .status-chip.pending { color: var(--amber); background: var(--amber-soft); }
+    .status-chip.running i { animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+    /* View 1: Deployment page */
+    .deploy-grid {
+      display: grid;
+      grid-template-columns: minmax(280px, .82fr) minmax(0, 1.4fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .target-list { display: grid; gap: 9px; padding: 12px; }
+    .target-card {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      color: var(--muted);
+      background: var(--surface-2);
+      text-align: left;
+    }
+    .target-card:hover { color: var(--text); border-color: var(--line-strong); }
+    .target-card.active { color: var(--text); border-color: var(--blue); background: var(--blue-soft); }
+    .target-glyph {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      color: var(--blue);
+      background: var(--surface);
+      font-size: 13px;
+    }
+    .target-card strong { display: block; font-size: 12px; }
+    .target-card small { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; }
+    .kind-tag {
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 8px;
+      font-weight: 760;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .kind-tag.template { color: var(--blue); background: var(--blue-soft); }
+    .kind-tag.derived { color: var(--green); background: var(--green-soft); }
+    .kind-tag.prompt { color: var(--violet); background: var(--violet-soft); }
+    .run-dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      margin-left: 5px;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 0 3px var(--blue-soft);
+      vertical-align: middle;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    .describe-button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 9px;
+      color: var(--blue);
+      background: transparent;
+      font-weight: 640;
+    }
+    .describe-button:hover { background: var(--blue-soft); }
+
+    .history-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 10px;
+    }
+    .history-meta code { color: var(--text); font-family: var(--mono); }
+    .run-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .run-table th {
+      padding: 8px 14px;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+    }
+    .run-table td { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+    .run-table tr:last-child td { border-bottom: 0; }
+    .run-table .mono { font-family: var(--mono); font-size: 10px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 9px;
+    }
+    .pill.ok { color: var(--green); background: var(--green-soft); }
+    .pill.ok i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .empty-note {
+      padding: 22px 14px;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: center;
+    }
+    .run-action-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-top: 1px solid var(--line);
+      background: var(--surface-2);
+    }
+    .run-action-bar small { color: var(--muted); font-size: 10px; }
+
+    /* View 2: Prompt to dynamic UI */
+    .prompt-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .prompt-body textarea {
+      width: 100%;
+      min-height: 168px;
+      resize: vertical;
+      padding: 11px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      color: var(--text);
+      background: var(--surface);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .prompt-actions {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-top: 11px;
+    }
+    .prompt-actions small { color: var(--muted); font-size: 9px; }
+    .schema-empty {
+      display: grid;
+      place-items: center;
+      min-height: 260px;
+      padding: 20px;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: center;
+    }
+    .schema-empty span { display: block; max-width: 34ch; margin-top: 6px; }
+    .field {
+      display: grid;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+    .field label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 690;
+    }
+    .type-tag {
+      padding: 1px 5px;
+      border-radius: 5px;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font: 700 8px var(--mono);
+      text-transform: none;
+    }
+    .req { color: var(--amber); font-size: 9px; }
+    .field input, .field select {
+      width: 100%;
+      padding: 8px 9px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+    }
+    .toggle-row span { font-size: 11px; }
+    .safety-note {
+      display: flex;
+      gap: 9px;
+      margin: 4px 0 12px;
+      padding: 9px 11px;
+      border-radius: 8px;
+      color: var(--amber);
+      background: var(--amber-soft);
+      font-size: 10px;
+    }
+    .safety-note strong { display: block; }
+    .safety-note span { display: block; margin-top: 1px; color: var(--muted); }
+    .step-hint {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .step-hint .num {
+      width: 22px; height: 22px;
+      display: grid; place-items: center;
+      flex: none;
+      border-radius: 999px;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font: 700 10px var(--mono);
+    }
+    .step-hint p { margin: 0; color: var(--muted); font-size: 11px; }
+    .step-hint strong { color: var(--text); }
+
+    /* View 3: Running deploy (CLI progress pattern) */
+    .run-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(300px, .9fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .run-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .run-head h2 { margin: 0; font-size: 14px; }
+    .run-head small { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .progress-track {
+      height: 6px;
+      border-radius: 999px;
+      background: var(--surface-3);
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 60%;
+      border-radius: 999px;
+      background: var(--blue);
+      transition: width .4s ease;
+    }
+    .steps { display: grid; gap: 2px; padding: 6px 0; }
+    .step {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 14px;
+    }
+    .step-icon {
+      width: 20px; height: 20px;
+      display: grid; place-items: center;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .step.done .step-icon { color: var(--green); background: var(--green-soft); }
+    .step.active .step-icon { color: var(--blue); background: var(--blue-soft); }
+    .step.active .step-icon i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: block; animation: pulse 1.2s ease-in-out infinite; }
+    .step.todo .step-icon { color: var(--faint); background: var(--surface-3); }
+    .step strong { display: block; font-size: 12px; }
+    .step small { display: block; color: var(--muted); font-size: 9px; }
+    .step .dur { color: var(--faint); font: 700 9px var(--mono); }
+    .log {
+      margin-top: 4px;
+      padding: 12px 14px;
+      border-top: 1px solid var(--line);
+      background: var(--surface-2);
+      font-family: var(--mono);
+      font-size: 10.5px;
+      line-height: 1.7;
+      color: var(--muted);
+      max-height: 190px;
+      overflow: auto;
+    }
+    .log b { color: var(--text); font-weight: 600; }
+    .log .g { color: var(--green); }
+
+    .chat {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      overflow: hidden;
+    }
+    .chat-transcript { padding: 13px; overflow: auto; max-height: 320px; }
+    .message { margin-bottom: 13px; }
+    .message-head {
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 9px;
+    }
+    .message-head strong { color: var(--text); }
+    .message-body {
+      padding: 9px 11px;
+      border-radius: 9px;
+      background: var(--surface-2);
+      font-size: 11px;
+    }
+    .message.user .message-body { background: var(--blue-soft); }
+    .composer { padding: 10px; border-top: 1px solid var(--line); background: var(--shell); }
+    .composer textarea {
+      width: 100%;
+      min-height: 54px;
+      max-height: 130px;
+      resize: vertical;
+      padding: 9px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      color: var(--text);
+      background: var(--surface);
+    }
+    .composer-row { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+    .composer-row small { color: var(--muted); font-size: 8px; }
+    .send-button {
+      margin-left: auto;
+      min-height: 30px;
+      padding: 0 11px;
+      border: 1px solid var(--blue);
+      border-radius: 7px;
+      color: #fff;
+      background: #276fd2;
+      font-weight: 700;
+    }
+    html[data-theme="dark"] .send-button { color: #0d1723; background: var(--blue); }
+
+    .toast {
+      position: fixed;
+      z-index: 120;
+      right: 18px;
+      bottom: 18px;
+      max-width: 380px;
+      padding: 11px 13px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      color: var(--text);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      font-size: 10px;
+    }
+    .toast strong { display: block; color: var(--green); }
+    .toast span { display: block; margin-top: 2px; color: var(--muted); }
+
+    @media (max-width: 1120px) {
+      .studio { grid-template-columns: 240px minmax(0, 1fr); }
+      .deploy-grid, .prompt-grid, .run-layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      body { overflow: auto; }
+      .studio { display: block; height: auto; }
+      .explorer { max-height: 300px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .app-main { display: block; min-height: 100vh; }
+      .topbar { min-height: 50px; position: sticky; top: 0; z-index: 20; flex-wrap: wrap; padding: 8px 12px; }
+      .crumbs span:nth-child(-n+2), .mock-label { display: none; }
+      .view-switch { order: 3; width: 100%; }
+      .view-switch button { flex: 1; }
+      .run-table { display: block; overflow-x: auto; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0s !important;
+        animation-duration: 0s !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="studio">
+    <aside class="explorer" aria-label="Explorer">
+      <div class="brand">
+        <span class="brand-mark">AS</span>
+        <div><strong>Agent Studio</strong><small>Deployment concept</small></div>
+        <span class="grow"></span>
+        <button class="icon-button" aria-label="Search Explorer" title="Search">⌕</button>
+      </div>
+      <div class="explorer-heading"><span>Workspaces</span><span class="grow"></span><span>1</span></div>
+      <nav class="tree" aria-label="Workspace projects">
+        <button class="tree-row" type="button">
+          <span class="chevron">⌄</span><span class="label">Product Engineering</span><span class="count">1</span>
+        </button>
+        <div class="project-node" id="projectNode">
+          <button class="tree-row project" id="projectToggle" type="button" aria-expanded="true">
+            <span class="chevron">⌄</span>
+            <span class="label"><span class="project-badge" style="display:inline-grid;margin-right:7px">A</span>Agent Studio</span>
+            <span class="count">live</span>
+          </button>
+          <div class="project-children">
+            <button class="tree-row child" type="button"><span>▦</span><span class="label">Board</span><span class="count">12</span></button>
+            <button class="tree-row child" type="button"><span>◇</span><span class="label">Project Hub</span><span></span></button>
+            <button class="tree-row child" type="button"><span>▱</span><span class="label">Wiki</span><span></span></button>
+            <button class="tree-row child" type="button"><span>⚗</span><span class="label">Workbenches</span><span class="count">3</span></button>
+            <button class="tree-row child active" type="button" aria-current="page">
+              <span>▲</span><span class="label">Deployment</span>
+              <span class="live-dot"><i></i>1</span>
+            </button>
+            <button class="tree-row child" type="button"><span>◫</span><span class="label">Epics</span><span class="count">2</span></button>
+          </div>
+        </div>
+      </nav>
+    </aside>
+
+    <main class="app-main">
+      <header class="topbar">
+        <div class="crumbs"><span>Product Engineering</span><span>/</span><span>Agent Studio</span><span>/</span><strong>Deployment</strong></div>
+        <span class="mock-label">AGT-2097 mockup</span>
+        <span class="grow"></span>
+        <div class="view-switch" role="tablist" aria-label="Deployment mockup views">
+          <button class="active" type="button" data-view="page" role="tab" aria-selected="true">Deployment page</button>
+          <button type="button" data-view="prompt" role="tab" aria-selected="false">Prompt → UI</button>
+          <button type="button" data-view="running" role="tab" aria-selected="false">Running deploy</button>
+        </div>
+        <button class="top-action" id="themeToggle" type="button" aria-label="Switch to dark theme">Dark theme</button>
+      </header>
+
+      <div class="view-scroll">
+
+        <!-- VIEW 1: Deployment page -->
+        <section class="view" id="viewPage" role="tabpanel" aria-label="Deployment page">
+          <div class="view-head">
+            <div class="eyebrow">Deployment / project surface</div>
+            <h1>Deployment</h1>
+            <p>Targets, state, and run history for Agent Studio. Derived history needs no run action; templates and prompt-defined targets launch runs as visible CLI tasks.</p>
+          </div>
+
+          <div class="deploy-grid">
+            <article class="panel">
+              <header class="panel-header">
+                <div><h2>Targets</h2><p>Derived from repository facts and descriptors.</p></div>
+              </header>
+              <div class="target-list" role="listbox" aria-label="Deploy targets" id="targetList">
+                <button class="target-card active" type="button" data-target="stable" role="option" aria-selected="true">
+                  <span class="target-glyph">↻</span>
+                  <span><strong>deploy-stable cycle</strong><small>Studio self-deploy · update-stable.sh</small></span>
+                  <span class="kind-tag derived">derived</span>
+                </button>
+                <button class="target-card" type="button" data-target="caddy" role="option" aria-selected="false">
+                  <span class="target-glyph">🌐</span>
+                  <span><strong>Docs site (Caddy) <span class="run-dot" title="1 deploy running now"></span></strong><small>agent-orchestrator-web VM · deploying</small></span>
+                  <span class="kind-tag template">template</span>
+                </button>
+                <button class="target-card" type="button" data-target="nuget" role="option" aria-selected="false">
+                  <span class="target-glyph">📦</span>
+                  <span><strong>NuGet 0.3.1</strong><small>Tag-push release · via publishing</small></span>
+                  <span class="kind-tag template">template</span>
+                </button>
+                <button class="target-card" type="button" data-target="edge" role="option" aria-selected="false">
+                  <span class="target-glyph">✎</span>
+                  <span><strong>Edge preview deploy</strong><small>Prompt-defined · rsync + Caddy</small></span>
+                  <span class="kind-tag prompt">prompt</span>
+                </button>
+                <button class="describe-button" type="button" id="describeButton">
+                  <span>＋</span><span>Describe a deploy (prompt → dynamic UI)</span>
+                </button>
+              </div>
+            </article>
+
+            <article class="panel">
+              <header class="panel-header">
+                <div><h2 id="historyTitle">deploy-stable cycle</h2><p id="historySub">Read-only history from logs and git</p></div>
+                <span class="grow"></span>
+                <span class="surface-tag derived" id="historyTag">Derived</span>
+                <span class="status-chip idle" id="historyStatus"><i></i> idle</span>
+              </header>
+              <div class="history-meta" id="historyMeta">
+                <span>Source</span><code>logs/stable-restarts.jsonl</code><span>·</span><span>git range between recorded HEADs</span>
+              </div>
+              <div id="historyContent"></div>
+            </article>
+          </div>
+        </section>
+
+        <!-- VIEW 2: Prompt to dynamic UI -->
+        <section class="view" id="viewPrompt" role="tabpanel" aria-label="Prompt to dynamic UI" hidden>
+          <div class="view-head">
+            <div class="eyebrow">Prompt-defined dynamic UI (PDU)</div>
+            <h1>Describe a deploy</h1>
+            <p>Where no template fits, describe the deployment in a prompt. The product compiles it into a small typed UI you review, then launches concrete runs as CLI tasks.</p>
+          </div>
+
+          <div class="prompt-grid">
+            <article class="panel">
+              <header class="panel-header">
+                <div><h2>1 · Describe</h2><p>Natural-language deploy prompt</p></div>
+                <span class="grow"></span>
+                <span class="surface-tag">Prompt</span>
+              </header>
+              <div class="panel-body prompt-body">
+                <label for="promptInput" style="display:block;margin-bottom:6px;color:var(--muted);font-size:10px;font-weight:690">Deploy prompt</label>
+                <textarea id="promptInput">Deploy the docs site: build with pnpm build, rsync dist/ to web@agent-orchestrator-web:/srv/docs, then reload Caddy. Let me pick the source branch and choose whether to purge the CDN. Always ask me to confirm before it runs.</textarea>
+                <div class="prompt-actions">
+                  <button class="primary-button" id="compileButton" type="button">Compile to UI</button>
+                  <button class="secondary-button" id="resetPrompt" type="button">Reset</button>
+                  <small>Compiling produces a reviewable schema. Nothing runs yet.</small>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel">
+              <header class="panel-header">
+                <div><h2>2 · Review &amp; run</h2><p id="schemaSub">Compiled dynamic UI (edit before saving)</p></div>
+                <span class="grow"></span>
+                <span class="surface-tag trusted">Trusted host</span>
+              </header>
+              <div class="panel-body">
+                <div class="schema-empty" id="schemaEmpty">
+                  <div>
+                    <div style="font-size:22px">⚙</div>
+                    <strong>No UI yet</strong>
+                    <span>Compile the prompt on the left to generate typed fields, defaults, and one run button.</span>
+                  </div>
+                </div>
+                <div id="schemaForm" hidden>
+                  <div class="step-hint">
+                    <span class="num">✓</span>
+                    <p><strong>Compiled from prompt.</strong> Fields, types, and defaults were extracted. Edit them, then save as a reusable target or run once.</p>
+                  </div>
+                  <div class="field">
+                    <label for="fBranch">Source branch <span class="type-tag">branch</span> <span class="req">required</span></label>
+                    <select id="fBranch"><option>develop</option><option>main</option><option>release/docs</option></select>
+                  </div>
+                  <div class="field">
+                    <label>Purge CDN <span class="type-tag">boolean</span></label>
+                    <div class="toggle-row"><input type="checkbox" id="fPurge"><span>Purge the CDN after sync</span></div>
+                  </div>
+                  <div class="field">
+                    <label for="fHost">Target host <span class="type-tag">host</span></label>
+                    <input id="fHost" value="agent-orchestrator-web" readonly>
+                  </div>
+                  <div class="field">
+                    <label for="fConfirm">Confirmation <span class="type-tag">required</span></label>
+                    <select id="fConfirm"><option>Ask before running (from prompt)</option></select>
+                  </div>
+                  <div class="safety-note">
+                    <strong>i</strong>
+                    <div><strong>Parameter capture only</strong><span>This compiled UI holds no credentials and no execution authority. The run is a CLI task; a host secret-ref is named, never stored. Any dangerous ask would be surfaced here for review, not executed.</span></div>
+                  </div>
+                  <div style="display:flex;gap:9px">
+                    <button class="secondary-button" id="saveTarget" type="button">Save as target</button>
+                    <button class="primary-button" id="runPrompt" type="button">Run once →</button>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <!-- VIEW 3: Running deploy (CLI progress pattern) -->
+        <section class="view" id="viewRunning" role="tabpanel" aria-label="Running deploy" hidden>
+          <div class="view-head">
+            <div class="eyebrow">Running deploy / CLI-task substrate</div>
+            <h1>Docs site deploy</h1>
+            <p>A deploy run is a normal visible CLI task. Progress, live output, chat, and durable history come from the CLI-task substrate (AGT-2093), not a second engine.</p>
+          </div>
+
+          <div class="run-layout">
+            <article class="panel">
+              <header class="run-head">
+                <span class="target-glyph">🌐</span>
+                <div><h2>Docs site (Caddy)</h2><small>Task AGT-2140 · branch develop · agent-orchestrator-web</small></div>
+                <span class="grow"></span>
+                <span class="status-chip running" id="runStatus"><i></i> running</span>
+              </header>
+              <div style="padding:12px 14px">
+                <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+              </div>
+              <div class="steps" id="steps">
+                <div class="step done"><span class="step-icon">✓</span><span><strong>Checkout &amp; build</strong><small>pnpm build · dist/ produced</small></span><span class="dur">18s</span></div>
+                <div class="step done"><span class="step-icon">✓</span><span><strong>Sync artifacts</strong><small>rsync dist/ → web@vm:/srv/docs</small></span><span class="dur">9s</span></div>
+                <div class="step active"><span class="step-icon"><i></i></span><span><strong>Reload Caddy</strong><small>caddy reload over SSH</small></span><span class="dur">…</span></div>
+                <div class="step todo"><span class="step-icon">○</span><span><strong>Verify &amp; record revision</strong><small>curl /health · write run record</small></span><span class="dur"></span></div>
+              </div>
+              <div class="log" id="log" aria-live="polite">
+<span class="g">✓</span> <b>pnpm build</b> - 42 pages, 1.2s render
+<span class="g">✓</span> rsync: 38 files, 4.1 MB transferred
+› caddy reload: validating config on agent-orchestrator-web …</div>
+              <div class="run-action-bar" style="border-top:1px solid var(--line);border-radius:0">
+                <small>Live output streams from the CLI task. This history is durable per target.</small>
+                <span class="grow"></span>
+                <button class="secondary-button" type="button" id="finishRun">Simulate finish</button>
+              </div>
+            </article>
+
+            <article class="panel chat" aria-label="Deploy task chat">
+              <header class="panel-header">
+                <div><h2>Task chat</h2><p>Same conversation surface as any CLI task</p></div>
+              </header>
+              <div class="chat-transcript" id="chatTranscript">
+                <div class="message">
+                  <div class="message-head"><strong>Deploy task</strong><span>now</span></div>
+                  <div class="message-body">Build and sync succeeded. Reloading Caddy now. I will verify <code>/health</code> and record the deployed revision before I finish.</div>
+                </div>
+                <div class="message user">
+                  <div class="message-head"><strong>Robert</strong><span>now</span></div>
+                  <div class="message-body">If the health check fails, keep the previous revision and tell me.</div>
+                </div>
+                <div class="message">
+                  <div class="message-head"><strong>Deploy task</strong><span>now</span></div>
+                  <div class="message-body">Understood. On a failed health check I will not switch the served revision and will surface the error here.</div>
+                </div>
+              </div>
+              <form class="composer" id="chatForm">
+                <textarea id="chatInput" aria-label="Message the deploy task" placeholder="Ask or steer this deploy..."></textarea>
+                <div class="composer-row"><small>Target, branch, and revision are attached to this task.</small><button class="send-button" type="submit">Send</button></div>
+              </form>
+            </article>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden><strong>Simulated</strong><span></span></div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var toastTimer;
+
+      // --- Deep-link initial state (?view=page|prompt|running&theme=light|dark) ---
+      var params = new URLSearchParams(location.search);
+      var themeParam = params.get("theme");
+      if (themeParam === "dark" || themeParam === "light") {
+        root.dataset.theme = themeParam;
+      }
+
+      // --- Theme toggle ---
+      var themeButton = document.getElementById("themeToggle");
+      function syncThemeButton() {
+        var dark = root.dataset.theme === "dark";
+        themeButton.textContent = dark ? "Light theme" : "Dark theme";
+        themeButton.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+      }
+      syncThemeButton();
+      themeButton.addEventListener("click", function () {
+        root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+        syncThemeButton();
+      });
+
+      function toast(title, copy) {
+        var t = document.getElementById("toast");
+        t.querySelector("strong").textContent = title;
+        t.querySelector("span").textContent = copy;
+        t.hidden = false;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { t.hidden = true; }, 4600);
+      }
+
+      // --- View switching ---
+      var views = { page: "viewPage", prompt: "viewPrompt", running: "viewRunning" };
+      function showView(name) {
+        Object.keys(views).forEach(function (key) {
+          document.getElementById(views[key]).hidden = key !== name;
+        });
+        document.querySelectorAll(".view-switch button").forEach(function (b) {
+          var on = b.dataset.view === name;
+          b.classList.toggle("active", on);
+          b.setAttribute("aria-selected", String(on));
+        });
+      }
+      document.querySelectorAll(".view-switch button").forEach(function (b) {
+        b.addEventListener("click", function () { showView(b.dataset.view); });
+      });
+      var viewParam = params.get("view");
+      if (viewParam && views[viewParam]) { showView(viewParam); }
+      var showCompiled = params.get("compiled") === "1";
+
+      // --- View 1: target history ---
+      var targets = {
+        stable: {
+          title: "deploy-stable cycle", sub: "Read-only history from logs and git",
+          tag: "Derived", tagClass: "derived", status: "idle", statusText: "idle",
+          meta: '<span>Source</span><code>logs/stable-restarts.jsonl</code><span>·</span><span>git range between recorded HEADs</span>',
+          rows: [
+            ["10:12", "ab12c4 → cd34e8", "3", "42s", "ok"],
+            ["08:47", "98fa10 → ab12c4", "4", "51s", "ok"],
+            ["Yesterday", "77bc02 → 98fa10", "3", "39s", "ok"]
+          ],
+          cols: ["When", "HEAD before → after", "Tasks", "Duration", "Status"],
+          runnable: false
+        },
+        caddy: {
+          title: "Docs site (Caddy)", sub: "Template · runs as a CLI task on the remote host",
+          tag: "Template", tagClass: "trusted", status: "running", statusText: "deploying now",
+          meta: '<span>Template</span><code>caddy-site</code><span>·</span><span>host</span><code>agent-orchestrator-web</code>',
+          rows: [
+            ["Now", "develop @cd34e8", "AGT-2140", "-", "running"],
+            ["Mon", "develop @a71f09", "AGT-2118", "34s", "ok"]
+          ],
+          cols: ["When", "Revision", "Task", "Duration", "Status"],
+          runnable: true, runLabel: "Open running deploy →"
+        },
+        nuget: {
+          title: "NuGet 0.3.1", sub: "Template · delegates to publishing (tag-push)",
+          tag: "Template", tagClass: "trusted", status: "idle", statusText: "3 tasks pending",
+          meta: '<span>Delegates to</span><code>publishing-workflows (PUB-2)</code><span>·</span><span>Trusted Publishing owns the actual publish</span>',
+          rows: [
+            ["v0.3.1", "tag pushed → workflow", "-", "-", "ok"],
+            ["v0.3.0", "tag pushed → workflow", "-", "-", "ok"]
+          ],
+          cols: ["Version", "Path", "Task", "Duration", "Status"],
+          runnable: true, runLabel: "Prepare release v0.3.2…"
+        },
+        edge: {
+          title: "Edge preview deploy", sub: "Prompt-defined · compiled dynamic UI",
+          tag: "Prompt", tagClass: "trusted", status: "idle", statusText: "never run",
+          meta: '<span>Prompt-defined</span><code>docs/deployments/edge-preview/prompt.md</code>',
+          rows: [],
+          cols: ["When", "Revision", "Task", "Duration", "Status"],
+          runnable: true, runLabel: "Open dynamic UI…"
+        }
+      };
+
+      function renderHistory(key) {
+        var t = targets[key];
+        document.getElementById("historyTitle").textContent = t.title;
+        document.getElementById("historySub").textContent = t.sub;
+        var tag = document.getElementById("historyTag");
+        tag.textContent = t.tag;
+        tag.className = "surface-tag " + t.tagClass;
+        var st = document.getElementById("historyStatus");
+        st.className = "status-chip " + (t.status === "ok" ? "ok" : t.status === "running" ? "running" : "idle");
+        st.innerHTML = "<i></i> " + t.statusText;
+        document.getElementById("historyMeta").innerHTML = t.meta;
+
+        var html = "";
+        if (!t.rows.length) {
+          html = '<div class="empty-note">No runs recorded yet. This target stays quiet until its first run - no invented numbers.</div>';
+        } else {
+          html = '<table class="run-table"><thead><tr>';
+          t.cols.forEach(function (c) { html += "<th>" + c + "</th>"; });
+          html += "</tr></thead><tbody>";
+          t.rows.forEach(function (r) {
+            html += "<tr>";
+            r.forEach(function (cell, i) {
+              if (i === t.cols.length - 1) {
+                if (cell === "running") {
+                  html += '<td><span class="status-chip running" style="padding:2px 7px"><i></i>running</span></td>';
+                } else {
+                  html += '<td><span class="pill ok"><i></i>' + cell + "</span></td>";
+                }
+              } else {
+                html += '<td class="' + (i === 1 ? "mono" : "") + '">' + cell + "</td>";
+              }
+            });
+            html += "</tr>";
+          });
+          html += "</tbody></table>";
+        }
+        if (t.runnable) {
+          html += '<div class="run-action-bar"><small>Runs launch a visible CLI task; the page links to its live surface.</small><span class="grow"></span><button class="primary-button" type="button" id="targetRun">' + t.runLabel + "</button></div>";
+        } else {
+          html += '<div class="run-action-bar"><small>Read-only derived target - no run action. History is computed from git and logs.</small></div>';
+        }
+        document.getElementById("historyContent").innerHTML = html;
+
+        var runBtn = document.getElementById("targetRun");
+        if (runBtn) {
+          runBtn.addEventListener("click", function () {
+            if (key === "edge") { showView("prompt"); return; }
+            if (key === "nuget") {
+              toast("Delegates to publishing (PUB-2)", "A release routes to the guided publishing action: clean-worktree check, manifest bump, one release commit, atomic tag push. Deployment does not run npm/dotnet publish.");
+              return;
+            }
+            showView("running");
+          });
+        }
+      }
+      renderHistory("stable");
+
+      document.querySelectorAll(".target-card").forEach(function (card) {
+        card.addEventListener("click", function () {
+          document.querySelectorAll(".target-card").forEach(function (c) {
+            c.classList.remove("active"); c.setAttribute("aria-selected", "false");
+          });
+          card.classList.add("active"); card.setAttribute("aria-selected", "true");
+          renderHistory(card.dataset.target);
+        });
+      });
+      document.getElementById("describeButton").addEventListener("click", function () { showView("prompt"); });
+
+      // --- View 2: compile prompt ---
+      document.getElementById("compileButton").addEventListener("click", function () {
+        document.getElementById("schemaEmpty").hidden = true;
+        document.getElementById("schemaForm").hidden = false;
+        toast("Compiled to UI", "The prompt was turned into 4 typed fields. Review and edit before saving or running. Nothing has run.");
+      });
+      document.getElementById("resetPrompt").addEventListener("click", function () {
+        document.getElementById("schemaEmpty").hidden = false;
+        document.getElementById("schemaForm").hidden = true;
+      });
+      document.getElementById("saveTarget").addEventListener("click", function () {
+        toast("Saved as target (simulated)", "Production would write docs/deployments/<id>/deployment.json + prompt.md - versioned repository content.");
+      });
+      document.getElementById("runPrompt").addEventListener("click", function () { showView("running"); });
+      if (showCompiled) {
+        document.getElementById("schemaEmpty").hidden = true;
+        document.getElementById("schemaForm").hidden = false;
+      }
+
+      // --- View 3: running deploy ---
+      document.getElementById("finishRun").addEventListener("click", function () {
+        document.getElementById("progressFill").style.width = "100%";
+        var st = document.getElementById("runStatus");
+        st.className = "status-chip ok"; st.innerHTML = "<i></i> deployed";
+        var steps = document.querySelectorAll("#steps .step");
+        steps.forEach(function (s) { s.className = "step done"; s.querySelector(".step-icon").innerHTML = "✓"; });
+        steps[2].querySelector(".dur").textContent = "3s";
+        steps[3].querySelector(".dur").textContent = "2s";
+        var log = document.getElementById("log");
+        log.innerHTML += '\n<span class="g">✓</span> caddy reload: config valid, reloaded\n<span class="g">✓</span> health: 200 OK · recorded revision <b>cd34e8</b>\n<span class="g">✓</span> <b>deploy finished</b> - run recorded to this target\'s history';
+        log.scrollTop = log.scrollHeight;
+        toast("Deploy finished (simulated)", "A real run would settle quietly into this target's durable history. No production system was touched.");
+      });
+
+      document.getElementById("chatForm").addEventListener("submit", function (e) {
+        e.preventDefault();
+        var input = document.getElementById("chatInput");
+        var text = input.value.trim();
+        if (!text) return;
+        var tr = document.getElementById("chatTranscript");
+        tr.appendChild(makeMessage("Robert", text, true));
+        input.value = "";
+        tr.appendChild(makeMessage("Deploy task", "Noted for task AGT-2140 on revision cd34e8. I steer this deploy through the CLI task; I will not change served output without your confirmation.", false));
+        tr.scrollTop = tr.scrollHeight;
+      });
+      function makeMessage(author, copy, user) {
+        var w = document.createElement("div");
+        w.className = "message" + (user ? " user" : "");
+        var h = document.createElement("div"); h.className = "message-head";
+        var s = document.createElement("strong"); s.textContent = author;
+        var m = document.createElement("span"); m.textContent = "now";
+        h.appendChild(s); h.appendChild(m);
+        var b = document.createElement("div"); b.className = "message-body"; b.textContent = copy;
+        w.appendChild(h); w.appendChild(b);
+        return w;
+      }
+
+      // --- Explorer collapse ---
+      document.getElementById("projectToggle").addEventListener("click", function () {
+        var node = document.getElementById("projectNode");
+        node.classList.toggle("collapsed");
+        this.setAttribute("aria-expanded", String(!node.classList.contains("collapsed")));
+      });
+    }());
+  </script>
+</body>
+</html>

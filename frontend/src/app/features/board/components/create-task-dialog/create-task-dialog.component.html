@@ -14,6 +14,10 @@
             [cacTooltip]="'Close'"
             (click)="cancelRequest.emit()">×</button>
     <h2 class="create-dialog__title" data-testid="create-dialog-header">{{ header() }}</h2>
+    <div class="create-dialog__legacy" data-testid="create-dialog-legacy-notice">
+      <span class="create-dialog__legacy-badge">Legacy</span><span class="create-dialog__legacy-copy">This full-field editor remains available. Please use Orchestrator Chat for the primary task-creation flow.</span><button type="button" class="create-dialog__chat-btn" data-testid="create-in-chat" (click)="openChatRequest.emit()">Create in chat</button>
+    </div>
+    <h3 class="create-dialog__section-title">Task details</h3>
     <div class="field">
       <span class="field__label">Title</span>
       <div class="create-dialog__title-row">
@@ -65,6 +69,7 @@
         </div>
       </div>
     </div>
+    <h3 class="create-dialog__section-title">Configuration</h3>
     <div class="create-dialog__grid">
       <div class="field">
         <span class="field__label">Type</span>
@@ -102,7 +107,6 @@
           (thinkingLevelChange)="newThinkingLevel.set($event)" />
       </div>
     </div>
-
     <div class="field">
       <span class="field__label">Kind</span>
       <div class="create-type-picker" data-testid="create-kind">
@@ -119,13 +123,11 @@
                 (click)="setKind('epic')">Epic</button>
       </div>
     </div>
-
     <app-create-mode-picker [(mode)]="newMode" [(allowWebAccess)]="newAllowWebAccess" />
     <app-create-epic-picker
       [watchPath]="newWatchPath()"
       [show]="!isEpic()"
       [(parentEpicId)]="newEpicId" />
-
     @if (availableTags().length > 0) {
       <div class="field">
         <span class="field__label">Tags</span>
@@ -142,7 +144,7 @@
         </div>
       </div>
     }
-
+    <h3 class="create-dialog__section-title">Description</h3>
     <div class="field create-dialog__prompt-field">
       <div class="create-dialog__prompt-label">
         <span class="field__label">Prompt</span>
@@ -239,7 +241,6 @@
         <div class="create-dialog__attachment-error" data-testid="create-attach-error">⚠ {{ attachmentError() }}</div>
       }
     </div>
-
     <div class="create-dialog__actions">
       <button class="btn" data-testid="create-cancel" (click)="cancelRequest.emit()">Cancel</button>
       <button class="btn btn--primary"

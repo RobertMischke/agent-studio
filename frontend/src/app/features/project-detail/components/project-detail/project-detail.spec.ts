@@ -66,7 +66,7 @@ describe('ProjectDetailComponent (smoke)', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="project-cli-onboarding-status"]')).toBeNull();
   });
 
-  it('does not render a duplicate overview feed header inside the project shell', async () => {
+  it('keeps the retired legacy overview free of machine plumbing', async () => {
     await TestBed.configureTestingModule({
       imports: [ProjectDetailComponent],
       providers: [
@@ -83,36 +83,11 @@ describe('ProjectDetailComponent (smoke)', () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('.proj-detail__head')).toBeNull();
-    expect(host.querySelector('[data-testid="project-detail-open-feed"]')).toBeNull();
-  });
-
-  it('renders compact onboarding status on overview without lane counts or CLI details', async () => {
-    await TestBed.configureTestingModule({
-      imports: [ProjectDetailComponent],
-      providers: [
-        provideZonelessChangeDetection(),
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideRouter([]),
-      ],
-    }).compileComponents();
-
-    const fixture = TestBed.createComponent(ProjectDetailComponent);
-    fixture.componentRef.setInput('projectName', 'Demo Project');
-    fixture.componentRef.setInput('view', 'overview');
-    fixture.detectChanges();
-
-    const host = fixture.nativeElement as HTMLElement;
-    const directGroupTitles = Array
-      .from(host.querySelectorAll<HTMLElement>('.proj-detail__group > h3'))
-      .map(el => el.textContent?.trim());
-    expect(directGroupTitles).not.toContain('Pipeline snapshot');
-    expect(directGroupTitles).not.toContain('Queue health');
-    expect(directGroupTitles).not.toContain('Lane counts');
-
-    const onboarding = host.querySelector('[data-testid="project-cli-onboarding-status"]');
-    expect(onboarding?.textContent).toContain('Onboarding status');
-    expect(host.querySelector('[data-testid="project-detail-cli-environment"]')).toBeNull();
+    const text = host.textContent ?? '';
+    expect(text).not.toContain('Watch path');
+    expect(text).not.toContain('Working directory');
+    expect(text).not.toContain('Repository');
+    expect(text).not.toContain('Onboarding status');
+    expect(host.querySelector('[data-testid="project-cli-onboarding-status"]')).toBeNull();
   });
 });

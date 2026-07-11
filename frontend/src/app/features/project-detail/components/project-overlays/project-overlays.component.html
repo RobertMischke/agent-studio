@@ -19,11 +19,16 @@
         (closeShell)="overlays.closeProjectShell()">
         @defer (when overlays.projectShellRail() === 'overview') {
           @if (overlays.projectShellRail() === 'overview') {
-            <app-project-detail
+            <app-project-overview-dashboard
               [projectName]="projShell"
-              view="overview"
-              (openFeed)="overlays.openFeedFromDetail($event)"
-              (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
+              (openRail)="setProjectShellRail($event)"
+              (openTask)="openTaskFromProjectShell($event)"
+              (openUrlPreview)="setProjectShellRail('project-urls')" />
+          }
+        }
+        @defer (when overlays.projectShellRail() === 'project-urls') {
+          @if (overlays.projectShellRail() === 'project-urls') {
+            <app-project-urls-panel [projectName]="projShell" />
           }
         }
         @defer (when overlays.projectShellRail() === 'security') {
@@ -66,6 +71,11 @@
               [projectName]="projShell"
               (createFollowUp)="uxuiFollowUp.emit($event)"
               (actionQueuedEvent)="uxuiActionQueued.emit($event)" />
+          }
+        }
+        @defer (when overlays.projectShellRail() === 'test-quality') {
+          @if (overlays.projectShellRail() === 'test-quality') {
+            <app-regression-radar scope="project" [projectName]="projShell" />
           }
         }
         @defer (when overlays.projectShellRail() === 'token-usage') {

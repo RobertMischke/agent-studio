@@ -14,5 +14,45 @@ public static class PublishEndpoints
     {
         app.MapGet("/api/projects/{project}/publish-status", (string project, PublishTargetService publish) =>
             Results.Ok(publish.GetProjectPublishStatus(project)));
+
+        app.MapGet("/api/projects/{project}/publish/{targetId}/panel", (
+            string project, string targetId, PublishActionService actions) =>
+            ActionResult(() => Results.Ok(actions.GetPanel(project, targetId))));
+
+        app.MapPut("/api/projects/{project}/publish/automation", (
+            string project,
+            SetPublishAutomationRequest request,
+            ProjectSettingsService settings,
+            PublishTargetService targets) =>
+        {
+            var target = targets.GetProjectPublishStatus(project).Targets
+                .FirstOrDefault(x => string.Equals(x.Id, request.TargetId, StringComparison.OrdinalIgnoreCase));
+            if (target is null) return Results.NotFound(new { error = $"Unknown publish target '{request.TargetId}'." });
+            if (!PublishAutomationModes.All.Contains(request.Mode, StringComparer.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = $"Unsupported automation mode '{request.Mode}'." });
+            settings.SetPublishAutomation(project, target.Id, request.Mode);
+            var resolved = PublishAutomationModes.Normalize(target.Id, request.Mode);
+            return Results.Ok(new { targetId = target.Id, mode = resolved });
+        });
+
+        app.MapPost("/api/projects/{project}/publish/package", (
+            string project, PublishPackageRequest request, PublishActionService actions) =>
+            ActionResult(() => Results.Ok(actions.PublishPackage(project, request.TargetId, request.Version))));
+
+        app.MapPost("/api/projects/{project}/publish/website", (
+            string project, DeployWebsiteRequest request, PublishActionService actions) =>
+            ActionResult(() => Results.Ok(actions.DeployWebsite(project))));
+
+        app.MapGet("/api/projects/{project}/publish/{targetId}/run", (
+            string project, string targetId, PublishActionService actions) =>
+            ActionResult(() => actions.RefreshRun(project, targetId) is { } run
+                ? Results.Ok(run)
+                : Results.NotFound(new { error = "No publish workflow has been triggered for this target." })));
+    }
+
+    private static IResult ActionResult(Func<IResult> action)
+    {
+        try { return action(); }
+        catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
     }
 }

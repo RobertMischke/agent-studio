@@ -117,6 +117,38 @@ a Codex run reads as cleanly as a Claude run in the Activity Log.
 | `item.completed` `update_plan` / `todo` | `● Todo update` | stdout |
 | any other frame / item type | `● <type>` (never raw JSON) | stdout |
 
+Codex also writes a tracing diagnostic such as
+`codex_core::tools::router: error=Exit code: 1` to stderr for a non-zero shell
+command. This is not a separate tool result. In AGT-2081, the Codex rollout
+session records a completed `custom_tool_call_output` for `Get-Process
+dotnet,vstest.console,testhost -ErrorAction SilentlyContinue`: it contains
+usable `dotnet` and `testhost` rows but reports exit 1 because at least one
+requested process name was absent. Codex continued the same turn and the CLI
+run later completed successfully. This establishes a real command-level exit
+1, not a Codex process failure or malformed tool response.
+
+The following `item.completed.command_execution` frame is authoritative and
+carries the command, output, and exit code. `CodexOutputRenderer` suppresses
+only the duplicate router tracing line so the activity parser sees one complete
+tool event. `RealCodexTranscript_ToolRouterExitDiagnostic_IsSuppressed` parses
+the persisted AGT-2081 Windows transcript fixture, drives the authoritative
+stdout frame through `CodexEventAdapter`, and asserts that it becomes an
+error-valued `ToolCompleted` event while the orphan diagnostic produces no
+rendered parser row. The negative test
+`SimilarStderrWithoutCodexRouterPrefix_RemainsVisible` protects genuine stderr.
+The host's `MapCodexFrame` normalization is required until the shared
+CodingAgentRunner adapter projects `command_execution.exit_code` onto
+`ToolCompleted.IsError`; without it, the package reports the valid completion
+as a successful tool event even though the renderer correctly marks it failed.
+
+AGT-2082 is a separate path. `CodexMapLineToRunEvents` calls
+`CodexTryCaptureTurnUsage` on raw stdout before `CodexOutputRenderer` runs, and
+`CodexTurnUsageBusEmitTests` verifies that a raw `turn.completed` usage frame
+reaches the recorded-usage bus with Codex attribution. Consequently, the
+AGT-2089 diagnostic caused noisy activity parser rows but could not remove
+recorded model usage. A missing usage entry must be investigated in raw
+`turn.completed` capture, parser registration, or bus emission instead.
+
 **Deliberate equivalences (not byte-identical to Claude).** Codex's frame catalogue
 differs from Claude's, so the marker *text* differs, but each maps to a verb the
 frontend `classifyAction` already buckets: `● Session` (vs Claude `● Session init`),

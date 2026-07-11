@@ -77,7 +77,7 @@ public sealed class AdHocUsageService
             totalCacheR += r.CacheReadTokens;
             totalCacheW += r.CacheCreationTokens;
 
-            var cost = TokenPricing.Estimate(r.Model, r.InputTokens, r.OutputTokens, r.CacheReadTokens, r.CacheCreationTokens);
+            var cost = TokenPricing.Estimate(r.Model, r.InputTokens, r.OutputTokens, r.CacheReadTokens, r.CacheCreationTokens, r.Ts);
             totalCost += cost.Total;
             if (!cost.ModelKnown) allPriced = false;
 
@@ -120,7 +120,7 @@ public sealed class AdHocUsageService
             .ThenBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
             .Select(kv =>
             {
-                var priced = TokenPricing.Estimate(kv.Key, 0, 0, 0, 0).ModelKnown;
+                var priced = kv.Value.AllPriced;
                 return new AdHocUsageByModel(
                     Model: kv.Key,
                     Calls: kv.Value.Calls,
@@ -158,6 +158,7 @@ public sealed class AdHocUsageService
             map[key] = b;
         }
         b.Calls++;
+        b.AllPriced &= cost.ModelKnown;
         b.Input += r.InputTokens;
         b.Output += r.OutputTokens;
         b.CacheRead += r.CacheReadTokens;
@@ -167,6 +168,7 @@ public sealed class AdHocUsageService
 
     private sealed class Bucket
     {
+        public bool AllPriced = true;
         public int Calls;
         public long Input;
         public long Output;

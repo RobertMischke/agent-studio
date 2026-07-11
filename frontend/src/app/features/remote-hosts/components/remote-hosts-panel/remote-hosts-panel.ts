@@ -1,8 +1,10 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { RemoteHostsService } from '../../services/remote-hosts.service';
 import { RemoteHostCardComponent } from '../remote-host-card/remote-host-card';
-import type { HostActionKind } from '../../models/remote-host.model';
+import type { HostActionKind, RemoteHost } from '../../models/remote-host.model';
 import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-wizard/add-host-wizard';
+import { type VisibleCliTaskCreated, type VisibleCliTaskWorkspace } from '../../../visible-cli-task';
+import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-dialog';
 
 /**
  * Remote Hosts settings page (AGT-1921).
@@ -13,14 +15,13 @@ import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-w
  * capabilities, live system vitals (RAM / CPU / Disk), per-CLI quota, and the
  * Re-Probe / Drain / Retire actions ({@link RemoteHostCardComponent}).
  *
- * Data comes from {@link RemoteHostsService}, which serves a static
- * configuration registry for now (UI-first) with the same shape a
- * heartbeat-fed backend endpoint will later fill in.
+ * Host definitions come from {@link RemoteHostsService}; real Task Server
+ * client LastSeen values hydrate liveness on every reload.
  */
 @Component({
   selector: 'app-remote-hosts-panel',
   standalone: true,
-  imports: [RemoteHostCardComponent, AddHostWizardComponent],
+  imports: [RemoteHostCardComponent, AddHostWizardComponent, RunnerSetupDialogComponent],
   templateUrl: './remote-hosts-panel.html',
   styleUrl: './remote-hosts-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -32,6 +33,9 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   readonly loading = this.service.loading;
   readonly error = this.service.error;
   readonly wizardOpen = signal(false);
+  readonly setupHost = signal<RemoteHost | null>(null);
+  readonly workspaces = input<readonly VisibleCliTaskWorkspace[]>([]);
+  readonly openTask = output<VisibleCliTaskCreated>();
 
   /** Ticking clock so relative heartbeat labels stay fresh without per-card timers. */
   readonly now = signal<number>(Date.now());
@@ -55,6 +59,13 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
 
   openWizard(): void { this.wizardOpen.set(true); }
   closeWizard(): void { this.wizardOpen.set(false); }
+  openSetup(host: RemoteHost): void { this.setupHost.set(host); }
+  closeSetup(): void { this.setupHost.set(null); }
+
+  onSetupTaskCreated(task: VisibleCliTaskCreated): void {
+    this.setupHost.set(null);
+    this.openTask.emit(task);
+  }
 
   completeWizard(host: ProvisionedHostDraft): void {
     this.service.addProvisionedHost(host.name, host.address);

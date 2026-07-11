@@ -120,7 +120,7 @@ import type { RunTimeline } from './features/run-timeline';
 import type { TaskScreenshot } from './features/screenshots';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from './components/menu';
-import type { TaskTokenSummary } from './features/tokens'; // verbose-debug overlay context types
+import { CostBreakdownDialogComponent, type TaskTokenSummary } from './features/tokens'; // verbose-debug overlay context types
 
 interface VerboseDebugContext {
   lines: CliOutputLine[];
@@ -178,6 +178,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     ProjectHubViewComponent,
     StudioDiffViewComponent,
     StudioActivityViewComponent,
+    CostBreakdownDialogComponent,
     ProjectUrlPreviewTabComponent,
     StudioIconComponent,
   ],
@@ -2145,7 +2146,7 @@ export class App implements OnInit, OnDestroy {
    * originating job. Mirrors the open-task pattern used by the
    * orchestrator feed.
    */
-  onOpenTaskFromReel(s: TaskScreenshot): void {
+  onOpenTaskFromReel(s: Pick<TaskScreenshot, 'jobId' | 'watchPath'>): void {
     this.closeWorkspaceScreenshots();
     if (!s?.jobId || !s?.watchPath) return;
     history.replaceState(

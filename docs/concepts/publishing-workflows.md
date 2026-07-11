@@ -131,9 +131,8 @@ shepherding.
 =======
 # Publishing Workflows (concept)
 
-Version: v1 (2026-07-10)
-Status: PUB-1 (derivation + read-only badges) implemented. PUB-2 (publish
-actions) is a separate, future card - nothing in this concept triggers a publish.
+Version: v2 (2026-07-11)
+Status: PUB-1 derivation and PUB-2 guided publish actions are implemented.
 
 Operator intent: **dead simple sehen, dass etwas Publizierbares da ist - im
 Prinzip nach jedem Task.** After a task lands, the operator should see at a glance
@@ -143,15 +142,14 @@ mechanics.
 
 ## 1. Scope and non-goals
 
-- **In scope (PUB-1):** derive a project's publish targets from repository facts,
-  compute a pending delta per target, and surface both read-only in the UI
-  (Project Hub badges + an accepted-task chip).
-- **Out of scope (PUB-1):** performing a publish, mutating the repo, reading
-  operator settings, or calling the GitHub/registry APIs. Everything here is
-  derived from the checked-out repository and is side-effect free.
-- **Deferred (PUB-2):** the actual publish action (cut a tag, trigger the release
-  workflow, redeploy the site). The badges are the trigger surface it will hang
-  off later.
+- **PUB-1:** derive publish targets from repository facts, compute the pending
+  delta, and show Project Hub badges plus accepted-task chips.
+- **PUB-2:** open a guided action panel from a badge, list the pending accepted
+  tasks, suggest an editable patch/minor version, and drive the repository's
+  existing tag or workflow-dispatch path.
+- **Still out of scope:** storing registry secrets or implementing a second
+  package publisher. Trusted Publishing remains keyless and the existing
+  GitHub Actions workflow owns the actual publish.
 
 ## 2. Target derivation (from repo facts, never settings)
 
@@ -241,6 +239,20 @@ of a count the Hub shows `<ecosystem> first publish pending (manual, operator)`
 (amber). The first publish is intentionally a manual operator action -
 coding-agent-chat is the reference case.
 
+For later releases, a feature task in the pending set suggests the next minor
+version; a mix containing only bugs and chores suggests the next patch. The
+operator can edit the suggestion before confirmation. Confirmation requires a
+clean worktree, updates `package.json` or the packable `.csproj`, creates one
+release commit and `vX.Y.Z`, then atomically pushes `HEAD` and the tag to
+`origin`. The product does not run `npm publish` or `dotnet nuget push`.
+
+Each target stores an automation mode: `manual`, `suggest`, or `auto`. Package
+targets clamp `auto` to `suggest`; website targets may use all three modes.
+The action panel is the shared operator surface for the suggestion and current
+workflow result. Website `auto` subscribes to the accepted-task transition and
+waits for that task's integration merge to appear in the website delta before
+dispatching the existing workflow.
+
 ## 5. Implementation map
 
 - Backend derivation: `backend/Features/Publishing/` -
@@ -248,13 +260,18 @@ coding-agent-chat is the reference case.
   manifest + source root), `PublishTargetService` (targets + pending deltas,
   cached per project), `TaskPublishableService` (per-task chip fold),
   `PublishEndpoints` (`GET /api/projects/{project}/publish-status`).
+- Backend actions: `PublishActionService` performs guarded manifest/tag pushes,
+  GitHub workflow dispatch, and `gh api` run tracking. `PublishEndpoints` owns
+  the panel, automation setting, trigger, and run-status routes.
+  GitHub authorization comes exclusively from the operator-managed `gh` CLI
+  session on the host. The product does not accept, inject, or persist a GitHub
+  token; unattended hosts must authenticate `gh` outside Agent Studio.
 - Git primitives (read-only): `GitService.GetLatestVersionTag`,
   `GetMainlineCommitsForScope`, `GetTipCommitDateUtc`.
 - Snapshot fold: `publishTargets` on `GET /api/projects/{project}/snapshot`.
 - Board fold: `TaskInfo.PublishSignal` on `/api/tasks` + `/grouped` + detail.
-- Frontend: the overview publish badges
-  (`project-detail` overview, `data-testid="project-publish-badges"`) and the
-  card chip (`task-card`, `data-testid="task-card-publishable"`).
+- Frontend: `project-publish-panel` turns the overview badges into the guided
+  release/deploy flow; the accepted-task chip remains the per-task signal.
 
 ## 6. Honest limitations
 

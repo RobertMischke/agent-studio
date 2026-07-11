@@ -48,6 +48,7 @@ export class RemoteHostCardComponent {
   /** Injected clock so the relative heartbeat label ticks without a per-card timer. */
   readonly now = input<number>(Date.now());
   readonly action = output<{ kind: HostActionKind; id: string }>();
+  readonly setup = output<RemoteHost>();
 
   readonly tone = computed(() => hostStatusTone(this.host().status));
   readonly statusLabel = computed(() => hostStatusLabel(this.host().status));
@@ -94,5 +95,11 @@ export class RemoteHostCardComponent {
   emit(kind: HostActionKind): void {
     if (this.host().busyAction) return;
     this.action.emit({ kind, id: this.host().id });
+  }
+
+  requestSetup(): void {
+    const host = this.host();
+    if (host.role !== 'remote' || host.status === 'retired' || host.busyAction) return;
+    this.setup.emit(host);
   }
 }

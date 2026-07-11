@@ -31,8 +31,12 @@ CLI execution tests.
 - `backend/Services/Cli/CliRouter.cs`: `cliType` routing.
 - `backend/Services/Quota/*QuotaProbe.cs`: per-CLI quota probes.
 - `backend/Services/Quota/QuotaService.cs`: aggregate quota surface.
-- `backend/Endpoints/CliEndpoints.cs`: sessions, versions, quota, and model
-  endpoints.
+- `backend/Features/Cli/CliEndpoints.cs`: sessions, versions, quota, and model
+  endpoints. The CLI-session tool (AGT-2102) adds `GET /api/cli/{cliType}/session-detail`
+  (lazy single-transcript parse: model, thinking, message count, first prompt)
+  and a guarded `DELETE /api/cli/{cliType}/session` (cleanup refused for any path
+  outside the CLI's own session store). Both resolve/parse in
+  `SessionRegistry.cs`; the `/usage` list report stays body-free.
 - `backend/Services/Runner/OrchestratorSession.cs` and
   `OrchestratorRunner.cs`: runner-to-CLI orchestration boundary.
 - `prompts/runtime/`: prompt templates handed to the CLIs.
@@ -75,6 +79,13 @@ CLI execution tests.
   data source for the load-distribution view). A healthy primary launch stays a
   log-only normal path. The planner reuses the AGT-2040 routing map; it does not
   duplicate "which model replaces which".
+- Quota-window projection keeps the first trusted start of an active window as
+  a persisted anchor (AGT-2107). A newly parsed `resetAt` cannot move that start
+  while the anchored reset has not yet passed. Conflicting boundaries and
+  projections above a 4x projected/used ratio in the first quarter of a window
+  are ignored instead of steering admission. The admission warning records
+  `resetAt`, assumed start, and elapsed fraction in the structured log, task
+  timeline, and load-distribution feed.
 
 ## Verification
 

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
-import type { ProjectQueueHealth, PublishTarget, RunnerStatus } from '../../../../models/task.model';
+import type { ProjectQueueHealth, RunnerStatus } from '../../../../models/task.model';
 import { CLI_TYPES, type CliType } from '../../../../models/task.model';
 import { cliTypeLabel, cliTypeIcon } from '../../../../services/format.util';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
@@ -13,7 +13,6 @@ import { GlobalOrchestratorCardComponent } from '../../../../features/orchestrat
 import { ProjectArchitectureSectionComponent } from '../project-architecture-section/project-architecture-section';
 import { ProjectDriftSectionComponent } from '../project-drift-section/project-drift-section';
 import { ProjectDriftOverviewSectionComponent } from '../project-drift-overview-section/project-drift-overview-section';
-import { RegressionRadarComponent } from '../../../../features/regression-radar';
 import { ProjectSupervisorSectionComponent } from '../project-supervisor-section/project-supervisor-section';
 import { ProjectMetaCycleSectionComponent } from '../project-meta-cycle-section/project-meta-cycle-section';
 import { ProjectAnalysisReportsSectionComponent } from '../project-analysis-reports-section/project-analysis-reports-section';
@@ -69,7 +68,6 @@ export type ProjectDetailView =
     ProjectArchitectureSectionComponent,
     ProjectDriftSectionComponent,
     ProjectDriftOverviewSectionComponent,
-    RegressionRadarComponent,
     ProjectSupervisorSectionComponent,
     ProjectMetaCycleSectionComponent,
     ProjectAnalysisReportsSectionComponent,
@@ -99,8 +97,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly projectPaths = signal<{ path: string; rootPath: string | null; repositoryPath: string | null } | null>(null);
   readonly pendingDecisions = signal<readonly { jobId: string; title: string; reason: string | null }[]>([]);
   readonly queueHealth = signal<ProjectQueueHealth | null>(null);
-  /** PUB-1: derived publish targets from the snapshot; rendered as Hub badges. */
-  readonly publishTargets = signal<readonly PublishTarget[]>([]);
   readonly queueRepairBusy = signal(false);
   readonly queueRepairMessage = signal<string | null>(null);
 
@@ -289,41 +285,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   readonly activeRunner = computed(() => this.runnerStatus()?.projects?.[this.projectName()] ?? null);
 
-  /**
-   * PUB-1: badge-worthy publish targets only. Operator intent is "Ruhe" when
-   * nothing is publishable: a target with zero pending and no first-publish
-   * state produces no badge. First-publish-pending always shows (the operator
-   * has to publish it manually). Each entry carries pre-rendered text + tone.
-   */
-  readonly publishBadges = computed(() => {
-    return this.publishTargets()
-      .filter(t => t.firstPublishPending || (t.pendingCount != null && t.pendingCount > 0))
-      .map(t => ({
-        id: t.id,
-        kind: t.kind,
-        firstPublish: t.firstPublishPending,
-        text: this.publishBadgeText(t),
-        tooltip: this.publishBadgeTooltip(t),
-      }));
-  });
-
-  private publishBadgeText(t: PublishTarget): string {
-    if (t.firstPublishPending) return `${t.label} first publish pending`;
-    const head = t.currentVersion ? `${t.label} ${t.currentVersion}` : t.label;
-    const n = t.pendingCount ?? 0;
-    return `${head} → ${n} task${n === 1 ? '' : 's'} pending`;
-  }
-
-  private publishBadgeTooltip(t: PublishTarget): string {
-    if (t.firstPublishPending) {
-      const name = t.packageName ? ` (${t.packageName})` : '';
-      return `${t.label} package${name} has never been published. First publish is a manual, operator action.`;
-    }
-    const scope = t.kind === 'website' ? 'the website folder' : 'the package source';
-    const since = t.reference ? ` since ${t.reference}` : '';
-    return `${t.pendingCount} merged task${t.pendingCount === 1 ? '' : 's'} touching ${scope}${since} not yet published.`;
-  }
-
   queueHealthLabel(health: ProjectQueueHealth, emptyLabel: string, noun: string): string {
     if (health.issueCount === 0) return emptyLabel;
     return `${health.issueCount} ${noun}${health.issueCount === 1 ? '' : 's'}`;
@@ -402,7 +363,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         }
         this.pendingDecisions.set(snap.reviewDecisionsPending ?? []);
         this.livePendingDecisions.set(snap.runnerPendingDecisions ?? []);
-        this.publishTargets.set(snap.publishTargets ?? []);
         this.queueHealth.set(snap.queueHealth ?? null);
       },
       error: () => { /* silent; keep last snapshot */ }

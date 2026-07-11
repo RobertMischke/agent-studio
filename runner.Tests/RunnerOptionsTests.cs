@@ -48,6 +48,14 @@ public class RunnerOptionsTests
         Assert.Equal(9, options.PollSeconds);
     }
 
+    [Fact]
+    public void Existing_client_identity_can_be_pinned_from_the_cli()
+    {
+        var (options, _, _, _) = RunnerOptions.Parse(["--client-id", "  agent-runner-01  "]);
+
+        Assert.Equal("agent-runner-01", options.ClientId);
+    }
+
     [Theory]
     [InlineData("AGT-20", "AGT-20")]
     [InlineData("project/task 20", "project-task-20")]

@@ -46,6 +46,8 @@ Use this page as the first stop when you need the right document quickly.
 | Agent message bus | [architecture/bus/agent-message-bus.md](architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](design/style-guide-hard-rules.md) |
 | Application visual survey (2026-07-11) | [design/app-survey-2026-07-11.html](design/app-survey-2026-07-11.html) |
+| Angular performance review (2026-07) | [design/angular-performance-report-2026-07.html](design/angular-performance-report-2026-07.html) |
+| Explorer project state indicator exploration (2026-07) | [design/tree-indicator-exploration-2026-07.html](design/tree-indicator-exploration-2026-07.html) and [alternatives catalog](wiki/concepts/tree-project-indicator-alternatives.md) |
 | UX doctrine | [product/design-principles.md](product/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](product/orchestrator-chat.md) |
 | In-app orchestrator sight, tools, and anchor slices | [concepts/orchestrator-in-app.md](concepts/orchestrator-in-app.md) |
@@ -56,7 +58,11 @@ Use this page as the first stop when you need the right document quickly.
 | Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](concepts/run-liveness-and-slot-semantics.md) |
 | Result view and case templates | [concepts/result-view-and-case-templates.md](concepts/result-view-and-case-templates.md) |
 | Publishing workflows (publish-target derivation + pending badges; PUB-1) | [concepts/publishing-workflows.md](concepts/publishing-workflows.md) |
+| Git-info performance measurements and cache invalidation (AGT-2007) | [reports/git-info-performance-agt-2007.md](reports/git-info-performance-agt-2007.md) |
 | Planning-task lifecycle (plan → spawn → accept; spawn-contract gate; AGT-2069) | [concepts/planning-task-lifecycle.md](concepts/planning-task-lifecycle.md) |
+| Experiment workbenches (Explorer, orchestrator chat, decision-to-task) | [concept](concepts/experimentier-workbench.md) · [interactive mockup](concepts/mockups/experimentier-workbench.html) |
+| Deployment as a first-class citizen (Deployment page, scenario templates, prompt-defined dynamic UI over CLI tasks; DEP-1..5) | [concept](concepts/deployment-first-class.md) · [interactive mockup](concepts/mockups/deployment-first-class.html) |
+| Project Overview operator dashboard (metrics, Visual Evidence Queue, Project URLs, deployment summary, Wiki entry) | [mockup contract](mockups/project-overview-dashboard/README.md) · [interactive mockup](mockups/project-overview-dashboard/ui.html) |
 | Wiki classification | [product/wiki-document-classification.md](product/wiki-document-classification.md) |
 | Wiki editing flow | [product/wiki-editing-and-branch-flow.md](product/wiki-editing-and-branch-flow.md) |
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](schemas/wiki-document-companion.schema.json) |
@@ -77,6 +83,9 @@ Use this page as the first stop when you need the right document quickly.
 | Auto-review reissue / evidence-gate analysis | [wiki/concepts/auto-review-evidence-gate-analysis.html](wiki/concepts/auto-review-evidence-gate-analysis.html) |
 | Planning & Research task type | [wiki/concepts/planning-research-task-type.html](wiki/concepts/planning-research-task-type.html) |
 | MVP presentation screen-tooling evaluation and recommendation | [research/screen-tooling-mvp-presentation-2026-07.md](research/screen-tooling-mvp-presentation-2026-07.md) |
+| MVP presentation capture runbook | [operations/setup/presentation-capture.md](operations/setup/presentation-capture.md) |
+| MVP presentation storyboard and shot list | [product/mvp-presentation-storyboard.md](product/mvp-presentation-storyboard.md) |
+| Quota snapshot events at run start/end (cap-forecast data collection) | [wiki/concepts/quota-snapshot-run-events.md](wiki/concepts/quota-snapshot-run-events.md) |
 | Runtime prompt usage audit | [wiki/concepts/runtime-prompt-usage-audit.html](wiki/concepts/runtime-prompt-usage-audit.html) |
 | Admin CLI onboarding | [wiki/concepts/admin-cli-onboarding.html](wiki/concepts/admin-cli-onboarding.html) |
 | Orchestrator supervision loop | [wiki/concepts/orchestrator-supervision-loop.html](wiki/concepts/orchestrator-supervision-loop.html) |

@@ -7,11 +7,11 @@
   (closeShell)="closeShell()">
   @defer (when activeRail() === 'overview') {
     @if (activeRail() === 'overview') {
-      <app-project-detail
+      <app-project-overview-dashboard
         [projectName]="projectName()"
-        view="overview"
-        (openFeed)="openFeedFromDetail($event)"
-        (openReport)="openReport($event)" />
+        (openRail)="setRail($event)"
+        (openTask)="openTask.emit($event)"
+        (openUrlPreview)="openUrlPreview($event)" />
     }
   }
   @defer (when activeRail() === 'project-urls') {
@@ -71,6 +71,11 @@
         [projectName]="projectName()"
         (createFollowUp)="onUxuiFollowUp($event)"
         (actionQueuedEvent)="onUxuiActionQueued($event)" />
+    }
+  }
+  @defer (when activeRail() === 'test-quality') {
+    @if (activeRail() === 'test-quality') {
+      <app-regression-radar scope="project" [projectName]="projectName()" />
     }
   }
   @defer (when activeRail() === 'token-usage') {

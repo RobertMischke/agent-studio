@@ -29,10 +29,13 @@ import type {
   RegistryProjectSummary,
   ProjectUrlStartRule,
   ProjectUrlSuggestion,
+  PublishActionPanel,
+  PublishAutomationMode,
+  PublishWorkflowRun,
 } from '../models/task.model';
 import { TaskState } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
-import type { CliModelCatalog, CliCompletionContract, CliUsageReport, CliWorkingMemoryReport, CliWorkingMemoryDeleteResult } from '../features/cli';
+import type { CliModelCatalog, CliCompletionContract, CliUsageReport, CliSessionDetail, CliSessionDeleteResult, CliWorkingMemoryReport, CliWorkingMemoryDeleteResult } from '../features/cli';
 import type { GitFileChange, GitStatus, TaskCommitDetail, TaskProvenanceView } from '../features/git';
 import type {
   OrchestratorLogResponse,
@@ -74,6 +77,10 @@ import type { TaskPlanView } from '../features/plan-strip/plan.model';
 import type { RegressionRadarResult } from '../features/regression-radar';
 import { ErrorDialogService } from './error-dialog.service';
 import { JobsHubClient } from './jobs-hub-client.service';
+import type {
+  ProjectDeploymentSummary,
+  ProjectThroughputSummary,
+} from '../models/project-overview.model';
 
 /** One row in the code-review list endpoint response (see backend `CodeReviewListEntry`). */
 export interface CodeReviewListEntry {
@@ -1402,6 +1409,26 @@ export class TaskService {
     return this.http.get<CliUsageReport>(`${this.baseUrl}/cli/usage`);
   }
 
+  /**
+   * Lazy deep-read of one CLI session (model, thinking, message count, first
+   * prompt, git branch). Fetched only when a session row is expanded so the
+   * inventory list never reads transcript bodies.
+   */
+  getCliSessionDetail(cliType: CliType, id: string, cwd: string | null) {
+    return this.http.get<CliSessionDetail>(
+      `${this.baseUrl}/cli/${encodeURIComponent(cliType)}/session-detail`,
+      { params: cwd ? { id, cwd } : { id } },
+    );
+  }
+
+  /** Guarded cleanup delete of a single session transcript. The backend refuses paths outside the CLI session store. */
+  deleteCliSession(cliType: CliType, id: string, cwd: string | null) {
+    return this.http.delete<CliSessionDeleteResult>(
+      `${this.baseUrl}/cli/${encodeURIComponent(cliType)}/session`,
+      { params: cwd ? { id, cwd } : { id } },
+    );
+  }
+
   /** Per-CLI completion contracts (how each backend signals turn completion). */
   getCliCompletionContracts() {
     return this.http.get<CliCompletionContract[]>(`${this.baseUrl}/cli/contracts`);
@@ -1588,6 +1615,39 @@ export class TaskService {
   getProjectSnapshot(projectName: string) {
     return this.http.get<ProjectSnapshot>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/snapshot`,
+    );
+  }
+
+  getPublishPanel(projectName: string, targetId: string) {
+    return this.http.get<PublishActionPanel>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/${encodeURIComponent(targetId)}/panel`,
+    );
+  }
+
+  setPublishAutomation(projectName: string, targetId: string, mode: PublishAutomationMode) {
+    return this.http.put<{ targetId: string; mode: PublishAutomationMode }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/automation`,
+      { targetId, mode },
+    );
+  }
+
+  publishPackage(projectName: string, targetId: string, version: string) {
+    return this.http.post<PublishWorkflowRun>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/package`,
+      { targetId, version },
+    );
+  }
+
+  deployWebsite(projectName: string) {
+    return this.http.post<PublishWorkflowRun>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/website`,
+      { targetId: 'website' },
+    );
+  }
+
+  getPublishRun(projectName: string, targetId: string) {
+    return this.http.get<PublishWorkflowRun>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/${encodeURIComponent(targetId)}/run`,
     );
   }
 
@@ -1875,6 +1935,20 @@ export class TaskService {
   getProjectTokenUsageSummary(projectName: string) {
     return this.http.get<ProjectTokenUsageSummary>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/token-usage/summary`,
+    );
+  }
+
+  /** Operator Overview throughput, archive-inclusive through lane history. */
+  getProjectThroughput(projectName: string) {
+    return this.http.get<ProjectThroughputSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/throughput`,
+    );
+  }
+
+  /** Shared DEP-1 read model: latest stable deploy plus current pending delta. */
+  getProjectDeploymentSummary(projectName: string) {
+    return this.http.get<ProjectDeploymentSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/deployment/summary`,
     );
   }
 

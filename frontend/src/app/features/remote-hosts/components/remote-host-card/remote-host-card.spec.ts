@@ -9,6 +9,7 @@ const HOST: RemoteHost = {
   name: 'agent-runner',
   role: 'remote',
   address: 'ssh://agent@runner.hetzner',
+  clientId: 'agent-runner',
   status: 'online',
   os: 'Ubuntu 24.04 LTS',
   lastHeartbeatAt: '2026-07-10T11:59:55Z',
@@ -63,6 +64,20 @@ describe('RemoteHostCardComponent', () => {
     const btn = fixture.nativeElement.querySelector('[data-testid="remote-host-action-drain"]') as HTMLButtonElement;
     btn.click();
     expect(received).toEqual({ kind: 'drain', id: 'hetzner' });
+  });
+
+  it('offers setup only for active remote hosts and emits the selected host', () => {
+    const remote = mount(HOST);
+    let selected: RemoteHost | null = null;
+    remote.componentInstance.setup.subscribe(host => { selected = host; });
+
+    const setup = remote.nativeElement.querySelector('[data-testid="remote-host-action-setup"]') as HTMLButtonElement;
+    expect(setup).toBeTruthy();
+    setup.click();
+    expect(selected).toEqual(HOST);
+
+    const local = mount({ ...HOST, id: 'local', role: 'local', address: null });
+    expect(local.nativeElement.querySelector('[data-testid="remote-host-action-setup"]')).toBeNull();
   });
 
   it('renders "no stats" when a host reports none (e.g. retired)', () => {

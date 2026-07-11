@@ -17,6 +17,24 @@
       "title": "ORCH-1: Orchestrator-Sicht - vollstaendiger Lese-Kontext (Lanes, Runs, Quota, Health, Journal)",
       "linkedAt": "2026-07-11T01:47:00.0244281Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2083",
+      "title": "Explorer/Tree: Projekt-Stand-Indikator - Design-Exploration mit 5-10 Alternativen \u002B interaktivem Mockup",
+      "linkedAt": "2026-07-11T09:01:37.8576044Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2096",
+      "title": "Angular-Performance- \u0026 Best-Practice-Analyse: HTML-Report (Wiki-tauglich); Fokusfall Review-Lane mit 104\u002B Karten",
+      "linkedAt": "2026-07-11T10:57:50.4441185Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2097",
+      "title": "KONZEPT: Deployment als First-Class-Citizen - Deployment-Seite, Szenario-Templates, prompt-definierte dynamische UI ueber CLI-Tasks",
+      "linkedAt": "2026-07-11T12:35:20.7454402Z",
+      "source": "auto"
     }
   ]
 }

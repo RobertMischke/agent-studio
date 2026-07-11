@@ -418,7 +418,8 @@
                 @if (tab.kind === 'hub') {
                   <app-project-hub-view
                     [projectName]="tab.projectName"
-                    [initialSection]="tab.section ?? 'overview'" />
+                    [initialSection]="tab.section ?? 'overview'"
+                    (openTask)="onOpenTaskFromReel($event)" />
                 }
               }
             }
@@ -457,6 +458,7 @@
             }
             @case ('workspace-settings') {
               <app-workspace-overlays [inline]="true"
+                                      [watchPaths]="watchPaths()"
                                       (openTask)="onOpenTaskFromReel($event)"
                                       (openProjectSettings)="onOpenProjectSettingsFromUsage($event)"
                                       (openJobDetail)="onOpenTaskFromSession($event)" />
@@ -481,6 +483,7 @@
       }
       <app-notification-stack />
       <app-media-lightbox />
+      <app-cost-breakdown-dialog />
       @if (errorDialog.activeError(); as error) {
         <app-error-dialog
           [error]="error"
@@ -510,6 +513,7 @@
           [(newAllowWebAccess)]="createJobForm.newAllowWebAccess"
           (cliTypeChange)="onCreateCliTypeChange($event)"
           (cancelRequest)="cancelCreate()"
+          (openChatRequest)="cancelCreate(); orchSideSheet.show()"
           (submitRequest)="submitCreate()" />
       }
       @if (showE2ECleanup()) {
@@ -816,7 +820,8 @@
         (openTask)="onOpenTaskFromReel($event)" />
 
 
-      <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)"
+      <app-workspace-overlays [watchPaths]="watchPaths()"
+                              (openTask)="onOpenTaskFromReel($event)"
                               (openProjectSettings)="onOpenProjectSettingsFromUsage($event)"
                               (openJobDetail)="onOpenTaskFromSession($event)" />
 
@@ -841,6 +846,7 @@
           [(newAllowWebAccess)]="createJobForm.newAllowWebAccess"
           (cliTypeChange)="onCreateCliTypeChange($event)"
           (cancelRequest)="cancelCreate()"
+          (openChatRequest)="cancelCreate(); orchSideSheet.show()"
           (submitRequest)="submitCreate()" />
       }
 

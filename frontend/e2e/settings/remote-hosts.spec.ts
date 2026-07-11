@@ -35,7 +35,7 @@ async function stubBackgroundApis(page: Page) {
 
   await page.route('**/api/tasks', json([]));
   await page.route('**/api/tasks/grouped', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
-  await page.route('**/api/watch-paths', json([]));
+  await page.route('**/api/watch-paths', json([{ name: 'agent-taskboard', path: 'C:/projects/agent-taskboard', rootPath: 'C:/projects' }]));
   await page.route('**/api/runner/status', json({ projects: {} }));
   await page.route('**/api/cli/quota', json({ ttlMs: 600_000, snapshots: [] }));
   await page.route('**/api/clients', json([]));
@@ -44,6 +44,8 @@ async function stubBackgroundApis(page: Page) {
 }
 
 test.describe('Remote Hosts settings section', () => {
+  test.use({ serviceWorkers: 'block' });
+
   test.beforeEach(async ({ page }) => {
     mkdirSync(SHOT_DIR, { recursive: true });
     await page.setViewportSize({ width: 1600, height: 950 });
@@ -102,6 +104,55 @@ test.describe('Remote Hosts settings section', () => {
     await expect(firstCard.getByTestId('remote-host-no-stats')).toBeVisible();
   });
 
+  test('configures one host and starts setup on the durable CLI task substrate', async ({ page }) => {
+    let createBody: Record<string, unknown> | null = null;
+    await page.unroute('**/api/tasks');
+    await page.route('**/api/tasks', async route => {
+      if (route.request().method() !== 'POST') {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+        return;
+      }
+      createBody = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'onboard-runner-02' }) });
+    });
+    await page.route('**/api/tasks/onboard-runner-02**', route => route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'mocked-task-detail-not-mounted' }),
+    }));
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await remote.getByTestId('remote-host-action-setup').click();
+
+    await expect(page.getByTestId('runner-setup-dialog')).toBeVisible();
+    await expect(page.getByTestId('runner-setup-loopback-block')).toContainText('Loopback is not remotely reachable');
+    await expect(page.getByTestId('visible-cli-task-card')).toBeHidden();
+
+    await page.getByTestId('runner-setup-git-remote').fill('git@github.com:example/agent-studio.git');
+    await page.getByTestId('runner-setup-connection-mode').selectOption('tunnel');
+
+    await expect(page.getByTestId('visible-cli-task-card')).toBeVisible();
+    await expect(page.getByTestId('visible-cli-task-prompt')).toContainText('Reachability gate (must run first)');
+    await expect(page.getByTestId('visible-cli-task-prompt')).toContainText('codex login --device-auth');
+    await expect(page.getByTestId('visible-cli-task-duration')).toContainText('10 to 20 minutes plus operator login time');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-runner-setup--mocked.png'), fullPage: false });
+    await page.getByTestId('visible-cli-task-start').click();
+
+    await expect.poll(() => createBody).not.toBeNull();
+    expect(createBody).toMatchObject({
+      title: 'Set up runner on agent-runner-01',
+      agent: 'codex',
+      targetState: '2-ready',
+      watchPath: 'C:/projects/agent-taskboard',
+    });
+    expect(String(createBody?.['promptMarkdown'])).toContain('## CLI input');
+    expect(String(createBody?.['promptMarkdown'])).toContain('bash scripts/remote-runner-onboard.sh');
+    expect(String(createBody?.['promptMarkdown'])).toContain("--host 'agent-runner'");
+    expect(String(createBody?.['promptMarkdown'])).toContain('X-Client-Id: agent-runner-01');
+    expect(String(createBody?.['promptMarkdown'])).toContain('Never copy, upload, or reuse credential files');
+  });
+
   test('adds a host through the guided four-step setup', async ({ page }) => {
     await page.goto('/#/workspace/settings/remote-hosts');
     await expect(page.getByTestId('remote-hosts-panel')).toBeVisible({ timeout: 5_000 });
@@ -131,6 +182,11 @@ test.describe('Remote Hosts settings section', () => {
     await expect(page.getByTestId('remote-host-card').first()).toBeVisible();
     await expect(page.getByTestId('remote-host-vitals').first()).toBeVisible();
     await page.screenshot({ path: join(SHOT_DIR, 'remote-hosts-section-light--mocked.png'), fullPage: false });
+
+    await page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' })
+      .getByTestId('remote-host-action-setup').click();
+    await expect(page.getByTestId('runner-setup-dialog')).toBeVisible();
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-runner-setup-light--mocked.png'), fullPage: false });
   });
 
   test('deep-link opens the Remote hosts section directly', async ({ page }) => {

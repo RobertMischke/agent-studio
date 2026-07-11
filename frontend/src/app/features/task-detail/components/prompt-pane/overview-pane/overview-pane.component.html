@@ -482,9 +482,9 @@
               <span class="ov-pl-step__tokens ov-value--mono"
                     data-testid="overview-pipeline-step-tokens">—</span>
             }
-            <span class="ov-pl-step__cost ov-value--mono"
-                  data-testid="overview-pipeline-step-cost"
-                  [cacTooltip]="row.costTooltip">
+            <button type="button" class="ov-pl-step__cost ov-pl-step__cost-button ov-value--mono" data-testid="overview-pipeline-step-cost" [cacTooltip]="row.costTooltip"
+                  [disabled]="row.totalTokens <= 0 || !row.costKnown" [attr.aria-label]="'Open cost calculation for ' + row.label"
+                  [appCostBreakdownTrigger]="[row]" [costBreakdownTitle]="row.label + ' cost calculation'" [costBreakdownRecordedAt]="pipelineStartedAt()">
               @if (row.totalTokens <= 0) {
                 —
               } @else if (!row.costKnown) {
@@ -492,7 +492,7 @@
               } @else {
                 {{ formatCost(row.costUsd) }}
               }
-            </span>
+            </button>
           </div>
             }
             }
@@ -508,15 +508,15 @@
                 [cacTooltip]="total.tokenTooltip">
             {{ formatTokens(total.totalTokens) }}
           </span>
-          <span class="ov-pl-total__cost ov-value--mono ov-value--strong"
-                data-testid="overview-pipeline-total-cost"
-                [cacTooltip]="total.costTooltip">
+          <button type="button" class="ov-pl-total__cost ov-pl-total__cost-button ov-value--mono ov-value--strong" data-testid="overview-pipeline-total-cost" [cacTooltip]="total.costTooltip"
+                [appCostBreakdownTrigger]="pipelineRows()" costBreakdownTitle="Task pipeline cost calculation"
+                [costBreakdownRecordedAt]="pipelineStartedAt()">
             {{ formatCost(total.totalCostUsd) }}
             @if (total.anyModelUnknown) {
               <span class="ov-dim"
                     [cacTooltip]="'One or more steps used a model with no price on file; the total excludes them.'">*</span>
             }
-          </span>
+          </button>
         </div>
       }
 

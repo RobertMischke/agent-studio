@@ -179,6 +179,18 @@
   color: var(--studio-fg-strong);
 }
 .cum__total--cost .cum__total-value { color: var(--studio-accent-success-strong); }
+.cum__cost-button { color: inherit; font: inherit; cursor: pointer; }
+.cum__inline-cost {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
 
 // ---------------------------------------------------------------------------
 // Model breakdown table

@@ -5,6 +5,12 @@
       "title": "BUG: Codex-Quota-Probe lieferte falsche Werte (4%/1% statt 100%) - Glitch finden \u002B absichern",
       "linkedAt": "2026-07-10T15:07:07.0181307Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2089",
+      "title": "BUG: Parser \u0022Tool router reported exit code 1, expected: tool-result\u0022 feuert seriell bei codex-Laeufen - Ursache finden",
+      "linkedAt": "2026-07-11T09:54:28.9017633Z",
+      "source": "auto"
     }
   ]
 }

@@ -85,6 +85,12 @@ export class LoadDistributionComponent implements OnInit, OnDestroy {
     const elapsed = duration - Math.max(0, Date.parse(window.resetAt) - Date.now());
     return elapsed <= 0 ? window.usedPct : Math.min(999, window.usedPct * duration / elapsed);
   }
+  projectionLabel(row: CliUsageQuotaRow, label: '5h' | '7d'): string {
+    const projected = this.projection(row, label);
+    if (projected === null) return 'Projection unavailable';
+    const state = projected > 100 ? 'Projected to exceed' : 'Within window';
+    return `${state} · ${projected.toFixed(0)}% at reset`;
+  }
   windowPct(row: CliUsageQuotaRow, label: '5h' | '7d'): number | null {
     return row.windows.find(w => w.label.toLowerCase().includes(label))?.usedPct ?? null;
   }

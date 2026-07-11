@@ -1,0 +1,294 @@
+import { expect, test } from '../fixtures/dev-backend';
+import type { Page, Route } from '@playwright/test';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
+
+/** Project Overview operator dashboard (AGT-2105).
+ *
+ * The mocked case pins exact real-shaped data, interactions, both themes, and
+ * the existing URL start endpoint. The real case proxies this worktree's
+ * fixture-owned backend and persists a second both-theme pair without claiming
+ * deterministic values.
+ */
+
+const RESULTS_DIR = process.env.PROJECT_OVERVIEW_RESULTS_DIR
+  ?? path.resolve(__dirname, '..', '..', 'playwright-screenshots', 'project-overview-dashboard');
+const PROJECT_NAME = 'Operator Demo';
+const PROJECT_ID = 'PROJ-900';
+
+function slugFor(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+const urls = [
+  { id: 'frontend', label: 'Operator UI', url: 'http://127.0.0.1:4310', sortOrder: 0,
+    startRule: { command: 'npm run start', cwd: null, port: 4310, source: 'manual' } },
+  { id: 'storybook', label: 'Component preview', url: 'http://127.0.0.1:4311', sortOrder: 1,
+    startRule: { command: 'npm run storybook', cwd: null, port: 4311, source: 'manual' } },
+];
+
+const project = {
+  id: PROJECT_ID, displayName: PROJECT_NAME, shortCode: 'OPD', workspaceId: 'ws-product',
+  storageLocation: '/mock/tasks/operator-demo', rootPath: '/mock/repos/operator-demo',
+  repositoryPath: '/mock/repos/operator-demo', sortOrder: 0, archived: false, urls,
+};
+const workspaces = [{ id: 'ws-product', displayName: 'Product Engineering', color: '#6c8cff', projects: [project] }];
+
+const throughput = {
+  project: PROJECT_NAME, capturedAt: '2026-07-11T12:00:00Z',
+  completedLast24h: 8, completedLast7d: 29,
+  recentCompletions: Array.from({ length: 29 }, (_, i) => ({
+    taskId: `done-${i + 1}`, taskKey: `OPD-${100 + i}`, title: `Delivered change ${i + 1}`,
+    completedAt: `2026-07-${String(11 - Math.floor(i / 5)).padStart(2, '0')}T10:00:00Z`,
+  })),
+};
+
+const tokenSummary = {
+  project: PROJECT_NAME, hasData: true,
+  lifetimeTotalTokens: 12_409_120, lifetimeJobTokens: 9_200_000,
+  lifetimeSupportingTokens: 2_109_120, lifetimeOrchestratorTokens: 1_100_000, lifetimeCalls: 441,
+  last24hTotalTokens: 1_248_320, last24hJobTokens: 910_000,
+  last24hSupportingTokens: 221_000, last24hOrchestratorTokens: 117_320, last24hCalls: 37,
+  last7dTotalTokens: 8_341_080, last7dJobTokens: 6_140_000,
+  last7dSupportingTokens: 1_401_080, last7dOrchestratorTokens: 800_000, last7dCalls: 229,
+  firstActivity: '2026-06-20T08:00:00Z', lastActivity: '2026-07-11T11:45:00Z',
+  fetchedAt: '2026-07-11T12:00:00Z', disclaimer: 'Measured from token-usage events.',
+};
+
+const commits = [
+  ['8c21d4f', 'Operator-first project overview'],
+  ['0a71c22', 'Reuse URL start-in-place'],
+  ['4f928ab', 'Add deployment summary contract'],
+  ['9d30e60', 'Link Wiki Pulse and planning work'],
+  ['ba812f1', 'Add both-theme acceptance proof'],
+].map(([shortSha, subject], index) => ({
+  sha: `${shortSha}${'0'.repeat(33)}`, shortSha, subject,
+  authorDateUtc: `2026-07-11T${String(11 - index).padStart(2, '0')}:00:00Z`,
+}));
+
+const deployment = {
+  project: PROJECT_NAME, available: true, reason: null, source: 'logs/stable-restarts.jsonl',
+  lastDeployment: {
+    at: '2026-07-10T09:42:11Z', status: 'ok', headBefore: '2bec67c', headAfter: 'a1f4b29',
+    durationSeconds: 47, jobsSinceLastRestart: 6, reviewCountAfter: 14, commits: commits.slice(0, 3),
+  },
+  pendingCount: commits.length,
+  pendingCommits: commits,
+};
+
+const wikiPulse = {
+  projectName: PROJECT_NAME, baseDir: '/mock/repos/operator-demo/docs', exists: true,
+  generatedAtUtc: '2026-07-11T12:00:00Z',
+  feed: { available: true, reason: null, items: [
+    { relPath: 'concepts/deployment-first-class.md', title: 'Deployment as a first-class citizen', author: 'Robert',
+      authorDateUtc: '2026-07-11T10:30:00Z', sha: 'a', shortSha: 'a', subject: 'AGT-2097 concept',
+      frameAreaSlug: 'concepts', frameAreaTitle: 'Concepts', taskKey: 'AGT-2097' },
+    { relPath: 'concepts/operator-dashboard.md', title: 'Operator dashboard decisions', author: 'Codex',
+      authorDateUtc: '2026-07-11T09:00:00Z', sha: 'b', shortSha: 'b', subject: 'AGT-2105 overview',
+      frameAreaSlug: 'current-state', frameAreaTitle: 'Current State', taskKey: 'AGT-2105' },
+  ] },
+  inbox: { available: true, reason: null, count: 0, items: [] },
+  drift: { available: true, reason: null, overallGrade: 'Fresh', areas: [],
+    counts: { fresh: 4, aging: 0, stale: 0, graded: 4 } },
+  critical: { available: true, reason: null, count: 0, overallGrade: 'none', items: [] },
+};
+
+const planningTask = {
+  id: 'plan-deployment-history', taskKey: 'OPD-221', key: 'OPD-221',
+  title: 'Plan deployment history detail', state: '2-ready', order: 1, agent: 'codex', cliType: 'codex',
+  createdAt: '2026-07-11T08:00:00Z', lastActivity: '2026-07-11T10:00:00Z',
+  watchPath: '/mock/tasks/operator-demo', projectName: PROJECT_NAME,
+  folderPath: '/mock/tasks/operator-demo/2-ready/plan-deployment-history', mode: 'planning',
+  model: null, sessionName: null, useOwnSession: null, lastUsage: null, execution: null, commit: null,
+};
+
+const snapshot = {
+  project: PROJECT_NAME, capturedAt: '2026-07-11T12:00:00Z',
+  paths: { path: '/mock/tasks/operator-demo', rootPath: '/mock/repos/operator-demo', repositoryPath: '/mock/repos/operator-demo' },
+  settings: { autoCommit: true, crashRecoveryEnabled: true, autoPushStrategy: 'on-completed', runnerMode: 'manual', orchestratorModel: null },
+  runnerStatus: null, orchestratorLogTail: [], orchestratorSession: null,
+  reviewDecisionsPending: [], runnerPendingDecisions: [],
+  publishTargets: [{
+    id: 'package:npm', kind: 'package', ecosystem: 'npm', label: 'npm', packageName: 'operator-demo',
+    currentVersion: '0.8.2', firstPublishPending: false, pendingCount: 2,
+    referenceKind: 'tag', reference: 'v0.8.2',
+  }],
+  queueHealth: { severity: 'ok', issueCount: 0, missingJobJson: [], duplicates: [], stateMismatches: [] },
+};
+
+function grouped() {
+  return {
+    backlog: [], preparation: [], orchestratorPrep: [], ready: [planningTask], progress: [], failedPickup: [],
+    codeNotComplete: [], autoReview: [], humanReview: [], escalated: [], review: [], completed: [], archive: [],
+  };
+}
+
+async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
+  await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+}
+
+async function proxyBackend(page: Page, backendBaseUrl: string): Promise<void> {
+  await page.route('**/api/**', async route => {
+    const requestUrl = new URL(route.request().url());
+    try {
+      const response = await route.fetch({ url: `${backendBaseUrl}${requestUrl.pathname}${requestUrl.search}` });
+      await route.fulfill({ response });
+    } catch {
+      await route.abort('failed').catch(() => undefined);
+    }
+  });
+}
+
+async function mockDashboard(page: Page): Promise<{ startedUrl: () => boolean; taskRequested: () => boolean }> {
+  let offlineStarted = false;
+  let planningTaskRequested = false;
+  await page.route('http://127.0.0.1:4310/**', route => route.fulfill({ status: 200, body: 'ok' }));
+  await page.route('http://127.0.0.1:4311/**', route => offlineStarted
+    ? route.fulfill({ status: 200, body: 'ok' })
+    : route.abort('connectionrefused'));
+
+  await page.route('**/api/watch-paths', route => fulfillJson(route, [{
+    name: PROJECT_NAME, path: '/mock/tasks/operator-demo', rootPath: '/mock/repos/operator-demo',
+    repositoryPath: '/mock/repos/operator-demo',
+  }]));
+  await page.route('**/api/workspaces', route => fulfillJson(route, workspaces));
+  await page.route('**/api/projects', route => fulfillJson(route, [project]));
+  await page.route('**/api/tasks', route => fulfillJson(route, [planningTask]));
+  await page.route('**/api/tasks/grouped', route => fulfillJson(route, grouped()));
+  await page.route(/\/api\/tasks\/plan-deployment-history(?:\?|$)/, () => {
+    planningTaskRequested = true;
+    // Navigation writes the task deep link before detail loading. Leave the
+    // heavy task pane pending so this dashboard spec verifies the handoff
+    // without compiling an unrelated editor surface.
+  });
+  await page.route('**/api/crash-recovery/pending', route => fulfillJson(route, { pending: [] }));
+  await page.route('**/api/projects/*/throughput', route => fulfillJson(route, throughput));
+  await page.route('**/api/projects/*/token-usage/summary', route => fulfillJson(route, tokenSummary));
+  await page.route('**/api/projects/*/deployment/summary', route => fulfillJson(route, deployment));
+  await page.route('**/api/projects/*/wiki/pulse**', route => fulfillJson(route, wikiPulse));
+  await page.route('**/api/projects/*/snapshot', route => fulfillJson(route, snapshot));
+  await page.route(`**/api/projects/${PROJECT_ID}/urls/storybook/start`, async route => {
+    offlineStarted = true;
+    await fulfillJson(route, { started: true, processId: 4421 });
+  });
+  await page.route('**/api/projects/*/token-usage/heatmap**', route => fulfillJson(route, {
+    project: PROJECT_NAME, days: [], jobs: [], hasData: false, fetchedAt: '2026-07-11T12:00:00Z',
+  }));
+  await page.route('**/api/projects/*/token-usage/expensive**', route => fulfillJson(route, { project: PROJECT_NAME, jobs: [] }));
+  await page.route('**/api/projects/*/token-usage/pipeline-cost**', route => fulfillJson(route, {
+    project: PROJECT_NAME, days: [], windowDays: 30, kinds: [], steps: [], totalTokens: 0,
+    totalCostUsd: 0, anyModelUnknown: false, taskCount: 0, hasData: false, fetchedAt: '2026-07-11T12:00:00Z',
+  }));
+  await page.route('**/api/projects/*/wiki/tree', route => fulfillJson(route, {
+    projectName: PROJECT_NAME, baseDir: '/mock/docs', exists: true, root: [],
+  }));
+  return {
+    startedUrl: () => offlineStarted,
+    taskRequested: () => planningTaskRequested,
+  };
+}
+
+async function openDashboard(page: Page, projectName = PROJECT_NAME, freshDocument = false): Promise<void> {
+  await page.setViewportSize({ width: 1536, height: 1200 });
+  const entry = freshDocument ? '/?source=real#' : '/#';
+  await page.goto(`${entry}/projects/${slugFor(projectName)}/overview`);
+  await expect(page.getByTestId('project-overview-dashboard')).toBeVisible({ timeout: 15_000 });
+  await dismissDevErrorDialog(page);
+  const recoveryDismiss = page.getByTestId('crash-recovery-dismiss').first();
+  if (await recoveryDismiss.isVisible().catch(() => false)) await recoveryDismiss.click();
+  const orchestratorClose = page.getByRole('region', { name: 'Orchestrator' }).getByRole('button', { name: 'Close' });
+  if (await orchestratorClose.isVisible().catch(() => false)) {
+    await orchestratorClose.evaluate((button: HTMLButtonElement) => button.click());
+  }
+}
+
+test.describe('Project Overview · operator dashboard', () => {
+  test.beforeAll(() => fs.mkdirSync(RESULTS_DIR, { recursive: true }));
+
+  test('shows exact operator signals, both themes, and reuses URL start-in-place', async ({ page, devBackend }) => {
+    test.setTimeout(120_000);
+    await proxyBackend(page, devBackend.baseUrl);
+    const mocked = await mockDashboard(page);
+    await openDashboard(page);
+
+    await expect(page.getByTestId('project-overview-throughput-24h')).toHaveText('8');
+    await expect(page.getByTestId('project-overview-throughput-7d')).toHaveText('29');
+    await expect(page.getByTestId('project-overview-tokens-24h')).toHaveText('1.2M');
+    await expect(page.getByTestId('project-overview-tokens-7d')).toHaveText('8.3M');
+    await expect(page.getByTestId('project-overview-deployment')).toContainText('5 changes ready to deploy');
+    await expect(page.getByTestId('project-overview-wiki')).toContainText('Deployment as a first-class citizen');
+    await expect(page.getByTestId('project-overview-planning-plan-deployment-history')).toBeVisible();
+
+    const legacyCopy = ['Watch path', 'Working directory', 'Repository', 'Clean context', 'Project sessions'];
+    for (const copy of legacyCopy) await expect(page.getByTestId('project-overview-dashboard')).not.toContainText(copy);
+
+    const numericVariant = await page.getByTestId('project-overview-throughput-24h')
+      .evaluate(element => getComputedStyle(element).fontVariantNumeric);
+    expect(numericVariant).toContain('tabular-nums');
+    const overflow = await page.getByTestId('project-overview-dashboard')
+      .evaluate(element => element.scrollWidth > element.clientWidth + 1);
+    expect(overflow).toBe(false);
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, `project-overview-dashboard--${theme}--mocked.png`),
+        fullPage: true,
+      });
+    }
+
+    await expect(page.getByTestId('project-overview-url-status-frontend')).toHaveAttribute('data-status', 'running');
+    await expect(page.getByTestId('project-overview-url-status-storybook')).toHaveAttribute('data-status', 'offline');
+    await page.getByTestId('project-overview-url-start-storybook').click();
+    await expect(page.getByTestId('project-overview-url-status-storybook')).toHaveAttribute('data-status', 'building');
+    await expect.poll(mocked.startedUrl).toBe(true);
+    await expect(page.getByTestId('project-overview-url-status-storybook')).toHaveAttribute('data-status', 'running');
+    await expect(page.getByTestId('project-overview-urls-summary')).toContainText('2 / 2');
+
+    await page.getByTestId('project-overview-deployment-details').locator('summary').click();
+    await expect(page.getByTestId('project-overview-deployment-details')).toContainText('Operator-first project overview');
+    await page.getByTestId('project-overview-last-deployment-details').locator('summary').click();
+    await expect(page.getByTestId('project-overview-last-deployment-details')).toContainText('Operator-first project overview');
+
+    await page.getByTestId('project-overview-open-token-usage').click();
+    await expect(page.getByTestId('project-shell-panel-token-usage')).toBeVisible();
+
+    await page.goto(`/#/projects/${slugFor(PROJECT_NAME)}/overview`);
+    await expect(page.getByTestId('project-overview-dashboard')).toBeVisible();
+    await page.getByTestId('project-overview-urls-details').click();
+    await expect(page.getByTestId('project-shell-panel-project-urls')).toBeVisible();
+
+    await page.goto(`/#/projects/${slugFor(PROJECT_NAME)}/overview`);
+    await expect(page.getByTestId('project-overview-dashboard')).toBeVisible();
+    await page.getByTestId('project-overview-open-wiki').click();
+    await expect(page.getByTestId('project-shell-panel-wiki')).toBeVisible();
+
+    await page.goto(`/#/projects/${slugFor(PROJECT_NAME)}/overview`);
+    await expect(page.getByTestId('project-overview-dashboard')).toBeVisible();
+    await page.getByTestId('project-overview-planning-plan-deployment-history').click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('job')).toBe('plan-deployment-history');
+    await expect.poll(mocked.taskRequested).toBe(true);
+
+    // Switch from deterministic routes to this worktree's fixture backend and
+    // persist a separately labelled real-source pair.
+    const response = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
+    expect(response.ok).toBe(true);
+    const paths = await response.json() as { name: string }[];
+    expect(paths.length).toBeGreaterThan(0);
+    const realProjectName = paths.find(item => /agent.?task/i.test(item.name))?.name ?? paths[0].name;
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await proxyBackend(page, devBackend.baseUrl);
+    await openDashboard(page, realProjectName, true);
+    await expect(page.getByTestId('project-overview-refresh')).toHaveText('Refresh', { timeout: 20_000 });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, `project-overview-dashboard--${theme}--real.png`),
+        fullPage: true,
+      });
+    }
+  });
+});

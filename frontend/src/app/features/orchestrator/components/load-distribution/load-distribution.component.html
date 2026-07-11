@@ -33,7 +33,7 @@
                 <span [style.width.%]="windowPct(row, $any(label)) ?? 0"></span>
                 @if (projection(row, $any(label)); as projected) { <i [style.left.%]="projected > 100 ? 100 : projected" [attr.title]="'Projected ' + projected.toFixed(0) + '% at reset'"></i> }
               </div>
-              <p>{{ projection(row, $any(label)) === null ? 'Projection unavailable' : (projection(row, $any(label))! > 100 ? 'Projected to exceed · ' : 'Within window · ') + projection(row, $any(label))!.toFixed(0) + '% at reset' }}</p>
+              <p>{{ projectionLabel(row, $any(label)) }}</p>
             </div>
           }
         </article>

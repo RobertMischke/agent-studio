@@ -37,7 +37,7 @@ Fix: finish the onboarding wizard once by running `claude` interactively yoursel
 ### 2.1 Clone this repo and the chat library
 
 ```sh
-git clone https://github.com/RobertMischke/agent-studio.git agent-orchestrator
+git clone https://github.com/agent-orc/agent-studio.git agent-orchestrator
 ```
 
 The frontend depends on a sibling library, `coding-agent-chat`, via a relative `file:` path (`frontend/package.json`: `"@coding-agent/chat": "file:../../../coding-agent-chat/dist/coding-agent-chat"`). Three `../` means your checkout must sit **two folders deep under a common root**, with `coding-agent-chat` cloned as a sibling of that root. For example:
@@ -52,7 +52,7 @@ C:\Projects\
 Build the library before you touch the frontend - `npm install` in `frontend/` will fail otherwise because `dist/coding-agent-chat` doesn't exist yet:
 
 ```sh
-git clone https://github.com/RobertMischke/coding-agent-chat.git C:/Projects/coding-agent-chat
+git clone https://github.com/agent-orc/chat.git C:/Projects/coding-agent-chat
 cd C:/Projects/coding-agent-chat
 npm install
 npm run build

@@ -2,6 +2,14 @@ namespace AgentStudio.Shared;
 
 public record ProjectSettings
 {
+    /// <summary>
+    /// Per publish-target automation ladder. Keys are derived target ids
+    /// (<c>package:npm</c>, <c>package:nuget</c>, <c>website</c>); values are
+    /// <c>manual</c>, <c>suggest</c>, or <c>auto</c>. Missing entries resolve to
+    /// manual. Package targets never resolve above suggest.
+    /// </summary>
+    public Dictionary<string, string>? PublishAutomation { get; init; }
+
     /// <summary>When true, transition <c>3-progress → 4-auto-review</c> auto-commits and stamps the SHA on the job.</summary>
     public bool AutoCommit { get; init; } = true;
 

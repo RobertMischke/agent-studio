@@ -17,6 +17,14 @@ public sealed class RunnerOptions
     /// <summary>Human-facing runner name shown on the board (the project the board assigns, e.g. agent-runner-01).</summary>
     public required string RunnerName { get; init; }
 
+    /// <summary>
+    /// Optional pre-registered Task Server client identity. When set, startup
+    /// verifies this exact identity instead of silently registering another id
+    /// from <see cref="RunnerName"/>. This is the systemd-friendly onboarding
+    /// path for hosts whose X-Client-Id was created before the runner install.
+    /// </summary>
+    public string? ClientId { get; init; }
+
     /// <summary>Reported hostname; defaults to the machine name.</summary>
     public required string Hostname { get; init; }
 
@@ -111,6 +119,7 @@ public sealed class RunnerOptions
             ServerUrl = Val("server", "RUNNER_SERVER_URL", "http://127.0.0.1:5030").TrimEnd('/'),
             RunnerId = Val("runner-id", "RUNNER_ID", $"agent-runner-{Environment.MachineName}".ToLowerInvariant()),
             RunnerName = Val("runner-name", "RUNNER_NAME", "agent-runner-01"),
+            ClientId = Val("client-id", "RUNNER_CLIENT_ID").Trim() is { Length: > 0 } clientId ? clientId : null,
             Hostname = Val("hostname", "RUNNER_HOSTNAME", Environment.MachineName),
             BackendName = Val("backend-name", "RUNNER_BACKEND_NAME", "remote-runner"),
             AuthToken = Val("auth-token", "RUNNER_AUTH_TOKEN") is { Length: > 0 } t ? t : null,

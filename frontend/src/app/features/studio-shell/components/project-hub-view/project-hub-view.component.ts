@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, effect, inject, input, output, sign
 import {
   ProjectShellComponent,
   ProjectDetailComponent,
+  ProjectOverviewDashboardComponent,
   ProjectSettingsPanelComponent,
   SecurityPanelComponent,
   UxuiPanelComponent,
@@ -16,6 +17,7 @@ import {
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { PromptAdminPanelComponent } from '../../../orchestrator';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
+import { RegressionRadarComponent } from '../../../regression-radar';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
   ProjectRailKey,
@@ -36,6 +38,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   'architecture',
   'drift',
   'uxui',
+  'test-quality',
   'token-usage',
   'observability',
   'steering',
@@ -70,6 +73,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   imports: [
     ProjectShellComponent,
     ProjectDetailComponent,
+    ProjectOverviewDashboardComponent,
     ProjectSettingsPanelComponent,
     SecurityPanelComponent,
     UxuiPanelComponent,
@@ -83,6 +87,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     ProjectProposalsPanelComponent,
     PromptAdminPanelComponent,
     WorkspaceScreenshotsComponent,
+    RegressionRadarComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-hub-view.component.html',

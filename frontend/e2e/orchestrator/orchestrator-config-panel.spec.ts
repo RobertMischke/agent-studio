@@ -124,6 +124,8 @@ test.describe('Orchestrator logic config (consolidated Settings, Admin/System en
 
     await page.getByTestId('orch-side-sheet-toggle').click();
     await expect(page.getByTestId('orch-side-sheet')).toBeVisible();
+    await page.getByTestId('orch-context-badge').click();
+    await expect(page.getByTestId('orch-context-menu')).toBeVisible();
     await page.getByTestId('orch-side-sheet-settings').click();
 
     await expect(page.getByTestId('workspace-settings-inline')).toBeVisible();

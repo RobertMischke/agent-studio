@@ -97,28 +97,26 @@ test.describe('Project chat markdown — Slice A primitives', () => {
     const sheet = page.getByTestId('orch-side-sheet');
     await expect(sheet).toBeVisible();
 
-    const chatBody = page.getByTestId('chat-body');
-    await expect(chatBody).toBeVisible();
+    const conversation = page.getByTestId('conversation-view');
+    await expect(conversation).toBeVisible();
 
-    // chat-turn-md must be present on every non-user markdown body.
-    const mdBodies = chatBody.locator('[data-testid="chat-turn-md"]');
-    await expect(mdBodies.first()).toBeVisible({ timeout: 5_000 });
-    expect(await mdBodies.count()).toBeGreaterThanOrEqual(2);
+    const group = conversation.getByTestId('conversation-message-message.orchestrator');
+    await expect(group).toBeVisible({ timeout: 5_000 });
+    await expect(group).toHaveAttribute('data-item-count', '2');
 
-    // The long turn should mount collapsed; the short one should not have
-    // a toggle at all. Locate by data-turn-id which we set in the template.
-    const longArticle = chatBody.locator('[data-turn-id="long-1"]');
-    const shortArticle = chatBody.locator('[data-turn-id="short-1"]');
+    const longArticle = conversation.locator(
+      '[data-testid="conversation-message-item"][data-item-id="long-1"]'
+    );
+    const shortArticle = conversation.locator(
+      '[data-testid="conversation-message-item"][data-item-id="short-1"]'
+    );
     await expect(longArticle).toBeVisible();
     await expect(shortArticle).toBeVisible();
 
-    await expect(longArticle).toHaveAttribute('data-collapsed', 'true');
-    await expect(shortArticle).toHaveAttribute('data-collapsed', 'false');
-
-    const showMore = page.getByTestId('chat-msg-toggle-long-1');
+    const showMore = longArticle.getByTestId('conversation-message-item-expand');
     await expect(showMore).toBeVisible();
-    await expect(showMore).toHaveAttribute('aria-expanded', 'false');
-    await expect(showMore).toHaveText(/Show more/);
+    await expect(showMore).toHaveText('expand');
+    await expect(shortArticle.getByTestId('conversation-message-item-expand')).toHaveCount(0);
 
     // Numbered code: the long turn carries a fence; >5 lines triggers the
     // numbered shape. The short turn should not.
@@ -128,13 +126,11 @@ test.describe('Project chat markdown — Slice A primitives', () => {
 
     // Click the toggle and confirm the article expands.
     await showMore.click();
-    await expect(longArticle).toHaveAttribute('data-collapsed', 'false');
-    await expect(showMore).toHaveAttribute('aria-expanded', 'true');
-    await expect(showMore).toHaveText(/Show less/);
+    await expect(showMore).toHaveText('collapse');
 
     // Click again to re-collapse.
     await showMore.click();
-    await expect(longArticle).toHaveAttribute('data-collapsed', 'true');
+    await expect(showMore).toHaveText('expand');
 
     // Capture a screenshot so the layout can be reviewed in chat without
     // running the UI. Tight crop to the side sheet only.
