@@ -668,6 +668,24 @@
             <code>4-auto-review</code> without <code>external_completion</code> provenance.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2148</code><br><span class="small">completion-gate reissue from historical build evidence</span></td>
+          <td>
+            A verification-only follow-up restored successfully and passed its focused tests, but the completion gate reissued it.
+            The successful status explained that an earlier <code>dotnet build --no-restore</code> failure was a false positive,
+            while the log tail also echoed old gate findings from <code>pipeline-execution.json</code>.
+          </td>
+          <td>
+            The evidence scan treated an explicitly disclaimed false-positive phrase and line-numbered durable pipeline-history
+            output as fresh build-failure evidence. Each reissue could therefore rediscover the previous verdict and sustain the loop.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the completion gate ignores only explicit false-positive diagnoses and
+            <code>pipeline-execution.json:&lt;line&gt;</code> artifact echoes. A merely earlier or otherwise unresolved build failure
+            still blocks. The reproduced successful close-out now reaches the normal pass terminal and auto-review.
+          </td>
+        </tr>
       </tbody>
     </table>
 

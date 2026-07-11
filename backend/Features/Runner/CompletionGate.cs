@@ -44,6 +44,16 @@ public static class CompletionGate
         @"^(?:\[[^\]]*\]\s*)*\s*\d{1,6}[:\t]\s*\S.*[(){};]",
         RegexOptions.Compiled);
 
+    // An echoed line from the durable pipeline history, usually produced by
+    // rg/Get-Content while investigating a prior completion-gate verdict. The
+    // JSON can contain the gate's own old "Build FAILED" finding; treating that
+    // copy as fresh run evidence makes every subsequent success reissue itself.
+    // Keep this precise to pipeline-execution.json line-number output so real
+    // compiler diagnostics with file paths remain visible (AGT-2148).
+    private static readonly Regex PipelineHistoryEchoRegex = new(
+        @"^(?:\[[^\]]*\]\s*)*.*(?:^|[\\/])pipeline-execution\.json:\d+:",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     // The build / compile / test-failure vocabulary. Kept as one fragment so the
     // generic incomplete-work scan and the "claims success but build failed"
     // contradiction check (see BuildErrorEvidenceRegex) share exactly one
@@ -164,6 +174,15 @@ public static class CompletionGate
         (?: [\[(] \s* (?: pre[-\s]?existing | out[-\s]?of[-\s]?scope | not \s+ (?:caused|introduced) ) [^\])]* [\])] )
       | \b not \s+ (?: caused | introduced ) \s+ by \s+ (?: this | these | the ) \s+ change(?:s)? \b
       | ^ \s* (?: pre[-\s]?existing | out[-\s]?of[-\s]?scope ) \b [^:]* :",
+        RegexOptions.Compiled);
+
+    // A build/test-failure phrase that the close-out explicitly identifies as a
+    // false positive is diagnostic history, not current unfinished work. Keep
+    // the relationship on the same line and explicit; broad words such as
+    // "resolved", "earlier", or an unrelated false-positive mention must not
+    // hide a real failure.
+    private static readonly Regex ExplicitFalsePositiveRegex = new(
+        @"(?ix)\b(?:" + BuildErrorEvidence + @")\b.{0,80}\b(?:as|was|is|diagnosed\s+as|identified\s+as|confirmed\s+as)\s+(?:a\s+)?false[-\s]?positive\b",
         RegexOptions.Compiled);
 
     public enum CompletionGateAction
@@ -423,6 +442,12 @@ public static class CompletionGate
             // out-of-scope: they are not unfinished work this change owns
             // (AGT-1986). See PreExistingOutOfScopeRegex.
             if (PreExistingOutOfScopeRegex.IsMatch(line)) continue;
+            // Drop durable pipeline-history output that repeats a prior gate
+            // verdict. It is an artifact echo, not this run's build output.
+            if (PipelineHistoryEchoRegex.IsMatch(line)) continue;
+            // Drop only explicitly disclaimed false-positive failure signals.
+            // Genuine current or merely historical failures remain evidence.
+            if (ExplicitFalsePositiveRegex.IsMatch(line)) continue;
             yield return line;
         }
     }
