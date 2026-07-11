@@ -51,6 +51,26 @@ export class RemoteHostsService {
     }
   }
 
+  /** Add the host produced by the UI-first setup wizard to this registry. */
+  addProvisionedHost(name: string, address: string): void {
+    const id = name.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-') || `runner-${Date.now()}`;
+    const host: RemoteHost = {
+      id,
+      name: name.trim() || id,
+      role: 'remote',
+      address: address.trim(),
+      status: 'idle',
+      os: 'Ubuntu LTS',
+      lastHeartbeatAt: new Date().toISOString(),
+      uptimeLabel: 'just provisioned',
+      capabilities: ['linux', 'git', 'node 22', 'dotnet 10', 'playwright'],
+      cliQuotas: [],
+      stats: null,
+    };
+    this.hosts.update((hosts) => [...hosts.filter((item) => item.id !== id), host]);
+    this.log('wizard-completed', { hostId: id, address: host.address });
+  }
+
   /** Re-run the runner probes for a host: refreshes its heartbeat + load. */
   reprobe(id: string): void {
     this.runAction(id, 'reprobe', (host) => ({

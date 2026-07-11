@@ -8,14 +8,23 @@
         per-CLI quota. Re-Probe, Drain, or Retire a host from its row.
       </p>
     </div>
-    <button class="rh__refresh"
+    <div class="rh__actions">
+      <button class="rh__add"
+              type="button"
+              data-testid="remote-hosts-add"
+              (click)="openWizard()">
+        <span aria-hidden="true">+</span>
+        <span>Add host</span>
+      </button>
+      <button class="rh__refresh"
             type="button"
             data-testid="remote-hosts-refresh"
             [disabled]="loading()"
             (click)="reload()">
       {{ loading() ? '⏳' : '↻' }}
       <span>Reload</span>
-    </button>
+      </button>
+    </div>
   </header>
 
   <div class="rh__summary" data-testid="remote-hosts-summary">
@@ -42,4 +51,8 @@
       <app-remote-host-card [host]="host" [now]="now()" (action)="onAction($event)" />
     }
   </div>
+
+  @if (wizardOpen()) {
+    <app-add-host-wizard (cancelled)="closeWizard()" (completed)="completeWizard($event)" />
+  }
 </div>

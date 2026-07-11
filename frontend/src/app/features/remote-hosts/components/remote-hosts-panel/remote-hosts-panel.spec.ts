@@ -36,6 +36,11 @@ describe('RemoteHostsPanelComponent', () => {
     const summary = el.querySelector('[data-testid="remote-hosts-summary"]')?.textContent ?? '';
     expect(summary).toContain(String(cards.length));
 
+    const addButton = el.querySelector('[data-testid="remote-hosts-add"]') as HTMLButtonElement;
+    addButton.click();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="add-host-wizard"]')).toBeTruthy();
+
     fixture.destroy();
   });
 });

@@ -102,6 +102,27 @@ test.describe('Remote Hosts settings section', () => {
     await expect(firstCard.getByTestId('remote-host-no-stats')).toBeVisible();
   });
 
+  test('adds a host through the guided four-step setup', async ({ page }) => {
+    await page.goto('/#/workspace/settings/remote-hosts');
+    await expect(page.getByTestId('remote-hosts-panel')).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('remote-hosts-add').click();
+    await expect(page.getByTestId('add-host-wizard')).toBeVisible();
+
+    await page.getByTestId('add-host-connect-check').check();
+    await page.getByTestId('add-host-next').click();
+    await page.getByTestId('add-host-provision-check').check();
+    await page.getByTestId('add-host-next').click();
+    await page.getByTestId('add-host-claude-check').check();
+    await page.getByTestId('add-host-codex-check').check();
+    await page.getByTestId('add-host-next').click();
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-add-wizard--mocked.png'), fullPage: false });
+    await page.getByTestId('add-host-smoke-check').check();
+    await page.getByTestId('add-host-next').click();
+
+    await expect(page.getByTestId('add-host-wizard')).toBeHidden();
+    await expect(page.getByTestId('remote-host-name').filter({ hasText: 'agent-runner-02' })).toBeVisible();
+  });
+
   test('renders on the light theme too (R5)', async ({ page }) => {
     await page.goto('/#/workspace/settings/remote-hosts');
     await page.waitForLoadState('domcontentloaded');

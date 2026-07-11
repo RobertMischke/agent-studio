@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { RemoteHostsService } from '../../services/remote-hosts.service';
 import { RemoteHostCardComponent } from '../remote-host-card/remote-host-card';
 import type { HostActionKind } from '../../models/remote-host.model';
+import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-wizard/add-host-wizard';
 
 /**
  * Remote Hosts settings page (AGT-1921).
@@ -19,7 +20,7 @@ import type { HostActionKind } from '../../models/remote-host.model';
 @Component({
   selector: 'app-remote-hosts-panel',
   standalone: true,
-  imports: [RemoteHostCardComponent],
+  imports: [RemoteHostCardComponent, AddHostWizardComponent],
   templateUrl: './remote-hosts-panel.html',
   styleUrl: './remote-hosts-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -30,6 +31,7 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   readonly hosts = this.service.hosts;
   readonly loading = this.service.loading;
   readonly error = this.service.error;
+  readonly wizardOpen = signal(false);
 
   /** Ticking clock so relative heartbeat labels stay fresh without per-card timers. */
   readonly now = signal<number>(Date.now());
@@ -50,6 +52,14 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   }
 
   reload(): void { this.service.reload(); }
+
+  openWizard(): void { this.wizardOpen.set(true); }
+  closeWizard(): void { this.wizardOpen.set(false); }
+
+  completeWizard(host: ProvisionedHostDraft): void {
+    this.service.addProvisionedHost(host.name, host.address);
+    this.wizardOpen.set(false);
+  }
 
   onAction(evt: { kind: HostActionKind; id: string }): void {
     switch (evt.kind) {

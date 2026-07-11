@@ -31,6 +31,19 @@ describe('RemoteHostsService', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
+  it('adds a wizard-completed host as an idle remote runner', () => {
+    svc.ensureLoaded();
+    svc.addProvisionedHost('Runner Berlin 02', 'ssh://runner@berlin.example');
+
+    const host = svc.hosts().find((item) => item.id === 'runner-berlin-02');
+    expect(host).toMatchObject({
+      name: 'Runner Berlin 02',
+      address: 'ssh://runner@berlin.example',
+      role: 'remote',
+      status: 'idle',
+    });
+  });
+
   it('drain flags the row busy, then settles it to draining', () => {
     svc.ensureLoaded();
     const id = svc.hosts()[0].id;
