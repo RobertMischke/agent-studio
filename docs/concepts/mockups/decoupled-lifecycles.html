@@ -194,7 +194,7 @@
     <header class="topbar">
       <div class="brand">
         <div class="brand-mark">DL</div>
-        <div class="brand-text"><strong>Lifecycle Workbench</strong><span>AGT-2091 · repository review artifact</span></div>
+        <div class="brand-text"><strong>Lifecycle Workbench</strong><span>AGT-2091 · Wiki-browsable review artifact</span></div>
       </div>
       <button class="ghost" id="themeButton" type="button" aria-label="Switch color theme">Dark theme</button>
     </header>
@@ -214,7 +214,7 @@
           </div>
           <div class="recommendation">
             <strong>Recommended: accept as the implementation contract.</strong>
-            <span class="mini">This Workbench changes no production runtime.</span>
+            <span class="mini">This mockup changes no production runtime. Project Hub promotion awaits WB-1.</span>
           </div>
         </aside>
       </section>
@@ -286,7 +286,7 @@
 
         <div class="evidence-grid">
           <section class="events">
-            <div class="events-head"><h3>Scenario event stream</h3><span class="mini">ordered by generation + sequence</span></div>
+            <div class="events-head"><h3>Scenario event stream</h3><span class="mini">server-allocated event sequence</span></div>
             <div class="event-log" id="eventLog"></div>
           </section>
           <section class="truth">
@@ -350,9 +350,9 @@
             <p>Decide recovery policy, replay retention, and healthy-controller takeover. The safe restart barrier is mandatory. No Epic or production cutover is created automatically.</p>
           </article>
           <article class="cards">
-            <span class="badge info">Executable after acceptance</span>
+            <span class="badge info">One spike now · production after acceptance</span>
             <h3>Implementation card chain</h3>
-            <p>Each card has a testable boundary. The protocol fixture may be run earlier as a disposable spike.</p>
+            <p>DL-1 may run now as a disposable in-memory spike. DL-2 through DL-6 remain behind Robert's explicit halt.</p>
             <div class="chain" aria-label="Recommended implementation order">
               <span class="chain-item">DL-1 simulator</span><span class="arrow">→</span>
               <span class="chain-item">DL-2 holder</span><span class="chain-item">DL-3 gateway</span><span class="arrow">→</span>
@@ -389,7 +389,7 @@
       gatewayRestart: [
         { message: 'The stream gateway restarts while lease authority stays live. The holder begins local spooling.', event: ['1843', 'holder', 'Gateway link lost; output spool enabled'], apply: s => { s.gateway = 'restarting'; s.link = 'disconnected'; s.spool = '3 unacknowledged'; s.commands = 'unavailable while disconnected'; s.clients[0].state = 'reconnecting'; s.tone = 'warn'; s.outcome = 'Degraded, execution alive'; } },
         { message: 'The gateway returns and reconstructs SES-481 from durable metadata.', event: ['1846', 'gateway', 'Session projection restored; holder reconnect accepted'], apply: s => { s.gateway = 'online'; s.link = 'replaying'; s.replay = 'holder replay in progress'; s.clients[0].state = 'online'; } },
-        { message: 'Spool acknowledgement reaches the holder. No second CLI was launched.', event: ['1847', 'channel', 'Sequences 1843..1846 durable; spool compacted'], apply: s => { s.link = 'connected'; s.spool = '0 unacknowledged'; s.cursor = 1847; s.replay = 'current'; s.commands = 'fenced and available'; s.tone = 'ok'; s.outcome = 'Recovered, one CLI'; } }
+        { message: 'Spool acknowledgement reaches the holder. No second CLI was launched.', event: ['1847', 'channel', 'Holder offsets acknowledged; canonical event stream durable'], apply: s => { s.link = 'connected'; s.spool = '0 unacknowledged'; s.cursor = 1847; s.replay = 'current'; s.commands = 'fenced and available'; s.tone = 'ok'; s.outcome = 'Recovered, one CLI'; } }
       ],
       hostRestart: [
         { message: 'The host heartbeat disappears. This may be a partition, so process state remains unknown and no replacement starts.', event: ['1843', 'holder', 'Heartbeat lost; generation 1 process state unknown'], apply: s => { s.host = 'agent-runner-01 · unreachable'; s.holder = 'unknown · last boot b17'; s.process = 'PID 8421 · state unknown'; s.session = 'running state unconfirmed'; s.link = 'disconnected'; s.commands = 'blocked'; s.control = 'suspended'; s.tone = 'warn'; s.outcome = 'Process unknown, fail closed'; } },

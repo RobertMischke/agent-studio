@@ -1,11 +1,15 @@
 # Decoupled agent-session lifecycles
 
-Status: operator-vision concept and experiment Workbench, 2026-07-12. This is
-an architecture target, not a claim that the production runtime already has
+Status: operator-vision concept and Workbench-family mockup, 2026-07-12. This
+is an architecture target, not a claim that the production runtime already has
 these lifecycle guarantees.
 
 Review artifact:
-[interactive lifecycle Workbench](mockups/decoupled-lifecycles.html).
+[interactive lifecycle Workbench-family mockup](mockups/decoupled-lifecycles.html).
+It is browsable in the current Wiki. It is not yet a manifest-backed Project
+Hub Workbench because the WB-1 folder contract and catalogue from AGT-2084 are
+not implemented; promotion must create the single canonical
+`docs/workbenches/decoupled-lifecycles/` source rather than duplicate this HTML.
 
 ## Decision in one paragraph
 
@@ -64,9 +68,10 @@ This builds on, rather than replaces, the current architecture:
   [orchestrator session registry](../product/orchestrator-chat.md) provide the
   precedent for stable logical session identities and resumable transcripts.
 - [Experiment Workbenches](experimentier-workbench.md), created by AGT-2084,
-  provide the repository-owned, self-contained review pattern used here. This
-  concept references that parallel work without depending on its production
-  implementation.
+  provide the repository-owned, self-contained review pattern followed by this
+  Wiki-browsable mockup. The manifest-backed Project Hub object remains future
+  WB-1 work; this concept references that parallel work without depending on
+  its production implementation.
 - AGT-2076's overnight forensics remains the warning: process-tree cleanup,
   backend restarts, and orphan reconciliation must preserve provable ownership.
   A detached process with no holder is not success.
@@ -85,8 +90,8 @@ service on the execution host. It owns:
 
 - process spawn into a dedicated process group or equivalent containment;
 - stdin and stdout/stderr handles;
-- one monotonic sequence across the whole logical session, with process
-  generation carried as event metadata;
+- one monotonic holder source offset across the whole logical session, with
+  process generation carried as event metadata;
 - a bounded host-local append journal and unacknowledged output spool;
 - provider session/resume metadata and the current process generation;
 - the host boot id and a fresh holder-incarnation id for every service start;
@@ -99,7 +104,7 @@ systemd-managed runner/holder service. `nohup`, tmux, or an untracked detached
 PID is not the ownership model: it may keep a process alive but cannot prove
 who may command it, fence stale writers, or reconcile terminal state.
 
-The holder reports four distinct conditions:
+The holder reports five distinct conditions:
 
 - `running`: a live contained CLI generation owns the current execution fence;
 - `waiting`: the CLI is alive but awaiting a provider, tool, permission, or
@@ -107,6 +112,8 @@ The holder reports four distinct conditions:
 - `interrupted-recoverable`: no CLI process is live, but the logical session
   has a durable checkpoint/provider resume id and still owns or can reacquire a
   valid continuation admission;
+- `interrupted-needs-action`: no CLI process is live and ownership is
+  reconciled, but resume awaits an explicit operator or policy decision;
 - `terminal`: completion, cancellation, failure, or supersession has been
   durably recorded.
 
@@ -124,10 +131,11 @@ port.
 The channel owns:
 
 - `sessionId` discovery and current holder/host projection;
-- ordered replay by `(sessionId, sequence)`, with generation recorded as event
-  metadata and a bounded cursor;
+- one server-allocated canonical event sequence for ordered replay by
+  `(sessionId, eventSequence)`, with generation and the holder's source offset
+  recorded as event metadata and a bounded cursor;
 - fan-out to zero, one, or many read subscribers;
-- acknowledgement to the holder so its spool can be compacted;
+- acknowledgement of holder source offsets so its spool can be compacted;
 - one short **control lease** for state-changing input;
 - idempotent command ids and an audit record of actor, client, lease, and
   result;
@@ -157,8 +165,9 @@ server or holder correctness depends on receiving that detach.
 
 Multiple clients may watch the same stream from different computers. They see
 the same session identity, execution host, process generation, channel health,
-last durable sequence, and control owner. Only the current control holder sees
-enabled mutating controls; all other clients remain live read-only observers.
+last durable event sequence, and control owner. Only the current control holder
+sees enabled mutating controls; all other clients remain live read-only
+observers.
 
 ## 3. Lifecycle matrix
 
@@ -208,8 +217,13 @@ metadata to calculate a conservative deadline on its local monotonic clock. The
 holder subtracts at least one heartbeat interval plus the transport/clock
 uncertainty margin. If it cannot renew by that **stop-before deadline**, it
 cancels and reaps the complete process group before the server may pass lease
-expiry and admit a successor. No new generation starts until the previous
-execution authority is durably fenced or that no-overlap interval has passed.
+expiry and admit a successor. No new generation starts on a higher fence alone.
+Admission requires durable fence continuity **and** either proof that the
+previous process group ended (changed boot id or same-boot containment
+reconciliation) or expiry of the complete conservative stop-before, lease,
+transport, and clock-uncertainty interval. The fence protects authoritative
+Task Server writes; the process-end or no-overlap proof protects external CLI
+side effects.
 
 Host identity uses both the stable registered host id and an observed boot id.
 Each holder service start adds a fresh incarnation id. A missing heartbeat only
@@ -223,10 +237,14 @@ not UI presence or reachability, gate resume.
 ### Attach
 
 An attach request carries authenticated principal, registered client id,
-`sessionId`, and an optional last-seen cursor. The channel returns a snapshot
-followed by ordered events. If the cursor predates retained data, it returns a
-`replay-gap` marker plus the newest durable snapshot rather than silently
-skipping output.
+`sessionId`, and an optional last-seen canonical event cursor. The channel
+returns a snapshot followed by server-sequenced events. Holder output arrives
+with an idempotent holder source offset; the gateway assigns the canonical
+event sequence when it durably accepts that output. Gateway-owned attach,
+control, and audit events use the same server allocator, so offline holder
+spooling can never collide with client events. If the cursor predates retained
+data, the channel returns a `replay-gap` marker plus the newest durable snapshot
+rather than silently skipping output.
 
 Attach defaults to read-only. `requestControl=true` is a separate operation and
 never implied by being the first or only viewer. A successful response carries
@@ -286,13 +304,14 @@ not access.
 Robert starts a task assigned to `agent-runner-01`. The central Task Server
 grants that runner the fenced task lease. Its systemd-managed holder creates
 session `SES-481`, generation 1, launches Codex in a contained process group,
-and streams sequenced events over the runner's outbound connection.
+and streams holder-offset events over the runner's outbound connection. The
+gateway durably assigns their canonical event sequence.
 
 The first UI can be closed. `SES-481` continues because neither the browser nor
 its backend request owns the process. On another computer Robert signs in,
-opens the running task, and attaches after sequence 1842. The channel returns a
-snapshot and events from 1843 onward. If the first client still holds control,
-the second watches read-only or requests an explicit takeover.
+opens the running task, and attaches after event sequence 1842. The channel
+returns a snapshot and events from 1843 onward. If the first client still holds
+control, the second watches read-only or requests an explicit takeover.
 
 If only the stream gateway restarts, the holder spools output and reconnects.
 If the Task Server lease authority also restarts, durable lease restoration or
@@ -314,12 +333,13 @@ AgentSession
   hostBootId, holderIncarnationId
   executionLeaseId, executionFence, authorityEpoch, stopBefore
   generation, providerSessionId
-  lifecycleState, lastSequence, lastAckedSequence
+  lifecycleState, lastEventSequence, lastAckedHolderSourceOffset
   startedAt, updatedAt, terminalAt?, terminalReason?
 
 SessionEvent
-  sessionId, generation, sequence, occurredAt
+  sessionId, eventSequence, occurredAt
   kind, payload, durability, commandId?
+  generation?, holderSourceOffset?
 
 ControlLease
   sessionId, leaseId, controlFence
@@ -368,17 +388,20 @@ Questions deliberately left at that halt:
 - Does control takeover require only capability plus reason, or a second
   confirmation while the current controller is still healthy?
 
-### Immediately executable follow-up cards
+### Executable chain, split by authorization
 
-These cards are implementation-ready once DL-0 is accepted. DL-1 can also run
-before acceptance as a throwaway protocol spike, but no production cutover
-should precede the halt.
+**Executable now:** DL-1 is a disposable in-memory protocol spike. It changes no
+production launch, lease, or UI path and can run while Robert reviews DL-0.
+
+**User HALT:** DL-2 through DL-6 are production feature cards. They may be
+drafted now but must not start until Robert accepts or revises DL-0. No
+production cutover may precede that decision.
 
 | Card | Size | Dependency | Executable acceptance boundary |
 |---|---|---|---|
 | **DL-1: Session protocol fixture and failure simulator** | M | none | In-memory holder/channel/UI fixture proves UI death, second-client attach, gateway restart replay, replay gap, control expiry, process-unknown on heartbeat loss, and proven host-restart generation change. No production process launch. |
-| **DL-2: Host session holder and durable local journal** | L | DL-0, DL-1 | Runner service owns a contained CLI generation, session-global sequence, boot/incarnation identity, ack-based spool, monotonic stop-before deadline, and process-group reaping. Killing UI/backend test processes does not kill or orphan the holder-owned fixture. |
-| **DL-3: Authenticated session stream gateway, read-only** | L | DL-1 | Machine-authenticated runner ingestion and authorized UI replay/fan-out work with zero or many subscribers; reconnect and retention gap are explicit. No stdin or cancel. |
+| **DL-2: Host session holder and durable local journal** | L | DL-0, DL-1 | Runner service owns a contained CLI generation, monotonic holder source offsets, boot/incarnation identity, ack-based spool, monotonic stop-before deadline, and process-group reaping. Killing UI/backend test processes does not kill or orphan the holder-owned fixture. |
+| **DL-3: Authenticated session stream gateway, read-only** | L | DL-0, DL-1 | Machine-authenticated runner ingestion and authorized UI replay/fan-out work with zero or many subscribers; the server allocates canonical event sequence, and reconnect and retention gap are explicit. No stdin or cancel. |
 | **DL-4: Multi-client attach UI** | M | DL-3 | A second authenticated browser attaches from a fresh context, sees host/generation/cursor health, and can close without affecting execution. Both themes, keyboard flow, narrow layout, and reduced motion are covered. |
 | **DL-5: Control lease and fenced command path** | L | DL-2, DL-3 | One controller at a time; expiry/takeover is visible and audited; duplicate or stale-generation commands are rejected; disconnect never cancels execution. |
 | **DL-6: Durable lease restart barrier and provider resume policy** | L | DL-2, DL-3, provider probes | Persisted lease/fence/epoch survives authority restart, with fail-closed quarantine tested as fallback; host loss remains process-unknown until incarnation proof; a new generation requires accepted policy and a fresh fence; unsupported resume lands visibly in `interrupted-needs-action`. |
@@ -390,30 +413,38 @@ fencing fail together if partially substituted into the current run path.
 
 ## 10. Review status
 
-This document and its Workbench are the complete deliverables for the concept
-card. They do not implement session detachment in production.
+This document and its Wiki-browsable Workbench-family mockup are the complete
+deliverables for the concept card. They do not implement session detachment or
+the AGT-2084 Project Hub catalogue in production.
 
 An independent second-opinion pass on 2026-07-12 initially returned **no-go**
 on restart fencing. It found that the current in-memory lease authority could
 forget a live holder on Task Server restart and that heartbeat loss had been
 presented as proof of host reboot. It also challenged partition deadlines,
-browser-supplied fences, takeover policy, event ordering, and a simulator path
-that visually assumed automatic provider resume.
+browser-supplied fences, takeover policy, event ordering, two possible sequence
+writers, the provisional Workbench location, and a simulator path that visually
+assumed automatic provider resume.
 
 The blocking findings were folded into the concept and Workbench:
 
 - durable lease/fence/authority-epoch restoration is now a cutover prerequisite,
   with a fail-closed restart quarantine as fallback;
 - the holder has a conservative monotonic stop-before deadline and reaps its
-  process group before server-side takeover can begin;
+  process group before server-side takeover can begin; a higher fence alone is
+  explicitly insufficient to start a successor;
 - stable host id, boot id, and holder incarnation distinguish partition,
   same-boot service restart, and proven host reboot;
 - heartbeat loss is `process-unknown` and cannot trigger replacement;
 - the gateway, not the browser, stamps execution authority on privileged
   commands, with stronger capabilities for task actions;
-- sequence is global to the logical session and generation is event metadata;
+- the server is the only canonical event-sequence allocator; holder output has
+  a separate idempotent source offset and generation metadata;
 - the host-restart simulation ends at `interrupted-needs-action` instead of
   assuming automatic resume.
+- DL-1 is the only immediately executable disposable spike; DL-2 through DL-6
+  remain behind Robert's explicit halt.
+- the HTML is described honestly as a current Wiki artifact pending promotion
+  into the not-yet-implemented AGT-2084 folder/catalogue contract.
 
 With these changes, the concept is ready for Robert's DL-0 review. Production
 remains fail-closed until the restart barrier is implemented and verified.
