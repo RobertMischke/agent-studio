@@ -1,0 +1,419 @@
+# Deployment as a first-class citizen
+
+Status: concept and mockup complete, 2026-07-11. Production implementation is
+intentionally deferred. DEP-1 through DEP-5 are proposed follow-up feature
+cards, ready for Epic handoff, and are not unfinished scope in this concept
+card.
+
+Mockup:
+[mockups/deployment-first-class.html](mockups/deployment-first-class.html).
+
+## Decision in one paragraph
+
+**Deployment becomes a first-class per-project surface, the way Project URLs
+already are.** Every project gets a **Deployment page** that shows its deploy
+targets, their current state, and their run history. The known cases are modeled
+as **scenario templates** (the Studio `deploy-stable` cycle, a Caddy site deploy
+on the `agent-orchestrator-web` VM, and a NuGet/npm release via tag push). Where
+no template fits, the operator describes the deployment as a **prompt**, and the
+prompt is compiled into a small **dynamic UI** (fields, parameters, one run
+button) for launching concrete deploys. Every actual run - template or
+prompt-defined - executes through the existing **visible CLI-task substrate**
+(AGT-2093), so progress, chat, operator input, and durable history come for
+free. The read-only start (DEP-1: a Deployment page that renders the existing
+`deploy-stable` history from git and logs) is small; the template runner and the
+prompt-to-UI compiler are separate later slices.
+
+## 1. Why deployment is a product object
+
+Deployment is real, recurring work that today lives entirely outside the
+product. It happens in a terminal, from memory, per project:
+
+- the Studio itself ships through the `deploy-stable` cycle - the devspace-level
+  `update-stable.sh` stops stable, pulls, and restarts, driven by
+  [`restart-stable-after-batch.sh`](../../scripts/supervisor/restart-stable-after-batch.sh),
+  which already appends a structured record to
+  `<workspace>/logs/stable-restarts.jsonl` per restart;
+- a public site is served by a reverse proxy (Caddy) on the
+  `agent-orchestrator-web` VM
+  ([linux-runner-host](../operations/setup/linux-runner-host.md) documents the
+  same-origin `/api` + `/hubs` reverse-proxy shape);
+- packages ship through a tag-push release picked up by an existing GitHub
+  Actions workflow, already modeled read-only by
+  [publishing workflows](publishing-workflows.md) (PUB-1 / PUB-2).
+
+Deployment is **super fuzzy**: it differs per project and resists one universal
+model. What changed is the substrate. AGT-2093 gives us **lightweight,
+first-class CLI tasks with full visibility** - the same object the Remote Hosts
+onboarding already reuses (AGT-2094): "the action creates a normal visible CLI
+task, so the existing task conversation owns live output, operator input,
+completion, and durable history"
+([linux-runner-host](../operations/setup/linux-runner-host.md)). Once a deploy
+run *is* a visible CLI task, deployment stops needing its own execution engine.
+It needs a **page to see it**, **templates for the known shapes**, and a **way to
+describe the unknown ones** - which is exactly this concept.
+
+The user-facing name is **Deployment** (a project surface). A single configured
+deploy path is a **target**; one execution is a **run**. This mirrors the
+publishing vocabulary (target / run) so the two surfaces read as siblings, not
+rivals.
+
+## 2. The three shapes of deployment
+
+Deployment splits cleanly into three shapes. The product models all three with
+one page and one execution substrate; only the *definition* of a run differs.
+
+| Shape | Where the run definition comes from | First examples |
+|---|---|---|
+| **Template** | A repository-recognized pattern with a known parameter set. | `deploy-stable` cycle, Caddy site deploy, NuGet/npm tag-push release. |
+| **Prompt** | An operator prompt compiled into a dynamic UI. | Any project-specific deploy that no template matches. |
+| **Derived (read-only)** | Facts already in git and logs, shown without a run action. | `deploy-stable` history from `stable-restarts.jsonl`; publish deltas from PUB-1. |
+
+The derived shape is deliberately first: it is honest, safe, and immediately
+useful, and it is what DEP-1 ships.
+
+## 3. Scenario templates (the known cases)
+
+A **template** is a named deploy shape with a small, typed parameter set and a
+single command path, executed as a CLI task. Templates are how we avoid asking
+the operator to re-describe a deployment the product already understands.
+
+The three first templates are modeled on processes that exist today. They are
+descriptions of reality, not new automation:
+
+### 3.1 `deploy-stable` cycle (Studio self-deploy)
+
+The Studio ships to its own stable seat. Stable never restarts itself
+(ADR-0021); an external watcher counts new jobs in the review lane, checks that
+stable is idle, then runs `update-stable.sh` and records the outcome.
+
+- **Parameters:** target seat (stable), restart threshold (informational), a
+  confirmation that stable is idle.
+- **Run:** a CLI task that invokes the existing update script and streams its
+  output; on success it verifies the runner resumed
+  ([`resume-runner.sh`](../../scripts/supervisor/resume-runner.sh)).
+- **History source:** `logs/stable-restarts.jsonl` (`headBefore`, `headAfter`,
+  `jobsSinceLastRestart`, `durationSeconds`, `status`) plus the git range between
+  the two HEADs. This is the DEP-1 read-only view - it needs no new run action.
+
+### 3.2 Caddy site deploy (`agent-orchestrator-web` VM)
+
+A public site is deployed behind a Caddy reverse proxy on a remote VM. The
+deploy is a build plus a file sync plus a proxy reload on the host.
+
+- **Parameters:** target host, source branch, site path, whether to reload the
+  proxy.
+- **Run:** a CLI task that executes the deploy over SSH on the remote host - the
+  same remote-command pattern the Remote Hosts onboarding already uses through
+  [`remote-runner-onboard.sh`](../../scripts/remote-runner-onboard.sh).
+- **History source:** the CLI-task run history for this target, plus the deployed
+  revision recorded per run.
+- **Routing vs publishing.** A site published by a **workflow** (GitHub Pages /
+  `deploy-pages`) is a *publishing* website target and stays owned by
+  [publishing workflows](publishing-workflows.md) (PUB-1). A site deployed to a
+  **host over SSH** (Caddy / rsync) is a *deployment* template target. The
+  trigger mechanism - workflow versus host command - decides which surface owns
+  a given site; the two never derive the same site twice.
+
+### 3.3 NuGet / npm release via tag push
+
+A package ships when a `vX.Y.Z` tag is pushed and an existing GitHub Actions
+workflow publishes it. This template does not re-implement publishing; it is the
+**launch surface** over the derivation and guarded actions that
+[publishing workflows](publishing-workflows.md) already own.
+
+- **Parameters:** ecosystem (derived), suggested next version (editable),
+  release notes source.
+- **Run:** delegates to the PUB-2 guided action (clean-worktree check, manifest
+  bump, one release commit, atomic `HEAD` + tag push). The product never runs
+  `npm publish` / `dotnet nuget push`; Trusted Publishing and the workflow stay
+  authoritative.
+- **History source:** the target's release tags and workflow-dispatch run
+  status, already surfaced by PUB-1.
+
+Templates are **derived from repository facts plus a repository-owned
+descriptor**, never from an opaque setting stored outside the repo. Fact-only
+derivation holds for the derived and release shapes; a host-bound template such
+as Caddy additionally needs a small repository-owned descriptor for its host and
+site path (§6), because SSH host identity is environment, not a repo fact. A
+project that has none of these shapes simply shows no templates rather than an
+invented one.
+
+## 4. Prompt to dynamic UI (the individual case)
+
+Most projects will have at least one deploy that no template matches. Instead of
+forcing every such case into a bespoke feature, the operator **describes the
+deployment in a prompt**, and the prompt is compiled into a **dynamic UI**: a
+small set of typed fields, sensible defaults, and one run button. Submitting the
+UI launches a CLI task with the resolved values.
+
+The flow:
+
+1. **Describe.** The operator writes a prompt: "Deploy the docs site: build with
+   `pnpm build`, rsync `dist/` to `web@vm:/srv/docs`, reload Caddy. Let me pick
+   the branch and choose whether to purge the CDN."
+2. **Compile.** The product extracts a **UI schema** from the prompt - a bounded
+   list of typed parameters (branch: enum of branches; purge-CDN: boolean;
+   confirm: required), a human title, and a command intent. The schema is
+   reviewable and editable; the operator confirms it before it becomes a
+   reusable definition.
+3. **Persist.** The confirmed definition is saved as a repository-owned deploy
+   descriptor (see §6) - so the dynamic UI is now a stable, versioned target,
+   not a one-off.
+4. **Run.** Filling the fields substitutes the values into the compiled command
+   template and launches it as a CLI task. Progress, chat, and history are the
+   CLI task's, exactly like a template run.
+
+The safety boundary is worth stating precisely, because "the UI has no execution
+authority" is true but not the interesting claim - the interesting question is
+what the *executor* is allowed to do. A PDU does **not** compile to a free-form
+agent prompt (which would be unbounded shell); it compiles to a **bounded
+command template with typed slots** - the same shape as a §3 template, only
+authored from a prompt instead of recognized from repo facts. The dynamic UI
+fills the slots; it never rewrites the command. Classifying an ask as
+"dangerous" is a **compile-time, human-reviewed** step, not a runtime model
+judgement: the compiler reduces the prompt to a bounded command and **flags
+anything it cannot bound** (raw shell, an unpinned secret, a destructive verb),
+and the operator sees and edits the template before it is saved or run. An ask
+the compiler cannot bound stays flagged until the operator resolves it; it never
+silently degrades into a free agent prompt. This is deliberately **weaker** than
+a code-pinned template, and the card owns that cost: a PDU trades the correctness
+guarantee of a pinned command path for flexibility, and its safety rests on human
+review of a bounded template, not on the substrate.
+
+## 5. Meta-pattern: dynamic UI from a prompt
+
+"Compile a prompt into a small dynamic UI, then execute through the CLI-task
+substrate" is a **reusable product pattern**, not a deployment-only trick. It
+will recur wherever a task is *shaped* (has a small, stable parameter set) but
+not *templated* (common enough to hard-code). Deployment is its first home; the
+same pattern fits ad-hoc maintenance jobs, data backfills, and one-off
+operational runs.
+
+Name it explicitly so later work reuses it rather than reinventing it:
+**Prompt-defined dynamic UI (PDU)**. Its contract:
+
+- **Input:** a natural-language prompt plus the project context.
+- **Output:** a bounded, typed UI schema (fields, types, defaults, required
+  flags, a title, a command intent) that a human reviews and edits.
+- **Persistence:** the confirmed schema is repository content, versioned and
+  diffable - not a hidden model artifact.
+- **Execution:** always the CLI-task substrate. The compiled artifact is a
+  bounded command template with typed slots, not a free-form agent prompt; the
+  UI fills slots and never holds execution authority.
+
+### When template, when prompt
+
+| Use a **template** when | Use a **prompt UI** when |
+|---|---|
+| The shape is recognized from repo facts (workflow, script, manifest). | No template matches and the deploy is project-specific. |
+| The parameter set is known and shared across projects. | The parameters are idiosyncratic to this one project. |
+| Correctness matters enough to pin the command path in code. | Flexibility matters more than a fixed command path. |
+| Examples: `deploy-stable`, Caddy site, tag-push release. | Examples: bespoke rsync deploy, a custom migration run. |
+
+A prompt UI that proves common across projects is a candidate to **graduate into
+a template**. That promotion is a normal feature decision, not an automatic
+step. This meta-pattern also belongs in the public working-model chapter of the
+website/docs, described as one of the ways Agent Studio turns intent into
+governed, visible work.
+
+## 6. Object and storage contract
+
+A project's deploy configuration is repository content, consistent with how
+[workbenches](experimentier-workbench.md) and the
+[wiki tree](../contracts/wiki-tree.md) store their objects as physical folders
+rather than a virtual registry:
+
+```text
+docs/deployments/
+  docs-site/
+    deployment.json                  # target descriptor (schema + lifecycle)
+    prompt.md                        # optional, the source prompt for a PDU target
+```
+
+`deployment.json` is the small query and lifecycle contract:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "docs-site",
+  "title": "Docs site (Caddy on agent-orchestrator-web)",
+  "kind": "template",
+  "template": "caddy-site",
+  "summary": "Build and sync the docs site, reload the proxy.",
+  "parameters": [
+    { "name": "branch", "type": "branch", "required": true },
+    { "name": "purgeCdn", "type": "boolean", "default": false }
+  ],
+  "targetHostId": "agent-orchestrator-web",
+  "updatedAt": "2026-07-11T10:30:00Z"
+}
+```
+
+| Field | Values | Meaning |
+|---|---|---|
+| `kind` | `template`, `prompt`, `derived` | Which of the three shapes defines runs. |
+| `template` | template id | Present when `kind` is `template`. |
+| `parameters[].type` | `string`, `boolean`, `branch`, `enum`, `secret-ref` | Typed capture; `secret-ref` names a host secret, never stores it. |
+
+Derived targets (like `deploy-stable` history) need no descriptor at all - they
+are computed from git and logs. Descriptors exist only for targets that have a
+run action. There is no `registry.json`; the folders are the model. Runs
+themselves are **not** stored here: a run is a CLI task, and its record lives in
+the task store, referenced by task key.
+
+## 7. Execution is always a CLI task
+
+Every deploy run is a normal visible CLI task (AGT-2093). This is the load-
+bearing decision that makes deployment cheap to add:
+
+- **Progress, chat, and history are free.** The task conversation already owns
+  live output, operator input, completion, and durable history. Deployment does
+  not build a second progress model.
+- **The Deployment page launches and links, it does not execute.** Pressing run
+  from a template or a prompt UI creates a CLI task through the existing task
+  mutation boundary and then shows that task's live surface. The page is a
+  launcher and a history view over deploy-tagged tasks.
+- **Secrets stay on the host.** A `secret-ref` parameter names a
+  host-managed secret; the product injects nothing. GitHub authorization for the
+  release template comes from the operator's `gh` session, exactly as
+  publishing-workflows requires.
+- **The running deploy uses the CLI-progress pattern.** A live deploy renders in
+  the same progress/step/chat layout as any CLI task, so operators already know
+  how to read it. The mockup demonstrates this third view.
+
+What the substrate gives for free is the **plumbing** - progress, chat, live
+output, and durable history. It does **not** give deploy *correctness*: the
+command path, host secrets, a health check, and rollback on failure are still
+per-target work that each template (or PDU command) must get right. This concept
+makes deployment cheap to *see and launch*; the hard parts of a specific deploy
+stay as hard as they are.
+
+## 8. Deployment page (read-only first)
+
+Under each expanded project, **Deployment** is a first-class Explorer row (a
+sibling of Wiki, Workbenches, and Project Hub), and a full-bleed page when
+opened. The page has three regions:
+
+```text
++-- Deployment (project) ---------------------------------------------+
+| Targets            | History                                        |
+|  deploy-stable  ●  |  vX @ab12  ->  @cd34   3 tasks   42s   ok       |
+|  docs-site (Caddy) |  ...                                           |
+|  NuGet 0.3.1       |                                                |
+|  + Describe a deploy (prompt)                                       |
++---------------------------------------------------------------------+
+```
+
+- **Targets** lists derived + templated + prompt targets, each with a quiet
+  status (dot or tint, never a colored left bar -
+  [style-guide R1](../design/style-guide-hard-rules.md)).
+- **History** shows recent runs for the selected target. For `deploy-stable`
+  this is read straight from `stable-restarts.jsonl` and the git range; no run
+  action is required.
+- **Describe a deploy** opens the prompt-to-UI flow (§4).
+
+Counts reconcile to visible children (R3). Settled runs render quietly; only a
+currently-running deploy carries an acute signal (R4). Both themes, keyboard
+access, reduced motion (R5). The page never centers itself in a narrow column
+(R2).
+
+## 9. Invariants and non-goals
+
+- Deploy targets are derived from repository facts and repository-owned
+  descriptors, never from opaque stored settings.
+- Every run executes as a visible CLI task; deployment owns no second execution
+  engine, progress model, or scheduler.
+- The Deployment page and any prompt-compiled UI capture parameters and launch
+  tasks; they never hold credentials, secrets, or direct execution authority. A
+  PDU compiles to a bounded command template with typed slots, never a free-form
+  agent prompt.
+- Secrets are named by reference and stay host-managed; the product injects
+  none.
+- The release template delegates to publishing-workflows; the product never runs
+  `npm publish` or `dotnet nuget push`.
+- Derived/read-only history is shown without inventing numbers; when there is no
+  reliable record the page stays quiet (matching PUB-1's discipline).
+- Aggregate counts equal visible children; settled runs are calm; both themes,
+  keyboard, narrow layouts, reduced motion, and no colored left accent bars are
+  part of every slice.
+- The first version is not a CD platform, a pipeline engine, an environment
+  promotion graph, a secret store, or an approval-workflow system.
+
+## 10. Boundary with adjacent systems
+
+| Object | Primary question | Owns | Relationship to deployment |
+|---|---|---|---|
+| Publishing workflows | Is something publishable, and ship it? | Package + workflow-published site target derivation + guarded release actions (PUB-1/2). | The release template is a launcher over it; host/SSH sites are deployment's, workflow/Pages sites stay publishing's. |
+| [Project URLs / iframe](project-relationship-model.md) | Where does the running result live? | Configured per-project URLs and previews (AGT-2095). | A deploy target may point at a Project URL to preview the deployed result. |
+| Workbenches | What should we see and decide? | Repository HTML experiments + decision-to-task (AGT-2084). | A deploy prompt is a decision that spawns a run, not an experiment. |
+| Remote Hosts onboarding | Provision a runner host. | Visible-CLI-task provisioning over SSH (AGT-2094). | Same CLI-task substrate and same remote-command pattern as a Caddy deploy. |
+| CLI-task substrate | Run and see one command. | Lightweight visible CLI tasks (AGT-2093). | The execution layer for every deploy run. |
+
+Deployment is the **launch-and-history surface**; publishing owns package/site
+release actions; the CLI-task substrate owns execution; Project URLs own the
+live result. Deployment does not absorb any of them.
+
+## 11. Implementation slices and honest size
+
+The complete feature is **large**: it crosses repository discovery, a new
+Explorer surface and page, template runners, a prompt-to-UI compiler, task
+mutation, and read-only history over two data sources. It should be an Epic or
+coordinated card family, not one coding card. The first read-only cut is small.
+
+| Slice | Honest size | Scope | Acceptance boundary |
+|---|---|---|---|
+| **DEP-1: Deployment page, `deploy-stable` history (read-only)** | M | Add the Explorer row and page; render `deploy-stable` runs from `stable-restarts.jsonl` + the git HEAD range. No run action. | History reconciles to the log; empty/missing log stays quiet; the per-row git range is batched/cached (no per-row git spawn - see the AGT-2007 git-info work); both themes; no left accent bars; no execution path. |
+| **DEP-2: Template targets, read-only** | M | Derive tag-push-release targets (via publishing) and host/SSH Caddy-site targets, and list them as targets with status. | Release + derived targets derive from facts only; the Caddy template target derives from facts **plus** its repository-owned descriptor; a project with none shows none; the release target reuses PUB-1 and workflow-published sites stay publishing's; still no run action. |
+| **DEP-3: Template run over the CLI-task substrate** | M/L | Add the run action for `deploy-stable` and Caddy-site templates: parameter capture, confirmation, launch as a CLI task, link to its live surface. | Run creates a normal CLI task through the mutation boundary; secrets stay host-side; the release template delegates to PUB-2; run history links back per target. |
+| **DEP-4: Prompt-to-dynamic-UI compiler (PDU)** | L | Compile a prompt into a reviewable typed UI schema; persist the confirmed descriptor; render the dynamic UI; launch runs as CLI tasks. | Schema is bounded, typed, human-editable; dangerous asks are surfaced not executed; the UI holds no execution authority; the descriptor is versioned repository content. |
+| **DEP-5: Running-deploy view in the CLI-progress pattern** | S/M | Present a live deploy in the shared CLI-task progress/step/chat layout from the Deployment page. | Reuses the existing CLI-task live surface; acute only while running; settles quietly into history. |
+
+DEP-4 is the risk-bearing slice (prompt-to-schema extraction, safety review,
+persistence). DEP-1 and DEP-2 are safe read-only starts that deliver value
+before any run action exists. Dependency order: DEP-1 -> DEP-2 -> DEP-3, with
+DEP-4 after DEP-3 and DEP-5 alongside DEP-3.
+
+## 12. Feature handoff status
+
+This concept card is complete with the concept, self-contained interactive
+mockup, implementation slice proposal, and second-opinion pass. The original
+scope explicitly excludes production code. No DEP slice is claimed as
+implemented here and none is an open item on this concept card. Feature delivery
+should start by creating an Epic or coordinated card family from DEP-1 through
+DEP-5, each accepted against the boundary in the slice table.
+
+## 13. Second-opinion pass
+
+An independent product and architecture review was applied on 2026-07-11. It
+challenged the first draft on scope creep, execution ownership, prompt safety,
+site-derivation ownership, and honest read-only limits. The resulting changes
+are part of this concept:
+
+- deployment explicitly owns **no execution engine**; every run is a CLI task,
+  and the page is a launcher plus history view, not a runtime;
+- the release template **delegates** to publishing-workflows, and §3.2 adds an
+  explicit **site-ownership routing rule** (workflow/Pages sites are
+  publishing's; host/SSH Caddy sites are deployment's) so no site derives twice;
+- the prompt-to-UI safety story was sharpened: a PDU compiles to a **bounded
+  command template with typed slots, not a free-form agent prompt**, danger
+  classification is a **compile-time human-reviewed** step, and the card now
+  **owns that a PDU is weaker than a code-pinned template** rather than implying
+  parity;
+- "derived from repo facts, never a stored setting" was corrected to **facts
+  plus a repository-owned descriptor**, because a Caddy host/SSH identity is
+  environment, not a repo fact; DEP-2's acceptance is scoped accordingly;
+- §7 now states plainly that the substrate gives **plumbing, not deploy
+  correctness** (command paths, secrets, health check, rollback stay per-target
+  work), so "cheap to add" is not oversold;
+- secrets are **named by reference and stay host-managed**; the product injects
+  none; the read-only history is **quiet when there is no reliable record**,
+  matching PUB-1's no-invented-numbers discipline;
+- DEP-1 was re-rated **M** with a git-batching acceptance clause (the AGT-2007
+  hazard), DEP-1/DEP-2 stay **read-only** so the first cut ships value without
+  any run path, and DEP-4 is the single large risk slice.
+
+The interactive mockup demonstrates the three views (Deployment page with
+templates, prompt-to-dynamic-UI, and a running deploy in the CLI-progress
+pattern). Its simulated run output and compiled schema are illustrative, not
+product behavior.
