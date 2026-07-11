@@ -75,6 +75,13 @@ CLI execution tests.
   data source for the load-distribution view). A healthy primary launch stays a
   log-only normal path. The planner reuses the AGT-2040 routing map; it does not
   duplicate "which model replaces which".
+- Quota-window projection keeps the first trusted start of an active window as
+  a persisted anchor (AGT-2107). A newly parsed `resetAt` cannot move that start
+  while the anchored reset has not yet passed. Conflicting boundaries and
+  projections above a 4x projected/used ratio in the first quarter of a window
+  are ignored instead of steering admission. The admission warning records
+  `resetAt`, assumed start, and elapsed fraction in the structured log, task
+  timeline, and load-distribution feed.
 
 ## Verification
 

@@ -762,14 +762,21 @@ public class ProjectRunner
     private void EmitQuotaAdmissionDecision(TaskInfo info, QuotaAdmissionPlan plan)
     {
         var proj = plan.Projection;
-        _logger.LogInformation(
-            "cli_quota_admission_decision jobId={JobId} project={Project} outcome={Outcome} cli={Cli} model={Model} isFallback={IsFallback} projectedPct={Projected} burnPctPerHour={Burn} hoursRemaining={Hours} nextReset={Reset} reason={Reason}",
+        var warning = plan.ProjectionWarning;
+        var logLevel = warning is null ? LogLevel.Information : LogLevel.Warning;
+        _logger.Log(
+            logLevel,
+            "cli_quota_admission_decision jobId={JobId} project={Project} outcome={Outcome} cli={Cli} model={Model} isFallback={IsFallback} projectedPct={Projected} burnPctPerHour={Burn} hoursRemaining={Hours} resetAt={ResetAt} assumedStart={AssumedStart} elapsedFraction={ElapsedFraction} projectionWarning={ProjectionWarning} reason={Reason}",
             info.Id, ProjectName, plan.Outcome, plan.CliType, plan.Model ?? "<default>", plan.IsFallback,
-            proj?.ProjectedUsedPct, proj?.BurnRatePctPerHour, proj?.HoursRemaining, plan.NextResetAt, plan.Reason);
+            proj?.ProjectedUsedPct ?? warning?.ProjectedUsedPct, proj?.BurnRatePctPerHour, proj?.HoursRemaining,
+            proj?.ResetAt ?? warning?.ResetAt ?? plan.NextResetAt,
+            proj?.AssumedStartAt ?? warning?.AssumedStartAt,
+            proj?.ElapsedFraction ?? warning?.ElapsedFraction,
+            warning?.Reason, plan.Reason);
 
         // The healthy "launch primary" decision is the silent normal path; only
         // the load-steering decisions reach the task surface.
-        if (plan.Outcome == QuotaAdmissionOutcome.LaunchPrimary) return;
+        if (plan.Outcome == QuotaAdmissionOutcome.LaunchPrimary && warning is null) return;
 
         var key = $"{plan.Outcome}|{plan.CliType}|{plan.Model}|{plan.Reason}";
         lock (_lastAdmissionDecisionByJob)
@@ -790,10 +797,14 @@ public class ProjectRunner
                 ["cli"] = plan.CliType,
                 ["model"] = plan.Model ?? string.Empty,
                 ["isFallback"] = plan.IsFallback ? "true" : "false",
-                ["projectedPct"] = proj?.ProjectedUsedPct.ToString("0.#") ?? string.Empty,
-                ["burnPctPerHour"] = proj?.BurnRatePctPerHour.ToString("0.##") ?? string.Empty,
-                ["hoursRemaining"] = proj?.HoursRemaining.ToString("0.##") ?? string.Empty,
+                ["projectedPct"] = proj?.ProjectedUsedPct.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+                ["burnPctPerHour"] = proj?.BurnRatePctPerHour.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+                ["hoursRemaining"] = proj?.HoursRemaining.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
                 ["nextReset"] = plan.NextResetAt?.ToString("o") ?? string.Empty,
+                ["resetAt"] = (proj?.ResetAt ?? warning?.ResetAt)?.ToString("o") ?? string.Empty,
+                ["assumedStart"] = (proj?.AssumedStartAt ?? warning?.AssumedStartAt)?.ToString("o") ?? string.Empty,
+                ["elapsedFraction"] = (proj?.ElapsedFraction ?? warning?.ElapsedFraction)?.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+                ["projectionWarning"] = warning?.Reason ?? string.Empty,
             });
 
         // AGT-2055 req 3 ("+ Feed-Zeile") + req 7: every load-steering decision

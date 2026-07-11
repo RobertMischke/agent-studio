@@ -116,6 +116,7 @@ public sealed class QuotaService
             _cache.TryGetValue(cliType, out var previous);
             var snap = await ProbeOnceAsync(probe, ct);
             snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
+            snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, DateTime.UtcNow);
             _cache[cliType] = snap;
             PersistCache();
             return snap;

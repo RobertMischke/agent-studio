@@ -43,7 +43,7 @@ public sealed class QuotaServiceSuspiciousSnapshotTests : IDisposable
         CliType = "codex",
         Windows = new()
         {
-            new QuotaWindow { Label = "5-hour", UsedPct = usedPct, ResetAt = new DateTime(2026, 7, 10, 17, 0, 0, DateTimeKind.Utc) }
+            new QuotaWindow { Label = "5-hour", UsedPct = usedPct, ResetAt = DateTime.UtcNow.Date.AddDays(1) }
         }
     };
 

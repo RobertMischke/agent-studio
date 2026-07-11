@@ -114,6 +114,31 @@ public sealed class QuotaAdmissionEventEmissionTests : IDisposable
         Assert.DoesNotContain(ReadFeed(), f => f.JobId == info.Id);
     }
 
+    [Fact]
+    public void SuspiciousProjection_LaunchesPrimaryButEmitsDiagnosticWarning()
+    {
+        var (runner, timeline) = BuildRunner();
+        var info = MakeJob("projection-warning-job");
+        var reset = new DateTime(2026, 7, 11, 16, 9, 0, DateTimeKind.Utc);
+        var start = new DateTime(2026, 7, 11, 11, 9, 0, DateTimeKind.Utc);
+        var warning = new QuotaProjectionWarning(
+            "5-hour", "5-hour projected/used ratio exceeds 4 near window start",
+            reset, start, 0.2, 19, 95);
+        var plan = new QuotaAdmissionPlan(
+            QuotaAdmissionOutcome.LaunchPrimary, "codex", "gpt-5.3-codex", null,
+            false, "launch: quota projection ignored", null, null, warning);
+
+        Emit(runner, info, plan);
+
+        var evt = Assert.Single(timeline.ReadAll(info.FolderPath));
+        Assert.Equal("0.2", evt.Details!["elapsedFraction"]);
+        Assert.Equal(reset.ToString("o"), evt.Details["resetAt"]);
+        Assert.Equal(start.ToString("o"), evt.Details["assumedStart"]);
+        Assert.Contains("ratio exceeds 4", evt.Details["projectionWarning"]);
+        var line = Assert.Single(ReadFeed().Where(f => f.JobId == info.Id));
+        Assert.Contains("projection ignored", line.Reasoning);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
     private static void Emit(ProjectRunner runner, TaskInfo info, QuotaAdmissionPlan plan)
     {
