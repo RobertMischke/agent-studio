@@ -1,0 +1,79 @@
+<section class="proposals" data-testid="project-proposals-panel">
+  <header class="proposals__header">
+    <div>
+      <p class="proposals__eyebrow">Operator review queue</p>
+      <h2>Project proposals</h2>
+      <p>Measured findings translated into implementation-ready decisions.</p>
+    </div>
+    <div class="proposals__stats" aria-label="Proposal summary">
+      <span><strong>{{ proposedCount() }}</strong> awaiting review</span>
+      <span><strong>{{ items().length }}</strong> total</span>
+      <span><strong>{{ generations() }}</strong> generations</span>
+    </div>
+  </header>
+
+  @if (error()) { <p class="proposals__error" role="alert">{{ error() }}</p> }
+  @if (loading()) {
+    <p class="proposals__empty">Loading proposals...</p>
+  } @else if (!items().length) {
+    <p class="proposals__empty">No proposal generation exists yet.</p>
+  } @else {
+    <div class="proposals__workspace">
+      <ol class="proposals__list" aria-label="Proposals">
+        @for (item of items(); track item.id) {
+          <li>
+            <button type="button" class="proposal-row"
+                    [class.proposal-row--active]="selectedId() === item.id"
+                    [attr.aria-current]="selectedId() === item.id ? 'true' : null"
+                    [attr.data-severity]="item.severity"
+                    [attr.data-testid]="'proposal-row-' + item.id"
+                    (click)="select(item.id)">
+              <img [src]="evidenceUrl(item)" alt="" loading="lazy" />
+              <span class="proposal-row__copy">
+                <span class="proposal-row__meta">
+                  <span class="severity-dot" aria-hidden="true"></span>{{ item.severity }}
+                  <span>{{ item.generation }}</span>
+                </span>
+                <strong>{{ item.proposal }}</strong>
+                <span class="status-chip" [attr.data-status]="item.status">{{ item.status }}</span>
+              </span>
+            </button>
+          </li>
+        }
+      </ol>
+
+      @if (selected(); as item) {
+        <article class="proposal-detail" data-testid="proposal-detail">
+          <div class="proposal-detail__hero">
+            <img [src]="evidenceUrl(item)" [alt]="'Evidence for ' + item.id" />
+            <span class="proposal-detail__severity" [attr.data-severity]="item.severity">{{ item.severity }}</span>
+          </div>
+          <div class="proposal-detail__body">
+            <div class="proposal-detail__meta">
+              <span>{{ item.id }}</span><span>Generation {{ item.generation }}</span><span>{{ item.estimatedEffort }}</span>
+            </div>
+            <h3>{{ item.proposal }}</h3>
+            <section><h4>Finding</h4><p>{{ item.finding }}</p></section>
+            <section><h4>Proposal</h4><p>{{ item.proposal }}</p></section>
+            @if (item.spawnedTask && taskStatus(item.spawnedTask); as status) {
+              <div class="proposal-detail__spawned">
+                <span>Implementation card</span>
+                <app-task-reference-microcard [status]="status" />
+              </div>
+            }
+            <footer>
+              @if (item.status === 'proposed' || item.status === 'approved') {
+                <button type="button" class="button button--secondary" [disabled]="deciding()" (click)="decide('reject')">Reject</button>
+                <button type="button" class="button button--primary" data-testid="proposal-approve" [disabled]="deciding()" (click)="decide('approve')">
+                  {{ deciding() ? 'Creating card...' : 'Approve and create card' }}
+                </button>
+              } @else {
+                <span class="proposal-detail__resolved">Decision recorded: {{ item.status }}</span>
+              }
+            </footer>
+          </div>
+        </article>
+      }
+    </div>
+  }
+</section>

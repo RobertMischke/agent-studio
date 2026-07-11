@@ -35,6 +35,11 @@
         (auditQueuedEvent)="onSecurityAuditQueued($event)" />
     }
   }
+  @defer (when activeRail() === 'proposals') {
+    @if (activeRail() === 'proposals') {
+      <app-project-proposals-panel [projectName]="projectName()" />
+    }
+  }
   @defer (when activeRail() === 'visual-evidence') {
     @if (activeRail() === 'visual-evidence') {
       <app-workspace-screenshots

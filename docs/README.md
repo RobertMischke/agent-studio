@@ -27,6 +27,7 @@ Use this page as the first stop when you need the right document quickly.
 | [schemas/](schemas/README.md) | JSON schemas for wire and disk shapes. |
 | [mockups/](mockups/) | Locked design references and click-dummies. |
 | [assets/](assets/README.md) | Image assets referenced by documentation pages. |
+| [proposals/](proposals/README.md) | Dated improvement proposals with durable approval status and implementation-card references. |
 
 ## Load-Bearing Entry Points
 

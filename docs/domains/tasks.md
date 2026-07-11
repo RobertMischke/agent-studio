@@ -61,6 +61,20 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
 - [../wiki/concepts/auto-review-evidence-gate-analysis.html](../wiki/concepts/auto-review-evidence-gate-analysis.html):
   why auto-review reissues good work ("Needs rework") and the evidence-gate fix.
 
+## Project proposals
+
+The Project Hub proposal queue is backed by dated Markdown generations under
+`docs/proposals/<YYYY-MM-DD>/`. Structured frontmatter carries the finding,
+evidence screenshot, proposed change, estimated effort, severity, durable
+decision status (`proposed`, `approved`, `rejected`, or `spawned`), and the
+spawned task key. `GET /api/projects/{projectName}/proposals` lists the complete
+history. `POST .../{id}/decision` records rejection or creates one coding card
+through `TaskMutationService` and then records its key as `spawnedTask`.
+
+New generations use `scripts/generate-project-proposals.mjs`. The generator is
+idempotent: an existing proposal document is preserved so a repeated survey run
+cannot erase an operator decision.
+
 ## Epic lifecycle
 
 - Epics are `kind=epic` task records; membership is the child's `epicId`.

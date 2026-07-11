@@ -29,6 +29,7 @@ export type ProjectRailKey =
   | 'workflow'
   | 'prompts'
   | 'audits'
+  | 'proposals'
   | 'settings'
   | 'settings-defaults'
   | 'settings-overrides'
@@ -166,6 +167,16 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Review definitions, per-task checks, and runtime probe slots for this project',
     empty: 'Audits & Checks placeholder. The review-definition model lands in a later slice.',
     icon: '⊟',
+    railIcon: 'list',
+  },
+  {
+    key: 'proposals',
+    group: 'quality',
+    label: 'Proposals',
+    panelTitle: 'Project Proposals',
+    description: 'Measured findings ready for operator approval and implementation-card spawning',
+    empty: 'No proposal generation exists yet.',
+    icon: '◇',
     railIcon: 'list',
   },
   // ---- CONTEXT: what agents and humans read to understand the project ----
