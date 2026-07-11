@@ -79,6 +79,7 @@ import { ErrorDialogService } from './error-dialog.service';
 import { JobsHubClient } from './jobs-hub-client.service';
 import type {
   ProjectDeploymentSummary,
+  CompiledDeploymentPrompt,
   ProjectThroughputSummary,
   ProjectVisualEvidenceItem,
   ProjectVisualEvidenceQueue,
@@ -1974,6 +1975,13 @@ export class TaskService {
   getProjectDeploymentSummary(projectName: string) {
     return this.http.get<ProjectDeploymentSummary>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/deployment/summary`,
+    );
+  }
+
+  compileProjectDeployment(projectName: string, prompt: string) {
+    return this.http.post<CompiledDeploymentPrompt>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/deployment/compile`,
+      { prompt },
     );
   }
 

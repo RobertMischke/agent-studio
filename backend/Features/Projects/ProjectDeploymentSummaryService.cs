@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using AgentStudio.Publishing;
 
 namespace AgentStudio.Projects;
 
@@ -19,6 +20,25 @@ public sealed record ProjectDeploymentRun(
     int ReviewCountAfter,
     IReadOnlyList<ProjectDeploymentCommit> Commits);
 
+public sealed record ProjectDeploymentParameter(
+    string Name,
+    string Type,
+    bool Required,
+    JsonElement? Default,
+    IReadOnlyList<string> Options);
+
+public sealed record ProjectDeploymentTarget(
+    string Id,
+    string Title,
+    string Kind,
+    string? Template,
+    string Summary,
+    bool Runnable,
+    string Source,
+    string? Command,
+    string? TargetHostId,
+    IReadOnlyList<ProjectDeploymentParameter> Parameters);
+
 public sealed record ProjectDeploymentSummary
 {
     public string Project { get; init; } = "";
@@ -29,6 +49,7 @@ public sealed record ProjectDeploymentSummary
     public IReadOnlyList<ProjectDeploymentRun> History { get; init; } = [];
     public int? PendingCount { get; init; }
     public IReadOnlyList<ProjectDeploymentCommit> PendingCommits { get; init; } = [];
+    public IReadOnlyList<ProjectDeploymentTarget> Targets { get; init; } = [];
 }
 
 /// <summary>
@@ -48,6 +69,7 @@ public sealed class ProjectDeploymentSummaryService
     private readonly GitService _git;
     private readonly ProjectSettingsService _settings;
     private readonly ILogger<ProjectDeploymentSummaryService> _logger;
+    private readonly PublishTargetService? _publish;
     private readonly ConcurrentDictionary<string, (DateTime At, ProjectDeploymentSummary Value)> _cache =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -56,13 +78,15 @@ public sealed class ProjectDeploymentSummaryService
         TaskScannerService scanner,
         GitService git,
         ProjectSettingsService settings,
-        ILogger<ProjectDeploymentSummaryService> logger)
+        ILogger<ProjectDeploymentSummaryService> logger,
+        PublishTargetService? publish = null)
     {
         _config = config;
         _scanner = scanner;
         _git = git;
         _settings = settings;
         _logger = logger;
+        _publish = publish;
     }
 
     public ProjectDeploymentSummary? Build(string projectName)
@@ -84,9 +108,11 @@ public sealed class ProjectDeploymentSummaryService
 
     private ProjectDeploymentSummary BuildUncached(string projectName)
     {
+        var repoRoot = _git.ResolveRepoRootForProject(projectName);
+        var targets = BuildTargets(projectName, repoRoot);
         var taskRepository = _config["TaskRepository"];
         if (string.IsNullOrWhiteSpace(taskRepository))
-            return Unavailable(projectName, "Task repository is not configured.");
+            return Unavailable(projectName, "Task repository is not configured.", targets);
 
         var path = Path.Combine(taskRepository, "logs", "stable-restarts.jsonl");
         var restartHistory = ReadRestartHistory(path, MaxHistoryRuns);
@@ -94,17 +120,16 @@ public sealed class ProjectDeploymentSummaryService
         if (latest is null)
             return Unavailable(projectName, File.Exists(path)
                 ? "No valid deploy-stable restart record is available."
-                : "No deploy-stable history is available.");
+                : "No deploy-stable history is available.", targets);
 
-        var repoRoot = _git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot) || !_git.IsGitRepo(repoRoot))
-            return Unavailable(projectName, "Project repository is unavailable.");
+            return Unavailable(projectName, "Project repository is unavailable.", targets);
 
         // stable-restarts.jsonl is workspace-wide and predates project identity.
         // Reject a row whose deployed revision is not part of this repository so
         // one project's latest stable deploy can never be attributed to another.
         if (!_git.IsAncestor(repoRoot, latest.HeadBefore, latest.HeadAfter))
-            return Unavailable(projectName, "Latest deploy-stable revision range does not belong to this project repository.");
+            return Unavailable(projectName, "Latest deploy-stable revision range does not belong to this project repository.", targets);
 
         var integrationBranch = _git.ResolveIntegrationBranch(
             repoRoot, _settings.Get(projectName).IntegrationBranch);
@@ -162,7 +187,84 @@ public sealed class ProjectDeploymentSummaryService
             History = history,
             PendingCount = pendingCount,
             PendingCommits = pendingItems,
+            Targets = targets,
         };
+    }
+
+    private IReadOnlyList<ProjectDeploymentTarget> BuildTargets(string projectName, string? repoRoot)
+    {
+        var targets = new List<ProjectDeploymentTarget>();
+        if (!string.IsNullOrWhiteSpace(repoRoot)
+            && File.Exists(Path.Combine(repoRoot, "scripts", "supervisor", "restart-stable-after-batch.sh")))
+        {
+            targets.Add(new ProjectDeploymentTarget(
+                "deploy-stable", "deploy-stable", "derived", "deploy-stable",
+                "Update the stable seat after confirming it is idle.", true, "repository-fact",
+                "bash scripts/supervisor/restart-stable-after-batch.sh", null,
+                [new("stableIdle", "boolean", true, JsonSerializer.SerializeToElement(false), [])]));
+        }
+
+        if (_publish is not null)
+        {
+            foreach (var target in _publish.GetProjectPublishStatus(projectName).Targets
+                         .Where(target => target.Kind == PublishTargetKind.Package))
+            {
+                targets.Add(new ProjectDeploymentTarget(
+                    $"release:{target.Ecosystem}", $"{target.Label} release", "template", "tag-push-release",
+                    "Launch the existing guarded publishing flow; publishing remains authoritative.", false,
+                    "publishing-workflows", null, null,
+                    [new("version", "string", true,
+                        target.CurrentVersion is null ? null : JsonSerializer.SerializeToElement(target.CurrentVersion), [])]));
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(repoRoot)) return targets;
+        var descriptorRoot = Path.Combine(repoRoot, "docs", "deployments");
+        if (!Directory.Exists(descriptorRoot)) return targets;
+
+        foreach (var file in Directory.EnumerateFiles(descriptorRoot, "deployment.json", SearchOption.AllDirectories))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(file));
+                var root = document.RootElement;
+                var id = String(root, "id");
+                var title = String(root, "title");
+                var kind = String(root, "kind");
+                var template = String(root, "template");
+                if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(title)
+                    || kind is not ("template" or "prompt")) continue;
+
+                var parameters = new List<ProjectDeploymentParameter>();
+                if (root.TryGetProperty("parameters", out var values) && values.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var value in values.EnumerateArray())
+                    {
+                        var name = String(value, "name");
+                        var type = String(value, "type");
+                        if (string.IsNullOrWhiteSpace(name) || type is not ("string" or "boolean" or "branch" or "enum" or "secret-ref")) continue;
+                        var required = value.TryGetProperty("required", out var requiredValue) && requiredValue.ValueKind == JsonValueKind.True;
+                        JsonElement? defaultValue = value.TryGetProperty("default", out var defaultElement) ? defaultElement.Clone() : null;
+                        var options = value.TryGetProperty("options", out var optionsElement) && optionsElement.ValueKind == JsonValueKind.Array
+                            ? optionsElement.EnumerateArray().Where(option => option.ValueKind == JsonValueKind.String).Select(option => option.GetString()!).ToList()
+                            : [];
+                        parameters.Add(new(name, type, required, defaultValue, options));
+                    }
+                }
+
+                var command = String(root, "command");
+                targets.Add(new ProjectDeploymentTarget(
+                    id, title, kind, template, String(root, "summary") ?? "Repository-owned deployment target.",
+                    !string.IsNullOrWhiteSpace(command), Path.GetRelativePath(repoRoot, file).Replace('\\', '/'),
+                    command, String(root, "targetHostId"), parameters));
+            }
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning(ex, "project-deployment-target-invalid project={Project} descriptor={Descriptor}", projectName, file);
+            }
+        }
+
+        return targets;
     }
 
     internal static RestartRecord? ReadLatestRestart(string path)
@@ -224,11 +326,15 @@ public sealed class ProjectDeploymentSummaryService
             .ToList();
     }
 
-    private static ProjectDeploymentSummary Unavailable(string project, string reason) => new()
+    private static ProjectDeploymentSummary Unavailable(
+        string project,
+        string reason,
+        IReadOnlyList<ProjectDeploymentTarget>? targets = null) => new()
     {
         Project = project,
         Available = false,
         Reason = reason,
+        Targets = targets ?? [],
     };
 
     private static ProjectDeploymentCommit ToCompact(GitCommitInfo commit)

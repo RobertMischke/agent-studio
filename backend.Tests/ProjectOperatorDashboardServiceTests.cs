@@ -198,6 +198,40 @@ public sealed class ProjectOperatorDashboardServiceTests : IDisposable
         Assert.Null(result.LastDeployment);
     }
 
+    [Fact]
+    public void DeploymentSummary_DerivesRunnableDescriptorWithoutHistory()
+    {
+        var (service, _, repo) = BuildDeploymentStack(createRepo: true);
+        var descriptor = Path.Combine(repo, "docs", "deployments", "docs-site");
+        Directory.CreateDirectory(descriptor);
+        File.WriteAllText(Path.Combine(descriptor, "deployment.json"), """
+            {
+              "schemaVersion": 1,
+              "id": "docs-site",
+              "title": "Docs site",
+              "kind": "template",
+              "template": "caddy-site",
+              "summary": "Deploy docs over SSH.",
+              "command": "bash scripts/deploy-docs.sh --host {{host}} --branch {{branch}}",
+              "targetHostId": "agent-orchestrator-web",
+              "parameters": [
+                { "name": "host", "type": "secret-ref", "required": true },
+                { "name": "branch", "type": "branch", "required": true }
+              ]
+            }
+            """);
+
+        var result = service.Build("Demo");
+
+        Assert.NotNull(result);
+        Assert.False(result!.Available);
+        var target = Assert.Single(result.Targets);
+        Assert.Equal("docs-site", target.Id);
+        Assert.True(target.Runnable);
+        Assert.Equal("agent-orchestrator-web", target.TargetHostId);
+        Assert.Equal(new[] { "secret-ref", "branch" }, target.Parameters.Select(parameter => parameter.Type));
+    }
+
     private (ProjectDeploymentSummaryService Service, string Workspace, string Repo) BuildDeploymentStack(bool createRepo)
     {
         var workspace = Path.Combine(_root, Guid.NewGuid().ToString("N"), "workspace");

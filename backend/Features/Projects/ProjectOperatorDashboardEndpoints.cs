@@ -24,6 +24,17 @@ public static class ProjectOperatorDashboardEndpoints
                 : Results.Ok(summary);
         });
 
+        app.MapPost("/api/projects/{projectName}/deployment/compile", (
+            string projectName,
+            CompileDeploymentPromptRequest request,
+            ProjectDeploymentSummaryService deployments,
+            ProjectDeploymentCompiler compiler) =>
+        {
+            if (deployments.Build(projectName) is null)
+                return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            return Results.Ok(compiler.Compile(request.Prompt));
+        });
+
         app.MapGet("/api/projects/{projectName}/visual-evidence", (
             string projectName,
             ProjectVisualEvidenceService evidence) =>

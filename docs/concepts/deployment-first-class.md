@@ -1,9 +1,12 @@
 # Deployment as a first-class citizen
 
-Status: concept and mockup complete, 2026-07-11. DEP-1 is implemented as the
-read-only first-class Deployment page over the shared Project Overview
-contract. DEP-2 through DEP-5 remain proposed follow-up feature cards; no
-mutating deployment workflow is part of DEP-1.
+Status: concept and initial workflow implemented, 2026-07-11. The shared
+Deployment contract now includes DEP-1 history and DEP-2 repository-derived
+targets. Runnable deploy-stable and descriptor targets launch normal visible
+CLI tasks (DEP-3), and the first bounded PDU compiler turns repository-script
+commands with declared typed slots into a human-reviewed run form. Package
+release targets remain delegated to Publishing. The richer shared live-progress
+presentation and broader natural-language compiler remain future refinements.
 
 Mockup:
 [mockups/deployment-first-class.html](mockups/deployment-first-class.html).
@@ -369,9 +372,9 @@ coordinated card family, not one coding card. The first read-only cut is small.
 | Slice | Honest size | Scope | Acceptance boundary |
 |---|---|---|---|
 | **DEP-1: Deployment page, `deploy-stable` history (read-only)** | M | Add the Explorer row and page; render `deploy-stable` runs from `stable-restarts.jsonl` + the git HEAD range. No run action. | History reconciles to the log; empty/missing log stays quiet; the per-row git range is batched/cached (no per-row git spawn - see the AGT-2007 git-info work); both themes; no left accent bars; no execution path. |
-| **DEP-2: Template targets, read-only** | M | Derive tag-push-release targets (via publishing) and host/SSH Caddy-site targets, and list them as targets with status. | Release + derived targets derive from facts only; the Caddy template target derives from facts **plus** its repository-owned descriptor; a project with none shows none; the release target reuses PUB-1 and workflow-published sites stay publishing's; still no run action. |
-| **DEP-3: Template run over the CLI-task substrate** | M/L | Add the run action for `deploy-stable` and Caddy-site templates: parameter capture, confirmation, launch as a CLI task, link to its live surface. | Run creates a normal CLI task through the mutation boundary; secrets stay host-side; the release template delegates to PUB-2; run history links back per target. |
-| **DEP-4: Prompt-to-dynamic-UI compiler (PDU)** | L | Compile a prompt into a reviewable typed UI schema; persist the confirmed descriptor; render the dynamic UI; launch runs as CLI tasks. | Schema is bounded, typed, human-editable; dangerous asks are surfaced not executed; the UI holds no execution authority; the descriptor is versioned repository content. |
+| **DEP-2: Template targets, read-only** | M | Implemented: derive tag-push-release targets via Publishing, deploy-stable from repository facts, and host/SSH targets from repository-owned descriptors. | The shared summary returns no invented target when facts or descriptors are absent; workflow-published websites stay Publishing's. |
+| **DEP-3: Template run over the CLI-task substrate** | M/L | Implemented: parameter capture and confirmation launch deploy-stable and runnable descriptor targets through `VisibleCliTaskService`. | The action creates a normal Ready task through the existing mutation boundary; secrets remain references; release targets delegate to Publishing. |
+| **DEP-4: Prompt-to-dynamic-UI compiler (PDU)** | L | Initial bounded compiler implemented: a prompt declaring a repository script command and typed slots renders a review form and launches through the same CLI-task substrate. Descriptor persistence and richer natural-language extraction remain follow-up scope. | Shell chaining, redirection, undeclared slots, and commands outside `scripts/*.sh` are surfaced as non-runnable warnings. |
 | **DEP-5: Running-deploy view in the CLI-progress pattern** | S/M | Present a live deploy in the shared CLI-task progress/step/chat layout from the Deployment page. | Reuses the existing CLI-task live surface; acute only while running; settles quietly into history. |
 
 DEP-4 is the risk-bearing slice (prompt-to-schema extraction, safety review,

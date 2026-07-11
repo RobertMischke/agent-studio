@@ -68,8 +68,10 @@ Every Overview request has an independent unavailable state. Detail links emit
 rail navigation or task navigation through the shell. The Visual Evidence queue
 projects delivered task screenshots and stores review receipts in each task's
 existing append-only `results/review-evidence.jsonl`; it does not introduce a
-second screenshot store. Deployment remains a read-only DEP-1 summary, while
-the existing publishing panel keeps ownership of its established actions.
+second screenshot store. Deployment uses the same summary for DEP-1 history and
+DEP-2 targets, launches runnable templates through the shared visible CLI-task
+substrate, and compiles only bounded repository-script prompts with typed slots.
+The existing publishing panel keeps ownership of package release actions.
 
 Machine facts stay in Project Settings: watch path, working directory,
 repository path, CLI readiness and status, clean-context configuration, and

@@ -28,4 +28,19 @@ code { font-family: var(--font-mono); font-size: .9em; }
 .deployment__run-main div { display: grid; gap: 5px; }
 .deployment__history details { flex-basis: 100%; }
 .deployment__empty { padding: 32px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-raised); }
+.deployment__targets, .deployment__launcher, .deployment__prompt { margin: 0 0 18px; padding: 20px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-raised); }
+.deployment__targets > header { display: flex; align-items: end; justify-content: space-between; margin-bottom: 12px; }
+.deployment__target-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.deployment__target-choice { display: flex; align-items: center; gap: 10px; padding: 12px; text-align: left; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-muted); color: inherit; }
+.deployment__target-choice.is-selected { border-color: var(--studio-accent, #6f86d9); background: var(--surface-selected, var(--surface-muted)); }
+.deployment__target-choice span:last-child { display: grid; gap: 3px; }
+.deployment__target-choice small { color: var(--text-tertiary); }
+.deployment__launcher { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); align-items: end; gap: 14px; }
+.deployment__launcher > div:first-child, .deployment__launcher > .deployment__notice, .deployment__launcher > .deployment__success, .deployment__launcher > .deployment__error { grid-column: 1 / -1; }
+.deployment__launcher label { display: grid; gap: 6px; color: var(--text-secondary); }
+.deployment__launcher input:not([type='checkbox']), .deployment__launcher select, .deployment__prompt textarea { width: 100%; padding: 9px 10px; border: 1px solid var(--border-default); border-radius: 6px; background: var(--surface-muted); color: var(--text-primary); }
+.deployment__prompt summary { cursor: pointer; font-weight: 700; }
+.deployment__prompt p, .deployment__prompt textarea { margin: 12px 0; }
+.deployment__success { padding: 10px 12px; border-radius: 6px; background: color-mix(in srgb, var(--success, #3f9b6d) 14%, transparent); }
+.deployment__error, .deployment__warnings { padding: 10px 12px; border-radius: 6px; background: color-mix(in srgb, var(--danger, #c75555) 14%, transparent); }
 @media (max-width: 720px) { .deployment__header, .deployment__target, .deployment__history > ol > li { align-items: stretch; flex-direction: column; } dl { flex-wrap: wrap; } }

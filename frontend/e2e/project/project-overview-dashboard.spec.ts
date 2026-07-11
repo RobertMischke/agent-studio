@@ -89,6 +89,18 @@ const deployment = {
   ],
   pendingCount: commits.length,
   pendingCommits: commits,
+  targets: [{
+    id: 'deploy-stable', title: 'deploy-stable', kind: 'derived', template: 'deploy-stable',
+    summary: 'Update the stable seat after confirming it is idle.', runnable: true,
+    source: 'repository-fact', command: 'bash scripts/supervisor/restart-stable-after-batch.sh', targetHostId: null,
+    parameters: [{ name: 'stableIdle', type: 'boolean', required: true, default: false, options: [] }],
+  }, {
+    id: 'docs-site', title: 'Docs site', kind: 'template', template: 'caddy-site',
+    summary: 'Deploy docs to the Caddy host.', runnable: true,
+    source: 'docs/deployments/docs-site/deployment.json', command: 'bash scripts/deploy-docs.sh --branch {{branch}}',
+    targetHostId: 'agent-orchestrator-web',
+    parameters: [{ name: 'branch', type: 'branch', required: true, default: 'develop', options: [] }],
+  }],
 };
 
 const wikiPulse = {
@@ -360,6 +372,7 @@ test.describe('Project Overview · operator dashboard', () => {
     await expect(page.getByTestId('project-deployment-panel')).toBeVisible();
     await expect(page.getByTestId('project-deployment-pending-count')).toHaveText('5');
     await expect(page.getByTestId('project-deployment-history').locator(':scope > li')).toHaveCount(3);
+    await expect(page.getByTestId('project-deployment-targets').locator('button')).toHaveCount(2);
     await expect(page.getByTestId('project-deployment-panel')).toContainText('a1f4b29');
     await expect(page.getByTestId('project-deployment-panel')).not.toContainText('Run deployment');
     for (const theme of ['light', 'dark'] as const) {

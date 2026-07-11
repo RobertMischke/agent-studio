@@ -32,6 +32,39 @@ export interface ProjectDeploymentSummary {
   history: ProjectDeploymentRun[];
   pendingCount: number | null;
   pendingCommits: ProjectDeploymentCommit[];
+  targets: ProjectDeploymentTarget[];
+}
+
+export type ProjectDeploymentParameterType = 'string' | 'boolean' | 'branch' | 'enum' | 'secret-ref';
+
+export interface ProjectDeploymentParameter {
+  name: string;
+  type: ProjectDeploymentParameterType;
+  required: boolean;
+  default: unknown;
+  options: string[];
+}
+
+export interface ProjectDeploymentTarget {
+  id: string;
+  title: string;
+  kind: 'derived' | 'template' | 'prompt';
+  template: string | null;
+  summary: string;
+  runnable: boolean;
+  source: string;
+  command: string | null;
+  targetHostId: string | null;
+  parameters: ProjectDeploymentParameter[];
+}
+
+export interface CompiledDeploymentPrompt {
+  title: string;
+  summary: string;
+  command: string | null;
+  parameters: ProjectDeploymentParameter[];
+  warnings: string[];
+  runnable: boolean;
 }
 
 export interface ProjectDeploymentRun {
