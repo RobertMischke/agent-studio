@@ -107,7 +107,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   autoCommitDraft = false;
   crashRecoveryDraft = true;
-  autoPushStrategyDraft: AutoPushStrategy = 'on-completed';
+  autoPushStrategyDraft: AutoPushStrategy = 'always-immediate';
   orchModelDraft = '';
 
   // Working directory / repository path (Settings). Seeded once from the
@@ -245,13 +245,13 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     {
       id: 'on-completed',
       label: 'On completed',
-      tooltip: 'Default. Push only after the job commit reaches 6-completed, after review.',
-      isDefault: true
+      tooltip: 'Push only after the job commit reaches 6-completed, after review.'
     },
     {
       id: 'always-immediate',
       label: 'Immediate',
-      tooltip: 'Push right after auto-commit too. Higher rebase risk if review findings require rewriting local history.'
+      tooltip: 'Default. Push every platform-owned commit immediately; failures retry in the background.',
+      isDefault: true
     }
   ];
 

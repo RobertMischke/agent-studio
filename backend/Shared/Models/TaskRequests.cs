@@ -497,7 +497,7 @@ public record SetIntegrationStrategyRequest
 
 public record SetAutoPushStrategyRequest
 {
-    public string Strategy { get; init; } = AutoPushStrategies.OnCompleted;
+    public string Strategy { get; init; } = AutoPushStrategies.AlwaysImmediate;
 }
 
 /// <summary>

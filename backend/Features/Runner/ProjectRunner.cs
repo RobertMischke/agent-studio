@@ -97,6 +97,7 @@ public class ProjectRunner
     // directly keep working; production DI always supplies an instance.
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
     private readonly AgentStudio.Pipeline.ModelQualificationService? _modelQualification;
+    private readonly AgentStudio.Pipeline.IntegrationPushQueue? _integrationPushQueue;
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
@@ -416,7 +417,8 @@ public class ProjectRunner
         AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null,
         CliQuotaFallbackService? quotaFallback = null,
         ILoadThrottleGate? loadThrottle = null,
-        AgentStudio.Pipeline.ModelQualificationService? modelQualification = null)
+        AgentStudio.Pipeline.ModelQualificationService? modelQualification = null,
+        AgentStudio.Pipeline.IntegrationPushQueue? integrationPushQueue = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -457,6 +459,7 @@ public class ProjectRunner
         _timeline = timeline;
         _pipelineLog = pipelineLog;
         _modelQualification = modelQualification;
+        _integrationPushQueue = integrationPushQueue;
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
 
@@ -1315,6 +1318,7 @@ public class ProjectRunner
                         integrateStarted);
                     RecordConflictResolutionStep(info, PipelineStepStatus.Skipped, "not-needed",
                         "No merge conflict was detected.", DateTime.UtcNow);
+                    EnqueueIntegrationPush(info, workBranch);
                     return BuildIntegratedCommitRange(integrationBaseSha, res.IntegratedSha)
                         ?? BuildBranchCommitRange(run, branchHeadAfterRun);
                 }
@@ -1334,6 +1338,7 @@ public class ProjectRunner
                         RecordIntegrationStep(info, PipelineStepStatus.Passed, "merged-after-resolution",
                             $"Task branch `{run.Branch}` merged into `{workBranch}` after conflict resolution at `{resolution.IntegratedSha ?? "<unknown>"}`.",
                             integrateStarted);
+                        EnqueueIntegrationPush(info, workBranch);
                         return BuildIntegratedCommitRange(integrationBaseSha, resolution.IntegratedSha)
                             ?? BuildBranchCommitRange(run, branchHeadAfterRun);
                     }
@@ -3990,6 +3995,15 @@ public class ProjectRunner
             }
             return null;
         }
+    }
+
+    private void EnqueueIntegrationPush(TaskInfo info, string branch)
+    {
+        if (_integrationPushQueue == null) return;
+        var enqueued = _integrationPushQueue.Enqueue(new AgentStudio.Pipeline.IntegrationPushRequest(
+            ProjectName, info.Id, info.FolderPath, Entry.RootPath, branch));
+        if (!enqueued)
+            _logger.LogWarning("integration-push enqueue failed project={Project} job={JobId} branch={Branch}", ProjectName, info.Id, branch);
     }
 
     /// <summary>

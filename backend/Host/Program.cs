@@ -451,6 +451,8 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.WikiTaskCrossReferenceService
 builder.Services.AddSingleton<AgentStudio.Pipeline.TaskSpawnerPostStepRunner>();
 builder.Services.AddSingleton<AspectRunnerService>();
 builder.Services.AddSingleton<AgentStudio.Review.CodeReviewStepService>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactPushQueue>();
+builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceArtifactPushWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactCommitService>();
 // Intelligente Abbruch-Bewertung (ADR-0032): the post-abort LLM review step.
 // Forwarded into ProjectRunner via TaskRunnerService; default-OFF per project.

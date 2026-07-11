@@ -21,10 +21,10 @@ public record ProjectSettings
 
     /// <summary>
     /// Controls when the platform pushes runner-owned commits. Default is
-    /// <see cref="AutoPushStrategies.OnCompleted"/> so only commits that have
-    /// passed human review and reached <c>6-completed</c> are pushed.
+    /// <see cref="AutoPushStrategies.AlwaysImmediate"/> so every platform-owned
+    /// commit is made durable on origin without waiting for lane transitions.
     /// </summary>
-    public string AutoPushStrategy { get; init; } = AutoPushStrategies.OnCompleted;
+    public string AutoPushStrategy { get; init; } = AutoPushStrategies.AlwaysImmediate;
 
     /// <summary>
     /// Last <i>live</i> runner mode for this project ("manual", "auto-single",
@@ -678,12 +678,12 @@ public static class AutoPushStrategies
 
     public static string Normalize(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value)) return OnCompleted;
+        if (string.IsNullOrWhiteSpace(value)) return AlwaysImmediate;
         var v = value.Trim();
         foreach (var strategy in All)
             if (string.Equals(strategy, v, StringComparison.OrdinalIgnoreCase))
                 return strategy;
-        return OnCompleted;
+        return AlwaysImmediate;
     }
 }
 

@@ -166,6 +166,49 @@ public sealed class WorkspaceArtifactCommitServiceTests : IDisposable
         Assert.Contains("Steps: pre-loop-guard=passed,aspect-code-quality=warn,post-orchestrator-decision=skipped", message);
     }
 
+    [Fact]
+    public void RunBoundaryCommit_EnqueuesEveryCommitForImmediatePush()
+    {
+        var queue = new WorkspaceArtifactPushQueue();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["TaskRepository"] = _root })
+            .Build();
+        var service = new WorkspaceArtifactCommitService(
+            config, NullLogger<WorkspaceArtifactCommitService>.Instance, queue);
+        var job = JobFolder("ASS-PUSH");
+        Directory.CreateDirectory(job);
+
+        File.WriteAllText(Path.Combine(job, "status.md"), "one\n");
+        Assert.True(service.TryCommitArtifactUpload(_root, "ASS-PUSH", job, ["status.md"]).DidCommit);
+        File.AppendAllText(Path.Combine(job, "status.md"), "two\n");
+        Assert.True(service.TryCommitArtifactUpload(_root, "ASS-PUSH", job, ["status.md"]).DidCommit);
+
+        Assert.True(queue.Reader.TryRead(out var first));
+        Assert.True(queue.Reader.TryRead(out var second));
+        Assert.Equal("ASS-PUSH", first!.JobId);
+        Assert.Equal("ASS-PUSH", second!.JobId);
+    }
+
+    [Fact]
+    public async Task WorkspacePushWorker_FailureIsToleratedAfterBoundedRetries()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WorkspaceArtifacts:PushRetrySeconds"] = "0"
+            })
+            .Build();
+        var worker = new WorkspaceArtifactPushWorker(
+            new WorkspaceArtifactPushQueue(),
+            NullLogger<WorkspaceArtifactPushWorker>.Instance,
+            config);
+
+        var pushed = await worker.ProcessAsync(
+            new WorkspaceArtifactPushRequest(_root, "ASS-OFFLINE"), default);
+
+        Assert.False(pushed);
+    }
+
     private string JobFolder(string id) =>
         Path.Combine(_root, "projects", "agent-taskboard", "tasks", "001", id);
 

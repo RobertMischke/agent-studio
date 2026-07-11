@@ -66,12 +66,35 @@
 .operator-dashboard__refresh:disabled { cursor: wait; opacity: 0.65; }
 
 .operator-dashboard__metrics,
-.operator-dashboard__wiki {
+.operator-dashboard__wiki,
+.operator-dashboard__remote {
   padding: var(--studio-spacing-4);
   border: 1px solid var(--studio-border);
   border-radius: 10px;
   background: var(--studio-bg-elevated);
 }
+
+.operator-dashboard__remote-rows {
+  display: grid;
+  gap: var(--studio-spacing-2);
+  margin-top: var(--studio-spacing-3);
+}
+.operator-dashboard__remote-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) auto minmax(12rem, 1fr);
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
+  border-radius: 8px;
+  background: var(--studio-bg-surface);
+  color: var(--studio-fg-muted);
+  font-size: 0.74rem;
+}
+.operator-dashboard__remote-row strong { color: var(--studio-success); }
+.operator-dashboard__remote-row[data-state='pending'] {
+  background: color-mix(in srgb, var(--studio-accent-warn) 8%, var(--studio-bg-surface));
+}
+.operator-dashboard__remote-row[data-state='pending'] strong { color: var(--studio-accent-warn); }
+.operator-dashboard__remote-warning { color: var(--studio-accent-warn); font-size: 0.72rem; }
 
 .operator-dashboard__section-head h2,
 .operator-dashboard__deployment h2 {

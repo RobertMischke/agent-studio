@@ -18,6 +18,8 @@ import type { WikiPulse } from '../../../../models/project-docs.model';
 import type { ProjectTokenUsageSummary } from '../../../project-token-usage';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { TaskService } from '../../../../services/task.service';
+import { ProjectGitService } from '../../../../services/project-git.service';
+import type { GitBranchEntry } from '../../../git';
 import { ProjectPublishPanelComponent } from '../project-publish-panel/project-publish-panel';
 import { ProjectOverviewUrlsComponent } from '../project-overview-urls/project-overview-urls';
 import { ProjectVisualEvidenceQueueComponent } from '../project-visual-evidence-queue/project-visual-evidence-queue';
@@ -46,6 +48,7 @@ export class ProjectOverviewDashboardComponent {
 
   private readonly tasks = inject(TaskService);
   private readonly docs = inject(ProjectDocsService);
+  private readonly git = inject(ProjectGitService);
   private refreshGeneration = 0;
 
   readonly throughput = signal<ProjectThroughputSummary | null>(null);
@@ -53,6 +56,7 @@ export class ProjectOverviewDashboardComponent {
   readonly deployment = signal<ProjectDeploymentSummary | null>(null);
   readonly wiki = signal<WikiPulse | null>(null);
   readonly publishTargets = signal<readonly PublishTarget[]>([]);
+  readonly remoteBranches = signal<readonly GitBranchEntry[]>([]);
   readonly loading = signal(true);
   readonly unavailable = signal<ReadonlySet<string>>(new Set());
   readonly evidenceRefreshGeneration = signal(0);
@@ -91,6 +95,10 @@ export class ProjectOverviewDashboardComponent {
       default: return this.deployment()?.lastDeployment ? 'Delta unavailable' : 'Not configured';
     }
   });
+  readonly managedRemoteBranches = computed(() => this.remoteBranches()
+    .filter(branch => branch.name === 'main' || branch.name === 'develop' || branch.name.startsWith('task/'))
+    .sort((a, b) => a.name.localeCompare(b.name)));
+  readonly hasLargeUnpushedDelta = computed(() => this.managedRemoteBranches().some(branch => branch.ahead > 50));
 
   constructor() {
     effect(() => this.refresh(this.projectName()));
@@ -107,7 +115,8 @@ export class ProjectOverviewDashboardComponent {
     this.deployment.set(null);
     this.wiki.set(null);
     this.publishTargets.set([]);
-    let pending = 5;
+    this.remoteBranches.set([]);
+    let pending = 6;
     const done = () => {
       pending--;
       if (pending === 0) this.loading.set(false);
@@ -142,6 +151,10 @@ export class ProjectOverviewDashboardComponent {
     this.tasks.getProjectSnapshot(project).subscribe({
       next: value => accept(() => this.publishTargets.set(value.publishTargets ?? [])),
       error: () => fail('publishing'),
+    });
+    this.git.getInventory(project).subscribe({
+      next: value => accept(() => this.remoteBranches.set(value.branches ?? [])),
+      error: () => fail('git-remote'),
     });
   }
 

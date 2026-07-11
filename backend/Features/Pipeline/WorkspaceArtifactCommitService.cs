@@ -19,13 +19,16 @@ public sealed class WorkspaceArtifactCommitService
 
     private readonly IConfiguration _configuration;
     private readonly ILogger<WorkspaceArtifactCommitService> _logger;
+    private readonly WorkspaceArtifactPushQueue? _pushQueue;
 
     public WorkspaceArtifactCommitService(
         IConfiguration configuration,
-        ILogger<WorkspaceArtifactCommitService> logger)
+        ILogger<WorkspaceArtifactCommitService> logger,
+        WorkspaceArtifactPushQueue? pushQueue = null)
     {
         _configuration = configuration;
         _logger = logger;
+        _pushQueue = pushQueue;
     }
 
     public WorkspaceArtifactCommitResult TryCommitRunBoundary(
@@ -158,6 +161,12 @@ public sealed class WorkspaceArtifactCommitService
             _logger.LogInformation(
                 "workspace-artifact-commit jobId={JobId} {LogLabel} runIndex={RunIndex} sha={Sha} paths={Paths}",
                 jobId, logLabel, plan.RunIndex, shortSha ?? "", string.Join(",", pathspecs));
+            if (WorkspaceAutoPushEnabled() && _pushQueue != null)
+            {
+                var enqueued = _pushQueue.Enqueue(new WorkspaceArtifactPushRequest(gitRoot, jobId));
+                if (!enqueued)
+                    _logger.LogWarning("workspace-artifact-push enqueue failed jobId={JobId} repo={Repo}", jobId, gitRoot);
+            }
             return WorkspaceArtifactCommitResult.Committed(shortSha, plan.RunIndex, plan.Steps ?? "none");
         }
         catch (Exception ex)
@@ -177,6 +186,9 @@ public sealed class WorkspaceArtifactCommitService
             $"chore(workspace): record external completion for {normalizedJob}\n\n" +
             $"Completed-Externally-By: {normalizedSource}\n";
     }
+
+    private bool WorkspaceAutoPushEnabled() =>
+        _configuration.GetValue<bool?>("WorkspaceArtifacts:AutoPushEnabled") ?? true;
 
     internal static string BuildArtifactUploadMessage(string jobId, IReadOnlyList<string> files)
     {
