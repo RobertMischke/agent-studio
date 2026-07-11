@@ -7,6 +7,7 @@ level and are referenced from `AGENTS.md`.
 | Page | What lives there |
 |---|---|
 | [style-guide-hard-rules.md](style-guide-hard-rules.md) | The hard, non-negotiable design rules (no left accent bars, full-bleed views, aggregate = sum of visible children, acute-only signals, both themes). |
+| [app-survey-2026-07-11.html](app-survey-2026-07-11.html) | Self-contained, screenshot-by-screenshot visual findings for the 2026-07-11 Stable application sweep. |
 
 The concrete component vocabulary (tokens, primitives, canonical components) and
 the "why" behind the shell look live under
