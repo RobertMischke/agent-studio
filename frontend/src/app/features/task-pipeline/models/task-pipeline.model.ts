@@ -46,6 +46,11 @@ export interface PipelineStepExecution {
   stepId: string;
   kind: StepKind;
   model?: string | null;
+  thinkingLevel?: string | null;
+  recommendedModel?: string | null;
+  recommendedThinkingLevel?: string | null;
+  selectionSource?: string | null;
+  estimatedSavingsPercent?: number | null;
   status: PipelineStepStatus;
   startedAt?: string | null;
   completedAt?: string | null;

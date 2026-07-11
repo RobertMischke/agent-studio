@@ -25,6 +25,11 @@ pipeline view.
 
 ## Key Code
 
+- `backend/Features/Pipeline/ModelQualificationService.cs`: zero-token PRE-step
+  that classifies the task in project context and maps it onto the selected
+  CLI's live model/reasoning ladders. `IModelEconomyAdvisor` is the stable seam
+  for `TokenEconomy.SuggestModel`; the local catalogue advisor is used until
+  that package is available.
 - `backend/Services/Pipeline/PipelineCatalogue.cs`: standard and read-only
   pipeline definitions, step ids, default ordering, step run modes, and display
   names.
@@ -123,6 +128,11 @@ pipeline view.
 
 ## Invariants
 
+- `pre-model-qualification` runs before CORE and never performs quota fallback
+  routing. It recommends from the live CLI catalogue without hardcoded model
+  ids. Explicit card model/reasoning pins always win; legacy cards without
+  provenance are treated as pinned. The selected/recommended pair remains
+  visible on the step record.
 - Aspect and code-review prompts carry a complete evidence set (AGT-2022): the
   run-window diff summary is appended with the task-branch-vs-base commit range
   (`base..task/<id>` via `GitService.GetCommitsInRangeAtRoot`) so a squash/merge

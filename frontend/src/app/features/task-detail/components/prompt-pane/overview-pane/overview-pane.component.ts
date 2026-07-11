@@ -100,6 +100,7 @@ interface PipelineRowVm {
   /** Effective display status: 'disabled' for project-disabled steps. */
   status: PipelineStepStatus | 'disabled';
   model: string | null;
+  thinkingLevel: string | null;
   cliType: CliType | null;
   /**
    * Whether {@link model} is the pre-run resolved effective model (no run has
@@ -248,6 +249,9 @@ function verdictTitle(verdict: string | null): string | null {
     // Auto-mode Ralph-loop guard verdicts (pre-loop-guard step).
     case 'looping':       return 'Loop forming';
     case 'loop-detected': return 'Loop detected';
+    case 'selected':      return 'Economy selection';
+    case 'override':      return 'Card override';
+    case 'fallback':      return 'Default fallback';
     default:              return null;
   }
 }
@@ -339,6 +343,8 @@ const PIPELINE_STEP_EXPLANATIONS: Record<string, string> = {
     'Auto-mode loop guard. Before the agent runs, a deterministic check makes sure the same task is not being re-issued in circles: it flags a forming loop while still under budget and trips the circuit-breaker once the iteration or token limit is hit, pausing for the user.',
   'pre-orchestrator-prep':
     'Opt-in prompt-readiness pass. Scores the task prompt for clarity while it is still in Preparation and either admits it to Ready or bounces it back for refinement. Runs off the coding seat, so it never blocks throughput.',
+  'pre-model-qualification':
+    'Zero-token model qualification. Classifies task type, size, affected surface, and similar project history, then maps that profile onto the selected CLI\'s live model and reasoning ladders. A model or level pinned on the card always wins; the recommendation remains visible for comparison.',
   'pre-reissue-open-items':
     'Re-issue guard. On a re-issued run it detects open items left from the previous attempt (the auto-review follow-up reason, unchecked checklist boxes, aspect concerns) and foregrounds them into the run prompt so the agent finishes them instead of starting over.',
   'core-agent-run':
@@ -844,6 +850,7 @@ export class OverviewPaneComponent {
       const recordedModel = e?.model ?? null;
       const resolvedModel = cfg?.resolvedModel ?? null;
       const model = recordedModel ?? resolvedModel ?? cfg?.model ?? step.model ?? null;
+      const thinkingLevel = e?.thinkingLevel ?? null;
       const cliType = this.asCliType(cfg?.cliType ?? step.cliType ?? this.effectiveCliType());
       const modelIsResolved = recordedModel == null && model != null;
       const modelTooltip = this.buildModelTooltip(label, model, modelIsResolved, cfg?.modelSource ?? null);
@@ -876,6 +883,7 @@ export class OverviewPaneComponent {
         config: cfg ?? null,
         status,
         model,
+        thinkingLevel,
         cliType,
         modelIsResolved,
         modelTooltip,

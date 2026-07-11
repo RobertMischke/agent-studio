@@ -42,8 +42,16 @@ public record TaskInfo
     public string? SessionName { get; init; }
     /// <summary>Preferred model for this job (e.g. <c>claude-sonnet-4.5</c>); passed via <c>--model</c> when supported.</summary>
     public string? Model { get; init; }
+    /// <summary>
+    /// True when the model was explicitly pinned on the card. Legacy tasks
+    /// without provenance default to true so an upgrade never changes their
+    /// execution model unexpectedly.
+    /// </summary>
+    public bool ModelExplicit { get; init; } = true;
     /// <summary>Optional thinking / reasoning effort level for the selected CLI model.</summary>
     public string? ThinkingLevel { get; init; }
+    /// <summary>True when the card explicitly pins its reasoning level.</summary>
+    public bool ThinkingLevelExplicit { get; init; } = true;
     /// <summary>Which CLI backend executes this job: <c>claude</c>, <c>codex</c>, or <c>gemini</c>. Defaults to <c>claude</c>.</summary>
     public string? CliType { get; init; }
     /// <summary>Effective fallback for the current run; null outside a quota-routed run.</summary>

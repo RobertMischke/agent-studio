@@ -198,6 +198,26 @@ Hard rules:
 - **Mutating an existing finding** (acknowledging it, attaching a follow-up id) is done by appending a new line with the same `id` and the updated fields. Readers fold the file into latest-per-id; the file stays append-only.
 - **Storage location.** Inside the job folder, never inside `agent-taskboard-dev/` itself. Meta-level documentation (decisions, ADRs, doctrine) goes in source; task-level evidence stays beside the job.
 
+### model-qualification.jsonl (optional)
+
+Append-only benchmark foundation for the `pre-model-qualification` decision and
+the matching CORE result. It lives at the job root. The decision captures the
+task profile, live catalogue source, recommendation, effective selection,
+override source, and estimated saving. The outcome captures the actual model,
+reasoning level, tokens, run status/verdict, and pipeline attempt.
+
+```jsonl
+{"at":"2026-07-11T18:00:00Z","event":"decision","decisionId":"...","jobId":"ui-polish","project":"agent-taskboard","cliType":"codex","taskType":"chore","surface":"frontend polish","complexity":"small","score":-2,"recommendedModel":"<catalogue economy rung>","recommendedThinkingLevel":"low","selectedModel":"<catalogue economy rung>","selectedThinkingLevel":"low","selectionSource":"qualification","estimatedSavingsPercent":65,"reason":"chore/small/frontend polish; ...","catalogueSource":"cli-pty"}
+{"at":"2026-07-11T18:02:00Z","event":"outcome","jobId":"ui-polish","project":"agent-taskboard","model":"<actual model>","thinkingLevel":"low","status":"completed","verdict":"success","inputTokens":1200,"outputTokens":300,"cacheReadTokens":500,"cacheCreationTokens":0,"attempt":1}
+```
+
+Hard rules:
+
+- `event` is `decision` or `outcome`; consumers join rows by `jobId` and attempt chronology.
+- Model ids and reasoning levels are values from the live CLI catalogue, never a second Studio-owned list.
+- `selectionSource=task-override` means the recommendation was reporting-only and the card pin won.
+- Logging is best-effort observability and never changes the run or lane decision.
+
 ### .metadata/prompts.jsonl (optional)
 
 Append-only JSON-Lines file holding the **raw final prompt of every one-shot step-call** dispatched for the task (review aspects, the code-review-grade pass, and any other step routed through the central one-shot CLI seam). It closes the "Rohdaten komplett" gap: these step prompts are rendered at run time and otherwise land in no durable file at the task, unlike the main run / follow-up prompts which already live in `prompt.md` and the chat. The capture is written at central dispatch *before* the CLI call (so a prompt survives a later timeout / failure), is best-effort (an IO failure is logged and swallowed, never propagated into the run), and is keyed to the pipeline step so the task-detail Overview can show the exact prompt a step sent. Main-run prompts and follow-ups are deliberately **not** written here — recording them again would be double bookkeeping.

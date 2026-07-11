@@ -876,6 +876,8 @@ export interface CreateTaskRequest {
   cliType?: CliType;
   model?: string;
   thinkingLevel?: string;
+  modelExplicit?: boolean;
+  thinkingLevelExplicit?: boolean;
   /** One of `bug`, `feature`, `chore`. Defaults to `chore` server-side. */
   taskType?: string;
   /** Workspace tag ids to attach on create. */

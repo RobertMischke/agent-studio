@@ -96,6 +96,7 @@ public class ProjectRunner
     // of a permanent "- -". Optional so test fixtures that build the runner
     // directly keep working; production DI always supplies an instance.
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
+    private readonly AgentStudio.Pipeline.ModelQualificationService? _modelQualification;
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
@@ -414,7 +415,8 @@ public class ProjectRunner
         AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null,
         AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null,
         CliQuotaFallbackService? quotaFallback = null,
-        ILoadThrottleGate? loadThrottle = null)
+        ILoadThrottleGate? loadThrottle = null,
+        AgentStudio.Pipeline.ModelQualificationService? modelQualification = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -454,6 +456,7 @@ public class ProjectRunner
         _integrationLeases = integrationLeases;
         _timeline = timeline;
         _pipelineLog = pipelineLog;
+        _modelQualification = modelQualification;
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
 
@@ -2109,8 +2112,16 @@ public class ProjectRunner
             // A user continue on an epic is the user steering the plan, not a
             // fresh decomposition, so it is left on the normal path.
             var isEpicPlanningRun = EpicRunPolicy.IsPlanningRun(info.Kind, intent);
-            var runModel = route?.Model ?? info.Model;
-            var runThinkingLevel = route?.ThinkingLevel ?? info.ThinkingLevel;
+            ModelQualificationDecision? qualification = null;
+            if (_modelQualification != null)
+            {
+                // Qualification is the input choice for the card's primary
+                // CLI. Quota fallback remains a separate admission concern
+                // and may still replace this selection for the one run below.
+                qualification = await QualifyModelAsync(info, promptPath, GetCliFor(info), ct);
+            }
+            var runModel = route?.Model ?? qualification?.SelectedModel ?? info.Model;
+            var runThinkingLevel = route?.ThinkingLevel ?? qualification?.SelectedThinkingLevel ?? info.ThinkingLevel;
             if (isEpicPlanningRun)
             {
                 plan = plan with { PromptTemplate = RuntimePromptService.EpicDecomposition, PromptOverride = null };
@@ -3900,6 +3911,87 @@ public class ProjectRunner
         }
     }
 
+    private async Task<ModelQualificationDecision?> QualifyModelAsync(
+        TaskInfo info,
+        string promptPath,
+        ICliExecutionService cli,
+        CancellationToken ct)
+    {
+        if (_modelQualification == null) return null;
+        var startedAt = DateTime.UtcNow;
+        try
+        {
+            var prompt = File.Exists(promptPath)
+                ? await File.ReadAllTextAsync(promptPath, ct)
+                : string.Empty;
+            var catalogue = await cli.GetModelCatalogAsync(false, ct);
+            var history = _scanner.ScanAllJobs()
+                .Where(task => string.Equals(task.ProjectName, info.ProjectName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var decision = _modelQualification.Qualify(info, prompt, catalogue, history, startedAt);
+
+            if (_pipelineLog != null)
+            {
+                _pipelineLog.EnsureAgentRunStart(
+                    info.FolderPath,
+                    AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
+                        AgentStudio.Pipeline.PipelineCatalogue.ForMode(info.Mode),
+                        _projectSettings.Get(ProjectName)),
+                    ProjectName,
+                    info.Id);
+                var finishedAt = DateTime.UtcNow;
+                _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
+                {
+                    StepId = AgentStudio.Pipeline.PipelineCatalogue.ModelQualificationStepId,
+                    Kind = StepKind.Module,
+                    Model = decision.SelectedModel,
+                    ThinkingLevel = decision.SelectedThinkingLevel,
+                    RecommendedModel = decision.RecommendedModel,
+                    RecommendedThinkingLevel = decision.RecommendedThinkingLevel,
+                    SelectionSource = decision.SelectionSource,
+                    EstimatedSavingsPercent = decision.EstimatedSavingsPercent,
+                    Status = PipelineStepStatus.Passed,
+                    StartedAt = startedAt,
+                    CompletedAt = finishedAt,
+                    DurationMs = Math.Max(0, (long)(finishedAt - startedAt).TotalMilliseconds),
+                    Verdict = decision.SelectionSource == "task-override" ? "override" : "selected",
+                    VerdictSummary = decision.Reason,
+                    Reason = decision.Reason,
+                });
+            }
+
+            await _modelQualification.RecordDecisionAsync(info.FolderPath, decision, ct);
+            _logger.LogInformation(
+                "model-qualification jobId={JobId} taskType={TaskType} complexity={Complexity} surface={Surface} recommendedModel={RecommendedModel} recommendedThinking={RecommendedThinking} selectedModel={SelectedModel} selectedThinking={SelectedThinking} source={SelectionSource} expectedSavingsPercent={Savings}",
+                info.Id, decision.TaskType, decision.Complexity, decision.Surface,
+                decision.RecommendedModel, decision.RecommendedThinkingLevel,
+                decision.SelectedModel, decision.SelectedThinkingLevel,
+                decision.SelectionSource, decision.EstimatedSavingsPercent);
+            return decision;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "model-qualification failed for {JobId}; using card/project defaults", info.Id);
+            if (_pipelineLog != null)
+            {
+                var finishedAt = DateTime.UtcNow;
+                _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
+                {
+                    StepId = AgentStudio.Pipeline.PipelineCatalogue.ModelQualificationStepId,
+                    Kind = StepKind.Module,
+                    Status = PipelineStepStatus.Skipped,
+                    StartedAt = startedAt,
+                    CompletedAt = finishedAt,
+                    DurationMs = Math.Max(0, (long)(finishedAt - startedAt).TotalMilliseconds),
+                    Verdict = "fallback",
+                    Reason = $"Qualification unavailable; project/card default retained: {ex.Message}",
+                    VerdictSummary = $"Qualification unavailable; project/card default retained: {ex.Message}",
+                });
+            }
+            return null;
+        }
+    }
+
     /// <summary>
     /// Open (or resume) the job's pipeline-execution record and mark the CORE
     /// "Agent execution" step <see cref="PipelineStepStatus.Running"/> at spawn,
@@ -3956,6 +4048,7 @@ public class ProjectRunner
                 StepId = AgentStudio.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
                 Kind = StepKind.Core,
                 Model = execution.Model ?? info.Model,
+                ThinkingLevel = execution.ThinkingLevel ?? info.ThinkingLevel,
                 Status = PipelineStepStatus.Running,
                 StartedAt = execution.StartedAt,
                 DurationMs = accumulatedMs,
@@ -4307,7 +4400,7 @@ public class ProjectRunner
     /// sentinel-detected / silent-completion run is a completion even though the
     /// process kill yields exitCode = -1 on Windows.
     /// </summary>
-    private void RecordCoreRunFinish(string jobId, CliExecution execution, CoreAgentUsage? usage)
+    private async Task RecordCoreRunFinish(string jobId, CliExecution execution, CoreAgentUsage? usage)
     {
         if (_pipelineLog == null) return;
         try
@@ -4371,6 +4464,7 @@ public class ProjectRunner
                 StepId = AgentStudio.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
                 Kind = StepKind.Core,
                 Model = execution.Model ?? info?.Model,
+                ThinkingLevel = execution.ThinkingLevel ?? info?.ThinkingLevel,
                 Status = coreStatus,
                 StartedAt = startedAt,
                 CompletedAt = completedAt,
@@ -4383,6 +4477,25 @@ public class ProjectRunner
                 Verdict = verdict,
                 Reason = reason,
             });
+
+            if (_modelQualification != null)
+            {
+                await _modelQualification.RecordOutcomeAsync(folder, new ModelQualificationOutcome
+                {
+                    At = DateTime.UtcNow,
+                    JobId = jobId,
+                    Project = ProjectName,
+                    Model = execution.Model ?? info?.Model,
+                    ThinkingLevel = execution.ThinkingLevel ?? info?.ThinkingLevel,
+                    Status = execution.Status ?? "unknown",
+                    Verdict = verdict,
+                    InputTokens = usage?.InputTokens ?? 0,
+                    OutputTokens = usage?.OutputTokens ?? 0,
+                    CacheReadTokens = usage?.CacheReadTokens ?? 0,
+                    CacheCreationTokens = usage?.CacheCreationTokens ?? 0,
+                    Attempt = record.Attempt,
+                });
+            }
         }
         catch (Exception ex)
         {
@@ -4684,7 +4797,7 @@ public class ProjectRunner
             // token-blank while the separate Agent footer block had data.
             // Best-effort; the record is observability, never a state-machine
             // input.
-            RecordCoreRunFinish(jobId, execution, coreUsage);
+            await RecordCoreRunFinish(jobId, execution, coreUsage);
 
             // Capture the post-run HEAD SHA so the run's commit set can be
             // derived deterministically via git rev-list HeadShaBefore..After.

@@ -66,6 +66,7 @@ Use this page as the first stop when you need the right document quickly.
 | Wiki classification | [product/wiki-document-classification.md](product/wiki-document-classification.md) |
 | Wiki editing flow | [product/wiki-editing-and-branch-flow.md](product/wiki-editing-and-branch-flow.md) |
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](schemas/wiki-document-companion.schema.json) |
+| Model qualification benchmark event schema | [schemas/model-qualification-event.schema.json](schemas/model-qualification-event.schema.json) |
 | Wiki drift audit | [meta/reports/wiki-drift-audit-2026-06-11.html](meta/reports/wiki-drift-audit-2026-06-11.html) |
 | Supported CLIs | [cli/supported-clis.md](cli/supported-clis.md) |
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](operations/setup/getting-started.md) |

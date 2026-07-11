@@ -513,6 +513,7 @@
           [(newMode)]="createJobForm.newMode"
           [(newAllowWebAccess)]="createJobForm.newAllowWebAccess"
           (cliTypeChange)="onCreateCliTypeChange($event)"
+          (modelSelectionTouched)="createJobForm.markModelSelectionExplicit()"
           (cancelRequest)="cancelCreate()"
           (openChatRequest)="cancelCreate(); orchSideSheet.show()"
           (submitRequest)="submitCreate()" />
@@ -846,6 +847,7 @@
           [(newMode)]="createJobForm.newMode"
           [(newAllowWebAccess)]="createJobForm.newAllowWebAccess"
           (cliTypeChange)="onCreateCliTypeChange($event)"
+          (modelSelectionTouched)="createJobForm.markModelSelectionExplicit()"
           (cancelRequest)="cancelCreate()"
           (openChatRequest)="cancelCreate(); orchSideSheet.show()"
           (submitRequest)="submitCreate()" />

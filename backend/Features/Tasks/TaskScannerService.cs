@@ -396,7 +396,13 @@ public class TaskScannerService : ITaskScanner
                     ? JsonSerializer.Deserialize<SessionUsage>(lu.GetRawText(), TaskJsonFile.ReadOpts)
                     : null,
                 Model = raw.TryGetProperty("model", out var md) ? md.GetString() : null,
+                // Provenance was added with model qualification. Missing means
+                // legacy and is conservatively treated as an explicit pin.
+                ModelExplicit = !raw.TryGetProperty("modelExplicit", out var modelExplicit)
+                    || modelExplicit.ValueKind != JsonValueKind.False,
                 ThinkingLevel = raw.TryGetProperty("thinkingLevel", out var tl) ? tl.GetString() : null,
+                ThinkingLevelExplicit = !raw.TryGetProperty("thinkingLevelExplicit", out var thinkingExplicit)
+                    || thinkingExplicit.ValueKind != JsonValueKind.False,
                 CliType = raw.TryGetProperty("cliType", out var ct) ? ct.GetString() : null,
                 Kind = TaskKinds.Normalize(raw.TryGetProperty("kind", out var kd) ? kd.GetString() : null),
                 EpicId = raw.TryGetProperty("epicId", out var ep) && !string.IsNullOrWhiteSpace(ep.GetString()) ? ep.GetString() : null,

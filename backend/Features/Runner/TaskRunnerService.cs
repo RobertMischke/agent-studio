@@ -45,6 +45,7 @@ public class TaskRunnerService : BackgroundService
     private readonly IntegrationLeaseService? _integrationLeases;
     private readonly TimelineLog? _timeline;
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
+    private readonly AgentStudio.Pipeline.ModelQualificationService? _modelQualification;
     // Forwarded to each ProjectRunner. DI injects the registered singleton; the
     // step is default-OFF per project, so a wired-but-disabled step changes
     // nothing. Null only when a test fixture builds the service directly.
@@ -134,7 +135,8 @@ public class TaskRunnerService : BackgroundService
         RunLeaseService? runLeases = null,
         RunnerIdentity? runnerIdentity = null,
         CliQuotaFallbackService? quotaFallback = null,
-        ILoadThrottleGate? loadThrottle = null)
+        ILoadThrottleGate? loadThrottle = null,
+        AgentStudio.Pipeline.ModelQualificationService? modelQualification = null)
     {
         _config = config;
         _logger = logger;
@@ -167,6 +169,7 @@ public class TaskRunnerService : BackgroundService
         _integrationLeases = integrationLeases;
         _timeline = timeline;
         _pipelineLog = pipelineLog;
+        _modelQualification = modelQualification;
         _postAbortReview = postAbortReview;
         _sessionInspector = sessionInspector;
         _keepAwake = keepAwake;
@@ -340,7 +343,8 @@ public class TaskRunnerService : BackgroundService
                 sessionInspector: _sessionInspector,
                 orchestratorDefaults: _orchestratorDefaults,
                 quotaFallback: _quotaFallback,
-                loadThrottle: _loadThrottle);
+                loadThrottle: _loadThrottle,
+                modelQualification: _modelQualification);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);

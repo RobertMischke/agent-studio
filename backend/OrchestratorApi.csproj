@@ -43,6 +43,15 @@
     <PackageReference Include="CodingAgentRunner" Version="0.5.0" />
   </ItemGroup>
 
+  <!-- TokenEconomy integration seam (AGT-2146). Until the package is
+       published, local co-development follows the same file-reference pattern
+       as CAR. Studio compiles its zero-token IModelEconomyAdvisor fallback when
+       the checkout is absent; an adapter can bind TokenEconomy.SuggestModel
+       without changing the runner contract once the project/package lands. -->
+  <ItemGroup Condition="Exists('..\..\..\token-economy\src\TokenEconomy\TokenEconomy.csproj')">
+    <ProjectReference Include="..\..\..\token-economy\src\TokenEconomy\TokenEconomy.csproj" />
+  </ItemGroup>
+
   <!-- Block 6: adopt the library's types by aliasing them to the names the app
        already uses, so call-sites resolve to the library after the duplicated
        app type is deleted. Each alias = one type now sourced from the package. -->

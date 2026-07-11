@@ -424,6 +424,9 @@ builder.Services.AddHostedService<MetaCycleHostedService>();
 builder.Services.AddHostedService<OrchestratorPrepHostedService>();
 builder.Services.AddHostedService<ChatNoteHostedService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineExecutionLog>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IModelEconomyAdvisor,
+    AgentStudio.Pipeline.CatalogueModelEconomyAdvisor>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ModelQualificationService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.MergeIntoDevelopRunner>();
 builder.Services.AddSingleton<AgentStudio.GeneratedFiles.FileGenerationIndex>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.ProjectPipelineCostService>();

@@ -103,8 +103,8 @@
           triggerTestid="create-agent"
           pickerTestidPrefix="create-agent-picker"
           (cliTypeChange)="cliTypeChange.emit($event)"
-          (modelChange)="newModel.set($event)"
-          (thinkingLevelChange)="newThinkingLevel.set($event)" />
+          (modelChange)="newModel.set($event); modelSelectionTouched.emit()"
+          (thinkingLevelChange)="newThinkingLevel.set($event); modelSelectionTouched.emit()" />
       </div>
     </div>
     <div class="field">
