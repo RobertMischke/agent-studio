@@ -109,6 +109,8 @@ async function discoverWorkspace(): Promise<string> {
 }
 
 export const test = base.extend<{ devBackend: DevBackend }>({
+  // Playwright 1.59 requires object destructuring even when the fixture has no dependencies.
+  // eslint-disable-next-line no-empty-pattern
   devBackend: async ({}, use, testInfo) => {
     const startedHealthy = await isHealthy();
     let weStartedIt = false;
