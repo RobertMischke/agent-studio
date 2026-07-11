@@ -37,8 +37,9 @@ Linux host and fills a bounded set of task slots without owning task state:
   local in-process runner read that same record, so config drift cannot cause
   double pickup. Lease fencing remains the hard takeover guard.
 - **Every slot has its own linked git worktree** under
-  `$RUNNER_WORKDIR/worktrees/<task-key>`. The shared `repo/` checkout is only the
-  git metadata/fetch source. Completed task worktrees are removed after handoff.
+  `$RUNNER_WORKDIR/<project-id>/worktrees/<task-key>`. Each project has a shared
+  clone at `$RUNNER_WORKDIR/<project-id>/repo`; it is fetched before a claimed
+  task starts. Completed task worktrees are removed after handoff.
 
 ### MVP boundaries (read before relying on it)
 
@@ -75,7 +76,7 @@ every provisioning command in that controller is executed through SSH on the
 selected host.
 
 Before the task can start, the dialog requires an SSH target, the registered
-host client id, a credential-free git origin, and one of these Task Server
+host client id, a credential-free fallback git origin, and one of these Task Server
 topologies:
 
 | Topology | URL entered in setup | Required proof |
@@ -102,7 +103,7 @@ The controller is intentionally repeatable after a host wipe:
    then `codex login status` and `claude auth status --text` report the active
    account. Credential files are never copied as the normal path.
 4. Atomically write `/etc/agent-runner/runner.env` with the Task Server URL,
-   runner identity, `RUNNER_CLIENT_ID`, and git origin. Install and start the
+   runner identity, `RUNNER_CLIENT_ID`, and fallback git origin. Install and start the
    service through systemd. The SSH session never owns the daemon process.
 5. Prove `systemctl is-enabled`, `systemctl is-active`, runner health, and the
    registered client endpoint before setup completes.
@@ -176,7 +177,7 @@ list.
 | `RUNNER_ID` | `--runner-id` | `agent-runner-<host>` | Stable lease owner identity. Fencing is per task, not per pid. |
 | `RUNNER_NAME` | `--runner-name` | `agent-runner-01` | Board-facing runner/project name. |
 | `RUNNER_CLIENT_ID` | `--client-id` | (self-register) | Existing host identity shown in Remote Hosts. When set, startup verifies this exact X-Client-Id and refuses to create a replacement identity. |
-| `RUNNER_GIT_REMOTE` | `--git-remote` | (required) | Origin the code is fetched from. |
+| `RUNNER_GIT_REMOTE` | `--git-remote` | (none) | Fallback origin for one-shot runs and claims from an older server that do not carry `repositoryUrl`. Daemon claims normally use the project origin supplied by the server. |
 | `RUNNER_BRANCH` | `--branch` | (base branch) | Branch to check out for the run. |
 | `RUNNER_BASE_BRANCH` | `--base-branch` | `main` | Fallback when the task branch is absent on origin. |
 | `RUNNER_WORKDIR` | `--workdir` | `$TMPDIR/agent-runner-work` | Where the repo checkout and `results/` live. |
@@ -197,6 +198,47 @@ Recommended per-CLI headless defaults (verify against your installed version):
   exposes. When quoting gets awkward, point `RUNNER_CLI_BIN` at a small wrapper
   script instead of fighting the space-split arg parser.
 
+### Multi-repository clone layout and eligibility
+
+The claim response contains the durable project id, repository URL, and default
+branch. The daemon uses the project id as the cache key, so two projects never
+share git metadata even when their task keys happen to look alike:
+
+```text
+$RUNNER_WORKDIR/
+  PROJ-001/repo
+  PROJ-001/worktrees/AGT-2141
+  PROJ-007/repo
+  PROJ-007/worktrees/QS-104
+```
+
+The Task Server resolves the repository URL from the project's registry URL
+entry whose id or label is `repo` (label `repository` is also accepted). If that
+entry is absent, it derives `remote.origin.url` and the default branch from the
+registered local `RepositoryPath`. Local filesystem remotes are not usable on a
+different host. An assigned project with no resolvable network repository URL
+is skipped before a lease is created and is logged as
+`remote-runner-project-skipped`; the card remains Ready and is not escalated.
+
+`RUNNER_GIT_REMOTE` remains a compatibility fallback. Keep it for one-shot
+diagnostics or during a rolling server upgrade, but do not use one global value
+to model a multi-project daemon.
+
+### Private repository authentication
+
+Private repositories require credentials that already work for the runner's OS
+user. This change deliberately does not provision, copy, or store git
+credentials in Agent Studio. Use one of the host-owned approaches:
+
+- a read-only deploy key per repository, selected through the host's SSH config;
+- `gh auth login` plus `gh auth setup-git` for the runner user; or
+- an operator-managed system credential helper with least-privilege access.
+
+Never copy an operator's SSH keys, GitHub token files, or credential-store data
+into the product or into task evidence. Public repositories need no additional
+setup. A private repository without working host credentials remains local until
+the operator configures host access.
+
 ## 4. Assign projects and run the daemon
 
 Assignment is stored through the Task Server API. The following assigns a
@@ -214,7 +256,6 @@ Start the foreground daemon with no task argument or with `--poll`:
 
 ```bash
 export RUNNER_SERVER_URL=http://<studio-host>:5030
-export RUNNER_GIT_REMOTE=<origin>
 export RUNNER_NAME=agent-runner-01
 export RUNNER_MAX_PARALLELISM=2
 /opt/agent-runner/agent-runner --poll
@@ -237,8 +278,9 @@ sudo systemctl enable --now agent-runner
 sudo journalctl -u agent-runner -f
 ```
 
-At minimum, `runner.env` sets `RUNNER_SERVER_URL`, `RUNNER_GIT_REMOTE`,
-`RUNNER_ID`, and `RUNNER_NAME`. Product onboarding also sets
+At minimum, `runner.env` sets `RUNNER_SERVER_URL`, `RUNNER_ID`, and
+`RUNNER_NAME`. Set `RUNNER_GIT_REMOTE` only when the compatibility fallback is
+needed. Product onboarding also sets
 `RUNNER_CLIENT_ID`, so the configured identity and its `LastSeen` record remain
 stable across reinstalls. The unit restarts after failures, logs to journald,
 requests graceful SIGINT shutdown, and best-effort starts
@@ -314,8 +356,10 @@ proof.
 
 - **No task is claimed** - confirm the project's `executionRunner` exactly
   matches `RUNNER_NAME` or `RUNNER_ID`, `remoteExecutionEnabled` is true, and
-  the card is pickup-eligible in `2-ready`. The local runner intentionally skips
-  the same assigned project.
+  the card is pickup-eligible in `2-ready`. Also inspect the backend log for
+  `remote-runner-project-skipped`: the project needs a network URL in its `repo`
+  registry entry or an origin derivable from `RepositoryPath`. The local runner
+  intentionally skips the same assigned project.
 - **`lease not granted: Held` in one-task mode** - another runner already holds
   the task. The daemon claim path normally avoids this before launch.
 - **`connection lost: cannot reach the task server ...` at startup** - the

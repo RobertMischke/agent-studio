@@ -216,6 +216,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             $"/api/projects/{ProjectName}/execution-runner",
             new { executionRunner = ProjectName, remoteExecutionEnabled = true });
         assignment.EnsureSuccessStatusCode();
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
 
         var wrongRunner = await client.ClaimAsync(new RClaim(
             "runner-other", "runner-other", "other-host", 1, "remote-runner"), CancellationToken.None);
@@ -230,8 +231,34 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal(TaskKey, claim.JobId);
         Assert.Equal(ProjectName, claim.ProjectName);
         Assert.NotNull(claim.Lease);
+        Assert.Equal("PROJ-001", claim.ProjectId);
+        Assert.Equal("https://github.com/agent-orc/agent-studio.git", claim.RepositoryUrl);
+        Assert.Equal("develop", claim.DefaultBranch);
         Assert.Equal("Prompt.", await client.ReadTaskFileAsync(claim.TaskKey!, "prompt.md", CancellationToken.None));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
+    }
+
+    [Fact]
+    public async Task Daemon_claim_skips_assigned_project_without_repository_url()
+    {
+        SeedTask(TaskStates.Ready, TaskKey, "No remote repository", "Prompt.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+
+        var assignment = await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/execution-runner",
+            new { executionRunner = ProjectName, remoteExecutionEnabled = true });
+        assignment.EnsureSuccessStatusCode();
+
+        var claim = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"), CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Empty, claim.Status);
+        Assert.Null(claim.RepositoryUrl);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
     }
 
     [Fact]
@@ -272,6 +299,14 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
                     });
                 });
             });
+
+    private static async Task AddRepositoryUrlAsync(HttpClient http, string repositoryUrl)
+    {
+        var response = await http.PostAsJsonAsync(
+            "/api/projects/PROJ-001/urls",
+            new { label = "repo", url = repositoryUrl });
+        response.EnsureSuccessStatusCode();
+    }
 
     private void SeedTask(string state, string key, string title, string promptBody)
     {

@@ -96,4 +96,7 @@ public sealed record RunnerClaimResponse(
     string? JobId = null,
     string? ProjectName = null,
     RunLeaseInfoDto? Lease = null,
-    string? Message = null);
+    string? Message = null,
+    string? ProjectId = null,
+    string? RepositoryUrl = null,
+    string? DefaultBranch = null);

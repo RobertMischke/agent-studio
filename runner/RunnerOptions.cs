@@ -34,8 +34,8 @@ public sealed class RunnerOptions
     /// <summary>Optional bearer token sent as Authorization on every request (Phase 2 auth).</summary>
     public string? AuthToken { get; init; }
 
-    /// <summary>Git remote the code arrives from. Code is read-only here; results leave via the API.</summary>
-    public required string GitRemote { get; init; }
+    /// <summary>Fallback git remote for one-shot runs and claims from older servers.</summary>
+    public string? GitRemote { get; init; }
 
     /// <summary>Directory the runner checks the repo out into on the runner host.</summary>
     public required string WorkDir { get; init; }
@@ -123,7 +123,7 @@ public sealed class RunnerOptions
             Hostname = Val("hostname", "RUNNER_HOSTNAME", Environment.MachineName),
             BackendName = Val("backend-name", "RUNNER_BACKEND_NAME", "remote-runner"),
             AuthToken = Val("auth-token", "RUNNER_AUTH_TOKEN") is { Length: > 0 } t ? t : null,
-            GitRemote = Val("git-remote", "RUNNER_GIT_REMOTE"),
+            GitRemote = Val("git-remote", "RUNNER_GIT_REMOTE").Trim() is { Length: > 0 } gitRemote ? gitRemote : null,
             WorkDir = Val("workdir", "RUNNER_WORKDIR", Path.Combine(Path.GetTempPath(), "agent-runner-work")),
             Branch = Val("branch", "RUNNER_BRANCH") is { Length: > 0 } b ? b : null,
             BaseBranch = Val("base-branch", "RUNNER_BASE_BRANCH", "main"),

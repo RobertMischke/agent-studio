@@ -63,6 +63,23 @@ public class RunnerOptionsTests
         => Assert.Equal(expected, GitWorkspace.SafeSegment(input));
 
     [Fact]
+    public void Project_id_maps_to_an_isolated_shared_clone_cache()
+    {
+        var root = Path.Combine("runner", "work");
+
+        Assert.Equal(
+            Path.Combine(root, "PROJ-042"),
+            GitWorkspace.CachePathForProject(root, "PROJ-042"));
+        Assert.NotEqual(
+            GitWorkspace.CachePathForProject(root, "PROJ-042"),
+            GitWorkspace.CachePathForProject(root, "PROJ-043"));
+    }
+
+    [Fact]
+    public void Missing_project_id_keeps_the_legacy_single_repo_cache_path()
+        => Assert.Equal("runner-work", GitWorkspace.CachePathForProject("runner-work", null));
+
+    [Fact]
     public void Health_check_flag_sets_health_check_only_and_needs_no_task_key()
     {
         var (options, taskKey, _, help) = RunnerOptions.Parse(["--health-check"]);

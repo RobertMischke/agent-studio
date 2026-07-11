@@ -62,7 +62,13 @@ public sealed class RemoteTaskRunner
     }
 
     /// <summary>Runs a daemon-claimed task using the lease minted by the atomic claim endpoint.</summary>
-    public async Task<int> RunClaimedAsync(string taskKey, RunLeaseInfoDto lease, CancellationToken shutdown)
+    public async Task<int> RunClaimedAsync(
+        string taskKey,
+        RunLeaseInfoDto lease,
+        CancellationToken shutdown,
+        string? projectId = null,
+        string? repositoryUrl = null,
+        string? defaultBranch = null)
     {
         _log($"running claimed task '{taskKey}' with lease {lease.LeaseId}, fencing token {lease.FencingToken}");
 
@@ -75,7 +81,8 @@ public sealed class RemoteTaskRunner
 
         RunOutcome outcome;
         List<string> uploadedFiles = [];
-        var workspace = new GitWorkspace(_options, taskKey, _log);
+        var workspace = new GitWorkspace(
+            _options, taskKey, _log, projectId, repositoryUrl, defaultBranch);
         var handedBack = false;
         try
         {

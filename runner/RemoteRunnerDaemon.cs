@@ -47,9 +47,15 @@ public sealed class RemoteRunnerDaemon
                     break;
 
                 claimedAny = true;
-                _log($"claimed {claim.ProjectName}/{claim.TaskKey} into slot {active.Count + 1}/{_options.HostMaxParallelism}");
+                _log($"claimed {claim.ProjectName}/{claim.TaskKey} using project cache {claim.ProjectId ?? "legacy fallback"} into slot {active.Count + 1}/{_options.HostMaxParallelism}");
                 var taskRunner = new RemoteTaskRunner(_options, _client, _log);
-                active.Add(taskRunner.RunClaimedAsync(claim.TaskKey, claim.Lease, shutdown));
+                active.Add(taskRunner.RunClaimedAsync(
+                    claim.TaskKey,
+                    claim.Lease,
+                    shutdown,
+                    claim.ProjectId,
+                    claim.RepositoryUrl,
+                    claim.DefaultBranch));
             }
 
             if (!claimedAny)

@@ -98,7 +98,10 @@ public sealed record RunnerClaimResponse(
     string? JobId = null,
     string? ProjectName = null,
     RunLeaseInfoDto? Lease = null,
-    string? Message = null);
+    string? Message = null,
+    string? ProjectId = null,
+    string? RepositoryUrl = null,
+    string? DefaultBranch = null);
 
 /// <summary>One consolidated output line, shaped to the server's CliOutputLine JSON.</summary>
 public sealed record CliOutputLine(DateTime Timestamp, string Stream, string Text);

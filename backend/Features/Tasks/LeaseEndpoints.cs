@@ -50,6 +50,7 @@ public static class LeaseEndpoints
             RunnerClaimRequest req,
             TaskScannerService scanner,
             AgentStudio.Projects.ProjectSettingsService settings,
+            AgentStudio.Registry.ProjectRegistry projects,
             TaskTransitionService transitions,
             RunLeaseService leases,
             ILoggerFactory loggerFactory,
@@ -64,7 +65,7 @@ public static class LeaseEndpoints
             {
                 var allWithArchive = scanner.ScanAllJobsWithArchive();
                 var waitsOn = TaskReferenceIndex.Build(allWithArchive);
-                var candidate = scanner.ScanAllJobs()
+                var eligible = scanner.ScanAllJobs()
                     .Where(t => t.State == TaskStates.Ready)
                     .Where(t =>
                     {
@@ -83,10 +84,30 @@ public static class LeaseEndpoints
                                && !waitsOn.EvaluateWaitsOn(t).Blocked;
                     })
                     .OrderBy(t => t.Order)
-                    .ThenBy(t => t.CreatedAt)
-                    .FirstOrDefault();
+                    .ThenBy(t => t.CreatedAt);
 
-                if (candidate is null)
+                TaskInfo? candidate = null;
+                RemoteProjectRepository? repository = null;
+                foreach (var task in eligible)
+                {
+                    var registryProject = projects.FindByStorageLocation(task.WatchPath)
+                                          ?? projects.FindByIdOrDisplayName(task.ProjectName);
+                    repository = RemoteProjectRepositoryResolver.Resolve(
+                        registryProject,
+                        settings.Get(task.ProjectName).IntegrationBranch);
+                    if (repository is not null)
+                    {
+                        candidate = task;
+                        break;
+                    }
+
+                    logger.LogInformation(
+                        "remote-runner-project-skipped project={Project} task={TaskKey} reason=repository-url-unresolved",
+                        task.ProjectName,
+                        task.Key ?? task.TaskKey ?? task.Id);
+                }
+
+                if (candidate is null || repository is null)
                     return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty));
 
                 var taskKey = candidate.Key ?? candidate.TaskKey;
@@ -111,10 +132,18 @@ public static class LeaseEndpoints
                 }
 
                 logger.LogInformation(
-                    "remote-runner-task-claimed project={Project} task={TaskKey} runner={Runner} lease={LeaseId} token={FencingToken}",
-                    candidate.ProjectName, taskKey, req.RunnerName, acquire.Lease.LeaseId, acquire.Lease.FencingToken);
+                    "remote-runner-task-claimed project={Project} projectId={ProjectId} task={TaskKey} runner={Runner} lease={LeaseId} token={FencingToken} repositorySource={RepositorySource} defaultBranch={DefaultBranch}",
+                    candidate.ProjectName, repository.ProjectId, taskKey, req.RunnerName, acquire.Lease.LeaseId,
+                    acquire.Lease.FencingToken, repository.Source, repository.DefaultBranch);
                 return Results.Ok(new RunnerClaimResponse(
-                    RunnerClaimStatus.Claimed, taskKey, candidate.Id, candidate.ProjectName, acquire.Lease));
+                    RunnerClaimStatus.Claimed,
+                    taskKey,
+                    candidate.Id,
+                    candidate.ProjectName,
+                    acquire.Lease,
+                    ProjectId: repository.ProjectId,
+                    RepositoryUrl: repository.RepositoryUrl,
+                    DefaultBranch: repository.DefaultBranch));
             }
             finally
             {
