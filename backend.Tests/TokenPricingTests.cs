@@ -11,6 +11,14 @@ namespace AgentStudio.Tests;
 public class TokenPricingTests
 {
     [Fact]
+    public void Estimate_KnownGpt56WithoutPriceForRunDate_IsExplicitlyUnknown()
+    {
+        var c = TokenPricing.Estimate("gpt-5.6-sol", 1_000_000, 100_000, 0, 0, new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc));
+        Assert.False(c.ModelKnown);
+        Assert.Equal(CodingAgentRunner.Pricing.PriceStatus.NoPriceForDate, c.Status);
+        Assert.Equal(0m, c.Total);
+    }
+    [Fact]
     public void Estimate_OpusPrices_MatchAnthropicListed()
     {
         // Opus 4.7: $5/M input, $25/M output. 1M input + 200K output =
@@ -63,15 +71,12 @@ public class TokenPricingTests
     }
 
     [Fact]
-    public void Estimate_Gpt5CodexPrices_MatchOpenAiApiListed()
+    public void Estimate_Gpt5CodexWithoutCarPrice_IsExplicitlyUnknown()
     {
         var c = TokenPricing.Estimate("gpt-5-codex", 1_000_000, 100_000, 1_000_000, 1_000_000);
-        Assert.True(c.ModelKnown);
-        Assert.Equal(1.25m, c.InputUsd);
-        Assert.Equal(1.00m, c.OutputUsd);
-        Assert.Equal(0.125m, c.CacheReadUsd);
-        Assert.Equal(1.25m, c.CacheWriteUsd);
-        Assert.Equal(3.625m, c.Total);
+        Assert.False(c.ModelKnown);
+        Assert.Equal(CodingAgentRunner.Pricing.PriceStatus.NoPriceForDate, c.Status);
+        Assert.Equal(0m, c.Total);
     }
 
     [Fact]
@@ -99,13 +104,25 @@ public class TokenPricingTests
     }
 
     [Fact]
-    public void Catalog_IsDerivedFromModelMetadataWithContextWindows()
+    public void ModelMetadataPricing_IsPassThroughFromCarCatalog()
     {
         foreach (var entry in ModelMetadataRegistry.All.Where(m => m.InputPricePerMillion is not null))
         {
             Assert.True(TokenPricing.Catalog.ContainsKey(entry.Id), entry.Id);
             Assert.NotNull(ModelMetadataRegistry.ContextWindowFor(entry.Id));
         }
+    }
+
+    [Fact]
+    public void Estimate_UsesPriceValidAtRecordedRunTime()
+    {
+        var transition = TokenPricing.Catalog["claude-sonnet-5"].History.Max(p => p.ValidFrom);
+        var before = TokenPricing.Estimate("claude-sonnet-5", 1_000_000, 0, 0, 0, transition.AddTicks(-1));
+        var after = TokenPricing.Estimate("claude-sonnet-5", 1_000_000, 0, 0, 0, transition);
+
+        Assert.True(before.ModelKnown);
+        Assert.True(after.ModelKnown);
+        Assert.NotEqual(before.Total, after.Total);
     }
 
     [Fact]

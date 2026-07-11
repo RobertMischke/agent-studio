@@ -104,7 +104,7 @@
               <tr>
                 <td>Total · {{ totals().models }} models</td>
                 <td class="cum__num" colspan="3">{{ formatTokens(totals().tokens) }}</td>
-                <td class="cum__num cum__num--cost">{{ totals().anyPriced ? formatUsd(totals().costUsd) : 'n/a' }}</td>
+                <td class="cum__num cum__num--cost">{{ totals().allPriced ? formatUsd(totals().costUsd) : 'Unknown' }}</td>
               </tr>
             </tfoot>
           }

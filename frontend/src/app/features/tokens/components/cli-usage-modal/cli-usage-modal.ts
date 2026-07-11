@@ -47,6 +47,7 @@ interface UsageTotals {
   tokens: number;
   models: number;
   anyPriced: boolean;
+  allPriced: boolean;
 }
 
 /**
@@ -128,7 +129,7 @@ export class CliUsageModalComponent {
         anyPriced = true;
       }
     }
-    return { costUsd, tokens, models: rows.length, anyPriced };
+    return { costUsd, tokens, models: rows.length, anyPriced, allPriced: rows.length > 0 && rows.every(r => r.modelPriced) };
   });
 
   readonly modelRows = computed<ModelUsageRow[]>(() => {
@@ -162,7 +163,7 @@ export class CliUsageModalComponent {
   }
 
   costLabel(value: number, priced: boolean): string {
-    return priced ? this.formatUsd(value) : 'n/a';
+    return priced ? this.formatUsd(value) : 'Unknown';
   }
 
   totalTokens(row: ModelUsageRow): number {

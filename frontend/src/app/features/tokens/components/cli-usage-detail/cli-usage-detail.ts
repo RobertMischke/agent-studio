@@ -121,7 +121,7 @@ export class CliUsageDetailComponent {
   }
 
   costLabel(value: number, priced: boolean): string {
-    return priced ? this.formatUsd(value) : 'n/a';
+    return priced ? this.formatUsd(value) : 'Unknown';
   }
 
   formatTokens(n: number): string {

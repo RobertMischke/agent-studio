@@ -389,6 +389,11 @@ public class TokenSummaryService
             bucket.Output += u.OutputTokens;
             bucket.CacheRead += u.CacheReadTokens;
             bucket.CacheCreate += u.CacheCreationTokens;
+            var entryCost = TokenPricing.Estimate(
+                key, u.InputTokens, u.OutputTokens, u.CacheReadTokens,
+                u.CacheCreationTokens, entry.Ts);
+            bucket.Cost += entryCost.Total;
+            if (!entryCost.ModelKnown) bucket.AnyUnpriced = true;
         }
 
         var byModel = new List<TokenSummaryByModel>();
@@ -396,9 +401,8 @@ public class TokenSummaryService
         bool allPriced = perModel.Count > 0;
         foreach (var bucket in perModel.Values.OrderByDescending(b => b.Input + b.Output))
         {
-            var cost = TokenPricing.Estimate(bucket.Model, bucket.Input, bucket.Output, bucket.CacheRead, bucket.CacheCreate);
-            grandTotal += cost.Total;
-            if (!cost.ModelKnown) allPriced = false;
+            grandTotal += bucket.Cost;
+            if (bucket.AnyUnpriced) allPriced = false;
             byModel.Add(new TokenSummaryByModel(
                 Model: bucket.DisplayModel,
                 Calls: bucket.Calls,
@@ -406,8 +410,8 @@ public class TokenSummaryService
                 OutputTokens: bucket.Output,
                 CacheReadTokens: bucket.CacheRead,
                 CacheCreationTokens: bucket.CacheCreate,
-                EstimatedApiCostUsd: cost.Total,
-                ModelPriced: cost.ModelKnown));
+                EstimatedApiCostUsd: bucket.Cost,
+                ModelPriced: !bucket.AnyUnpriced));
         }
 
         return new TokenSummary(

@@ -143,12 +143,19 @@ public sealed record ModelMetadata(
     bool IsDefault,
     bool Deprecated,
     bool Available,
-    decimal? InputPricePerMillion,
-    decimal? OutputPricePerMillion,
     long? ContextWindow,
-    string[]? Aliases = null,
-    decimal? CacheReadPerMillionOverride = null,
-    decimal? CacheWritePerMillionOverride = null);
+    string[]? Aliases = null)
+{
+    // Pricing is intentionally a live catalog pass-through. Studio owns no
+    // rates; callers that need historical cost use TokenPricing.Estimate.
+    private CodingAgentRunner.Pricing.ModelPrice? CurrentPrice =>
+        CodingAgentRunner.Pricing.ModelPriceCatalog.Default
+            .ResolvePrice(Id, DateTime.UtcNow).Price;
+    public decimal? InputPricePerMillion => CurrentPrice?.InputPerMTok;
+    public decimal? OutputPricePerMillion => CurrentPrice?.OutputPerMTok;
+    public decimal? CacheReadPerMillionOverride => CurrentPrice?.CacheReadPerMTok;
+    public decimal? CacheWritePerMillionOverride => CurrentPrice?.CacheWritePerMTok;
+}
 
 /// <summary>
 /// Single server-side source of truth for known model metadata: catalog labels,
@@ -158,34 +165,33 @@ public static class ModelMetadataRegistry
 {
     private static readonly ModelMetadata[] Entries =
     [
-        Claude(ModelIds.ClaudeOpus48, "Claude Opus 4.8", isDefault: true, input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.8"]),
-        Claude(ModelIds.ClaudeOpus47, "Claude Opus 4.7", input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.7"]),
-        Claude(ModelIds.ClaudeOpus46, "Claude Opus 4.6", input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.6"]),
-        Claude(ModelIds.ClaudeOpus45, "Claude Opus 4.5", input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.5"]),
-        Claude(ModelIds.ClaudeSonnet5, "Claude Sonnet 5", input: 3.00m, output: 15.00m, context: 200_000),
-        Claude(ModelIds.ClaudeSonnet46, "Claude Sonnet 4.6", input: 3.00m, output: 15.00m, context: 200_000, aliases: ["claude-sonnet-4.6"]),
-        Claude(ModelIds.ClaudeSonnet45, "Claude Sonnet 4.5", input: 3.00m, output: 15.00m, context: 200_000, aliases: ["claude-sonnet-4.5"]),
-        Claude(ModelIds.ClaudeHaiku45, "Claude Haiku 4.5", input: 1.00m, output: 5.00m, context: 200_000, aliases: ["claude-haiku-4.5"]),
+        Claude(ModelIds.ClaudeOpus48, "Claude Opus 4.8", isDefault: true, context: 200_000, aliases: ["claude-opus-4.8"]),
+        Claude(ModelIds.ClaudeOpus47, "Claude Opus 4.7", context: 200_000, aliases: ["claude-opus-4.7"]),
+        Claude(ModelIds.ClaudeOpus46, "Claude Opus 4.6", context: 200_000, aliases: ["claude-opus-4.6"]),
+        Claude(ModelIds.ClaudeOpus45, "Claude Opus 4.5", context: 200_000, aliases: ["claude-opus-4.5"]),
+        Claude(ModelIds.ClaudeSonnet5, "Claude Sonnet 5", context: 200_000),
+        Claude(ModelIds.ClaudeSonnet46, "Claude Sonnet 4.6", context: 200_000, aliases: ["claude-sonnet-4.6"]),
+        Claude(ModelIds.ClaudeSonnet45, "Claude Sonnet 4.5", context: 200_000, aliases: ["claude-sonnet-4.5"]),
+        Claude(ModelIds.ClaudeHaiku45, "Claude Haiku 4.5", context: 200_000, aliases: ["claude-haiku-4.5"]),
         // gpt-5.5 is the current Codex/OpenAI default. codex-cli 0.143 on a
         // ChatGPT account rejects gpt-5-codex with a 400 invalid_request, so
         // the default must be the account-valid model (AGT-1941). Pricing is
         // left null until authoritative numbers are confirmed (same posture as
         // the GPT-4.1 / GPT-4o entries) so no invented cost is asserted.
         new(ModelIds.Gpt55, "GPT-5.5", "openai", IsDefault: true, Deprecated: false, Available: true,
-            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 400_000),
+            ContextWindow: 400_000),
         // gpt-5-codex is retained (API-key accounts still accept it) but is no
         // longer the default: a ChatGPT-account spawn rejects it outright.
         new(ModelIds.Gpt5Codex, "GPT-5 Codex", "openai", IsDefault: false, Deprecated: false, Available: true,
-            InputPricePerMillion: 1.25m, OutputPricePerMillion: 10.00m, ContextWindow: 272_000,
-            CacheReadPerMillionOverride: 0.125m, CacheWritePerMillionOverride: 1.25m),
+            ContextWindow: 272_000),
         new(ModelIds.Gpt41, "GPT-4.1", "openai", IsDefault: false, Deprecated: false, Available: true,
-            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 1_000_000),
+            ContextWindow: 1_000_000),
         new(ModelIds.Gpt4o, "GPT-4o", "openai", IsDefault: false, Deprecated: false, Available: true,
-            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 128_000),
+            ContextWindow: 128_000),
         new(ModelIds.Gemini25Pro, "Gemini 2.5 Pro", "google", IsDefault: false, Deprecated: false, Available: true,
-            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 2_000_000),
+            ContextWindow: 2_000_000),
         new(ModelIds.Gemini25Flash, "Gemini 2.5 Flash", "google", IsDefault: false, Deprecated: false, Available: true,
-            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 1_000_000),
+            ContextWindow: 1_000_000),
     ];
 
     private static readonly IReadOnlyDictionary<string, ModelMetadata> ById = Entries
@@ -333,12 +339,10 @@ public static class ModelMetadataRegistry
         string id,
         string label,
         bool isDefault = false,
-        decimal input = 0,
-        decimal output = 0,
         long context = 200_000,
         string[]? aliases = null)
         => new(id, label, "anthropic", isDefault, Deprecated: false, Available: true,
-            InputPricePerMillion: input, OutputPricePerMillion: output, ContextWindow: context, Aliases: aliases);
+            ContextWindow: context, Aliases: aliases);
 
     private static string? VendorForCli(string? cliType)
     {
