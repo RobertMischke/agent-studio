@@ -3,6 +3,8 @@ import { ProjectOverlaysService } from '../../state/project-overlays.service';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { OrchestratorFeedComponent, PromptAdminPanelComponent } from '../../../orchestrator';
 import { ProjectDetailComponent } from '../project-detail/project-detail';
+import { ProjectOverviewDashboardComponent } from '../project-overview-dashboard/project-overview-dashboard';
+import { ProjectUrlsPanelComponent } from '../project-urls-panel/project-urls-panel.component';
 import { ProjectSettingsPanelComponent } from '../project-settings-panel/project-settings-panel.component';
 import { ProjectShellComponent } from '../project-shell/project-shell.component';
 import { SecurityPanelComponent } from '../security-panel/security-panel.component';
@@ -16,6 +18,7 @@ import { AnalysisReportDrilldownComponent } from '../analysis-report-drilldown/a
 import { ProjectRailKey } from '../project-shell/project-shell.config';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import type { TaskScreenshot } from '../../../screenshots';
+import { RegressionRadarComponent } from '../../../regression-radar';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
@@ -36,6 +39,8 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
   imports: [
     OrchestratorFeedComponent,
     ProjectDetailComponent,
+    ProjectOverviewDashboardComponent,
+    ProjectUrlsPanelComponent,
     ProjectSettingsPanelComponent,
     ProjectShellComponent,
     SecurityPanelComponent,
@@ -47,6 +52,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
     ProjectWikiSectionComponent,
     AnalysisReportDrilldownComponent,
     WorkspaceScreenshotsComponent,
+    RegressionRadarComponent,
     PromptAdminPanelComponent,
     TooltipDirective,
     OverlayPortalDirective
@@ -64,18 +70,20 @@ export class ProjectOverlaysComponent {
   readonly securityAuditQueued = output<{ projectName: string; jobId: string }>();
   readonly uxuiFollowUp = output<{ projectName: string; prefill: string; title: string }>();
   readonly uxuiActionQueued = output<{ projectName: string; action: string; jobId: string }>();
-  readonly openTask = output<TaskScreenshot>();
+  readonly openTask = output<Pick<TaskScreenshot, 'jobId' | 'watchPath'>>();
 
   /** The shell needs to provide watchPaths for hash → name resolution on rail change. */
   readonly railChangeNeedsWatchPaths = output<ProjectRailKey>();
 
   hasCustomPanel(rail: ProjectRailKey): boolean {
     return rail === 'overview'
+      || rail === 'project-urls'
       || rail === 'security'
       || rail === 'visual-evidence'
       || rail === 'architecture'
       || rail === 'drift'
       || rail === 'uxui'
+      || rail === 'test-quality'
       || rail === 'token-usage'
       || rail === 'observability'
       || rail === 'steering'
@@ -92,6 +100,11 @@ export class ProjectOverlaysComponent {
 
   setProjectShellRail(key: ProjectRailKey): void {
     this.overlays.setProjectShellRail(key);
+  }
+
+  openTaskFromProjectShell(task: Pick<TaskScreenshot, 'jobId' | 'watchPath'>): void {
+    this.overlays.closeProjectShell();
+    this.openTask.emit(task);
   }
 
   private readonly modalStack = inject(ModalStackService);

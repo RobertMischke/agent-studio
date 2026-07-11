@@ -77,6 +77,10 @@ import type { TaskPlanView } from '../features/plan-strip/plan.model';
 import type { RegressionRadarResult } from '../features/regression-radar';
 import { ErrorDialogService } from './error-dialog.service';
 import { JobsHubClient } from './jobs-hub-client.service';
+import type {
+  ProjectDeploymentSummary,
+  ProjectThroughputSummary,
+} from '../models/project-overview.model';
 
 /** One row in the code-review list endpoint response (see backend `CodeReviewListEntry`). */
 export interface CodeReviewListEntry {
@@ -1931,6 +1935,20 @@ export class TaskService {
   getProjectTokenUsageSummary(projectName: string) {
     return this.http.get<ProjectTokenUsageSummary>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/token-usage/summary`,
+    );
+  }
+
+  /** Operator Overview throughput, archive-inclusive through lane history. */
+  getProjectThroughput(projectName: string) {
+    return this.http.get<ProjectThroughputSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/throughput`,
+    );
+  }
+
+  /** Shared DEP-1 read model: latest stable deploy plus current pending delta. */
+  getProjectDeploymentSummary(projectName: string) {
+    return this.http.get<ProjectDeploymentSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/deployment/summary`,
     );
   }
 

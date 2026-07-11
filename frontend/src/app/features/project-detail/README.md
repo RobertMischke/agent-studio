@@ -1,44 +1,103 @@
 # project-detail
 
-The full per-project page: project shell (left rail + body), per-rail panels (security, uxui, observability, product-runtime, steering, token-usage), legacy project-detail panel, plus per-project overlays.
+The full per-project surface: the operator-first Overview, project shell, rail
+panels, legacy project-detail settings, and per-project overlays.
 
-Cycle 9f Round 4 merged `project-shell` and `project-detail` into one feature folder per the design model — they're the same surface in the user's mental model.
+`project-shell` and `project-detail` share this feature folder because they are
+one project surface in the user's mental model.
 
 ## Public API
 
-Imports via `from './features/project-detail'`. See [`index.ts`](./index.ts).
+Import via `from './features/project-detail'`. See [`index.ts`](./index.ts).
 
 **State services**:
 
-- `ProjectOverlaysService` (Cycle 9g) — open/close + URL-hash sync for the four per-project overlays (orch-feed / project-detail / project-shell / analysis-report).
+- `ProjectOverlaysService`: open/close and URL-hash sync for the four per-project
+  overlays (orch-feed / project-detail / project-shell / analysis-report).
 
 **Container components**:
 
-- `ProjectOverlaysComponent` — renders the 4 overlays in one place; the shell mounts it once.
-- `ProjectShellComponent` — the project page's left-rail + body shell.
-- `ProjectDetailComponent` — legacy per-project settings overlay.
-- `AnalysisReportDrilldownComponent` — drill-down for one analysis report.
-- `AutonomySliderComponent` — the autonomy slider used in project settings.
+- `ProjectOverlaysComponent`: renders the four overlays in one place; the shell
+  mounts it once.
+- `ProjectShellComponent`: the project page's left rail and body shell.
+- `ProjectOverviewDashboardComponent`: operator-first default Overview.
+- `ProjectDetailComponent`: legacy per-project settings overlay.
+- `AnalysisReportDrilldownComponent`: drill-down for one analysis report.
+- `AutonomySliderComponent`: the autonomy slider used in project settings.
 
-**Rail panels** (per-rail content shown inside ProjectShell):
+**Rail panels**:
 
-- `SecurityPanelComponent` — slice 1 of the quality-system mockup.
-- `UxuiPanelComponent` — slice 6.
-- `ProjectObservabilityPanelComponent`, `ProjectProductRuntimePanelComponent` — observability + runtime telemetry.
-- `ProjectSteeringDocsSectionComponent` — steering docs viewer (also embedded in ProjectShell).
+- `SecurityPanelComponent`: security quality view.
+- `UxuiPanelComponent`: UX and UI quality view.
+- `ProjectObservabilityPanelComponent` and
+  `ProjectProductRuntimePanelComponent`: observability and runtime telemetry.
+- `ProjectSteeringDocsSectionComponent`: steering docs viewer, also embedded in
+  ProjectShell.
+- `RegressionRadarComponent`: project regression signals under Test Quality.
 
 **Project-shell config**:
 
-- `DEFAULT_PROJECT_RAIL_KEY`, `ProjectRailKey`, `isProjectRailKey`, `toProjectSlug` — URL hash slug + rail-key validation.
+- `DEFAULT_PROJECT_RAIL_KEY`, `ProjectRailKey`, `isProjectRailKey`, and
+  `toProjectSlug`: URL hash slug and rail-key validation.
 
-**Types**: security + uxui panel response shapes (re-exported from their `.types.ts` files for the API services that wrap the backend).
+**Types**: security and UX/UI panel response shapes, re-exported from their
+`.types.ts` files for the API services that wrap the backend.
+
+## Operator Overview
+
+`components/project-overview-dashboard/` composes compact projections of the
+project's existing detail truths:
+
+- delivered tasks from `GET /api/projects/{projectName}/throughput`;
+- token totals from `GET /api/projects/{projectName}/token-usage/summary`;
+- last deployment and pending delta from
+  `GET /api/projects/{projectName}/deployment/summary`;
+- recent Wiki activity from
+  `GET /api/projects/{projectName}/wiki/pulse?feedLimit=6`;
+- active planning-mode tasks from the current task snapshot; and
+- publish targets from `GET /api/projects/{projectName}/snapshot`.
+
+`components/project-overview-urls/` is a compact adapter over the project
+registry, `ProjectUrlProbeService`, and the existing URL start endpoint. It
+shows at most four configured URLs, emits navigation to the full Project URLs
+rail, and does not duplicate URL configuration or process-start logic.
+
+Every Overview request has an independent unavailable state. Detail links emit
+rail navigation or task navigation through the shell. The Overview does not
+own a Visual Evidence queue or deployment workflow in v1. Deployment remains a
+read-only DEP-1 summary, while the existing publishing panel keeps ownership of
+its established actions.
+
+Machine facts stay in Project Settings: watch path, working directory,
+repository path, CLI readiness and status, clean-context configuration, and
+project sessions. Do not move them back into the operator Overview.
 
 ## Notable
 
-- **Cross-overlay nav** lives in `ProjectOverlaysService.openFeedFromShell` / `openFeedFromDetail` — the two patterns where clicking one overlay swaps to another.
-- **Per-rail follow-ups** (security / uxui "Create follow-up task") bubble up to the shell because they trigger the create-job-dialog whose form state is in `features/board/state/create-job-form.service.ts`.
-- The project-shell URL hash is `#/projects/<slug>` or `#/projects/<slug>/<rail-key>`. Slug → name resolution requires the workspace watch-paths; service exposes `syncShellFromHash(watchPaths)` for the shell to call on `hashchange`.
+- **Cross-overlay navigation** lives in
+  `ProjectOverlaysService.openFeedFromShell` and `openFeedFromDetail`, the two
+  patterns where clicking one overlay swaps to another.
+- **Per-rail follow-ups** bubble up to the shell because they trigger the create
+  task dialog whose form state is in
+  `features/board/state/create-job-form.service.ts`.
+- The project-shell URL hash is `#/projects/<slug>` or
+  `#/projects/<slug>/<rail-key>`. Slug-to-name resolution requires workspace
+  watch paths. The service exposes `syncShellFromHash(watchPaths)` for the shell
+  to call on `hashchange`.
+
+## Focused Verification
+
+- Component contract:
+  `components/project-overview-dashboard/project-overview-dashboard.spec.ts`
+- Compact URL adapter contract:
+  `components/project-overview-urls/project-overview-urls.spec.ts`
+- Production Playwright flow:
+  `frontend/e2e/project/project-overview-dashboard.spec.ts`
+- Interactive mockup contract:
+  `frontend/e2e/mockups/project-overview-dashboard-mockup.spec.ts`
 
 ## Sub-folders
 
-- `components/` — shell + 5 rail panels + the legacy project-detail + the analysis-report drilldown + 7 small section components (`project-*-section.ts`) that compose into the panels. Several panels are large (>1000 LOC) and candidates for further internal splits.
+- `components/`: the Overview, shell, rail panels, legacy project-detail,
+  analysis-report drilldown, and focused section components that compose the
+  larger panels.

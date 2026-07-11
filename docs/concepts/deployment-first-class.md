@@ -295,6 +295,11 @@ Under each expanded project, **Deployment** is a first-class Explorer row (a
 sibling of Wiki, Workbenches, and Project Hub), and a full-bleed page when
 opened. The page has three regions:
 
+Project Overview may render a compact last-deploy and pending-delta summary as
+an entry point to this page. That block consumes the same DEP-1 summary contract
+as Deployment itself. It does not parse `stable-restarts.jsonl` or git again,
+persist a second last-deploy truth, or gain a separate run action.
+
 ```text
 +-- Deployment (project) ---------------------------------------------+
 | Targets            | History                                        |

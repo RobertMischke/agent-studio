@@ -1,0 +1,163 @@
+import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter } from '@angular/router';
+import { describe, expect, it } from 'vitest';
+import type { TaskInfo } from '../../../../models/task.model';
+import { TaskService } from '../../../../services/task.service';
+import { ProjectOverviewDashboardComponent } from './project-overview-dashboard';
+
+describe('ProjectOverviewDashboardComponent', () => {
+  it('renders operator metrics, deployment, Wiki, and planning without machine plumbing', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ProjectOverviewDashboardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const tasks = TestBed.inject(TaskService);
+    tasks.jobs.set([planningTask()]);
+    const fixture = TestBed.createComponent(ProjectOverviewDashboardComponent);
+    fixture.componentRef.setInput('projectName', 'Demo Project');
+    const openedTasks: { jobId: string; watchPath: string }[] = [];
+    fixture.componentInstance.openTask.subscribe(task => openedTasks.push(task));
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/projects/Demo%20Project/throughput').flush({
+      project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z',
+      completedLast24h: 7, completedLast7d: 31, recentCompletions: [],
+    });
+    http.expectOne('/api/projects/Demo%20Project/token-usage/summary').flush(tokenSummary());
+    http.expectOne('/api/projects/Demo%20Project/deployment/summary').flush({
+      project: 'Demo Project', available: true, reason: null,
+      source: 'logs/stable-restarts.jsonl', pendingCount: 3,
+      pendingCommits: [
+        { sha: '111111111111', shortSha: '1111111', subject: 'Ship operator dashboard', authorDateUtc: '2026-07-11T10:00:00Z' },
+        { sha: '222222222222', shortSha: '2222222', subject: 'Add URL start state', authorDateUtc: '2026-07-11T09:00:00Z' },
+        { sha: '333333333333', shortSha: '3333333', subject: 'Refresh Wiki pulse', authorDateUtc: '2026-07-11T08:00:00Z' },
+      ],
+      lastDeployment: {
+        at: '2026-07-10T10:00:00Z', status: 'ok', headBefore: 'aaaaaaa', headAfter: 'bbbbbbb',
+        durationSeconds: 42, jobsSinceLastRestart: 4, reviewCountAfter: 12, commits: [
+          { sha: 'aaaaaaaaaaaa', shortSha: 'aaaaaaa', subject: 'Previously deployed change', authorDateUtc: '2026-07-10T09:00:00Z' },
+        ],
+      },
+    });
+    http.expectOne('/api/projects/Demo%20Project/wiki/pulse?feedLimit=6').flush(wikiPulse());
+    http.expectOne('/api/projects/Demo%20Project/snapshot').flush(snapshot());
+    http.expectOne('/api/workspaces').flush([{ id: 'ws', displayName: 'Workspace', projects: [{
+      id: 'PROJ-1', displayName: 'Demo Project', workspaceId: 'ws', storageLocation: 'C:/tasks/demo',
+      sortOrder: 0, archived: false, urls: [],
+    }] }]);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="project-overview-throughput-24h"]')?.textContent).toContain('7');
+    expect(host.querySelector('[data-testid="project-overview-throughput-7d"]')?.textContent).toContain('31');
+    expect(host.querySelector('[data-testid="project-overview-tokens-24h"]')?.textContent).toContain('124K');
+    expect(host.querySelector('[data-testid="project-overview-tokens-7d"]')?.textContent).toContain('831K');
+    expect(host.querySelector('[data-testid="project-overview-deployment"]')?.textContent).toContain('3 changes ready to deploy');
+    expect(host.querySelector('[data-testid="project-overview-last-deployment-details"]')?.textContent).toContain('Previously deployed change');
+    expect(host.querySelector('[data-testid="project-overview-wiki"]')?.textContent).toContain('Operator dashboard concept');
+    expect(host.querySelector('[data-testid="project-overview-planning-agt-2200"]')).toBeTruthy();
+    host.querySelector<HTMLButtonElement>('[data-testid="project-overview-planning-agt-2200"]')!.click();
+    expect(openedTasks).toEqual([{ jobId: 'agt-2200', watchPath: 'C:/tasks/demo' }]);
+
+    const text = host.textContent ?? '';
+    expect(text).not.toContain('Watch path');
+    expect(text).not.toContain('Working directory');
+    expect(text).not.toContain('Clean context');
+    expect(text).not.toContain('Project sessions');
+    http.verify();
+  });
+
+  it('routes compact blocks to their existing detail rails', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ProjectOverviewDashboardComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ProjectOverviewDashboardComponent);
+    fixture.componentRef.setInput('projectName', 'Demo Project');
+    const rails: string[] = [];
+    fixture.componentInstance.openRail.subscribe(rail => rails.push(rail));
+    fixture.detectChanges();
+    flushEmpty(TestBed.inject(HttpTestingController));
+    fixture.detectChanges();
+
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('[data-testid="project-overview-open-token-usage"]')!.click();
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('[data-testid="project-overview-open-wiki"]')!.click();
+
+    expect(rails).toEqual(['token-usage', 'wiki']);
+  });
+});
+
+function planningTask(): TaskInfo {
+  return {
+    id: 'agt-2200', taskKey: 'AGT-2200', key: 'AGT-2200', title: 'Plan deployment history',
+    state: '2-ready', order: 0, agent: 'codex', createdAt: '2026-07-11T08:00:00Z',
+    watchPath: 'C:/tasks/demo', projectName: 'Demo Project', folderPath: 'C:/tasks/demo/2-ready/agt-2200',
+    lastActivity: '2026-07-11T09:00:00Z', sessionName: null, model: null, cliType: 'codex',
+    useOwnSession: null, lastUsage: null, execution: null, commit: null, mode: 'planning',
+  } as TaskInfo;
+}
+
+function tokenSummary() {
+  return {
+    project: 'Demo Project', hasData: true,
+    lifetimeTotalTokens: 1_400_000, lifetimeJobTokens: 1_000_000,
+    lifetimeSupportingTokens: 250_000, lifetimeOrchestratorTokens: 150_000, lifetimeCalls: 90,
+    last24hTotalTokens: 124_000, last24hJobTokens: 90_000,
+    last24hSupportingTokens: 20_000, last24hOrchestratorTokens: 14_000, last24hCalls: 8,
+    last7dTotalTokens: 831_000, last7dJobTokens: 620_000,
+    last7dSupportingTokens: 130_000, last7dOrchestratorTokens: 81_000, last7dCalls: 44,
+    firstActivity: '2026-07-01T00:00:00Z', lastActivity: '2026-07-11T10:00:00Z',
+    fetchedAt: '2026-07-11T12:00:00Z', disclaimer: 'Measured usage.',
+  };
+}
+
+function wikiPulse() {
+  return {
+    projectName: 'Demo Project', baseDir: 'C:/repo/docs', exists: true, generatedAtUtc: '2026-07-11T12:00:00Z',
+    feed: { available: true, reason: null, items: [{
+      relPath: 'concepts/operator-dashboard.md', title: 'Operator dashboard concept', author: 'Robert',
+      authorDateUtc: '2026-07-11T10:30:00Z', sha: 'abc', shortSha: 'abc', subject: 'Add concept',
+      frameAreaSlug: 'concepts', frameAreaTitle: 'Concepts', taskKey: 'AGT-2105',
+    }] },
+    inbox: { available: true, reason: null, count: 0, items: [] },
+    drift: { available: true, reason: null, overallGrade: 'Fresh', areas: [], counts: { fresh: 1, aging: 0, stale: 0, graded: 1 } },
+    critical: { available: true, reason: null, count: 0, overallGrade: 'none', items: [] },
+  };
+}
+
+function snapshot() {
+  return {
+    project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z',
+    paths: { path: 'C:/tasks/demo', rootPath: 'C:/repo', repositoryPath: 'C:/repo' },
+    settings: { autoCommit: true, crashRecoveryEnabled: true, autoPushStrategy: 'on-completed', runnerMode: 'manual', orchestratorModel: null },
+    runnerStatus: null, orchestratorLogTail: [], orchestratorSession: null,
+    reviewDecisionsPending: [], runnerPendingDecisions: [], publishTargets: [],
+    queueHealth: { severity: 'ok', issueCount: 0, missingJobJson: [], duplicates: [], stateMismatches: [] },
+  };
+}
+
+function flushEmpty(http: HttpTestingController): void {
+  http.expectOne('/api/projects/Demo%20Project/throughput').flush({
+    project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z', completedLast24h: 0, completedLast7d: 0, recentCompletions: [],
+  });
+  http.expectOne('/api/projects/Demo%20Project/token-usage/summary').flush(tokenSummary());
+  http.expectOne('/api/projects/Demo%20Project/deployment/summary').flush({
+    project: 'Demo Project', available: false, reason: 'No history.', source: 'logs/stable-restarts.jsonl',
+    lastDeployment: null, pendingCount: null, pendingCommits: [],
+  });
+  http.expectOne('/api/projects/Demo%20Project/wiki/pulse?feedLimit=6').flush({ ...wikiPulse(), feed: { available: true, reason: null, items: [] } });
+  http.expectOne('/api/projects/Demo%20Project/snapshot').flush(snapshot());
+  http.expectOne('/api/workspaces').flush([]);
+}

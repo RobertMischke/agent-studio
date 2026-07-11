@@ -62,7 +62,9 @@ public sealed class ProjectTokenUsageBusParityTests : IDisposable
             // jobId=null -> orchestrator bucket
             MakeEntry("claude-haiku-4-5",   2_000,   100, Now.AddMinutes(-30),              jobId: null),
             // outside the 24h window, lifetime-only
-            MakeEntry("claude-opus-4-7",   30_000, 2_500, Now.AddHours(-48),                jobId: "real-job-a"));
+            MakeEntry("claude-opus-4-7",   30_000, 2_500, Now.AddHours(-48),                jobId: "real-job-a"),
+            // outside the rolling seven-day window, lifetime-only
+            MakeEntry("claude-opus-4-7",   20_000, 1_500, Now.AddDays(-8),                  jobId: "real-job-a"));
 
         var legacy = ProjectTokenUsageService.BuildSummaryFromEntries(ProjectName, log.Read(_watchPath), jobsById, Now);
         var bus    = BusBackedProjectTokenUsageReader.BuildSummaryFromStore(store, _workspace, ProjectName, jobsById, Now);
@@ -72,6 +74,11 @@ public sealed class ProjectTokenUsageBusParityTests : IDisposable
         Assert.True(legacy.LifetimeJobTokens > 0);
         Assert.True(legacy.LifetimeSupportingTokens > 0);
         Assert.True(legacy.LifetimeOrchestratorTokens > 0);
+        Assert.Equal(191_300, legacy.Last7dTotalTokens);
+        Assert.Equal(172_500, legacy.Last7dJobTokens);
+        Assert.Equal(16_700, legacy.Last7dSupportingTokens);
+        Assert.Equal(2_100, legacy.Last7dOrchestratorTokens);
+        Assert.Equal(6, legacy.Last7dCalls);
     }
 
     [Fact]
@@ -96,6 +103,28 @@ public sealed class ProjectTokenUsageBusParityTests : IDisposable
         var bus    = BusBackedProjectTokenUsageReader.BuildHeatmapFromStore(store, _workspace, ProjectName, jobsById, 30, Now);
 
         AssertHeatmapEquivalent(legacy, bus);
+    }
+
+    [Fact]
+    public void BuildSummary_Last7d_IsAnExactRollingWindow()
+    {
+        var jobsById = BuildJobs(("real-job", "Implement dashboard"));
+        var entries = new[]
+        {
+            MakeEntry("claude-opus-4-7", 100, 10, Now.AddDays(-7), jobId: "real-job"),
+            MakeEntry("claude-opus-4-7", 200, 20, Now.AddDays(-7).AddTicks(-1), jobId: "real-job"),
+            MakeEntry("claude-opus-4-7", 300, 30, Now.AddHours(-1), jobId: "real-job"),
+            MakeEntry("claude-opus-4-7", 400, 40, Now.AddTicks(1), jobId: "real-job"),
+        };
+
+        var result = ProjectTokenUsageService.BuildSummaryFromEntries(
+            ProjectName, entries, jobsById, Now);
+
+        Assert.Equal(440, result.Last7dTotalTokens);
+        Assert.Equal(440, result.Last7dJobTokens);
+        Assert.Equal(0, result.Last7dSupportingTokens);
+        Assert.Equal(0, result.Last7dOrchestratorTokens);
+        Assert.Equal(2, result.Last7dCalls);
     }
 
     [Fact]
@@ -244,6 +273,11 @@ public sealed class ProjectTokenUsageBusParityTests : IDisposable
         Assert.Equal(a.Last24hSupportingTokens,       b.Last24hSupportingTokens);
         Assert.Equal(a.Last24hOrchestratorTokens,     b.Last24hOrchestratorTokens);
         Assert.Equal(a.Last24hCalls,                  b.Last24hCalls);
+        Assert.Equal(a.Last7dTotalTokens,             b.Last7dTotalTokens);
+        Assert.Equal(a.Last7dJobTokens,               b.Last7dJobTokens);
+        Assert.Equal(a.Last7dSupportingTokens,        b.Last7dSupportingTokens);
+        Assert.Equal(a.Last7dOrchestratorTokens,      b.Last7dOrchestratorTokens);
+        Assert.Equal(a.Last7dCalls,                   b.Last7dCalls);
         Assert.Equal(a.FirstActivity,                 b.FirstActivity);
         Assert.Equal(a.LastActivity,                  b.LastActivity);
     }

@@ -214,6 +214,10 @@
   height: 100%;
   max-width: none;
 }
+.proj-shell__panel[data-rail-key='overview'] .proj-shell__panel-content {
+  width: 100%;
+  max-width: none;
+}
 .proj-shell__panel-head {
   flex: 0 0 auto;
   padding-bottom: var(--studio-spacing-3);

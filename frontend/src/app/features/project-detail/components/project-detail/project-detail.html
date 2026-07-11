@@ -1,27 +1,4 @@
 <section class="proj-detail" [attr.data-testid]="'project-detail-' + view()">
-  @if (view() === 'overview') {
-    @if (paths(); as p) {
-      <dl class="proj-detail__paths">
-        <div><dt>Watch path</dt><dd>{{ p.path }}</dd></div>
-        <div><dt>Working directory</dt><dd>{{ p.rootPath || '(same as watch path)' }}</dd></div>
-        <div><dt>Repository</dt><dd>{{ p.repositoryPath || '(none configured)' }}</dd></div>
-      </dl>
-    }
-
-    <app-project-publish-panel [projectName]="projectName()" [targets]="publishTargets()" />
-
-    <app-project-cli-environment-section
-      [projectName]="projectName()"
-      [paths]="paths()"
-      [modeRows]="cliEnvironmentModeRows()"
-      [contextModeRows]="cliEnvironmentContextModeRows()"
-      presentation="onboarding" />
-
-    <section class="proj-detail__group">
-      <app-regression-radar scope="project" [projectName]="projectName()" />
-    </section>
-  }
-
   @if (view() === 'jobs') {
     <section class="proj-detail__group">
       <h3>Runner mode</h3>

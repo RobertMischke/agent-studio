@@ -1,0 +1,207 @@
+<section class="operator-dashboard" data-testid="project-overview-dashboard">
+  <header class="operator-dashboard__header">
+    <div>
+      <p class="operator-dashboard__eyebrow">Project pulse</p>
+      <h1>{{ projectName() }}</h1>
+      <p>What shipped, what is running, and what needs your attention.</p>
+    </div>
+    <button type="button"
+            class="operator-dashboard__refresh"
+            data-testid="project-overview-refresh"
+            [disabled]="loading()"
+            (click)="refresh()">
+      <app-studio-icon name="refresh" [size]="14" />
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  <section class="operator-dashboard__metrics" aria-labelledby="project-overview-metrics-title">
+    <header class="operator-dashboard__section-head">
+      <div>
+        <p class="operator-dashboard__eyebrow">Throughput &amp; spend</p>
+        <h2 id="project-overview-metrics-title">Key numbers</h2>
+      </div>
+      <button type="button"
+              data-testid="project-overview-open-token-usage"
+              (click)="openRail.emit('token-usage')">Open Token Usage</button>
+    </header>
+
+    <div class="operator-dashboard__metric-lines">
+      <article class="operator-dashboard__metric-line" data-testid="project-overview-throughput">
+        <span class="operator-dashboard__metric-icon"><app-studio-icon name="check" [size]="16" /></span>
+        <div class="operator-dashboard__metric-copy">
+          <strong>Delivered tickets</strong>
+          <span>Accepted into Completed, including archived history</span>
+        </div>
+        <dl>
+          <div><dt>24 hours</dt><dd data-testid="project-overview-throughput-24h">{{ throughput()?.completedLast24h ?? 'Not available' }}</dd></div>
+          <div><dt>7 days</dt><dd data-testid="project-overview-throughput-7d">{{ throughput()?.completedLast7d ?? 'Not available' }}</dd></div>
+        </dl>
+      </article>
+
+      <article class="operator-dashboard__metric-line" data-testid="project-overview-tokens">
+        <span class="operator-dashboard__metric-icon operator-dashboard__metric-icon--tokens"><app-studio-icon name="cli" [size]="16" /></span>
+        <div class="operator-dashboard__metric-copy">
+          <strong>Token usage</strong>
+          <span>Job, supporting, and orchestrator calls</span>
+        </div>
+        <dl>
+          <div><dt>24 hours</dt><dd data-testid="project-overview-tokens-24h">{{ formatCompact(tokenUsage()?.last24hTotalTokens) }}</dd></div>
+          <div><dt>7 days</dt><dd data-testid="project-overview-tokens-7d">{{ formatCompact(tokenUsage()?.last7dTotalTokens) }}</dd></div>
+        </dl>
+      </article>
+    </div>
+  </section>
+
+  <div class="operator-dashboard__split">
+    <app-project-overview-urls
+      [projectName]="projectName()"
+      (openDetails)="openRail.emit('project-urls')"
+      (openPreview)="openUrlPreview.emit($event)" />
+
+    <section class="operator-dashboard__wiki" data-testid="project-overview-wiki">
+      <header class="operator-dashboard__section-head">
+        <div>
+          <p class="operator-dashboard__eyebrow">Things worth reading</p>
+          <h2>Wiki &amp; planning</h2>
+        </div>
+        <button type="button" data-testid="project-overview-open-wiki" (click)="openRail.emit('wiki')">Open Wiki</button>
+      </header>
+
+      <div class="operator-dashboard__wiki-columns">
+        <div>
+          <h3>New concepts</h3>
+          @if (recentWikiItems().length > 0) {
+            <ul>
+              @for (item of recentWikiItems(); track item.relPath) {
+                <li>
+                  <button type="button" (click)="openRail.emit('wiki')">
+                    <strong>{{ item.title }}</strong>
+                    <span>{{ item.frameAreaTitle || 'Wiki' }} · {{ formatAgo(item.authorDateUtc) }}</span>
+                  </button>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="operator-dashboard__empty">No recent Wiki changes.</p>
+          }
+        </div>
+
+        <div>
+          <h3>Planning in progress</h3>
+          @if (visiblePlanningTasks().length > 0) {
+            <ul>
+              @for (task of visiblePlanningTasks(); track trackTask(task)) {
+                <li>
+                  <button type="button"
+                          [attr.data-testid]="'project-overview-planning-' + task.id"
+                          (click)="openPlanningTask(task)">
+                    <strong>{{ task.key || task.id }} · {{ task.title }}</strong>
+                    <span>{{ task.state }} · active {{ formatAgo(task.lastActivity) }}</span>
+                  </button>
+                </li>
+              }
+              @if (planningRemainder() > 0) {
+                <li class="operator-dashboard__remainder">+ {{ planningRemainder() }} more planning task{{ planningRemainder() === 1 ? '' : 's' }}</li>
+              }
+            </ul>
+          } @else {
+            <p class="operator-dashboard__empty">No active planning tasks.</p>
+          }
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="operator-dashboard__deployment"
+           [attr.data-state]="deploymentState()"
+           data-testid="project-overview-deployment">
+    <header class="operator-dashboard__deployment-head">
+      <div>
+        <p class="operator-dashboard__eyebrow">Deployment</p>
+        @if (deploymentState() === 'failed') {
+          <h2>Latest deployment needs attention</h2>
+          <p>The latest deploy-stable attempt ended with status {{ deployment()?.lastDeployment?.status }}.</p>
+        } @else if (deploymentState() === 'pending') {
+          <h2>{{ deployment()?.pendingCount }} change{{ deployment()?.pendingCount === 1 ? '' : 's' }} ready to deploy</h2>
+          <p>Develop is ahead of the last deployed revision.</p>
+        } @else if (deploymentState() === 'current') {
+          <h2>Deployment is current</h2>
+          <p>The deployed revision matches the integration branch.</p>
+        } @else if (deployment()?.lastDeployment) {
+          <h2>Deployment delta unavailable</h2>
+          <p>{{ deployment()?.reason || 'The integration branch could not be compared with the deployed revision.' }}</p>
+        } @else {
+          <h2>No deployment baseline yet</h2>
+          <p>{{ deployment()?.reason || 'No stable deployment history is available for this project.' }}</p>
+        }
+      </div>
+      <span class="operator-dashboard__deployment-state"
+            [class.operator-dashboard__deployment-state--pending]="deploymentState() === 'pending'"
+            [class.operator-dashboard__deployment-state--failed]="deploymentState() === 'failed'">
+        {{ deploymentStateLabel() }}
+      </span>
+    </header>
+
+    @if (deployment()?.lastDeployment; as last) {
+      <div class="operator-dashboard__deploy-summary">
+        <div>
+          <span>{{ deploymentState() === 'failed' ? 'Latest attempt' : 'Last deployed' }}</span>
+          <strong data-testid="project-overview-last-deployed">{{ formatAgo(last.at) }}</strong>
+          <small>{{ formatDateTime(last.at) }}</small>
+        </div>
+        <div>
+          <span>Revision</span>
+          <strong class="operator-dashboard__mono">{{ last.headAfter }}</strong>
+          <small>from {{ last.headBefore }}</small>
+        </div>
+        <div>
+          <span>Delivered</span>
+          <strong>{{ last.jobsSinceLastRestart }} ticket{{ last.jobsSinceLastRestart === 1 ? '' : 's' }}</strong>
+          <small>{{ last.durationSeconds }} s · {{ last.status }}</small>
+        </div>
+      </div>
+    }
+
+    @if (deploymentState() === 'pending') {
+      <details class="operator-dashboard__deploy-details" data-testid="project-overview-deployment-details">
+        <summary>Review pending deployment delta</summary>
+        <ul>
+          @for (commit of pendingCommits(); track commit.sha) {
+            <li><code>{{ commit.shortSha }}</code><span>{{ commit.subject }}</span></li>
+          }
+          @if (pendingCommitRemainder() > 0) {
+            <li class="operator-dashboard__remainder">+ {{ pendingCommitRemainder() }} more change{{ pendingCommitRemainder() === 1 ? '' : 's' }}</li>
+          }
+        </ul>
+      </details>
+    }
+
+    @if (deployedCommits().length > 0) {
+      <details class="operator-dashboard__deploy-details" data-testid="project-overview-last-deployment-details">
+        <summary>Review {{ deploymentState() === 'failed' ? 'latest attempt' : 'last deployment' }} contents</summary>
+        <ul>
+          @for (commit of deployedCommits(); track commit.sha) {
+            <li><code>{{ commit.shortSha }}</code><span>{{ commit.subject }}</span></li>
+          }
+          @if (deployedCommitRemainder() > 0) {
+            <li class="operator-dashboard__remainder">+ {{ deployedCommitRemainder() }} more deployed change{{ deployedCommitRemainder() === 1 ? '' : 's' }}</li>
+          }
+        </ul>
+      </details>
+    }
+
+    @if (publishTargets().length > 0) {
+      <details class="operator-dashboard__publishing" data-testid="project-overview-publishing-actions">
+        <summary>Package and workflow publishing actions</summary>
+        <app-project-publish-panel [projectName]="projectName()" [targets]="publishTargets()" />
+      </details>
+    }
+  </section>
+
+  @if (unavailable().size > 0) {
+    <p class="operator-dashboard__partial" role="status">
+      Some dashboard sources are temporarily unavailable. Available blocks remain live.
+    </p>
+  }
+</section>

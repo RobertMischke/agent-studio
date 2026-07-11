@@ -79,6 +79,37 @@ async function installRoutes(page: Page): Promise<void> {
   await page.route('**/api/git/summary**', r => r.fulfill(json([])));
   // The snapshot under test - publishTargets folded in.
   await page.route('**/api/projects/*/snapshot**', r => r.fulfill(json(snapshot())));
+  await page.route('**/api/projects/*/throughput', r => r.fulfill(json({
+    project: PROJECT, capturedAt: '2026-07-10T12:00:00Z', completedLast24h: 0,
+    completedLast7d: 0, recentCompletions: [],
+  })));
+  await page.route('**/api/projects/*/token-usage/summary', r => r.fulfill(json({
+    project: PROJECT, hasData: false,
+    lifetimeTotalTokens: 0, lifetimeJobTokens: 0, lifetimeSupportingTokens: 0,
+    lifetimeOrchestratorTokens: 0, lifetimeCalls: 0,
+    last24hTotalTokens: 0, last24hJobTokens: 0, last24hSupportingTokens: 0,
+    last24hOrchestratorTokens: 0, last24hCalls: 0,
+    last7dTotalTokens: 0, last7dJobTokens: 0, last7dSupportingTokens: 0,
+    last7dOrchestratorTokens: 0, last7dCalls: 0,
+    firstActivity: null, lastActivity: null, fetchedAt: '2026-07-10T12:00:00Z', disclaimer: '',
+  })));
+  await page.route('**/api/projects/*/deployment/summary', r => r.fulfill(json({
+    project: PROJECT, available: false, reason: 'No history.', source: 'logs/stable-restarts.jsonl',
+    lastDeployment: null, pendingCount: null, pendingCommits: [],
+  })));
+  await page.route('**/api/projects/*/wiki/pulse**', r => r.fulfill(json({
+    projectName: PROJECT, baseDir: REPO_PATH, exists: true, generatedAtUtc: '2026-07-10T12:00:00Z',
+    feed: { available: true, reason: null, items: [] },
+    inbox: { available: true, reason: null, count: 0, items: [] },
+    drift: { available: true, reason: null, overallGrade: 'Fresh', areas: [], counts: { fresh: 0, aging: 0, stale: 0, graded: 0 } },
+    critical: { available: true, reason: null, count: 0, overallGrade: 'none', items: [] },
+  })));
+  await page.route('**/api/workspaces', r => r.fulfill(json([{
+    id: 'ws', displayName: 'Workspace', projects: [{
+      id: 'PROJ-1', displayName: PROJECT, workspaceId: 'ws', storageLocation: REPO_PATH,
+      sortOrder: 0, archived: false, urls: [],
+    }],
+  }])));
   await page.route(/\/api\/projects\/[^/]+\/publish\/package(?::|%3A)nuget\/panel/i, r => r.fulfill(json({
     project: PROJECT,
     target: PUBLISH_TARGETS[0],
@@ -134,12 +165,20 @@ async function dismissHarnessOverlay(page: Page): Promise<void> {
   });
 }
 
+async function openPublishingActions(page: Page): Promise<void> {
+  const publishing = page.getByTestId('project-overview-publishing-actions');
+  await expect(publishing).toBeVisible({ timeout: 15_000 });
+  await publishing.locator('summary').click();
+}
+
 test.describe('PUB-1 · Project Hub publish badges (mocked)', () => {
   test.setTimeout(180_000);
 
   test('renders package/website/first-publish badges and stays quiet on zero-pending', async ({ page }, testInfo) => {
     await openHubOnOverview(page);
     await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 15_000 });
+    await dismissHarnessOverlay(page);
+    await openPublishingActions(page);
 
     const badges = page.getByTestId('project-publish-badges');
     await expect(badges).toBeVisible({ timeout: 15_000 });
@@ -193,6 +232,7 @@ test.describe('PUB-1 · Project Hub publish badges (mocked)', () => {
   test('opens the guided package release with task mix, editable SemVer and workflow tracking', async ({ page }, testInfo) => {
     await openHubOnOverview(page);
     await dismissHarnessOverlay(page);
+    await openPublishingActions(page);
     const panelResponse = page.waitForResponse(response => response.url().includes('/publish/') && response.url().endsWith('/panel'));
     await page.getByTestId('publish-badge-package:nuget').evaluate((element: HTMLButtonElement) => element.click());
     await expect.poll(async () => (await panelResponse).status()).toBe(200);

@@ -2146,7 +2146,7 @@ export class App implements OnInit, OnDestroy {
    * originating job. Mirrors the open-task pattern used by the
    * orchestrator feed.
    */
-  onOpenTaskFromReel(s: TaskScreenshot): void {
+  onOpenTaskFromReel(s: Pick<TaskScreenshot, 'jobId' | 'watchPath'>): void {
     this.closeWorkspaceScreenshots();
     if (!s?.jobId || !s?.watchPath) return;
     history.replaceState(
