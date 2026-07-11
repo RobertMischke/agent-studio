@@ -322,6 +322,21 @@ public class GitService
     /// </summary>
     internal static void InvalidateToplevelCache() => _toplevelCache.Clear();
 
+    // Task-detail status is polled and is commonly requested again while the
+    // user switches panes. A one-second cache removes every git spawn from that
+    // burst. Unlike commit history, working-tree status cannot be keyed only by
+    // HEAD because unstaged files do not move HEAD, so expiry is deliberately
+    // short and is the correctness boundary for external filesystem changes.
+    private readonly object _statusCacheLock = new();
+    private readonly Dictionary<string, (DateTime At, GitStatusResult Value)> _statusCache =
+        new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan StatusTtl = TimeSpan.FromSeconds(1);
+
+    internal void InvalidateStatusCache()
+    {
+        lock (_statusCacheLock) _statusCache.Clear();
+    }
+
     private readonly object _summaryLock = new();
     private DateTime _summaryAt = DateTime.MinValue;
     private List<GitProjectSummary> _summaryCache = [];
@@ -883,8 +898,11 @@ public class GitService
         string root, string? currentBranch, IReadOnlyDictionary<string, string> worktreeByBranch)
     {
         // One for-each-ref pass gives tip SHA, upstream, ahead/behind track, the
-        // last-commit date and subject per branch. Fields are separated by the
-        // Unit Separator (0x1f) so a commit subject with spaces round-trips.
+        // last-commit date and subject per branch. The explicit refs/heads
+        // pattern is intentional: refs/backups/* is an operational safety net,
+        // not user-visible branch inventory, and large backup namespaces must
+        // not add scan or response cost. Fields are separated by the Unit
+        // Separator (0x1f) so a commit subject with spaces round-trips.
         const char US = '';
         var fmt = string.Join(US.ToString(), new[]
         {
@@ -1172,12 +1190,23 @@ public class GitService
             // callers pass preferRunLocation=false and stay unmeasured to keep
             // the rollup logs scoped to user-facing git-info requests.
             using var _t = GitProcessTelemetry.BeginRequest("tasks/git/status", _logger);
+            var cacheKey = $"{watchPath}\n{jobId}";
+            lock (_statusCacheLock)
+            {
+                if (_statusCache.TryGetValue(cacheKey, out var cached) &&
+                    DateTime.UtcNow - cached.At < StatusTtl)
+                {
+                    return cached.Value;
+                }
+            }
             var loc = ResolveRunLocation(jobId, watchPath);
             if (loc == null)
                 return new GitStatusResult(false, null, 0, 0, 0, [], "Job not found or project has no RootPath configured.");
             if (loc.Root == null)
                 return new GitStatusResult(false, null, 0, 0, 0, [], $"Not a git repository: {loc.Configured}");
-            return ReadStatusAtRoot(loc.Root, loc.IsWorktree);
+            var fresh = ReadStatusAtRoot(loc.Root, loc.IsWorktree);
+            lock (_statusCacheLock) _statusCache[cacheKey] = (DateTime.UtcNow, fresh);
+            return fresh;
         }
 
         var configured = ResolveRepoRoot(jobId, watchPath);

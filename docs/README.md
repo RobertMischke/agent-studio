@@ -57,6 +57,7 @@ Use this page as the first stop when you need the right document quickly.
 | Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](concepts/run-liveness-and-slot-semantics.md) |
 | Result view and case templates | [concepts/result-view-and-case-templates.md](concepts/result-view-and-case-templates.md) |
 | Publishing workflows (publish-target derivation + pending badges; PUB-1) | [concepts/publishing-workflows.md](concepts/publishing-workflows.md) |
+| Git-info performance measurements and cache invalidation (AGT-2007) | [reports/git-info-performance-agt-2007.md](reports/git-info-performance-agt-2007.md) |
 | Planning-task lifecycle (plan → spawn → accept; spawn-contract gate; AGT-2069) | [concepts/planning-task-lifecycle.md](concepts/planning-task-lifecycle.md) |
 | Experiment workbenches (Explorer, orchestrator chat, decision-to-task) | [concept](concepts/experimentier-workbench.md) · [interactive mockup](concepts/mockups/experimentier-workbench.html) |
 | Wiki classification | [product/wiki-document-classification.md](product/wiki-document-classification.md) |
