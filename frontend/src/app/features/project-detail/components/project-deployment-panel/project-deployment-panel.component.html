@@ -39,16 +39,16 @@
       <section class="deployment__launcher" data-testid="project-deployment-launcher">
         <div><p class="deployment__eyebrow">Selected target</p><h2>{{ target.title }}</h2><p>{{ target.summary }}</p></div>
         @for (parameter of target.parameters; track parameter.name) {
-          <label>
+          <label [attr.for]="'deployment-param-' + parameter.name">
             <span>{{ parameter.name }}{{ parameter.required ? ' *' : '' }}</span>
             @if (parameter.type === 'boolean') {
-              <input type="checkbox" [attr.data-testid]="'deployment-param-' + parameter.name" [ngModel]="parameterValues()[parameter.name] === true" (ngModelChange)="setParameter(parameter.name, $event)" />
+              <input [id]="'deployment-param-' + parameter.name" type="checkbox" [attr.data-testid]="'deployment-param-' + parameter.name" [ngModel]="parameterValues()[parameter.name] === true" (ngModelChange)="setParameter(parameter.name, $event)" />
             } @else if (parameter.type === 'enum') {
-              <select [ngModel]="parameterValues()[parameter.name]" (ngModelChange)="setParameter(parameter.name, $event)">
+              <select [id]="'deployment-param-' + parameter.name" [ngModel]="parameterValues()[parameter.name]" (ngModelChange)="setParameter(parameter.name, $event)">
                 @for (option of parameter.options; track option) { <option [value]="option">{{ option }}</option> }
               </select>
             } @else {
-              <input [type]="parameter.type === 'secret-ref' ? 'password' : 'text'" [ngModel]="parameterValues()[parameter.name]" (ngModelChange)="setParameter(parameter.name, $event)" />
+              <input [id]="'deployment-param-' + parameter.name" [type]="parameter.type === 'secret-ref' ? 'password' : 'text'" [ngModel]="parameterValues()[parameter.name]" (ngModelChange)="setParameter(parameter.name, $event)" />
             }
           </label>
         }
