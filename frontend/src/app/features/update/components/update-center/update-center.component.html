@@ -5,7 +5,7 @@
       <header class="upd-center__head">
       <div>
         <h2 class="upd-center__title">Update Center</h2>
-        <p class="upd-center__lead">Stable updates run through the standalone UpdateService on port 5039.</p>
+        <p class="upd-center__lead">Runtime truth, release branches and deploy history in one place.</p>
       </div>
       <div class="upd-center__head-actions">
         <button type="button"
@@ -27,32 +27,36 @@
         </section>
       }
 
-      <section class="upd-center__id">
-      <div class="upd-center__row">
-        <span class="upd-center__label">Version</span>
-        <span class="upd-center__value">v{{ status()?.productVersion ?? '—' }}</span>
-      </div>
-      <div class="upd-center__row">
-        <span class="upd-center__label">Local</span>
-        <code class="upd-center__sha">{{ status()?.headLocal ?? '—' }}</code>
-      </div>
-      <div class="upd-center__row">
-        <span class="upd-center__label">Origin/main</span>
-        <code class="upd-center__sha">{{ status()?.headOrigin ?? '—' }}</code>
-      </div>
-      <div class="upd-center__row">
-        <span class="upd-center__label">Status</span>
-        @if ((status()?.behindBy ?? 0) === 0) {
-          <span class="upd-center__pill upd-center__pill--ok">Up to date</span>
+      <section class="upd-center__hero" data-testid="update-center-runtime">
+        <div class="upd-center__eyebrow"><span class="upd-center__dot"></span> Running Agent Studio</div>
+        <strong class="upd-center__version">{{ status()?.runningVersion?.version ?? status()?.productVersion ?? 'Version unknown' }}</strong>
+        <div class="upd-center__runtime-meta">
+          <code>{{ shortSha(status()?.runningVersion?.commit ?? status()?.headLocal) }}</code>
+          <span>Deployed {{ formatDate(status()?.runningVersion?.deployedAt) }}</span>
+        </div>
+        @if ((status()?.mainVersion?.behindBy ?? status()?.behindBy ?? 0) === 0) {
+          <span class="upd-center__pill upd-center__pill--ok">Matches main</span>
         } @else {
-          <span class="upd-center__pill upd-center__pill--behind">{{ status()!.behindBy }} commit{{ status()!.behindBy === 1 ? '' : 's' }} behind</span>
+          <span class="upd-center__pill upd-center__pill--behind">Update available</span>
         }
-      </div>
+      </section>
+
+      <section class="upd-center__branches" aria-label="Branch versions">
+        <article class="upd-center__branch" data-testid="update-center-main-version">
+          <div class="upd-center__branch-head"><span>main</span><code>{{ shortSha(status()?.mainVersion?.commit ?? status()?.headOrigin) }}</code></div>
+          <strong>{{ deltaLabel(status()?.mainVersion?.aheadBy, status()?.mainVersion?.behindBy ?? status()?.behindBy) }}</strong>
+          <small>{{ formatDate(status()?.mainVersion?.commitAt) }}</small>
+        </article>
+        <article class="upd-center__branch" data-testid="update-center-develop-version">
+          <div class="upd-center__branch-head"><span>develop</span><code>{{ shortSha(status()?.developVersion?.commit) }}</code></div>
+          <strong>{{ deltaLabel(status()?.developVersion?.aheadBy, status()?.developVersion?.behindBy) }}</strong>
+          <small>{{ formatDate(status()?.developVersion?.commitAt) }}</small>
+        </article>
       </section>
 
       @if ((status()?.pendingCommits?.length ?? 0) > 0) {
         <section class="upd-center__commits">
-          <h3 class="upd-center__sub">Pending on origin/main</h3>
+          <h3 class="upd-center__sub">What changes with the next deploy</h3>
           <ul class="upd-center__list" data-testid="update-center-pending">
             @for (c of status()!.pendingCommits; track c.sha) {
               <li class="upd-center__commit">
@@ -66,7 +70,7 @@
 
       @if (history().length > 0) {
         <section class="upd-center__history">
-          <h3 class="upd-center__sub">Recent runs</h3>
+          <h3 class="upd-center__sub">Deploy history</h3>
           <ul class="upd-center__list" data-testid="update-center-history">
             @for (h of history(); track h.runId) {
               <li class="upd-center__run">

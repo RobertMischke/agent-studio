@@ -38,10 +38,10 @@ export class UpdateClientService {
   /** Convenience: how far behind origin/main we are; 0 when unknown / synced. */
   readonly behindBy = computed(() => this.status()?.behindBy ?? 0);
 
-  /** Product version from the VERSION file (semver, e.g. "0.1.0"). */
+  /** Loaded backend build identity; static VERSION is only the pre-probe fallback. */
   readonly productVersion = computed(() => this.status()?.productVersion ?? '');
 
-  /** Local short SHA of the running stable HEAD. */
+  /** Stable checkout HEAD retained for backwards compatibility. */
   readonly headLocal = computed(() => this.status()?.headLocal ?? '');
 
   /**

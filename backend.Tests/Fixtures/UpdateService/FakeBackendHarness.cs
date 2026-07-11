@@ -66,6 +66,12 @@ public sealed class FakeBackendHarness : IAsyncDisposable
                 return Results.Json("err", statusCode: 503);
             return Results.Text("\"ok\"", "application/json");
         });
+        app.MapGet("/api/system/version", () => Results.Json(new
+        {
+            version = "2026.07.11-1200+aaaaaaa",
+            commit = "aaaaaaa",
+            deployedAt = "2026-07-11T12:00:00Z"
+        }));
 
         app.MapGet("/api/runner/status", () =>
         {

@@ -67,6 +67,24 @@ export class UpdateCenterComponent implements OnDestroy {
     this.client.closeCenter();
   }
 
+  shortSha(value: string | null | undefined): string {
+    return value?.slice(0, 8) || 'unknown';
+  }
+
+  formatDate(value: string | null | undefined): string {
+    if (!value) return 'Time unknown';
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium', timeStyle: 'short',
+    }).format(new Date(value));
+  }
+
+  deltaLabel(ahead: number | null | undefined, behind: number | null | undefined): string {
+    const parts: string[] = [];
+    if (behind) parts.push(`${behind} ahead of running`);
+    if (ahead) parts.push(`${ahead} behind running`);
+    return parts.length ? parts.join(' · ') : 'Same commit as running';
+  }
+
   async refreshStatus(): Promise<void> {
     if (this.refreshInFlight()) return;
     this.refreshInFlight.set(true);

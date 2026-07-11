@@ -33,8 +33,14 @@ public sealed record UpdateStatus(
     string ProductVersion,
     string Mode,                     // "manual" | "scheduled"
     IReadOnlyList<VerificationFailure>? VerificationFailures, // populated when phase=failed after verifying.
-    bool AutoRollbackEnabled         // mirrors UpdateServiceOptions.AutoRollback so the FE can show the right copy.
+    bool AutoRollbackEnabled,        // mirrors UpdateServiceOptions.AutoRollback so the FE can show the right copy.
+    RuntimeVersion? RunningVersion = null,
+    BranchVersion? MainVersion = null,
+    BranchVersion? DevelopVersion = null
 );
+
+public sealed record RuntimeVersion(string Version, string Commit, DateTime DeployedAt);
+public sealed record BranchVersion(string Branch, string Commit, DateTime? CommitAt, int AheadBy, int BehindBy);
 
 public sealed record CommitInfo(string Sha, string Subject, string Author, DateTime AuthorDate);
 

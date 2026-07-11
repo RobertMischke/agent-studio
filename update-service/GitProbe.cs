@@ -64,6 +64,30 @@ public sealed class GitProbe : IGitProbe
         return list;
     }
 
+    public VersionTopology ReadVersionTopology(string runningCommit)
+    {
+        // main was fetched by FetchAndCompare immediately before this call.
+        // Fetch develop independently so a missing develop ref cannot erase
+        // the already-valid main comparison.
+        Run("fetch", "--quiet", "origin", "develop");
+        return new VersionTopology(ReadBranch("main", runningCommit), ReadBranch("develop", runningCommit));
+    }
+
+    private BranchVersion ReadBranch(string branch, string runningCommit)
+    {
+        var reference = $"origin/{branch}";
+        var commit = Run("rev-parse", "--short", reference).Trim();
+        var atRaw = Run("show", "-s", "--format=%cI", reference).Trim();
+        DateTime? at = DateTime.TryParse(atRaw, null,
+            System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+            out var parsed) ? parsed : null;
+        var counts = Run("rev-list", "--left-right", "--count", $"{runningCommit}...{reference}")
+            .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        var ahead = counts.Length > 0 && int.TryParse(counts[0], out var a) ? a : 0;
+        var behind = counts.Length > 1 && int.TryParse(counts[1], out var b) ? b : 0;
+        return new BranchVersion(branch, commit, at, ahead, behind);
+    }
+
     private string Run(params string[] args)
     {
         var psi = new ProcessStartInfo("git")
