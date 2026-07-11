@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import * as fs from 'fs';
 import * as path from 'path';
-import { api, BACKEND } from '../helpers/api';
+import { BACKEND } from '../helpers/api';
 
 /**
  * Wiki Pulse landing view (PULSE-1). The wiki opens on the generated Pulse view
@@ -15,10 +15,6 @@ import { api, BACKEND } from '../helpers/api';
  * PROJECT_WIKI_RESULTS_DIR is set; otherwise a sibling of the spec.
  */
 
-interface WatchPath { name: string; path: string }
-interface WikiTreeNodeFixture { type: 'folder' | 'md' | 'html' | 'json'; children?: WikiTreeNodeFixture[] }
-interface WikiTreeFixture { exists: boolean; root: WikiTreeNodeFixture[] }
-
 const SCREENSHOT_DIR = (() => {
   const fromEnv = process.env.PROJECT_WIKI_RESULTS_DIR;
   if (fromEnv && fromEnv.trim()) return fromEnv;
@@ -27,11 +23,6 @@ const SCREENSHOT_DIR = (() => {
 
 function slugFor(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
-
-function countWikiDocs(nodes: readonly WikiTreeNodeFixture[] = []): number {
-  return nodes.reduce((count, node) =>
-    node.type === 'folder' ? count + countWikiDocs(node.children ?? []) : count + 1, 0);
 }
 
 const PULSE_FIXTURE = {
@@ -129,6 +120,20 @@ async function mockGradingContext(page: import('@playwright/test').Page): Promis
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GRADING_STATUS_DONE) }));
 }
 
+/** Keeps the spec independent of the host's configured real projects. */
+async function mockProjectContext(page: import('@playwright/test').Page): Promise<void> {
+  await page.route('**/api/watch-paths', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{ name: 'demo', path: '/throwaway/demo', rootPath: '/throwaway/demo' }]),
+  }));
+  await page.route('**/api/projects/demo/wiki/tree', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ exists: true, root: [{ type: 'md', name: 'README.md', relPath: 'README.md' }] }),
+  }));
+}
+
 /**
  * A route callback that rejects fails the test it belongs to. The app keeps
  * polling in the background (e.g. `GET /api/cli/claude/models`), so a proxied
@@ -141,7 +146,10 @@ async function mockGradingContext(page: import('@playwright/test').Page): Promis
  */
 function isTeardownRace(error: unknown): boolean {
   const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
-  return message.includes('has been closed') || message.includes('target closed') || message.includes('disposed');
+  return message.includes('has been closed')
+    || message.includes('target closed')
+    || message.includes('disposed')
+    || message.includes('test ended');
 }
 
 async function proxyBackend(page: import('@playwright/test').Page): Promise<void> {
@@ -171,30 +179,20 @@ async function proxyBackend(page: import('@playwright/test').Page): Promise<void
 }
 
 test.describe('Wiki Pulse landing view (PULSE-2)', () => {
-  let projectName = '';
+  const projectName = 'demo';
 
   test.afterEach(async ({ page }) => {
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 
-  test.beforeAll(async () => {
+  test.beforeAll(() => {
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
-    const paths = await api<WatchPath[]>('/api/watch-paths');
-    expect(paths.length).toBeGreaterThan(0);
-    const prioritized = [
-      ...paths.filter(p => /agent.?software|agent.?studio|agent.?task/i.test(p.name)),
-      ...paths,
-    ];
-    const candidates = Array.from(new Map(prioritized.map(p => [p.name, p])).values());
-    for (const candidate of candidates) {
-      const tree = await api<WikiTreeFixture>(`/api/projects/${encodeURIComponent(candidate.name)}/wiki/tree`);
-      if (tree.exists && countWikiDocs(tree.root) > 0) { projectName = candidate.name; break; }
-    }
-    expect(projectName, 'expected a project with a populated docs/wiki tree').not.toBe('');
   });
 
-  test('opens on the generated Pulse view with feed, inbox, and drift grade bar', async ({ page }) => {
+  test('opens on the generated Pulse view with feed, inbox, and drift grade bar', async ({ page, devBackend }) => {
+    expect(devBackend.port).toBe(5030);
     await proxyBackend(page);
+    await mockProjectContext(page);
     // Overlay a deterministic Pulse payload so the surface is stable (--mocked).
     await page.route('**/wiki/pulse**', route =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PULSE_FIXTURE) }));
@@ -232,8 +230,10 @@ test.describe('Wiki Pulse landing view (PULSE-2)', () => {
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'wiki-pulse-warnings-in-progress--mocked.png'), fullPage: true });
   });
 
-  test('degrades to labelled empty states when a source is unavailable', async ({ page }) => {
+  test('degrades to labelled empty states when a source is unavailable', async ({ page, devBackend }) => {
+    expect(devBackend.port).toBe(5030);
     await proxyBackend(page);
+    await mockProjectContext(page);
     await page.route('**/wiki/pulse**', route => route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({
@@ -254,8 +254,10 @@ test.describe('Wiki Pulse landing view (PULSE-2)', () => {
     await expect(page.getByTestId('project-wiki-pulse-drift-empty')).toContainText('No knowledge pages filed');
   });
 
-  test('shows the grading trigger and critical pages (AGT-2051)', async ({ page }) => {
+  test('shows the grading trigger and critical pages (AGT-2051)', async ({ page, devBackend }) => {
+    expect(devBackend.port).toBe(5030);
     await proxyBackend(page);
+    await mockProjectContext(page);
     await page.route('**/wiki/pulse**', route =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PULSE_FIXTURE) }));
     await mockGradingContext(page);

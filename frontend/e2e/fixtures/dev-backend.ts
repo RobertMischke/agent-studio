@@ -109,7 +109,7 @@ async function discoverWorkspace(): Promise<string> {
 }
 
 export const test = base.extend<{ devBackend: DevBackend }>({
-  devBackend: async (_fixtures, use, testInfo) => {
+  devBackend: async ({}, use, testInfo) => {
     const startedHealthy = await isHealthy();
     let weStartedIt = false;
 
