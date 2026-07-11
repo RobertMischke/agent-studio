@@ -48,6 +48,8 @@ export class WikiPulseComponent {
   readonly feed = computed(() => this.pulse()?.feed ?? null);
   readonly inbox = computed(() => this.pulse()?.inbox ?? null);
   readonly drift = computed(() => this.pulse()?.drift ?? null);
+  readonly warnings = computed(() => this.pulse()?.warnings ?? null);
+  readonly activity = computed(() => this.pulse()?.activity ?? null);
 
   /** Change-feed rows bucketed by local calendar day, newest day first. */
   readonly feedGroups = computed<WikiPulseFeedGroup[]>(() => {
@@ -131,6 +133,15 @@ export class WikiPulseComponent {
   absoluteTime(iso: string): string {
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+  }
+
+  runtime(iso: string): string {
+    const ms = Date.now() - new Date(iso).getTime();
+    if (!Number.isFinite(ms) || ms < 0) return 'just started';
+    const minutes = Math.max(1, Math.floor(ms / 60_000));
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ${minutes % 60}m`;
   }
 
   private dayKey(iso: string): string {

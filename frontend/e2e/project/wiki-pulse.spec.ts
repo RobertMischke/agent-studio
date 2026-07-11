@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
-import { api } from '../helpers/api';
+import { api, BACKEND } from '../helpers/api';
 
 /**
  * Wiki Pulse landing view (PULSE-1). The wiki opens on the generated Pulse view
@@ -93,6 +93,22 @@ const PULSE_FIXTURE = {
       { relPath: 'scratch-idea.md', title: 'Scratch idea', grade: 'C', assessment: 'Thin, unfiled scratch note with gaps.', gradedAt: '2026-07-10T09:00:00Z', model: 'claude-sonnet-5', reportPath: 'scratch-idea.md.report.html', frameAreaTitle: null },
     ],
   },
+  warnings: {
+    available: true,
+    reason: null,
+    count: 2,
+    items: [
+      { kind: 'human-action', title: 'Runner restart loop', detail: 'Development signal is active.', humanAction: 'Inspect the latest failed resume before reissuing.', relPath: 'engineering-workstream/20-development-signals/restart.md', status: 'active' },
+      { kind: 'dead-link', title: 'Dead link in operator guide', detail: '../missing-runbook.md', humanAction: 'Repair or remove this internal link.', relPath: 'operations/operator-guide.md', status: null },
+    ],
+  },
+  activity: {
+    available: true,
+    reason: null,
+    runs: [{ taskKey: 'AGT-2015', lane: '3-progress', startedAtUtc: new Date(Date.now() - 43 * 60_000).toISOString(), docsFilesChanged: 3 }],
+    collector: { ranAtUtc: new Date(Date.now() - 3 * 3600_000).toISOString(), status: 'ok', error: null, merges: 0, condensations: 0 },
+    curator: { ranAtUtc: new Date(Date.now() - 6 * 3600_000).toISOString(), status: 'ok', error: null, merges: 2, condensations: 1 },
+  },
 };
 
 const MAINTENANCE_MODEL = { cliType: 'claude', model: 'claude-sonnet-5', thinkingLevel: null };
@@ -113,8 +129,31 @@ async function mockGradingContext(page: import('@playwright/test').Page): Promis
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GRADING_STATUS_DONE) }));
 }
 
-test.describe('Wiki Pulse landing view (PULSE-1)', () => {
+async function proxyBackend(page: import('@playwright/test').Page): Promise<void> {
+  await page.route('**/api/**', async route => {
+    const url = new URL(route.request().url());
+    const target = `${BACKEND}${url.pathname}${url.search}`;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await route.fetch({ url: target });
+        await route.fulfill({ response });
+        return;
+      } catch (error) {
+        lastError = error;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+    throw lastError;
+  });
+}
+
+test.describe('Wiki Pulse landing view (PULSE-2)', () => {
   let projectName = '';
+
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  });
 
   test.beforeAll(async () => {
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -133,6 +172,7 @@ test.describe('Wiki Pulse landing view (PULSE-1)', () => {
   });
 
   test('opens on the generated Pulse view with feed, inbox, and drift grade bar', async ({ page }) => {
+    await proxyBackend(page);
     // Overlay a deterministic Pulse payload so the surface is stable (--mocked).
     await page.route('**/wiki/pulse**', route =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PULSE_FIXTURE) }));
@@ -158,14 +198,20 @@ test.describe('Wiki Pulse landing view (PULSE-1)', () => {
     await expect(page.getByTestId('project-wiki-pulse-inbox-open-scratch-idea.md')).toBeVisible();
     await expect(page.getByTestId('project-wiki-pulse-inbox')).toContainText('Needs sorting');
 
+    await expect(page.getByTestId('project-wiki-pulse-warnings')).toContainText('Inspect the latest failed resume');
+    await expect(page.getByTestId('project-wiki-pulse-live-AGT-2015')).toContainText('3 docs files changed');
+    await expect(page.getByTestId('project-wiki-pulse-collector-run')).toContainText('ok');
+    await expect(page.getByTestId('project-wiki-pulse-curator-run')).toContainText('2 merges · 1 condensations');
+
     // No horizontal overflow on the landing surface.
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
     expect(overflow).toBe(false);
 
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'wiki-pulse-landing--mocked-real.png'), fullPage: true });
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'wiki-pulse-warnings-in-progress--mocked.png'), fullPage: true });
   });
 
   test('degrades to labelled empty states when a source is unavailable', async ({ page }) => {
+    await proxyBackend(page);
     await page.route('**/wiki/pulse**', route => route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({
@@ -187,6 +233,7 @@ test.describe('Wiki Pulse landing view (PULSE-1)', () => {
   });
 
   test('shows the grading trigger and critical pages (AGT-2051)', async ({ page }) => {
+    await proxyBackend(page);
     await page.route('**/wiki/pulse**', route =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PULSE_FIXTURE) }));
     await mockGradingContext(page);

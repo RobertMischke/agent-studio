@@ -1,6 +1,6 @@
 # Wiki Pulse dashboard
 
-Status: Concept (living). Slice PULSE-1 implemented (2026-07-10).
+Status: Concept (living). Slices PULSE-1 and PULSE-2 implemented (2026-07-11).
 
 > Operator intent (2026-07-09): "When you open the wiki, you should see a history
 > of the last changes: warnings, which things need to be sorted, what is being
@@ -91,6 +91,20 @@ In PULSE-1: the change feed, the inbox, and the drift grade bar.
 **Not** in PULSE-1 (these are PULSE-2): a Warnings tile and an "In progress"
 (live-runs) tile. Pulse is deliberately deterministic in v1 - no LLM, no live
 run state.
+
+### 4.1 PULSE-2 warnings and live work
+
+PULSE-2 adds two generated tiles. Warnings combines active or observed
+Development Signals that carry `human-action` frontmatter with deterministic
+frame violations, dead internal links, and Workstream areas above the 40-page
+budget. In progress lists only live tasks whose task-aware working tree contains
+changes below `docs/`, with task key, lane, runtime, and changed-doc count.
+
+The activity tile also formalizes maintenance outcomes. The latest collector
+result is read from task pipeline history. The curator persists `lastStatus`,
+`lastError`, and its merge and condensation counts in
+`engineering-workstream/.curator/context.json`; Pulse displays the latest result
+and timestamp for both sources. Missing sources remain labelled empty states.
 
 Update (GRADE-1, 2026-07-10, AGT-2051): the Warnings surface arrived as the
 **Critical pages** section plus a **Grade all pages** trigger, driven by an

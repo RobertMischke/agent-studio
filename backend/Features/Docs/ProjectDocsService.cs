@@ -483,7 +483,7 @@ public class ProjectDocsService
         return new WikiRecentEdits(projectName, wikiDir, true, results);
     }
 
-    // -------- Wiki Pulse (PULSE-1: change-feed + inbox + drift grading) --------
+    // -------- Wiki Pulse (generated wiki landing view) --------
 
     // Top-level repo directories that are code (not knowledge) but are never a
     // "code root" for the drift heuristic: the wiki root itself plus build
@@ -545,7 +545,9 @@ public class ProjectDocsService
                 new WikiPulseFeed(false, reason, []),
                 new WikiPulseInbox(false, reason, 0, []),
                 WikiPulseDrift.Unavailable(reason),
-                WikiPulseCritical.Unavailable(reason));
+                WikiPulseCritical.Unavailable(reason),
+                WikiPulseWarnings.Unavailable(reason),
+                WikiPulseActivity.Unavailable(reason));
         }
 
         // Inbox + the LLM critical-pages list are pure filesystem reads (no git),
@@ -555,6 +557,8 @@ public class ProjectDocsService
         var allDocs = ListWikiDocs(wikiDir);
         var inbox = BuildPulseInbox(allDocs);
         var critical = BuildPulseCritical(allDocs, LoadWikiMetadataIndex(wikiDir));
+        var warnings = BuildPulseWarnings(wikiDir, allDocs);
+        var activity = BuildPulseActivity(projectName, wikiDir, git);
 
         var repoRoot = git.ResolveRepoRootForProject(projectName);
         if (string.IsNullOrWhiteSpace(repoRoot))
@@ -564,7 +568,9 @@ public class ProjectDocsService
                 new WikiPulseFeed(false, reason, []),
                 inbox,
                 WikiPulseDrift.Unavailable(reason),
-                critical);
+                critical,
+                warnings,
+                activity);
         }
 
         var docsRepoRel = Path.GetRelativePath(repoRoot, wikiDir).Replace('\\', '/');
@@ -612,7 +618,187 @@ public class ProjectDocsService
         var codeRoots = ResolveCodeRoots(repoRoot);
         var drift = BuildPulseDrift(allDocs, lastUpdateByRel, repoRoot, codeRoots, git);
 
-        return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift, critical);
+        return new WikiPulse(projectName, wikiDir, true, generatedAt, feed, inbox, drift, critical, warnings, activity);
+    }
+
+    private static readonly Regex MarkdownLinkRegex =
+        new(@"!?\[[^\]]*\]\((?<target>[^)\s]+)(?:\s+[^)]*)?\)", RegexOptions.Compiled);
+    private static readonly Regex HtmlLinkRegex =
+        new(@"(?:href|src)\s*=\s*[""'](?<target>[^""']+)[""']", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>PULSE-2 warnings from collector signals and deterministic docs integrity checks.</summary>
+    private static WikiPulseWarnings BuildPulseWarnings(string wikiDir, IReadOnlyList<WikiFileEntry> docs)
+    {
+        var items = new List<WikiPulseWarningItem>();
+        foreach (var doc in docs)
+        {
+            var full = Path.Combine(wikiDir, doc.RelPath.Replace('/', Path.DirectorySeparatorChar));
+            string text;
+            try { text = File.ReadAllText(full); }
+            catch { continue; }
+
+            var area = EngineeringWorkstreamFrame.AreaForPath(doc.RelPath);
+            if (string.Equals(area?.Slug, "20-development-signals", StringComparison.OrdinalIgnoreCase))
+            {
+                var action = FrontmatterScalar(text, "human-action");
+                var status = FrontmatterScalar(text, "status");
+                if (!string.IsNullOrWhiteSpace(action)
+                    && status is not null
+                    && (status.Equals("observed", StringComparison.OrdinalIgnoreCase)
+                        || status.Equals("active", StringComparison.OrdinalIgnoreCase)))
+                {
+                    items.Add(new("human-action", doc.Title,
+                        $"Development signal is {status.ToLowerInvariant()}.", action, doc.RelPath, status.ToLowerInvariant()));
+                }
+            }
+
+            foreach (Match match in (Path.GetExtension(full).Equals(".md", StringComparison.OrdinalIgnoreCase)
+                         ? MarkdownLinkRegex.Matches(text)
+                         : HtmlLinkRegex.Matches(text)))
+            {
+                var target = match.Groups["target"].Value.Trim();
+                if (!IsInternalLink(target) || InternalLinkExists(wikiDir, doc.RelPath, target)) continue;
+                items.Add(new("dead-link", $"Dead link in {doc.Title}", target,
+                    "Repair or remove this internal link.", doc.RelPath, null));
+            }
+        }
+
+        var frameElements = new[] { EngineeringWorkstreamFrame.FrameRootRel, EngineeringWorkstreamFrame.OverviewShellRel }
+            .Concat(EngineeringWorkstreamFrame.Areas.SelectMany(a => new[] { a.FolderRel, a.IndexShellRel }));
+        foreach (var shell in frameElements)
+        {
+            var full = Path.Combine(wikiDir, shell.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(full) && !Directory.Exists(full))
+                items.Add(new("frame", "Workstream frame is incomplete", shell,
+                    "Restore the missing immutable frame element.", shell, null));
+        }
+
+        foreach (var stray in docs.Where(d => EngineeringWorkstreamFrame.IsWithinFrame(d.RelPath)
+                     && !EngineeringWorkstreamFrame.IsFrameShell(d.RelPath)
+                     && EngineeringWorkstreamFrame.AreaForPath(d.RelPath) == null))
+            items.Add(new("frame", "Page violates the Workstream frame", stray.RelPath,
+                "Move this page into one of the five fixed areas.", stray.RelPath, null));
+
+        foreach (var area in EngineeringWorkstreamFrame.Areas)
+        {
+            var count = docs.Count(d => !EngineeringWorkstreamFrame.IsFrameShell(d.RelPath)
+                && EngineeringWorkstreamFrame.AreaForPath(d.RelPath)?.Slug == area.Slug
+                && Path.GetExtension(d.RelPath).Equals(".md", StringComparison.OrdinalIgnoreCase));
+            if (count > WorkstreamCurationService.MaxManagedPagesPerArea)
+                items.Add(new("page-budget", $"{area.Title} is over budget", $"{count} / {WorkstreamCurationService.MaxManagedPagesPerArea} Markdown pages",
+                    "Merge or archive low-value pages before adding more.", area.Slug, null));
+        }
+
+        return new(true, items.Count == 0 ? "No warnings need human attention." : null, items.Count, items);
+    }
+
+    private WikiPulseActivity BuildPulseActivity(string projectName, string wikiDir, GitService git)
+    {
+        var runs = new List<WikiPulseLiveRun>();
+        foreach (var task in _scanner.ScanAllJobs().Where(t =>
+                     string.Equals(t.ProjectName, projectName, StringComparison.OrdinalIgnoreCase)
+                     && string.Equals(t.State, TaskStates.Progress, StringComparison.Ordinal)))
+        {
+            var status = git.GetStatus(task.Id, task.WatchPath, preferRunLocation: true);
+            if (!status.IsRepo || !status.Files.Any(f => f.Path.Replace('\\', '/').StartsWith("docs/", StringComparison.OrdinalIgnoreCase))) continue;
+            var taskKey = !string.IsNullOrWhiteSpace(task.Key) ? task.Key
+                : !string.IsNullOrWhiteSpace(task.TaskKey) ? task.TaskKey : task.Id;
+            runs.Add(new(taskKey, task.State, task.EnteredLaneAt,
+                status.Files.Count(f => f.Path.Replace('\\', '/').StartsWith("docs/", StringComparison.OrdinalIgnoreCase))));
+        }
+
+        var collector = LatestCollectorRun(projectName);
+        var curator = ReadCuratorRun(Path.Combine(wikiDir, EngineeringWorkstreamFrame.FrameRootRel, ".curator", "context.json"));
+        return new(true, runs.Count == 0 ? "No live run currently touches docs/." : null, runs, collector, curator);
+    }
+
+    private WikiPulseRunSummary? LatestCollectorRun(string projectName)
+    {
+        WikiPulseRunSummary? latest = null;
+        foreach (var task in _scanner.ScanAllJobsWithArchive().Where(t => string.Equals(t.ProjectName, projectName, StringComparison.OrdinalIgnoreCase)))
+        {
+            var path = Path.Combine(task.FolderPath, AgentStudio.Pipeline.PipelineExecutionLog.FileName);
+            try
+            {
+                if (!File.Exists(path)) continue;
+                using var json = JsonDocument.Parse(File.ReadAllText(path));
+                foreach (var attempt in PipelineAttempts(json.RootElement))
+                {
+                    if (!attempt.TryGetProperty("steps", out var steps)) continue;
+                    foreach (var step in steps.EnumerateArray())
+                    {
+                        if (!step.TryGetProperty("stepId", out var id)
+                            || !string.Equals(id.GetString(), AgentStudio.Pipeline.PipelineCatalogue.WorkstreamCollectorStepId, StringComparison.OrdinalIgnoreCase)
+                            || !step.TryGetProperty("completedAt", out var completed)
+                            || !completed.TryGetDateTime(out var at)) continue;
+                        var status = step.TryGetProperty("status", out var s) ? PulseStepStatus(s) : "unknown";
+                        var candidate = new WikiPulseRunSummary(at, status == "passed" ? "ok" : status,
+                            step.TryGetProperty("reason", out var reason) ? reason.GetString() : null, 0, 0);
+                        if (latest == null || candidate.RanAtUtc > latest.RanAtUtc) latest = candidate;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                SilentCatch.Note(ex, "ProjectDocsService: malformed collector run data; omitting Pulse summary.");
+            }
+        }
+        return latest;
+    }
+
+    private static string PulseStepStatus(JsonElement status)
+    {
+        if (status.ValueKind == JsonValueKind.String) return status.GetString()?.ToLowerInvariant() ?? "unknown";
+        if (status.ValueKind != JsonValueKind.Number || !status.TryGetInt32(out var value)) return "unknown";
+        return value switch { 0 => "pending", 1 => "running", 2 => "passed", 3 => "failed", 4 => "skipped", 5 => "planned", _ => "unknown" };
+    }
+
+    private static IEnumerable<JsonElement> PipelineAttempts(JsonElement root)
+    {
+        yield return root;
+        if (root.TryGetProperty("previousAttempts", out var previous))
+            foreach (var attempt in previous.EnumerateArray()) yield return attempt;
+    }
+
+    private static WikiPulseRunSummary? ReadCuratorRun(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            using var json = JsonDocument.Parse(File.ReadAllText(path));
+            var root = json.RootElement;
+            if (!root.TryGetProperty("lastRunAt", out var ran) || !ran.TryGetDateTime(out var at)) return null;
+            return new(at,
+                root.TryGetProperty("lastStatus", out var status) ? status.GetString() ?? "ok" : "ok",
+                root.TryGetProperty("lastError", out var error) ? error.GetString() : null,
+                root.TryGetProperty("merged", out var merged) ? merged.GetInt32() : 0,
+                root.TryGetProperty("condensed", out var condensed) ? condensed.GetInt32() : 0);
+        }
+        catch { return null; }
+    }
+
+    private static string? FrontmatterScalar(string text, string key)
+    {
+        var frontmatter = WikiFrontmatterRegex.Match(text);
+        if (!frontmatter.Success) return null;
+        var match = Regex.Match(frontmatter.Groups["body"].Value, $@"(?im)^{Regex.Escape(key)}:\s*(?<value>[^\r\n]+)$");
+        return match.Success ? match.Groups["value"].Value.Trim().Trim('"', '\'') : null;
+    }
+
+    private static bool IsInternalLink(string target) =>
+        !string.IsNullOrWhiteSpace(target) && !target.StartsWith('#') && !target.StartsWith('/')
+        && !Regex.IsMatch(target, @"^[a-z][a-z0-9+.-]*:", RegexOptions.IgnoreCase);
+
+    private static bool InternalLinkExists(string wikiDir, string sourceRel, string target)
+    {
+        var clean = Uri.UnescapeDataString(target.Split('#', '?')[0]).Replace('/', Path.DirectorySeparatorChar);
+        var sourceDir = Path.GetDirectoryName(Path.Combine(wikiDir, sourceRel.Replace('/', Path.DirectorySeparatorChar))) ?? wikiDir;
+        string full;
+        try { full = Path.GetFullPath(Path.Combine(sourceDir, clean)); }
+        catch { return false; }
+        if (!full.StartsWith(Path.GetFullPath(wikiDir), StringComparison.OrdinalIgnoreCase)) return false;
+        return File.Exists(full) || Directory.Exists(full)
+            || File.Exists(full + ".md") || File.Exists(Path.Combine(full, "README.md")) || File.Exists(Path.Combine(full, "index.html"));
     }
 
     /// <summary>
@@ -1698,7 +1884,29 @@ public record WikiPulse(
     WikiPulseFeed Feed,
     WikiPulseInbox Inbox,
     WikiPulseDrift Drift,
-    WikiPulseCritical Critical);
+    WikiPulseCritical Critical,
+    WikiPulseWarnings Warnings,
+    WikiPulseActivity Activity);
+
+public record WikiPulseWarnings(bool Available, string? Reason, int Count, List<WikiPulseWarningItem> Items)
+{
+    public static WikiPulseWarnings Unavailable(string reason) => new(false, reason, 0, []);
+}
+
+public record WikiPulseWarningItem(string Kind, string Title, string Detail, string HumanAction, string? RelPath, string? Status);
+
+public record WikiPulseActivity(
+    bool Available,
+    string? Reason,
+    List<WikiPulseLiveRun> Runs,
+    WikiPulseRunSummary? Collector,
+    WikiPulseRunSummary? Curator)
+{
+    public static WikiPulseActivity Unavailable(string reason) => new(false, reason, [], null, null);
+}
+
+public record WikiPulseLiveRun(string TaskKey, string Lane, DateTime StartedAtUtc, int DocsFilesChanged);
+public record WikiPulseRunSummary(DateTime RanAtUtc, string Status, string? Error, int Merges, int Condensations);
 
 /// <summary>
 /// Critical-pages section (AGT-2051): pages a wiki-grading run scored C or D,

@@ -105,7 +105,8 @@ public class WikiPulseTests : IDisposable
 
         // --- A signals page added AFTER all code churn -> Fresh (0 commits since).
         // Its task key comes from the commit subject, not frontmatter.
-        File.WriteAllText(Path.Combine(area20, "signal.md"), "# Latency signal\n");
+        File.WriteAllText(Path.Combine(area20, "signal.md"),
+            "---\nstatus: active\nhuman-action: Investigate the latency regression.\n---\n# Latency signal\n\n[Missing runbook](missing.md)\n");
         RunGit(repoRoot, "add -A");
         Commit(repoRoot, "2026-06-01T00:00:00", "AGT-2020 add latency signal");
 
@@ -167,6 +168,10 @@ public class WikiPulseTests : IDisposable
         Assert.Equal(1, pulse.Drift.Counts.Aging);
         Assert.Equal(0, pulse.Drift.Counts.Stale);
         Assert.Equal(2, pulse.Drift.Counts.Graded);
+
+        Assert.Contains(pulse.Warnings.Items, w => w.Kind == "human-action"
+            && w.Status == "active" && w.HumanAction.Contains("Investigate"));
+        Assert.Contains(pulse.Warnings.Items, w => w.Kind == "dead-link" && w.Detail == "missing.md");
     }
 
     [Fact]

@@ -93,8 +93,9 @@ public static class ProjectDocsEndpoints
                 : ConditionalOk(http, res.ETag, res.Edits);
         });
 
-        // The generated wiki Pulse landing view (PULSE-1): change feed + inbox +
-        // deterministic drift grade bar, composed server-side so the landing
+        // The generated wiki Pulse landing view: change feed + inbox + drift,
+        // PULSE-2 warnings/live docs work, and maintenance-run summaries. It is
+        // composed server-side so the landing
         // surface costs two git walks instead of the tree + recent + per-doc
         // history fan-out. Sits before the /files catch-all for path precedence.
         app.MapGet("/api/projects/{projectName}/wiki/pulse", (string projectName, ProjectDocsService docs, GitService git, int? feedLimit) =>

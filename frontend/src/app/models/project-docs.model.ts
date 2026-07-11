@@ -266,6 +266,45 @@ export interface WikiPulseCritical {
   items: WikiPulseCriticalItem[];
 }
 
+export interface WikiPulseWarningItem {
+  kind: 'human-action' | 'frame' | 'dead-link' | 'page-budget';
+  title: string;
+  detail: string;
+  humanAction: string;
+  relPath: string | null;
+  status: string | null;
+}
+
+export interface WikiPulseWarnings {
+  available: boolean;
+  reason: string | null;
+  count: number;
+  items: WikiPulseWarningItem[];
+}
+
+export interface WikiPulseLiveRun {
+  taskKey: string;
+  lane: string;
+  startedAtUtc: string;
+  docsFilesChanged: number;
+}
+
+export interface WikiPulseRunSummary {
+  ranAtUtc: string;
+  status: string;
+  error: string | null;
+  merges: number;
+  condensations: number;
+}
+
+export interface WikiPulseActivity {
+  available: boolean;
+  reason: string | null;
+  runs: WikiPulseLiveRun[];
+  collector: WikiPulseRunSummary | null;
+  curator: WikiPulseRunSummary | null;
+}
+
 /**
  * The generated wiki Pulse landing view: a read-only composition of the change
  * feed, the sort-needed inbox, the deterministic drift grade bar, and the LLM
@@ -282,6 +321,8 @@ export interface WikiPulse {
   inbox: WikiPulseInbox;
   drift: WikiPulseDrift;
   critical: WikiPulseCritical;
+  warnings?: WikiPulseWarnings;
+  activity?: WikiPulseActivity;
 }
 
 // ---- Wiki grading maintenance run (AGT-2051) ----
