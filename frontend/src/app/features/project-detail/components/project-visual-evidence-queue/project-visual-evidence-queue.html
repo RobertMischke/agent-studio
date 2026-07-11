@@ -1,0 +1,37 @@
+<section class="evidence-queue" data-testid="project-overview-evidence">
+  <header class="evidence-queue__header">
+    <div><p>Fresh visual evidence</p><h2>Review queue</h2></div>
+    @if (queue(); as value) {
+      <span class="evidence-queue__count" data-testid="project-overview-evidence-count">{{ value.unseenCount }} unseen</span>
+    }
+  </header>
+  @if (loading()) {
+    <p class="evidence-queue__state" data-testid="project-overview-evidence-loading">Loading visual evidence...</p>
+  } @else if (error() && !queue()) {
+    <div class="evidence-queue__state evidence-queue__state--error" data-testid="project-overview-evidence-error">
+      <span>Visual evidence is temporarily unavailable.</span><button type="button" (click)="load()">Retry</button>
+    </div>
+  } @else if (queue(); as value) {
+    @if (value.items.length === 0) {
+      <p class="evidence-queue__state" data-testid="project-overview-evidence-empty">No delivered visual evidence yet.</p>
+    } @else {
+      <ul>
+        @for (item of value.items.slice(0, 3); track item.id) {
+          <li [attr.data-status]="item.reviewStatus" [attr.data-testid]="'project-overview-evidence-' + item.id">
+            @if (item.url) {
+              <button class="evidence-queue__preview" type="button" (click)="inspect(item)" [attr.aria-label]="'Inspect ' + item.caption"><img [src]="item.url" [alt]="item.caption" /></button>
+            } @else { <span class="evidence-queue__missing" aria-hidden="true">Unavailable</span> }
+            <div class="evidence-queue__copy"><strong>{{ item.caption }}</strong><span>{{ item.jobId }} · {{ item.source }} · {{ item.reviewStatus }}</span><code>{{ item.fileName }}</code></div>
+            <div class="evidence-queue__actions">
+              <button type="button" (click)="inspect(item)">Inspect</button>
+              @if (item.reviewStatus === 'unseen') {
+                <button type="button" class="evidence-queue__ack" [disabled]="acknowledging().has(item.id)" [attr.data-testid]="'project-overview-evidence-ack-' + item.id" (click)="acknowledge(item)">{{ acknowledging().has(item.id) ? 'Saving...' : 'Mark reviewed' }}</button>
+              } @else { <span class="evidence-queue__status">{{ item.reviewStatus === 'reviewed' ? 'Reviewed' : 'No longer actionable' }}</span> }
+            </div>
+          </li>
+        }
+      </ul>
+      @if (value.items.length > 3) { <p class="evidence-queue__more">+ {{ value.items.length - 3 }} more in the project queue</p> }
+    }
+  }
+</section>

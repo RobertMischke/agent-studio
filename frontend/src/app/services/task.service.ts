@@ -80,6 +80,8 @@ import { JobsHubClient } from './jobs-hub-client.service';
 import type {
   ProjectDeploymentSummary,
   ProjectThroughputSummary,
+  ProjectVisualEvidenceItem,
+  ProjectVisualEvidenceQueue,
 } from '../models/project-overview.model';
 
 /** One row in the code-review list endpoint response (see backend `CodeReviewListEntry`). */
@@ -1942,6 +1944,19 @@ export class TaskService {
   getProjectThroughput(projectName: string) {
     return this.http.get<ProjectThroughputSummary>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/throughput`,
+    );
+  }
+
+  getProjectVisualEvidence(projectName: string) {
+    return this.http.get<ProjectVisualEvidenceQueue>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/visual-evidence`,
+    );
+  }
+
+  acknowledgeProjectVisualEvidence(projectName: string, itemId: string) {
+    return this.http.post<ProjectVisualEvidenceItem>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/visual-evidence/${encodeURIComponent(itemId)}/acknowledge`,
+      {},
     );
   }
 

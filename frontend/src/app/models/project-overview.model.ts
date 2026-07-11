@@ -41,3 +41,27 @@ export interface ProjectDeploymentSummary {
   pendingCount: number | null;
   pendingCommits: ProjectDeploymentCommit[];
 }
+
+export type ProjectVisualEvidenceReviewStatus = 'unseen' | 'reviewed' | 'unavailable';
+
+export interface ProjectVisualEvidenceItem {
+  id: string;
+  jobId: string;
+  jobTitle: string;
+  watchPath: string;
+  fileName: string;
+  relativePath: string;
+  url: string | null;
+  caption: string;
+  testStatus: string | null;
+  source: string;
+  capturedAt: string;
+  reviewStatus: ProjectVisualEvidenceReviewStatus;
+}
+
+export interface ProjectVisualEvidenceQueue {
+  project: string;
+  capturedAt: string;
+  unseenCount: number;
+  items: ProjectVisualEvidenceItem[];
+}

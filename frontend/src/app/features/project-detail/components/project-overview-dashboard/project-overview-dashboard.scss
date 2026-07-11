@@ -157,12 +157,13 @@
 
 .operator-dashboard__split {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--studio-spacing-4);
   align-items: stretch;
 }
 
 .operator-dashboard__split > * { min-width: 0; }
+.operator-dashboard__split > .operator-dashboard__wiki { grid-column: 1 / -1; }
 
 .operator-dashboard__wiki-columns {
   display: grid;

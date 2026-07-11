@@ -20,6 +20,7 @@ import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { TaskService } from '../../../../services/task.service';
 import { ProjectPublishPanelComponent } from '../project-publish-panel/project-publish-panel';
 import { ProjectOverviewUrlsComponent } from '../project-overview-urls/project-overview-urls';
+import { ProjectVisualEvidenceQueueComponent } from '../project-visual-evidence-queue/project-visual-evidence-queue';
 import type { ProjectRailKey } from '../project-shell/project-shell.config';
 
 /** Operator-first Project Overview. Every block is a compact projection of an
@@ -31,6 +32,7 @@ import type { ProjectRailKey } from '../project-shell/project-shell.config';
     StudioIconComponent,
     ProjectPublishPanelComponent,
     ProjectOverviewUrlsComponent,
+    ProjectVisualEvidenceQueueComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-overview-dashboard.html',
@@ -53,6 +55,7 @@ export class ProjectOverviewDashboardComponent {
   readonly publishTargets = signal<readonly PublishTarget[]>([]);
   readonly loading = signal(true);
   readonly unavailable = signal<ReadonlySet<string>>(new Set());
+  readonly evidenceRefreshGeneration = signal(0);
 
   readonly planningTasks = computed(() => this.tasks.jobs()
     .filter(task => task.projectName === this.projectName())
@@ -95,6 +98,7 @@ export class ProjectOverviewDashboardComponent {
 
   refresh(project = this.projectName()): void {
     if (!project) return;
+    this.evidenceRefreshGeneration.update(value => value + 1);
     const generation = ++this.refreshGeneration;
     this.loading.set(true);
     this.unavailable.set(new Set());

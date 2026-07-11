@@ -223,6 +223,7 @@ builder.Services.AddSingleton<FixtureMigrationService>();
 builder.Services.AddSingleton<TaskSessionLog>();
 builder.Services.AddSingleton<TimelineLog>();
 builder.Services.AddSingleton<ProjectThroughputService>();
+builder.Services.AddSingleton<ProjectVisualEvidenceService>();
 // T2b (ASS-1740): the single per-task read layer. Loads all raw sources
 // (detail, session-events, cli-output, timeline ledger) once and projects the
 // run timeline + meshed ledger so the /runs and /timeline views stop

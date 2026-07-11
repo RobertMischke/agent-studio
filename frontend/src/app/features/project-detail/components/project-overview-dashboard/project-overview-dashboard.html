@@ -54,6 +54,11 @@
   </section>
 
   <div class="operator-dashboard__split">
+    <app-project-visual-evidence-queue
+      [projectName]="projectName()"
+      [refreshGeneration]="evidenceRefreshGeneration()"
+      (openTask)="openTask.emit($event)" />
+
     <app-project-overview-urls
       [projectName]="projectName()"
       (openDetails)="openRail.emit('project-urls')"
