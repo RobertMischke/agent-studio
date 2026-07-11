@@ -946,8 +946,19 @@ cliRouter.ReattachAll();
 // PID and therefore has no useful active-jobs entry. At boot there are no live
 // runs yet, so reclaim helpers whose command line still points into an
 // ephemeral task worktree before pickup starts.
-WindowsWorktreeOrphanSweeper.Sweep(
-    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("WorktreeOrphanBootSweep"));
+var worktreeOrphanLogger = app.Services.GetRequiredService<ILoggerFactory>()
+    .CreateLogger("WorktreeOrphanBootSweep");
+if (Environment.GetEnvironmentVariable("ATP_DEV_BACKEND_FROM_FIXTURE") == "1")
+{
+    // The Playwright node process is the backend's launcher in this mode. A
+    // worktree-path sweep would classify and kill its own test harness.
+    worktreeOrphanLogger.LogInformation(
+        "worktree-orphan-boot-sweep-skipped reason=playwright-fixture");
+}
+else
+{
+    WindowsWorktreeOrphanSweeper.Sweep(worktreeOrphanLogger);
+}
 
 // Wire up Runner status → SignalR push
 var taskRunner = app.Services.GetRequiredService<TaskRunnerService>();
