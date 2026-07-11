@@ -2285,6 +2285,12 @@ export class App implements OnInit, OnDestroy {
     return jobs.every((j) => j.projectName === first) ? first : null;
   }
 
+  /** Project selected by the active board tab; null preserves the explicit workspace-wide board. */
+  boardProjectScope(): string | null {
+    const tab = this.studioTabState.activeTab();
+    return tab?.kind === 'board' && tab.projectName !== '__all__' ? tab.projectName : null;
+  }
+
   /** Current runner mode (lookup mirrors the studio-shell header chip). */
   laneAutoMode(state: string, jobs: TaskInfo[]): string {
     const proj = this.laneAutoProject(state, jobs);

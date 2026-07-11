@@ -58,7 +58,12 @@ public sealed class ExternalCompletionEndpointsTests : IDisposable
             Deliverables = new List<ExternalDeliverable>
             {
                 new() { Path = "docs/concepts/out-of-band-task-completion.md@abc1234", Note = "concept doc" },
+                new() { Url = "https://github.com/example/repo/tree/runner/host/stuck-card", Note = "runner salvage branch" },
             },
+            GateItems =
+            [
+                "worktree-blocked: unsecured worktree on agent-runner-01: /var/lib/agent-runner/worktrees/AGT-2147",
+            ],
         };
 
         using var response = await client.PostAsJsonAsync(
@@ -83,6 +88,7 @@ public sealed class ExternalCompletionEndpointsTests : IDisposable
         // results/deliverables.md written with the deliverable + provenance.
         var deliverables = File.ReadAllText(Path.Combine(moved, "results", "deliverables.md"));
         Assert.Contains("out-of-band-task-completion.md@abc1234", deliverables);
+        Assert.Contains("[https://github.com/example/repo/tree/runner/host/stuck-card]", deliverables);
         Assert.Contains("Completed externally by operator-chat", deliverables);
 
         // task.json carries the externalCompletion provenance for the badge.
@@ -100,6 +106,11 @@ public sealed class ExternalCompletionEndpointsTests : IDisposable
         var timeline = File.ReadAllText(TaskPaths.TimelineLog(moved));
         Assert.Contains(TimelineEventKinds.ExternalCompletion, timeline);
         Assert.Contains("Completed externally by operator-chat", timeline);
+
+        // A remote salvage failure arrives as an explicit open gate item. The
+        // escalation summary consumes this checklist on the moved card.
+        var followUp = File.ReadAllText(Path.Combine(moved, "orchestrator-follow-up.md"));
+        Assert.Contains("- [ ] worktree-blocked: unsecured worktree on agent-runner-01", followUp);
     }
 
     [Fact]

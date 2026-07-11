@@ -12,6 +12,7 @@ topology=""
 client_id=""
 runner_name=""
 git_remote=""
+git_push_remote=""
 package_id="CodingAgentRunner"
 runner_command="agent-runner"
 minimum_version="0.5.0"
@@ -25,7 +26,8 @@ Usage: remote-runner-onboard.sh \
   --topology <central|tunnel|lan> \
   --client-id <registered-x-client-id> \
   --runner-name <runner-name> \
-  --git-remote <origin-url> [options]
+  --git-remote <fetch-origin-url> \
+  --git-push-remote <write-origin-url> [options]
 
 Options:
   --package-id <id>       NuGet DotnetTool package (default: CodingAgentRunner)
@@ -53,6 +55,7 @@ while (($#)); do
     --client-id) client_id="${2:-}"; shift 2 ;;
     --runner-name) runner_name="${2:-}"; shift 2 ;;
     --git-remote) git_remote="${2:-}"; shift 2 ;;
+    --git-push-remote) git_push_remote="${2:-}"; shift 2 ;;
     --package-id) package_id="${2:-}"; shift 2 ;;
     --runner-command) runner_command="${2:-}"; shift 2 ;;
     --minimum-version) minimum_version="${2:-}"; shift 2 ;;
@@ -68,6 +71,7 @@ done
 [[ -n "$client_id" ]] || die "--client-id is required."
 [[ -n "$runner_name" ]] || die "--runner-name is required."
 [[ -n "$git_remote" ]] || die "--git-remote is required."
+[[ -n "$git_push_remote" ]] || die "--git-push-remote is required."
 
 host_pattern='^([A-Za-z0-9][A-Za-z0-9._-]*@)?[A-Za-z0-9][A-Za-z0-9._-]*$'
 server_url_pattern='^https?://(\[[0-9A-Fa-f:]+\]|[A-Za-z0-9.-]+)(:[0-9]{1,5})?(/[A-Za-z0-9._~:/%+-]*)?$'
@@ -87,6 +91,11 @@ if [[ ! "$git_remote" =~ $https_git_pattern \
       && ! "$git_remote" =~ $ssh_git_pattern \
       && ! "$git_remote" =~ $scp_git_pattern ]]; then
   die "--git-remote must be a credential-free SSH or HTTPS origin URL."
+fi
+if [[ ! "$git_push_remote" =~ $ssh_git_pattern \
+      && ! "$git_push_remote" =~ $scp_git_pattern \
+      && ! "$git_push_remote" =~ $https_git_pattern ]]; then
+  die "--git-push-remote must be a credential-free SSH or HTTPS origin URL."
 fi
 
 case "$server_url" in
@@ -196,13 +205,14 @@ fi
 
 printf '[onboarding] phase=systemd Writing configuration and enabling the OS-owned service.\n'
 "${ssh_base[@]}" -T "$host" bash -s -- \
-  "$server_url" "$client_id" "$runner_name" "$git_remote" "$runner_command" <<'REMOTE_SYSTEMD'
+  "$server_url" "$client_id" "$runner_name" "$git_remote" "$git_push_remote" "$runner_command" <<'REMOTE_SYSTEMD'
 set -euo pipefail
 server_url="$1"
 client_id="$2"
 runner_name="$3"
 git_remote="$4"
-runner_command="$5"
+git_push_remote="$5"
+runner_command="$6"
 export PATH="$HOME/.dotnet/tools:$HOME/.local/bin:$PATH"
 runner_bin="$(command -v "$runner_command")"
 runner_user="$(id -un)"
@@ -219,6 +229,7 @@ chmod 600 "$env_tmp"
   printf 'RUNNER_ID=%s\n' "$runner_name"
   printf 'RUNNER_NAME=%s\n' "$runner_name"
   printf 'RUNNER_GIT_REMOTE=%s\n' "$git_remote"
+  printf 'RUNNER_GIT_PUSH_REMOTE=%s\n' "$git_push_remote"
   printf 'RUNNER_WORKDIR=/var/lib/agent-runner/work\n'
   printf 'RUNNER_MAX_PARALLELISM=2\n'
 } >"$env_tmp"
@@ -267,9 +278,19 @@ sudo systemctl is-active agent-runner
 "$runner_bin" --health-check --server "$server_url"
 
 identity_url="${server_url%/}/api/clients/${client_id}"
-curl --fail --show-error --silent --max-time 10 \
-  -H "X-Client-Id: $client_id" "$identity_url" >/dev/null
-printf '[remote] service=active health=passed identity=%s\n' "$client_id"
+git_status=""
+for _ in $(seq 1 30); do
+  identity_json="$(curl --fail --show-error --silent --max-time 10 -H "X-Client-Id: $client_id" "$identity_url")"
+  git_status="$(printf '%s' "$identity_json" | sed -n 's/.*"runnerGitStatus"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  [[ "$git_status" == "ready" || "$git_status" == "read-only" ]] && break
+  sleep 2
+done
+[[ "$git_status" == "ready" ]] || {
+  sudo journalctl -u agent-runner -n 40 --no-pager >&2
+  printf '[remote] Runner Git push capability is %s; claims remain disabled.\n' "${git_status:-unreported}" >&2
+  exit 40
+}
+printf '[remote] service=active health=passed identity=%s gitPushStatus=ready\n' "$client_id"
 REMOTE_SYSTEMD
 
 printf '[onboarding] completed host=%s runner=%s client=%s\n' "$host" "$runner_name" "$client_id"

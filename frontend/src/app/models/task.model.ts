@@ -482,6 +482,9 @@ export interface ClientSummary {
   defaultCliType?: string | null;
   defaultModel?: string | null;
   defaultThinkingLevel?: string | null;
+  runnerGitStatus?: 'ready' | 'read-only' | null;
+  runnerGitDetail?: string | null;
+  runnerGitCheckedAt?: string | null;
 }
 
 /**
@@ -928,6 +931,8 @@ export interface EpicRollup {
   completed: number;
   inProgress: number;
   open: number;
+  /** Latest lane-entry timestamp among all members once the epic is complete. */
+  completedAt?: string | null;
   byState: Record<string, number>;
   subTasks: EpicSubTaskRef[];
 }

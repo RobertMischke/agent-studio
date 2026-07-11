@@ -14,12 +14,14 @@ namespace AgentRunner;
 /// <summary>
 /// Runner -> Server: register the runner as a client identity
 /// (/api/clients/register). The server's X-Client-Id middleware rejects every
-/// mutation (lease, log, artifact, external-completion) from an unregistered id
+/// mutation (lease, log, artifact, completion) from an unregistered id
 /// with 401 <c>client-unknown</c>, so the runner must register before it writes.
 /// Registration is idempotent on <see cref="DisplayName"/> and the open-path
 /// carve-out means it needs no prior identity itself.
 /// </summary>
 public sealed record ClientRegisterRequest(string DisplayName, string? Kind = null, string? Notes = null);
+
+public sealed record RunnerGitCapabilityRequest(string Status, string? Detail, DateTime CheckedAt);
 
 /// <summary>Server projection of a registered client identity; only <see cref="Id"/> is used (as the X-Client-Id).</summary>
 public sealed record ClientRegisterResponse(string Id, string DisplayName, string Kind);
@@ -88,7 +90,25 @@ public sealed record RunnerClaimRequest(
     string Hostname,
     int Pid,
     string BackendName,
-    int? RequestedTtlSeconds = null);
+    int? RequestedTtlSeconds = null,
+    HostTelemetrySample? Telemetry = null,
+    int AvailableSlots = 1);
+
+/// <summary>Thirty-second host snapshot piggybacked on the daemon claim poll.</summary>
+public sealed record HostTelemetrySample(
+    DateTime Timestamp,
+    double? CpuPercent,
+    double? Load1,
+    double? Load5,
+    double? Load15,
+    long? MemoryUsedBytes,
+    long? MemoryTotalBytes,
+    long? SwapInBytesPerSecond,
+    long? SwapOutBytesPerSecond,
+    double? CpuStealPercent,
+    double? IoWaitPercent,
+    int CpuCores,
+    int ActiveSlots);
 
 public enum RunnerClaimStatus { Claimed, Empty, Invalid }
 
@@ -98,6 +118,29 @@ public sealed record RunnerClaimResponse(
     string? JobId = null,
     string? ProjectName = null,
     RunLeaseInfoDto? Lease = null,
+    string? Message = null,
+    string? ProjectId = null,
+    string? RepositoryUrl = null,
+    string? DefaultBranch = null);
+
+/// <summary>Runner -> Server: fenced normal completion after the remote CLI exits.</summary>
+public sealed record RemoteRunCompletionRequest(
+    string TaskKey,
+    string LeaseId,
+    long FencingToken,
+    string RunnerId,
+    string Outcome,
+    string? Reason = null,
+    string? Source = null,
+    int? ExitCode = null,
+    string? SalvageBranch = null,
+    string? SalvageCommitSha = null,
+    string? SalvageBranchUrl = null);
+
+public sealed record RemoteRunCompletionResponse(
+    string TaskKey,
+    string Outcome,
+    string TargetState,
     string? Message = null);
 
 /// <summary>One consolidated output line, shaped to the server's CliOutputLine JSON.</summary>
@@ -135,7 +178,8 @@ public sealed record ExternalCompletionRequest(
     string? Summary,
     List<ExternalDeliverable>? Deliverables = null,
     string? Source = null,
-    string? TargetState = null);
+    string? TargetState = null,
+    List<string>? GateItems = null);
 
 public sealed record ExternalCompletionResponse(
     string? JobId = null,

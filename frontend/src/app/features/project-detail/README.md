@@ -55,6 +55,8 @@ project's existing detail truths:
 - recent Wiki activity from
   `GET /api/projects/{projectName}/wiki/pulse?feedLimit=6`;
 - active planning-mode tasks from the current task snapshot; and
+- delivered screenshots and their durable review receipts from
+  `GET /api/projects/{projectName}/visual-evidence`; and
 - publish targets from `GET /api/projects/{projectName}/snapshot`.
 
 `components/project-overview-urls/` is a compact adapter over the project
@@ -63,10 +65,13 @@ shows at most four configured URLs, emits navigation to the full Project URLs
 rail, and does not duplicate URL configuration or process-start logic.
 
 Every Overview request has an independent unavailable state. Detail links emit
-rail navigation or task navigation through the shell. The Overview does not
-own a Visual Evidence queue or deployment workflow in v1. Deployment remains a
-read-only DEP-1 summary, while the existing publishing panel keeps ownership of
-its established actions.
+rail navigation or task navigation through the shell. The Visual Evidence queue
+projects delivered task screenshots and stores review receipts in each task's
+existing append-only `results/review-evidence.jsonl`; it does not introduce a
+second screenshot store. Deployment uses the same summary for DEP-1 history and
+DEP-2 targets, launches runnable templates through the shared visible CLI-task
+substrate, and compiles only bounded repository-script prompts with typed slots.
+The existing publishing panel keeps ownership of package release actions.
 
 Machine facts stay in Project Settings: watch path, working directory,
 repository path, CLI readiness and status, clean-context configuration, and

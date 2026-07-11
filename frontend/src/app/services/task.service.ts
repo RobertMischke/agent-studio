@@ -79,7 +79,10 @@ import { ErrorDialogService } from './error-dialog.service';
 import { JobsHubClient } from './jobs-hub-client.service';
 import type {
   ProjectDeploymentSummary,
+  CompiledDeploymentPrompt,
   ProjectThroughputSummary,
+  ProjectVisualEvidenceItem,
+  ProjectVisualEvidenceQueue,
 } from '../models/project-overview.model';
 
 /** One row in the code-review list endpoint response (see backend `CodeReviewListEntry`). */
@@ -545,8 +548,9 @@ export class TaskService {
    * "load more" and an accurate empty state. No full disk walk per call —
    * the backend serves this from the same cached scan that feeds the board.
    */
-  getArchivedTasks(opts: { watchPath?: string; offset?: number; limit?: number; search?: string } = {}) {
+  getArchivedTasks(opts: { project?: string; watchPath?: string; offset?: number; limit?: number; search?: string } = {}) {
     let params = this.withWatchPath(opts.watchPath).params ?? new HttpParams();
+    if (opts.project?.trim()) params = params.set('project', opts.project.trim());
     if (typeof opts.offset === 'number') params = params.set('offset', String(opts.offset));
     if (typeof opts.limit === 'number') params = params.set('limit', String(opts.limit));
     const term = opts.search?.trim();
@@ -1476,12 +1480,22 @@ export class TaskService {
   }
 
   /** All epics with their live sub-task rollups. */
-  getEpics(includeFixtures = false) {
-    const params = includeFixtures ? new HttpParams().set('includeFixtures', 'true') : undefined;
+  getEpics(includeFixtures = false, status?: 'active' | 'completed', project?: string) {
+    let params = new HttpParams();
+    if (includeFixtures) params = params.set('includeFixtures', 'true');
+    if (status) params = params.set('status', status);
+    if (project) params = params.set('project', project);
     return this.http.get<import('../models/task.model').EpicRollup[]>(
       `${this.baseUrl}/epics`,
-      params ? { params } : {},
+      { params },
     );
+  }
+
+  getCompletedEpicCount(includeFixtures = false, project?: string) {
+    let params = new HttpParams();
+    if (includeFixtures) params = params.set('includeFixtures', 'true');
+    if (project) params = params.set('project', project);
+    return this.http.get<{ count: number }>(`${this.baseUrl}/epics/completed/count`, { params });
   }
 
   /** A single epic's rollup. */
@@ -1945,10 +1959,30 @@ export class TaskService {
     );
   }
 
+  getProjectVisualEvidence(projectName: string) {
+    return this.http.get<ProjectVisualEvidenceQueue>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/visual-evidence`,
+    );
+  }
+
+  acknowledgeProjectVisualEvidence(projectName: string, itemId: string) {
+    return this.http.post<ProjectVisualEvidenceItem>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/visual-evidence/${encodeURIComponent(itemId)}/acknowledge`,
+      {},
+    );
+  }
+
   /** Shared DEP-1 read model: latest stable deploy plus current pending delta. */
   getProjectDeploymentSummary(projectName: string) {
     return this.http.get<ProjectDeploymentSummary>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/deployment/summary`,
+    );
+  }
+
+  compileProjectDeployment(projectName: string, prompt: string) {
+    return this.http.post<CompiledDeploymentPrompt>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/deployment/compile`,
+      { prompt },
     );
   }
 

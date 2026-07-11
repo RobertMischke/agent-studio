@@ -94,7 +94,7 @@
 .proj-shell__mini-item--active {
   background: var(--studio-nav-active-bg);
   color: var(--studio-accent-strong);
-  box-shadow: inset 3px 0 0 0 var(--studio-nav-active-bar);
+  box-shadow: none;
 }
 
 .proj-shell__splitter {

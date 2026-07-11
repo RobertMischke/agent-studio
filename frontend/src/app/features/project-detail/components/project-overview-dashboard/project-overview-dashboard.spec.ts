@@ -51,6 +51,7 @@ describe('ProjectOverviewDashboardComponent', () => {
     });
     http.expectOne('/api/projects/Demo%20Project/wiki/pulse?feedLimit=6').flush(wikiPulse());
     http.expectOne('/api/projects/Demo%20Project/snapshot').flush(snapshot());
+    http.expectOne('/api/projects/Demo%20Project/visual-evidence').flush(evidenceQueue());
     http.expectOne('/api/workspaces').flush([{ id: 'ws', displayName: 'Workspace', projects: [{
       id: 'PROJ-1', displayName: 'Demo Project', workspaceId: 'ws', storageLocation: 'C:/tasks/demo',
       sortOrder: 0, archived: false, urls: [],
@@ -66,6 +67,7 @@ describe('ProjectOverviewDashboardComponent', () => {
     expect(host.querySelector('[data-testid="project-overview-last-deployment-details"]')?.textContent).toContain('Previously deployed change');
     expect(host.querySelector('[data-testid="project-overview-wiki"]')?.textContent).toContain('Operator dashboard concept');
     expect(host.querySelector('[data-testid="project-overview-planning-agt-2200"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="project-overview-evidence-count"]')?.textContent).toContain('1 unseen');
     host.querySelector<HTMLButtonElement>('[data-testid="project-overview-planning-agt-2200"]')!.click();
     expect(openedTasks).toEqual([{ jobId: 'agt-2200', watchPath: 'C:/tasks/demo' }]);
 
@@ -159,5 +161,19 @@ function flushEmpty(http: HttpTestingController): void {
   });
   http.expectOne('/api/projects/Demo%20Project/wiki/pulse?feedLimit=6').flush({ ...wikiPulse(), feed: { available: true, reason: null, items: [] } });
   http.expectOne('/api/projects/Demo%20Project/snapshot').flush(snapshot());
+  http.expectOne('/api/projects/Demo%20Project/visual-evidence').flush({
+    project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z', unseenCount: 0, items: [],
+  });
   http.expectOne('/api/workspaces').flush([]);
+}
+
+function evidenceQueue() {
+  return {
+    project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z', unseenCount: 1,
+    items: [{
+      id: 'visual-screenshot-demo', jobId: 'agt-2199', jobTitle: 'Delivered UI', watchPath: 'C:/tasks/demo',
+      fileName: 'overview--real.png', relativePath: 'results/overview--real.png', url: '/shot.png',
+      caption: 'Delivered overview', testStatus: 'passed', source: 'real', capturedAt: '2026-07-11T11:00:00Z', reviewStatus: 'unseen',
+    }],
+  };
 }

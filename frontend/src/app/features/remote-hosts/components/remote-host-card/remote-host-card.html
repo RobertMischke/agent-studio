@@ -6,6 +6,10 @@
     <span class="host__name" data-testid="remote-host-name">{{ h.name }}</span>
     <span class="host__role" [attr.data-role]="h.role">{{ roleLabel() }}</span>
     <span class="host__badge" [attr.data-tone]="tone()" data-testid="remote-host-status">{{ statusLabel() }}</span>
+    @if (h.gitPushStatus === 'read-only') {
+      <span class="host__badge" data-tone="error" data-testid="remote-host-git-read-only"
+            [attr.title]="h.gitPushDetail || 'Git push startup probe failed'">Read-only</span>
+    }
     <span class="host__spacer"></span>
     @if (h.address) {
       <span class="host__addr" [attr.title]="h.address">{{ h.address }}</span>
@@ -47,6 +51,41 @@
     </div>
   } @else {
     <p class="host__no-stats" data-testid="remote-host-no-stats">No live system stats reported.</p>
+  }
+
+  @if (h.telemetry && h.telemetry.points.length) {
+    <section class="telemetry" data-testid="remote-host-telemetry" aria-label="Host performance history">
+      <div class="telemetry__head">
+        <strong>Performance history</strong>
+        <span class="telemetry__context" data-testid="remote-host-slots-context">{{ latestContext() }}</span>
+        <div class="telemetry__windows" aria-label="Telemetry time window">
+          @for (window of ['1h', '6h', '48h', '14d']; track window) {
+            <button type="button" [attr.aria-pressed]="telemetryWindow() === window"
+                    [attr.data-testid]="'remote-host-window-' + window"
+                    (click)="selectTelemetryWindow($any(window))">{{ window }}</button>
+          }
+        </div>
+      </div>
+      @if (h.telemetry.findings.length) {
+        <div class="telemetry__findings" data-testid="remote-host-findings">
+          @for (finding of h.telemetry.findings; track finding.kind) {
+            <span class="host__badge" data-tone="warn" [attr.title]="finding.since + ' to ' + finding.until">
+              {{ finding.label }} · since {{ finding.since | date:'short' }}
+            </span>
+          }
+        </div>
+      }
+      <div class="telemetry__charts">
+        @for (row of chartRows(); track row.key) {
+          <div class="telemetry__row" [attr.data-chart]="row.key">
+            <span>{{ row.label }}</span>
+            <svg viewBox="0 0 100 30" preserveAspectRatio="none" role="img" [attr.aria-label]="row.label + ' history'">
+              <polyline [attr.points]="row.path"></polyline>
+            </svg>
+          </div>
+        }
+      </div>
+    </section>
   }
 
   @if (h.cliQuotas.length) {

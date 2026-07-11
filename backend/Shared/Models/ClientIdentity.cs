@@ -62,6 +62,11 @@ public record ClientIdentity
     /// use the selected model's default level.
     /// </summary>
     public string? DefaultThinkingLevel { get; init; }
+
+    /// <summary>Latest daemon startup proof: <c>ready</c> or <c>read-only</c>; null for legacy clients.</summary>
+    public string? RunnerGitStatus { get; init; }
+    public string? RunnerGitDetail { get; init; }
+    public DateTime? RunnerGitCheckedAt { get; init; }
 }
 
 public enum ClientIdentityKind
@@ -127,6 +132,9 @@ public record ClientSummary
     public string? DefaultCliType { get; init; }
     public string? DefaultModel { get; init; }
     public string? DefaultThinkingLevel { get; init; }
+    public string? RunnerGitStatus { get; init; }
+    public string? RunnerGitDetail { get; init; }
+    public DateTime? RunnerGitCheckedAt { get; init; }
 
     public static ClientSummary From(ClientIdentity i) => new()
     {
@@ -148,8 +156,18 @@ public record ClientSummary
         Notes = i.Notes,
         DefaultCliType = i.DefaultCliType,
         DefaultModel = i.DefaultModel,
-        DefaultThinkingLevel = i.DefaultThinkingLevel
+        DefaultThinkingLevel = i.DefaultThinkingLevel,
+        RunnerGitStatus = i.RunnerGitStatus,
+        RunnerGitDetail = i.RunnerGitDetail,
+        RunnerGitCheckedAt = i.RunnerGitCheckedAt
     };
+}
+
+public record RunnerGitCapabilityRequest
+{
+    public string Status { get; init; } = "";
+    public string? Detail { get; init; }
+    public DateTime CheckedAt { get; init; }
 }
 
 /// <summary>

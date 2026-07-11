@@ -23,5 +23,35 @@ public static class ProjectOperatorDashboardEndpoints
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
                 : Results.Ok(summary);
         });
+
+        app.MapPost("/api/projects/{projectName}/deployment/compile", (
+            string projectName,
+            CompileDeploymentPromptRequest request,
+            ProjectDeploymentSummaryService deployments,
+            ProjectDeploymentCompiler compiler) =>
+        {
+            if (deployments.Build(projectName) is null)
+                return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            return Results.Ok(compiler.Compile(request.Prompt));
+        });
+
+        app.MapGet("/api/projects/{projectName}/visual-evidence", (
+            string projectName,
+            ProjectVisualEvidenceService evidence) =>
+        {
+            var queue = evidence.Build(projectName);
+            return queue is null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(queue);
+        });
+
+        app.MapPost("/api/projects/{projectName}/visual-evidence/{itemId}/acknowledge", (
+            string projectName,
+            string itemId,
+            ProjectVisualEvidenceService evidence) =>
+        {
+            var item = evidence.Acknowledge(projectName, itemId);
+            return item is null ? Results.NotFound() : Results.Ok(item);
+        });
     }
 }

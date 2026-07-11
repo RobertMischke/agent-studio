@@ -53,6 +53,20 @@
       "type": ["string", "null"],
       "maxLength": 1000,
       "description": "Free-form operator notes (\"shared dev box\", \"Layer 3 review on stable\", etc.)."
+    },
+    "runnerGitStatus": {
+      "type": ["string", "null"],
+      "enum": ["ready", "read-only", null],
+      "description": "Latest remote-daemon startup push proof. A read-only runner is refused claims."
+    },
+    "runnerGitDetail": {
+      "type": ["string", "null"],
+      "description": "Operator-facing result of the latest Git push dry-run."
+    },
+    "runnerGitCheckedAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "UTC time of the latest remote-daemon Git push capability probe."
     }
   }
 }

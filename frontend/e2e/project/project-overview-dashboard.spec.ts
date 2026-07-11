@@ -73,8 +73,34 @@ const deployment = {
     at: '2026-07-10T09:42:11Z', status: 'ok', headBefore: '2bec67c', headAfter: 'a1f4b29',
     durationSeconds: 47, jobsSinceLastRestart: 6, reviewCountAfter: 14, commits: commits.slice(0, 3),
   },
+  history: [
+    {
+      at: '2026-07-10T09:42:11Z', status: 'ok', headBefore: '2bec67c', headAfter: 'a1f4b29',
+      durationSeconds: 47, jobsSinceLastRestart: 6, reviewCountAfter: 14, commits: commits.slice(0, 3),
+    },
+    {
+      at: '2026-07-08T17:12:00Z', status: 'ok', headBefore: '441bc21', headAfter: '2bec67c',
+      durationSeconds: 38, jobsSinceLastRestart: 4, reviewCountAfter: 8, commits: [],
+    },
+    {
+      at: '2026-07-07T14:03:00Z', status: 'failed', headBefore: '310aa91', headAfter: '441bc21',
+      durationSeconds: 12, jobsSinceLastRestart: 2, reviewCountAfter: 4, commits: [],
+    },
+  ],
   pendingCount: commits.length,
   pendingCommits: commits,
+  targets: [{
+    id: 'deploy-stable', title: 'deploy-stable', kind: 'derived', template: 'deploy-stable',
+    summary: 'Update the stable seat after confirming it is idle.', runnable: true,
+    source: 'repository-fact', command: 'bash scripts/supervisor/restart-stable-after-batch.sh', targetHostId: null,
+    parameters: [{ name: 'stableIdle', type: 'boolean', required: true, default: false, options: [] }],
+  }, {
+    id: 'docs-site', title: 'Docs site', kind: 'template', template: 'caddy-site',
+    summary: 'Deploy docs to the Caddy host.', runnable: true,
+    source: 'docs/deployments/docs-site/deployment.json', command: 'bash scripts/deploy-docs.sh --branch {{branch}}',
+    targetHostId: 'agent-orchestrator-web',
+    parameters: [{ name: 'branch', type: 'branch', required: true, default: 'develop', options: [] }],
+  }],
 };
 
 const wikiPulse = {
@@ -140,9 +166,67 @@ async function proxyBackend(page: Page, backendBaseUrl: string): Promise<void> {
   });
 }
 
+interface RealProjectTarget {
+  name: string;
+  cleanup: () => Promise<void>;
+}
+
+async function resolveRealProject(backendBaseUrl: string): Promise<RealProjectTarget> {
+  const watchPathsResponse = await fetch(`${backendBaseUrl}/api/watch-paths`);
+  expect(watchPathsResponse.ok).toBe(true);
+  const watchPaths = await watchPathsResponse.json() as { name: string }[];
+  if (watchPaths.length > 0) {
+    return {
+      name: watchPaths.find(item => /agent.?task/i.test(item.name))?.name ?? watchPaths[0].name,
+      cleanup: async () => undefined,
+    };
+  }
+
+  const workspacesResponse = await fetch(`${backendBaseUrl}/api/workspaces`);
+  expect(workspacesResponse.ok).toBe(true);
+  const workspaces = await workspacesResponse.json() as { id: string }[];
+  expect(workspaces.length, 'The dev backend must expose a workspace for isolated project provisioning.').toBeGreaterThan(0);
+
+  const suffix = Date.now().toString(36).slice(-5).toUpperCase();
+  const name = `Overview Evidence ${suffix}`;
+  const createResponse = await fetch(`${backendBaseUrl}/api/projects`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      sourceType: 'local-folder',
+      workspaceId: workspaces[0].id,
+      displayName: name,
+      shortCode: `E${suffix}`,
+    }),
+  });
+  const createBody = await createResponse.text();
+  expect(createResponse.ok, `Could not provision an isolated real-source project: ${createBody}`).toBe(true);
+  const created = JSON.parse(createBody) as { id: string; displayName: string };
+
+  await expect.poll(async () => {
+    const response = await fetch(`${backendBaseUrl}/api/watch-paths`);
+    if (!response.ok) return false;
+    const paths = await response.json() as { name: string }[];
+    return paths.some(item => item.name === created.displayName);
+  }).toBe(true);
+
+  return {
+    name: created.displayName,
+    cleanup: async () => {
+      const response = await fetch(`${backendBaseUrl}/api/projects/${encodeURIComponent(created.id)}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok && response.status !== 404) {
+        throw new Error(`Could not remove isolated real-source project ${created.id}: ${await response.text()}`);
+      }
+    },
+  };
+}
+
 async function mockDashboard(page: Page): Promise<{ startedUrl: () => boolean; taskRequested: () => boolean }> {
   let offlineStarted = false;
   let planningTaskRequested = false;
+  let evidenceReviewed = false;
   await page.route('http://127.0.0.1:4310/**', route => route.fulfill({ status: 200, body: 'ok' }));
   await page.route('http://127.0.0.1:4311/**', route => offlineStarted
     ? route.fulfill({ status: 200, body: 'ok' })
@@ -168,6 +252,33 @@ async function mockDashboard(page: Page): Promise<{ startedUrl: () => boolean; t
   await page.route('**/api/projects/*/deployment/summary', route => fulfillJson(route, deployment));
   await page.route('**/api/projects/*/wiki/pulse**', route => fulfillJson(route, wikiPulse));
   await page.route('**/api/projects/*/snapshot', route => fulfillJson(route, snapshot));
+  await page.route('**/api/projects/*/visual-evidence', route => fulfillJson(route, {
+    project: PROJECT_NAME, capturedAt: '2026-07-11T12:00:00Z', unseenCount: evidenceReviewed ? 0 : 1,
+    items: [{
+      id: 'visual-screenshot-overview', jobId: 'OPD-220', jobTitle: 'Visual overview delivery',
+      watchPath: '/mock/tasks/operator-demo', fileName: 'overview--real.png',
+      relativePath: 'results/overview--real.png', url: '/evidence-shot.svg', caption: 'Project overview in light theme',
+      testStatus: 'passed', source: 'real', capturedAt: '2026-07-11T11:30:00Z',
+      reviewStatus: evidenceReviewed ? 'reviewed' : 'unseen',
+    }, {
+      id: 'visual-screenshot-removed', jobId: 'OPD-204', jobTitle: 'Prior sweep',
+      watchPath: '/mock/tasks/operator-demo', fileName: 'removed--mocked.png',
+      relativePath: 'results/removed--mocked.png', url: null, caption: 'Prior settings sweep',
+      testStatus: null, source: 'unavailable', capturedAt: '2026-07-10T09:00:00Z', reviewStatus: 'unavailable',
+    }],
+  }));
+  await page.route('**/api/projects/*/visual-evidence/*/acknowledge', route => {
+    evidenceReviewed = true;
+    return fulfillJson(route, {
+      id: 'visual-screenshot-overview', jobId: 'OPD-220', jobTitle: 'Visual overview delivery',
+      watchPath: '/mock/tasks/operator-demo', fileName: 'overview--real.png', relativePath: 'results/overview--real.png',
+      url: '/evidence-shot.svg', caption: 'Project overview in light theme', testStatus: 'passed', source: 'real',
+      capturedAt: '2026-07-11T11:30:00Z', reviewStatus: 'reviewed',
+    });
+  });
+  await page.route('**/evidence-shot.svg', route => route.fulfill({
+    status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100"><rect width="160" height="100" fill="#6c8cff"/><rect x="14" y="14" width="132" height="18" rx="4" fill="#fff"/><rect x="14" y="42" width="60" height="44" rx="4" fill="#dce3ff"/><rect x="82" y="42" width="64" height="44" rx="4" fill="#fff"/></svg>',
+  }));
   await page.route(`**/api/projects/${PROJECT_ID}/urls/storybook/start`, async route => {
     offlineStarted = true;
     await fulfillJson(route, { started: true, processId: 4421 });
@@ -219,6 +330,11 @@ test.describe('Project Overview · operator dashboard', () => {
     await expect(page.getByTestId('project-overview-deployment')).toContainText('5 changes ready to deploy');
     await expect(page.getByTestId('project-overview-wiki')).toContainText('Deployment as a first-class citizen');
     await expect(page.getByTestId('project-overview-planning-plan-deployment-history')).toBeVisible();
+    await expect(page.getByTestId('project-overview-evidence-count')).toHaveText('1 unseen');
+    await expect(page.getByTestId('project-overview-evidence-visual-screenshot-removed')).toContainText('No longer actionable');
+    await page.getByTestId('project-overview-evidence-ack-visual-screenshot-overview').click();
+    await expect(page.getByTestId('project-overview-evidence-count')).toHaveText('0 unseen');
+    await expect(page.getByTestId('project-overview-evidence-visual-screenshot-overview')).toContainText('Reviewed');
 
     const legacyCopy = ['Watch path', 'Working directory', 'Repository', 'Clean context', 'Project sessions'];
     for (const copy of legacyCopy) await expect(page.getByTestId('project-overview-dashboard')).not.toContainText(copy);
@@ -252,6 +368,24 @@ test.describe('Project Overview · operator dashboard', () => {
     await page.getByTestId('project-overview-last-deployment-details').locator('summary').click();
     await expect(page.getByTestId('project-overview-last-deployment-details')).toContainText('Operator-first project overview');
 
+    await page.getByTestId('project-overview-open-deployment').click();
+    await expect(page.getByTestId('project-deployment-panel')).toBeVisible();
+    await expect(page.getByTestId('project-deployment-pending-count')).toHaveText('5');
+    await expect(page.getByTestId('project-deployment-history').locator(':scope > li')).toHaveCount(3);
+    await expect(page.getByTestId('project-deployment-targets').locator('button')).toHaveCount(2);
+    await expect(page.getByTestId('project-deployment-panel')).toContainText('a1f4b29');
+    await expect(page.getByTestId('project-deployment-panel')).not.toContainText('Run deployment');
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, `project-deployment-history--${theme}--mocked.png`),
+        fullPage: true,
+      });
+    }
+
+    await page.goto(`/#/projects/${slugFor(PROJECT_NAME)}/overview`);
+    await expect(page.getByTestId('project-overview-dashboard')).toBeVisible();
+
     await page.getByTestId('project-overview-open-token-usage').click();
     await expect(page.getByTestId('project-shell-panel-token-usage')).toBeVisible();
 
@@ -273,20 +407,30 @@ test.describe('Project Overview · operator dashboard', () => {
 
     // Switch from deterministic routes to this worktree's fixture backend and
     // persist a separately labelled real-source pair.
-    const response = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
-    expect(response.ok).toBe(true);
-    const paths = await response.json() as { name: string }[];
-    expect(paths.length).toBeGreaterThan(0);
-    const realProjectName = paths.find(item => /agent.?task/i.test(item.name))?.name ?? paths[0].name;
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
-    await proxyBackend(page, devBackend.baseUrl);
-    await openDashboard(page, realProjectName, true);
-    await expect(page.getByTestId('project-overview-refresh')).toHaveText('Refresh', { timeout: 20_000 });
+    const realProject = await resolveRealProject(devBackend.baseUrl);
+    try {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      await proxyBackend(page, devBackend.baseUrl);
+      await openDashboard(page, realProject.name, true);
+      await expect(page.getByTestId('project-overview-refresh')).toHaveText('Refresh', { timeout: 20_000 });
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+        await page.screenshot({
+          path: path.join(RESULTS_DIR, `project-overview-dashboard--${theme}--real.png`),
+          fullPage: true,
+        });
+      }
+    } finally {
+      await realProject.cleanup();
+    }
+    await page.getByTestId('project-overview-open-deployment').click();
+    await expect(page.getByTestId('project-deployment-panel')).toBeVisible();
+    await expect(page.getByTestId('project-deployment-refresh')).toHaveText('Refresh', { timeout: 20_000 });
     for (const theme of ['light', 'dark'] as const) {
       await setTheme(page, theme);
-      await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
       await page.screenshot({
-        path: path.join(RESULTS_DIR, `project-overview-dashboard--${theme}--real.png`),
+        path: path.join(RESULTS_DIR, `project-deployment-history--${theme}--real.png`),
         fullPage: true,
       });
     }

@@ -1,230 +1,477 @@
-# Linux runner host — provisioning & headless CLI auth runbook
+# Linux runner host (standalone remote runner)
 
-**Status.** Phase-1 output of the remote-ready theme
-([remote-ready-kickoff-2026-07.md](../../research/remote-ready-kickoff-2026-07.md),
-ADR-0059). First verified end-to-end on 2026-07-07 against the Hetzner test
-host. This runbook is the reproducible path from "bare Ubuntu" to "all runner
-pieces proven": claude/codex CLIs authenticated headlessly, Playwright
-rendering, backend building.
+Status: Remote daemon runbook. The runner continuously executes server-assigned
+projects on a Linux host while retaining the RM-5 one-task diagnostic mode.
 
-## 1. Current test host
+Related work: AGT-2092 (runner operations baseline) and AGT-2094 (Admin UI
+remote-host onboarding). AGT-2094 uses this runbook as its operational
+reference; the UI does not maintain a second copy of these commands.
 
-| | |
-|---|---|
-| Provider | Hetzner Server-Börse (dedicated), auction #3031485 |
-| Hardware | i7-8700 (6C/12T), 64 GB RAM, 2×512 GB NVMe as software RAID1 |
-| OS | Ubuntu 24.04 LTS (installimage, ext4, `/boot` + swap 8G + `/`) |
-| Access | SSH key-auth only (`PasswordAuthentication no`, `PermitRootLogin prohibit-password`) |
-| Users | `root` (key), `agent` (key, `sudo NOPASSWD`) — all runner work happens as `agent` |
+This is the operator-facing companion to the plan in
+[../../research/remote-ready-kickoff-2026-07.md](../../research/remote-ready-kickoff-2026-07.md)
+(Phase 1 + Phase 3) and the binding lease contract in
+[../../concepts/parallel-task-execution.md](../../concepts/parallel-task-execution.md)
+§8.2C. The runner code lives under [`runner/`](../../../runner) and consumes only
+the Runner API surface added by RM-3 (fenced lease) and RM-4 (log + artifact
+upload).
 
-Operator convenience: the operator machine carries `~/.ssh/config` aliases
-`agent-runner` (→ `agent@<host>`) and `agent-runner-root`, both using the
-dedicated `~/.ssh/agent-studio-runner` ed25519 key (no passphrase — accepted
-for the test host; per-machine keys + rotation are the D4/D5 follow-up).
-Recovery path if keys are lost: Hetzner Rescue System.
+## What the standalone runner is
 
-## 2. Base provisioning (as root, once)
+A single self-contained .NET console process (`agent-runner`) that runs on a
+Linux host and fills a bounded set of task slots without owning task state:
+
+- **Code arrives via git `origin`** - the runner fetches and checks out a branch
+  read-only. It never pushes; the platform still owns git integration on the
+  server side (ADR-0019/0050/0057).
+- **Results leave via the API** - CLI output goes to `POST /api/runner/logs`,
+  evidence files under `results/` go to `POST /api/runner/artifacts`, and the
+  terminal sentinel is handed off with fenced `POST /api/runner/completion`.
+  `Done` and `NoOp` enter normal `4-auto-review`; blocked, input, and genuinely
+  unknown outcomes go to human review. Remote runs are not labelled as
+  out-of-band completions.
+- **Exactly-one-runner is enforced by the fenced lease** - acquire mints a
+  fencing token, a heartbeat renews it, and a rejected heartbeat (`StaleToken` /
+  `Expired`) means another holder took over, so the runner abandons the run
+  instead of racing it (the §8.2C split-brain guard, enforced runner-side in
+  `runner/LeaseHeartbeat.cs`).
+- **Assignment is server-owned** - `ProjectSettings.executionRunner` names the
+  daemon that may claim a project's cards. The remote claim endpoint and the
+  local in-process runner read that same record, so config drift cannot cause
+  double pickup. Lease fencing remains the hard takeover guard.
+- **Every slot has its own linked git worktree** under
+  `$RUNNER_WORKDIR/<project-id>/worktrees/<task-key>`. Each project has a shared
+  clone at `$RUNNER_WORKDIR/<project-id>/repo`; it is fetched before a claimed
+  task starts. Completed task worktrees are removed after handoff.
+
+### MVP boundaries (read before relying on it)
+
+- **No code integration from the remote run.** The runner uploads evidence and a
+  summary, not a git diff. A run that produces committable code changes still
+  needs the platform's own commit/push path; that cutover is later remote-ready
+  work, not this MVP.
+- **Suitability is explicit and narrow.** `remoteExecutionEnabled` defaults to
+  true at project level. Set it false only for machine-bound work such as the
+  UpdateService Windows machinery or live-checkout drift scans. Headless
+  Chromium, UI tests, and screenshots are remote-capable and use the host-owned
+  Mode-A stack.
+- **The CLI invocation is configurable, not hard-coded.** Headless auth and
+  print-mode flags differ per CLI and per version; `RUNNER_CLI_BIN` /
+  `RUNNER_CLI_ARGS` select them. See the per-CLI defaults below.
+
+## Test host
+
+`agent-runner` (Hetzner, `88.99.136.78`). SSH key-auth, one sudo-capable user.
+No inbound ports beyond SSH until the central-URL auth work (Phase 2) lands, so
+the runner reaches the Task Server over an `ssh -R`/`-L` tunnel or the operator's
+LAN address during the MVP. For **unattended** operation, keep that tunnel up as
+a supervised, auto-reconnecting service and gate work on its health-check:
+[remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
+
+## Product onboarding from Remote Hosts
+
+The primary setup path is **Workspace Settings -> Remote hosts -> Set up
+runner**. The action creates a normal visible CLI task, so the existing task
+conversation owns live output, operator input, completion, and durable history.
+The local controller then runs
+[`scripts/remote-runner-onboard.sh`](../../../scripts/remote-runner-onboard.sh);
+every provisioning command in that controller is executed through SSH on the
+selected host.
+
+Before the task can start, the dialog requires an SSH target, the registered
+host client id, a credential-free fallback git origin, and one of these Task Server
+topologies:
+
+| Topology | URL entered in setup | Required proof |
+|---|---|---|
+| Central | Authenticated TLS URL, for example `https://tasks.example.com` | Remote `curl --max-time 10 <url>/healthz` succeeds. Do not expose the workstation with only `X-Client-Id`; it is attribution, not authentication. |
+| Tunnel | Remote listener, normally `http://127.0.0.1:15031` | The supervised reverse-tunnel unit from [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md) is active and the remote health probe succeeds. |
+| LAN | Protected workstation LAN address and bound Task Server port | Firewall and access controls are explicit, and the remote health probe succeeds. |
+
+`http://localhost:5031` and `http://127.0.0.1:5031` name the remote host itself
+when evaluated there. Setup rejects them for central and LAN modes. Tunnel mode
+must name the listener that actually exists on the remote host. A failed probe
+stops before package installation and prints central URL, tunnel, and LAN
+remediation instead of waiting on a runner request.
+
+The controller is intentionally repeatable after a host wipe:
+
+1. Verify SSH key access, passwordless sudo, .NET 10, and Task Server health
+   from the host.
+2. Install or update the `CodingAgentRunner` NuGet global tool and require
+   version `0.5.0` or newer, then install the Codex and Claude CLIs.
+3. Run host-owned login flows. Codex uses `codex login --device-auth`; the URL
+   and one-time code stay visible in the task conversation. Claude uses
+   `claude auth login --claudeai`. The operator completes browser steps locally,
+   then `codex login status` and `claude auth status --text` report the active
+   account. Credential files are never copied as the normal path.
+4. Atomically write `/etc/agent-runner/runner.env` with the Task Server URL,
+   runner identity, `RUNNER_CLIENT_ID`, and fallback git origin. Install and start the
+   service through systemd. The SSH session never owns the daemon process.
+5. Prove `systemctl is-enabled`, `systemctl is-active`, runner health, and the
+   registered client endpoint before setup completes.
+
+The NuGet package must be published with package type `DotnetTool` and expose
+the `agent-runner` command. A library-only `CodingAgentRunner` package cannot be
+installed with `dotnet tool`; setup reports that packaging mismatch explicitly
+and does not silently switch to a source build. The source-publish procedure
+below remains a troubleshooting and development fallback, not the product
+onboarding path.
+
+## 1. Provision the host
+
+Ubuntu LTS. Install the runtime the runner and the agent CLIs need:
 
 ```bash
-apt-get update && apt-get install -y git curl build-essential python3
-# node 22 (NodeSource)
-curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs
-# dotnet 10 SDK (dotnet-install.sh into /usr/lib/dotnet, symlink into PATH)
-curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --install-dir /usr/lib/dotnet
-ln -sf /usr/lib/dotnet/dotnet /usr/local/bin/dotnet
-# coding-agent CLIs
-npm install -g @anthropic-ai/claude-code @openai/codex
-# runner user
-adduser --disabled-password --gecos "" agent
-usermod -aG sudo agent && echo "agent ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agent
-install -d -m 700 -o agent -g agent /home/agent/.ssh
-cp /root/.ssh/authorized_keys /home/agent/.ssh/ && chown agent:agent /home/agent/.ssh/authorized_keys
-# playwright browsers + OS deps (as agent)
-su - agent -c "npx --yes playwright install --with-deps chromium"
-# ssh hardening: PasswordAuthentication no, PermitRootLogin prohibit-password → systemctl reload sshd
+sudo apt-get update && sudo apt-get install -y git curl build-essential
+# dotnet 10 SDK (or runtime) and node 22 via the usual channels, then:
+npm i -g @anthropic-ai/claude-code @openai/codex
+npx playwright install --with-deps chromium
 ```
 
-`DOTNET_ROOT=/usr/lib/dotnet` must be exported for `dotnet` SDK commands in
-non-login shells (e.g. over plain `ssh host 'command'`).
+### Per-host CLI credentials (D5, permanent)
 
-## 3. Headless CLI auth (decision D5 — credential seeding)
+Authenticate every CLI **on the host itself** so the host owns its own
+credentials. Do **not** copy the operator's `~/.claude/.credentials.json` /
+`~/.codex/auth.json` over from the studio. A seeded credential shares a
+refresh-token lineage with the operator's account, so when the operator side
+re-logs-in or rotates its token, the host's copy is invalidated and the host
+drops out logged-out mid-batch. This drift was live on 2026-07-09 (host-claude
+logged out after an operator-side token rotation, needing a manual re-seed); a
+host that logged in independently is immune to it. Per-host login is the
+permanent replacement for the earlier shared-credential seeding.
 
-No browser exists on the host; interactive OAuth is replaced by seeding the
-credential files from an already-authenticated machine. **Exact file set:**
+- **Claude.** Log in directly on the host, once, over an `ssh -L` port-forward so
+  the OAuth browser step can complete (`claude`, finish onboarding), **or** mint a
+  long-lived headless token on the host with `claude setup-token`. Either way the
+  host holds its **own** refresh token, independent of the operator's. Verify with
+  `claude --version` and one throwaway `claude -p "say hi"` before wiring the runner.
+- **Codex.** Same rule: run `codex login` on the host so it writes the host's own
+  `~/.codex/auth.json`; do not copy the operator's. Verify with `codex --version`.
+- **Rotation is now per host.** If a host's own token is ever revoked, re-run that
+  host's login / `setup-token` **on that host**. No other host and no operator-side
+  action is involved, so there is no cross-host drift to chase.
 
-| CLI | File on host | Mode | Content |
+The host's `~/.claude/.credentials.json` must stay a plain file the runner user
+can read and write in place, so Claude's own token refresh persists for the next
+launch. (The studio's clean-context mechanism keeps the same in-place invariant
+for parallel runs by sharing the one credential file *by link* rather than
+copying it - AGT-2066 "OAuth token roulette"; see the clean-context section of
+[`docs/cli/supported-clis.md`](../../cli/supported-clis.md).)
+
+## 2. Build the runner
+
+```bash
+git clone <origin> agent-taskboard && cd agent-taskboard
+dotnet publish runner/AgentRunner.csproj -c Release -o /opt/agent-runner
+```
+
+The output binary is `agent-runner`.
+
+## 3. Configure
+
+Every value has an environment-variable default (systemd-friendly); the per-task
+identifiers can also be passed as flags. `agent-runner --help` prints the full
+list.
+
+| Env var | Flag | Default | Meaning |
 |---|---|---|---|
-| claude | `~/.claude/.credentials.json` | `600` | OAuth access+refresh token (copy from operator machine) |
-| claude | `~/.claude.json` | `644` | minimal onboarding state, see below |
-| codex | `~/.codex/auth.json` | `600` | copy from operator machine |
+| `RUNNER_SERVER_URL` | `--server` | `http://127.0.0.1:5030` | Task Server base URL (or the tunnelled address). |
+| `RUNNER_ID` | `--runner-id` | `agent-runner-<host>` | Stable lease owner identity. Fencing is per task, not per pid. |
+| `RUNNER_NAME` | `--runner-name` | `agent-runner-01` | Board-facing runner/project name. |
+| `RUNNER_CLIENT_ID` | `--client-id` | (self-register) | Existing host identity shown in Remote Hosts. When set, startup verifies this exact X-Client-Id and refuses to create a replacement identity. |
+| `RUNNER_GIT_REMOTE` | `--git-remote` | (none) | Credential-free fetch URL and startup push-probe repository. Required for daemon onboarding; normally use HTTPS. |
+| `RUNNER_GIT_PUSH_REMOTE` | `--git-push-remote` | (fetch URL) | Write URL installed as Git `origin.pushurl`; normally the SSH URL backed by this host/repository deploy key. |
+| `RUNNER_BRANCH` | `--branch` | (base branch) | Branch to check out for the run. |
+| `RUNNER_BASE_BRANCH` | `--base-branch` | `main` | Fallback when the task branch is absent on origin. |
+| `RUNNER_WORKDIR` | `--workdir` | `$TMPDIR/agent-runner-work` | Where the repo checkout and `results/` live. |
+| `RUNNER_CLI_BIN` | `--cli` | `claude` | Agent CLI binary (or a wrapper script). |
+| `RUNNER_CLI_ARGS` | `--cli-args` | `-p` | Headless CLI args; the prompt is streamed on stdin. |
+| `RUNNER_AUTH_TOKEN` | `--auth-token` | (none) | Bearer token for the central URL (Phase 2 auth). |
+| `RUNNER_TTL_SECONDS` | `--ttl` | `120` | Requested lease TTL; the server clamps it. |
+| `RUNNER_HEARTBEAT_SECONDS` | | `30` | Renew cadence, kept below the TTL. |
+| `RUNNER_RUN_TIMEOUT_SECONDS` | | `3600` | Hard cap on a single CLI run. |
+| `RUNNER_MAX_PARALLELISM` | `--max-parallelism` | `2` | Maximum concurrent task slots on this host. |
+| `RUNNER_POLL_SECONDS` | `--poll-seconds` | `5` | Delay after an empty claim poll. |
 
-Minimal `~/.claude.json` (skips trust/theme/upsell wizard that would
-otherwise dead-lock a headless run):
+Recommended per-CLI headless defaults (verify against your installed version):
 
-```json
-{
-  "hasCompletedOnboarding": true,
-  "theme": "dark",
-  "autoUpdates": false
-}
+- Claude: `RUNNER_CLI_BIN=claude`, `RUNNER_CLI_ARGS="-p"` (prompt on stdin, text
+  output on stdout that the runner scans for the `[[TASK_*]]` sentinel).
+- Codex: `RUNNER_CLI_BIN=codex`, plus the non-interactive exec flags your version
+  exposes. When quoting gets awkward, point `RUNNER_CLI_BIN` at a small wrapper
+  script instead of fighting the space-split arg parser.
+
+### Multi-repository clone layout and eligibility
+
+The claim response contains the durable project id, repository URL, and default
+branch. The daemon uses the project id as the cache key, so two projects never
+share git metadata even when their task keys happen to look alike:
+
+```text
+$RUNNER_WORKDIR/
+  PROJ-001/repo
+  PROJ-001/worktrees/AGT-2141
+  PROJ-007/repo
+  PROJ-007/worktrees/QS-104
 ```
 
-Seeding from the operator machine (PowerShell/Git-Bash):
+The Task Server resolves the repository URL from the project's registry URL
+entry whose id or label is `repo` (label `repository` is also accepted). If that
+entry is absent, it derives `remote.origin.url` and the default branch from the
+registered local `RepositoryPath`. Local filesystem remotes are not usable on a
+different host. An assigned project with no resolvable network repository URL
+is skipped before a lease is created and is logged as
+`remote-runner-project-skipped`; the card remains Ready and is not escalated.
+
+`RUNNER_GIT_REMOTE` is also the repository used by the daemon's one-time startup
+write probe. Configure it together with `RUNNER_GIT_PUSH_REMOTE` for the
+host/repository assignment. Do not point one global push URL at unrelated claim
+repositories.
+
+### Push identity setup
+
+The recommended identity is one write-enabled repository deploy key per runner
+host and repository. Generate it as the systemd runner user. Only the public key
+leaves the host:
 
 ```bash
-ssh agent-runner 'mkdir -p ~/.claude ~/.codex && chmod 700 ~/.claude ~/.codex'
-scp ~/.claude/.credentials.json agent-runner:~/.claude/.credentials.json
-scp ~/.codex/auth.json          agent-runner:~/.codex/auth.json
-ssh agent-runner 'chmod 600 ~/.claude/.credentials.json ~/.codex/auth.json'
-# then write ~/.claude.json as above
+install -d -m 0700 ~/.ssh
+ssh-keygen -t ed25519 -f ~/.ssh/agent-studio-deploy -C 'agent-runner-01:agent-studio' -N ''
+cat ~/.ssh/agent-studio-deploy.pub
 ```
 
-**Verification (must both pass):**
+In GitHub, an organization owner must first allow repository deploy keys in the
+organization security/settings policy. If the GitHub API returns `422 Deploy
+keys are disabled for this repository`, this organization policy is still off.
+After it is enabled, add the public key under repository Settings, Deploy keys,
+select **Allow write access**, and keep the private key on the runner. Pin its
+use without changing the fetch URL:
+
+```sshconfig
+Host github-agent-studio
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/agent-studio-deploy
+  IdentitiesOnly yes
+```
 
 ```bash
-ssh agent-runner 'claude --version && claude -p "Reply with exactly: RUNNER-OK"'
-ssh agent-runner 'codex exec --skip-git-repo-check "Reply with exactly: CODEX-OK"'
+RUNNER_GIT_REMOTE=https://github.com/agent-orc/agent-studio.git
+RUNNER_GIT_PUSH_REMOTE=git@github-agent-studio:agent-orc/agent-studio.git
 ```
 
-### Known risk: refresh-token drift
+As a fallback when organization policy cannot allow deploy keys, create a
+fine-grained personal access token owned by a dedicated machine account. Limit
+it to this repository with **Contents: Read and write**, store it in the runner
+user's OS credential helper, and keep the HTTPS URL free of embedded secrets.
+Do not put a token in `runner.env`, a command line, task output, or evidence.
 
-The seeded refresh token is *shared* with the operator machine. If both sides
-rotate it independently, one side can get logged out. Observed remedy: re-seed
-`.credentials.json` from whichever machine still has a valid session. This is
-carried as kickoff risk "headless subscription auth drift"; the durable
-answer (per-host `claude setup-token` long-lived tokens or per-host accounts)
-is part of D5's rotation decision — revisit before Phase 3 (multiple
-runners). `autoUpdates: false` keeps the CLI version pinned so probe/PTY
-behavior only changes when we choose to update.
+At daemon startup, the runner performs `git push --dry-run` to
+`refs/heads/runner-capability-probe/<runner-id>`, publishes `ready` or
+`read-only` on its client identity, and then polls. Dry-run creates no branch.
+The server refuses claims from a `read-only` runner, and Remote Hosts shows a
+Read-only badge with the probe error. Restore credentials and restart the unit;
+the next startup probe replaces the status.
 
-## 4. Smoke battery (Phase-1 baseline, 2026-07-07)
+### Remote completion protocol
 
-| Check | Command | Result 2026-07-07 |
-|---|---|---|
-| claude headless | `claude -p "Reply with exactly: RUNNER-OK"` | ✅ `RUNNER-OK` (2.1.202) |
-| codex headless | `codex exec --skip-git-repo-check …` | ✅ `CODEX-OK` (0.142.5) |
-| Playwright | `npx playwright screenshot --browser chromium https://example.com /tmp/pw.png` | ✅ 15.9 KB PNG |
-| repo clone | `git clone https://github.com/RobertMischke/agent-studio.git` | ✅ public, no deploy key needed (read) |
-| backend build | `dotnet build agent-taskboard.sln` | ✅ 0 errors (63 pre-existing warnings) |
-| backend tests | `dotnet test --no-build` | ⚠️ 3295/3337 green; 23 known Linux failures — see kickoff doc "Phase 1 findings" |
-| backend boot | `dotnet run --project backend` + Linux `appsettings.Local.json` | ✅ `/api/projects` serves registry with Unix paths |
-| quota probe (Porta.Pty) | `POST /api/cli/quota/refresh/claude` (`X-Client-Id` header!) | ✅ full PTY scrape on Ubuntu 24.04, plan + windows parsed |
-| E2E task run | `POST /api/tasks` + `POST /api/tasks/{id}/start` | ✅ claude spawned, worktree flow (ADR-0057), artifact written, lane → 4-auto-review. Note: repo needs a `develop` branch; `watchPath` = `<RootPath>/.orchestrator/jobs` for in-repo layout |
+The Task Server returns the operator-authored `prompt.md` verbatim. Immediately
+before spawning either CLI, the standalone runner appends the same mandatory
+completion protocol used by the local runner. It requires exactly one final
+`[[TASK_DONE]]`, `[[TASK_BLOCKED:<reason>]]`,
+`[[TASK_NEEDS_INPUT:<reason>]]`, or `[[TASK_NOOP]]` line. This assembly happens
+inside the shared task execution path, so daemon claims and one-task diagnostics
+cannot drift. The shipped log contains
+`remote-completion-protocol appended to task prompt` before the spawn line.
 
-## 5. Operator hands-on — exploring the host
+Codex `exec --json -` output remains JSONL on stdout. The scanner consumes the
+complete stdout buffer after the process and asynchronous readers have drained;
+the sentinel inside an `item.completed` agent message is recognized without a
+Codex-version-specific event parser.
 
-Everything below is safe to run as `agent` (alias `ssh agent-runner`).
+## 4. Assign projects and run the daemon
 
-**Where things live:**
-
-| Path | What |
-|---|---|
-| `~/agent-taskboard` | clone of agent-studio (backend + frontend), branch `main` |
-| `~/agent-taskboard/backend/appsettings.Local.json` | host-local config: `TaskRepository` + `WatchPaths` |
-| `~/taskboard-workspace` | the task store (git-backed), `projects/<key>/tasks/<lane>/` |
-| `~/projects/website` | pilot project checkout (cloned from the local mirror) |
-| `~/git/website.git` | bare mirror the operator pushes into (see §6) |
-| `~/smoke-project` | throwaway repo from the Phase-1 E2E smoke |
-| `/tmp/ass-worktrees/<project>/<task>` | per-task git worktrees (ADR-0057) |
-| `~/coding-agent-chat` | chat-lib clone + build (the frontend's `file:` dependency) |
-| `~/bin/stack-start.sh`, `~/bin/stack-stop.sh` | start/stop the full stack |
-| `/tmp/backend.log`, `/tmp/ngserve.log` | stack logs |
-
-**Look around / verify the pieces:**
+Assignment is stored through the Task Server API. The following assigns a
+remote-capable project to this daemon; use an empty `executionRunner` to hand it
+back to the local runner:
 
 ```bash
-ssh agent-runner                      # log in
-htop                                  # what is running / load (q to quit)
-claude -p "Reply with exactly: OK"    # CLI auth still alive?
-git -C ~/agent-taskboard log --oneline -3   # which code version is on the host
+curl -X PUT "$RUNNER_SERVER_URL/api/projects/my-project/execution-runner" \
+  -H 'Content-Type: application/json' \
+  -H 'X-Client-Id: <registered-operator-client-id>' \
+  -d '{"executionRunner":"agent-runner-01","remoteExecutionEnabled":true}'
 ```
 
-**Start / stop the full stack (backend :5030 + board UI :4010):**
+Start the foreground daemon with no task argument or with `--poll`:
 
 ```bash
-~/bin/stack-start.sh    # logs: /tmp/backend.log, /tmp/ngserve.log
-~/bin/stack-stop.sh
+export RUNNER_SERVER_URL=http://<studio-host>:5030
+export RUNNER_NAME=agent-runner-01
+export RUNNER_MAX_PARALLELISM=2
+/opt/agent-runner/agent-runner --poll
 ```
 
-(The scripts wrap `dotnet run --project backend` and
-`ng serve frontend --port 4010 --proxy-config proxy.conf.json` with `setsid`.
-Two hard-won details inside: the frontend's `@coding-agent/chat` is a
-`file:`-dependency, so `~/coding-agent-chat` must be cloned + built and its
-transitive dep `lowlight` installed `--no-save`; and never `pkill -f` a
-pattern that appears in your own ssh command line — it kills your session.)
+The daemon registers once, polls `POST /api/runner/claim`, and fills free host
+slots. The server only returns pickup-eligible `2-ready` cards from assigned,
+remote-capable projects and moves a successful fenced claim to `3-progress`.
 
-**See the product from your own browser** (nothing is exposed publicly —
-the tunnel is the only door): the operator machine's `~/.ssh/config` carries
-a `studio-remote` alias with `LocalForward 14010 127.0.0.1:4010` and
-`LocalForward 15030 127.0.0.1:5030` (local ports deliberately ≠ 4010/5030,
-which the local dev stack may occupy). Then:
+### systemd deployment
+
+Install the shipped unit and an environment file, then enable it:
 
 ```bash
-ssh -N studio-remote     # foreground, Ctrl+C disconnects
+sudo install -D -m 0644 deploy/systemd/agent-runner.service /etc/systemd/system/agent-runner.service
+sudo install -d -m 0750 /etc/agent-runner /var/lib/agent-runner
+sudoedit /etc/agent-runner/runner.env
+sudo systemctl daemon-reload
+sudo systemctl enable --now agent-runner
+sudo journalctl -u agent-runner -f
 ```
 
-and open `http://localhost:14010` — the full board UI, served and executed
-on the Linux host. `-N` means "no shell, forwarding only";
-`ExitOnForwardFailure yes` makes a port collision fail loudly instead of
-silently tunneling nothing.
+At minimum, `runner.env` sets `RUNNER_SERVER_URL`, `RUNNER_ID`, `RUNNER_NAME`,
+`RUNNER_GIT_REMOTE`, and `RUNNER_GIT_PUSH_REMOTE`. Product onboarding also sets
+`RUNNER_CLIENT_ID`, so the configured identity and its `LastSeen` record remain
+stable across reinstalls. The unit restarts after failures, logs to journald,
+requests graceful SIGINT shutdown, and best-effort starts
+`~/bin/stack-start.sh` before the daemon so host-local screenshot runs have a
+clean Mode-A Studio stack.
 
-**Watch a run live:**
+## 5. Run one task end-to-end for diagnostics
 
-```bash
-tail -f /tmp/backend-smoke.log                          # runner + API log
-watch -n2 'pgrep -af "claude|codex" | grep -v pgrep'    # spawned CLIs
-ls /tmp/ass-worktrees/*/*/                              # what the task changed
-curl -s localhost:5030/api/cli/quota | python3 -m json.tool | head -30
-```
+1. On the **local board**, assign the ready task to project **`agent-runner-01`**
+   (the project the remote runner serves) and note its task key.
+2. On the **runner host**:
 
-## 6. How code reaches the host — git sync & security assessment
+   ```bash
+   export RUNNER_SERVER_URL=http://<studio-host>:5030
+   export RUNNER_GIT_REMOTE=<origin>
+   export RUNNER_BRANCH=task/<the-task-branch>     # optional; falls back to base
+   /opt/agent-runner/agent-runner <TASK-KEY>
+   ```
 
-**Two channels, both deliberate:**
+The runner then, in order: **preflights connectivity** (probes `/healthz`, so a
+dropped tunnel is reported cleanly *before* any lease or CLI work), **registers
+its client identity** (see below), acquires the fenced lease, starts
+heartbeating, checks out the branch from origin, fetches `prompt.md` over the
+API, spawns the CLI in the working tree, ships stdout/stderr to the server every
+few seconds, uploads everything under `results/`, secures and removes the
+worktree, posts the fenced normal runner completion, and releases the lease.
+Exit code `0` means a clean handoff; `1` a
+blocked/needs-input outcome; `2` lease not granted; `3` lease lost mid-run; `4`
+the task server was unreachable or rejected a call.
 
-1. **Public repos** (agent-studio itself): plain `https` clone/fetch from
-   GitHub. Read-only by construction — the host holds **no GitHub
-   credentials at all**, so it *cannot* push to GitHub, delete branches, or
-   read private repos even if fully compromised.
-2. **Private repos** (pilot: the website): the **operator pushes over SSH
-   into a bare mirror** on the host (`git push runner main` →
-   `~/git/website.git`); the working clone pulls from that mirror. Again: no
-   GitHub secret ever touches the host. Results flow back the same way —
-   task branches (`task/<id>`) land in the mirror, and the operator runs
-   `git fetch runner` locally to review them. The sync is **manual and
-   operator-initiated in both directions**, which is the right default while
-   the host is a test environment.
+For unattended operation, run `agent-runner --health-check` as a readiness probe
+(exit `0` reachable, `4` not) before assigning a task, and keep the tunnel up as
+a service. Both are covered in
+[remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
 
-**What secrets *do* live on the host, and the blast radius:**
+### Worktree salvage before teardown
 
-| Secret | Risk if host is compromised | Mitigation |
-|---|---|---|
-| `~/.claude/.credentials.json` | attacker can consume the Claude subscription and act as the CLI identity | revocable from the operator side (re-login rotates); `autoUpdates` off; monitor /usage |
-| `~/.codex/auth.json` | same for the OpenAI account | revocable |
-| `~/.ssh/authorized_keys` (public keys) | none (public halves) | — |
-| project code in `~/projects` | disclosure — currently code that is public anyway or website content | don't mirror sensitive repos to the test host |
+The runner never removes a checkout that contains work available only on the
+host. This rule applies to success, missing terminal sentinels, failure,
+cancellation, timeout, graceful systemd shutdown, and debris recovered when the
+next process starts:
 
-**Deliberately absent:** GitHub tokens/deploy keys, task-server credentials
-(none exist yet — Phase 2), TLS private keys, any inbound service beyond
-`sshd`. The exposure of the box is: SSH (key-only, root prohibited) — and
-outbound HTTPS to github.com/Anthropic/OpenAI.
+1. Inspect `git status` in the task worktree.
+2. Commit dirty and untracked files with
+   `wip(runner): salvage before teardown - outcome <X>`.
+3. Push run-produced commits to
+   `runner/<runner-id>/<task-key>` and verify the origin ref matches `HEAD`.
+4. Remove the linked worktree only after that verification. A clean checkout
+   at its original commit needs no salvage branch.
 
-**When this changes (Phase 3, per `parallel-task-execution.md` §8.2C):**
-multiple runners will need unattended fetch/push. The contract there is
-**per-runner deploy keys with least privilege** (read + push only to
-`task/*` refs of assigned repos), never a personal token. The current
-zero-credential state is the baseline we degrade from *knowingly*, one
-scoped key at a time.
+The runner-completion deliverables link a successful salvage branch and its
+commit. If the remote check or push fails, the runner leaves the worktree in
+place and records an open `worktree-blocked` gate item containing the host,
+path, and intended branch. Do not delete that path manually. Restore origin
+access, push or otherwise secure the branch, and close the gate only after the
+remote ref is verified.
 
-## 7. Operational notes
+### Client identity registration (required)
 
-- **Process containment:** plain `nohup … &` over ssh does *not* reliably
-  survive session teardown; use `setsid` (or a systemd unit, which is the
-  D6 target anyway). This is the same orphan-containment gap the kickoff
-  lists for CLI grandchildren — Linux needs process-group reaping
-  (`setsid` + `kill -pgid`) before Phase 3.
-- The backend reads `backend/appsettings.Local.json` (gitignored) for
-  `TaskRepository` + `WatchPaths`; on the host, point `TaskRepository` at a
-  local path and seed a demo store via
-  `node scripts/seed-demo-workspace.mjs --root <path>` (ADR-0056).
-- Nothing on the host listens publicly; only SSH is exposed. Keep it that
-  way until Phase-2 auth lands (kickoff §5, D4).
+The Task Server guards every mutation behind an `X-Client-Id` registration
+boundary (`ClientIdentityMiddleware`): a POST from an id the server has never
+seen is rejected `401 client-unknown`. Reads (prompt fetch) stay open, but the
+lease, log, artifact, and completion writes do not. Product onboarding
+sets `RUNNER_CLIENT_ID` to the existing host identity. Startup authenticates a
+`GET /api/clients/{id}` with that header before its first write; an unknown or
+retired id is a hard error, and the runner does not create a replacement. This
+verification also refreshes `LastSeen` through the normal middleware path.
+
+When `RUNNER_CLIENT_ID` is omitted for a manual/legacy install, the runner
+self-registers before its first write: it POSTs `RUNNER_NAME` to
+`/api/clients/register` (an open-path route) and adopts the server-assigned id.
+Registration is idempotent on the name. A `401 client-unknown` therefore points
+to a wrong configured id or a reverse proxy stripping `X-Client-Id`.
+
+## 6. Acceptance walkthrough
+
+The task passes RM-5 acceptance when, after the runner exits `0`:
+
+- a successful sentinel has moved the card on the **local** board to
+  `4-auto-review` with an `agent_run_finished` timeline entry sourced from
+  `agent-runner-01`, and no `external_completion` provenance;
+- `logs/cli-output.log` on the server shows the remote CLI output; and
+- the uploaded evidence is present under the task's `results/` folder and in the
+  workspace evidence commit.
+
+For the full Remote Hosts acceptance, also record the setup task id, the exact
+Task Server URL/topology, `systemctl is-enabled` and `is-active`, both CLI auth
+status outputs, and the runner client id from `GET /api/clients`. Its
+`lastSeenAt` must become fresh after the daemon begins polling. Finally assign a
+Ready probe task through the normal project execution setting and verify that
+the remote runner badge, fenced lease timeline, CLI log upload, result upload,
+and runner completion all name the same runner. This is the AGT-1923 probe
+mechanic; do not substitute the static frontend readiness fixture for this
+proof.
+
+## Troubleshooting
+
+- **No task is claimed** - confirm the project's `executionRunner` exactly
+  matches `RUNNER_NAME` or `RUNNER_ID`, `remoteExecutionEnabled` is true, and
+  the card is pickup-eligible in `2-ready`. Also inspect the backend log for
+  `remote-runner-project-skipped`: the project needs a network URL in its `repo`
+  registry entry or an origin derivable from `RepositoryPath`. The local runner
+  intentionally skips the same assigned project.
+- **`lease not granted: Held` in one-task mode** - another runner already holds
+  the task. The daemon claim path normally avoids this before launch.
+- **`connection lost: cannot reach the task server ...` at startup** - the
+  preflight `/healthz` probe failed, almost always a dropped reverse tunnel.
+  Confirm with `agent-runner --health-check`; if it also exits `4`, restart the
+  tunnel service ([remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md)).
+  The runner refuses at preflight by design, so no half-started lease or CLI is
+  left behind.
+- **`lease lost: StaleToken` mid-run** - a TTL takeover happened; the network was
+  slow enough that heartbeats missed the window. Raise `RUNNER_TTL_SECONDS` /
+  lower `RUNNER_HEARTBEAT_SECONDS`, or check the tunnel.
+- **`Task '<key>' has no prompt.md`** - the task key did not resolve on the
+  server, or the job folder has no prompt. Confirm the key against the board.
+- **No output shipped** - the server rejects logs for an unknown task key; the
+  console still shows the CLI output locally. Check `RUNNER_SERVER_URL` and the
+  task key.
+- **CLI exits immediately / wrong flags** - the headless flags do not match the
+  installed CLI version. Adjust `RUNNER_CLI_ARGS` or wrap the CLI in a script.
+- **`outcome Unknown` after a substantive final reply** - first confirm the run
+  log contains `remote-completion-protocol appended to task prompt`. Its absence
+  means the host is running a pre-AGT-2148 runner build. If the line is present,
+  inspect the final stdout event and verify that the agent emitted one canonical
+  `[[TASK_*]]` token; Codex JSONL is supported directly and stdout is not tail
+  truncated by the runner.
+- **`401 client-unknown` on a lease/log/upload call** - the runner's
+  `X-Client-Id` never reached the server, so it looks unregistered. The runner
+  registers itself automatically, so this almost always means a reverse proxy or
+  tunnel is dropping the `X-Client-Id` request header; forward it, or point
+  `RUNNER_SERVER_URL` straight at the Studio.
+## Reading host telemetry
+
+The runner samples the host every 30 seconds and piggybacks the sample on its existing Task Server claim poll. The Remote Hosts view keeps CPU, memory, Linux load averages, swap traffic, CPU steal time, I/O wait, core count, and active runner slots together. Use the 1h, 6h, 48h, and 14d controls to compare load with concurrency. For example, `6 active slots · load 6.4 of 12 cores` is direct evidence for whether the current slot limit leaves headroom.
+
+Linux values come from `/proc/stat`, `/proc/loadavg`, `/proc/meminfo`, and `/proc/vmstat`. Windows runners report CPU and memory where the operating system exposes them without an additional agent; Linux-only fields remain empty. Raw 30-second samples are retained for 48 hours. Older samples are compacted into five-minute averages and retained for 14 days. The series is persisted below the workspace store in `telemetry/<client-id>.json`, so a backend restart does not erase it.
+
+The host card raises these sustained findings after at least three consecutive samples:
+
+- **VM throttled**: CPU steal time stays above 5 percent. On a virtual machine, this means the hypervisor is withholding scheduled CPU time.
+- **Oversubscribed**: the one-minute load average stays above the reported core count. Compare the active-slots line before increasing parallelism.
+- **Memory pressure**: combined swap-in and swap-out traffic stays above 64 KiB/s. A single historical swap allocation without traffic does not trigger this finding.
+
+Short spikes remain visible in the quiet history chart but do not create a badge. Check I/O wait alongside CPU when load is high: high load with low CPU and elevated I/O wait usually points to storage contention rather than missing cores.

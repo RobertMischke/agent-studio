@@ -89,3 +89,11 @@ writer owning one file means no cross-writer contention by construction.
 6. Server becomes deployable standalone / remote.
 
 Steps 1–3 already remove the current breakage; 4–6 deliver the distributed vision.
+
+## 7. Current distributed-orchestration steps
+
+AGT-2122 tracks the broader distributed-orchestration direction. AGT-2141 is
+the first concrete multi-repository step: the server now places project git
+coordinates on each remote claim, and the daemon maintains one shared clone per
+project instead of relying on a single host-wide origin. Lease authority and
+task state remain server-owned; repository credentials remain host-owned.

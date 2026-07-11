@@ -599,6 +599,95 @@
             regression fixture proves a root <code>.slnx</code> with nested-only projects executes at the repository root.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2143</code><br><span class="small">Codex clean-context resume spiral<br>(observed on <code>CAR-5</code>)</span></td>
+          <td>
+            A successful run committed its change, passed 490 tests, and received a code-review grade. The follow-up then ran
+            <code>codex thread/resume</code> inside a newly-created clean-context <code>CODEX_HOME</code>. That home deliberately
+            contained no rollout, so Codex exited in under one second with <code>no rollout found</code>. The empty launch failure
+            replaced the successful run as the aspect basis, produced the false finding "No reviewable code exists", and drove a
+            reissue spiral while session-index-only corpses accumulated.
+          </td>
+          <td>
+            Resume eligibility checked only the stored UUID and worktree cwd, not the rollout in the effective Codex home. The
+            clean-context home is created after prompt planning, so the deterministic mismatch was discovered only by the child
+            process. Session inventory trusted <code>session_index.jsonl</code> without requiring a rollout, and review helpers
+            could select the latest failed run instead of the last completed run.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> Codex resume now proves the rollout exists before prompt rendering. A missing
+            rollout selects the full recovery prompt and logs <code>codex_resume_precondition_fallback</code>, so no doomed resume
+            is launched. CLI sessions without rollouts are hidden immediately and index rows older than five minutes are compacted
+            with <code>codex_session_stillborn_cleanup</code>. Aspect, grade, changed-file, and abort-review evidence select the last
+            completed run; a launch-only failure after a graded success routes to human review with that successful SHA range and
+            cannot reissue. The 2026-07-11 forensic scan found 7 stale shared-home index-only rows and 10 clean Codex homes in the
+            CAR-5 window; the rows are removed by the first post-deploy session inventory refresh.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2147</code><br><span class="small">remote worktree teardown data loss<br>(observed on <code>AGT-2091</code>)</span></td>
+          <td>
+            A remote CLI exited 0 and reported completed work plus passing Playwright tests, but omitted the terminal sentinel.
+            The run was classified as completed out-of-band and teardown force-removed the checkout. No commit, runner branch,
+            or dangling object survived, so roughly one hour of work was irrecoverable.
+          </td>
+          <td>
+            The standalone runner posted external completion before teardown, inspected neither working-tree status nor remote
+            reachability, and force-removed both the linked checkout and its local runner branch. The local runner's snapshot
+            guard did not cover <code>runner/GitWorkspace</code>.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> every remote teardown now commits dirty work, pushes run-produced commits to
+            <code>runner/&lt;runner-id&gt;/&lt;task-key&gt;</code>, verifies the origin ref, and only then removes the checkout.
+            Successful salvage branches are linked in runner-completion deliverables. A failed remote check or push retains the worktree and
+            records a visible <code>worktree-blocked</code> gate item with host and path. The same fail-closed path runs for
+            unknown outcomes, exceptions, cancellation, shutdown, and crash debris.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2148</code><br><span class="small">remote daemon runs omitted terminal sentinels</span></td>
+          <td>
+            Twenty-six remote runs on <code>agent-runner-01</code> exited 0 after substantive final replies but were
+            classified <code>Unknown</code> because no <code>[[TASK_*]]</code> terminal sentinel was present. Equivalent
+            local runs emitted their sentinels normally.
+          </td>
+          <td>
+            <code>RemoteTaskRunner</code> fetched <code>prompt.md</code> and passed it verbatim to stdin. Unlike the local
+            <code>runner-fresh-start</code> render, the standalone one-shot and daemon path never appended the mandatory
+            completion protocol. Output was fully drained, and Codex 0.144 JSONL leaves the sentinel visible to the
+            existing scanner, so neither parser loss nor tail truncation caused the wave.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the shared standalone execution path now appends the four-sentinel contract
+            before every CLI spawn and logs that assembly. Regression fixtures prove the rendered daemon prompt and a
+            Codex JSONL <code>item.completed</code> reply resolve to <code>Done</code> rather than <code>Unknown</code>.
+            A fenced runner-completion endpoint records <code>agent_run_finished</code> and moves successful runs into normal
+            <code>4-auto-review</code> without <code>external_completion</code> provenance.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2148</code><br><span class="small">completion-gate reissue from historical build evidence</span></td>
+          <td>
+            A verification-only follow-up restored successfully and passed its focused tests, but the completion gate reissued it.
+            The successful status explained that an earlier <code>dotnet build --no-restore</code> failure was a false positive,
+            while the log tail also echoed old gate findings from <code>pipeline-execution.json</code>.
+          </td>
+          <td>
+            The evidence scan treated an explicitly disclaimed false-positive phrase and line-numbered durable pipeline-history
+            output as fresh build-failure evidence. A second reissue exposed the remaining cause: recent-log context was truncated
+            from the end, retaining early failure output while dropping the later passing verification, terminal sentinel, and CLI exit.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> recent-log truncation now preserves the terminal end of the run. The completion gate
+            also ignores explicit false-positive or superseded failure diagnoses, negated phrases such as <code>no unfinished evidence</code>,
+            and <code>pipeline-execution.json:&lt;line&gt;</code> artifact echoes. A merely earlier or otherwise unresolved build failure
+            still blocks. The reproduced successful close-out now reaches the normal pass terminal and auto-review.
+          </td>
+        </tr>
       </tbody>
     </table>
 

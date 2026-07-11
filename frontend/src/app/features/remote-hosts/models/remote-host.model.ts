@@ -64,6 +64,36 @@ export interface HostSystemStats {
   diskFreeGb: number;
 }
 
+export interface HostTelemetryPoint {
+  timestamp: string;
+  cpuPercent: number | null;
+  load1: number | null;
+  load5: number | null;
+  load15: number | null;
+  memoryUsedBytes: number | null;
+  memoryTotalBytes: number | null;
+  swapInBytesPerSecond: number | null;
+  swapOutBytesPerSecond: number | null;
+  cpuStealPercent: number | null;
+  ioWaitPercent: number | null;
+  cpuCores: number;
+  activeSlots: number;
+}
+
+export interface HostTelemetryFinding {
+  kind: 'vm-throttled' | 'oversubscribed' | 'memory-pressure';
+  label: string;
+  since: string;
+  until: string;
+}
+
+export interface HostTelemetrySeries {
+  clientId: string;
+  window: string;
+  points: readonly HostTelemetryPoint[];
+  findings: readonly HostTelemetryFinding[];
+}
+
 /** A single execution location in the registry. */
 export interface RemoteHost {
   id: string;
@@ -86,6 +116,10 @@ export interface RemoteHost {
   cliQuotas: readonly HostCliQuota[];
   /** Live system stats, or null when the host reports none (e.g. retired). */
   stats: HostSystemStats | null;
+  telemetry?: HostTelemetrySeries | null;
+  /** Latest daemon startup proof of origin write access. */
+  gitPushStatus?: 'ready' | 'read-only' | null;
+  gitPushDetail?: string | null;
   /** Transient: an action currently in flight for this host. */
   busyAction?: HostActionKind | null;
 }

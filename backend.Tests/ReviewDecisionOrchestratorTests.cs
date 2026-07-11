@@ -21,6 +21,59 @@ namespace AgentStudio.Tests;
 /// </summary>
 public class ReviewDecisionOrchestratorTests : IDisposable
 {
+    [Fact]
+    public void RecentLogTruncation_PreservesTerminalAndDropsEarlyFailure()
+    {
+        var log = "Build FAILED.\n" + new string('x', 7_000) +
+                  "\n67/67 tests passed.\n[[TASK_DONE]]\n[taskboard] CLI exited: status=completed, exitCode=0";
+
+        var recent = ReviewDecisionOrchestrator.TruncateTail(log, 6_000);
+
+        Assert.DoesNotContain("Build FAILED", recent);
+        Assert.Contains("67/67 tests passed", recent);
+        Assert.Contains("[[TASK_DONE]]", recent);
+        Assert.Contains("exitCode=0", recent);
+    }
+
+    [Fact]
+    public void ReviewBasis_SelectsLastSuccessfulRun_NotLaterLaunchFailure()
+    {
+        var runs = new[]
+        {
+            new RunRecord
+            {
+                Index = 1, Status = "completed", HeadShaBefore = "base", HeadShaAfter = "success",
+            },
+            new RunRecord
+            {
+                Index = 2, Status = "failed", HeadShaBefore = "success", HeadShaAfter = "success",
+            },
+        };
+
+        var selected = ReviewDecisionOrchestrator.SelectAuthoritativeReviewRuns(runs);
+
+        var run = Assert.Single(selected);
+        Assert.Equal(1, run.Index);
+        Assert.Equal("success", run.HeadShaAfter);
+    }
+
+    [Fact]
+    public void LaunchFailure_AfterGradedSuccess_PreservesHumanReviewBasis()
+    {
+        var runs = new[]
+        {
+            new RunRecord { Index = 1, Status = "completed" },
+            new RunRecord { Index = 2, Status = "failed" },
+        };
+
+        Assert.True(ProjectRunner.HasSuccessfulGradedRun(
+            new[] { "code-review:grade-a" }, runs));
+        Assert.False(ProjectRunner.HasSuccessfulGradedRun(
+            Array.Empty<string>(), runs));
+        Assert.False(ProjectRunner.HasSuccessfulGradedRun(
+            new[] { "code-review:grade-a" }, new[] { new RunRecord { Status = "failed" } }));
+    }
+
     private readonly string _workspace;
     private readonly string _watchPath;
     private readonly TimelineLog _timeline = new(NullLogger<TimelineLog>.Instance);

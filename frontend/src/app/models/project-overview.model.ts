@@ -28,7 +28,46 @@ export interface ProjectDeploymentSummary {
   available: boolean;
   reason: string | null;
   source: string;
-  lastDeployment: {
+  lastDeployment: ProjectDeploymentRun | null;
+  history: ProjectDeploymentRun[];
+  pendingCount: number | null;
+  pendingCommits: ProjectDeploymentCommit[];
+  targets: ProjectDeploymentTarget[];
+}
+
+export type ProjectDeploymentParameterType = 'string' | 'boolean' | 'branch' | 'enum' | 'secret-ref';
+
+export interface ProjectDeploymentParameter {
+  name: string;
+  type: ProjectDeploymentParameterType;
+  required: boolean;
+  default: unknown;
+  options: string[];
+}
+
+export interface ProjectDeploymentTarget {
+  id: string;
+  title: string;
+  kind: 'derived' | 'template' | 'prompt';
+  template: string | null;
+  summary: string;
+  runnable: boolean;
+  source: string;
+  command: string | null;
+  targetHostId: string | null;
+  parameters: ProjectDeploymentParameter[];
+}
+
+export interface CompiledDeploymentPrompt {
+  title: string;
+  summary: string;
+  command: string | null;
+  parameters: ProjectDeploymentParameter[];
+  warnings: string[];
+  runnable: boolean;
+}
+
+export interface ProjectDeploymentRun {
     at: string;
     status: string;
     headBefore: string;
@@ -37,7 +76,28 @@ export interface ProjectDeploymentSummary {
     jobsSinceLastRestart: number;
     reviewCountAfter: number;
     commits: ProjectDeploymentCommit[];
-  } | null;
-  pendingCount: number | null;
-  pendingCommits: ProjectDeploymentCommit[];
+}
+
+export type ProjectVisualEvidenceReviewStatus = 'unseen' | 'reviewed' | 'unavailable';
+
+export interface ProjectVisualEvidenceItem {
+  id: string;
+  jobId: string;
+  jobTitle: string;
+  watchPath: string;
+  fileName: string;
+  relativePath: string;
+  url: string | null;
+  caption: string;
+  testStatus: string | null;
+  source: string;
+  capturedAt: string;
+  reviewStatus: ProjectVisualEvidenceReviewStatus;
+}
+
+export interface ProjectVisualEvidenceQueue {
+  project: string;
+  capturedAt: string;
+  unseenCount: number;
+  items: ProjectVisualEvidenceItem[];
 }

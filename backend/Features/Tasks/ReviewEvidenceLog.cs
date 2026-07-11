@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Collections.Concurrent;
 
 namespace AgentStudio.Tasks;
 
@@ -20,6 +21,7 @@ namespace AgentStudio.Tasks;
 /// </summary>
 internal static class ReviewEvidenceLog
 {
+    private static readonly ConcurrentDictionary<string, object> AppendLocks = new(StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions WriteOpts = new()
     {
         WriteIndented = false,
@@ -123,7 +125,13 @@ internal static class ReviewEvidenceLog
         Directory.CreateDirectory(dir);
         var path = TaskPaths.ReviewEvidenceLog(jobFolder);
         var json = JsonSerializer.Serialize(entry, WriteOpts);
-        File.AppendAllText(path, json + "\n", Encoding.UTF8);
+        // Acknowledgements can arrive from task detail and Project Overview at
+        // the same time. Keep each JSONL record intact while retaining the
+        // append-only/latest-per-id contract.
+        lock (AppendLocks.GetOrAdd(path, _ => new object()))
+        {
+            File.AppendAllText(path, json + "\n", Encoding.UTF8);
+        }
     }
 
     private static string? ReadString(JsonElement doc, string name)

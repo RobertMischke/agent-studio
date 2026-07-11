@@ -68,12 +68,21 @@
           </label>
 
           <label class="setup__field--wide">
-            <span>Git remote URL</span>
+            <span>Git fetch URL</span>
             <input data-testid="runner-setup-git-remote"
                    autocomplete="off"
                    [ngModel]="gitRemote()"
                    (ngModelChange)="gitRemote.set($event)" />
-            <small>The runner clones and updates code from this origin. Workstation file copying is not used.</small>
+            <small>Use a credential-free HTTPS URL for clone and fetch.</small>
+          </label>
+
+          <label class="setup__field--wide">
+            <span>Git push URL</span>
+            <input data-testid="runner-setup-git-push-remote"
+                   autocomplete="off"
+                   [ngModel]="gitPushRemote()"
+                   (ngModelChange)="gitPushRemote.set($event)" />
+            <small>Use the SSH URL backed by this host's write deploy key, or a fine-grained token credential helper fallback.</small>
           </label>
         </div>
 

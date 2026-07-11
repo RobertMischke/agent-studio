@@ -308,6 +308,7 @@
                           [sortStrategy]="laneSortStrategy(lane.state, lane.jobs)"
                           [reorderDisabled]="laneReorderDisabled(lane.state, lane.jobs)"
                           [autoProject]="laneAutoProject(lane.state, lane.jobs)"
+                          [projectScope]="boardProjectScope()"
                           [autoMode]="laneAutoMode(lane.state, lane.jobs)"
                           [runnerStatus]="laneAutoRunner(lane.state, lane.jobs)"
                           [nowMs]="nowMs()"

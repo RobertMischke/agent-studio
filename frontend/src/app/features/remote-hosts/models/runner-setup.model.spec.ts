@@ -22,19 +22,21 @@ const VALID: RunnerSetupConfig = {
   taskServerUrl: 'https://tasks.example.test',
   connectionMode: 'central',
   clientId: 'runner-client-01',
-  gitRemote: 'git@github.com:example/agent-studio.git',
+  gitRemote: 'https://github.com/example/agent-studio.git',
+  gitPushRemote: 'git@github.com:example/agent-studio.git',
 };
 
 describe('runner setup model', () => {
   it('requires every operator-owned connection value', () => {
     expect(runnerSetupIssues({
-      sshTarget: '', taskServerUrl: '', connectionMode: '', clientId: '', gitRemote: '',
+      sshTarget: '', taskServerUrl: '', connectionMode: '', clientId: '', gitRemote: '', gitPushRemote: '',
     })).toEqual([
       'SSH target is required.',
       'Task Server URL is required.',
       'Choose how the remote host reaches the Task Server.',
       'Client identity is required.',
       'Git remote URL is required.',
+      'Git push URL is required.',
     ]);
   });
 
@@ -55,10 +57,13 @@ describe('runner setup model', () => {
     expect(request.command).toContain("--server 'https://tasks.example.test'");
     expect(request.command).toContain("--topology 'central'");
     expect(request.command).toContain("--runner-name 'agent-runner-01'");
+    expect(request.command).toContain("--git-remote 'https://github.com/example/agent-studio.git'");
+    expect(request.command).toContain("--git-push-remote 'git@github.com:example/agent-studio.git'");
     expect(request.context).toMatchObject({
       taskServerUrl: 'https://tasks.example.test',
       clientId: 'runner-client-01',
-      gitRemote: 'git@github.com:example/agent-studio.git',
+      gitRemote: 'https://github.com/example/agent-studio.git',
+      gitPushRemote: 'git@github.com:example/agent-studio.git',
     });
     expect(request.prompt).toContain('Reachability gate (must run first)');
     expect(request.prompt).toContain('CodingAgentRunner');

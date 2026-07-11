@@ -10,6 +10,7 @@ export interface RunnerSetupConfig {
   connectionMode: RunnerSetupConnectionMode | '';
   clientId: string;
   gitRemote: string;
+  gitPushRemote: string;
 }
 
 /** Validate the operator-owned values before a provisioning task can be queued. */
@@ -24,6 +25,7 @@ export function runnerSetupIssues(config: RunnerSetupConfig): string[] {
   if (!config.connectionMode) issues.push('Choose how the remote host reaches the Task Server.');
   if (!config.clientId.trim()) issues.push('Client identity is required.');
   if (!config.gitRemote.trim()) issues.push('Git remote URL is required.');
+  if (!config.gitPushRemote.trim()) issues.push('Git push URL is required.');
   if (config.taskServerUrl.trim() && isLocalUrl(config.taskServerUrl) && config.connectionMode !== 'tunnel') {
     issues.push('A remote host cannot reach this loopback URL. Choose Tunnel or enter a central or LAN URL.');
   }
@@ -36,6 +38,7 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
   const taskServerUrl = config.taskServerUrl.trim().replace(/\/+$/, '');
   const clientId = config.clientId.trim();
   const gitRemote = config.gitRemote.trim();
+  const gitPushRemote = config.gitPushRemote.trim();
   const connectionMode = config.connectionMode || 'not selected';
   const healthUrl = `${taskServerUrl}/healthz`;
   const controllerCommand = [
@@ -46,6 +49,7 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
     `--client-id ${shellArg(clientId)}`,
     `--runner-name ${shellArg(host.name)}`,
     `--git-remote ${shellArg(gitRemote)}`,
+    `--git-push-remote ${shellArg(gitPushRemote)}`,
   ].join(' ');
 
   return {
@@ -62,6 +66,7 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
       connectionMode,
       clientId,
       gitRemote,
+      gitPushRemote,
       executionBoundary: 'Run the controller agent locally; perform every host operation through SSH.',
     },
     prompt: [
@@ -80,7 +85,7 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
       '- Install or update the NuGet global tool `CodingAgentRunner` with a version range of `[0.5.0,)`; verify the resolved version is at least 0.5.0.',
       '- The controller intentionally fails if the published NuGet package is not a DotnetTool. Report that packaging failure; do not bypass it with a session process or copied binary.',
       `- Configure the runner with Task Server URL \`${taskServerUrl}\` and client identity \`${clientId}\` so every request sends that exact X-Client-Id.`,
-      `- Configure code checkout/update from Git remote \`${gitRemote}\`; do not transfer a workstation working tree or credentials.`,
+      `- Configure fetches from \`${gitRemote}\` and pushes through the host-owned write identity at \`${gitPushRemote}\`; do not transfer workstation credentials.`,
       '- Create or update a systemd unit, run daemon-reload, enable it, and start it through systemd. Never leave the runner as a shell, tmux, nohup, or user-session process.',
       '',
       '3. Host-native CLI authentication',
@@ -90,7 +95,7 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
       '- Never copy, upload, or reuse credential files from the operator workstation. Credentials must be created and refreshed by each CLI on this host.',
       '',
       '4. Verification and real handoff',
-      '- Confirm the systemd service is active and enabled, the Task Server accepts the configured client identity, and the client registry shows a fresh LastSeen.',
+      '- Confirm the systemd service is active and enabled, the Task Server accepts the configured client identity, and the client registry shows a fresh LastSeen plus runnerGitStatus `ready`.',
       '- Run the runner connection or health check and include the result.',
       '- Queue and complete one real smoke task through this remote runner. Prove the remote lease/runner attribution and final task result; a local or synthetic no-op is not acceptance.',
       '- Finish with the installed runner version, service state, Task Server reachability result, Codex and Claude login identities, refreshed LastSeen, and smoke-task key/result.',

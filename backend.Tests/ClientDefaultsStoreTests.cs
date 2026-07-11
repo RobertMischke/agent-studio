@@ -109,6 +109,24 @@ public class ClientDefaultsStoreTests : IDisposable
     }
 
     [Fact]
+    public void RunnerGitCapability_RoundTripsThroughDiskAndSummary()
+    {
+        var config = BuildConfig();
+        var store = new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance);
+        var runner = store.Register(new RegisterClientRequest { DisplayName = "agent-runner-01", Kind = "service" });
+        var checkedAt = new DateTime(2026, 7, 11, 20, 0, 0, DateTimeKind.Utc);
+
+        var updated = store.SetRunnerGitCapability(runner.Id, "read-only", "permission denied", checkedAt);
+        var reloaded = new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance).Find(runner.Id);
+        var summary = ClientSummary.From(reloaded!);
+
+        Assert.Equal("read-only", updated!.RunnerGitStatus);
+        Assert.Equal("read-only", summary.RunnerGitStatus);
+        Assert.Equal("permission denied", summary.RunnerGitDetail);
+        Assert.Equal(checkedAt, summary.RunnerGitCheckedAt);
+    }
+
+    [Fact]
     public void ClientSummary_ExposesDefaults()
     {
         var identity = new ClientIdentity

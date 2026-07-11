@@ -48,6 +48,7 @@ describe('RunnerSetupDialogComponent', () => {
 
     component.connectionMode.set('lan');
     component.gitRemote.set('git@github.com:example/agent-studio.git');
+    component.gitPushRemote.set('git@github.com:example/agent-studio.git');
     fixture.detectChanges();
     expect(el.querySelector('[data-testid="runner-setup-loopback-block"]')).toBeTruthy();
 

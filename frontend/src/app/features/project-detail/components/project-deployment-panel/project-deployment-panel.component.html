@@ -1,0 +1,104 @@
+<section class="deployment" data-testid="project-deployment-panel">
+  <header class="deployment__header">
+    <div>
+      <p class="deployment__eyebrow">Project operations</p>
+      <h1>Deployment</h1>
+      <p>Repository-derived targets, visible CLI-task runs, and the stable deployment audit trail.</p>
+    </div>
+    <button type="button" data-testid="project-deployment-refresh" [disabled]="loading()" (click)="refresh()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (requestFailed()) {
+    <div class="deployment__empty" role="status" data-testid="project-deployment-request-error">
+      <h2>Deployment history is temporarily unavailable</h2>
+      <p>The shared deployment source could not be read. Try refreshing this page.</p>
+    </div>
+  } @else if (!loading() && summary(); as deployment) {
+    <section class="deployment__targets" aria-labelledby="deployment-targets-title">
+      <header>
+        <div><p class="deployment__eyebrow">Repository truth</p><h2 id="deployment-targets-title">Targets</h2></div>
+        <span>{{ deployment.targets.length }} target{{ deployment.targets.length === 1 ? '' : 's' }}</span>
+      </header>
+      @if (deployment.targets.length) {
+        <div class="deployment__target-grid" data-testid="project-deployment-targets">
+          @for (target of deployment.targets; track target.id) {
+            <button type="button" class="deployment__target-choice" [class.is-selected]="selectedTarget()?.id === target.id" (click)="chooseTarget(target)">
+              <span class="deployment__dot" aria-hidden="true"></span>
+              <span><strong>{{ target.title }}</strong><small>{{ target.kind }} · {{ target.source }}</small></span>
+            </button>
+          }
+        </div>
+      } @else {
+        <p class="deployment__notice" data-testid="project-deployment-no-targets">No deployment target can be derived from repository facts or descriptors.</p>
+      }
+    </section>
+
+    @if (selectedTarget(); as target) {
+      <section class="deployment__launcher" data-testid="project-deployment-launcher">
+        <div><p class="deployment__eyebrow">Selected target</p><h2>{{ target.title }}</h2><p>{{ target.summary }}</p></div>
+        @for (parameter of target.parameters; track parameter.name) {
+          <label [attr.for]="'deployment-param-' + parameter.name">
+            <span>{{ parameter.name }}{{ parameter.required ? ' *' : '' }}</span>
+            @if (parameter.type === 'boolean') {
+              <input [id]="'deployment-param-' + parameter.name" type="checkbox" [attr.data-testid]="'deployment-param-' + parameter.name" [ngModel]="parameterValues()[parameter.name] === true" (ngModelChange)="setParameter(parameter.name, $event)" />
+            } @else if (parameter.type === 'enum') {
+              <select [id]="'deployment-param-' + parameter.name" [ngModel]="parameterValues()[parameter.name]" (ngModelChange)="setParameter(parameter.name, $event)">
+                @for (option of parameter.options; track option) { <option [value]="option">{{ option }}</option> }
+              </select>
+            } @else {
+              <input [id]="'deployment-param-' + parameter.name" [type]="parameter.type === 'secret-ref' ? 'password' : 'text'" [ngModel]="parameterValues()[parameter.name]" (ngModelChange)="setParameter(parameter.name, $event)" />
+            }
+          </label>
+        }
+        @if (target.template === 'tag-push-release') {
+          <p class="deployment__notice">This target delegates to the guarded Publishing action. Deployment does not run package publishing commands.</p>
+        } @else {
+          <button type="button" data-testid="project-deployment-run" [disabled]="!canRun(target) || running()" (click)="runSelected()">
+            {{ running() ? 'Creating visible task...' : 'Run as visible CLI task' }}
+          </button>
+        }
+        @if (createdTask(); as task) { <p class="deployment__success" role="status" data-testid="project-deployment-created">Task {{ task.jobId }} queued. Open it from the project task list for live progress and chat.</p> }
+        @if (runError(); as message) { <p class="deployment__error" role="alert">{{ message }}</p> }
+      </section>
+    }
+
+    <details class="deployment__prompt" data-testid="project-deployment-prompt">
+      <summary>Describe a deployment</summary>
+      <p>Compilation accepts a repository-owned script and typed slots. Example: <code>Command: bash scripts/deploy.sh --branch {{ '{{branch}}' }}</code> plus <code>Parameter: branch branch</code>.</p>
+      <textarea rows="5" [ngModel]="prompt()" (ngModelChange)="prompt.set($event)" aria-label="Deployment description"></textarea>
+      <button type="button" [disabled]="!prompt().trim() || compiling()" (click)="compilePrompt()">{{ compiling() ? 'Compiling...' : 'Compile typed UI' }}</button>
+      @if (compiled(); as result) {
+        @if (result.warnings.length) {
+          <ul class="deployment__warnings" role="status">@for (warning of result.warnings; track warning) { <li>{{ warning }}</li> }</ul>
+        } @else { <p class="deployment__success" role="status">Bounded schema compiled. Review the selected target fields before running.</p> }
+      }
+    </details>
+
+    @if (!deployment.available || !deployment.lastDeployment) {
+      <div class="deployment__empty" role="status" data-testid="project-deployment-unavailable">
+        <h2>No deployment baseline yet</h2>
+        <p>{{ deployment.reason || 'No deploy-stable history is available for this project.' }}</p>
+        <small>Source: {{ deployment.source }}</small>
+      </div>
+    } @else {
+      <section class="deployment__target" aria-labelledby="deployment-target-title">
+        <div class="deployment__target-copy"><span class="deployment__dot" aria-hidden="true"></span><div><p class="deployment__eyebrow">Stable baseline</p><h2 id="deployment-target-title">deploy-stable</h2><p>Stable restart records, enriched by the project Git range.</p></div></div>
+        <dl><div><dt>Deployed revision</dt><dd><code>{{ shortSha(deployment.lastDeployment.headAfter) }}</code></dd></div><div><dt>Pending delta</dt><dd data-testid="project-deployment-pending-count">{{ deployment.pendingCount ?? 'Unknown' }}</dd></div><div><dt>Source</dt><dd>{{ deployment.source }}</dd></div></dl>
+        @if (deployment.reason) { <p class="deployment__notice" role="status">{{ deployment.reason }}</p> }
+      </section>
+      @if (deployment.pendingCommits.length > 0) {
+        <details class="deployment__pending" data-testid="project-deployment-pending"><summary>Pending deployment delta ({{ deployment.pendingCount }})</summary><ul>@for (commit of deployment.pendingCommits; track commit.sha) { <li><code>{{ commit.shortSha }}</code><span>{{ commit.subject }}</span></li> }</ul></details>
+      }
+      <section class="deployment__history" aria-labelledby="deployment-history-title">
+        <header><div><p class="deployment__eyebrow">Audit trail</p><h2 id="deployment-history-title">Run history</h2></div><span>{{ deployment.history.length }} run{{ deployment.history.length === 1 ? '' : 's' }}</span></header>
+        <ol data-testid="project-deployment-history">
+          @for (run of deployment.history; track run.at + run.headAfter) {
+            <li [attr.data-status]="run.status"><div class="deployment__run-main"><span class="deployment__status-dot" aria-hidden="true"></span><div><strong>{{ run.at | date:'medium' }}</strong><span><code>{{ shortSha(run.headBefore) }}</code> to <code>{{ shortSha(run.headAfter) }}</code></span></div></div><dl><div><dt>Status</dt><dd>{{ run.status }}</dd></div><div><dt>Delivered</dt><dd>{{ run.jobsSinceLastRestart }} ticket{{ run.jobsSinceLastRestart === 1 ? '' : 's' }}</dd></div><div><dt>Duration</dt><dd>{{ run.durationSeconds | number:'1.0-1' }} s</dd></div></dl>@if (run.commits.length > 0) { <details><summary>{{ run.commits.length }} Git change{{ run.commits.length === 1 ? '' : 's' }}</summary><ul>@for (commit of run.commits; track commit.sha) { <li><code>{{ commit.shortSha }}</code><span>{{ commit.subject }}</span></li> }</ul></details> }</li>
+          }
+        </ol>
+      </section>
+    }
+  }
+</section>
