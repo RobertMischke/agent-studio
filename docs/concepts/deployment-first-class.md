@@ -384,12 +384,13 @@ DEP-4 after DEP-3 and DEP-5 alongside DEP-3.
 
 ## 12. Feature handoff status
 
-This concept card is complete with the concept, self-contained interactive
-mockup, implementation slice proposal, and second-opinion pass. The original
-scope explicitly excludes production code. No DEP slice is claimed as
-implemented here and none is an open item on this concept card. Feature delivery
-should start by creating an Epic or coordinated card family from DEP-1 through
-DEP-5, each accepted against the boundary in the slice table.
+The concept began as a production-code-free handoff, but the first workflow is
+now implemented. DEP-1 and DEP-2 share one backend projection for history and
+repository-derived targets. DEP-3 launches runnable targets as normal Ready CLI
+tasks, and the bounded first DEP-4 compiler turns a repository-script command
+with declared typed slots into the same reviewed run form. The remaining
+follow-ups are descriptor persistence, broader natural-language extraction, and
+the richer shared live-progress presentation described in DEP-5.
 
 ## 13. Second-opinion pass
 
