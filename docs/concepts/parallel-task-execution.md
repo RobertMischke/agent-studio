@@ -82,7 +82,7 @@ Merges `task/<id>` → `integrationBranch` (or opens a PR, §5). On merge confli
 Two cheap stages, both rendered on the timeline (§6):
 
 1. **Preparation step (once per task, stored on the task):** `exclusive?` (too big / cross-cutting ⇒ runs alone — the exception) + `predictedScope` (which paths/areas it will touch). Default is parallelisable; `exclusive` is rare. Reuses the existing prep loop (`OrchestratorPrepRules` / `OrchestratorPrepHostedService`).
-2. **Pick-gate (runner, when a slot frees, cheap + fast):** `exclusive` ⇒ run alone; else compare this task's stored `predictedScope` against the scopes of the **currently running** tasks ⇒ `parallel-ok` / `serialize`. This is the gate added at `ProjectRunner.cs:461`: the single `_activeJobId` latch becomes "N slots, admit only if the pick-gate says `parallel-ok`".
+2. **Pick-gate (runner, when a slot frees, cheap + fast):** `exclusive` ⇒ run alone; else compare this task's stored `predictedScope` against the scopes of the **currently running** tasks ⇒ `parallel-ok` / `serialize`. Only two declared, overlapping scopes serialize. An unknown scope is admitted optimistically because every coding run has its own worktree; any real overlap is contained and becomes an integration conflict rather than shared-checkout corruption. This is the gate added at `ProjectRunner.cs:461`: the single `_activeJobId` latch becomes "N slots, admit only if the pick-gate says `parallel-ok`".
 
 ## 6. Integration strategies
 

@@ -1093,8 +1093,8 @@ public class ProjectRunner
     /// Predict a task's parallelisability facts so the pick-gate can prove it
     /// disjoint from running tasks. Heuristic: repo-relative path prefixes
     /// mentioned in the title + prompt.md form the predicted scope; none found =
-    /// unknown scope (the pick-gate then serializes, or admits optimistically
-    /// under worktree isolation - see <see cref="DecideAdmission"/>). The
+    /// unknown scope (the pick-gate admits it optimistically under worktree
+    /// isolation). The
     /// orchestrator can later replace this with an LLM scope prediction.
     /// </summary>
     private TaskParallelism PredictParallelism(TaskInfo info)
@@ -1117,19 +1117,15 @@ public class ProjectRunner
 
     /// <summary>
     /// Pick-gate admission for one candidate against what is already running.
-    /// Wraps <see cref="ParallelSlotPolicy.Decide"/> and, under worktree
-    /// isolation (max&gt;1), upgrades the conservative "unknown-scope" serialize
-    /// to an optimistic admit: a real file conflict then surfaces deterministically
-    /// at integrate-merge (-&gt; escalate), never as corruption. Exclusive tasks and
-    /// proven scope conflicts are still serialized.
+    /// Delegates to <see cref="ParallelSlotPolicy.Decide"/>. Unknown scopes are
+    /// admitted optimistically because each coding run is worktree-isolated; a
+    /// real file conflict then surfaces deterministically at integrate-merge
+    /// (-&gt; escalate), never as shared-checkout corruption. Exclusive tasks and
+    /// declared scope conflicts are still serialized.
     /// </summary>
     private SlotAdmission DecideAdmission(string jobId, TaskParallelism p, int slotMax)
     {
-        var dec = ParallelSlotPolicy.Decide(jobId, p, _activeRuns.RunningTasks(), slotMax);
-        if (!dec.Admitted && slotMax > 1 && _activeRuns.Count > 0
-            && dec.Reason.Contains("unknown-scope", StringComparison.OrdinalIgnoreCase))
-            return new SlotAdmission(SlotDecision.Admit, "parallel-ok (optimistic: unknown scope, worktree-isolated)");
-        return dec;
+        return ParallelSlotPolicy.Decide(jobId, p, _activeRuns.RunningTasks(), slotMax);
     }
 
     /// <summary>Where parallel task worktrees live (sibling temp root, off the repo).</summary>
