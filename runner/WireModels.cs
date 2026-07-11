@@ -138,7 +138,8 @@ public sealed record ExternalCompletionRequest(
     string? Summary,
     List<ExternalDeliverable>? Deliverables = null,
     string? Source = null,
-    string? TargetState = null);
+    string? TargetState = null,
+    List<string>? GateItems = null);
 
 public sealed record ExternalCompletionResponse(
     string? JobId = null,

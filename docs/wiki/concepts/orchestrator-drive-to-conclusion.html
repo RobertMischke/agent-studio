@@ -599,6 +599,27 @@
             regression fixture proves a root <code>.slnx</code> with nested-only projects executes at the repository root.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2147</code><br><span class="small">remote worktree teardown data loss<br>(observed on <code>AGT-2091</code>)</span></td>
+          <td>
+            A remote CLI exited 0 and reported completed work plus passing Playwright tests, but omitted the terminal sentinel.
+            The run was classified as completed out-of-band and teardown force-removed the checkout. No commit, runner branch,
+            or dangling object survived, so roughly one hour of work was irrecoverable.
+          </td>
+          <td>
+            The standalone runner posted external completion before teardown, inspected neither working-tree status nor remote
+            reachability, and force-removed both the linked checkout and its local runner branch. The local runner's snapshot
+            guard did not cover <code>runner/GitWorkspace</code>.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> every remote teardown now commits dirty work, pushes run-produced commits to
+            <code>runner/&lt;runner-id&gt;/&lt;task-key&gt;</code>, verifies the origin ref, and only then removes the checkout.
+            Successful salvage branches are linked in deliverables. A failed remote check or push retains the worktree and
+            records a visible <code>worktree-blocked</code> gate item with host and path. The same fail-closed path runs for
+            unknown outcomes, exceptions, cancellation, shutdown, and crash debris.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -47,6 +47,12 @@ public record ExternalCompletionRequest
     /// <see cref="TaskStates"/> value.
     /// </summary>
     public string? TargetState { get; init; }
+    /// <summary>
+    /// Optional open checklist items that require operator action. Remote
+    /// runners use this when a worktree could not be secured and therefore
+    /// remains on its host.
+    /// </summary>
+    public List<string>? GateItems { get; init; }
 }
 
 /// <summary>One delivered artifact recorded in <c>results/deliverables.md</c>.</summary>

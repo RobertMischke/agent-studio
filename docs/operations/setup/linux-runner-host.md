@@ -305,8 +305,9 @@ dropped tunnel is reported cleanly *before* any lease or CLI work), **registers
 its client identity** (see below), acquires the fenced lease, starts
 heartbeating, checks out the branch from origin, fetches `prompt.md` over the
 API, spawns the CLI in the working tree, ships stdout/stderr to the server every
-few seconds, uploads everything under `results/`, posts the external-completion,
-and releases the lease. Exit code `0` means a clean handoff; `1` a
+few seconds, uploads everything under `results/`, secures and removes the
+worktree, posts the external-completion, and releases the lease. Exit code `0`
+means a clean handoff; `1` a
 blocked/needs-input outcome; `2` lease not granted; `3` lease lost mid-run; `4`
 the task server was unreachable or rejected a call.
 
@@ -314,6 +315,28 @@ For unattended operation, run `agent-runner --health-check` as a readiness probe
 (exit `0` reachable, `4` not) before assigning a task, and keep the tunnel up as
 a service. Both are covered in
 [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
+
+### Worktree salvage before teardown
+
+The runner never removes a checkout that contains work available only on the
+host. This rule applies to success, missing terminal sentinels, failure,
+cancellation, timeout, graceful systemd shutdown, and debris recovered when the
+next process starts:
+
+1. Inspect `git status` in the task worktree.
+2. Commit dirty and untracked files with
+   `wip(runner): salvage before teardown - outcome <X>`.
+3. Push run-produced commits to
+   `runner/<runner-id>/<task-key>` and verify the origin ref matches `HEAD`.
+4. Remove the linked worktree only after that verification. A clean checkout
+   at its original commit needs no salvage branch.
+
+The external-completion deliverables link a successful salvage branch and its
+commit. If the remote check or push fails, the runner leaves the worktree in
+place and records an open `worktree-blocked` gate item containing the host,
+path, and intended branch. Do not delete that path manually. Restore origin
+access, push or otherwise secure the branch, and close the gate only after the
+remote ref is verified.
 
 ### Client identity registration (required)
 

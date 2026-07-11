@@ -75,7 +75,8 @@ state.
   process that continuously claims server-assigned projects with bounded host
   slots (default 2), fenced leases + heartbeat, per-task linked git worktrees,
   log/artifact upload, and external-completion. The original `--task <key>`
-  one-shot remains for diagnostics. It owns no task state and never pushes git.
+  one-shot remains for diagnostics. It owns no task state. Its only git write to
+  origin is the mandatory teardown salvage branch described below.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../operations/setup/linux-runner-host.md).
 - `TaskRunnerService.ProjectRunnerBadge` + `TaskEndpointHelpers.WithRuntime`
@@ -192,6 +193,13 @@ state.
   a failed auto-commit leaves the branch tip at develop, which reads as "merged"
   and would force-remove the deliverable. Genuine auto-commit failures at
   integration are surfaced as a High `integration-error`, never silent.
+- Remote teardown is also fail-closed. `runner/GitWorkspace` checks status on
+  every normal, exceptional, shutdown, and crash-debris teardown. It commits a
+  dirty checkout as `wip(runner): salvage before teardown - outcome <X>` and
+  pushes run-produced commits to `runner/<runner-id>/<task-key>`. The remote ref
+  is verified before removal. A failed check or push keeps the worktree and
+  records a `worktree-blocked` gate item with host and path. Successful salvage
+  branches are linked from the card's `results/deliverables.md`.
 - Workspace-shaped orchestrator settings (model, thinking level, autonomy)
   resolve `project override → workspace default → platform constant` through
   `OrchestratorSettingsResolver`, never read ad-hoc at a call site. The provider
