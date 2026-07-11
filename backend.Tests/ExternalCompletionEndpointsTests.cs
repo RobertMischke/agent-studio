@@ -174,6 +174,44 @@ public sealed class ExternalCompletionEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task ExternalCompletion_FromRegisteredService_UsesProgressToAutoReviewPath()
+    {
+        WriteJob(TaskStates.Progress, "remote-progress-completion", "Remote Progress Completion", "Prompt.");
+        WriteLifecycleRunning(TaskStates.Progress, "remote-progress-completion");
+        var queue = new RecordingAutoReviewQueue();
+
+        using var factory = BuildFactory(queue);
+        using var client = factory.CreateClient();
+        using var registration = await client.PostAsJsonAsync("/api/clients/register", new RegisterClientRequest
+        {
+            DisplayName = "agent-runner-01",
+            Kind = ClientIdentityKinds.Service,
+        });
+        registration.EnsureSuccessStatusCode();
+        using var registrationBody = JsonDocument.Parse(await registration.Content.ReadAsStringAsync());
+        client.DefaultRequestHeaders.Add(
+            "X-Client-Id",
+            registrationBody.RootElement.GetProperty("id").GetString());
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/tasks/remote-progress-completion/external-completion?watchPath={Uri.EscapeDataString(_watchPath)}",
+            new ExternalCompletionRequest
+            {
+                Summary = "Delivered on the remote branch.",
+                Source = "agent-runner-01",
+            });
+
+        response.EnsureSuccessStatusCode();
+        var moved = Path.Combine(_watchPath, TaskStates.AutoReview, "remote-progress-completion");
+        Assert.True(Directory.Exists(moved));
+        Assert.Contains("post-processing-running", File.ReadAllText(Path.Combine(moved, "lifecycle.json")));
+
+        var queued = Assert.Single(queue.Requests);
+        Assert.Equal("remote-progress-completion", queued.JobId);
+        Assert.Contains(queued.Source, new[] { "progress-to-auto-review", "runner-external-completion" });
+    }
+
+    [Fact]
     public async Task ExternalCompletion_FromRegisteredService_EntersRegularPostProcessing()
     {
         // Recovery may move a remote card before its completion arrives. The
