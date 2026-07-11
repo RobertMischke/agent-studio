@@ -26,6 +26,7 @@ public sealed record ProjectDeploymentSummary
     public string? Reason { get; init; }
     public string Source { get; init; } = ProjectDeploymentSummaryService.SourceName;
     public ProjectDeploymentRun? LastDeployment { get; init; }
+    public IReadOnlyList<ProjectDeploymentRun> History { get; init; } = [];
     public int? PendingCount { get; init; }
     public IReadOnlyList<ProjectDeploymentCommit> PendingCommits { get; init; } = [];
 }
@@ -39,6 +40,7 @@ public sealed class ProjectDeploymentSummaryService
 {
     internal const string SourceName = "logs/stable-restarts.jsonl";
     internal const int MaxPendingCommits = 12;
+    internal const int MaxHistoryRuns = 20;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(5);
 
     private readonly IConfiguration _config;
@@ -87,7 +89,8 @@ public sealed class ProjectDeploymentSummaryService
             return Unavailable(projectName, "Task repository is not configured.");
 
         var path = Path.Combine(taskRepository, "logs", "stable-restarts.jsonl");
-        var latest = ReadLatestRestart(path);
+        var restartHistory = ReadRestartHistory(path, MaxHistoryRuns);
+        var latest = restartHistory.FirstOrDefault();
         if (latest is null)
             return Unavailable(projectName, File.Exists(path)
                 ? "No valid deploy-stable restart record is available."
@@ -129,29 +132,46 @@ public sealed class ProjectDeploymentSummaryService
             "project-deployment-summary-read project={Project} status={Status} deployedCommits={DeployedCommits} pendingCommits={PendingCommits}",
             projectName, latest.Status, deployed.Count, pendingCount);
 
+        var latestRun = new ProjectDeploymentRun(
+            latest.At,
+            latest.Status,
+            latest.HeadBefore,
+            latest.HeadAfter,
+            latest.DurationSeconds,
+            latest.JobsSinceLastRestart,
+            latest.ReviewCountAfter,
+            deployed);
+        var history = restartHistory.Select(row => row == latest
+            ? latestRun
+            : new ProjectDeploymentRun(
+                row.At,
+                row.Status,
+                row.HeadBefore,
+                row.HeadAfter,
+                row.DurationSeconds,
+                row.JobsSinceLastRestart,
+                row.ReviewCountAfter,
+                [])).ToList();
+
         return new ProjectDeploymentSummary
         {
             Project = projectName,
             Available = true,
             Reason = reason,
-            LastDeployment = new ProjectDeploymentRun(
-                latest.At,
-                latest.Status,
-                latest.HeadBefore,
-                latest.HeadAfter,
-                latest.DurationSeconds,
-                latest.JobsSinceLastRestart,
-                latest.ReviewCountAfter,
-                deployed),
+            LastDeployment = latestRun,
+            History = history,
             PendingCount = pendingCount,
             PendingCommits = pendingItems,
         };
     }
 
     internal static RestartRecord? ReadLatestRestart(string path)
+        => ReadRestartHistory(path, 1).FirstOrDefault();
+
+    internal static IReadOnlyList<RestartRecord> ReadRestartHistory(string path, int limit)
     {
-        if (!File.Exists(path)) return null;
-        RestartRecord? latest = null;
+        if (!File.Exists(path) || limit <= 0) return [];
+        var rows = new List<RestartRecord>();
         try
         {
             foreach (var line in File.ReadLines(path))
@@ -185,7 +205,7 @@ public sealed class ProjectDeploymentSummaryService
                         Double(root, "durationSeconds"),
                         Int(root, "jobsSinceLastRestart"),
                         Int(root, "reviewCountAfter"));
-                    if (latest is null || row.At > latest.At) latest = row;
+                    rows.Add(row);
                 }
                 catch (JsonException ex)
                 {
@@ -196,9 +216,12 @@ public sealed class ProjectDeploymentSummaryService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return null;
+            return [];
         }
-        return latest;
+        return rows
+            .OrderByDescending(row => row.At)
+            .Take(limit)
+            .ToList();
     }
 
     private static ProjectDeploymentSummary Unavailable(string project, string reason) => new()

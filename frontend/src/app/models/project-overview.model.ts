@@ -28,7 +28,13 @@ export interface ProjectDeploymentSummary {
   available: boolean;
   reason: string | null;
   source: string;
-  lastDeployment: {
+  lastDeployment: ProjectDeploymentRun | null;
+  history: ProjectDeploymentRun[];
+  pendingCount: number | null;
+  pendingCommits: ProjectDeploymentCommit[];
+}
+
+export interface ProjectDeploymentRun {
     at: string;
     status: string;
     headBefore: string;
@@ -37,9 +43,6 @@ export interface ProjectDeploymentSummary {
     jobsSinceLastRestart: number;
     reviewCountAfter: number;
     commits: ProjectDeploymentCommit[];
-  } | null;
-  pendingCount: number | null;
-  pendingCommits: ProjectDeploymentCommit[];
 }
 
 export type ProjectVisualEvidenceReviewStatus = 'unseen' | 'reviewed' | 'unavailable';

@@ -141,6 +141,9 @@
           <p>{{ deployment()?.reason || 'No stable deployment history is available for this project.' }}</p>
         }
       </div>
+      <button type="button"
+              data-testid="project-overview-open-deployment"
+              (click)="openRail.emit('deployment')">Open Deployment</button>
       <span class="operator-dashboard__deployment-state"
             [class.operator-dashboard__deployment-state--pending]="deploymentState() === 'pending'"
             [class.operator-dashboard__deployment-state--failed]="deploymentState() === 'failed'">

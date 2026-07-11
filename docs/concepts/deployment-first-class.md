@@ -1,9 +1,9 @@
 # Deployment as a first-class citizen
 
-Status: concept and mockup complete, 2026-07-11. Production implementation is
-intentionally deferred. DEP-1 through DEP-5 are proposed follow-up feature
-cards, ready for Epic handoff, and are not unfinished scope in this concept
-card.
+Status: concept and mockup complete, 2026-07-11. DEP-1 is implemented as the
+read-only first-class Deployment page over the shared Project Overview
+contract. DEP-2 through DEP-5 remain proposed follow-up feature cards; no
+mutating deployment workflow is part of DEP-1.
 
 Mockup:
 [mockups/deployment-first-class.html](mockups/deployment-first-class.html).

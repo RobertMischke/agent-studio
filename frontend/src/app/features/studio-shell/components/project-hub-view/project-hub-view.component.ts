@@ -3,6 +3,7 @@ import {
   ProjectShellComponent,
   ProjectDetailComponent,
   ProjectOverviewDashboardComponent,
+  ProjectDeploymentPanelComponent,
   ProjectSettingsPanelComponent,
   SecurityPanelComponent,
   UxuiPanelComponent,
@@ -30,6 +31,7 @@ import { studioTabKey } from '../../studio-shell.types';
 /** Rails whose content panel is real (not the project-shell placeholder). */
 const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRailKey>([
   'overview',
+  'deployment',
   'project-urls',
   'git',
   'visual-evidence',
@@ -74,6 +76,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     ProjectShellComponent,
     ProjectDetailComponent,
     ProjectOverviewDashboardComponent,
+    ProjectDeploymentPanelComponent,
     ProjectSettingsPanelComponent,
     SecurityPanelComponent,
     UxuiPanelComponent,

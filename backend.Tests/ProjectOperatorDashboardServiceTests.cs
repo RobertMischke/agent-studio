@@ -79,6 +79,7 @@ public sealed class ProjectOperatorDashboardServiceTests : IDisposable
         Assert.Null(result.LastDeployment);
         Assert.Null(result.PendingCount);
         Assert.Empty(result.PendingCommits);
+        Assert.Empty(result.History);
         Assert.Equal(ProjectDeploymentSummaryService.SourceName, result.Source);
     }
 
@@ -123,6 +124,33 @@ public sealed class ProjectOperatorDashboardServiceTests : IDisposable
         Assert.Equal("Deploy payload", result.LastDeployment.Commits[0].Subject);
         Assert.Equal(2, result.PendingCount);
         Assert.Equal(new[] { "Pending two", "Pending one" }, result.PendingCommits.Select(c => c.Subject));
+        Assert.Single(result.History);
+        Assert.Same(result.LastDeployment, result.History[0]);
+    }
+
+    [Fact]
+    public void DeploymentSummary_ReturnsBoundedNewestFirstHistory_WithoutPerRowGitEnrichment()
+    {
+        var (service, workspace, repo) = BuildDeploymentStack(createRepo: true);
+        var headBefore = RevParse(repo, "HEAD");
+        Commit(repo, "deployed.txt", "deployed", "Deploy payload");
+        var headAfter = RevParse(repo, "HEAD");
+        var logs = Path.Combine(workspace, "logs");
+        Directory.CreateDirectory(logs);
+        File.WriteAllLines(Path.Combine(logs, "stable-restarts.jsonl"),
+        [
+            JsonSerializer.Serialize(new { ts = "2026-07-10T08:00:00Z", @event = "restart", status = "ok", headBefore, headAfter, durationSeconds = 20, jobsSinceLastRestart = 1 }),
+            JsonSerializer.Serialize(new { ts = "2026-07-11T08:00:00Z", @event = "restart", status = "failed", headBefore, headAfter, durationSeconds = 30, jobsSinceLastRestart = 2 }),
+        ]);
+
+        var result = service.Build("Demo");
+
+        Assert.NotNull(result);
+        Assert.Equal(2, result!.History.Count);
+        Assert.Equal("failed", result.History[0].Status);
+        Assert.Equal("ok", result.History[1].Status);
+        Assert.NotEmpty(result.History[0].Commits);
+        Assert.Empty(result.History[1].Commits);
     }
 
     [Fact]

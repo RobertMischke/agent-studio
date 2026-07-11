@@ -73,6 +73,20 @@ const deployment = {
     at: '2026-07-10T09:42:11Z', status: 'ok', headBefore: '2bec67c', headAfter: 'a1f4b29',
     durationSeconds: 47, jobsSinceLastRestart: 6, reviewCountAfter: 14, commits: commits.slice(0, 3),
   },
+  history: [
+    {
+      at: '2026-07-10T09:42:11Z', status: 'ok', headBefore: '2bec67c', headAfter: 'a1f4b29',
+      durationSeconds: 47, jobsSinceLastRestart: 6, reviewCountAfter: 14, commits: commits.slice(0, 3),
+    },
+    {
+      at: '2026-07-08T17:12:00Z', status: 'ok', headBefore: '441bc21', headAfter: '2bec67c',
+      durationSeconds: 38, jobsSinceLastRestart: 4, reviewCountAfter: 8, commits: [],
+    },
+    {
+      at: '2026-07-07T14:03:00Z', status: 'failed', headBefore: '310aa91', headAfter: '441bc21',
+      durationSeconds: 12, jobsSinceLastRestart: 2, reviewCountAfter: 4, commits: [],
+    },
+  ],
   pendingCount: commits.length,
   pendingCommits: commits,
 };
@@ -342,6 +356,23 @@ test.describe('Project Overview · operator dashboard', () => {
     await page.getByTestId('project-overview-last-deployment-details').locator('summary').click();
     await expect(page.getByTestId('project-overview-last-deployment-details')).toContainText('Operator-first project overview');
 
+    await page.getByTestId('project-overview-open-deployment').click();
+    await expect(page.getByTestId('project-deployment-panel')).toBeVisible();
+    await expect(page.getByTestId('project-deployment-pending-count')).toHaveText('5');
+    await expect(page.getByTestId('project-deployment-history').locator(':scope > li')).toHaveCount(3);
+    await expect(page.getByTestId('project-deployment-panel')).toContainText('a1f4b29');
+    await expect(page.getByTestId('project-deployment-panel')).not.toContainText('Run deployment');
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, `project-deployment-history--${theme}--mocked.png`),
+        fullPage: true,
+      });
+    }
+
+    await page.goto(`/#/projects/${slugFor(PROJECT_NAME)}/overview`);
+    await expect(page.getByTestId('project-overview-dashboard')).toBeVisible();
+
     await page.getByTestId('project-overview-open-token-usage').click();
     await expect(page.getByTestId('project-shell-panel-token-usage')).toBeVisible();
 
@@ -379,6 +410,16 @@ test.describe('Project Overview · operator dashboard', () => {
       }
     } finally {
       await realProject.cleanup();
+    }
+    await page.getByTestId('project-overview-open-deployment').click();
+    await expect(page.getByTestId('project-deployment-panel')).toBeVisible();
+    await expect(page.getByTestId('project-deployment-refresh')).toHaveText('Refresh', { timeout: 20_000 });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, `project-deployment-history--${theme}--real.png`),
+        fullPage: true,
+      });
     }
   });
 });

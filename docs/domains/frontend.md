@@ -85,6 +85,11 @@ groups, and a failed domain reports an error without hiding successful domains.
   attention. It delegates URL status and start-in-place behavior to
   `project-overview-urls/`, and delegates publishing actions to the existing
   `project-publish-panel/` instead of introducing competing state or commands.
+- `frontend/src/app/features/project-detail/components/project-deployment-panel/`:
+  the first-class, read-only Deployment destination. It consumes the same
+  `GET /api/projects/{projectName}/deployment/summary` contract as Overview,
+  renders the bounded `deploy-stable` restart audit trail and current pending
+  delta, and intentionally exposes no run action in DEP-1.
 - Project Settings owns the project-dedicated execution assignment. The
   execution card selects `local` or a healthy runner identity and persists it
   through the runtime-owned
@@ -140,10 +145,11 @@ previews and links to the owning detail surface. Each data request fails
 independently so one unavailable source does not blank the dashboard. Numeric
 metrics use tabular figures.
 
-The production v1 does not own a Visual Evidence review queue or a deployment
-workflow. Those remain explicit follow-up slices. The deployment block is
-read-only, apart from the separately owned publishing controls, and must keep
-using the DEP-1 summary rather than parse deployment history in the frontend.
+The production v1 owns a read-only Deployment destination, not a deployment
+workflow. Mutating template and prompt-defined controls remain explicit
+follow-up slices. Overview and Deployment both use the DEP-1 summary contract;
+neither parses deployment history in the frontend. Publishing controls remain
+owned by the existing publishing surface.
 
 ## Invariants
 
