@@ -157,7 +157,10 @@
           <app-prompt-admin-panel />
         }
         @case ('tokens') {
-          <app-token-usage-section (openProjectSettings)="openProjectSettings.emit($event)" />
+          <app-token-usage-section
+            [page]="overlays.tokenUsagePage()"
+            (pageChange)="overlays.selectTokenUsagePage($event)"
+            (openProjectSettings)="openProjectSettings.emit($event)" />
         }
         @case ('screenshots') {
           <app-workspace-screenshots (openTask)="openTask.emit($event)" />

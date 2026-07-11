@@ -193,6 +193,28 @@ The candidate marker scans for the two telltale patterns:
 
 The good variant is membership in the `Tokens` or `Bus` namespace.
 
+## Frontend scope levels
+
+Workspace Settings presents Token usage as a small page tree instead of one
+mixed dashboard:
+
+- `#/workspace/tokens` is the workspace and project level. It keeps the
+  existing time-window and project filters, and every aggregate reconciles to
+  the visible projects.
+- `#/workspace/tokens/claude` and `#/workspace/tokens/codex` are CLI account
+  pages. Each page labels provider quota windows separately from locally
+  captured workspace tokens and shows resets, average burn projection, the
+  1h/24h/7d trend selector, effort-attribution availability, and a plausibility
+  explanation.
+- The current workspace timeline contract has no CLI field per bucket and the
+  aggregate contract has no reasoning-effort field. The UI therefore labels
+  the trend as a workspace plausibility baseline and effort as unattributed. It
+  does not invent either attribution.
+- Per-task cap forecast (TE-4) is a labelled future integration point only.
+
+Workspace and project usage calculations are unchanged by this navigation
+split. CLI pages are extendable by adding another page key and model mapping.
+
 ## What's deliberately out of scope
 
 - **Token pricing tables.** `TokenPricing` stays where it is; cost lookup is

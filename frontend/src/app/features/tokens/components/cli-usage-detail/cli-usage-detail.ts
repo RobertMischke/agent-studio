@@ -65,6 +65,9 @@ interface ModelUsageRow {
   styleUrl: './cli-usage-detail.scss',
 })
 export class CliUsageDetailComponent {
+  /** Workspace mode keeps project attribution and task totals while account
+   * windows live on the dedicated per-CLI pages. */
+  readonly workspaceOnly = input(false);
   readonly quotaRows = input<CliUsageQuotaRow[]>([]);
   readonly tokens = input<TokenSummaryAggregate | null>(null);
   readonly adhoc = input<AdHocUsageAggregate | null>(null);

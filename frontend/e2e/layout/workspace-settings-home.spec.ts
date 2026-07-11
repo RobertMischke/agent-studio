@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { dismissDevErrorDialog } from '../helpers/theme';
+import { dismissDevErrorDialog, setTheme, type Theme } from '../helpers/theme';
 
 /**
  * Global Workspace-settings home ("Dach") - ASS-695.
@@ -41,12 +41,24 @@ async function stubBackgroundApis(page: Page) {
   await page.route('**/api/watch-paths', json([]));
   await page.route('**/api/runner/status', json({ projects: {} }));
   await page.route('**/api/runner/token-summary-aggregate*', json({
-    projects: 0, orchestratorEntries: 0, orchestratorLlmCalls: 0,
-    totalInputTokens: 0, totalOutputTokens: 0, totalCacheReadTokens: 0, totalCacheCreationTokens: 0,
-    estimatedApiCostUsd: 0, allModelsPriced: false, byModel: [], byProject: [],
+    projects: 2, orchestratorEntries: 21, orchestratorLlmCalls: 21,
+    totalInputTokens: 510000, totalOutputTokens: 94000, totalCacheReadTokens: 180000, totalCacheCreationTokens: 22000,
+    estimatedApiCostUsd: 2.4, allModelsPriced: true, byModel: [
+      { model: 'claude-sonnet-4-6', calls: 12, inputTokens: 280000, outputTokens: 54000, cacheReadTokens: 120000, cacheCreationTokens: 18000, estimatedApiCostUsd: 1.6, modelPriced: true },
+      { model: 'gpt-5.3-codex', calls: 9, inputTokens: 230000, outputTokens: 40000, cacheReadTokens: 60000, cacheCreationTokens: 4000, estimatedApiCostUsd: 0.8, modelPriced: true },
+    ], byProject: [],
     fetchedAt: new Date().toISOString(), disclaimer: 'stubbed',
   }));
-  await page.route('**/api/cli/quota', json({ ttlMs: 600_000, snapshots: [] }));
+  await page.route('**/api/cli/quota', json({ at: new Date().toISOString(), ttlSeconds: 600, snapshots: [
+    { cliType: 'claude', fetchedAt: new Date().toISOString(), plan: 'Max', source: 'local probe', error: null, windows: [
+      { label: '5h session', usedPct: 42, used: null, limit: null, unit: '%', resetAt: new Date(Date.now() + 3 * 3600_000).toISOString(), resetLabel: 'in 3 hours' },
+      { label: '7d weekly', usedPct: 61, used: null, limit: null, unit: '%', resetAt: new Date(Date.now() + 4 * 86400_000).toISOString(), resetLabel: 'in 4 days' },
+    ] },
+    { cliType: 'codex', fetchedAt: new Date().toISOString(), plan: 'Pro', source: 'local probe', error: null, windows: [
+      { label: '5h session', usedPct: 36, used: null, limit: null, unit: '%', resetAt: new Date(Date.now() + 2 * 3600_000).toISOString(), resetLabel: 'in 2 hours' },
+      { label: '7d weekly', usedPct: 24, used: null, limit: null, unit: '%', resetAt: new Date(Date.now() + 5 * 86400_000).toISOString(), resetLabel: 'in 5 days' },
+    ] },
+  ] }));
   await page.route('**/api/cli/quota/caps', json({ defaultCapPct: 95, caps: {} }));
   // The CLI-admin (Usage caps) section pulls model-route profiles via the quota
   // feature. Stub it too, else an unstubbed call falls through to the dev
@@ -100,7 +112,13 @@ async function stubBackgroundApis(page: Page) {
     windowStart: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
     windowEnd: new Date().toISOString(),
     windowHours: 24, bucketMinutes: 60, bucketCount: 0,
-    cells: [], projects: [], fetchedAt: new Date().toISOString(), disclaimer: 'stubbed',
+    cells: Array.from({ length: 12 }, (_, index) => ({
+      project: 'Agent Studio', bucketStart: new Date(Date.now() - (12 - index) * 3600_000).toISOString(),
+      bucketEnd: new Date(Date.now() - (11 - index) * 3600_000).toISOString(), calls: index + 1,
+      input: 12000 + index * 1800, output: 3000 + index * 400, cacheRead: 5000, cacheWrite: 500,
+      total: 20500 + index * 2200, dollars: 0.1, allModelsPriced: true,
+      agentTokens: 14000 + index * 1600, supportingTokens: 4000 + index * 400, orchestratorTokens: 2500 + index * 200,
+    })), projects: [], fetchedAt: new Date().toISOString(), disclaimer: 'stubbed',
   }));
   await page.route('**/api/workspace/tokens/expensive-jobs*', json({ jobs: [] }));
   await page.route('**/api/workspace/screenshots*', json({ windowHours: 72, projectFilter: null, screenshots: [] }));
@@ -184,6 +202,38 @@ test.describe('Workspace settings home (Dach)', () => {
     await page.getByTestId('workspace-settings-card-tokens').click();
     await expect(page.getByTestId('workspace-tokens-overlay')).toBeVisible();
     await expect(page.getByTestId('workspace-token-timeline')).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('Token usage exposes workspace and per-CLI window-analysis subpages in both themes', async ({ page }) => {
+    const themes: readonly Theme[] = ['light', 'dark'];
+    mkdirSync(process.env.TOKEN_USAGE_RESULTS_DIR ?? SHOT_DIR, { recursive: true });
+    await page.goto('/#/workspace/tokens/claude');
+    await expect(page.getByTestId('cli-window-analysis-claude')).toBeVisible();
+    await expect(page.getByTestId('cli-window-analysis-claude')).toContainText('CLI account level');
+    await expect(page.getByTestId('cli-window-cards')).toContainText('5h session');
+    await expect(page.getByTestId('cli-effort-split')).toContainText('Unattributed 100%');
+    await expect(page.getByTestId('cli-plausibility')).toContainText('Per-task cap forecast (TE-4)');
+
+    await page.setViewportSize({ width: 1800, height: 1200 });
+    for (const theme of themes) {
+      await setTheme(page, theme);
+      await page.getByTestId('workspace-tokens-overlay').screenshot({
+        path: join(process.env.TOKEN_USAGE_RESULTS_DIR ?? SHOT_DIR, `token-usage-subpages--mocked-${theme}.png`),
+      });
+    }
+
+    await page.getByTestId('token-usage-nav-codex').click();
+    await expect(page).toHaveURL(/#\/workspace\/tokens\/codex$/);
+    await expect(page.getByTestId('cli-window-analysis-codex')).toContainText('Codex usage windows');
+    await page.getByTestId('cli-window-period-7d').click();
+    await expect(page.getByTestId('cli-window-period-7d')).toHaveAttribute('aria-pressed', 'true');
+
+    await page.getByTestId('token-usage-nav-workspace').click();
+    await expect(page.getByTestId('workspace-token-timeline')).toBeVisible();
+    await expect(page.getByTestId('token-usage-detail')).toBeVisible();
+    await expect(page.getByTestId('cli-usage-detail-trend')).toBeVisible();
+    await expect(page.getByTestId('cli-usage-detail-headroom')).toHaveCount(0);
+    await expect(page.getByTestId('cli-usage-detail-cli-claude')).toHaveCount(0);
   });
 
   test('deep-link #/workspace/settings opens the home on the overview', async ({ page }) => {

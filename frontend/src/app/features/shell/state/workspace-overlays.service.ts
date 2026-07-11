@@ -33,6 +33,8 @@ export type WorkspaceSettingsSection =
   | 'tokens'
   | 'screenshots';
 
+export type WorkspaceTokenUsagePage = 'workspace' | 'claude' | 'codex';
+
 /**
  * Shell-feature service: open/close state + URL-hash sync for the consolidated
  * Workspace-settings view. One view, one open flag, one active section.
@@ -52,6 +54,7 @@ export class WorkspaceOverlaysService {
   readonly settingsOpen = signal<boolean>(false);
   /** The active section inside the view. */
   readonly section = signal<WorkspaceSettingsSection>('overview');
+  readonly tokenUsagePage = signal<WorkspaceTokenUsagePage>('workspace');
 
   /**
    * Back-compat read signals. Each loose overlay is now a section of the one
@@ -85,6 +88,7 @@ export class WorkspaceOverlaysService {
 
   open(section: WorkspaceSettingsSection): void {
     this.section.set(section);
+    if (section === 'tokens') this.tokenUsagePage.set('workspace');
     this.settingsOpen.set(true);
     this.openedViaHash = false;
     this.writeHash(this.hashForSection(section));
@@ -99,6 +103,11 @@ export class WorkspaceOverlaysService {
     if (this.section() === section) return;
     this.section.set(section);
     this.writeHash(this.hashForSection(section));
+  }
+
+  selectTokenUsagePage(page: WorkspaceTokenUsagePage): void {
+    this.tokenUsagePage.set(page);
+    this.writeHash(page === 'workspace' ? '#/workspace/tokens' : `#/workspace/tokens/${page}`);
   }
 
   close(): void {
@@ -155,6 +164,7 @@ export class WorkspaceOverlaysService {
   syncFromHash(): void {
     const section = this.sectionForHash(window.location.hash);
     if (section) {
+      this.tokenUsagePage.set(this.tokenUsagePageForHash(window.location.hash));
       if (this.section() !== section) this.section.set(section);
       if (!this.settingsOpen()) this.settingsOpen.set(true);
       this.openedViaHash = true;
@@ -167,6 +177,8 @@ export class WorkspaceOverlaysService {
   private sectionForHash(hash: string): WorkspaceSettingsSection | null {
     switch (hash) {
       case '#/workspace/tokens': return 'tokens';
+      case '#/workspace/tokens/claude': return 'tokens';
+      case '#/workspace/tokens/codex': return 'tokens';
       case '#/workspace/screenshots': return 'screenshots';
       case '#/workspace/settings/caps':
       case '#/workspace/caps': return 'caps';
@@ -186,6 +198,12 @@ export class WorkspaceOverlaysService {
       case '#/workspace/settings': return 'overview';
       default: return null;
     }
+  }
+
+  private tokenUsagePageForHash(hash: string): WorkspaceTokenUsagePage {
+    if (hash === '#/workspace/tokens/claude') return 'claude';
+    if (hash === '#/workspace/tokens/codex') return 'codex';
+    return 'workspace';
   }
 
   private hashForSection(section: WorkspaceSettingsSection): string {
@@ -221,6 +239,8 @@ export class WorkspaceOverlaysService {
     '#/workspace/caps',
     '#/workspace/prompts',
     '#/workspace/tokens',
+    '#/workspace/tokens/claude',
+    '#/workspace/tokens/codex',
     '#/workspace/screenshots',
     // Retired aliases stay here so a stale summary hash still clears on close.
     '#/workspace/summary',
