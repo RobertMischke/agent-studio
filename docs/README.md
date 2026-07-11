@@ -78,6 +78,8 @@ Use this page as the first stop when you need the right document quickly.
 | Auto-review reissue / evidence-gate analysis | [wiki/concepts/auto-review-evidence-gate-analysis.html](wiki/concepts/auto-review-evidence-gate-analysis.html) |
 | Planning & Research task type | [wiki/concepts/planning-research-task-type.html](wiki/concepts/planning-research-task-type.html) |
 | MVP presentation screen-tooling evaluation and recommendation | [research/screen-tooling-mvp-presentation-2026-07.md](research/screen-tooling-mvp-presentation-2026-07.md) |
+| MVP presentation capture runbook | [operations/setup/presentation-capture.md](operations/setup/presentation-capture.md) |
+| MVP presentation storyboard and shot list | [product/mvp-presentation-storyboard.md](product/mvp-presentation-storyboard.md) |
 | Runtime prompt usage audit | [wiki/concepts/runtime-prompt-usage-audit.html](wiki/concepts/runtime-prompt-usage-audit.html) |
 | Admin CLI onboarding | [wiki/concepts/admin-cli-onboarding.html](wiki/concepts/admin-cli-onboarding.html) |
 | Orchestrator supervision loop | [wiki/concepts/orchestrator-supervision-loop.html](wiki/concepts/orchestrator-supervision-loop.html) |

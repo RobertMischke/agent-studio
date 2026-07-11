@@ -63,7 +63,7 @@ auto-discovers via `testDir: './e2e'` so no path tweaks are needed.
 | `project/` | Per-project detail panels: drift, observability, runtime, security, UX/UI, token usage, steering, identity. | 15 |
 | `system/` | Cross-cutting chrome: modal stack, caret suppression, markdown body, concept help, decision banner, update banner. | 8 |
 | `task-detail/` | Task detail view: header, lane pager, status dropdown, panes, protocol pane, prompts, triage, verbose debug. | 29 |
-| `visual-evidence/` | Screenshots reel, lightbox, README + dialog screenshot regressions. | 7 |
+| `visual-evidence/` | Screenshots reel, lightbox, README + dialog screenshot regressions. | 8 |
 
 Per-spec coverage map is auto-generated below (run
 `node scripts/generate-e2e-coverage-map.mjs --write` to refresh).
@@ -350,11 +350,12 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `triage-actions-in-detail-header.spec.ts` | Triage actions in detail header (primary + overflow) |
 | `verbose-debug-overlay.spec.ts` | Verbose Debug overlay - task workbench |
 
-### `visual-evidence/` — 7 specs
+### `visual-evidence/` — 8 specs
 
 | Spec | Summary |
 |------|---------|
 | `job-screenshots-in-protocol.spec.ts` | Job artifacts harvesting (images-and-protocol) |
+| `presentation-capture.spec.ts` | Deterministic both-theme, hi-DPI MVP presentation stills over the ADR-0056 demo workspace |
 | `prompt-screenshot-attachment.spec.ts` | Prompt editor — screenshot attachments |
 | `readme-screenshots.spec.ts` | readme screenshots — board, detail, protocol pane |
 | `session-chip-screenshot.spec.ts` | session chip — visual capture (continued / lost / fresh) |
