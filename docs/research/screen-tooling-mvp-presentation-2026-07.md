@@ -22,8 +22,21 @@ give a recommendation, and cut the follow-up tasks.
 Extend the existing Playwright pipeline for all presentation stills. Use
 ScreenToGif for short silent loops and OBS Studio for narrated MP4
 walkthroughs, always against the ADR-0056 demo workspace. Do not build a
-Playwright video pipeline for the MVP presentation. Queue T1-T4 below as the
-MVP task cut; keep T5 optional and take T6 as independent cleanup.
+Playwright video pipeline for the MVP presentation. T1-T4 below are queued as
+the single implementation task `mvp-presentation-capture-kit`; keep T5 optional
+and take T6 as independent cleanup.
+
+### Presentation decisions
+
+| Decision | Selected default | Consequence for capture work |
+|---|---|---|
+| Medium | **Live slide deck**, with optional embedded silent loops and an optional narrated backup recording. No interactive click-through for the MVP. | T4 optimizes the story for a presenter-controlled sequence. Motion supplements the deck rather than replacing it. |
+| Deck format | **16:9 at 1920x1080.** | T1 composes and reviews every asset in a 1920x1080 frame. Playwright uses hi-DPI capture so cropped UI remains crisp on the slide. |
+| Webcam | **No webcam presence.** Narrated backup footage uses microphone audio and product capture only. | T3 does not need a camera scene or presenter overlay. This keeps attention on the product and simplifies repeatable framing. |
+
+These are delivery defaults for the MVP, not unanswered dependencies. They can
+be revisited after the first storyboard review without blocking the capture
+kit.
 
 **Context note.** The task points at `docs/concepts/remote-execution-product-integration.md §7`.
 That file does not exist in the tree. The live plan of record for the remote
@@ -203,8 +216,11 @@ Call this out in the remote plan so "capture" is not assumed to be one thing:
 
 ## 6. Task cut (Task-Zuschnitt)
 
-Small, independently landable tasks. These are recommended for queueing via the
-Task API; this evaluation does not create them.
+T1-T4 are the independently verifiable slices of the queued follow-up
+`mvp-presentation-capture-kit` in `0-backlog`. One card keeps the capture set,
+demo story, operator runbook, and storyboard aligned to the same presentation
+decisions. T5 remains an optional later spike. T6 is decision-independent
+cleanup and is not part of the queued MVP capture card.
 
 - **T1 - Presentation stills set (Playwright).** Add a presentation capture set
   (extend `demo-screenshot-tour.spec.ts` or a new `presentation-*.spec.ts`) at
@@ -244,11 +260,12 @@ Task API; this evaluation does not create them.
 
 ---
 
-## 7. Open questions
+## 7. Completion record
 
-- Presentation medium: live slide deck, recorded video, or an interactive
-  click-through? T4 depends on the answer.
-- Target resolution / aspect ratio of the deck (drives the T1 viewport and
-  hi-DPI factor).
-- Whether narrated reels need webcam presence (OBS handles it; changes the
-  runbook).
+- Presentation medium decided: live deck, optional silent loops, optional
+  narrated backup, and no interactive click-through for the MVP.
+- Deck format decided: 16:9 at 1920x1080 with hi-DPI source captures.
+- Webcam decision: no webcam; microphone narration only when backup footage is
+  produced.
+- Follow-up created through the Task API: `mvp-presentation-capture-kit` in
+  `0-backlog`, covering T1-T4.
