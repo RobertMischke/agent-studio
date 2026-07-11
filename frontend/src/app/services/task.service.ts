@@ -1478,12 +1478,22 @@ export class TaskService {
   }
 
   /** All epics with their live sub-task rollups. */
-  getEpics(includeFixtures = false) {
-    const params = includeFixtures ? new HttpParams().set('includeFixtures', 'true') : undefined;
+  getEpics(includeFixtures = false, status?: 'active' | 'completed', project?: string) {
+    let params = new HttpParams();
+    if (includeFixtures) params = params.set('includeFixtures', 'true');
+    if (status) params = params.set('status', status);
+    if (project) params = params.set('project', project);
     return this.http.get<import('../models/task.model').EpicRollup[]>(
       `${this.baseUrl}/epics`,
-      params ? { params } : {},
+      { params },
     );
+  }
+
+  getCompletedEpicCount(includeFixtures = false, project?: string) {
+    let params = new HttpParams();
+    if (includeFixtures) params = params.set('includeFixtures', 'true');
+    if (project) params = params.set('project', project);
+    return this.http.get<{ count: number }>(`${this.baseUrl}/epics/completed/count`, { params });
   }
 
   /** A single epic's rollup. */

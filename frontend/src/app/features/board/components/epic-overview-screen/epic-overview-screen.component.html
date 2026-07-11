@@ -27,7 +27,7 @@
     <div class="epic-overview__muted" data-testid="epic-overview-loading">Loading epics…</div>
   } @else if (error()) {
     <div class="epic-overview__muted" data-testid="epic-overview-error">Could not load epics.</div>
-  } @else if (visibleEpics().length === 0) {
+  } @else if (totalEpics() === 0) {
     @if (scopedProject(); as scope) {
       <div class="epic-overview__empty" data-testid="epic-overview-empty">
         <p class="epic-overview__empty-text">No epics in {{ scope.name }} yet.</p>
@@ -45,18 +45,12 @@
     }
   } @else {
     <div class="epic-overview__sections" data-testid="epic-overview-list">
-      @for (section of epicSections(); track section.id) {
-        <section class="epic-overview__section"
-                 [attr.data-testid]="'epic-overview-section-' + section.id">
-          <header class="epic-overview__section-head">
-            <h2>{{ section.label }}</h2>
-            <span>{{ section.epics.length }}</span>
-          </header>
-          <ul class="epic-overview__list" role="list">
-      @for (epic of section.epics; track trackByEpic($index, epic)) {
+      <ul class="epic-overview__list" role="list" data-testid="epic-overview-active-list">
+      @for (epic of displayedEpics(); track trackByEpic($index, epic)) {
         @let identity = identityFor(epic.projectName);
         @let expanded = isExpanded(epic.id);
         <li class="epic-overview__card"
+            [class.epic-overview__card--completed]="epic.subTaskTotal > 0 && epic.completed === epic.subTaskTotal"
             data-testid="epic-overview-card"
             [attr.data-epic-id]="epic.id">
           <div class="epic-overview__card-head">
@@ -84,6 +78,9 @@
             </span>
             <span class="epic-overview__count"
                   data-testid="epic-overview-card-count">{{ epic.completed }} / {{ epic.subTaskTotal }} done</span>
+            @if (completedDate(epic.completedAt); as date) {
+              <time class="epic-overview__date" data-testid="epic-overview-completed-date" [attr.datetime]="epic.completedAt">{{ date }}</time>
+            }
           </div>
 
           <div class="epic-overview__bar"
@@ -138,9 +135,21 @@
           }
         </li>
       }
-          </ul>
-        </section>
-      }
+      </ul>
+      <section class="epic-overview__completed" data-testid="epic-overview-section-completed">
+        <button type="button"
+                class="epic-overview__completed-head"
+                data-testid="epic-overview-completed-toggle"
+                [attr.aria-expanded]="completedOpen()"
+                (click)="toggleCompleted()">
+          <app-studio-icon name="chevronRight" [size]="14"></app-studio-icon>
+          <span>Completed</span>
+          <span class="epic-overview__completed-count">{{ completedCount() }} completed</span>
+        </button>
+        @if (completedOpen() && completedLoading()) {
+          <div class="epic-overview__muted" data-testid="epic-overview-completed-loading">Loading completed epicsâ€¦</div>
+        }
+      </section>
     </div>
   }
 

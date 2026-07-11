@@ -931,6 +931,8 @@ export interface EpicRollup {
   completed: number;
   inProgress: number;
   open: number;
+  /** Latest lane-entry timestamp among all members once the epic is complete. */
+  completedAt?: string | null;
   byState: Record<string, number>;
   subTasks: EpicSubTaskRef[];
 }
