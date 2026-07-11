@@ -86,6 +86,9 @@ export interface RemoteHost {
   cliQuotas: readonly HostCliQuota[];
   /** Live system stats, or null when the host reports none (e.g. retired). */
   stats: HostSystemStats | null;
+  /** Latest daemon startup proof of origin write access. */
+  gitPushStatus?: 'ready' | 'read-only' | null;
+  gitPushDetail?: string | null;
   /** Transient: an action currently in flight for this host. */
   busyAction?: HostActionKind | null;
 }

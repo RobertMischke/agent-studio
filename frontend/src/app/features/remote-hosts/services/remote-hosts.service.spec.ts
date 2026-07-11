@@ -125,10 +125,14 @@ describe('RemoteHostsService client registry hydration', () => {
       lastSeenAt: new Date(now - 30_000).toISOString(),
       tokenBudgetMonthly: null,
       notes: null,
+      runnerGitStatus: 'read-only',
+      runnerGitDetail: 'push-dry-run failed (128): permission denied',
     }]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
       status: 'online',
       lastHeartbeatAt: new Date(now - 30_000).toISOString(),
+      gitPushStatus: 'read-only',
+      gitPushDetail: 'push-dry-run failed (128): permission denied',
     });
 
     svc.reload();

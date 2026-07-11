@@ -79,7 +79,13 @@ export class RemoteHostsService {
               : now - seenMs <= RemoteHostsService.DEGRADED_CLIENT_MS
                 ? 'degraded'
                 : 'offline';
-          return { ...host, lastHeartbeatAt: seenAt, status };
+          return {
+            ...host,
+            lastHeartbeatAt: seenAt,
+            status,
+            gitPushStatus: client.runnerGitStatus ?? null,
+            gitPushDetail: client.runnerGitDetail ?? null,
+          };
         }));
         this.log('clients-hydrated', {
           clients: clients?.length ?? 0,

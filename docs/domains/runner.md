@@ -200,6 +200,10 @@ state.
   is verified before removal. A failed check or push keeps the worktree and
   records a `worktree-blocked` gate item with host and path. Successful salvage
   branches are linked from the card's `results/deliverables.md`.
+- Remote daemon admission is write-capability gated. Startup keeps the fetch URL
+  and Git `pushurl` separate, performs one push dry-run, and publishes the result
+  on its client identity. A reported `read-only` identity receives no claims;
+  Remote Hosts surfaces the same state for operator repair.
 - Workspace-shaped orchestrator settings (model, thinking level, autonomy)
   resolve `project override → workspace default → platform constant` through
   `OrchestratorSettingsResolver`, never read ad-hoc at a call site. The provider

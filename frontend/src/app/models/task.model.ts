@@ -482,6 +482,9 @@ export interface ClientSummary {
   defaultCliType?: string | null;
   defaultModel?: string | null;
   defaultThinkingLevel?: string | null;
+  runnerGitStatus?: 'ready' | 'read-only' | null;
+  runnerGitDetail?: string | null;
+  runnerGitCheckedAt?: string | null;
 }
 
 /**

@@ -53,12 +53,25 @@ public static class LeaseEndpoints
             AgentStudio.Registry.ProjectRegistry projects,
             TaskTransitionService transitions,
             RunLeaseService leases,
+            HttpContext context,
+            AgentStudio.Clients.ClientIdentityStore clients,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
             var logger = loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerClaim");
             if (string.IsNullOrWhiteSpace(req.RunnerId) || string.IsNullOrWhiteSpace(req.RunnerName))
                 return Results.BadRequest(new RunnerClaimResponse(RunnerClaimStatus.Invalid, Message: "runnerId and runnerName are required."));
+
+            var clientId = context.Request.Headers["X-Client-Id"].ToString();
+            var client = clients.Find(clientId);
+            if (string.Equals(client?.RunnerGitStatus, "read-only", StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogWarning(
+                    "remote-runner-claim-refused-read-only runner={Runner} clientId={ClientId} detail={Detail}",
+                    req.RunnerName, clientId, client.RunnerGitDetail);
+                return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty,
+                    Message: $"runner is read-only: {client.RunnerGitDetail ?? "git push probe failed"}"));
+            }
 
             await ClaimGate.WaitAsync(ct);
             try

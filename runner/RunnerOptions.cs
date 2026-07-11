@@ -37,6 +37,9 @@ public sealed class RunnerOptions
     /// <summary>Fallback git remote for one-shot runs and claims from older servers.</summary>
     public string? GitRemote { get; init; }
 
+    /// <summary>Optional write-only URL installed as origin.pushurl while fetches keep using <see cref="GitRemote"/>.</summary>
+    public string? GitPushRemote { get; init; }
+
     /// <summary>Directory the runner checks the repo out into on the runner host.</summary>
     public required string WorkDir { get; init; }
 
@@ -124,6 +127,7 @@ public sealed class RunnerOptions
             BackendName = Val("backend-name", "RUNNER_BACKEND_NAME", "remote-runner"),
             AuthToken = Val("auth-token", "RUNNER_AUTH_TOKEN") is { Length: > 0 } t ? t : null,
             GitRemote = Val("git-remote", "RUNNER_GIT_REMOTE").Trim() is { Length: > 0 } gitRemote ? gitRemote : null,
+            GitPushRemote = Val("git-push-remote", "RUNNER_GIT_PUSH_REMOTE").Trim() is { Length: > 0 } gitPushRemote ? gitPushRemote : null,
             WorkDir = Val("workdir", "RUNNER_WORKDIR", Path.Combine(Path.GetTempPath(), "agent-runner-work")),
             Branch = Val("branch", "RUNNER_BRANCH") is { Length: > 0 } b ? b : null,
             BaseBranch = Val("base-branch", "RUNNER_BASE_BRANCH", "main"),

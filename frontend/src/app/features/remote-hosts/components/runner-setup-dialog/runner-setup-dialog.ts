@@ -32,6 +32,7 @@ export class RunnerSetupDialogComponent implements OnInit {
   readonly connectionMode = signal<RunnerSetupConnectionMode | ''>('');
   readonly clientId = signal('');
   readonly gitRemote = signal('');
+  readonly gitPushRemote = signal('');
 
   readonly config = computed<RunnerSetupConfig>(() => ({
     sshTarget: this.sshTarget(),
@@ -39,6 +40,7 @@ export class RunnerSetupDialogComponent implements OnInit {
     connectionMode: this.connectionMode(),
     clientId: this.clientId(),
     gitRemote: this.gitRemote(),
+    gitPushRemote: this.gitPushRemote(),
   }));
   readonly issues = computed(() => runnerSetupIssues(this.config()));
   readonly ready = computed(() => this.issues().length === 0);

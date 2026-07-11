@@ -67,6 +67,17 @@ public static class ClientEndpoints
                 : Results.NotFound(new { error = "client-not-found" });
         });
 
+        clients.MapPost("/{id}/runner-git-capability", (string id, RunnerGitCapabilityRequest? request, HttpContext context, ClientIdentityStore store) =>
+        {
+            if (request is null || request.Status is not ("ready" or "read-only"))
+                return Results.BadRequest(new { error = "status must be ready or read-only" });
+            var caller = context.Request.Headers["X-Client-Id"].ToString();
+            if (!string.Equals(caller, id, StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = "runner may only report its own capability" });
+            var updated = store.SetRunnerGitCapability(id, request.Status, request.Detail, request.CheckedAt);
+            return updated is null ? Results.NotFound(new { error = "client-not-found" }) : Results.Ok(ClientSummary.From(updated));
+        });
+
         // Per-client default CLI + model used when the user creates new tasks
         // (and surfaced into the orchestrator chat prompt so a "create me
         // three tasks" request lands on the user's actual preferences, not a

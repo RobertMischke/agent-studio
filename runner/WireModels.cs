@@ -21,6 +21,8 @@ namespace AgentRunner;
 /// </summary>
 public sealed record ClientRegisterRequest(string DisplayName, string? Kind = null, string? Notes = null);
 
+public sealed record RunnerGitCapabilityRequest(string Status, string? Detail, DateTime CheckedAt);
+
 /// <summary>Server projection of a registered client identity; only <see cref="Id"/> is used (as the X-Client-Id).</summary>
 public sealed record ClientRegisterResponse(string Id, string DisplayName, string Kind);
 

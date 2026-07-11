@@ -57,6 +57,17 @@ describe('RemoteHostCardComponent', () => {
     expect(el.querySelector('[data-testid="remote-host-status"]')?.textContent).toContain('Offline');
   });
 
+  it('shows the independent read-only badge when the startup push probe fails', () => {
+    const el: HTMLElement = mount({
+      ...HOST,
+      gitPushStatus: 'read-only',
+      gitPushDetail: 'push-dry-run failed (128): permission denied',
+    }).nativeElement;
+    const badge = el.querySelector('[data-testid="remote-host-git-read-only"]');
+    expect(badge?.textContent).toContain('Read-only');
+    expect(badge?.getAttribute('title')).toContain('permission denied');
+  });
+
   it('emits an action event with the host id when a control is clicked', () => {
     const fixture = mount(HOST);
     let received: { kind: string; id: string } | null = null;

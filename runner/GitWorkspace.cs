@@ -61,6 +61,8 @@ public sealed class GitWorkspace
                 _log("git fetch origin --prune");
                 await Git(["fetch", "origin", "--prune"], SharedRepoPath, ct);
             }
+            if (!string.IsNullOrWhiteSpace(_options.GitPushRemote))
+                await Git(["remote", "set-url", "--push", "origin", _options.GitPushRemote], SharedRepoPath, ct);
 
             var requested = string.IsNullOrWhiteSpace(_options.Branch) ? _baseBranch : _options.Branch!;
             string branch;

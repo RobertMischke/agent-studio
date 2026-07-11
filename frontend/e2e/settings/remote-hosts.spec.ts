@@ -129,7 +129,8 @@ test.describe('Remote Hosts settings section', () => {
     await expect(page.getByTestId('runner-setup-loopback-block')).toContainText('Loopback is not remotely reachable');
     await expect(page.getByTestId('visible-cli-task-card')).toBeHidden();
 
-    await page.getByTestId('runner-setup-git-remote').fill('git@github.com:example/agent-studio.git');
+    await page.getByTestId('runner-setup-git-remote').fill('https://github.com/example/agent-studio.git');
+    await page.getByTestId('runner-setup-git-push-remote').fill('git@github.com:example/agent-studio.git');
     await page.getByTestId('runner-setup-connection-mode').selectOption('tunnel');
 
     await expect(page.getByTestId('visible-cli-task-card')).toBeVisible();
@@ -151,6 +152,26 @@ test.describe('Remote Hosts settings section', () => {
     expect(String(createBody?.['promptMarkdown'])).toContain("--host 'agent-runner'");
     expect(String(createBody?.['promptMarkdown'])).toContain('X-Client-Id: agent-runner-01');
     expect(String(createBody?.['promptMarkdown'])).toContain('Never copy, upload, or reuse credential files');
+  });
+
+  test('surfaces a failed startup push probe as a read-only host', async ({ page }) => {
+    await page.unroute('**/api/clients');
+    await page.route('**/api/clients', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service',
+        registeredAt: '2026-07-11T19:00:00Z', lastSeenAt: new Date().toISOString(),
+        runnerGitStatus: 'read-only', runnerGitDetail: 'push-dry-run failed (128): permission denied',
+      }]),
+    }));
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    const badge = remote.getByTestId('remote-host-git-read-only');
+    await expect(badge).toBeVisible();
+    await expect(badge).toHaveAttribute('title', /permission denied/);
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-read-only--mocked.png'), fullPage: false });
   });
 
   test('adds a host through the guided four-step setup', async ({ page }) => {

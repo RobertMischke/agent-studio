@@ -23,6 +23,11 @@ public sealed class RemoteRunnerDaemon
         var clientId = await _client.RegisterAsync(_options.RunnerName, "service", shutdown);
         _log($"registered daemon '{_options.RunnerName}' as client '{clientId}'; slots={_options.HostMaxParallelism}");
 
+        var gitCapability = await GitPushProbe.RunAsync(_options, _log, shutdown);
+        await _client.ReportGitCapabilityAsync(clientId, new RunnerGitCapabilityRequest(
+            gitCapability.CanPush ? "ready" : "read-only", gitCapability.Detail, DateTime.UtcNow), shutdown);
+        _log($"runner-git-capability status={(gitCapability.CanPush ? "ready" : "read-only")} detail={gitCapability.Detail}");
+
         var active = new List<Task<int>>();
         while (!shutdown.IsCancellationRequested)
         {

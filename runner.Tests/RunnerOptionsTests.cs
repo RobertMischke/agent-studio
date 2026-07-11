@@ -56,6 +56,17 @@ public class RunnerOptionsTests
         Assert.Equal("agent-runner-01", options.ClientId);
     }
 
+    [Fact]
+    public void Fetch_and_push_remotes_can_be_configured_separately()
+    {
+        var (options, _, _, _) = RunnerOptions.Parse([
+            "--git-remote", "https://github.com/acme/repo.git",
+            "--git-push-remote", "git@github.com:acme/repo.git"]);
+
+        Assert.Equal("https://github.com/acme/repo.git", options.GitRemote);
+        Assert.Equal("git@github.com:acme/repo.git", options.GitPushRemote);
+    }
+
     [Theory]
     [InlineData("AGT-20", "AGT-20")]
     [InlineData("project/task 20", "project-task-20")]

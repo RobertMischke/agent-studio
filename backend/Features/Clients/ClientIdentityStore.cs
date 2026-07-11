@@ -253,6 +253,24 @@ public class ClientIdentityStore
         }
     }
 
+    public ClientIdentity? SetRunnerGitCapability(string id, string status, string? detail, DateTime checkedAt)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (!_byId.TryGetValue(id, out var existing)) return null;
+            var updated = existing with
+            {
+                RunnerGitStatus = status,
+                RunnerGitDetail = string.IsNullOrWhiteSpace(detail) ? null : detail.Trim(),
+                RunnerGitCheckedAt = checkedAt.ToUniversalTime()
+            };
+            _byId[id] = updated;
+            TryWriteLocked(updated);
+            return updated;
+        }
+    }
+
     /// <summary>
     /// Stamp <c>lastSeenAt</c> on the identity. Called by the access-log
     /// middleware on every authenticated read or write so the GET listing

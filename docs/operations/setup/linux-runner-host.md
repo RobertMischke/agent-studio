@@ -179,7 +179,8 @@ list.
 | `RUNNER_ID` | `--runner-id` | `agent-runner-<host>` | Stable lease owner identity. Fencing is per task, not per pid. |
 | `RUNNER_NAME` | `--runner-name` | `agent-runner-01` | Board-facing runner/project name. |
 | `RUNNER_CLIENT_ID` | `--client-id` | (self-register) | Existing host identity shown in Remote Hosts. When set, startup verifies this exact X-Client-Id and refuses to create a replacement identity. |
-| `RUNNER_GIT_REMOTE` | `--git-remote` | (none) | Fallback origin for one-shot runs and claims from an older server that do not carry `repositoryUrl`. Daemon claims normally use the project origin supplied by the server. |
+| `RUNNER_GIT_REMOTE` | `--git-remote` | (none) | Credential-free fetch URL and startup push-probe repository. Required for daemon onboarding; normally use HTTPS. |
+| `RUNNER_GIT_PUSH_REMOTE` | `--git-push-remote` | (fetch URL) | Write URL installed as Git `origin.pushurl`; normally the SSH URL backed by this host/repository deploy key. |
 | `RUNNER_BRANCH` | `--branch` | (base branch) | Branch to check out for the run. |
 | `RUNNER_BASE_BRANCH` | `--base-branch` | `main` | Fallback when the task branch is absent on origin. |
 | `RUNNER_WORKDIR` | `--workdir` | `$TMPDIR/agent-runner-work` | Where the repo checkout and `results/` live. |
@@ -222,24 +223,55 @@ different host. An assigned project with no resolvable network repository URL
 is skipped before a lease is created and is logged as
 `remote-runner-project-skipped`; the card remains Ready and is not escalated.
 
-`RUNNER_GIT_REMOTE` remains a compatibility fallback. Keep it for one-shot
-diagnostics or during a rolling server upgrade, but do not use one global value
-to model a multi-project daemon.
+`RUNNER_GIT_REMOTE` is also the repository used by the daemon's one-time startup
+write probe. Configure it together with `RUNNER_GIT_PUSH_REMOTE` for the
+host/repository assignment. Do not point one global push URL at unrelated claim
+repositories.
 
-### Private repository authentication
+### Push identity setup
 
-Private repositories require credentials that already work for the runner's OS
-user. This change deliberately does not provision, copy, or store git
-credentials in Agent Studio. Use one of the host-owned approaches:
+The recommended identity is one write-enabled repository deploy key per runner
+host and repository. Generate it as the systemd runner user. Only the public key
+leaves the host:
 
-- a read-only deploy key per repository, selected through the host's SSH config;
-- `gh auth login` plus `gh auth setup-git` for the runner user; or
-- an operator-managed system credential helper with least-privilege access.
+```bash
+install -d -m 0700 ~/.ssh
+ssh-keygen -t ed25519 -f ~/.ssh/agent-studio-deploy -C 'agent-runner-01:agent-studio' -N ''
+cat ~/.ssh/agent-studio-deploy.pub
+```
 
-Never copy an operator's SSH keys, GitHub token files, or credential-store data
-into the product or into task evidence. Public repositories need no additional
-setup. A private repository without working host credentials remains local until
-the operator configures host access.
+In GitHub, an organization owner must first allow repository deploy keys in the
+organization security/settings policy. If the GitHub API returns `422 Deploy
+keys are disabled for this repository`, this organization policy is still off.
+After it is enabled, add the public key under repository Settings, Deploy keys,
+select **Allow write access**, and keep the private key on the runner. Pin its
+use without changing the fetch URL:
+
+```sshconfig
+Host github-agent-studio
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/agent-studio-deploy
+  IdentitiesOnly yes
+```
+
+```bash
+RUNNER_GIT_REMOTE=https://github.com/agent-orc/agent-studio.git
+RUNNER_GIT_PUSH_REMOTE=git@github-agent-studio:agent-orc/agent-studio.git
+```
+
+As a fallback when organization policy cannot allow deploy keys, create a
+fine-grained personal access token owned by a dedicated machine account. Limit
+it to this repository with **Contents: Read and write**, store it in the runner
+user's OS credential helper, and keep the HTTPS URL free of embedded secrets.
+Do not put a token in `runner.env`, a command line, task output, or evidence.
+
+At daemon startup, the runner performs `git push --dry-run` to
+`refs/heads/runner-capability-probe/<runner-id>`, publishes `ready` or
+`read-only` on its client identity, and then polls. Dry-run creates no branch.
+The server refuses claims from a `read-only` runner, and Remote Hosts shows a
+Read-only badge with the probe error. Restore credentials and restart the unit;
+the next startup probe replaces the status.
 
 ### Remote completion protocol
 
@@ -296,9 +328,8 @@ sudo systemctl enable --now agent-runner
 sudo journalctl -u agent-runner -f
 ```
 
-At minimum, `runner.env` sets `RUNNER_SERVER_URL`, `RUNNER_ID`, and
-`RUNNER_NAME`. Set `RUNNER_GIT_REMOTE` only when the compatibility fallback is
-needed. Product onboarding also sets
+At minimum, `runner.env` sets `RUNNER_SERVER_URL`, `RUNNER_ID`, `RUNNER_NAME`,
+`RUNNER_GIT_REMOTE`, and `RUNNER_GIT_PUSH_REMOTE`. Product onboarding also sets
 `RUNNER_CLIENT_ID`, so the configured identity and its `LastSeen` record remain
 stable across reinstalls. The unit restarts after failures, logs to journald,
 requests graceful SIGINT shutdown, and best-effort starts

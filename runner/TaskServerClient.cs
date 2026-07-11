@@ -167,6 +167,10 @@ public sealed class TaskServerClient : IDisposable
         => await PostJsonAsync<RunnerClaimRequest, RunnerClaimResponse>("/api/runner/claim", req, ct)
            ?? new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: "Empty claim response.");
 
+    public async Task ReportGitCapabilityAsync(string clientId, RunnerGitCapabilityRequest request, CancellationToken ct)
+        => _ = await PostJsonAsync<RunnerGitCapabilityRequest, object>(
+            $"/api/clients/{Uri.EscapeDataString(clientId)}/runner-git-capability", request, ct);
+
     private static JsonSerializerOptions CreateJsonOptions()
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
