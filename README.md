@@ -22,6 +22,8 @@ Every run is a configurable **pre / core / post** pipeline, not a single shot. P
 
 A per-project **orchestrator** owns queue movement — and it is a participant you can talk to, not a hidden daemon. It carries a long-lived session with inspectable memory (what it was booted with, which tasks and decisions it has seen), summarises the queue ("25 tasks: 6 in backlog, 1 in progress, 16 in human review, 2 escalated"), and is **deterministic, not prompt-trust**: when an agent's report contradicts the structural evidence — no edits, near-zero duration, a post-recovery no-op — the orchestrator re-issues the work itself instead of accepting the inconsistency. A supervisor layer above it watches health and budget every tick.
 
+Every canonical chat turn is grounded in a compact application digest rather than a raw data dump. It covers the board pulse, active run phases, cached CLI quota, publish-target status, backend and watcher health, and recent decision-journal entries. The `global`, `project:<id>`, and `task:<projectId>/<taskKey>` context keys control what the digest may see, while an explicit refresh rebuilds it and re-probes quota.
+
 ### Context management — the project Wiki
 
 ![The project Wiki: a 338-page knowledge base built from the repository's docs tree, with categories, rendered Markdown and git history](./docs/assets/images/wiki-context.png)
@@ -143,6 +145,8 @@ Eight `TaskBackgroundPoller<T>` subclasses keep the open detail and the board fr
 ### Orchestration: deterministic, not prompt-trust
 
 Per-project orchestrator owns queue movement. A long-lived orchestrator session carries the manager voice across runs and surfaces in a project-side sheet with chat composition and a project picker. The deterministic post-run policy parses `[[TASK_DONE]]` / `[[TASK_BLOCKED:<reason>]]` / `[[TASK_NEEDS_INPUT:<reason>]]` / `[[TASK_NOOP]]` sentinels from the CLI buffer; when the agent's report contradicts structural evidence (no edits, near-zero duration, after a session-loss recovery with a user follow-up), the orchestrator re-issues the work itself instead of accepting the inconsistency. The decision tree is matrix-tested. A supervisor layer above the runner observes health and budget every tick and emits typed advisories + interventions when something looks stuck.
+
+The side-sheet chat and canonical session-turn API share one ORCH-1 digest builder. Global context folds all registered projects; project and task contexts stay project-isolated, with task context adding a focused card. The side sheet shows the real capture freshness and its Refresh action forces a digest refresh without granting any new mutation authority. See [docs/concepts/orchestrator-in-app.md](./docs/concepts/orchestrator-in-app.md) for the scoped read contract and the explicit ORCH-2/ORCH-3 boundary.
 
 ### Token economy
 

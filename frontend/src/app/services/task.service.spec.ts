@@ -278,6 +278,47 @@ describe('TaskService', () => {
 
     expect(reply).toBe('on the header');
   });
+
+  it('reads a project-scoped orchestrator context digest with safe path encoding', () => {
+    let digest = '';
+    service.getOrchestratorContextDigest('project:Agent Studio').subscribe(value => {
+      digest = value.digest;
+    });
+
+    const req = http.expectOne('/api/orchestrator/context/project:Agent%20Studio');
+    expect(req.request.method).toBe('GET');
+    req.flush({
+      contextKey: 'project:Agent Studio',
+      capturedAt: '2026-07-11T10:00:00Z',
+      digest: 'lanes: ready=2',
+      sources: [],
+    });
+
+    expect(digest).toBe('lanes: ready=2');
+  });
+
+  it('force-refreshes global and task orchestrator context digests explicitly', () => {
+    service.refreshOrchestratorContextDigest('global').subscribe();
+    const global = http.expectOne('/api/orchestrator/context/global/refresh');
+    expect(global.request.method).toBe('POST');
+    expect(global.request.body).toBeNull();
+    global.flush({
+      contextKey: 'global',
+      capturedAt: '2026-07-11T10:00:00Z',
+      digest: 'workspace',
+      sources: [],
+    });
+
+    service.refreshOrchestratorContextDigest('task:Agent Studio/AGT-2047').subscribe();
+    const task = http.expectOne('/api/orchestrator/context/task:Agent%20Studio/AGT-2047/refresh');
+    expect(task.request.method).toBe('POST');
+    task.flush({
+      contextKey: 'task:Agent Studio/AGT-2047',
+      capturedAt: '2026-07-11T10:01:00Z',
+      digest: 'task focus',
+      sources: [],
+    });
+  });
 });
 
 describe('orchestratorContextChatSegment', () => {

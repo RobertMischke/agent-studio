@@ -85,6 +85,36 @@ export interface OrchestratorContextSessionsResponse {
   sessions: OrchestratorContextSession[];
 }
 
+export type OrchestratorContextDigestSourceName =
+  | 'lanes'
+  | 'transitions'
+  | 'runs'
+  | 'quota'
+  | 'publishTargets'
+  | 'health'
+  | 'decisionJournal';
+
+/** One source used to assemble the compact ORCH-1 read-context digest. */
+export interface OrchestratorContextDigestSource {
+  name: OrchestratorContextDigestSourceName;
+  status: 'ok' | 'empty' | 'degraded' | 'unavailable';
+  capturedAt: string | null;
+  detail: string | null;
+}
+
+/**
+ * Compact, context-keyed application snapshot supplied to the orchestrator.
+ * The backend assembles this from canonical board, run, quota, publishing,
+ * health, and decision-journal sources so the frontend never has to merge a
+ * potentially inconsistent prompt from its local stores.
+ */
+export interface OrchestratorContextDigest {
+  contextKey: string;
+  capturedAt: string;
+  digest: string;
+  sources: OrchestratorContextDigestSource[];
+}
+
 /**
  * One turn in the per-project orchestrator chat. Mirrors backend
  * `OrchestratorChatTurn`. Roles: 'user' for the human's messages,

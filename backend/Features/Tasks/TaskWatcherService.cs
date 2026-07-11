@@ -30,6 +30,9 @@ public class TaskWatcherService : BackgroundService
     private readonly ILogger<TaskWatcherService> _logger;
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly TimeSpan _debounce;
+    private DateTime? _startedAt;
+    private int _configuredPathCount;
+    private string? _lastError;
 
     public event Action<string>? OnJobChanged;
 
@@ -44,6 +47,12 @@ public class TaskWatcherService : BackgroundService
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var entries = _scanner.GetWatchPaths();
+        lock (_lock)
+        {
+            _startedAt = DateTime.UtcNow;
+            _configuredPathCount = entries.Count;
+            _lastError = null;
+        }
         foreach (var entry in entries)
         {
             if (string.IsNullOrWhiteSpace(entry.Path))
@@ -77,24 +86,58 @@ public class TaskWatcherService : BackgroundService
                 watcher.Deleted += (_, e) => Debounce(e.FullPath);
                 watcher.Renamed += (_, e) => Debounce(e.FullPath);
                 watcher.Error += (_, e) =>
-                    _logger.LogWarning(e.GetException(), "FileSystemWatcher error for {Path}", entry.Path);
-
-                _watchers.Add(watcher);
+                {
+                    var error = e.GetException();
+                    lock (_lock) _lastError = error?.Message ?? "FileSystemWatcher reported an unknown error.";
+                    _logger.LogWarning(error, "FileSystemWatcher error for {Path}", entry.Path);
+                };
+                lock (_lock) _watchers.Add(watcher);
                 _logger.LogInformation("Watching: {Name} -> {Path}", entry.Name, entry.Path);
             }
             catch (Exception ex)
             {
+                lock (_lock) _lastError = ex.Message;
                 _logger.LogError(ex, "Failed to start watcher for {Path}", entry.Path);
             }
         }
-
         stoppingToken.Register(() =>
         {
-            foreach (var w in _watchers) { try { w.Dispose(); } catch (Exception __ex) { SilentCatch.Note(__ex, "TaskWatcherService:94"); } }
-            _watchers.Clear();
+            FileSystemWatcher[] watchers;
+            lock (_lock)
+            {
+                watchers = _watchers.ToArray();
+                _watchers.Clear();
+            }
+            foreach (var watcher in watchers)
+            {
+                try { watcher.Dispose(); }
+                catch (Exception __ex) { SilentCatch.Note(__ex, "TaskWatcherService: watcher dispose"); }
+            }
         });
-
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Cheap read-only watcher health used by the orchestrator context digest.
+    /// It deliberately reports the actual active handle count and last observed
+    /// event/error instead of inferring health from the static <c>/healthz</c>
+    /// response. No paths are exposed in the snapshot.
+    /// </summary>
+    public TaskWatcherHealthSnapshot GetHealthSnapshot()
+    {
+        lock (_lock)
+        {
+            var active = _watchers.Count;
+            return new TaskWatcherHealthSnapshot(
+                StartedAt: _startedAt,
+                ConfiguredPathCount: _configuredPathCount,
+                ActiveWatcherCount: active,
+                LastEventAt: _lastEvent == DateTime.MinValue ? null : _lastEvent,
+                LastError: _lastError,
+                Healthy: _startedAt != null
+                    && string.IsNullOrWhiteSpace(_lastError)
+                    && (_configuredPathCount == 0 || active == _configuredPathCount));
+        }
     }
 
     private DateTime _lastEvent = DateTime.MinValue;
@@ -157,3 +200,12 @@ public class TaskWatcherService : BackgroundService
         return false;
     }
 }
+
+/// <summary>Read-only health projection for <see cref="TaskWatcherService"/>.</summary>
+public sealed record TaskWatcherHealthSnapshot(
+    DateTime? StartedAt,
+    int ConfiguredPathCount,
+    int ActiveWatcherCount,
+    DateTime? LastEventAt,
+    string? LastError,
+    bool Healthy);

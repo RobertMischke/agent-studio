@@ -49,6 +49,12 @@ state.
   and `/park` API surface, and session turn dispatch through the existing
   orchestrator CLI runner. Records persist under
   `<TaskRepository>/.metadata/orchestrator-sessions/<encoded>/`.
+- `backend/Features/Orchestrator/OrchestratorContextDigestService.cs` and
+  `OrchestratorContextEndpoints.cs`: ORCH-1 read context shared by side-sheet
+  chat turns and session turns. The bounded digest folds board transitions,
+  active lifecycle phases, cached quota, PUB-1 targets, backend/watcher health,
+  and decision-journal excerpts according to the `global|project|task` key.
+  `POST .../refresh` is the explicit expensive path that re-probes quota first.
 - `backend/Features/Registry/OrchestratorSettingsResolver.cs`: pure two-tier
   resolver for the workspace-shaped orchestrator knobs (model, thinking level,
   autonomy) - `project override → workspace default → platform constant` - plus
@@ -155,6 +161,12 @@ state.
   return `status: "queued"` and a one-based `queuePosition`. Posting `/park`
   cancels the active turn for that context and parks queued turns for the same
   context.
+- Every orchestrator chat entry point receives the same ORCH-1 application
+  digest. Global context may read all registered projects; project and task
+  contexts are project-isolated, with task context adding only its focused task.
+  Digest sections are capped and omit raw quota samples and full decision
+  prompts/responses. Normal turns use cached quota; only the explicit refresh
+  endpoint starts quota probes.
 - Every coding run is worktree-isolated - single-slot resume/reissue included,
   not just parallel slots. The shared main checkout is read-only reference + the
   integration target; on a failed worktree prepare the run is deferred, never
