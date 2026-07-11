@@ -74,7 +74,7 @@ state.
 - `runner/*`: the standalone remote runner daemon. A dependency-free console
   process that continuously claims server-assigned projects with bounded host
   slots (default 2), fenced leases + heartbeat, per-task linked git worktrees,
-  log/artifact upload, and external-completion. The original `--task <key>`
+  log/artifact upload, and fenced normal completion into auto-review. The original `--task <key>`
   one-shot remains for diagnostics. It owns no task state. Its only git write to
   origin is the mandatory teardown salvage branch described below.
   Operator runbook:

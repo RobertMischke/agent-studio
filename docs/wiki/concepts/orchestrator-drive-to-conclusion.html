@@ -615,9 +615,31 @@
           <td>
             <span class="pill ok">fixed</span> every remote teardown now commits dirty work, pushes run-produced commits to
             <code>runner/&lt;runner-id&gt;/&lt;task-key&gt;</code>, verifies the origin ref, and only then removes the checkout.
-            Successful salvage branches are linked in deliverables. A failed remote check or push retains the worktree and
+            Successful salvage branches are linked in runner-completion deliverables. A failed remote check or push retains the worktree and
             records a visible <code>worktree-blocked</code> gate item with host and path. The same fail-closed path runs for
             unknown outcomes, exceptions, cancellation, shutdown, and crash debris.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2148</code><br><span class="small">remote daemon runs omitted terminal sentinels</span></td>
+          <td>
+            Twenty-six remote runs on <code>agent-runner-01</code> exited 0 after substantive final replies but were
+            classified <code>Unknown</code> because no <code>[[TASK_*]]</code> terminal sentinel was present. Equivalent
+            local runs emitted their sentinels normally.
+          </td>
+          <td>
+            <code>RemoteTaskRunner</code> fetched <code>prompt.md</code> and passed it verbatim to stdin. Unlike the local
+            <code>runner-fresh-start</code> render, the standalone one-shot and daemon path never appended the mandatory
+            completion protocol. Output was fully drained, and Codex 0.144 JSONL leaves the sentinel visible to the
+            existing scanner, so neither parser loss nor tail truncation caused the wave.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the shared standalone execution path now appends the four-sentinel contract
+            before every CLI spawn and logs that assembly. Regression fixtures prove the rendered daemon prompt and a
+            Codex JSONL <code>item.completed</code> reply resolve to <code>Done</code> rather than <code>Unknown</code>.
+            A fenced runner-completion endpoint records <code>agent_run_finished</code> and moves successful runs into normal
+            <code>4-auto-review</code> without <code>external_completion</code> provenance.
           </td>
         </tr>
       </tbody>

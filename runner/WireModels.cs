@@ -14,7 +14,7 @@ namespace AgentRunner;
 /// <summary>
 /// Runner -> Server: register the runner as a client identity
 /// (/api/clients/register). The server's X-Client-Id middleware rejects every
-/// mutation (lease, log, artifact, external-completion) from an unregistered id
+/// mutation (lease, log, artifact, completion) from an unregistered id
 /// with 401 <c>client-unknown</c>, so the runner must register before it writes.
 /// Registration is idempotent on <see cref="DisplayName"/> and the open-path
 /// carve-out means it needs no prior identity itself.
@@ -102,6 +102,26 @@ public sealed record RunnerClaimResponse(
     string? ProjectId = null,
     string? RepositoryUrl = null,
     string? DefaultBranch = null);
+
+/// <summary>Runner -> Server: fenced normal completion after the remote CLI exits.</summary>
+public sealed record RemoteRunCompletionRequest(
+    string TaskKey,
+    string LeaseId,
+    long FencingToken,
+    string RunnerId,
+    string Outcome,
+    string? Reason = null,
+    string? Source = null,
+    int? ExitCode = null,
+    string? SalvageBranch = null,
+    string? SalvageCommitSha = null,
+    string? SalvageBranchUrl = null);
+
+public sealed record RemoteRunCompletionResponse(
+    string TaskKey,
+    string Outcome,
+    string TargetState,
+    string? Message = null);
 
 /// <summary>One consolidated output line, shaped to the server's CliOutputLine JSON.</summary>
 public sealed record CliOutputLine(DateTime Timestamp, string Stream, string Text);

@@ -25,8 +25,10 @@ Linux host and fills a bounded set of task slots without owning task state:
   server side (ADR-0019/0050/0057).
 - **Results leave via the API** - CLI output goes to `POST /api/runner/logs`,
   evidence files under `results/` go to `POST /api/runner/artifacts`, and the
-  final outcome is reconciled with `POST /api/tasks/{taskKey}/external-completion`
-  so the card re-enters the local board.
+  terminal sentinel is handed off with fenced `POST /api/runner/completion`.
+  `Done` and `NoOp` enter normal `4-auto-review`; blocked, input, and genuinely
+  unknown outcomes go to human review. Remote runs are not labelled as
+  out-of-band completions.
 - **Exactly-one-runner is enforced by the fenced lease** - acquire mints a
   fencing token, a heartbeat renews it, and a rejected heartbeat (`StaleToken` /
   `Expired`) means another holder took over, so the runner abandons the run
@@ -239,6 +241,22 @@ into the product or into task evidence. Public repositories need no additional
 setup. A private repository without working host credentials remains local until
 the operator configures host access.
 
+### Remote completion protocol
+
+The Task Server returns the operator-authored `prompt.md` verbatim. Immediately
+before spawning either CLI, the standalone runner appends the same mandatory
+completion protocol used by the local runner. It requires exactly one final
+`[[TASK_DONE]]`, `[[TASK_BLOCKED:<reason>]]`,
+`[[TASK_NEEDS_INPUT:<reason>]]`, or `[[TASK_NOOP]]` line. This assembly happens
+inside the shared task execution path, so daemon claims and one-task diagnostics
+cannot drift. The shipped log contains
+`remote-completion-protocol appended to task prompt` before the spawn line.
+
+Codex `exec --json -` output remains JSONL on stdout. The scanner consumes the
+complete stdout buffer after the process and asynchronous readers have drained;
+the sentinel inside an `item.completed` agent message is recognized without a
+Codex-version-specific event parser.
+
 ## 4. Assign projects and run the daemon
 
 Assignment is stored through the Task Server API. The following assigns a
@@ -306,8 +324,8 @@ its client identity** (see below), acquires the fenced lease, starts
 heartbeating, checks out the branch from origin, fetches `prompt.md` over the
 API, spawns the CLI in the working tree, ships stdout/stderr to the server every
 few seconds, uploads everything under `results/`, secures and removes the
-worktree, posts the external-completion, and releases the lease. Exit code `0`
-means a clean handoff; `1` a
+worktree, posts the fenced normal runner completion, and releases the lease.
+Exit code `0` means a clean handoff; `1` a
 blocked/needs-input outcome; `2` lease not granted; `3` lease lost mid-run; `4`
 the task server was unreachable or rejected a call.
 
@@ -331,7 +349,7 @@ next process starts:
 4. Remove the linked worktree only after that verification. A clean checkout
    at its original commit needs no salvage branch.
 
-The external-completion deliverables link a successful salvage branch and its
+The runner-completion deliverables link a successful salvage branch and its
 commit. If the remote check or push fails, the runner leaves the worktree in
 place and records an open `worktree-blocked` gate item containing the host,
 path, and intended branch. Do not delete that path manually. Restore origin
@@ -343,7 +361,7 @@ remote ref is verified.
 The Task Server guards every mutation behind an `X-Client-Id` registration
 boundary (`ClientIdentityMiddleware`): a POST from an id the server has never
 seen is rejected `401 client-unknown`. Reads (prompt fetch) stay open, but the
-lease, log, artifact, and external-completion writes do not. Product onboarding
+lease, log, artifact, and completion writes do not. Product onboarding
 sets `RUNNER_CLIENT_ID` to the existing host identity. Startup authenticates a
 `GET /api/clients/{id}` with that header before its first write; an unknown or
 retired id is a hard error, and the runner does not create a replacement. This
@@ -359,8 +377,9 @@ to a wrong configured id or a reverse proxy stripping `X-Client-Id`.
 
 The task passes RM-5 acceptance when, after the runner exits `0`:
 
-- the card has moved on the **local** board (default `5-human-review`) with an
-  `external_completion` timeline entry sourced from `agent-runner-01`;
+- a successful sentinel has moved the card on the **local** board to
+  `4-auto-review` with an `agent_run_finished` timeline entry sourced from
+  `agent-runner-01`, and no `external_completion` provenance;
 - `logs/cli-output.log` on the server shows the remote CLI output; and
 - the uploaded evidence is present under the task's `results/` folder and in the
   workspace evidence commit.
@@ -371,7 +390,7 @@ status outputs, and the runner client id from `GET /api/clients`. Its
 `lastSeenAt` must become fresh after the daemon begins polling. Finally assign a
 Ready probe task through the normal project execution setting and verify that
 the remote runner badge, fenced lease timeline, CLI log upload, result upload,
-and external completion all name the same runner. This is the AGT-1923 probe
+and runner completion all name the same runner. This is the AGT-1923 probe
 mechanic; do not substitute the static frontend readiness fixture for this
 proof.
 
@@ -401,6 +420,12 @@ proof.
   task key.
 - **CLI exits immediately / wrong flags** - the headless flags do not match the
   installed CLI version. Adjust `RUNNER_CLI_ARGS` or wrap the CLI in a script.
+- **`outcome Unknown` after a substantive final reply** - first confirm the run
+  log contains `remote-completion-protocol appended to task prompt`. Its absence
+  means the host is running a pre-AGT-2148 runner build. If the line is present,
+  inspect the final stdout event and verify that the agent emitted one canonical
+  `[[TASK_*]]` token; Codex JSONL is supported directly and stdout is not tail
+  truncated by the runner.
 - **`401 client-unknown` on a lease/log/upload call** - the runner's
   `X-Client-Id` never reached the server, so it looks unregistered. The runner
   registers itself automatically, so this almost always means a reverse proxy or

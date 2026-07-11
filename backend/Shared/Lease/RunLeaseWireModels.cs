@@ -100,3 +100,27 @@ public sealed record RunnerClaimResponse(
     string? ProjectId = null,
     string? RepositoryUrl = null,
     string? DefaultBranch = null);
+
+/// <summary>
+/// Fenced handoff from a standalone runner after its CLI exits. This is a
+/// normal runner completion, not an out-of-band reconciliation: successful
+/// outcomes enter auto-review and retain the regular agent-run timeline.
+/// </summary>
+public sealed record RemoteRunCompletionRequest(
+    string TaskKey,
+    string LeaseId,
+    long FencingToken,
+    string RunnerId,
+    string Outcome,
+    string? Reason = null,
+    string? Source = null,
+    int? ExitCode = null,
+    string? SalvageBranch = null,
+    string? SalvageCommitSha = null,
+    string? SalvageBranchUrl = null);
+
+public sealed record RemoteRunCompletionResponse(
+    string TaskKey,
+    string Outcome,
+    string TargetState,
+    string? Message = null);

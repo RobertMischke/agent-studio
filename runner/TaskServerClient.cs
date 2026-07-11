@@ -8,7 +8,7 @@ namespace AgentRunner;
 
 /// <summary>
 /// Thin typed HTTP client over the Task Server's Runner API surface: the fenced
-/// lease (RM-3), log + artifact ingestion (RM-4), out-of-band completion, and the
+/// lease (RM-3), log + artifact ingestion (RM-4), fenced run completion, and the
 /// task-file read used to fetch prompt.md. The runner talks to the server only
 /// through these routes - it never writes the task store directly.
 /// </summary>
@@ -187,6 +187,9 @@ public sealed class TaskServerClient : IDisposable
 
     public async Task<ArtifactIngestResponse?> UploadArtifactsAsync(ArtifactIngestRequest req, CancellationToken ct)
         => await PostJsonAsync<ArtifactIngestRequest, ArtifactIngestResponse>("/api/runner/artifacts", req, ct);
+
+    public async Task<RemoteRunCompletionResponse?> CompleteRunAsync(RemoteRunCompletionRequest req, CancellationToken ct)
+        => await PostJsonAsync<RemoteRunCompletionRequest, RemoteRunCompletionResponse>("/api/runner/completion", req, ct);
 
     public async Task<ExternalCompletionResponse?> CompleteAsync(string jobId, ExternalCompletionRequest req, CancellationToken ct)
         => await PostJsonAsync<ExternalCompletionRequest, ExternalCompletionResponse>(

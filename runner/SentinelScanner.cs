@@ -7,13 +7,10 @@ public enum RunOutcomeKind { Done, Blocked, NeedsInput, NoOp, Unknown }
 
 public sealed record RunOutcome(RunOutcomeKind Kind, string? Reason)
 {
-    /// <summary>Lane the completion should target, matching the server's TaskStates values.</summary>
+    /// <summary>Lane expected from the server's normal remote-run completion policy.</summary>
     public string TargetState => Kind switch
     {
-        // Even a Done remote run gets a quick human confirmation on the board,
-        // matching the external-completion default. Non-Done outcomes are honest
-        // about needing attention.
-        RunOutcomeKind.Done => "5-human-review",
+        RunOutcomeKind.Done or RunOutcomeKind.NoOp => "4-auto-review",
         _ => "5-human-review",
     };
 

@@ -150,6 +150,98 @@ public static class LeaseEndpoints
                 ClaimGate.Release();
             }
         });
+
+        app.MapPost("/api/runner/completion", async (
+            RemoteRunCompletionRequest req,
+            TaskScannerService scanner,
+            TaskTransitionService transitions,
+            RunLeaseService leases,
+            TimelineLog timeline,
+            WorkspaceArtifactCommitService artifactCommits,
+            ILoggerFactory loggerFactory,
+            CancellationToken ct) =>
+        {
+            var reportedOutcome = req.Outcome ?? string.Empty;
+            if (!leases.IsCurrent(req.TaskKey, req.LeaseId, req.FencingToken, req.RunnerId))
+                return Results.Conflict(new RemoteRunCompletionResponse(
+                    req.TaskKey, reportedOutcome, TaskStates.Progress,
+                    "Lease id, fencing token, or runner id does not match the current holder."));
+
+            var task = scanner.ScanAllJobs().FirstOrDefault(t =>
+                string.Equals(t.TaskKey, req.TaskKey, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t.Id, req.TaskKey, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t.Key, req.TaskKey, StringComparison.OrdinalIgnoreCase));
+            if (task is null)
+                return Results.NotFound(new RemoteRunCompletionResponse(
+                    req.TaskKey, reportedOutcome, TaskStates.Progress, $"No task '{req.TaskKey}'."));
+
+            var outcome = reportedOutcome.Trim().ToLowerInvariant();
+            var targetState = outcome switch
+            {
+                "done" or "noop" => TaskStates.AutoReview,
+                "blocked" or "needsinput" or "unknown" => TaskStates.HumanReview,
+                _ => string.Empty,
+            };
+            if (targetState.Length == 0)
+                return Results.BadRequest(new RemoteRunCompletionResponse(
+                    req.TaskKey, reportedOutcome, TaskStates.Progress,
+                    "Outcome must be Done, NoOp, Blocked, NeedsInput, or Unknown."));
+
+            var source = string.IsNullOrWhiteSpace(req.Source) ? req.RunnerId : req.Source.Trim();
+            var details = new Dictionary<string, string>
+            {
+                ["cli"] = "remote-runner",
+                ["status"] = outcome,
+                ["runner"] = source,
+                ["sentinel"] = outcome switch
+                {
+                    "needsinput" => "TASK_NEEDS_INPUT",
+                    "unknown" => string.Empty,
+                    _ => $"TASK_{outcome.ToUpperInvariant()}",
+                },
+            };
+            if (!string.IsNullOrWhiteSpace(req.SalvageBranch))
+                details["salvageBranch"] = req.SalvageBranch;
+            if (!string.IsNullOrWhiteSpace(req.SalvageCommitSha))
+                details["salvageCommitSha"] = req.SalvageCommitSha;
+            if (!string.IsNullOrWhiteSpace(req.SalvageBranchUrl))
+                details["salvageBranchUrl"] = req.SalvageBranchUrl;
+            if (!string.IsNullOrWhiteSpace(req.SalvageBranch)
+                && !string.IsNullOrWhiteSpace(req.SalvageCommitSha))
+            {
+                var resultsDir = TaskPaths.ResultsDir(task.FolderPath);
+                Directory.CreateDirectory(resultsDir);
+                var deliverablesPath = Path.Combine(resultsDir, "deliverables.md");
+                var branchRef = !string.IsNullOrWhiteSpace(req.SalvageBranchUrl)
+                    ? $"[{req.SalvageBranch}]({req.SalvageBranchUrl})"
+                    : $"`{req.SalvageBranch}`";
+                File.WriteAllText(
+                    deliverablesPath,
+                    $"# Remote runner deliverables{Environment.NewLine}{Environment.NewLine}" +
+                    $"- Salvage branch {branchRef} at `{req.SalvageCommitSha}`.{Environment.NewLine}",
+                    System.Text.Encoding.UTF8);
+                artifactCommits.TryCommitArtifactUpload(
+                    null, task.Id, task.FolderPath, ["results/deliverables.md"]);
+            }
+            timeline.Append(
+                task.FolderPath,
+                TimelineEventKinds.AgentRunFinished,
+                TimelineActors.Agent,
+                summary: $"remote run {outcome} on {source}",
+                details: details);
+
+            var move = await transitions.MoveAsync(
+                task.Id, targetState, task.WatchPath, ct,
+                cause: $"remote-runner-completion:{source}");
+            if (move.Status != MoveJobStatus.Success)
+                return Results.Conflict(new RemoteRunCompletionResponse(
+                    req.TaskKey, reportedOutcome, task.State, $"Lane move refused: {move.Status} {move.Message}"));
+
+            loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion").LogInformation(
+                "remote-runner-completion project={Project} task={TaskKey} runner={Runner} outcome={Outcome} targetState={TargetState} token={FencingToken}",
+                task.ProjectName, req.TaskKey, source, outcome, targetState, req.FencingToken);
+            return Results.Ok(new RemoteRunCompletionResponse(req.TaskKey, reportedOutcome, targetState));
+        });
     }
 
     /// <summary>

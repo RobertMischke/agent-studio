@@ -26,6 +26,7 @@ using RArtifactIngest = Runner::AgentRunner.ArtifactIngestRequest;
 using RArtifact = Runner::AgentRunner.RunnerArtifactUpload;
 using RComplete = Runner::AgentRunner.ExternalCompletionRequest;
 using RDeliverable = Runner::AgentRunner.ExternalDeliverable;
+using RRemoteComplete = Runner::AgentRunner.RemoteRunCompletionRequest;
 
 namespace AgentStudio.Tests;
 
@@ -173,6 +174,49 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         var reason = await client.ProbeHealthAsync(CancellationToken.None);
 
         Assert.Null(reason);
+    }
+
+    [Fact]
+    public async Task Recognized_remote_task_done_uses_regular_runner_completion_not_external_completion()
+    {
+        SeedTask(TaskStates.Progress, TaskKey, "Remote done", "Make a trivial change.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var ct = CancellationToken.None;
+        await client.RegisterAsync(ProjectName, "service", ct);
+
+        var lease = await client.AcquireLeaseAsync(
+            new RAcquire(TaskKey, RunnerId, ProjectName, "hetzner-test", 4242, "codex"), ct);
+        Assert.True(lease.Granted);
+        Assert.NotNull(lease.Lease);
+
+        await client.IngestLogsAsync(new RLogIngest(TaskKey,
+        [
+            new RCliLine(DateTime.UtcNow, "stdout", "Implemented and verified."),
+            new RCliLine(DateTime.UtcNow, "stdout", "[[TASK_DONE]]"),
+        ]), ct);
+
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            TaskKey,
+            lease.Lease!.LeaseId,
+            lease.Lease.FencingToken,
+            RunnerId,
+            "Done",
+            Source: ProjectName,
+            ExitCode: 0), ct);
+
+        Assert.NotNull(completion);
+        Assert.Equal(TaskStates.AutoReview, completion!.TargetState);
+        var moved = Path.Combine(_watchPath, TaskStates.AutoReview, TaskKey);
+        Assert.True(Directory.Exists(moved));
+
+        var taskJson = File.ReadAllText(Path.Combine(moved, "task.json"));
+        Assert.DoesNotContain("externalCompletion", taskJson, StringComparison.OrdinalIgnoreCase);
+        var timeline = File.ReadAllText(Path.Combine(moved, "logs", "timeline.jsonl"));
+        Assert.Contains("agent_run_finished", timeline);
+        Assert.DoesNotContain("external_completion", timeline);
     }
 
     [Fact]

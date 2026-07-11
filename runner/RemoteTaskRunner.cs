@@ -4,10 +4,9 @@ namespace AgentRunner;
 /// Runs exactly one task end-to-end on the remote host (RM-5 MVP). The lifecycle:
 /// acquire the fenced lease, start heartbeating, prepare the git working tree,
 /// spawn the agent CLI with the fetched prompt, ship its output to the server,
-/// upload the results/ evidence, post an external-completion so the result
-/// re-enters the local board, and always release the lease. The runner owns no
-/// task state. Before removing a worktree it salvages changes and pushes the
-/// runner branch to origin.
+/// upload the results/ evidence, post a fenced runner completion so the result
+/// enters the normal review pipeline, and always release the lease. Before removing
+/// a worktree it salvages changes and pushes the runner branch to origin.
 /// </summary>
 public sealed class RemoteTaskRunner
 {
@@ -81,7 +80,6 @@ public sealed class RemoteTaskRunner
         var shipperTask = shipper.RunAsync(TimeSpan.FromSeconds(5), stopRun.Token);
 
         var outcome = new RunOutcome(RunOutcomeKind.Unknown, "Runner ended before a terminal outcome was recorded.");
-        List<string> uploadedFiles = [];
         var workspace = new GitWorkspace(
             _options, taskKey, _log, projectId, repositoryUrl, defaultBranch);
         var handedBack = false;
@@ -90,7 +88,7 @@ public sealed class RemoteTaskRunner
         {
             outcome = await ExecuteAsync(taskKey, workspace, shipper, stopRun, shutdown);
             await shipper.FlushAsync(shutdown);
-            uploadedFiles = await UploadResultsAsync(taskKey, shutdown);
+            await UploadResultsAsync(taskKey, shutdown);
 
             if (heartbeat.LeaseLost)
             {
@@ -100,10 +98,10 @@ public sealed class RemoteTaskRunner
 
             teardownAttempted = true;
             var teardown = await workspace.TeardownAsync(outcome.Kind.ToString(), CancellationToken.None);
-            await CompleteAsync(taskKey, outcome, uploadedFiles, teardown, shutdown);
+            await CompleteAsync(taskKey, lease, outcome, teardown, shutdown);
             handedBack = true;
             _log($"task '{taskKey}' handed back to the local board: {outcome.Kind}");
-            return outcome.Kind is RunOutcomeKind.Blocked or RunOutcomeKind.NeedsInput ? 1 : 0;
+            return outcome.Kind is RunOutcomeKind.Done or RunOutcomeKind.NoOp ? 0 : 1;
         }
         catch (WorktreeSalvageException ex)
         {
@@ -116,11 +114,6 @@ public sealed class RemoteTaskRunner
             stopRun.Cancel();
             await SafeAwait(heartbeatTask);
             await SafeAwait(shipperTask);
-            // Shutdown already cancelled the run token. Release with an
-            // independent token so SIGINT can relinquish the lease immediately
-            // instead of always waiting for TTL expiry.
-            await ReleaseAsync(lease, CancellationToken.None);
-
             // This path covers shutdown, cancellation, quota death, and any
             // exception before the normal completion handoff. Salvage uses an
             // independent token because SIGINT has already cancelled the run.
@@ -132,7 +125,7 @@ public sealed class RemoteTaskRunner
                     var teardown = await workspace.TeardownAsync(outcome.Kind.ToString(), CancellationToken.None);
                     if (!handedBack && !heartbeat.LeaseLost)
                     {
-                        await CompleteAsync(taskKey, outcome, uploadedFiles, teardown, CancellationToken.None);
+                        await CompleteAsync(taskKey, lease, outcome, teardown, CancellationToken.None);
                         handedBack = true;
                     }
                 }
@@ -152,6 +145,10 @@ public sealed class RemoteTaskRunner
                     _log($"task worktree teardown failed; worktree retained at {workspace.RepoPath}: {ex.Message}");
                 }
             }
+
+            // Completion is fenced by the live lease, so release only after the
+            // normal or fail-closed handoff has finished.
+            await ReleaseAsync(lease, CancellationToken.None);
         }
     }
 
@@ -161,8 +158,10 @@ public sealed class RemoteTaskRunner
         var branch = await workspace.PrepareAsync(shutdown);
         shipper.Add("system", $"[runner] working tree ready on branch '{branch}'");
 
-        var prompt = await _client.ReadTaskFileAsync(taskKey, "prompt.md", shutdown)
-                     ?? throw new InvalidOperationException($"Task '{taskKey}' has no prompt.md to run.");
+        var taskPrompt = await _client.ReadTaskFileAsync(taskKey, "prompt.md", shutdown)
+                         ?? throw new InvalidOperationException($"Task '{taskKey}' has no prompt.md to run.");
+        var prompt = RemoteRunPrompt.Build(taskPrompt);
+        shipper.Add("system", "[runner] remote-completion-protocol appended to task prompt");
 
         var resultsDir = ResultsDir(taskKey);
         if (Directory.Exists(resultsDir)) Directory.Delete(resultsDir, recursive: true);
@@ -217,29 +216,18 @@ public sealed class RemoteTaskRunner
 
     private async Task CompleteAsync(
         string taskKey,
+        RunLeaseInfoDto lease,
         RunOutcome outcome,
-        IReadOnlyList<string> files,
         WorktreeTeardownResult teardown,
         CancellationToken ct)
     {
-        var summary = outcome.Reason is { Length: > 0 }
-            ? $"{outcome.SummaryPrefix}: {outcome.Reason}"
-            : $"{outcome.SummaryPrefix} on {_options.Hostname}.";
-        var deliverables = files.Select(f => new ExternalDeliverable(Path: f, Note: "Uploaded by remote runner.")).ToList();
-        if (teardown.SecuredWork && teardown.Branch is not null && teardown.CommitSha is not null)
-        {
-            var note = $"Runner salvage branch at commit {teardown.CommitSha}.";
-            deliverables.Add(teardown.BranchUrl is not null
-                ? new ExternalDeliverable(Url: teardown.BranchUrl, Note: note)
-                : new ExternalDeliverable(Path: $"{teardown.Branch}@{teardown.CommitSha}", Note: note));
-        }
-
-        var resp = await _client.CompleteAsync(taskKey, new ExternalCompletionRequest(
-            Summary: summary,
-            Deliverables: deliverables.Count > 0 ? deliverables : null,
-            Source: _options.RunnerName,
-            TargetState: outcome.TargetState), ct);
-        _log($"external-completion recorded: state {resp?.TargetState}, evidence commit {resp?.EvidenceCommitSha ?? "n/a"}");
+        var resp = await _client.CompleteRunAsync(new RemoteRunCompletionRequest(
+            taskKey, lease.LeaseId, lease.FencingToken, _options.RunnerId,
+            outcome.Kind.ToString(), outcome.Reason, _options.RunnerName,
+            SalvageBranch: teardown.Branch,
+            SalvageCommitSha: teardown.CommitSha,
+            SalvageBranchUrl: teardown.BranchUrl), ct);
+        _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}");
     }
 
     private async Task ReportUnsecuredWorktreeAsync(string taskKey, WorktreeSalvageException ex)
