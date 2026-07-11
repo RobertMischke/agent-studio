@@ -262,6 +262,7 @@ builder.Services.AddSingleton<BoardMergeStatusService>();
 // folds the per-task chip signal onto accepted cards (O(projects), no per-card git).
 builder.Services.AddSingleton<PublishTargetService>();
 builder.Services.AddSingleton<TaskPublishableService>();
+builder.Services.AddSingleton<PublishActionService>();
 builder.Services.AddSingleton<TaskTransitionService>();
 // Out-of-band task completion (docs/concepts/out-of-band-task-completion.md §3):
 // reconciles a task finished outside the runner in one atomic call.
@@ -916,6 +917,16 @@ transitionsForRunner.OnJobMoved += (projectName, jobId, fromState, toState) =>
     runnerForTransitions.ClearActiveJobForProject(
         projectName, jobId,
         $"job moved out of 3-progress externally ({fromState} -> {toState})");
+};
+
+// PUB-2 automation ladder. Package targets are clamped to suggest; only the
+// website auto rung subscribes to acceptance and waits for the asynchronous
+// integration merge before dispatching the existing deploy workflow.
+var publishActionsForTransitions = app.Services.GetRequiredService<PublishActionService>();
+transitionsForRunner.OnJobMoved += (projectName, jobId, _, toState) =>
+{
+    if (toState == TaskStates.Completed)
+        publishActionsForTransitions.HandleTaskAccepted(projectName, jobId);
 };
 
 // Defensive: when a non-API folder change touches the watch tree (external

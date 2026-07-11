@@ -1262,6 +1262,38 @@ export interface PublishTarget {
   reference: string | null;
 }
 
+export type PublishAutomationMode = 'manual' | 'suggest' | 'auto';
+
+export interface PublishPendingTask {
+  taskId: string;
+  taskKey: string;
+  title: string;
+  taskType: 'bug' | 'feature' | 'chore';
+}
+
+export interface PublishWorkflowRun {
+  project: string;
+  targetId: string;
+  workflow: string;
+  runId: number | null;
+  status: string;
+  conclusion: string | null;
+  version: string | null;
+  url: string | null;
+  triggeredAt: string;
+  error: string | null;
+}
+
+export interface PublishActionPanel {
+  project: string;
+  target: PublishTarget;
+  automationMode: PublishAutomationMode;
+  pendingTasks: PublishPendingTask[];
+  suggestedVersion: string | null;
+  notice: string | null;
+  lastRun: PublishWorkflowRun | null;
+}
+
 /**
  * PUB-1 - per-task publish chip signal folded onto an accepted task
  * (`TaskInfo.publishSignal`): which publish targets the task's merged work is

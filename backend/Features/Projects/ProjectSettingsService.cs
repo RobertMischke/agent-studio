@@ -93,6 +93,25 @@ public class ProjectSettingsService
         _logger.LogInformation("Max parallelism set to {Max} for project {Project}", clamped, projectName);
     }
 
+    public void SetPublishAutomation(string projectName, string targetId, string mode)
+    {
+        EnsureLoaded();
+        var normalized = PublishAutomationModes.Normalize(targetId, mode);
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var map = current.PublishAutomation is null
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(current.PublishAutomation, StringComparer.OrdinalIgnoreCase);
+            map[targetId.Trim()] = normalized;
+            _cache[projectName] = current with { PublishAutomation = map };
+            Persist();
+        }
+        _logger.LogInformation(
+            "publish-automation-updated project={Project} target={Target} mode={Mode}",
+            projectName, targetId, normalized);
+    }
+
     /// <summary>
     /// Assigns a project to one remote runner and optionally changes its remote
     /// eligibility. Blank assignment returns pickup ownership to the local

@@ -29,6 +29,9 @@ import type {
   RegistryProjectSummary,
   ProjectUrlStartRule,
   ProjectUrlSuggestion,
+  PublishActionPanel,
+  PublishAutomationMode,
+  PublishWorkflowRun,
 } from '../models/task.model';
 import { TaskState } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
@@ -1588,6 +1591,39 @@ export class TaskService {
   getProjectSnapshot(projectName: string) {
     return this.http.get<ProjectSnapshot>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/snapshot`,
+    );
+  }
+
+  getPublishPanel(projectName: string, targetId: string) {
+    return this.http.get<PublishActionPanel>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/${encodeURIComponent(targetId)}/panel`,
+    );
+  }
+
+  setPublishAutomation(projectName: string, targetId: string, mode: PublishAutomationMode) {
+    return this.http.put<{ targetId: string; mode: PublishAutomationMode }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/automation`,
+      { targetId, mode },
+    );
+  }
+
+  publishPackage(projectName: string, targetId: string, version: string) {
+    return this.http.post<PublishWorkflowRun>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/package`,
+      { targetId, version },
+    );
+  }
+
+  deployWebsite(projectName: string) {
+    return this.http.post<PublishWorkflowRun>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/website`,
+      { targetId: 'website' },
+    );
+  }
+
+  getPublishRun(projectName: string, targetId: string) {
+    return this.http.get<PublishWorkflowRun>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/publish/${encodeURIComponent(targetId)}/run`,
     );
   }
 

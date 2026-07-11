@@ -23,6 +23,7 @@ import { AnalysisReport } from '../../../../models/analysis-report.model';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { ProjectWorkflowSectionComponent } from '../project-workflow-section/project-workflow-section';
 import { ProjectCliEnvironmentSectionComponent } from '../project-cli-environment-section/project-cli-environment-section';
+import { ProjectPublishPanelComponent } from '../project-publish-panel/project-publish-panel';
 interface ProjectSettingsRow {
   autoCommit: boolean;
   crashRecoveryEnabled: boolean;
@@ -76,6 +77,7 @@ export type ProjectDetailView =
     ProjectWorkspaceSectionComponent,
     ProjectWorkflowSectionComponent,
     ProjectCliEnvironmentSectionComponent,
+    ProjectPublishPanelComponent,
     AutonomySliderComponent,
     TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,

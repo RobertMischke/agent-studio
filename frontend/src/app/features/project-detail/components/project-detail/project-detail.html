@@ -8,24 +8,7 @@
       </dl>
     }
 
-    @if (publishBadges(); as badges) {
-      @if (badges.length > 0) {
-        <section class="proj-detail__group proj-detail__publish" data-testid="project-publish-badges">
-          <h3>Publishable</h3>
-          <div class="proj-detail__publish-list">
-            @for (b of badges; track b.id) {
-              <span class="publish-badge"
-                    [class.publish-badge--first]="b.firstPublish"
-                    [class.publish-badge--website]="b.kind === 'website'"
-                    [attr.data-testid]="'publish-badge-' + b.id"
-                    [cacTooltip]="b.tooltip">
-                {{ b.text }}@if (b.firstPublish) {<span class="publish-badge__manual"> (manual, operator)</span>}
-              </span>
-            }
-          </div>
-        </section>
-      }
-    }
+    <app-project-publish-panel [projectName]="projectName()" [targets]="publishTargets()" />
 
     <app-project-cli-environment-section
       [projectName]="projectName()"
