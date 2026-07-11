@@ -154,6 +154,61 @@ describe('CodeReviewPanelComponent', () => {
     httpCtrl.verify();
   });
 
+  it('shows the last grade with date when the newest delivery has no fresh grade', async () => {
+    await setup();
+    const fixture = TestBed.createComponent(CodeReviewPanelComponent);
+    fixture.componentRef.setInput('job', seedJob());
+    fixture.detectChanges();
+
+    const httpCtrl = TestBed.inject(HttpTestingController);
+    httpCtrl.expectOne((r) => r.url.includes('/tasks/code-review/defaults'))
+      .flush({ cliType: 'claude', model: 'claude-haiku-4-5' });
+    httpCtrl.expectOne((r) => r.url.includes('/code-review/list')).flush({
+      entries: [
+        {
+          fileName: 'code-review-2026-07-11.md', verdict: 'pass', summary: 'Latest delivery review.',
+          model: 'claude-haiku-4-5', cliType: 'claude', runAt: '2026-07-11T12:00:00Z',
+        },
+        {
+          fileName: 'code-review-grade-2026-07-09.md', verdict: 'pass', grade: 'B', summary: 'Prior grade.',
+          model: 'claude-opus-4-8', cliType: 'claude', runAt: '2026-07-09T19:22:02Z',
+        },
+      ],
+    });
+    fixture.detectChanges();
+
+    const fallback = (fixture.nativeElement as HTMLElement)
+      .querySelector('[data-testid="code-review-older-grade"]');
+    expect(fallback?.textContent).toContain('Grade B');
+    expect(fallback?.textContent).toContain('older delivery');
+    expect(fallback?.textContent).toContain('2026');
+    httpCtrl.verify();
+  });
+
+  it('marks the only available grade as older when task activity is newer', async () => {
+    await setup();
+    const fixture = TestBed.createComponent(CodeReviewPanelComponent);
+    const job = seedJob();
+    job.lastActivity = '2026-07-11T12:00:00Z';
+    fixture.componentRef.setInput('job', job);
+    fixture.detectChanges();
+
+    const httpCtrl = TestBed.inject(HttpTestingController);
+    httpCtrl.expectOne((r) => r.url.includes('/tasks/code-review/defaults'))
+      .flush({ cliType: 'claude', model: 'claude-haiku-4-5' });
+    httpCtrl.expectOne((r) => r.url.includes('/code-review/list')).flush({
+      entries: [{
+        fileName: 'code-review-grade-2026-07-09.md', verdict: 'pass', grade: 'B', summary: 'Prior grade.',
+        model: 'claude-opus-4-8', cliType: 'claude', runAt: '2026-07-09T19:22:02Z',
+      }],
+    });
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement)
+      .querySelector('[data-testid="code-review-older-grade"]')?.textContent).toContain('older delivery');
+    httpCtrl.verify();
+  });
+
   it('posts the chosen model when Run is clicked, shows the running indicator, then refreshes the list', async () => {
     await setup();
     const fixture = TestBed.createComponent(CodeReviewPanelComponent);

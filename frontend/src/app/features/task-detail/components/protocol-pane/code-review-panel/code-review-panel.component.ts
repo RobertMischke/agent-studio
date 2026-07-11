@@ -84,6 +84,23 @@ export class CodeReviewPanelComponent implements OnInit {
 
   /** True when there is at least one MD listed and the user can drill in. */
   readonly hasEntries = computed(() => this.entries().length > 0);
+  /** Last available grade when the newest review belongs to a newer delivery. */
+  readonly olderGrade = computed<CodeReviewListEntry | null>(() => {
+    const entries = [...this.entries()].sort((a, b) => (b.runAt ?? '').localeCompare(a.runAt ?? ''));
+    const graded = entries.find((entry) => !!entry.grade?.trim()) ?? null;
+    if (!graded) return null;
+    const newerReviewExists = graded !== entries[0];
+    const reviewAt = Date.parse(graded.runAt);
+    const deliveryTimes = [
+      this.job().lastActivity,
+      ...(this.job().commits ?? []).map((commit) => commit.at),
+    ]
+      .map((value) => Date.parse(value ?? ''))
+      .filter(Number.isFinite);
+    const newerDeliveryExists = Number.isFinite(reviewAt)
+      && deliveryTimes.some((timestamp) => timestamp > reviewAt);
+    return newerReviewExists || newerDeliveryExists ? graded : null;
+  });
   readonly bodyIsLarge = computed<boolean>(() => isLargeDiff(this.expandedBody()));
   readonly bodySizeLabel = computed<string>(() => describeDiffSize(this.expandedBody()));
   readonly bodyGated = computed<boolean>(() => this.bodyIsLarge() && !this.expandedBodyRevealed());
@@ -250,6 +267,14 @@ export class CodeReviewPanelComponent implements OnInit {
 
   verdictTone(v: string): CodeReviewVerdictTone {
     return codeReviewVerdictTone(v);
+  }
+
+  gradeTone(grade: string | null | undefined): string {
+    const normalized = grade?.trim().toUpperCase();
+    if (normalized === 'A' || normalized === 'B') return 'pass';
+    if (normalized === 'C') return 'concerns';
+    if (normalized === 'D') return 'block';
+    return 'neutral';
   }
 
   trackByFile(_index: number, entry: CodeReviewListEntry): string {

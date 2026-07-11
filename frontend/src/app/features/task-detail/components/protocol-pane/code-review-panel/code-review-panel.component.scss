@@ -60,6 +60,19 @@
   font-size: 0.8rem;
 }
 
+.cr-prior-grade {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-2);
+  margin: 0;
+  padding: var(--studio-spacing-2);
+  border-radius: 4px;
+  background: var(--studio-surface-muted);
+  color: var(--studio-fg-dim);
+  font-size: 0.75rem;
+}
+
 .cr-list {
   list-style: none;
   margin: 0;

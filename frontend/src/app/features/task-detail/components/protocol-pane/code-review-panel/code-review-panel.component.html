@@ -45,6 +45,12 @@
   }
 
   @if (hasEntries()) {
+    @if (olderGrade(); as prior) {
+      <p class="cr-prior-grade" data-testid="code-review-older-grade">
+        <span class="cr-verdict cr-verdict-{{ gradeTone(prior.grade) }}">Grade {{ prior.grade }}</span>
+        <span>Review from {{ formatTimestamp(prior.runAt) }}, older delivery</span>
+      </p>
+    }
     <ul class="cr-list" data-testid="code-review-list">
       @for (entry of entries(); track trackByFile($index, entry)) {
         <li class="cr-row" [attr.data-verdict]="verdictTone(entry.verdict)">

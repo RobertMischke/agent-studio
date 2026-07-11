@@ -45,7 +45,7 @@
   // The whole header row is the collapse toggle.
   &__head {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--studio-spacing-2);
     width: 100%;
     margin: 0;
@@ -86,8 +86,9 @@
 
   &__headline {
     display: flex;
-    align-items: center;
-    gap: var(--studio-spacing-2);
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--studio-spacing-1);
     flex: 1 1 auto;
     min-width: 0;
   }
@@ -101,22 +102,66 @@
     transition: color 0.15s ease;
   }
 
-  // One-line essence carried by the header at all times (category · grade · merge).
+  &__state {
+    color: var(--studio-fg);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  // Supporting grade and merge signals carried by the header at all times.
   &__essence {
     display: flex;
     align-items: center;
     gap: var(--studio-spacing-2);
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-width: 0;
     font-size: 12px;
   }
 
-  &__essence-reason {
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+  &__reissues {
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--studio-fg) 3%, transparent);
+    padding: var(--studio-spacing-2) var(--studio-spacing-3);
+
+    summary {
+      cursor: pointer;
+      color: var(--studio-fg-strong);
+      font-size: 11px;
+      font-weight: 700;
+    }
+  }
+
+  &__history-count {
+    margin-inline-start: var(--studio-spacing-1);
     color: var(--studio-fg-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__reissue-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--studio-spacing-2);
+    margin: var(--studio-spacing-2) 0 0;
+    padding-inline-start: var(--studio-spacing-4);
+
+    li { color: var(--studio-fg); }
+  }
+
+  &__reissue-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--studio-spacing-2);
+    font-size: 11px;
+
+    time { color: var(--studio-fg-dim); }
+  }
+
+  &__reissue-trigger {
+    display: block;
+    margin-top: var(--studio-spacing-1);
+    color: var(--studio-fg-dim);
+    font-size: 11px;
+    line-height: 1.45;
   }
 
   &__essence-merge {

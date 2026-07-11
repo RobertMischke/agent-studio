@@ -39,6 +39,7 @@ import {
 } from '../../../../components/aspect-findings';
 import type { SteeringInfo } from '../../../../components/steering-detail';
 import { buildMergeSignal, type MergeSignalView } from '../../../board';
+import type { TaskTimelineEvent } from '../../../task-timeline';
 
 /** One open gate point, rendered as a checklist row. */
 export interface EscalationGateItem {
@@ -71,6 +72,15 @@ export interface EscalationReviewHead {
   model: string | null;
   /** ISO instant the grade ran, for provenance. */
   runAt: string | null;
+  /** True when a newer review artifact exists but has no fresh grade. */
+  olderDelivery: boolean;
+}
+
+/** One automatic reissue and the timeline reason that caused it. */
+export interface EscalationReissue {
+  index: number;
+  at: string;
+  trigger: string;
 }
 
 /** Delivery context: where the work landed + how much of it there is. */
@@ -252,6 +262,10 @@ export interface EscalationSummaryView {
   delivery: EscalationDelivery;
   /** Gate recommendation, or null when no verdict is recorded. */
   recommendation: EscalationRecommendation | null;
+  /** Reissue history derived from quality-loop reopen rows. */
+  reissues: EscalationReissue[];
+  /** One reconciled operator-facing sentence for delivery and decision state. */
+  stateSentence: string;
 }
 
 /** Inputs the host feeds in from the existing polled / fetched signals. */
@@ -269,6 +283,8 @@ export interface EscalationSummaryInputs {
    * `BuildStatusStub` `- Category:` / `- Reason:` lines); null when absent.
    */
   statusMarkdown: string | null;
+  /** Full chronological task ledger used for reissue provenance and budget. */
+  timeline: readonly TaskTimelineEvent[];
 }
 
 /**
@@ -410,7 +426,56 @@ export function pickReviewHead(entries: readonly CodeReviewListEntry[]): Escalat
     summary: chosen.summary?.trim() || '',
     model: chosen.model?.trim() || null,
     runAt: chosen.runAt || null,
+    olderDelivery: chosen !== byNewest[0],
   };
+}
+
+/**
+ * Lift every automatic reopen into a compact history row. Timeline details are
+ * preferred because they carry the concrete gate cause; the human summary is
+ * the fallback for older ledgers.
+ */
+export function deriveReissues(events: readonly TaskTimelineEvent[]): EscalationReissue[] {
+  return events
+    .filter((event) => event.kind === 'quality_loop_reopened')
+    .map((event, index) => {
+      const cause = event.details?.['cause']?.trim();
+      const reason = event.details?.['reason']?.trim();
+      const summary = event.summary?.trim();
+      const trigger = cause && reason && !reason.toLowerCase().includes(cause.toLowerCase())
+        ? `${cause}: ${reason}`
+        : reason || cause || summary || 'Quality loop reopened the task.';
+      return { index: index + 1, at: event.ts, trigger };
+    });
+}
+
+/** Reconcile successful delivery signals with the still-acute human decision. */
+export function buildEscalationStateSentence(
+  delivery: EscalationDelivery,
+  gateItems: readonly EscalationGateItem[],
+  events: readonly TaskTimelineEvent[],
+  reason: string | null,
+): string {
+  const merged = !!delivery.merge?.develop.merged || !!delivery.merge?.main.merged;
+  const delivered = delivery.commitCount > 0;
+  const deliveryText = merged
+    ? 'Delivered and merged'
+    : delivered
+      ? 'Delivered but not merged'
+      : 'Not delivered yet';
+  const escalation = [...events].reverse().find((event) => event.kind === 'orchestrator_escalated');
+  const attempt = Number(escalation?.details?.['attempt']);
+  const maxAttempts = Number(escalation?.details?.['maxAttempts']);
+  const budgetExhausted = Number.isFinite(attempt)
+    && Number.isFinite(maxAttempts)
+    && maxAttempts > 0
+    && attempt >= maxAttempts;
+  const why = budgetExhausted
+    ? 'the reissue budget is exhausted'
+    : reason?.trim() || 'the orchestrator escalated the remaining gaps';
+  const open = gateItems.filter((item) => !item.checked).length;
+  const gateText = open === 1 ? '1 gate point remains open' : `${open} gate points remain open`;
+  return `${deliveryText}; waiting for your decision because ${why}, and ${gateText}.`;
 }
 
 /**
@@ -456,15 +521,19 @@ export function deriveRecommendation(
 /** Assemble the full escalation summary view model from the raw inputs. */
 export function buildEscalationSummaryView(inputs: EscalationSummaryInputs): EscalationSummaryView {
   const { items, source } = resolveGateItems(inputs);
+  const delivery = buildDelivery(inputs.info);
+  const reason = inputs.steering?.reason?.trim() || null;
   return {
     escalation: deriveEscalationClass(inputs),
-    reason: inputs.steering?.reason?.trim() || null,
+    reason,
     cause: causeOf(inputs.steering),
     gateItems: items,
     gateSource: source,
     review: pickReviewHead(inputs.codeReviews),
-    delivery: buildDelivery(inputs.info),
+    delivery,
     recommendation: deriveRecommendation(inputs.info.orchestratorVerdict),
+    reissues: deriveReissues(inputs.timeline),
+    stateSentence: buildEscalationStateSentence(delivery, items, inputs.timeline, reason),
   };
 }
 
