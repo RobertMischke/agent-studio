@@ -581,6 +581,24 @@
             the existing bounded reissue/escalation path. Pure fixtures pin all three night cases.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2099</code><br><span class="small">derived .NET gate cwd<br>(observed on <code>TE-3</code>)</span></td>
+          <td>
+            The derived target-less <code>dotnet build</code> gate failed with <code>MSB1003</code> although the
+            TokenEconomy worktree contained a root <code>.slnx</code> solution.
+          </td>
+          <td>
+            Command discovery depended on the repository root, but execution did not state or test an absolute cwd invariant.
+            A backend process started from another directory could therefore make a target-less command resolve against the
+            wrong directory without enough log context to diagnose it.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the gate canonicalizes the selected checkout root before planning and resolves
+            every command cwd from that absolute root. Each command now records its repository and working directory, and a
+            regression fixture proves a root <code>.slnx</code> with nested-only projects executes at the repository root.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -79,6 +79,12 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         if (!Directory.Exists(repositoryPath))
             return Skipped($"repository not found: {repositoryPath}");
 
+        // ProcessStartInfo accepts relative working directories, but resolves
+        // them against the backend process cwd. Freeze the repository root here
+        // so a gate selected from a job folder or supervisor session cannot
+        // accidentally run a target-less command outside the task checkout.
+        repositoryPath = Path.GetFullPath(repositoryPath);
+
         if (changedFiles is { Count: > 0 } && !HasCodeDiff(changedFiles))
             return Skipped("no code diff");
 
@@ -113,9 +119,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
 
         foreach (var cmd in toRun)
         {
-            var workingDir = string.IsNullOrEmpty(cmd.WorkingSubdir)
-                ? repositoryPath
-                : Path.Combine(repositoryPath, cmd.WorkingSubdir);
+            var workingDir = ResolveWorkingDirectory(repositoryPath, cmd);
             if (!Directory.Exists(workingDir))
             {
                 output.AppendLine($"! skipped {Describe(cmd)} (missing directory)");
@@ -127,6 +131,10 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             if (cmd.Ecosystem == VerifyEcosystem.Node) ranFrontend = true;
             else ranBackend = true;
 
+            _logger.LogInformation(
+                "build_test_gate_command_started repository={Repository} working_directory={WorkingDirectory} command={Command}",
+                repositoryPath, workingDir, cmd.Command);
+            output.AppendLine($"# working directory: {workingDir}");
             var exit = await RunShellAsync(workingDir, cmd.Command, Remaining(timeout, sw.Elapsed), output, ct);
             if (exit != 0)
             {
@@ -167,6 +175,20 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
     {
         var where = string.IsNullOrEmpty(cmd.WorkingSubdir) ? "" : $" ({cmd.WorkingSubdir})";
         return $"`{cmd.Command}`{where}";
+    }
+
+    /// <summary>
+    /// Resolves every command cwd from the selected checkout root. In
+    /// particular, target-less dotnet commands have an empty subdirectory and
+    /// therefore execute exactly at the worktree root where discovery found the
+    /// solution.
+    /// </summary>
+    internal static string ResolveWorkingDirectory(string repositoryPath, VerifyCommand cmd)
+    {
+        var repositoryRoot = Path.GetFullPath(repositoryPath);
+        return string.IsNullOrEmpty(cmd.WorkingSubdir)
+            ? repositoryRoot
+            : Path.GetFullPath(Path.Combine(repositoryRoot, cmd.WorkingSubdir));
     }
 
     private Task<int?> RunShellAsync(
