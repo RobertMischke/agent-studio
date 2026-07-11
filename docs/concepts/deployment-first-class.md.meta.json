@@ -1,0 +1,10 @@
+{
+  "relatedTasks": [
+    {
+      "key": "AGT-2097",
+      "title": "KONZEPT: Deployment als First-Class-Citizen - Deployment-Seite, Szenario-Templates, prompt-definierte dynamische UI ueber CLI-Tasks",
+      "linkedAt": "2026-07-11T12:35:20.7454402Z",
+      "source": "auto"
+    }
+  ]
+}
