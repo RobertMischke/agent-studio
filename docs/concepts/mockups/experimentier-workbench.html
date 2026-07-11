@@ -1,0 +1,1414 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Experiment Workbench - interactive concept mockup</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #e9eef4;
+      --shell: #f7f9fc;
+      --surface: #ffffff;
+      --surface-2: #f1f5f9;
+      --surface-3: #e7edf5;
+      --text: #172131;
+      --muted: #667489;
+      --faint: #8794a7;
+      --line: #d5dee9;
+      --line-strong: #b9c6d6;
+      --blue: #276fd2;
+      --blue-soft: rgba(39, 111, 210, .11);
+      --violet: #7357b6;
+      --violet-soft: rgba(115, 87, 182, .12);
+      --green: #167b59;
+      --green-soft: rgba(22, 123, 89, .11);
+      --amber: #95650d;
+      --amber-soft: rgba(179, 119, 14, .13);
+      --red: #b4423a;
+      --red-soft: rgba(180, 66, 58, .11);
+      --shadow: 0 18px 58px rgba(37, 55, 78, .17);
+      --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0c1119;
+      --shell: #111925;
+      --surface: #17212e;
+      --surface-2: #1d2938;
+      --surface-3: #263446;
+      --text: #edf3fa;
+      --muted: #9aa8bb;
+      --faint: #78879a;
+      --line: #2b394b;
+      --line-strong: #41536a;
+      --blue: #76a9f7;
+      --blue-soft: rgba(89, 146, 233, .16);
+      --violet: #b8a3ef;
+      --violet-soft: rgba(151, 122, 222, .17);
+      --green: #67c9a1;
+      --green-soft: rgba(68, 177, 136, .15);
+      --amber: #e1b45e;
+      --amber-soft: rgba(209, 151, 44, .16);
+      --red: #f07d73;
+      --red-soft: rgba(225, 90, 80, .15);
+      --shadow: 0 20px 64px rgba(0, 0, 0, .35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font: 13px/1.45 var(--sans);
+    }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }
+    [hidden] { display: none !important; }
+
+    .studio {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: 274px minmax(0, 1fr);
+      background: var(--bg);
+    }
+
+    .explorer {
+      min-width: 0;
+      overflow: auto;
+      background: var(--shell);
+      border-right: 1px solid var(--line);
+    }
+    .brand {
+      height: 54px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand-mark {
+      width: 27px;
+      height: 27px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font-weight: 800;
+      letter-spacing: -.04em;
+    }
+    .brand strong { font-size: 13px; }
+    .brand small { display: block; color: var(--muted); font-size: 10px; }
+    .grow { flex: 1; }
+    .icon-button {
+      width: 31px;
+      height: 31px;
+      display: grid;
+      place-items: center;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      color: var(--muted);
+      background: transparent;
+    }
+    .icon-button:hover { color: var(--text); background: var(--surface-2); }
+
+    .explorer-heading {
+      display: flex;
+      align-items: center;
+      padding: 14px 13px 7px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 760;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+    .tree { padding: 0 7px 16px; }
+    .tree-row {
+      width: 100%;
+      min-height: 34px;
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 7px;
+      border: 0;
+      border-radius: 7px;
+      color: var(--muted);
+      background: transparent;
+      text-align: left;
+    }
+    .tree-row:hover { color: var(--text); background: var(--surface-2); }
+    .tree-row.active, .tree-row[aria-current="page"] {
+      color: var(--text);
+      background: var(--blue-soft);
+    }
+    .tree-row.project {
+      min-height: 39px;
+      color: var(--text);
+      font-weight: 690;
+    }
+    .tree-row.child { padding-left: 25px; }
+    .tree-row.topic {
+      min-height: 43px;
+      padding-left: 43px;
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .tree-row .label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tree-row.topic .label {
+      white-space: normal;
+      line-height: 1.25;
+    }
+    .topic-copy small {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 9px;
+    }
+    .chevron {
+      width: 16px;
+      color: var(--faint);
+      text-align: center;
+      transition: transform .16s ease;
+    }
+    .collapsed > .tree-row .chevron, .workbench-group.collapsed .group-row .chevron {
+      transform: rotate(-90deg);
+    }
+    .project-badge {
+      width: 20px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      color: #fff;
+      background: #4778c7;
+      font-size: 10px;
+      font-weight: 800;
+    }
+    .count {
+      min-width: 21px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface-3);
+      font: 700 9px/1.4 var(--mono);
+      text-align: center;
+    }
+    .phase {
+      padding: 2px 6px;
+      border-radius: 999px;
+      color: var(--violet);
+      background: var(--violet-soft);
+      font-size: 9px;
+      white-space: nowrap;
+    }
+    .phase.ready { color: var(--amber); background: var(--amber-soft); }
+    .phase.shaping { color: var(--green); background: var(--green-soft); }
+    .project-children, .workbench-topics { display: block; }
+    .project-node.collapsed .project-children,
+    .workbench-group.collapsed .workbench-topics { display: none; }
+    .history-link {
+      width: calc(100% - 43px);
+      margin: 4px 0 3px 43px;
+      padding: 6px 8px;
+      border: 0;
+      border-radius: 6px;
+      color: var(--muted);
+      background: transparent;
+      text-align: left;
+      font-size: 10px;
+    }
+    .history-link:hover { color: var(--text); background: var(--surface-2); }
+
+    .app-main {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 54px minmax(0, 1fr);
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--shell) 93%, transparent);
+    }
+    .crumbs {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .crumbs strong {
+      max-width: 38vw;
+      overflow: hidden;
+      color: var(--text);
+      text-overflow: ellipsis;
+    }
+    .mock-label {
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: var(--violet);
+      background: var(--violet-soft);
+      font-size: 9px;
+      font-weight: 760;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .top-action {
+      min-height: 31px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--muted);
+      background: var(--surface);
+    }
+    .top-action:hover { color: var(--text); border-color: var(--line-strong); }
+
+    .workbench-layout {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(560px, 1fr) minmax(330px, 390px);
+    }
+    .workbench-layout.chat-hidden { grid-template-columns: minmax(0, 1fr) 0; }
+    .workbench-host {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .workbench-head {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--shell);
+    }
+    .workbench-title { min-width: 0; }
+    .eyebrow {
+      margin-bottom: 2px;
+      color: var(--blue);
+      font-size: 9px;
+      font-weight: 780;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .workbench-title h1 {
+      margin: 0;
+      overflow: hidden;
+      font-size: 18px;
+      letter-spacing: -.02em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workbench-title p {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: 999px;
+      color: var(--violet);
+      background: var(--violet-soft);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+    .status-chip i {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .primary-button, .secondary-button {
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 8px;
+      font-weight: 680;
+      white-space: nowrap;
+    }
+    .primary-button {
+      border: 1px solid var(--blue);
+      color: #fff;
+      background: #276fd2;
+    }
+    html[data-theme="dark"] .primary-button { color: #0d1723; background: var(--blue); }
+    .primary-button:hover { filter: brightness(1.05); }
+    .secondary-button {
+      border: 1px solid var(--line-strong);
+      color: var(--text);
+      background: var(--surface);
+    }
+    .secondary-button:hover { border-color: var(--blue); }
+
+    .workbench-scroll {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      padding: 16px;
+    }
+    .artifact-banner {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      padding: 9px 11px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      color: var(--muted);
+      background: var(--surface);
+      font-size: 10px;
+    }
+    .artifact-banner code { color: var(--text); font-family: var(--mono); }
+    .artifact-banner .safe {
+      margin-left: auto;
+      color: var(--green);
+      white-space: nowrap;
+    }
+    .experiment-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(230px, .65fr);
+      gap: 12px;
+      align-items: start;
+    }
+    .panel {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 46px;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .panel-header h2 { margin: 0; font-size: 13px; }
+    .panel-header p { margin: 2px 0 0; color: var(--muted); font-size: 10px; }
+    .surface-tag {
+      padding: 3px 6px;
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface-3);
+      font-size: 8px;
+      font-weight: 760;
+      letter-spacing: .04em;
+      white-space: nowrap;
+      text-transform: uppercase;
+    }
+    .surface-tag.trusted { color: var(--green); background: var(--green-soft); }
+    .panel-body { padding: 12px; }
+    .segmented {
+      display: inline-flex;
+      padding: 2px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-2);
+    }
+    .segmented button {
+      min-height: 27px;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 6px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 10px;
+    }
+    .segmented button.active {
+      color: var(--text);
+      background: var(--surface);
+      box-shadow: 0 1px 3px rgba(31, 45, 64, .12);
+    }
+
+    .prototype {
+      min-height: 330px;
+      padding: 14px;
+      border-radius: 9px;
+      background:
+        radial-gradient(circle at 84% 14%, var(--blue-soft), transparent 31%),
+        var(--surface-2);
+    }
+    .prototype-window {
+      min-height: 300px;
+      display: grid;
+      grid-template-columns: minmax(190px, .72fr) minmax(220px, 1fr);
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      background: var(--surface);
+      box-shadow: 0 14px 32px rgba(35, 53, 75, .13);
+    }
+    .mini-tree {
+      padding: 9px;
+      border-right: 1px solid var(--line);
+      background: var(--shell);
+    }
+    .mini-title {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 760;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .mini-title span { margin-left: auto; color: var(--faint); font-family: var(--mono); }
+    .project-sample {
+      display: grid;
+      grid-template-columns: 16px 20px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 5px 6px;
+      border-radius: 7px;
+      color: var(--muted);
+    }
+    .project-sample.focus { color: var(--text); background: var(--blue-soft); }
+    .project-sample .avatar {
+      width: 19px;
+      height: 19px;
+      display: grid;
+      place-items: center;
+      border-radius: 5px;
+      color: #fff;
+      background: #4778c7;
+      font-size: 8px;
+      font-weight: 800;
+    }
+    .project-sample .name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 10px;
+    }
+    .signal-dots { display: inline-flex; gap: 3px; }
+    .signal-dots i {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--faint);
+    }
+    .signal-dots i:nth-child(1), .signal-dots i:nth-child(2) { background: var(--blue); }
+    .signal-dots i:nth-child(3) { background: var(--green); }
+    .signal-dots i:nth-child(5), .signal-dots i:nth-child(6) {
+      border: 1px solid var(--line-strong);
+      background: transparent;
+    }
+    .focus-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--blue);
+      background: var(--surface);
+      font: 700 9px var(--mono);
+    }
+    .heat-orb {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 0 3px var(--blue-soft);
+    }
+    .prototype[data-situation="quiet"] .signal-dots i { background: var(--faint); }
+    .prototype[data-situation="quiet"] .signal-dots i:nth-child(n+3) {
+      border: 1px solid var(--line-strong);
+      background: transparent;
+    }
+    .prototype[data-situation="quiet"] .focus-chip { color: var(--green); }
+    .prototype[data-situation="quiet"] .heat-orb { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+    .prototype[data-situation="escalated"] .signal-dots i:nth-child(-n+2) { background: var(--red); }
+    .prototype[data-situation="escalated"] .focus-chip { color: var(--red); background: var(--red-soft); }
+    .prototype[data-situation="escalated"] .heat-orb { background: var(--red); box-shadow: 0 0 0 3px var(--red-soft); }
+
+    .mini-content {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 20px;
+      background: var(--surface);
+    }
+    .mini-content .kicker {
+      color: var(--blue);
+      font-size: 9px;
+      font-weight: 760;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+    .mini-content h3 { margin: 5px 0 7px; font-size: 18px; letter-spacing: -.025em; }
+    .mini-content p { margin: 0; color: var(--muted); font-size: 10px; }
+    .mini-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 14px;
+    }
+    .mini-metric {
+      padding: 8px;
+      border-radius: 7px;
+      background: var(--surface-2);
+    }
+    .mini-metric strong { display: block; font: 700 11px var(--mono); }
+    .mini-metric span { color: var(--muted); font-size: 8px; }
+
+    .option-list { display: grid; gap: 8px; }
+    .option-card {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 9px;
+      padding: 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      background: var(--surface-2);
+      text-align: left;
+    }
+    .option-card:hover { color: var(--text); border-color: var(--line-strong); }
+    .option-card.active { color: var(--text); border-color: var(--blue); background: var(--blue-soft); }
+    .option-letter {
+      width: 25px;
+      height: 25px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      color: var(--blue);
+      background: var(--surface);
+      font: 800 10px var(--mono);
+    }
+    .option-card strong { display: block; font-size: 10px; }
+    .option-card small { display: block; margin-top: 1px; color: var(--muted); font-size: 8px; }
+    .rank {
+      padding: 2px 5px;
+      border-radius: 999px;
+      color: var(--green);
+      background: var(--green-soft);
+      font-size: 8px;
+    }
+    .criteria {
+      display: grid;
+      gap: 7px;
+      margin-top: 12px;
+    }
+    .criterion {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .criterion:last-child { border-bottom: 0; }
+    .criterion strong { font-size: 10px; }
+    .criterion span { color: var(--muted); font-size: 9px; }
+    .score { color: var(--green) !important; font: 700 10px var(--mono); }
+    .task-card {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-2);
+    }
+    .task-key {
+      padding: 3px 6px;
+      border-radius: 6px;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font: 760 9px var(--mono);
+    }
+    .task-card strong { display: block; overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+    .task-card small { display: block; color: var(--muted); font-size: 8px; }
+
+    .chat-panel {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      overflow: hidden;
+      border-left: 1px solid var(--line);
+      background: var(--shell);
+      transition: opacity .16s ease;
+    }
+    .chat-hidden .chat-panel { opacity: 0; pointer-events: none; }
+    .chat-header {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 58px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .orchestrator-mark {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      color: var(--violet);
+      background: var(--violet-soft);
+      font-weight: 800;
+    }
+    .chat-header strong { display: block; font-size: 12px; }
+    .chat-header small { display: block; color: var(--muted); font-size: 9px; }
+    .context-strip {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 11px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      background: var(--surface-2);
+      font-size: 9px;
+    }
+    .context-strip code {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text);
+      font-family: var(--mono);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .context-strip .fresh { margin-left: auto; color: var(--green); white-space: nowrap; }
+    .transcript {
+      min-height: 0;
+      overflow: auto;
+      padding: 13px;
+    }
+    .message { margin-bottom: 14px; }
+    .message-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 9px;
+    }
+    .message-head strong { color: var(--text); font-size: 9px; }
+    .message-body {
+      padding: 9px 10px;
+      border-radius: 9px;
+      color: var(--text);
+      background: var(--surface);
+      font-size: 11px;
+    }
+    .message.user .message-body { background: var(--blue-soft); }
+    .message-body p { margin: 0; }
+    .message-body p + p { margin-top: 7px; }
+    .decision-row {
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 7px;
+      background: var(--violet-soft);
+    }
+    .decision-row strong { display: block; color: var(--violet); font-size: 9px; }
+    .decision-row span { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; }
+    .composer {
+      padding: 10px;
+      border-top: 1px solid var(--line);
+      background: var(--shell);
+    }
+    .composer textarea {
+      width: 100%;
+      min-height: 66px;
+      max-height: 140px;
+      resize: vertical;
+      padding: 9px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      color: var(--text);
+      background: var(--surface);
+    }
+    .composer-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 7px;
+    }
+    .composer-row small { color: var(--muted); font-size: 8px; }
+    .send-button {
+      margin-left: auto;
+      min-height: 30px;
+      padding: 0 11px;
+      border: 1px solid var(--blue);
+      border-radius: 7px;
+      color: #fff;
+      background: #276fd2;
+      font-weight: 700;
+    }
+    html[data-theme="dark"] .send-button { color: #0d1723; background: var(--blue); }
+
+    .modal-backdrop {
+      position: fixed;
+      z-index: 100;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(5, 10, 18, .58);
+      backdrop-filter: blur(4px);
+    }
+    .dialog {
+      width: min(720px, 100%);
+      max-height: min(760px, calc(100vh - 36px));
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: 13px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .dialog-header, .dialog-footer {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 13px 15px;
+    }
+    .dialog-header { border-bottom: 1px solid var(--line); }
+    .dialog-footer { justify-content: flex-end; border-top: 1px solid var(--line); }
+    .dialog-header h2 { margin: 0; font-size: 15px; }
+    .dialog-header p { margin: 2px 0 0; color: var(--muted); font-size: 9px; }
+    .preview-badge {
+      margin-left: auto;
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: var(--amber);
+      background: var(--amber-soft);
+      font-size: 9px;
+      font-weight: 760;
+    }
+    .dialog-body {
+      overflow: auto;
+      padding: 15px;
+    }
+    .source-receipt {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 7px;
+      margin-bottom: 13px;
+    }
+    .receipt-cell {
+      padding: 8px;
+      border-radius: 8px;
+      background: var(--surface-2);
+    }
+    .receipt-cell span { display: block; color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .07em; }
+    .receipt-cell strong { display: block; margin-top: 3px; overflow: hidden; font: 700 9px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 11px;
+    }
+    .field { min-width: 0; }
+    .field.full { grid-column: 1 / -1; }
+    .field label {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 690;
+    }
+    .field input, .field select, .field textarea {
+      width: 100%;
+      padding: 8px 9px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+    }
+    .field textarea { min-height: 118px; resize: vertical; }
+    .simulation-note {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 9px;
+      border-radius: 8px;
+      color: var(--amber);
+      background: var(--amber-soft);
+      font-size: 9px;
+    }
+    .simulation-note strong { display: block; }
+    .simulation-note span { display: block; margin-top: 1px; color: var(--muted); }
+    .toast {
+      position: fixed;
+      z-index: 120;
+      right: 18px;
+      bottom: 18px;
+      max-width: 360px;
+      padding: 11px 13px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      color: var(--text);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      font-size: 10px;
+    }
+    .toast strong { display: block; color: var(--green); }
+    .toast span { display: block; margin-top: 2px; color: var(--muted); }
+
+    @media (max-width: 1180px) {
+      .studio { grid-template-columns: 240px minmax(0, 1fr); }
+      .workbench-layout { grid-template-columns: minmax(500px, 1fr) 340px; }
+      .experiment-grid { grid-template-columns: 1fr; }
+      .decision-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .decision-panel .panel-header { grid-column: 1 / -1; }
+    }
+    @media (max-width: 900px) {
+      body { overflow: auto; }
+      .studio { height: auto; min-height: 100%; grid-template-columns: 220px minmax(0, 1fr); }
+      .app-main { min-height: 100vh; }
+      .workbench-layout { display: block; overflow: visible; }
+      .workbench-host { overflow: visible; }
+      .workbench-scroll { overflow: visible; }
+      .chat-panel { min-height: 600px; border-top: 1px solid var(--line); border-left: 0; }
+      .chat-hidden .chat-panel { display: none; }
+      .prototype-window { grid-template-columns: 1fr; }
+      .mini-tree { border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+    @media (max-width: 640px) {
+      .studio { display: block; }
+      .explorer { max-height: 310px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .app-main { display: block; }
+      .topbar { min-height: 50px; position: sticky; top: 0; z-index: 20; }
+      .crumbs span:nth-child(-n+2) { display: none; }
+      .mock-label { display: none; }
+      .workbench-head { align-items: flex-start; flex-wrap: wrap; }
+      .workbench-title { flex: 1 1 calc(100% - 100px); }
+      .workbench-title p { white-space: normal; }
+      .status-chip { order: 3; }
+      .workbench-head .secondary-button { order: 4; margin-left: auto; }
+      .workbench-head .primary-button { order: 5; }
+      .workbench-scroll { padding: 10px; }
+      .artifact-banner { align-items: flex-start; flex-wrap: wrap; }
+      .artifact-banner .safe { margin-left: 0; }
+      .experiment-grid { display: block; }
+      .decision-panel { display: block; margin-top: 10px; }
+      .prototype { min-height: 0; padding: 8px; }
+      .prototype-window { min-height: 0; }
+      .mini-content { padding: 14px; }
+      .source-receipt, .form-grid { grid-template-columns: 1fr; }
+      .field.full { grid-column: auto; }
+      .dialog-footer { flex-wrap: wrap; }
+      .dialog-footer .secondary-button, .dialog-footer .primary-button { flex: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0s !important;
+        animation-duration: 0s !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="studio">
+    <aside class="explorer" aria-label="Explorer">
+      <div class="brand">
+        <span class="brand-mark">AS</span>
+        <div><strong>Agent Studio</strong><small>Experiment concept</small></div>
+        <span class="grow"></span>
+        <button class="icon-button" aria-label="Search Explorer" title="Search">⌕</button>
+      </div>
+      <div class="explorer-heading"><span>Workspaces</span><span class="grow"></span><span>1</span></div>
+      <nav class="tree" aria-label="Workspace projects">
+        <button class="tree-row" type="button">
+          <span class="chevron">⌄</span><span class="label">Product Engineering</span><span class="count">1</span>
+        </button>
+        <div class="project-node" id="projectNode">
+          <button class="tree-row project" id="projectToggle" type="button" aria-expanded="true">
+            <span class="chevron">⌄</span>
+            <span class="label"><span class="project-badge" style="display:inline-grid;margin-right:7px">A</span>Agent Studio</span>
+            <span class="count">live</span>
+          </button>
+          <div class="project-children">
+            <button class="tree-row child" type="button"><span>▦</span><span class="label">Board</span><span class="count">12</span></button>
+            <button class="tree-row child" type="button"><span>◇</span><span class="label">Project Hub</span><span></span></button>
+            <button class="tree-row child" type="button"><span>▱</span><span class="label">Wiki</span><span></span></button>
+            <div class="workbench-group" id="workbenchGroup">
+              <button class="tree-row child group-row active" id="workbenchToggle" type="button" aria-expanded="true">
+                <span class="chevron">⌄</span><span class="label">Workbenches</span><span class="count">3</span>
+              </button>
+              <div class="workbench-topics">
+                <button class="tree-row topic" type="button" aria-current="page" data-testid="workbench-topic-active">
+                  <span class="label topic-copy">Project state at a glance<small>Updated 8 min ago</small></span><span class="phase">testing</span>
+                </button>
+                <button class="tree-row topic" type="button">
+                  <span class="label topic-copy">Pipeline completion flow<small>Updated yesterday</small></span><span class="phase ready">decision ready</span>
+                </button>
+                <button class="tree-row topic" type="button">
+                  <span class="label topic-copy">App surface measurement<small>Updated 2 days ago</small></span><span class="phase shaping">shaping</span>
+                </button>
+                <button class="history-link" type="button" id="historyButton">View decided and archived history</button>
+              </div>
+            </div>
+            <button class="tree-row child" type="button"><span>◫</span><span class="label">Epics</span><span class="count">2</span></button>
+          </div>
+        </div>
+      </nav>
+    </aside>
+
+    <main class="app-main">
+      <header class="topbar">
+        <div class="crumbs"><span>Product Engineering</span><span>/</span><span>Agent Studio</span><span>/</span><strong>Project state at a glance</strong></div>
+        <span class="mock-label">AGT-2084 mockup</span>
+        <span class="grow"></span>
+        <button class="top-action" id="chatToggle" type="button" aria-pressed="true">Hide chat</button>
+        <button class="top-action" id="themeToggle" type="button" aria-label="Switch to dark theme">Dark theme</button>
+      </header>
+
+      <div class="workbench-layout" id="workbenchLayout">
+        <section class="workbench-host" aria-labelledby="workbenchTitle">
+          <header class="workbench-head">
+            <div class="workbench-title">
+              <div class="eyebrow">Workbenches / active experiment</div>
+              <h1 id="workbenchTitle">Project state at a glance</h1>
+              <p>Compare Explorer signals before one becomes a production feature.</p>
+            </div>
+            <span class="grow"></span>
+            <span class="status-chip"><i></i> Testing</span>
+            <button class="secondary-button" id="archiveButton" type="button" data-testid="archive-workbench">Archive...</button>
+            <button class="primary-button" id="buildButton" type="button" data-testid="build-feature">Build as feature</button>
+          </header>
+
+          <div class="workbench-scroll">
+            <div class="artifact-banner">
+              <span>Repository artifact</span>
+              <code>docs/workbenches/project-state-at-a-glance/index.html</code>
+              <span>·</span>
+              <code>develop@8f21c4a</code>
+              <span class="safe">Isolated interactive view</span>
+            </div>
+
+            <div class="experiment-grid">
+              <article class="panel">
+                <header class="panel-header">
+                  <div><h2>Explorer signal specimen</h2><p>Change the project situation and compare the three finalists.</p></div>
+                  <span class="grow"></span>
+                  <span class="surface-tag">Sandboxed HTML</span>
+                  <div class="segmented" aria-label="Project situation" data-testid="situation-picker">
+                    <button type="button" data-situation="quiet">Quiet</button>
+                    <button class="active" type="button" data-situation="active">Active</button>
+                    <button type="button" data-situation="escalated">Escalated</button>
+                  </div>
+                </header>
+                <div class="panel-body">
+                  <div class="prototype" id="prototype" data-situation="active" data-variant="dots">
+                    <div class="prototype-window">
+                      <div class="mini-tree">
+                        <div class="mini-title">Explorer <span>3 projects</span></div>
+                        <div class="project-sample focus">
+                          <span>⌄</span><span class="avatar">A</span><span class="name">Agent Studio</span>
+                          <span class="sample-indicator" data-indicator="dots"><span class="signal-dots" aria-label="Active project signal"><i></i><i></i><i></i><i></i><i></i><i></i></span></span>
+                        </div>
+                        <div class="project-sample">
+                          <span>›</span><span class="avatar" style="background:#7457b3">R</span><span class="name">Runner Platform</span><span class="signal-dots"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                        </div>
+                        <div class="project-sample">
+                          <span>›</span><span class="avatar" style="background:#2b8967">D</span><span class="name">Docs and Wiki</span><span class="heat-orb" style="background:var(--green);box-shadow:none"></span>
+                        </div>
+                      </div>
+                      <div class="mini-content">
+                        <span class="kicker">Selected hypothesis</span>
+                        <h3 id="variantTitle">Micro dashboard dots</h3>
+                        <p id="variantCopy">Six stable slots show work mix without pretending to be a task total.</p>
+                        <div class="mini-metrics">
+                          <div class="mini-metric"><strong id="glanceMetric">High</strong><span>At-a-glance read</span></div>
+                          <div class="mini-metric"><strong id="spaceMetric">Very low</strong><span>Space cost</span></div>
+                          <div class="mini-metric"><strong id="historyMetric">No</strong><span>History required</span></div>
+                          <div class="mini-metric"><strong id="learningMetric">Medium</strong><span>Learning cost</span></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <aside class="panel decision-panel">
+                <header class="panel-header">
+                  <div><h2>Decision panel</h2><p>One experiment, visible criteria, explicit closure.</p></div>
+                  <span class="grow"></span>
+                  <span class="surface-tag trusted">Trusted host</span>
+                </header>
+                <div class="panel-body">
+                  <div class="option-list" aria-label="Signal variants" data-testid="variant-picker">
+                    <button class="option-card active" type="button" data-variant="dots">
+                      <span class="option-letter">A</span><span><strong>Micro dashboard dots</strong><small>Situation sample</small></span><span class="rank">lead</span>
+                    </button>
+                    <button class="option-card" type="button" data-variant="chip">
+                      <span class="option-letter">B</span><span><strong>Focus chip</strong><small>State plus number</small></span><span></span>
+                    </button>
+                    <button class="option-card" type="button" data-variant="orb">
+                      <span class="option-letter">C</span><span><strong>Heat orb</strong><small>Maximum compression</small></span><span></span>
+                    </button>
+                  </div>
+                  <div class="criteria">
+                    <div class="criterion"><span><strong>Readable at rail density</strong><br>Project names keep priority.</span><span class="score">pass</span></div>
+                    <div class="criterion"><span><strong>No false totals</strong><br>Sampled state is explained.</span><span class="score">pass</span></div>
+                    <div class="criterion"><span><strong>Both themes</strong><br>Semantic tokens only.</span><span class="score">pass</span></div>
+                  </div>
+                  <div class="task-card" aria-label="Related task AGT-2083">
+                    <span class="task-key">AGT-2083</span>
+                    <span><strong>Explorer project-state indicators</strong><small>Human review · source experiment</small></span>
+                    <span>↗</span>
+                  </div>
+                  <div class="task-card" id="spawnReceipt" hidden aria-live="polite">
+                    <span class="task-key">AGT-DEMO</span>
+                    <span><strong>Implement project-state signal</strong><small>Simulated receipt · no task created</small></span>
+                    <span>↗</span>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <aside class="chat-panel" aria-label="Project orchestrator chat" data-testid="orchestrator-chat">
+          <header class="chat-header">
+            <span class="orchestrator-mark">O</span>
+            <div><strong>Orchestrator</strong><small>Canonical project conversation</small></div>
+            <span class="grow"></span>
+            <button class="icon-button" id="closeChat" type="button" aria-label="Hide orchestrator chat">×</button>
+          </header>
+          <div class="context-strip">
+            <span>Context</span><code>project:AGT · workbench@8f21c4a</code><span class="fresh">fresh</span>
+          </div>
+          <div class="transcript" id="transcript" aria-live="polite">
+            <div class="message user">
+              <div class="message-head"><strong>Robert</strong><span>10:34</span></div>
+              <div class="message-body"><p>I want to see the project situation in the Explorer, but it must not look like another task count.</p></div>
+            </div>
+            <div class="message">
+              <div class="message-head"><strong>Project orchestrator</strong><span>10:34 · saw revision 8f21c4a</span></div>
+              <div class="message-body">
+                <p>The dots communicate a sampled situation best. The focus chip is clearer without a legend, but its number changes meaning by state.</p>
+                <div class="decision-row"><strong>Current recommendation</strong><span>Keep option A in the lead. Test Escalated and Quiet before spawning a feature card.</span></div>
+              </div>
+            </div>
+          </div>
+          <form class="composer" id="chatForm">
+            <textarea id="chatInput" aria-label="Message the project orchestrator" placeholder="Ask about this Workbench..." required></textarea>
+            <div class="composer-row"><small>Workbench path and revision are attached to this turn.</small><button class="send-button" type="submit">Send</button></div>
+          </form>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="spawnModal" hidden>
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="spawnTitle" data-testid="spawn-preview">
+      <header class="dialog-header">
+        <div><h2 id="spawnTitle">Build as feature</h2><p>Review the exact card before crossing from experiment to implementation.</p></div>
+        <span class="preview-badge">Spawn preview</span>
+        <button class="icon-button" id="closeModal" type="button" aria-label="Close spawn preview">×</button>
+      </header>
+      <div class="dialog-body">
+        <div class="source-receipt">
+          <div class="receipt-cell"><span>Workbench</span><strong>project-state-at-a-glance</strong></div>
+          <div class="receipt-cell"><span>Revision</span><strong>develop@8f21c4a</strong></div>
+          <div class="receipt-cell"><span>Selected option</span><strong id="previewOption">A · Micro dashboard dots</strong></div>
+        </div>
+        <div class="form-grid">
+          <div class="field full"><label for="taskTitle">Task title</label><input id="taskTitle" value="Explorer: implement project-state signal"></div>
+          <div class="field"><label for="targetProject">Target project</label><select id="targetProject"><option>Agent Studio</option></select></div>
+          <div class="field"><label for="targetLane">Initial lane</label><select id="targetLane"><option>0-backlog</option><option>2-ready</option></select></div>
+          <div class="field"><label for="taskMode">Mode</label><input id="taskMode" value="coding · feature" readonly></div>
+          <div class="field"><label for="relatedSource">Related source</label><input id="relatedSource" value="AGT-2083 · relatedTo" readonly></div>
+          <div class="field full"><label for="taskPrompt">Proposed task prompt</label><textarea id="taskPrompt">Implement the selected Micro dashboard dots signal in the project Explorer.
+
+Preserve the visible-count invariant, both themes, keyboard access, reduced motion, and the no-colored-left-bar rule. Add Playwright coverage for active, quiet, and escalated projects.
+
+Source: docs/workbenches/project-state-at-a-glance/ at develop@8f21c4a.</textarea></div>
+        </div>
+        <div class="simulation-note"><strong>i</strong><div><strong>Concept mockup only</strong><span>Confirming below simulates an idempotent task receipt. It does not call Agent Studio or create a task.</span></div></div>
+      </div>
+      <footer class="dialog-footer">
+        <button class="secondary-button" id="cancelModal" type="button">Cancel</button>
+        <button class="primary-button" id="confirmSpawn" type="button">Simulate feature spawn</button>
+      </footer>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="archiveModal" hidden>
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="archiveTitle" data-testid="archive-preview">
+      <header class="dialog-header">
+        <div><h2 id="archiveTitle">Archive Workbench</h2><p>Close the experiment explicitly without creating an implementation card.</p></div>
+        <span class="preview-badge">Archive preview</span>
+        <button class="icon-button" id="closeArchiveModal" type="button" aria-label="Close archive preview">×</button>
+      </header>
+      <div class="dialog-body">
+        <div class="source-receipt">
+          <div class="receipt-cell"><span>Workbench</span><strong>project-state-at-a-glance</strong></div>
+          <div class="receipt-cell"><span>Revision</span><strong>develop@8f21c4a</strong></div>
+          <div class="receipt-cell"><span>Outcome</span><strong>archive · no feature spawn</strong></div>
+        </div>
+        <div class="field">
+          <label for="archiveReason">Why should no feature follow?</label>
+          <textarea id="archiveReason" required placeholder="Record the evidence or decision that closes this experiment."></textarea>
+        </div>
+        <div class="simulation-note"><strong>i</strong><div><strong>Explicit closure contract</strong><span>A production action records this non-empty reason, source revision, operator, and decision time. It creates no task and keeps the Workbench available as quiet history.</span></div></div>
+      </div>
+      <footer class="dialog-footer">
+        <button class="secondary-button" id="cancelArchiveModal" type="button">Keep current</button>
+        <button class="primary-button" id="confirmArchive" type="button">Simulate archive decision</button>
+      </footer>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden><strong>Simulated receipt: AGT-DEMO</strong><span>No real task was created. A production flow would now show the task microcard and durable decision receipt.</span></div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var layout = document.getElementById("workbenchLayout");
+      var prototype = document.getElementById("prototype");
+      var modal = document.getElementById("spawnModal");
+      var archiveModal = document.getElementById("archiveModal");
+      var buildButton = document.getElementById("buildButton");
+      var toastTimer;
+      var lastFocus;
+      var variants = {
+        dots: {
+          title: "Micro dashboard dots",
+          copy: "Six stable slots show work mix without pretending to be a task total.",
+          preview: "A · Micro dashboard dots",
+          glance: "High", space: "Very low", history: "No", learning: "Medium"
+        },
+        chip: {
+          title: "Focus chip",
+          copy: "A semantic glyph and one focus number give the clearest explicit read.",
+          preview: "B · Focus chip",
+          glance: "High", space: "Low", history: "No", learning: "Low"
+        },
+        orb: {
+          title: "Heat orb",
+          copy: "One compact mark scans quickly, but compresses away most explanation.",
+          preview: "C · Heat orb",
+          glance: "High", space: "Minimal", history: "No", learning: "High"
+        }
+      };
+      var currentVariant = "dots";
+
+      function setIndicator(variant) {
+        var target = document.querySelector(".sample-indicator");
+        target.innerHTML = "";
+        if (variant === "dots") {
+          var dots = document.createElement("span");
+          dots.className = "signal-dots";
+          dots.setAttribute("aria-label", "Sampled project situation");
+          for (var i = 0; i < 6; i += 1) dots.appendChild(document.createElement("i"));
+          target.appendChild(dots);
+        } else if (variant === "chip") {
+          var chip = document.createElement("span");
+          chip.className = "focus-chip";
+          chip.textContent = prototype.dataset.situation === "escalated" ? "! 2" : prototype.dataset.situation === "quiet" ? "· 0" : "▶ 3";
+          target.appendChild(chip);
+        } else {
+          var orb = document.createElement("span");
+          orb.className = "heat-orb";
+          orb.setAttribute("aria-label", "Compressed project situation");
+          target.appendChild(orb);
+        }
+      }
+
+      function setVariant(variant) {
+        currentVariant = variant;
+        prototype.dataset.variant = variant;
+        document.querySelectorAll("[data-variant]").forEach(function (button) {
+          button.classList.toggle("active", button.dataset.variant === variant);
+        });
+        var data = variants[variant];
+        document.getElementById("variantTitle").textContent = data.title;
+        document.getElementById("variantCopy").textContent = data.copy;
+        document.getElementById("glanceMetric").textContent = data.glance;
+        document.getElementById("spaceMetric").textContent = data.space;
+        document.getElementById("historyMetric").textContent = data.history;
+        document.getElementById("learningMetric").textContent = data.learning;
+        document.getElementById("previewOption").textContent = data.preview;
+        setIndicator(variant);
+      }
+
+      document.querySelectorAll(".option-card[data-variant]").forEach(function (button) {
+        button.addEventListener("click", function () { setVariant(button.dataset.variant); });
+      });
+      document.querySelectorAll("[data-situation]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          prototype.dataset.situation = button.dataset.situation;
+          document.querySelectorAll(".segmented [data-situation]").forEach(function (item) {
+            item.classList.toggle("active", item === button);
+          });
+          setIndicator(currentVariant);
+        });
+      });
+
+      document.getElementById("themeToggle").addEventListener("click", function (event) {
+        var dark = root.dataset.theme === "dark";
+        root.dataset.theme = dark ? "light" : "dark";
+        event.currentTarget.textContent = dark ? "Dark theme" : "Light theme";
+        event.currentTarget.setAttribute("aria-label", dark ? "Switch to dark theme" : "Switch to light theme");
+      });
+
+      function setChatVisible(visible) {
+        layout.classList.toggle("chat-hidden", !visible);
+        var toggle = document.getElementById("chatToggle");
+        toggle.textContent = visible ? "Hide chat" : "Show chat";
+        toggle.setAttribute("aria-pressed", String(visible));
+      }
+      document.getElementById("chatToggle").addEventListener("click", function () {
+        setChatVisible(layout.classList.contains("chat-hidden"));
+      });
+      document.getElementById("closeChat").addEventListener("click", function () { setChatVisible(false); });
+
+      document.getElementById("projectToggle").addEventListener("click", function () {
+        var node = document.getElementById("projectNode");
+        node.classList.toggle("collapsed");
+        this.setAttribute("aria-expanded", String(!node.classList.contains("collapsed")));
+      });
+      document.getElementById("workbenchToggle").addEventListener("click", function () {
+        var group = document.getElementById("workbenchGroup");
+        group.classList.toggle("collapsed");
+        this.setAttribute("aria-expanded", String(!group.classList.contains("collapsed")));
+      });
+      document.getElementById("historyButton").addEventListener("click", function () {
+        showToast("History is quiet", "A production view would list decided and archived Workbenches without acute styling.");
+      });
+
+      function openModal() {
+        lastFocus = document.activeElement;
+        document.getElementById("previewOption").textContent = variants[currentVariant].preview;
+        document.getElementById("taskPrompt").value =
+          "Implement the selected " + variants[currentVariant].title + " signal in the project Explorer.\n\n" +
+          "Preserve the visible-count invariant, both themes, keyboard access, reduced motion, and the " +
+          "no-colored-left-bar rule. Add Playwright coverage for active, quiet, and escalated projects.\n\n" +
+          "Source: docs/workbenches/project-state-at-a-glance/ at develop@8f21c4a.";
+        modal.hidden = false;
+        document.getElementById("closeModal").focus();
+      }
+      function closeModal() {
+        modal.hidden = true;
+        if (lastFocus) lastFocus.focus();
+      }
+      buildButton.addEventListener("click", openModal);
+      document.getElementById("closeModal").addEventListener("click", closeModal);
+      document.getElementById("cancelModal").addEventListener("click", closeModal);
+      modal.addEventListener("click", function (event) { if (event.target === modal) closeModal(); });
+
+      function openArchiveModal() {
+        lastFocus = document.activeElement;
+        archiveModal.hidden = false;
+        document.getElementById("archiveReason").focus();
+      }
+      function closeArchiveModal() {
+        archiveModal.hidden = true;
+        document.getElementById("archiveReason").removeAttribute("aria-invalid");
+        if (lastFocus) lastFocus.focus();
+      }
+      document.getElementById("archiveButton").addEventListener("click", openArchiveModal);
+      document.getElementById("closeArchiveModal").addEventListener("click", closeArchiveModal);
+      document.getElementById("cancelArchiveModal").addEventListener("click", closeArchiveModal);
+      archiveModal.addEventListener("click", function (event) {
+        if (event.target === archiveModal) closeArchiveModal();
+      });
+
+      function showToast(title, copy) {
+        var toast = document.getElementById("toast");
+        toast.querySelector("strong").textContent = title;
+        toast.querySelector("span").textContent = copy;
+        toast.hidden = false;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toast.hidden = true; }, 5000);
+      }
+      document.getElementById("confirmSpawn").addEventListener("click", function () {
+        closeModal();
+        document.getElementById("spawnReceipt").hidden = false;
+        buildButton.textContent = "Preview feature card";
+        showToast("Simulated receipt: AGT-DEMO", "No real task was created. Production would persist the operation id, task key, and source revision.");
+      });
+      document.getElementById("confirmArchive").addEventListener("click", function () {
+        var reason = document.getElementById("archiveReason");
+        if (!reason.value.trim()) {
+          reason.setAttribute("aria-invalid", "true");
+          reason.focus();
+          return;
+        }
+        closeArchiveModal();
+        showToast("Simulated archive decision", "No task was created. Production would keep this Workbench as quiet history with the recorded reason.");
+      });
+      document.getElementById("archiveReason").addEventListener("input", function () {
+        this.removeAttribute("aria-invalid");
+      });
+
+      document.getElementById("chatForm").addEventListener("submit", function (event) {
+        event.preventDefault();
+        var input = document.getElementById("chatInput");
+        var text = input.value.trim();
+        if (!text) return;
+        var transcript = document.getElementById("transcript");
+        transcript.appendChild(makeMessage("Robert", text, true));
+        input.value = "";
+        var reply = "I am looking at " + variants[currentVariant].title + " on revision 8f21c4a. I can compare it, change the presentation selection, or prepare the feature preview. I will not create a card without your confirmation.";
+        transcript.appendChild(makeMessage("Project orchestrator", reply, false));
+        transcript.scrollTop = transcript.scrollHeight;
+      });
+
+      function makeMessage(author, copy, user) {
+        var wrapper = document.createElement("div");
+        wrapper.className = "message" + (user ? " user" : "");
+        var head = document.createElement("div");
+        head.className = "message-head";
+        var strong = document.createElement("strong");
+        strong.textContent = author;
+        var meta = document.createElement("span");
+        meta.textContent = user ? "now" : "now · saw revision 8f21c4a";
+        head.appendChild(strong);
+        head.appendChild(meta);
+        var body = document.createElement("div");
+        body.className = "message-body";
+        var paragraph = document.createElement("p");
+        paragraph.textContent = copy;
+        body.appendChild(paragraph);
+        wrapper.appendChild(head);
+        wrapper.appendChild(body);
+        return wrapper;
+      }
+
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && !modal.hidden) closeModal();
+        if (event.key === "Escape" && !archiveModal.hidden) closeArchiveModal();
+      });
+    }());
+  </script>
+</body>
+</html>
