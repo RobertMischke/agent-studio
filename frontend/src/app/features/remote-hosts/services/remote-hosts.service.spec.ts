@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { TestBed } from '@angular/core/testing';
 import { RemoteHostsService } from './remote-hosts.service';
 
 describe('RemoteHostsService', () => {
@@ -20,6 +23,13 @@ describe('RemoteHostsService', () => {
     expect(hosts.length).toBeGreaterThanOrEqual(2);
     expect(hosts.some((h) => h.role === 'local')).toBe(true);
     expect(hosts.some((h) => h.role === 'remote')).toBe(true);
+    expect(hosts.find((h) => h.id === 'agent-runner-01')).toMatchObject({
+      clientId: 'agent-runner-01',
+      status: 'offline',
+      lastHeartbeatAt: null,
+      cliQuotas: [],
+      stats: null,
+    });
     expect(svc.loading()).toBe(false);
     expect(svc.error()).toBeNull();
   });
@@ -39,6 +49,7 @@ describe('RemoteHostsService', () => {
     expect(host).toMatchObject({
       name: 'Runner Berlin 02',
       address: 'ssh://runner@berlin.example',
+      clientId: 'runner-berlin-02',
       role: 'remote',
       status: 'idle',
     });
@@ -91,5 +102,66 @@ describe('RemoteHostsService', () => {
     vi.runAllTimers();
 
     expect(svc.hosts().find((h) => h.id === id)?.status).toBe('draining');
+  });
+});
+
+describe('RemoteHostsService client registry hydration', () => {
+  it('projects fresh and stale LastSeen while preserving retired hosts', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = Date.now();
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([{
+      id: 'agent-runner-01',
+      displayName: 'agent-runner-01',
+      emoji: null,
+      colour: null,
+      kind: 'agent-instance',
+      registeredAt: new Date(now - 10_000).toISOString(),
+      lastSeenAt: new Date(now - 30_000).toISOString(),
+      tokenBudgetMonthly: null,
+      notes: null,
+    }]);
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
+      status: 'online',
+      lastHeartbeatAt: new Date(now - 30_000).toISOString(),
+    });
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([{
+      id: 'agent-runner-01',
+      displayName: 'agent-runner-01',
+      emoji: null,
+      colour: null,
+      kind: 'agent-instance',
+      registeredAt: new Date(now - 300_000).toISOString(),
+      lastSeenAt: new Date(now - 180_000).toISOString(),
+      tokenBudgetMonthly: null,
+      notes: null,
+    }]);
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('degraded');
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([{
+      id: 'agent-runner-01', displayName: 'agent-runner-01', emoji: null, colour: null,
+      kind: 'agent-instance', registeredAt: new Date(now - 900_000).toISOString(),
+      lastSeenAt: new Date(now - 600_000).toISOString(), tokenBudgetMonthly: null, notes: null,
+    }]);
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('offline');
+
+    svc.hosts.update(hosts => hosts.map(host =>
+      host.id === 'agent-runner-01' ? { ...host, status: 'retired' } : host));
+    svc.reload();
+    http.expectOne('/api/clients').flush([{
+      id: 'agent-runner-01', displayName: 'agent-runner-01', emoji: null, colour: null,
+      kind: 'agent-instance', registeredAt: new Date(now).toISOString(),
+      lastSeenAt: new Date(now).toISOString(), tokenBudgetMonthly: null, notes: null,
+    }]);
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('retired');
+    http.verify();
   });
 });

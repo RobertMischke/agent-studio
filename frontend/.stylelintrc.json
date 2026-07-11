@@ -188,6 +188,7 @@
         "src/app/features/board/components/create-task-dialog/create-task-dialog.component.scss",
         "src/app/features/board/components/task-column/task-column.scss",
         "src/app/features/project-detail/components/execution-assignment-card/execution-assignment-card.scss",
+        "src/app/features/remote-hosts/components/runner-setup-dialog/runner-setup-dialog.scss",
         "src/app/features/task-detail/components/prompt-pane/pipeline-run-history/pipeline-run-history.component.scss",
         "src/app/features/task-detail/components/prompt-pane/pipeline-step-details/pipeline-step-details.component.scss",
         "src/app/features/task-detail/components/prompt-pane/pipeline-step-toggle/pipeline-step-toggle.component.scss"

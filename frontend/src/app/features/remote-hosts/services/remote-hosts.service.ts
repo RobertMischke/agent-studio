@@ -1,15 +1,16 @@
-import { Injectable, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Injectable, inject, signal } from '@angular/core';
+import type { ClientSummary } from '../../../models/task.model';
 import type { HostActionKind, RemoteHost } from '../models/remote-host.model';
 import { seedRemoteHosts } from './remote-hosts.seed';
 
 /**
  * Registry + action service for the Remote-Hosts page (AGT-1921).
  *
- * UI-first: the host list is served from a static configuration seed
- * ({@link seedRemoteHosts}) that mirrors the shape a heartbeat-fed
- * `GET /api/hosts` endpoint will later return. When that endpoint lands, only
- * {@link reload} changes - it swaps the seed for an HTTP call and the component
- * keeps reading `hosts()` unchanged.
+ * Host topology comes from the static configuration seed while liveness comes
+ * from the real client registry. Reload hydrates each configured client id from
+ * `GET /api/clients`, so runner polling updates LastSeen and status without a
+ * second host-registry backend contract.
  *
  * The Re-Probe / Drain / Retire actions are applied optimistically against the
  * in-memory registry (there is no backend command surface yet) and emit
@@ -27,6 +28,10 @@ export class RemoteHostsService {
 
   /** Simulated latency for the optimistic actions (ms). */
   private static readonly ACTION_DELAY_MS = 550;
+  private static readonly FRESH_CLIENT_MS = 90_000;
+  private static readonly DEGRADED_CLIENT_MS = 5 * 60_000;
+  /** Optional keeps direct-constructor pure tests and non-HTTP previews viable. */
+  private readonly http = tryInjectHttpClient();
 
   /** Load once on first mount; explicit reloads re-seed the registry. */
   ensureLoaded(): void {
@@ -38,17 +43,54 @@ export class RemoteHostsService {
     this.loading.set(true);
     this.error.set(null);
     try {
-      // Static registry for now (UI-first). This is the single line that
-      // becomes an HTTP fetch once the heartbeat-fed endpoint exists.
-      this.hosts.set(seedRemoteHosts(Date.now()));
+      const retiredIds = new Set(this.hosts().filter(host => host.status === 'retired').map(host => host.id));
+      this.hosts.set(seedRemoteHosts(Date.now()).map(host =>
+        retiredIds.has(host.id) ? { ...host, status: 'retired', stats: null } : host));
       this.loaded = true;
       this.log('loaded', { count: this.hosts().length });
+      this.hydrateClientRegistry();
     } catch (e) {
       this.error.set('Failed to load the host registry.');
       this.log('load-failed', { message: (e as Error)?.message ?? 'unknown' });
     } finally {
       this.loading.set(false);
     }
+  }
+
+  private hydrateClientRegistry(): void {
+    if (!this.http) return;
+    const startedAt = performance.now();
+    this.http.get<ClientSummary[]>('/api/clients').subscribe({
+      next: clients => {
+        const byId = new Map((clients ?? []).map(client => [client.id, client]));
+        const now = Date.now();
+        this.hosts.update(hosts => hosts.map(host => {
+          const client = byId.get(host.clientId);
+          if (!client || host.status === 'retired') return host;
+          if (client.kind === 'retired') {
+            return { ...host, status: 'retired', lastHeartbeatAt: client.lastSeenAt, stats: null };
+          }
+          const seenAt = client.lastSeenAt;
+          const seenMs = seenAt ? Date.parse(seenAt) : Number.NaN;
+          const status = !seenAt || Number.isNaN(seenMs)
+            ? 'offline'
+            : now - seenMs <= RemoteHostsService.FRESH_CLIENT_MS
+              ? 'online'
+              : now - seenMs <= RemoteHostsService.DEGRADED_CLIENT_MS
+                ? 'degraded'
+                : 'offline';
+          return { ...host, lastHeartbeatAt: seenAt, status };
+        }));
+        this.log('clients-hydrated', {
+          clients: clients?.length ?? 0,
+          durationMs: Math.round(performance.now() - startedAt),
+        });
+      },
+      error: error => this.log('clients-hydrate-failed', {
+        message: error?.message ?? 'unknown',
+        durationMs: Math.round(performance.now() - startedAt),
+      }),
+    });
   }
 
   /** Add the host produced by the UI-first setup wizard to this registry. */
@@ -59,6 +101,7 @@ export class RemoteHostsService {
       name: name.trim() || id,
       role: 'remote',
       address: address.trim(),
+      clientId: id,
       status: 'idle',
       os: 'Ubuntu LTS',
       lastHeartbeatAt: new Date().toISOString(),
@@ -126,4 +169,12 @@ export class RemoteHostsService {
 function jitterLoad(load: number): number {
   const delta = (load % 7) - 3; // deterministic-ish nudge, no Math.random dependency
   return Math.max(2, Math.min(96, load + delta));
+}
+
+function tryInjectHttpClient(): HttpClient | null {
+  try {
+    return inject(HttpClient, { optional: true });
+  } catch {
+    return null;
+  }
 }

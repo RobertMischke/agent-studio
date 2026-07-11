@@ -16,17 +16,19 @@ public sealed class TaskServerClient : IDisposable
 {
     private static readonly JsonSerializerOptions Json = CreateJsonOptions();
     private readonly HttpClient _http;
+    private readonly string? _configuredClientId;
 
     public TaskServerClient(RunnerOptions options)
     {
         _http = new HttpClient { BaseAddress = new Uri(options.ServerUrl), Timeout = TimeSpan.FromSeconds(60) };
+        _configuredClientId = options.ClientId;
         if (!string.IsNullOrWhiteSpace(options.AuthToken))
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.AuthToken);
         // The server treats X-Client-Id as a registration boundary; seed it with
         // the provisional runner id so reads (and the registration POST itself)
         // are attributed. RegisterAsync swaps in the server-assigned id before the
         // first write, since an unregistered id is rejected 401 on mutations.
-        SetClientId(options.RunnerId);
+        SetClientId(options.ClientId ?? options.RunnerId);
     }
 
     /// <summary>
@@ -36,10 +38,11 @@ public sealed class TaskServerClient : IDisposable
     /// live server endpoints without a socket. Not for production use; the production
     /// path is the <see cref="RunnerOptions"/> constructor above.
     /// </summary>
-    internal TaskServerClient(HttpClient http, string runnerId)
+    internal TaskServerClient(HttpClient http, string runnerId, string? configuredClientId = null)
     {
         _http = http;
-        SetClientId(runnerId);
+        _configuredClientId = configuredClientId;
+        SetClientId(configuredClientId ?? runnerId);
     }
 
     /// <summary>
@@ -51,12 +54,61 @@ public sealed class TaskServerClient : IDisposable
     /// </summary>
     public async Task<string> RegisterAsync(string displayName, string kind, CancellationToken ct)
     {
+        if (!string.IsNullOrWhiteSpace(_configuredClientId))
+        {
+            var escapedClientId = Uri.EscapeDataString(_configuredClientId);
+            using var verify = await _http.GetAsync(
+                $"/api/clients/{escapedClientId}", ct);
+            var detail = await verify.Content.ReadAsStringAsync(ct);
+            if (!verify.IsSuccessStatusCode)
+            {
+                throw new TaskServerException(
+                    (int)verify.StatusCode,
+                    $"Configured RUNNER_CLIENT_ID '{_configuredClientId}' was not accepted by the Task Server " +
+                    $"(GET /api/clients/{escapedClientId} -> {(int)verify.StatusCode}: {Trim(detail)}). " +
+                    "Choose the registered host identity shown in Remote Hosts; startup will not create a replacement identity.");
+            }
+
+            ClientIdentityDetail? identityDetail;
+            try
+            {
+                identityDetail = JsonSerializer.Deserialize<ClientIdentityDetail>(detail, Json);
+            }
+            catch (JsonException ex)
+            {
+                throw InvalidConfiguredIdentity(
+                    $"the response was not a client identity ({ex.Message})", detail);
+            }
+
+            var identity = identityDetail?.Identity;
+            if (identity is null
+                || string.IsNullOrWhiteSpace(identity.Id)
+                || !string.Equals(identity.Id, _configuredClientId, StringComparison.OrdinalIgnoreCase))
+            {
+                throw InvalidConfiguredIdentity("the response named a different or empty identity", detail);
+            }
+
+            if (string.Equals(identity.Kind, "retired", StringComparison.OrdinalIgnoreCase))
+            {
+                throw InvalidConfiguredIdentity("the identity is retired", detail);
+            }
+
+            SetClientId(identity.Id);
+            return identity.Id;
+        }
+
         var resp = await PostJsonAsync<ClientRegisterRequest, ClientRegisterResponse>(
             "/api/clients/register", new ClientRegisterRequest(displayName, kind), ct);
         if (!string.IsNullOrWhiteSpace(resp?.Id))
             SetClientId(resp!.Id);
         return resp?.Id ?? string.Empty;
     }
+
+    private TaskServerException InvalidConfiguredIdentity(string reason, string detail)
+        => new(
+            (int)HttpStatusCode.Conflict,
+            $"Configured RUNNER_CLIENT_ID '{_configuredClientId}' was not accepted by the Task Server: {reason}. " +
+            $"Response: {Trim(detail)}. Choose an active registered host identity; startup will not create a replacement identity.");
 
     /// <summary>The client id this runner presents as X-Client-Id (server-assigned after registration).</summary>
     public string ClientId { get; private set; } = string.Empty;

@@ -24,6 +24,15 @@ public sealed record ClientRegisterRequest(string DisplayName, string? Kind = nu
 /// <summary>Server projection of a registered client identity; only <see cref="Id"/> is used (as the X-Client-Id).</summary>
 public sealed record ClientRegisterResponse(string Id, string DisplayName, string Kind);
 
+/// <summary>
+/// Server response from GET /api/clients/{id}. The runner only needs the
+/// canonical id and lifecycle kind to prove that a configured identity exists
+/// and is still active before it starts issuing mutations under that id.
+/// </summary>
+public sealed record ClientIdentityDetail(ClientIdentitySummary Identity);
+
+public sealed record ClientIdentitySummary(string Id, string Kind);
+
 /// <summary>Runner -> Server: acquire the fenced run lease for a task (/api/runner/lease/acquire).</summary>
 public sealed record RunLeaseAcquireRequest(
     string TaskKey,

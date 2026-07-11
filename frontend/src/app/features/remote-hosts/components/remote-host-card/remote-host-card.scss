@@ -216,6 +216,13 @@
 .host__btn:hover:not(:disabled) { background: var(--studio-bg-selected); }
 .host__btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .host__btn:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+.host__btn--primary {
+  border-color: var(--studio-accent);
+  background: var(--studio-accent);
+  color: var(--studio-on-accent);
+  font-weight: 700;
+}
+.host__btn--primary:hover:not(:disabled) { filter: brightness(1.08); }
 .host__btn--danger { color: var(--studio-accent-6-strong); }
 .host__btn--danger:hover:not(:disabled) {
   background: var(--notify-error-tint);

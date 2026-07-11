@@ -66,6 +66,14 @@
   }
 
   <footer class="host__actions">
+    @if (h.role === 'remote') {
+      <button class="host__btn host__btn--primary" type="button"
+              data-testid="remote-host-action-setup"
+              [disabled]="!!h.busyAction || retired()"
+              (click)="requestSetup()">
+        Set up runner
+      </button>
+    }
     <button class="host__btn" type="button"
             data-testid="remote-host-action-reprobe"
             [disabled]="!!h.busyAction"

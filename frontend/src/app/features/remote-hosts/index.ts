@@ -2,6 +2,7 @@
 export { RemoteHostsPanelComponent } from './components/remote-hosts-panel/remote-hosts-panel';
 export { RemoteHostCardComponent } from './components/remote-host-card/remote-host-card';
 export { AddHostWizardComponent } from './components/add-host-wizard/add-host-wizard';
+export { RunnerSetupDialogComponent } from './components/runner-setup-dialog/runner-setup-dialog';
 export { RemoteHostsService } from './services/remote-hosts.service';
 export { seedRemoteHosts } from './services/remote-hosts.seed';
 export type {
@@ -14,6 +15,8 @@ export type {
   HostStatusTone,
   MeterTone,
 } from './models/remote-host.model';
+export type { RunnerSetupConfig, RunnerSetupConnectionMode } from './models/runner-setup.model';
+export { buildRunnerSetupRequest, runnerSetupIssues } from './models/runner-setup.model';
 export {
   formatMemory,
   formatDisk,

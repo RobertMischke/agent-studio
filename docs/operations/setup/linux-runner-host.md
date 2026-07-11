@@ -3,6 +3,10 @@
 Status: Remote daemon runbook. The runner continuously executes server-assigned
 projects on a Linux host while retaining the RM-5 one-task diagnostic mode.
 
+Related work: AGT-2092 (runner operations baseline) and AGT-2094 (Admin UI
+remote-host onboarding). AGT-2094 uses this runbook as its operational
+reference; the UI does not maintain a second copy of these commands.
+
 This is the operator-facing companion to the plan in
 [../../research/remote-ready-kickoff-2026-07.md](../../research/remote-ready-kickoff-2026-07.md)
 (Phase 1 + Phase 3) and the binding lease contract in
@@ -59,6 +63,56 @@ the runner reaches the Task Server over an `ssh -R`/`-L` tunnel or the operator'
 LAN address during the MVP. For **unattended** operation, keep that tunnel up as
 a supervised, auto-reconnecting service and gate work on its health-check:
 [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md).
+
+## Product onboarding from Remote Hosts
+
+The primary setup path is **Workspace Settings -> Remote hosts -> Set up
+runner**. The action creates a normal visible CLI task, so the existing task
+conversation owns live output, operator input, completion, and durable history.
+The local controller then runs
+[`scripts/remote-runner-onboard.sh`](../../../scripts/remote-runner-onboard.sh);
+every provisioning command in that controller is executed through SSH on the
+selected host.
+
+Before the task can start, the dialog requires an SSH target, the registered
+host client id, a credential-free git origin, and one of these Task Server
+topologies:
+
+| Topology | URL entered in setup | Required proof |
+|---|---|---|
+| Central | Authenticated TLS URL, for example `https://tasks.example.com` | Remote `curl --max-time 10 <url>/healthz` succeeds. Do not expose the workstation with only `X-Client-Id`; it is attribution, not authentication. |
+| Tunnel | Remote listener, normally `http://127.0.0.1:15031` | The supervised reverse-tunnel unit from [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md) is active and the remote health probe succeeds. |
+| LAN | Protected workstation LAN address and bound Task Server port | Firewall and access controls are explicit, and the remote health probe succeeds. |
+
+`http://localhost:5031` and `http://127.0.0.1:5031` name the remote host itself
+when evaluated there. Setup rejects them for central and LAN modes. Tunnel mode
+must name the listener that actually exists on the remote host. A failed probe
+stops before package installation and prints central URL, tunnel, and LAN
+remediation instead of waiting on a runner request.
+
+The controller is intentionally repeatable after a host wipe:
+
+1. Verify SSH key access, passwordless sudo, .NET 10, and Task Server health
+   from the host.
+2. Install or update the `CodingAgentRunner` NuGet global tool and require
+   version `0.5.0` or newer, then install the Codex and Claude CLIs.
+3. Run host-owned login flows. Codex uses `codex login --device-auth`; the URL
+   and one-time code stay visible in the task conversation. Claude uses
+   `claude auth login --claudeai`. The operator completes browser steps locally,
+   then `codex login status` and `claude auth status --text` report the active
+   account. Credential files are never copied as the normal path.
+4. Atomically write `/etc/agent-runner/runner.env` with the Task Server URL,
+   runner identity, `RUNNER_CLIENT_ID`, and git origin. Install and start the
+   service through systemd. The SSH session never owns the daemon process.
+5. Prove `systemctl is-enabled`, `systemctl is-active`, runner health, and the
+   registered client endpoint before setup completes.
+
+The NuGet package must be published with package type `DotnetTool` and expose
+the `agent-runner` command. A library-only `CodingAgentRunner` package cannot be
+installed with `dotnet tool`; setup reports that packaging mismatch explicitly
+and does not silently switch to a source build. The source-publish procedure
+below remains a troubleshooting and development fallback, not the product
+onboarding path.
 
 ## 1. Provision the host
 
@@ -121,6 +175,7 @@ list.
 | `RUNNER_SERVER_URL` | `--server` | `http://127.0.0.1:5030` | Task Server base URL (or the tunnelled address). |
 | `RUNNER_ID` | `--runner-id` | `agent-runner-<host>` | Stable lease owner identity. Fencing is per task, not per pid. |
 | `RUNNER_NAME` | `--runner-name` | `agent-runner-01` | Board-facing runner/project name. |
+| `RUNNER_CLIENT_ID` | `--client-id` | (self-register) | Existing host identity shown in Remote Hosts. When set, startup verifies this exact X-Client-Id and refuses to create a replacement identity. |
 | `RUNNER_GIT_REMOTE` | `--git-remote` | (required) | Origin the code is fetched from. |
 | `RUNNER_BRANCH` | `--branch` | (base branch) | Branch to check out for the run. |
 | `RUNNER_BASE_BRANCH` | `--base-branch` | `main` | Fallback when the task branch is absent on origin. |
@@ -183,8 +238,10 @@ sudo journalctl -u agent-runner -f
 ```
 
 At minimum, `runner.env` sets `RUNNER_SERVER_URL`, `RUNNER_GIT_REMOTE`,
-`RUNNER_ID`, and `RUNNER_NAME`. The unit restarts after failures, logs to
-journald, requests graceful SIGINT shutdown, and best-effort starts
+`RUNNER_ID`, and `RUNNER_NAME`. Product onboarding also sets
+`RUNNER_CLIENT_ID`, so the configured identity and its `LastSeen` record remain
+stable across reinstalls. The unit restarts after failures, logs to journald,
+requests graceful SIGINT shutdown, and best-effort starts
 `~/bin/stack-start.sh` before the daemon so host-local screenshot runs have a
 clean Mode-A Studio stack.
 
@@ -221,14 +278,17 @@ a service. Both are covered in
 The Task Server guards every mutation behind an `X-Client-Id` registration
 boundary (`ClientIdentityMiddleware`): a POST from an id the server has never
 seen is rejected `401 client-unknown`. Reads (prompt fetch) stay open, but the
-lease, log, artifact, and external-completion writes do not. The runner
-therefore **self-registers before its first write**: on startup it POSTs its
-`RUNNER_NAME` to `/api/clients/register` (an open-path route) and adopts the
-server-assigned id as its `X-Client-Id` for the rest of the run. Registration is
-idempotent on the name, so restarts reuse the same identity and the board
-attributes the completion to the same runner. No operator action is needed; this
-is documented so a `401 client-unknown` in the logs points at the right cause
-(usually a reverse proxy stripping the `X-Client-Id` header).
+lease, log, artifact, and external-completion writes do not. Product onboarding
+sets `RUNNER_CLIENT_ID` to the existing host identity. Startup authenticates a
+`GET /api/clients/{id}` with that header before its first write; an unknown or
+retired id is a hard error, and the runner does not create a replacement. This
+verification also refreshes `LastSeen` through the normal middleware path.
+
+When `RUNNER_CLIENT_ID` is omitted for a manual/legacy install, the runner
+self-registers before its first write: it POSTs `RUNNER_NAME` to
+`/api/clients/register` (an open-path route) and adopts the server-assigned id.
+Registration is idempotent on the name. A `401 client-unknown` therefore points
+to a wrong configured id or a reverse proxy stripping `X-Client-Id`.
 
 ## 6. Acceptance walkthrough
 
@@ -239,6 +299,16 @@ The task passes RM-5 acceptance when, after the runner exits `0`:
 - `logs/cli-output.log` on the server shows the remote CLI output; and
 - the uploaded evidence is present under the task's `results/` folder and in the
   workspace evidence commit.
+
+For the full Remote Hosts acceptance, also record the setup task id, the exact
+Task Server URL/topology, `systemctl is-enabled` and `is-active`, both CLI auth
+status outputs, and the runner client id from `GET /api/clients`. Its
+`lastSeenAt` must become fresh after the daemon begins polling. Finally assign a
+Ready probe task through the normal project execution setting and verify that
+the remote runner badge, fenced lease timeline, CLI log upload, result upload,
+and external completion all name the same runner. This is the AGT-1923 probe
+mechanic; do not substitute the static frontend readiness fixture for this
+proof.
 
 ## Troubleshooting
 

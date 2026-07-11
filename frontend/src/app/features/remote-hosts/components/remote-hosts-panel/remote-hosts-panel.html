@@ -35,12 +35,6 @@
     <span class="rh__count"><strong>{{ remoteCount() }}</strong> remote</span>
   </div>
 
-  <app-visible-cli-task-card
-    class="rh__onboarding"
-    [request]="onboardingTask"
-    [workspaces]="workspaces()"
-    (taskCreated)="openTask.emit($event)" />
-
   @if (error(); as err) {
     <div class="rh__error" data-testid="remote-hosts-error">{{ err }}</div>
   }
@@ -54,11 +48,23 @@
 
   <div class="rh__list">
     @for (host of hosts(); track host.id) {
-      <app-remote-host-card [host]="host" [now]="now()" (action)="onAction($event)" />
+      <app-remote-host-card
+        [host]="host"
+        [now]="now()"
+        (action)="onAction($event)"
+        (setup)="openSetup($event)" />
     }
   </div>
 
   @if (wizardOpen()) {
     <app-add-host-wizard (cancelled)="closeWizard()" (completed)="completeWizard($event)" />
+  }
+
+  @if (setupHost(); as host) {
+    <app-runner-setup-dialog
+      [host]="host"
+      [workspaces]="workspaces()"
+      (cancelled)="closeSetup()"
+      (taskCreated)="onSetupTaskCreated($event)" />
   }
 </div>

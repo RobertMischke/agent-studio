@@ -6,9 +6,9 @@ import type { CliType } from '../../../models/task.model';
  * The "Remote Hosts" settings page shows every execution location - the
  * operator's local machine and each remote runner host - in one list, so the
  * whole fleet reads as a single picture (see
- * docs/research/remote-ready-kickoff-2026-07.md). The registry is served
- * statically from configuration for now (UI first); the same shapes are what a
- * runner heartbeat / lease payload will later fill in.
+ * docs/research/remote-ready-kickoff-2026-07.md). Host definitions are seeded
+ * from configuration and their liveness is hydrated from the Task Server client
+ * registry, whose LastSeen timestamp is refreshed by real runner requests.
  */
 
 /** Where a host sits relative to the operator. */
@@ -72,6 +72,8 @@ export interface RemoteHost {
   role: HostRole;
   /** SSH target for remote hosts; null for the local machine. */
   address: string | null;
+  /** Task-server client identity used as X-Client-Id by this host. */
+  clientId: string;
   status: HostHeartbeatStatus;
   os: string;
   /** ISO timestamp of the last heartbeat, or null if never seen. */
