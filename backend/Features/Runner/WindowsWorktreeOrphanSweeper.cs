@@ -103,15 +103,7 @@ internal static class WindowsWorktreeOrphanSweeper
     {
         try
         {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = "taskkill.exe",
-                ArgumentList = { "/F", "/T", "/PID", pid.ToString(System.Globalization.CultureInfo.InvariantCulture) },
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            });
+            using var process = Process.Start(BuildTaskKillStartInfo(pid));
             if (process is null) return false;
             process.WaitForExit(5_000);
             return process.HasExited && process.ExitCode == 0;
@@ -121,5 +113,22 @@ internal static class WindowsWorktreeOrphanSweeper
             logger.LogWarning(ex, "worktree-orphan boot taskkill failed for PID {Pid}", pid);
             return false;
         }
+    }
+
+    internal static ProcessStartInfo BuildTaskKillStartInfo(int pid)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "taskkill.exe",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        startInfo.ArgumentList.Add("/F");
+        startInfo.ArgumentList.Add("/T");
+        startInfo.ArgumentList.Add("/PID");
+        startInfo.ArgumentList.Add(pid.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return startInfo;
     }
 }

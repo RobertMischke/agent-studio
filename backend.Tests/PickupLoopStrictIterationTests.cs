@@ -318,6 +318,22 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
 
         var runner = BuildRunner();
         runner.SetMode("auto-continuous");
+
+        // Attempts 1-4 remain retryable: the strict picker returns the same
+        // progress candidate and leaves it in place. The fifth identical busy
+        // preparation failure is the bounded terminal below.
+        runner.SetPickupAttemptsForTest(
+            slug,
+            ProjectRunner.WorktreeBlockedFailureThreshold - 1,
+            ProjectRunner.WorktreeBlockedExecutionStatus,
+            $"Orphan worktree dir busy at {busyPath}; deferring task {slug}.");
+
+        var retryable = InvokePickerLoop(runner);
+
+        Assert.NotNull(retryable);
+        Assert.Equal(slug, retryable!.Id);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, slug)));
+
         runner.SetPickupAttemptsForTest(
             slug,
             ProjectRunner.WorktreeBlockedFailureThreshold,
@@ -351,15 +367,17 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     }
 
     [Fact]
-    public void RevertNoticeLimiter_EmitsOncePerTenMinutes_WithSuppressionCount()
+    public void RepeatedPickReverts_SuppressSameCardForTenMinutes_ThenEmitCountAndReset()
     {
         var runner = BuildRunner();
         var start = new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc);
 
         Assert.Equal((true, 0), runner.TakeRevertLogDecisionForTest("busy-orphan", start));
         Assert.Equal((false, 1), runner.TakeRevertLogDecisionForTest("busy-orphan", start.AddMinutes(1)));
-        Assert.Equal((false, 2), runner.TakeRevertLogDecisionForTest("busy-orphan", start.AddMinutes(9)));
-        Assert.Equal((true, 2), runner.TakeRevertLogDecisionForTest("busy-orphan", start.AddMinutes(10)));
+        Assert.Equal((false, 2), runner.TakeRevertLogDecisionForTest("busy-orphan", start.AddMinutes(5)));
+        Assert.Equal((false, 3), runner.TakeRevertLogDecisionForTest("busy-orphan", start.AddMinutes(9).AddSeconds(59)));
+        Assert.Equal((true, 3), runner.TakeRevertLogDecisionForTest("busy-orphan", start.AddMinutes(10)));
+        Assert.Equal((false, 1), runner.TakeRevertLogDecisionForTest("busy-orphan", start.AddMinutes(11)));
         Assert.Equal((true, 0), runner.TakeRevertLogDecisionForTest("another-task", start.AddMinutes(1)));
     }
 

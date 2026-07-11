@@ -6,6 +6,17 @@ namespace AgentStudio.Tests;
 public sealed class WindowsWorktreeOrphanSweeperTests
 {
     [Fact]
+    public void BuildTaskKillStartInfo_UsesForcedWholeTreeTermination()
+    {
+        var startInfo = WindowsWorktreeOrphanSweeper.BuildTaskKillStartInfo(16208);
+
+        Assert.Equal("taskkill.exe", startInfo.FileName);
+        Assert.Equal(new[] { "/F", "/T", "/PID", "16208" }, startInfo.ArgumentList);
+        Assert.False(startInfo.UseShellExecute);
+        Assert.True(startInfo.CreateNoWindow);
+    }
+
+    [Fact]
     public void SelectCandidates_OnlyReturnsDetachedHelpersBoundToTaskWorktrees()
     {
         var processes = new[]
