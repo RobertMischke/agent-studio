@@ -1,7 +1,7 @@
 # Git Info Performance, AGT-2007
 
-Date: 2026-07-11  
-Host: Windows 10.0.26200, 16 logical processors  
+Date: 2026-07-11
+Host: Windows 10.0.26200, 16 logical processors
 Reference checkout: this Agent Studio task worktree, sharing the reference repository object and ref database
 
 ## Result
@@ -11,13 +11,17 @@ the median of 15 samples from `GitInfoPerfMeasurementTests`.
 
 | Path | Before | After cold | After warm | Target |
 |---|---:|---:|---:|---:|
-| `tasks/git/status` | 567 ms | 346 ms | 0 ms | cold < 2 s, warm < 500 ms |
+| `tasks/git/status` | 332 ms | 177 ms | < 1 ms | cold < 2 s, warm < 500 ms |
 
 The before path reproduces the previous six serial processes: repository root,
 worktree list, porcelain status, branch, staged and unstaged numstat. The cold
 path caches no status or repository-root result and runs the four independent
 status reads concurrently. The warm path serves the one-second task-detail
 status cache and starts no git process.
+
+These values are from a fresh rerun in the final task worktree. The earlier
+recorded run measured 567 ms before, 346 ms cold after and below 1 ms warm
+after, so both runs satisfy the target with substantial margin.
 
 The original full harness also measured the batched provenance algorithm on the
 same host. It replaces two `merge-base --is-ancestor` processes per attributed
