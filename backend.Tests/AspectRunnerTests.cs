@@ -198,6 +198,22 @@ public class AspectRunnerTests : IDisposable
         Assert.Equal(AspectStatus.Concerns, AspectVerdictParsing.ReadStatusFromReport(content));
     }
 
+    [Fact]
+    public async Task SparkReply_WithMalformedVerdict_UsesDeterministicUnparseableConcern()
+    {
+        var runner = BuildRunner(_ => "Analysis complete. [[ASPECT_VERDICT: status=maybe; summary=looks fine]]");
+
+        var report = await runner.RunAsync(BuildInputs(), ["documentation-impact"],
+            CliTypes.Codex, "gpt-5.6-codex-spark", TimeSpan.FromSeconds(5), CancellationToken.None,
+            modelForAspect: _ => "gpt-5.6-codex-spark",
+            cliForAspect: _ => CliTypes.Codex);
+
+        var verdict = Assert.Single(report.Verdicts);
+        Assert.Equal(AspectStatus.Concerns, verdict.Status);
+        Assert.Equal("Aspect runner produced no parseable verdict.", verdict.Summary);
+        Assert.Equal("review:unparseable", verdict.ConcernTagId);
+    }
+
     [Theory]
     [InlineData("Looks fine.\n\nStatus: pass", AspectStatus.Pass)]
     [InlineData("**Status:** concerns\n\nNeeds review.", AspectStatus.Concerns)]

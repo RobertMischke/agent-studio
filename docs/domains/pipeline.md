@@ -27,9 +27,12 @@ pipeline view.
 
 - `backend/Features/Pipeline/ModelQualificationService.cs`: zero-token PRE-step
   that classifies the task in project context and maps it onto the selected
-  CLI's live model/reasoning ladders. `IModelEconomyAdvisor` is the stable seam
-  for `TokenEconomy.SuggestModel`; the local catalogue advisor is used until
-  that package is available.
+  CLI's live model/reasoning ladders. `IModelEconomyAdvisor` is the stable
+  `TokenEconomy.SuggestModel` seam.
+- `backend/Features/Pipeline/PipelineStepEconomyAdvisor.cs`: opt-in automated
+  recommendation layer for cheap pipeline work. It passes only live-discovered
+  Spark candidates to `IModelEconomyAdvisor`, preserves explicit step pins, and
+  falls back to the normal runtime model when no qualified Spark model exists.
 - `backend/Services/Pipeline/PipelineCatalogue.cs`: standard and read-only
   pipeline definitions, step ids, default ordering, step run modes, and display
   names.
@@ -143,11 +146,15 @@ pipeline view.
   preserve the current runtime default. Aspect reviews and abort review honor
   all three fields. Spark model ids are selected from the live Codex catalogue,
   not pinned in the static registry, because the entitlement model can change.
-  This is the execution seam for a future `TokenEconomy.SuggestModel` capability
-  matrix: the advisor may recommend a qualified low-cost model, while
-  `pre-model-qualification` (AGT-2146) remains the evidence-producing guard and
-  explicit operator pins continue to win. Coding CORE runs are not routed to
-  Spark by this feature.
+  Setting `economyModel: true` on an aspect activates the automated
+  `TokenEconomy.SuggestModel` path against the live Spark subset. The
+  `pre-model-qualification` step (AGT-2146) remains the evidence-producing guard,
+  explicit step pins continue to win, and a missing Spark candidate preserves
+  the current runtime default. Coding CORE runs are not routed to Spark by this
+  feature.
+  Aspect output validation is unchanged and deterministic across models: valid
+  sentinels map to the three aspect statuses, while a malformed Spark reply maps
+  to `Concerns` plus `review:unparseable` through the existing parser path.
 - Aspect and code-review prompts carry a complete evidence set (AGT-2022): the
   run-window diff summary is appended with the task-branch-vs-base commit range
   (`base..task/<id>` via `GitService.GetCommitsInRangeAtRoot`) so a squash/merge

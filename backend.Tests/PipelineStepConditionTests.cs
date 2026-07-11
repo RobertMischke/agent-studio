@@ -307,4 +307,24 @@ public class PipelineStepConditionTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    [Fact]
+    public void SetPipelineStep_EconomyModelOnly_PersistsAsOptIn()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "atp-economy-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var svc = NewService(dir);
+            svc.SetPipelineStep("Proj", "aspect-code-quality", new PipelineStepSetting { EconomyModel = true });
+
+            var stored = svc.Get("Proj").PipelineSteps!["aspect-code-quality"];
+            Assert.True(stored.EconomyModel);
+            Assert.True(NewService(dir).Get("Proj").PipelineSteps!["aspect-code-quality"].EconomyModel);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 }

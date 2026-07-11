@@ -573,6 +573,7 @@ public record SetPipelineStepRequest
     /// <summary>Full pipeline step id (e.g. <c>aspect-code-quality</c>) or bare suffix (<c>code-quality</c>).</summary>
     public string StepId { get; init; } = "";
     public bool? Enabled { get; init; }
+    public bool? EconomyModel { get; init; }
     public string? Mode { get; init; }
     public string? CliType { get; init; }
     public string? Model { get; init; }

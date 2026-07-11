@@ -184,6 +184,7 @@ public static class ProjectSettingsEndpoints
                     // the runtime actually resolves through PipelineStepConfigResolver
                     // expose the shared CLI/model/thinking controls.
                     usesModel = PipelineStepModelDefaults.UsesModel(s),
+                    supportsEconomyModel = s.Kind == StepKind.Aspect,
                     usesPrompt = PipelineStepModelDefaults.UsesModel(s),
                     supportsMode = s.Kind is StepKind.Tool or StepKind.Orchestrator,
                     cliType,
@@ -250,6 +251,7 @@ public static class ProjectSettingsEndpoints
             settings.SetPipelineStep(projectName, req.StepId, new PipelineStepSetting
             {
                 Enabled = req.Enabled,
+                EconomyModel = req.EconomyModel,
                 Mode = req.Mode,
                 CliType = req.CliType,
                 Model = req.Model,

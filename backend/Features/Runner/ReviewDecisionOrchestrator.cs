@@ -159,6 +159,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     public Func<string, string?, RegressionRadarResult>? RegressionRadarAnalyzer { get; set; }
     private readonly TimelineLog? _timeline;
     private readonly ProjectSettingsService? _projectSettings;
+    private readonly PipelineStepEconomyAdvisor? _pipelineStepEconomy;
     private readonly WorkspaceArtifactCommitService? _workspaceArtifactCommits;
     // The automatic code-review quality-grade step (ASS-1657). Optional so the
     // many stand-alone test constructors that wire the orchestrator without it
@@ -215,7 +216,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         TaskSpawnerPostStepRunner? taskSpawner = null,
         WikiTaskCrossReferenceService? wikiTaskCrossReferences = null,
         AgentsWikiSyncPostStepRunner? agentsWikiSync = null,
-        WorkstreamCollectorPostStepRunner? workstreamCollector = null)
+        WorkstreamCollectorPostStepRunner? workstreamCollector = null,
+        PipelineStepEconomyAdvisor? pipelineStepEconomy = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -228,6 +230,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _logger = logger;
         _usage = usage;
         _oneShotRegistry = oneShotRegistry;
+        _pipelineStepEconomy = pipelineStepEconomy;
         _sessions = sessions;
         _git = git;
         _pipelineLog = pipelineLog;
@@ -1589,16 +1592,32 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var enabledAspects = aspects
             .Where(id => PipelineStepConfigResolver.ShouldRun(settings, $"aspect-{id}", conditionContext))
             .ToList();
+        var economyRecommendations = new Dictionary<string, PipelineStepEconomyRecommendation>(StringComparer.OrdinalIgnoreCase);
+        if (_pipelineStepEconomy is not null)
+        {
+            foreach (var aspectId in enabledAspects)
+            {
+                var recommendation = await _pipelineStepEconomy.SuggestModelAsync(
+                    settings, $"aspect-{aspectId}", ct);
+                if (recommendation is not null) economyRecommendations[aspectId] = recommendation;
+            }
+        }
         Func<string, string>? modelForAspect = settings is null
             ? null
-            : aspectId => PipelineStepConfigResolver.ResolveModel(settings, $"aspect-{aspectId}", aspectModel);
+            : aspectId => economyRecommendations.TryGetValue(aspectId, out var recommendation)
+                ? recommendation.Model
+                : PipelineStepConfigResolver.ResolveModel(settings, $"aspect-{aspectId}", aspectModel);
         Func<string, string?>? cliForAspect = settings is null
             ? null
-            : aspectId => PipelineStepConfigResolver.ResolveCliType(settings, $"aspect-{aspectId}") ?? CliTypes.Claude;
+            : aspectId => economyRecommendations.TryGetValue(aspectId, out var recommendation)
+                ? recommendation.CliType
+                : PipelineStepConfigResolver.ResolveCliType(settings, $"aspect-{aspectId}") ?? CliTypes.Claude;
         Func<string, string?>? thinkingLevelForAspect = settings is null
             ? null
             : aspectId =>
             {
+                if (economyRecommendations.TryGetValue(aspectId, out var recommendation))
+                    return recommendation.ThinkingLevel;
                 var resolvedModel = modelForAspect?.Invoke(aspectId) ?? aspectModel;
                 return PipelineStepConfigResolver.ResolveThinkingLevel(
                     settings,

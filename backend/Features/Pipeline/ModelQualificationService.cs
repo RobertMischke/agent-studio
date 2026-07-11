@@ -16,7 +16,7 @@ public enum TaskComplexity
 /// </summary>
 public interface IModelEconomyAdvisor
 {
-    ModelEconomySuggestion Suggest(
+    ModelEconomySuggestion SuggestModel(
         IReadOnlyList<CliModelInfo> availableModels,
         TaskComplexity complexity);
 }
@@ -33,7 +33,7 @@ public sealed record ModelEconomySuggestion(
 /// </summary>
 public sealed class CatalogueModelEconomyAdvisor : IModelEconomyAdvisor
 {
-    public ModelEconomySuggestion Suggest(
+    public ModelEconomySuggestion SuggestModel(
         IReadOnlyList<CliModelInfo> availableModels,
         TaskComplexity complexity)
     {
@@ -175,7 +175,7 @@ public sealed class ModelQualificationService
         var surface = architectureHits > 0
             ? (areas >= 3 ? "cross-cutting architecture" : "backend/architecture")
             : polishHits > 0 ? "frontend polish" : "general";
-        var recommendation = _economy.Suggest(catalogue.Models, complexity);
+        var recommendation = _economy.SuggestModel(catalogue.Models, complexity);
 
         var modelExplicit = task.ModelExplicit;
         var thinkingExplicit = task.ThinkingLevelExplicit;

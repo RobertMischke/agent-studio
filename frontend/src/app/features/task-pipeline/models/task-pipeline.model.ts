@@ -228,6 +228,7 @@ export interface PipelineCatalogueStep {
   resolvedThinkingLevel?: string | null;
   thinkingLevelSource?: string | null;
   usesModel: boolean;
+  supportsEconomyModel?: boolean;
   usesPrompt: boolean;
   supportsMode: boolean;
   cliType?: string | null;
@@ -280,6 +281,7 @@ export interface PipelineCatalogue {
  */
 export interface PipelineStepSetting {
   enabled?: boolean | null;
+  economyModel?: boolean | null;
   mode?: string | null;
   cliType?: string | null;
   model?: string | null;

@@ -402,6 +402,13 @@ public record PipelineStepCondition
 public record PipelineStepSetting
 {
     /// <summary>
+    /// Opts this LLM-backed step into the TokenEconomy recommendation path.
+    /// An explicit per-step <see cref="Model"/> still wins. The runtime falls
+    /// back to its normal model when no qualified economy model is available.
+    /// </summary>
+    public bool? EconomyModel { get; init; }
+
+    /// <summary>
     /// When <c>false</c>, the step is skipped for this project. Null or
     /// <c>true</c> leaves the step enabled. Only honoured for steps the
     /// runtime can actually skip (today: the aspect post-steps and the

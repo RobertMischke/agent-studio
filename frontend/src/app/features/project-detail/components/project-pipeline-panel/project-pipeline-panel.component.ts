@@ -37,7 +37,6 @@ import {
   stepTokenLabel,
   stepTokenTooltip,
 } from './pipeline-config.util';
-
 /**
  * Project-level Pipeline page (Nav-rebuild step 3 / T4a). Renders the
  * pre/core/post step catalogue as a calm CSS grid where each configurable
@@ -62,10 +61,8 @@ import {
 })
 export class ProjectPipelinePanelComponent {
   readonly projectName = input.required<string>();
-
   /** Deep-link to the Prompts registry rail (content is managed there). */
   readonly openPrompts = output<void>();
-
   private readonly jobService = inject(TaskService);
 
   readonly catalogue = signal<readonly PipelineCatalogueStep[]>([]);
@@ -130,12 +127,14 @@ export class ProjectPipelinePanelComponent {
         stub: step.stub ?? false,
         deferred: step.deferred ?? false,
         usesModel: step.usesModel,
+        supportsEconomyModel: step.supportsEconomyModel ?? false,
         usesPrompt: step.usesPrompt,
         supportsMode: step.supportsMode,
         canDisable: step.canDisable,
         supportsCondition: step.supportsCondition,
         phase: step.phase ?? phaseForStep(step),
         enabled: ov?.enabled ?? step.defaultEnabled,
+        economyModel: ov?.economyModel ?? false,
         cliType: ov?.cliType ?? step.cliType ?? '',
         model: ov?.model ?? '',
         thinkingLevel: ov?.thinkingLevel ?? '',
@@ -331,11 +330,8 @@ export class ProjectPipelinePanelComponent {
     stepId: string,
     selection: { cliType: CliType; model: string; thinkingLevel: string | null },
   ): void {
-    this.writeStep(stepId, {
-      cliType: selection.cliType,
-      model: selection.model,
-      thinkingLevel: selection.thinkingLevel,
-    });
+    this.writeStep(stepId, { economyModel: false, cliType: selection.cliType,
+      model: selection.model, thinkingLevel: selection.thinkingLevel });
   }
 
   /**
@@ -401,10 +397,11 @@ export class ProjectPipelinePanelComponent {
    * resent). `enabled` is sent as null when it equals the built-in default
    * so an at-default step clears its entry instead of leaving a dead one.
    */
-  private writeStep(
+  writeStep(
     stepId: string,
     patch: {
       enabled?: boolean;
+      economyModel?: boolean;
       cliType?: string;
       model?: string;
       thinkingLevel?: string | null;
@@ -416,6 +413,7 @@ export class ProjectPipelinePanelComponent {
     const cur = this.overrides()[stepId] ?? {};
     const defaultEnabled = this.catalogue().find(s => s.id === stepId)?.defaultEnabled ?? true;
     const enabled = patch.enabled ?? (cur.enabled ?? defaultEnabled);
+    const economyModel = patch.economyModel ?? (cur.economyModel ?? false);
     const model = (patch.model ?? cur.model ?? '').trim();
     const cliType = (patch.cliType ?? cur.cliType ?? '').trim();
     const thinkingLevel = (patch.thinkingLevel !== undefined ? patch.thinkingLevel : (cur.thinkingLevel ?? ''))?.trim() ?? '';
@@ -427,6 +425,7 @@ export class ProjectPipelinePanelComponent {
     this.jobService.setProjectPipelineStep(this.projectName(), {
       stepId,
       enabled: enabled === defaultEnabled ? null : enabled,
+      economyModel: economyModel || null,
       cliType: cliType || null,
       model: model || null,
       thinkingLevel: thinkingLevel || null,
@@ -460,6 +459,7 @@ export class ProjectPipelinePanelComponent {
 
   modelSummary(step: PipelineAdminRow): string {
     if (!step.usesModel) return 'no model';
+    if (step.economyModel && !step.model) return 'Spark auto';
     return step.effectiveModel || 'runtime default';
   }
 

@@ -1819,6 +1819,7 @@ export class TaskService {
     step: {
       stepId: string;
       enabled?: boolean | null;
+      economyModel?: boolean | null;
       mode?: string | null;
       cliType?: string | null;
       model?: string | null;
