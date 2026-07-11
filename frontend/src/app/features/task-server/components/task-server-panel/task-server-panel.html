@@ -1,0 +1,132 @@
+<div class="ts" data-testid="task-server-panel">
+  <header class="ts__head">
+    <div class="ts__intro">
+      <h2 class="ts__title">Task Server</h2>
+      <p class="ts__subtitle">
+        The durable task server the whole platform talks to. Read its connected
+        URL, the workspace store it owns, the git-backed evidence status, and the
+        registered clients - then run a maintenance sweep from Management.
+      </p>
+    </div>
+    <button class="ts__refresh"
+            type="button"
+            data-testid="task-server-refresh"
+            [disabled]="loading()"
+            (click)="reload()">
+      {{ loading() ? '⏳' : '↻' }}
+      <span>Reload</span>
+    </button>
+  </header>
+
+  @if (error(); as err) {
+    <div class="ts__error" data-testid="task-server-error">{{ err }}</div>
+  }
+
+  @if (status(); as s) {
+    <div class="ts__summary" data-testid="task-server-summary">
+      <span class="ts__count"><strong>{{ s.store.projectCount }}</strong> projects</span>
+      <span class="ts__sep" aria-hidden="true">·</span>
+      <span class="ts__count"><strong>{{ s.store.taskCount }}</strong> tasks</span>
+      <span class="ts__sep" aria-hidden="true">·</span>
+      <span class="ts__count"><strong>{{ s.clients.length }}</strong> clients</span>
+    </div>
+
+    <div class="ts__blocks">
+      @if (connection(); as c) {
+        <section class="ts__block" data-testid="task-server-connection" [attr.data-tone]="healthTone(c.health)">
+          <header class="ts__block-head">
+            <span class="ts__dot" [attr.data-tone]="healthTone(c.health)" aria-hidden="true"></span>
+            <h3 class="ts__block-title">Connection</h3>
+            <span class="ts__badge" [attr.data-tone]="healthTone(c.health)" data-testid="task-server-health">{{ healthLabel(c.health) }}</span>
+          </header>
+          <dl class="ts__rows">
+            <div class="ts__row">
+              <dt>URL</dt>
+              <dd class="ts__mono" data-testid="task-server-url">{{ c.url }}</dd>
+            </div>
+            <div class="ts__row">
+              <dt>Phase</dt>
+              <dd>{{ phaseLabel(c.phase) }} <span class="ts__hint">{{ c.phase === 'local' ? 'localhost today' : 'central URL' }}</span></dd>
+            </div>
+            <div class="ts__row"><dt>Version</dt><dd>{{ c.version || '-' }}</dd></div>
+            <div class="ts__row"><dt>Uptime</dt><dd>{{ c.uptimeLabel || '-' }}</dd></div>
+            <div class="ts__row"><dt>Auth</dt><dd>{{ c.authMode }}</dd></div>
+          </dl>
+        </section>
+      }
+
+      @if (store(); as st) {
+        <section class="ts__block" data-testid="task-server-store">
+          <header class="ts__block-head">
+            <h3 class="ts__block-title">Workspace store</h3>
+            <span class="ts__badge" data-testid="task-server-store-size">{{ formatBytes(st.sizeBytes) }}</span>
+          </header>
+          <dl class="ts__rows">
+            <div class="ts__row">
+              <dt>Root</dt>
+              <dd class="ts__mono" [attr.title]="st.root">{{ st.root }}</dd>
+            </div>
+            <div class="ts__row"><dt>Projects</dt><dd>{{ st.projectCount }}</dd></div>
+            <div class="ts__row"><dt>Active tasks</dt><dd>{{ st.taskCount }}</dd></div>
+            <div class="ts__row"><dt>Archived</dt><dd>{{ st.archivedTaskCount }}</dd></div>
+            <div class="ts__row"><dt>Identities</dt><dd>{{ st.identityCount }}</dd></div>
+          </dl>
+        </section>
+      }
+
+      @if (evidence(); as ev) {
+        <section class="ts__block" data-testid="task-server-evidence" [attr.data-tone]="evidenceStateTone(ev.state)">
+          <header class="ts__block-head">
+            <span class="ts__dot" [attr.data-tone]="evidenceStateTone(ev.state)" aria-hidden="true"></span>
+            <h3 class="ts__block-title">Evidence git</h3>
+            <span class="ts__badge" [attr.data-tone]="evidenceStateTone(ev.state)" data-testid="task-server-evidence-state">{{ evidenceStateLabel(ev.state) }}</span>
+          </header>
+          <dl class="ts__rows">
+            <div class="ts__row"><dt>Branch</dt><dd class="ts__mono">{{ ev.branch }}</dd></div>
+            <div class="ts__row"><dt>Uncommitted</dt><dd>{{ ev.uncommittedFiles }} {{ ev.uncommittedFiles === 1 ? 'file' : 'files' }}</dd></div>
+            <div class="ts__row"><dt>Ahead / behind</dt><dd>{{ ev.ahead }} / {{ ev.behind }}</dd></div>
+            <div class="ts__row">
+              <dt>Last commit</dt>
+              <dd>
+                @if (ev.lastCommitSha) {
+                  <span class="ts__mono">{{ ev.lastCommitSha }}</span> · {{ lastCommitLabel() }}
+                } @else { - }
+              </dd>
+            </div>
+            @if (ev.lastCommitSubject) {
+              <div class="ts__row"><dt></dt><dd class="ts__subject">{{ ev.lastCommitSubject }}</dd></div>
+            }
+          </dl>
+        </section>
+      }
+    </div>
+
+    <section class="ts__section" data-testid="task-server-clients-section">
+      <header class="ts__section-head">
+        <h3 class="ts__section-title">Client registry</h3>
+        <span class="ts__section-count">
+          <strong>{{ s.clients.length }}</strong> {{ s.clients.length === 1 ? 'identity' : 'identities' }}
+        </span>
+      </header>
+      <app-task-server-clients-card [clients]="clients()" [now]="now()" />
+    </section>
+
+    <section class="ts__section" data-testid="task-server-management-section">
+      <header class="ts__section-head">
+        <h3 class="ts__section-title">Management</h3>
+        <span class="ts__section-desc">
+          Store-maintenance sweeps. Applied optimistically while the backend
+          command surface is built - outcomes appear below each run.
+        </span>
+      </header>
+      <app-task-server-management-panel
+        [results]="results()"
+        [busyAction]="busyAction()"
+        (run)="onRun($event)" />
+    </section>
+  } @else if (!loading()) {
+    <div class="ts__empty" data-testid="task-server-empty">
+      No task-server status available.
+    </div>
+  }
+</div>

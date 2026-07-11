@@ -1,0 +1,37 @@
+<section class="mgmt" data-testid="task-server-management">
+  <div class="mgmt__actions">
+    @for (action of actions; track action.kind) {
+      <div class="mgmt__action">
+        <div class="mgmt__action-text">
+          <span class="mgmt__action-label">{{ action.label }}</span>
+          <span class="mgmt__action-desc">{{ action.description }}</span>
+        </div>
+        <button class="mgmt__btn"
+                type="button"
+                [class.mgmt__btn--danger]="action.danger"
+                [attr.data-testid]="'task-server-action-' + action.kind"
+                [disabled]="!!busyAction()"
+                (click)="emit(action.kind)">
+          {{ busyAction() === action.kind ? 'Running…' : 'Run' }}
+        </button>
+      </div>
+    }
+  </div>
+
+  @if (results().length) {
+    <ol class="mgmt__results" data-testid="task-server-results" aria-label="Recent sweep results">
+      @for (result of results(); track result.ranAt + result.kind) {
+        <li class="mgmt__result" [attr.data-testid]="'task-server-result-' + result.kind">
+          <span class="mgmt__result-kind">{{ actionLabel(result.kind) }}</span>
+          <span class="mgmt__result-summary">{{ result.summary }}</span>
+          <span class="mgmt__result-count"
+                [class.mgmt__result-count--none]="result.affected === 0">{{ result.affected }}</span>
+        </li>
+      }
+    </ol>
+  } @else {
+    <p class="mgmt__empty" data-testid="task-server-results-empty">
+      No sweeps run this session. Results appear here after you run one.
+    </p>
+  }
+</section>
