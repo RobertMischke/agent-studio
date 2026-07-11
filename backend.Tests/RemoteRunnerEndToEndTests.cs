@@ -19,6 +19,7 @@ using RAcquire = Runner::AgentRunner.RunLeaseAcquireRequest;
 using RHeartbeat = Runner::AgentRunner.RunLeaseHeartbeatRequest;
 using RRelease = Runner::AgentRunner.RunLeaseReleaseRequest;
 using RClaim = Runner::AgentRunner.RunnerClaimRequest;
+using RTelemetry = Runner::AgentRunner.HostTelemetrySample;
 using RClaimStatus = Runner::AgentRunner.RunnerClaimStatus;
 using RGitCapability = Runner::AgentRunner.RunnerGitCapabilityRequest;
 using RLogIngest = Runner::AgentRunner.LogIngestRequest;
@@ -269,7 +270,9 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
 
         var claim = await client.ClaimAsync(new RClaim(
-            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"), CancellationToken.None);
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner", Telemetry: new RTelemetry(
+                DateTime.UtcNow, 54, 6.4, 6, 5, 34_000_000_000, 64_000_000_000,
+                0, 0, 6.2, 2.1, 12, 6)), CancellationToken.None);
 
         Assert.Equal(RClaimStatus.Claimed, claim.Status);
         Assert.False(string.IsNullOrWhiteSpace(claim.TaskKey));
@@ -281,6 +284,12 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal("develop", claim.DefaultBranch);
         Assert.Equal("Prompt.", await client.ReadTaskFileAsync(claim.TaskKey!, "prompt.md", CancellationToken.None));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
+        var telemetry = await http.GetFromJsonAsync<HostTelemetryResponse>(
+            $"/api/clients/{Uri.EscapeDataString(client.ClientId)}/telemetry?window=1h");
+        Assert.NotNull(telemetry);
+        Assert.Single(telemetry!.Points);
+        Assert.Equal(6.4, telemetry.Points[0].Load1);
+        Assert.Equal(6, telemetry.Points[0].ActiveSlots);
     }
 
     [Fact]

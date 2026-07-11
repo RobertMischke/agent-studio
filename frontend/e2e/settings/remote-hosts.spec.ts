@@ -174,6 +174,40 @@ test.describe('Remote Hosts settings section', () => {
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-read-only--mocked.png'), fullPage: false });
   });
 
+  test('shows persisted performance history, slot context, and a throttling finding', async ({ page }) => {
+    await page.unroute('**/api/clients');
+    await page.route('**/api/clients', route => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify([{
+        id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service',
+        registeredAt: '2026-07-11T18:00:00Z', lastSeenAt: new Date().toISOString(),
+      }]),
+    }));
+    const now = Date.now();
+    const points = Array.from({ length: 8 }, (_, index) => ({
+      timestamp: new Date(now - (7 - index) * 30_000).toISOString(),
+      cpuPercent: 44 + index * 3, load1: 5.7 + index * 0.1, load5: 5.4, load15: 5.1,
+      memoryUsedBytes: 36_000_000_000 + index * 300_000_000, memoryTotalBytes: 64_000_000_000,
+      swapInBytesPerSecond: 0, swapOutBytesPerSecond: 0, cpuStealPercent: 6.2, ioWaitPercent: 2.1,
+      cpuCores: 12, activeSlots: index < 4 ? 5 : 6,
+    }));
+    await page.route('**/api/clients/agent-runner-01/telemetry?window=14d', route => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({
+        clientId: 'agent-runner-01', window: '14d', points,
+        findings: [{ kind: 'vm-throttled', label: 'VM throttled', since: points[0].timestamp, until: points.at(-1)?.timestamp }],
+      }),
+    }));
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expect(remote.getByTestId('remote-host-telemetry')).toBeVisible();
+    await expect(remote.getByTestId('remote-host-slots-context')).toContainText('6 active slots · load 6.4 of 12 cores');
+    await expect(remote.getByTestId('remote-host-findings')).toContainText('VM throttled');
+    await expect(remote.locator('[data-chart]')).toHaveCount(4);
+    await remote.getByTestId('remote-host-window-1h').click();
+    await expect(remote.getByTestId('remote-host-window-1h')).toHaveAttribute('aria-pressed', 'true');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-telemetry--mocked.png'), fullPage: false });
+  });
+
   test('adds a host through the guided four-step setup', async ({ page }) => {
     await page.goto('/#/workspace/settings/remote-hosts');
     await expect(page.getByTestId('remote-hosts-panel')).toBeVisible({ timeout: 5_000 });

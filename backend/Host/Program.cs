@@ -177,6 +177,7 @@ catch (Exception ex)
 }
 
 builder.Services.AddSingleton<ClientIdentityStore>();
+builder.Services.AddSingleton<HostTelemetryStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
 builder.Services.AddSingleton<TaskScannerService>();

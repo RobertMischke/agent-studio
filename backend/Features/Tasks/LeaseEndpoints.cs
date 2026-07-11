@@ -55,6 +55,7 @@ public static class LeaseEndpoints
             RunLeaseService leases,
             HttpContext context,
             AgentStudio.Clients.ClientIdentityStore clients,
+            AgentStudio.Clients.HostTelemetryStore telemetry,
             ILoggerFactory loggerFactory,
             CancellationToken ct) =>
         {
@@ -63,6 +64,10 @@ public static class LeaseEndpoints
                 return Results.BadRequest(new RunnerClaimResponse(RunnerClaimStatus.Invalid, Message: "runnerId and runnerName are required."));
 
             var clientId = context.Request.Headers["X-Client-Id"].ToString();
+            if (req.Telemetry is not null && !string.IsNullOrWhiteSpace(clientId))
+                telemetry.Append(clientId, req.Telemetry);
+            if (req.AvailableSlots <= 0)
+                return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: "telemetry recorded; no free host slots"));
             var client = clients.Find(clientId);
             if (client is not null && string.Equals(client.RunnerGitStatus, "read-only", StringComparison.OrdinalIgnoreCase))
             {

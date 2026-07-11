@@ -12,6 +12,9 @@ export type {
   HostActionKind,
   HostCliQuota,
   HostSystemStats,
+  HostTelemetryPoint,
+  HostTelemetryFinding,
+  HostTelemetrySeries,
   HostStatusTone,
   MeterTone,
 } from './models/remote-host.model';

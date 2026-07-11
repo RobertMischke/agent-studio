@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import type { ClientSummary } from '../../../models/task.model';
-import type { HostActionKind, RemoteHost } from '../models/remote-host.model';
+import type { HostActionKind, HostTelemetrySeries, RemoteHost } from '../models/remote-host.model';
 import { seedRemoteHosts } from './remote-hosts.seed';
 
 /**
@@ -91,11 +91,42 @@ export class RemoteHostsService {
           clients: clients?.length ?? 0,
           durationMs: Math.round(performance.now() - startedAt),
         });
+        for (const host of this.hosts().filter(host => byId.has(host.clientId) && host.status !== 'retired')) {
+          this.hydrateTelemetry(host.id, host.clientId);
+        }
       },
       error: error => this.log('clients-hydrate-failed', {
         message: error?.message ?? 'unknown',
         durationMs: Math.round(performance.now() - startedAt),
       }),
+    });
+  }
+
+  private hydrateTelemetry(hostId: string, clientId: string): void {
+    if (!this.http) return;
+    const startedAt = performance.now();
+    this.http.get<HostTelemetrySeries>(`/api/clients/${encodeURIComponent(clientId)}/telemetry?window=14d`).subscribe({
+      next: telemetry => {
+        this.patch(hostId, host => {
+          const latest = telemetry.points.at(-1);
+          const stats = host.stats && latest
+            ? {
+                ...host.stats,
+                cpuCores: latest.cpuCores || host.stats.cpuCores,
+                cpuLoadPct: latest.cpuPercent ?? host.stats.cpuLoadPct,
+                ramTotalMb: latest.memoryTotalBytes ? latest.memoryTotalBytes / 1024 / 1024 : host.stats.ramTotalMb,
+                ramFreeMb: latest.memoryTotalBytes && latest.memoryUsedBytes !== null
+                  ? (latest.memoryTotalBytes - latest.memoryUsedBytes) / 1024 / 1024
+                  : host.stats.ramFreeMb,
+              }
+            : host.stats;
+          return { ...host, stats, telemetry };
+        });
+        this.log('telemetry-hydrated', { hostId, points: telemetry.points.length, findings: telemetry.findings.length,
+          durationMs: Math.round(performance.now() - startedAt) });
+      },
+      error: error => this.log('telemetry-hydrate-failed', { hostId, message: error?.message ?? 'unknown',
+        durationMs: Math.round(performance.now() - startedAt) }),
     });
   }
 

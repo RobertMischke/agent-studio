@@ -128,6 +128,9 @@ describe('RemoteHostsService client registry hydration', () => {
       runnerGitStatus: 'read-only',
       runnerGitDetail: 'push-dry-run failed (128): permission denied',
     }]);
+    http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
+      clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
+    });
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
       status: 'online',
       lastHeartbeatAt: new Date(now - 30_000).toISOString(),
@@ -147,6 +150,9 @@ describe('RemoteHostsService client registry hydration', () => {
       tokenBudgetMonthly: null,
       notes: null,
     }]);
+    http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
+      clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
+    });
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('degraded');
 
     svc.reload();
@@ -155,6 +161,9 @@ describe('RemoteHostsService client registry hydration', () => {
       kind: 'agent-instance', registeredAt: new Date(now - 900_000).toISOString(),
       lastSeenAt: new Date(now - 600_000).toISOString(), tokenBudgetMonthly: null, notes: null,
     }]);
+    http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
+      clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
+    });
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('offline');
 
     svc.hosts.update(hosts => hosts.map(host =>

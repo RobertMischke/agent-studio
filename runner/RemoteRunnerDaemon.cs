@@ -29,6 +29,16 @@ public sealed class RemoteRunnerDaemon
         _log($"runner-git-capability status={(gitCapability.CanPush ? "ready" : "read-only")} detail={gitCapability.Detail}");
 
         var active = new List<Task<int>>();
+        var telemetry = new HostTelemetrySampler();
+        HostTelemetrySample? TakeTelemetry()
+        {
+            try { return telemetry.SampleIfDue(active.Count); }
+            catch (Exception ex)
+            {
+                _log($"host-telemetry-sample-failed error={ex.GetType().Name} message={ex.Message}");
+                return null;
+            }
+        }
         while (!shutdown.IsCancellationRequested)
         {
             for (var i = active.Count - 1; i >= 0; i--)
@@ -41,11 +51,21 @@ public sealed class RemoteRunnerDaemon
             }
 
             var claimedAny = false;
+            if (active.Count >= _options.HostMaxParallelism)
+            {
+                var sample = TakeTelemetry();
+                if (sample is not null)
+                    _ = await _client.ClaimAsync(new RunnerClaimRequest(
+                        _options.RunnerId, _options.RunnerName, _options.Hostname,
+                        Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
+                        sample, AvailableSlots: 0), shutdown);
+            }
             while (active.Count < _options.HostMaxParallelism && !shutdown.IsCancellationRequested)
             {
                 var claim = await _client.ClaimAsync(new RunnerClaimRequest(
                     _options.RunnerId, _options.RunnerName, _options.Hostname,
-                    Environment.ProcessId, _options.BackendName, _options.TtlSeconds), shutdown);
+                    Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
+                    TakeTelemetry()), shutdown);
                 if (claim.Status != RunnerClaimStatus.Claimed
                     || string.IsNullOrWhiteSpace(claim.TaskKey)
                     || claim.Lease is null)

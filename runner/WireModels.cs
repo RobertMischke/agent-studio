@@ -90,7 +90,25 @@ public sealed record RunnerClaimRequest(
     string Hostname,
     int Pid,
     string BackendName,
-    int? RequestedTtlSeconds = null);
+    int? RequestedTtlSeconds = null,
+    HostTelemetrySample? Telemetry = null,
+    int AvailableSlots = 1);
+
+/// <summary>Thirty-second host snapshot piggybacked on the daemon claim poll.</summary>
+public sealed record HostTelemetrySample(
+    DateTime Timestamp,
+    double? CpuPercent,
+    double? Load1,
+    double? Load5,
+    double? Load15,
+    long? MemoryUsedBytes,
+    long? MemoryTotalBytes,
+    long? SwapInBytesPerSecond,
+    long? SwapOutBytesPerSecond,
+    double? CpuStealPercent,
+    double? IoWaitPercent,
+    int CpuCores,
+    int ActiveSlots);
 
 public enum RunnerClaimStatus { Claimed, Empty, Invalid }
 

@@ -462,3 +462,16 @@ proof.
   registers itself automatically, so this almost always means a reverse proxy or
   tunnel is dropping the `X-Client-Id` request header; forward it, or point
   `RUNNER_SERVER_URL` straight at the Studio.
+## Reading host telemetry
+
+The runner samples the host every 30 seconds and piggybacks the sample on its existing Task Server claim poll. The Remote Hosts view keeps CPU, memory, Linux load averages, swap traffic, CPU steal time, I/O wait, core count, and active runner slots together. Use the 1h, 6h, 48h, and 14d controls to compare load with concurrency. For example, `6 active slots · load 6.4 of 12 cores` is direct evidence for whether the current slot limit leaves headroom.
+
+Linux values come from `/proc/stat`, `/proc/loadavg`, `/proc/meminfo`, and `/proc/vmstat`. Windows runners report CPU and memory where the operating system exposes them without an additional agent; Linux-only fields remain empty. Raw 30-second samples are retained for 48 hours. Older samples are compacted into five-minute averages and retained for 14 days. The series is persisted below the workspace store in `telemetry/<client-id>.json`, so a backend restart does not erase it.
+
+The host card raises these sustained findings after at least three consecutive samples:
+
+- **VM throttled**: CPU steal time stays above 5 percent. On a virtual machine, this means the hypervisor is withholding scheduled CPU time.
+- **Oversubscribed**: the one-minute load average stays above the reported core count. Compare the active-slots line before increasing parallelism.
+- **Memory pressure**: combined swap-in and swap-out traffic stays above 64 KiB/s. A single historical swap allocation without traffic does not trigger this finding.
+
+Short spikes remain visible in the quiet history chart but do not create a badge. Check I/O wait alongside CPU when load is high: high load with low CPU and elevated I/O wait usually points to storage contention rather than missing cores.

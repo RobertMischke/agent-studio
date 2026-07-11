@@ -67,6 +67,13 @@ public static class ClientEndpoints
                 : Results.NotFound(new { error = "client-not-found" });
         });
 
+        clients.MapGet("/{id}/telemetry", (string id, string? window, ClientIdentityStore identities, HostTelemetryStore telemetry) =>
+        {
+            if (identities.Find(id) is null) return Results.NotFound(new { error = "client-not-found" });
+            var selected = window is "1h" or "6h" or "48h" or "14d" ? window : "48h";
+            return Results.Ok(telemetry.Query(id, selected));
+        });
+
         clients.MapPost("/{id}/runner-git-capability", (string id, RunnerGitCapabilityRequest? request, HttpContext context, ClientIdentityStore store) =>
         {
             if (request is null || request.Status is not ("ready" or "read-only"))

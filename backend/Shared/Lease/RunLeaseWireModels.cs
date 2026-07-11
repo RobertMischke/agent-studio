@@ -79,7 +79,9 @@ public sealed record RunnerClaimRequest(
     string Hostname,
     int Pid,
     string BackendName,
-    int? RequestedTtlSeconds = null);
+    int? RequestedTtlSeconds = null,
+    AgentStudio.Clients.HostTelemetrySample? Telemetry = null,
+    int AvailableSlots = 1);
 
 /// <summary>Typed status handed back by one daemon pickup poll.</summary>
 public enum RunnerClaimStatus

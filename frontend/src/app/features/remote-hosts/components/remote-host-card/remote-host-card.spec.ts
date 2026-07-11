@@ -28,6 +28,7 @@ const HOST: RemoteHost = {
 };
 
 function mount(host: RemoteHost) {
+  TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     imports: [RemoteHostCardComponent],
     providers: [provideZonelessChangeDetection()],
@@ -95,5 +96,28 @@ describe('RemoteHostCardComponent', () => {
     const el: HTMLElement = mount({ ...HOST, status: 'retired', stats: null }).nativeElement;
     expect(el.querySelector('[data-testid="remote-host-no-stats"]')).toBeTruthy();
     expect(el.querySelectorAll('.meter').length).toBe(0);
+  });
+
+  it('renders telemetry charts, slot context, findings, and switches windows', () => {
+    const telemetry = {
+      clientId: 'agent-runner', window: '14d',
+      points: [
+        { timestamp: '2026-07-10T11:00:00Z', cpuPercent: 42, load1: 5.8, load5: 5, load15: 4,
+          memoryUsedBytes: 32e9, memoryTotalBytes: 64e9, swapInBytesPerSecond: 0, swapOutBytesPerSecond: 0,
+          cpuStealPercent: 6, ioWaitPercent: 2, cpuCores: 12, activeSlots: 5 },
+        { timestamp: '2026-07-10T11:59:30Z', cpuPercent: 54, load1: 6.4, load5: 6, load15: 5,
+          memoryUsedBytes: 34e9, memoryTotalBytes: 64e9, swapInBytesPerSecond: 0, swapOutBytesPerSecond: 0,
+          cpuStealPercent: 7, ioWaitPercent: 3, cpuCores: 12, activeSlots: 6 },
+      ],
+      findings: [{ kind: 'vm-throttled' as const, label: 'VM throttled', since: '2026-07-10T11:58:00Z', until: '2026-07-10T11:59:30Z' }],
+    };
+    const fixture = mount({ ...HOST, telemetry });
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelectorAll('.telemetry__row').length).toBe(4);
+    expect(el.querySelector('[data-testid="remote-host-slots-context"]')?.textContent).toContain('6 active slots · load 6.4 of 12 cores');
+    expect(el.querySelector('[data-testid="remote-host-findings"]')?.textContent).toContain('VM throttled');
+    (el.querySelector('[data-testid="remote-host-window-1h"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.telemetryWindow()).toBe('1h');
   });
 });
