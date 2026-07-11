@@ -140,6 +140,63 @@ async function proxyBackend(page: Page, backendBaseUrl: string): Promise<void> {
   });
 }
 
+interface RealProjectTarget {
+  name: string;
+  cleanup: () => Promise<void>;
+}
+
+async function resolveRealProject(backendBaseUrl: string): Promise<RealProjectTarget> {
+  const watchPathsResponse = await fetch(`${backendBaseUrl}/api/watch-paths`);
+  expect(watchPathsResponse.ok).toBe(true);
+  const watchPaths = await watchPathsResponse.json() as { name: string }[];
+  if (watchPaths.length > 0) {
+    return {
+      name: watchPaths.find(item => /agent.?task/i.test(item.name))?.name ?? watchPaths[0].name,
+      cleanup: async () => undefined,
+    };
+  }
+
+  const workspacesResponse = await fetch(`${backendBaseUrl}/api/workspaces`);
+  expect(workspacesResponse.ok).toBe(true);
+  const workspaces = await workspacesResponse.json() as { id: string }[];
+  expect(workspaces.length, 'The dev backend must expose a workspace for isolated project provisioning.').toBeGreaterThan(0);
+
+  const suffix = Date.now().toString(36).slice(-5).toUpperCase();
+  const name = `Overview Evidence ${suffix}`;
+  const createResponse = await fetch(`${backendBaseUrl}/api/projects`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      sourceType: 'local-folder',
+      workspaceId: workspaces[0].id,
+      displayName: name,
+      shortCode: `E${suffix}`,
+    }),
+  });
+  const createBody = await createResponse.text();
+  expect(createResponse.ok, `Could not provision an isolated real-source project: ${createBody}`).toBe(true);
+  const created = JSON.parse(createBody) as { id: string; displayName: string };
+
+  await expect.poll(async () => {
+    const response = await fetch(`${backendBaseUrl}/api/watch-paths`);
+    if (!response.ok) return false;
+    const paths = await response.json() as { name: string }[];
+    return paths.some(item => item.name === created.displayName);
+  }).toBe(true);
+
+  return {
+    name: created.displayName,
+    cleanup: async () => {
+      const response = await fetch(`${backendBaseUrl}/api/projects/${encodeURIComponent(created.id)}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok && response.status !== 404) {
+        throw new Error(`Could not remove isolated real-source project ${created.id}: ${await response.text()}`);
+      }
+    },
+  };
+}
+
 async function mockDashboard(page: Page): Promise<{ startedUrl: () => boolean; taskRequested: () => boolean }> {
   let offlineStarted = false;
   let planningTaskRequested = false;
@@ -306,28 +363,22 @@ test.describe('Project Overview · operator dashboard', () => {
 
     // Switch from deterministic routes to this worktree's fixture backend and
     // persist a separately labelled real-source pair.
-    const response = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
-    expect(response.ok).toBe(true);
-    const paths = await response.json() as { name: string }[];
-    if (paths.length === 0) {
-      test.info().annotations.push({
-        type: 'real-source-evidence',
-        description: 'Dev-backend fixture has no configured watch paths; mocked both-theme evidence was captured.',
-      });
-      return;
-    }
-    const realProjectName = paths.find(item => /agent.?task/i.test(item.name))?.name ?? paths[0].name;
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
-    await proxyBackend(page, devBackend.baseUrl);
-    await openDashboard(page, realProjectName, true);
-    await expect(page.getByTestId('project-overview-refresh')).toHaveText('Refresh', { timeout: 20_000 });
-    for (const theme of ['light', 'dark'] as const) {
-      await setTheme(page, theme);
-      await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
-      await page.screenshot({
-        path: path.join(RESULTS_DIR, `project-overview-dashboard--${theme}--real.png`),
-        fullPage: true,
-      });
+    const realProject = await resolveRealProject(devBackend.baseUrl);
+    try {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      await proxyBackend(page, devBackend.baseUrl);
+      await openDashboard(page, realProject.name, true);
+      await expect(page.getByTestId('project-overview-refresh')).toHaveText('Refresh', { timeout: 20_000 });
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+        await page.screenshot({
+          path: path.join(RESULTS_DIR, `project-overview-dashboard--${theme}--real.png`),
+          fullPage: true,
+        });
+      }
+    } finally {
+      await realProject.cleanup();
     }
   });
 });
