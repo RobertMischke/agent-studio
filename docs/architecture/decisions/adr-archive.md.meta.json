@@ -98,5 +98,13 @@
       "evidence": []
     }
   ],
-  "nextAction": "Keep decision history separate from current operational guidance."
+  "nextAction": "Keep decision history separate from current operational guidance.",
+  "relatedTasks": [
+    {
+      "key": "AGT-1812",
+      "title": "EPIC: Migrate Orchestrator settings modal into Workspace-defaults \u002B Project-overrides",
+      "linkedAt": "2026-07-10T23:59:51.6299208Z",
+      "source": "auto"
+    }
+  ]
 }

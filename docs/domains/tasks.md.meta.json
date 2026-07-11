@@ -11,6 +11,12 @@
       "title": "Task-Referenz-Mikrokarten: Kuerzel im Wiki/Chat werden lebende Mini-Cards",
       "linkedAt": "2026-07-10T23:37:38.1663284Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-1812",
+      "title": "EPIC: Migrate Orchestrator settings modal into Workspace-defaults \u002B Project-overrides",
+      "linkedAt": "2026-07-10T23:59:51.6299208Z",
+      "source": "auto"
     }
   ]
 }

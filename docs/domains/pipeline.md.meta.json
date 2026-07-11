@@ -105,6 +105,12 @@
       "title": "Review-/Aspect-Evidenz: results/ \u002B Task-Branch-Diff statt nur Working-Diff (read-only-Tasks)",
       "linkedAt": "2026-07-10T15:11:35.547485Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-1943",
+      "title": "BUG: Post-Build-Test-Gate baut im geteilten Checkout - kollidiert mit laufendem Dev-Backend",
+      "linkedAt": "2026-07-10T23:55:16.7118693Z",
+      "source": "auto"
     }
   ]
 }
