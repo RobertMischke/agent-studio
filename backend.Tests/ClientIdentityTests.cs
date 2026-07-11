@@ -162,6 +162,24 @@ public class ClientIdentityTests : IDisposable
     }
 
     [Fact]
+    public void Retire_DoesNotCompleteWhenClaimPollOmitsTelemetry()
+    {
+        var config = BuildConfig();
+        var store = BuildStore(config);
+        var runner = store.Register(new RegisterClientRequest { DisplayName = "telemetry-gap-runner", Kind = ClientIdentityKinds.Service });
+
+        store.RecordRunnerActivity(runner.Id, activeSlots: 1, availableSlots: 1, claimed: true);
+        store.RequestDrain(runner.Id, retireAfterDrain: true);
+
+        var duringTelemetryGap = store.RecordRunnerActivity(
+            runner.Id, activeSlots: null, availableSlots: 1, claimed: false);
+
+        Assert.Equal(ClientIdentityKind.Service, duringTelemetryGap?.Kind);
+        Assert.Equal(1, duringTelemetryGap?.RunnerActiveSlots);
+        Assert.Equal(ClientIdentityKind.Service, BuildStore(config).Find(runner.Id)?.Kind);
+    }
+
+    [Fact]
     public void RetiredHost_CanBeRevived_ThenPermanentlyDeleted()
     {
         var config = BuildConfig();

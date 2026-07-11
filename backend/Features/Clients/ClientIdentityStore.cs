@@ -284,7 +284,7 @@ public class ClientIdentityStore
     }
 
     /// <summary>Project daemon polls into the identity and finish graceful retirement at zero active slots.</summary>
-    public ClientIdentity? RecordRunnerActivity(string id, int activeSlots, int availableSlots, bool claimed)
+    public ClientIdentity? RecordRunnerActivity(string id, int? activeSlots, int availableSlots, bool claimed)
     {
         EnsureLoaded();
         lock (_lock)
@@ -294,10 +294,18 @@ public class ClientIdentityStore
             {
                 RunnerDaemonState = string.Equals(existing.RunnerGitStatus, "read-only", StringComparison.OrdinalIgnoreCase)
                     ? "read-only" : "running",
-                RunnerActiveSlots = Math.Max(0, activeSlots),
+                // Telemetry is sampled less often than claim polling. A poll
+                // without a sample must preserve the last known active count;
+                // treating "not reported" as zero could complete a pending
+                // retirement while work is still running.
+                RunnerActiveSlots = activeSlots is null
+                    ? existing.RunnerActiveSlots
+                    : Math.Max(0, activeSlots.Value),
                 RunnerAvailableSlots = Math.Max(0, availableSlots),
                 RunnerLastClaimAt = claimed ? DateTime.UtcNow : existing.RunnerLastClaimAt,
-                Kind = existing.RetireRequestedAt is not null && activeSlots <= 0
+                Kind = existing.RetireRequestedAt is not null
+                    && activeSlots is not null
+                    && activeSlots.Value <= 0
                     ? ClientIdentityKind.Retired : existing.Kind
             };
             WriteLocked(updated);
@@ -347,7 +355,8 @@ public class ClientIdentityStore
             return updated;
         }
     }
- <c>lastSeenAt</c> on the identity. Called by the access-log
+    /// <summary>
+    /// Updates <c>lastSeenAt</c> on the identity. Called by the access-log
     /// middleware on every authenticated read or write so the GET listing
     /// can show who has been talking to the API and when.
     /// </summary>

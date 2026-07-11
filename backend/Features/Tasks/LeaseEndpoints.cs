@@ -66,7 +66,9 @@ public static class LeaseEndpoints
             var clientId = context.Request.Headers["X-Client-Id"].ToString();
             if (req.Telemetry is not null && !string.IsNullOrWhiteSpace(clientId))
                 telemetry.Append(clientId, req.Telemetry);
-            var activeSlots = Math.Max(0, req.Telemetry?.ActiveSlots ?? 0);
+            int? activeSlots = req.Telemetry is null
+                ? null
+                : Math.Max(0, req.Telemetry.ActiveSlots);
             var client = string.IsNullOrWhiteSpace(clientId)
                 ? null
                 : clients.RecordRunnerActivity(clientId, activeSlots, req.AvailableSlots, claimed: false);
@@ -164,7 +166,11 @@ public static class LeaseEndpoints
                     candidate.ProjectName, repository.ProjectId, taskKey, req.RunnerName, acquire.Lease.LeaseId,
                     acquire.Lease.FencingToken, repository.Source, repository.DefaultBranch);
                 if (!string.IsNullOrWhiteSpace(clientId))
-                    clients.RecordRunnerActivity(clientId, activeSlots + 1, Math.Max(0, req.AvailableSlots - 1), claimed: true);
+                    clients.RecordRunnerActivity(
+                        clientId,
+                        (activeSlots ?? client?.RunnerActiveSlots ?? 0) + 1,
+                        Math.Max(0, req.AvailableSlots - 1),
+                        claimed: true);
                 return Results.Ok(new RunnerClaimResponse(
                     RunnerClaimStatus.Claimed,
                     taskKey,

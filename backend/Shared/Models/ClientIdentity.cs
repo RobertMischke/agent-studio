@@ -79,6 +79,7 @@ public record ClientIdentity
     public int? RunnerAvailableSlots { get; init; }
 }
 
+public enum ClientIdentityKind
 {
     Human,
     AgentInstance,
