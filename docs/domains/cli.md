@@ -31,8 +31,12 @@ CLI execution tests.
 - `backend/Services/Cli/CliRouter.cs`: `cliType` routing.
 - `backend/Services/Quota/*QuotaProbe.cs`: per-CLI quota probes.
 - `backend/Services/Quota/QuotaService.cs`: aggregate quota surface.
-- `backend/Endpoints/CliEndpoints.cs`: sessions, versions, quota, and model
-  endpoints.
+- `backend/Features/Cli/CliEndpoints.cs`: sessions, versions, quota, and model
+  endpoints. The CLI-session tool (AGT-2102) adds `GET /api/cli/{cliType}/session-detail`
+  (lazy single-transcript parse: model, thinking, message count, first prompt)
+  and a guarded `DELETE /api/cli/{cliType}/session` (cleanup refused for any path
+  outside the CLI's own session store). Both resolve/parse in
+  `SessionRegistry.cs`; the `/usage` list report stays body-free.
 - `backend/Services/Runner/OrchestratorSession.cs` and
   `OrchestratorRunner.cs`: runner-to-CLI orchestration boundary.
 - `prompts/runtime/`: prompt templates handed to the CLIs.

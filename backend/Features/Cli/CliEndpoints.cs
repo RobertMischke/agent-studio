@@ -88,6 +88,37 @@ public static class CliEndpoints
             return Results.Ok(sessions.BuildReport(router, activeJobByProject));
         });
 
+        // Lazy deep-read of one session (row expand in the CLI-session tool).
+        // Parses exactly one transcript on demand so the list report stays
+        // body-free even with thousands of sessions.
+        cliGroup.MapGet("/{cliType}/session-detail", (string cliType, string id, string? cwd, SessionRegistry sessions) =>
+        {
+            if (!CliTypes.IsValid(cliType))
+                return Results.BadRequest(new { error = $"Unknown cliType '{cliType}'" });
+            if (string.IsNullOrWhiteSpace(id))
+                return Results.BadRequest(new { error = "id query parameter is required" });
+            return Results.Ok(sessions.BuildSessionDetail(cliType, id, cwd));
+        });
+
+        // Guarded single-session cleanup. SessionRegistry confirms the resolved
+        // path lives under the CLI's own session store before deleting; anything
+        // outside is refused, so this can only remove a transcript.
+        cliGroup.MapDelete("/{cliType}/session", (string cliType, string id, string? cwd, SessionRegistry sessions) =>
+        {
+            if (!CliTypes.IsValid(cliType))
+                return Results.BadRequest(new { error = $"Unknown cliType '{cliType}'" });
+            if (string.IsNullOrWhiteSpace(id))
+                return Results.BadRequest(new { error = "id query parameter is required" });
+
+            var result = sessions.DeleteSession(cliType, id, cwd);
+            return result.Status switch
+            {
+                "Deleted" => Results.Ok(result),
+                "NotFound" => Results.Json(result, statusCode: StatusCodes.Status404NotFound),
+                _ => Results.Json(result, statusCode: StatusCodes.Status500InternalServerError),
+            };
+        });
+
         // ── Quota: per-CLI subscription quota for the right-hand sidesheet ──
         cliGroup.MapGet("/quota", (QuotaService quota, CancellationToken ct) =>
         {

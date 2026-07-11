@@ -60,15 +60,16 @@ test.describe('CLI usage hub (status-bar → settings home)', () => {
     const sessions = page.getByTestId('cli-sessions-panel');
     await expect(sessions).toBeVisible();
 
-    // The panel lazy-loads `/api/cli/usage`; wait out the loading state.
-    await expect(sessions.getByText('Loading native CLI session stores...')).toHaveCount(0, {
-      timeout: 15_000,
-    });
+    // The panel lazy-loads `/api/cli/usage`; wait out the loading state, then
+    // the revamped tool renders its search + filter toolbar and a summary.
+    await expect(sessions.getByTestId('cli-sessions-toolbar')).toBeVisible({ timeout: 15_000 });
+    await expect(sessions.getByTestId('cli-sessions-summary')).toBeVisible();
+    await expect(sessions.getByTestId('cli-sessions-search')).toBeVisible();
+    await expect(sessions.getByTestId('cli-filter-all')).toBeVisible();
 
-    // Available CLI section headers render even with zero sessions.
-    for (const label of ['Copilot', 'Claude Code', 'Codex']) {
-      await expect(sessions.getByText(label, { exact: true }).first()).toBeVisible();
-    }
+    // The virtualised list renders at least one session row (real machine has
+    // thousands of transcripts on disk).
+    await expect(sessions.getByTestId('cli-session-row').first()).toBeVisible();
 
     // No error surfaced from the session load.
     await expect(sessions.locator('.sessions__error')).toHaveCount(0);

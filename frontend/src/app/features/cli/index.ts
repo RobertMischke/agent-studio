@@ -13,6 +13,8 @@ export type {
   CliUsageProjectGroup,
   CliUsageSection,
   CliUsageReport,
+  CliSessionDetail,
+  CliSessionDeleteResult,
   LinkedJobRef,
   CliWorkingMemoryEntry,
   CliWorkingMemoryReport,
