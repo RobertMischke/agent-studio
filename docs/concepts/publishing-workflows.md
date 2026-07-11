@@ -132,6 +132,9 @@ dispatching the existing workflow.
 - Backend actions: `PublishActionService` performs guarded manifest/tag pushes,
   GitHub workflow dispatch, and `gh api` run tracking. `PublishEndpoints` owns
   the panel, automation setting, trigger, and run-status routes.
+  GitHub authorization comes exclusively from the operator-managed `gh` CLI
+  session on the host. The product does not accept, inject, or persist a GitHub
+  token; unattended hosts must authenticate `gh` outside Agent Studio.
 - Git primitives (read-only): `GitService.GetLatestVersionTag`,
   `GetMainlineCommitsForScope`, `GetTipCommitDateUtc`.
 - Snapshot fold: `publishTargets` on `GET /api/projects/{project}/snapshot`.
