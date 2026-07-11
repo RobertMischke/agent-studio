@@ -424,11 +424,10 @@ describe('OverviewPaneComponent (smoke)', () => {
     // A step with no recorded prompt yields empty text so the trigger stays hidden.
     expect(c.stepPromptMarkdown('aspect-requirement-fit')).toBe('');
 
+    c.expandAllPipelineGroups();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
     const host = fixture.nativeElement as HTMLElement;
-    // The step with a recorded prompt renders the per-step "Prompt" trigger.
-    expect(host.querySelector('[data-testid="overview-pipeline-step-prompt-aspect-code-quality"]')).not.toBeNull();
-    // The step without one renders no trigger.
-    expect(host.querySelector('[data-testid="overview-pipeline-step-prompt-aspect-requirement-fit"]')).toBeNull();
+    expect(host.querySelectorAll('[data-testid="overview-pipeline-step-details"]').length).toBe(2);
   });
 
   it('pipeline block: run switcher shows archived attempts from pipeline history', async () => {
@@ -541,6 +540,8 @@ describe('OverviewPaneComponent (smoke)', () => {
 
     const archivedRun = options.find(button => button.getAttribute('data-attempt') === '1')!;
     archivedRun.click();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    c.expandAllPipelineGroups();
     try { fixture.detectChanges(); } catch { /* ignore */ }
 
     const archivedRows = c.pipelineRows();
@@ -813,8 +814,8 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(core.tokenTooltip?.body).toContain('Source: AGENT (CLI FOOTER) / reported');
     expect(core.tokenTooltip?.body).toContain('Input: 2.5k');
     expect(core.tokenTooltip?.body).toContain('Output: 195.6k');
-    expect(core.tokenTooltip?.body).toContain('Cache read: 18.50M');
-    expect(core.tokenTooltip?.body).toContain('Cache creation: 1.00M');
+    expect(core.tokenTooltip?.body).toContain('Cache read: 18.5m');
+    expect(core.tokenTooltip?.body).toContain('Cache creation: 1m');
     expect(core.tokenTooltip?.body).toContain('Total API price estimate: $20.40');
     expect(core.tokenTooltip?.body).toContain('Actual CLI billing uses the subscription or plan');
     expect(core.tokenTooltip?.body).toContain('not these API rates');
@@ -826,7 +827,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     try { fixture.detectChanges(); } catch { /* ignore */ }
 
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="overview-pipeline-step-tokens"]')?.textContent?.trim()).toBe('19.70M');
+    expect(el.querySelector('[data-testid="overview-pipeline-step-tokens"]')?.textContent?.trim()).toBe('19.7m');
     expect(el.querySelector('[data-testid="overview-pipeline-agent-runs"]')?.textContent?.trim()).toBe('8 runs');
     expect(el.querySelector('.ov-pl-total__label')?.textContent).toContain('SUM');
   });
@@ -910,11 +911,11 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(text).toContain('Output');
     expect(text).toContain('195.6k');
     expect(text).toContain('Cache read');
-    expect(text).toContain('18.50M');
+    expect(text).toContain('18.5m');
     expect(text).toContain('Cache write');
-    expect(text).toContain('1.00M');
+    expect(text).toContain('1m');
     expect(text).toContain('Total');
-    expect(text).toContain('19.70M');
+    expect(text).toContain('19.7m');
     expect(text).toContain('CORE totals come from the agent CLI footer');
     expect(modal!.querySelector('[data-testid="overview-step-token-modal-total-note"]')).toBeNull();
 
@@ -1095,14 +1096,12 @@ describe('OverviewPaneComponent (smoke)', () => {
     // The loop guard is the first row (pre steps), so a detected loop is visible early.
     expect(rows[0].id).toBe('pre-loop-guard');
     expect(c.stepKindLabel(rows[0].kind)).toBe('Pre steps');
-    // The per-row kind column shows the compact uppercase marker (the wide lane
-    // text is reserved for the tooltip), one short code per kind.
-    expect(c.stepKindMarker(rows[0].kind)).toBe('PRE');
-    expect(c.stepKindMarker('core')).toBe('CORE');
-    expect(c.stepKindMarker('aspect')).toBe('ASPECT');
-    expect(c.stepKindMarker('orchestrator')).toBe('DECISION');
-    expect(c.stepKindMarker('tool')).toBe('TOOL');
-    expect(c.stepKindMarker('drift')).toBe('DRIFT');
+    expect(c.stepKindIcon(rows[0].kind)).toBe('sliders');
+    expect(c.stepKindIcon('core')).toBe('bot');
+    expect(c.stepKindIcon('aspect')).toBe('eye');
+    expect(c.stepKindIcon('orchestrator')).toBe('branch');
+    expect(c.stepKindIcon('tool')).toBe('cli');
+    expect(c.stepKindIcon('drift')).toBe('diff');
 
     const guard = rows.find(r => r.id === 'pre-loop-guard')!;
     expect(guard.status).toBe('failed');
@@ -1252,6 +1251,8 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(decision.verdict).toBe('accept');
     expect(c.stepKindLabel(decision.kind)).toBe('Decision');
 
+    c.expandAllPipelineGroups();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
     // The DOM carries muted parallel metadata on aspect rows and exactly one
     // final-verdict chip on the orchestrator row.
     const parallelNotes = fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step-parallel"]');
@@ -1351,6 +1352,8 @@ describe('OverviewPaneComponent (smoke)', () => {
     const decision = c.pipelineRows().find(r => r.id === 'post-orchestrator-decision')!;
     expect(c.decisionBadgeForRow(decision)).toBeNull();
 
+    c.expandAllPipelineGroups();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
     // With no badge, the generic verdict pill renders the recorded verdict.
     const badgeEl = fixture.nativeElement.querySelector('[data-testid="overview-pipeline-step-decision"]');
     expect(badgeEl).toBeNull();
@@ -1768,6 +1771,20 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(typeof proto['shortSessionId']).toBe('undefined');
     expect(typeof proto['copyToClipboard']).toBe('undefined');
     expect(fixture.componentInstance).toBeTruthy();
+  });
+
+  it('shows loop-waiting with elapsed time in task detail', async () => {
+    const fixture = await build(baseJob({
+      state: '3-progress',
+      phase: 'loop-waiting',
+      phaseEnteredAt: new Date(Date.now() - 42_000).toISOString(),
+    }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const phase = (fixture.nativeElement as HTMLElement)
+      .querySelector('[data-testid="overview-title-phase"]');
+    expect(phase?.textContent).toContain('Waiting for loop continuation 0:42');
   });
 
   it('keeps overview content on reusable left-aligned measures', async () => {

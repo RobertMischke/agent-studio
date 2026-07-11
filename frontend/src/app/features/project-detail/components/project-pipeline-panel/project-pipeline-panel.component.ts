@@ -597,6 +597,8 @@ export class ProjectPipelinePanelComponent {
         return 'Maintains common-problem wiki entries from run outcomes when enabled.';
       case 'post-wiki-learnings':
         return 'Writes per-task learnings into the project wiki from structured run evidence.';
+      case 'post-agents-wiki-sync':
+        return 'Keeps AGENTS/wiki pointers for designated topics consistent and collects each topic current state when enabled.';
       case 'post-abort-review':
         return 'Optional review pass after an aborted or stopped run to decide rerun, reissue, or escalation.';
       default:

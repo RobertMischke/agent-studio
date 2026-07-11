@@ -490,6 +490,35 @@
       gap: var(--studio-spacing-2);
       margin-bottom: var(--studio-card-section-gap);
     }
+    /* DtC step 6 — CooldownRetry banner. A 3-progress card that infra-crashed and
+       is holding out its scheduled re-pickup backoff (runActivity.failed-backoff).
+       Full-width warn-toned banner (the DtC "transient" tone) so a cooling task
+       reads distinctly from the "Running live" tint and from a fresh stall — it is
+       neither a live run nor a dead one. R1: status via all-round background tint,
+       never a left accent bar. */
+    .task-card__cooldown {
+      display: flex;
+      align-items: center;
+      gap: var(--studio-spacing-2);
+      margin-bottom: var(--studio-card-section-gap);
+      padding: 4px var(--studio-spacing-2);
+      border-radius: 6px;
+      font-size: var(--studio-card-meta-size);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+      color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
+      border: 1px solid color-mix(in srgb, var(--studio-accent-warn) 42%, transparent);
+      cursor: help;
+    }
+    .task-card__cooldown-glyph { flex: 0 0 auto; font-size: 12px; }
+    .task-card__cooldown-label { flex: 1 1 auto; min-width: 0; }
+    .task-card__cooldown-countdown {
+      flex: 0 0 auto;
+      font-variant-numeric: tabular-nums;
+      opacity: 0.85;
+    }
     .task-card__execution-pill,
     .task-card__pending-pill,
     .task-card__waiting-pill,
@@ -516,27 +545,36 @@
       letter-spacing: 0.02em;
     }
     /* Mode badge (planning / research). Only non-coding modes render a pill so
-       the board stays quiet for the default mode; the tinted variants make a
-       planning or research card recognizable at a glance. Glyph + label come
-       from the same source as the create-dialog mode picker. */
+       the board stays quiet for the default mode. AGT-2069: planning cards get
+       a deliberately loud, filled badge ("here work is PLANNED") so a
+       planning-task -> follow-up-card workflow is unmistakable at a glance;
+       research stays a calmer filled tint. Glyph + label come from the same
+       source as the create-dialog mode picker. */
     .task-card__mode-pill {
       border: 1px solid transparent;
       cursor: help;
       white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 700;
     }
     .task-card__mode-glyph {
       font-size: 11px;
       line-height: 1;
     }
+    /* AGT-2069: prominent filled planning badge (both themes: saturated fill +
+       light text reads on light and dark card surfaces). */
     .task-card__mode-pill--planning {
-      color: #d8b4fe;
-      background: rgba(192, 132, 252, 0.12);
-      border-color: rgba(192, 132, 252, 0.32);
+      color: #f5f3ff;
+      background: #7c3aed;
+      border-color: #6d28d9;
+      box-shadow: 0 1px 4px rgba(124, 58, 237, 0.45);
     }
     .task-card__mode-pill--research {
-      color: #7dd3fc;
-      background: rgba(56, 189, 248, 0.12);
-      border-color: rgba(56, 189, 248, 0.32);
+      color: #ecfeff;
+      background: #0e7490;
+      border-color: #155e75;
+      box-shadow: 0 1px 4px rgba(14, 116, 144, 0.4);
     }
     .task-card__pending-pill {
       color: var(--severity-warn);
@@ -922,6 +960,14 @@
       color: var(--studio-accent-success-strong);
       background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-success) 35%, transparent);
+    }
+    /* Run-Liveness Slice B: "Waiting for answer since m:ss". An attention/pending
+       amber tint (like intake-running, but a different lane so they never
+       co-occur) so a steered card stands out without a left accent bar (R1). */
+    :is(.task-card__phase-pill--steer-pending, .task-card__phase-pill--loop-waiting) {
+      color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-warn) 42%, transparent);
     }
     .task-card__phase-pill--post-processing-running {
       color: var(--lane-auto-review);
@@ -1335,44 +1381,36 @@
       cursor: help;
       flex: 0 0 auto;
     }
-    /* AGT-2046: always-on two-segment merge signal [d|m]. develop | main, filled
-       green when the work has landed on that rung, muted/outlined when not. The
-       colours match the git-state post-merge green + pre-merge muted so the whole
-       card speaks one merge vocabulary. Leads the change-head so it is the first
-       thing the eye lands on when scanning the board. */
+    /* AGT-2046 / AGT-2063: always-on two-segment merge signal [d|m]. develop |
+       main. The old design boxed the whole pair in a bordered tile AND boxed each
+       letter in its own bordered slot, the boxed-in look the operator flagged. It
+       now reads as two NAKED mono letters (no frames, matching the card's other
+       bare glyphs): a strong success-green letter means the work has landed on
+       that rung, a quiet dimmed letter means it has not. Colour is the only
+       channel, read from theme tokens so it holds in both themes (R5). No left
+       accent bar or border box anywhere (R1). */
     .task-card__merge-signal {
       display: inline-flex;
-      align-items: stretch;
-      gap: 2px;
-      padding: 2px;
-      border-radius: 6px;
-      background: var(--studio-card-muted-bg);
-      border: 1px solid var(--studio-card-muted-border);
+      align-items: center;
+      gap: 3px;
       cursor: help;
       flex: 0 0 auto;
       font-variant-numeric: tabular-nums;
     }
     .task-card__merge-seg {
-      display: inline-grid;
-      place-items: center;
-      width: 15px;
-      height: 15px;
-      border-radius: 4px;
-      font-size: 10px;
-      font-weight: 800;
+      font-size: 11px;
+      font-weight: 700;
       line-height: 1;
       text-transform: lowercase;
-      /* NOT merged: a hollow, muted slot so it reads as "empty". */
+      /* NOT merged: a quiet, dimmed letter so it recedes. */
       color: var(--studio-fg-dim);
-      background: rgba(148, 163, 184, 0.10);
-      border: 1px solid rgba(148, 163, 184, 0.28);
     }
-    /* Merged: filled green, kräftig genug zum Scannen (operator: stärkeres Signal). */
+    /* Merged: strong success green so the landed rung catches the eye on a scan
+       (the operator asked for a stronger signal), carried by colour + weight,
+       not a box. */
     .task-card__merge-seg--on {
-      color: #052e16;
-      background: #4ade80;
-      border-color: #22c55e;
-      box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35);
+      color: var(--studio-success);
+      font-weight: 800;
     }
     .task-card__change-ref-value {
       min-width: 0;

@@ -5,6 +5,18 @@
       "title": "KRITISCH: Clean-Context-Credentials - OAuth-Token-Roulette bei parallelen Refreshes",
       "linkedAt": "2026-07-10T14:55:03.0061807Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2004",
+      "title": "Runner-Daemon: kontinuierlicher Pickup mit Projekt-Zuweisung (Remote-Dauerbetrieb A)",
+      "linkedAt": "2026-07-10T16:43:03.0907018Z",
+      "source": "auto"
+    },
+    {
+      "key": "AGT-2005",
+      "title": "Remote-Dauerbetrieb B: persistente Verbindung \u002B per-Host-CLI-Credentials",
+      "linkedAt": "2026-07-10T16:46:34.3870261Z",
+      "source": "auto"
     }
   ]
 }

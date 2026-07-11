@@ -6,6 +6,7 @@ import type { MenuItem } from '../../../../components/menu';
 import type { AutoReviewStatusView } from '../../../../services/auto-review-status.store';
 import { cliTypeIcon, cliTypeLabel, shortModelName, taskModeIcon, taskModeLabel } from '../../../../services/format.util';
 import { shouldShowFailureToast } from '../../../task-detail/services/run-outcome.util';
+import { buildThinkingLevelIndicator, type ThinkingLevelIndicator } from '../../../../services/thinking-level.util';
 
 export interface TaskTypeChip {
   kind: string;
@@ -292,6 +293,7 @@ export interface EffectiveModelChip {
   source: EffectiveModelSource;
   isDefault: boolean;
   tooltip: StructuredTooltip;
+  thinkingLevel: ThinkingLevelIndicator | null;
 }
 
 const CLI_TYPES_SET = new Set(['claude', 'codex', 'gemini']);
@@ -360,9 +362,15 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
     isDefault = false;
   }
 
-  const tooltip = buildModelTooltip(job, owner, source, ownerCli, ownerModel);
+  const thinkingLevel = buildThinkingLevelIndicator(
+    job.execution,
+    job.thinkingLevel,
+    owner.defaultThinkingLevel,
+    fullModel,
+  );
+  const tooltip = buildModelTooltip(job, owner, source, ownerCli, ownerModel, thinkingLevel);
 
-  return { icon, label, fullModel, cliLabel: cliLbl, source, isDefault, tooltip };
+  return { icon, label, fullModel, cliLabel: cliLbl, source, isDefault, tooltip, thinkingLevel };
 }
 
 function buildModelTooltip(
@@ -371,6 +379,7 @@ function buildModelTooltip(
   source: EffectiveModelSource,
   ownerCli: CliType | null,
   ownerModel: string | null,
+  thinkingLevel: ThinkingLevelIndicator | null,
 ): StructuredTooltip {
   const lines: string[] = [];
 
@@ -385,6 +394,12 @@ function buildModelTooltip(
 
   lines.push(`<b>Model:</b> ${escapeHtml(effectiveModel ?? 'none')}${source === 'default' ? ' <i>(client default)</i>' : source === 'run' ? ' <i>(running)</i>' : ''}`);
   lines.push(`<b>CLI:</b> ${effectiveCli ? escapeHtml(cliTypeLabel(effectiveCli)) : 'none'}${!jobCli && ownerCli ? ' <i>(client default)</i>' : ''}`);
+  if (thinkingLevel) {
+    lines.push(`<b>Thinking level:</b> ${escapeHtml(thinkingLevel.effective)}${thinkingLevel.differsFromConfigured ? ' <i>(effective)</i>' : ''}`);
+    if (thinkingLevel.differsFromConfigured) {
+      lines.push(`<b>Configured thinking level:</b> ${escapeHtml(thinkingLevel.configured ?? 'none')}`);
+    }
+  }
   lines.push(`<b>Agent:</b> ${escapeHtml(job.agent || 'none')} <i>(pickup permission)</i>`);
   if (source === 'fallback') lines.push(`<b>Reason:</b> quota (${escapeHtml(job.quotaFallback?.reason ?? 'cap reached')})`);
 
@@ -805,25 +820,26 @@ function shortShaOf(sha: string | null | undefined): string | null {
 }
 
 /**
- * True when the card carries any git anchor at all (a backend signal, a recorded
- * merge, a task-branch tip, or an attributed commit). Cards with nothing
- * committed yet get no merge signal so the pre-work lanes stay quiet.
+ * True when the card has at least one attributed TASK commit (the SSOT
+ * {@link commitChainOf}). The merge signal is a statement about the task's own
+ * commits, so this is the whole gate. AGT-2063: a card that committed nothing
+ * gets NO signal - not from the backend `mergeSignal`, not from a recorded
+ * branch tip, not from a merge fact. A `task/<id>` branch that was cut but never
+ * produced a commit has its base commit as the tip, and the base is trivially an
+ * ancestor of develop/main; keying off it painted commit-less cards as "in
+ * develop", the false statement the operator hit.
  */
-function hasGitAnchor(job: TaskInfo): boolean {
-  if (job.mergeSignal) return true;
-  const prov = job.provenance ?? null;
-  if (prov?.merge?.mergeCommit) return true;
-  if (prov?.transitions?.some((t) => !!t.branchTip)) return true;
-  if ((job.commits?.length ?? 0) > 0) return true;
-  return !!job.commit;
+function hasTaskCommits(job: TaskInfo): boolean {
+  return commitChainOf(job).length > 0;
 }
 
 /**
  * Build the two-segment merge signal for a card. Returns null when the card has
- * no git anchor to describe (pre-work lanes with nothing committed).
+ * no attributed task commit to describe: a card without commits shows no signal
+ * at all, not an empty or default one (AGT-2063).
  */
 export function buildMergeSignal(job: TaskInfo): MergeSignalView | null {
-  if (!hasGitAnchor(job)) return null;
+  if (!hasTaskCommits(job)) return null;
 
   const sig = job.mergeSignal ?? null;
   const prov = job.provenance ?? null;
@@ -990,20 +1006,56 @@ export type PhaseBadgeTone =
   | 'intake-running'
   | 'intake-blocked'
   | 'intake-passed'
+  | 'loop-waiting'
+  | 'steer-pending'
   | 'post-processing-running'
   | 'post-processing-blocked'
   | 'awaiting-review';
 export interface PhaseBadge { label: string; tone: PhaseBadgeTone; tooltip: string; }
 
 /**
+ * Format a steer wait as a compact total-minutes `mm:ss` elapsed label. Refreshes on
+ * the shared 30s card tick, so it reads as a live "waiting for answer since …"
+ * without a dedicated per-second timer.
+ */
+export function formatSteerWait(elapsedMs: number): string {
+  const total = Math.max(0, Math.floor(elapsedMs / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/**
  * Lifecycle-phase chip. Surfaces the `phase` substate on cards that carry one.
  * Returns null when the job has no explicit phase, so cards that predate the
- * field render exactly like before.
+ * field render exactly like before. When the card is steer-pending, the optional
+ * `steerPendingSince` + `nowMs` render the "waiting for answer · m:ss" timer
+ * (Run-Liveness Slice B).
  */
-export function buildPhaseBadge(phase: TaskInfo['phase']): PhaseBadge | null {
+export function buildPhaseBadge(
+  phase: TaskInfo['phase'],
+  steerPendingSince?: string | null,
+  nowMs?: number,
+): PhaseBadge | null {
   switch (phase ?? null) {
     case 'human-ready':
       return null;
+    case 'steer-pending': {
+      const since = steerPendingSince ? Date.parse(steerPendingSince) : NaN;
+      const suffix = Number.isFinite(since) && typeof nowMs === 'number'
+        ? ` · ${formatSteerWait(nowMs - since)}`
+        : '';
+      return { label: `Waiting for answer${suffix}`, tone: 'steer-pending',
+               tooltip: 'The run asked a question and is waiting for an answer. If it stays unanswered it is auto-answered from the task context or escalated - it will not hang (Run-Liveness Slice B).' };
+    }
+    case 'loop-waiting': {
+      const since = steerPendingSince ? Date.parse(steerPendingSince) : NaN;
+      const suffix = Number.isFinite(since) && typeof nowMs === 'number'
+        ? ` ${formatSteerWait(nowMs - since)}`
+        : '';
+      return { label: `Waiting for loop continuation${suffix}`, tone: 'loop-waiting',
+               tooltip: 'The coding CLI has exited and freed its execution slot. The orchestrator is preparing a continuation, which must acquire a new slot before the CLI resumes.' };
+    }
     case 'intake-running':
       return { label: 'Intake running', tone: 'intake-running',
                tooltip: 'Orchestrator intake is checking this card (separate runner from the coding CLI).' };
@@ -1070,6 +1122,71 @@ export function buildExecutionBadge(job: TaskInfo): ExecutionBadge | null {
   }
 
   return null;
+}
+
+/**
+ * DtC drive-to-conclusion infra-retry budget: up to 3 total attempts per
+ * run-chain (attempt 1 = original run + up to 2 infra retries). Mirrors the
+ * backend `CompletionRetrigger` DefaultBudget; see the four-terminal model in
+ * `docs/wiki/concepts/orchestrator-drive-to-conclusion.html`. The k/3 in the
+ * CooldownRetry banner counts against this budget.
+ */
+export const INFRA_RETRY_BUDGET = 3;
+
+export interface CooldownRetryBanner {
+  /** Attempt this cooldown is holding for, clamped to [1, budget]. */
+  attempt: number;
+  budget: number;
+  /** Whole seconds until the scheduled re-pickup, or null when already due. */
+  secondsLeft: number | null;
+  /** Primary line, e.g. `infra-crashed · retrying 2/3`. */
+  label: string;
+  /** Countdown fragment, e.g. `in 210s` (or `now` when the timer elapsed). */
+  countdown: string;
+  tooltip: string;
+}
+
+/**
+ * DtC step 6 — the CooldownRetry banner for a `3-progress` card that infra-crashed
+ * and is holding out a scheduled re-pickup backoff (the `runActivity.failed-backoff`
+ * state, ASS-1751). This is the ONLY non-live state allowed in 3-progress, and it
+ * must read distinctly from the normal "Running live" chip so a cooling task does
+ * not look like a fresh stall: the card renders it as a warn-toned banner
+ * (`infra-crashed · retrying k/3 · in Ns`), not the running tint.
+ *
+ * Source is the already-overlaid `runActivity` (kind + backoffUntil + attempt) —
+ * no new side-channel. `nowMs` is injected so the countdown ticks from the card's
+ * shared clock signal. Returns null off the Progress lane, when no runActivity is
+ * attached, or for any run-activity state other than `failed-backoff`.
+ */
+export function buildCooldownRetryBanner(job: TaskInfo, nowMs: number): CooldownRetryBanner | null {
+  if (job.state !== TaskState.Progress) return null;
+  const activity = job.runActivity;
+  if (!activity || activity.kind !== 'failed-backoff') return null;
+
+  const attempt = Math.min(Math.max(activity.attempt, 1), INFRA_RETRY_BUDGET);
+  const untilMs = activity.backoffUntil ? Date.parse(activity.backoffUntil) : Number.NaN;
+  const secondsLeft = Number.isFinite(untilMs) && untilMs > nowMs
+    ? Math.max(1, Math.round((untilMs - nowMs) / 1000))
+    : null;
+  const countdown = secondsLeft !== null ? `in ${secondsLeft}s` : 'now';
+
+  const lastError = activity.lastError?.trim();
+  const tooltipLines = [
+    'Infra crash — the last run died before a terminal verdict.',
+    `The orchestrator kept the loop and scheduled a re-pickup (attempt ${attempt} of ${INFRA_RETRY_BUDGET})${secondsLeft !== null ? ` in ~${secondsLeft}s` : ' now'}.`,
+    'This is a held CooldownRetry, not a live run and not a stall.',
+  ];
+  if (lastError) tooltipLines.push(`Last error: ${lastError}`);
+
+  return {
+    attempt,
+    budget: INFRA_RETRY_BUDGET,
+    secondsLeft,
+    label: `infra-crashed · retrying ${attempt}/${INFRA_RETRY_BUDGET}`,
+    countdown,
+    tooltip: tooltipLines.join('\n'),
+  };
 }
 
 export interface ReviewBadge { label: string; tone: 'generating' | 'ready' | 'failed'; tooltip: string; }

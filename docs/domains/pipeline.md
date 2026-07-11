@@ -19,6 +19,9 @@ pipeline view.
   per-step telemetry rows.
 - [docs/domains/token-pricing.md](./token-pricing.md) is the single source for pipeline
   cost derivation.
+- [Workflow arguments become unbounded fan-out](../wiki/common-problems/workflow-args-json-string-fanout/)
+  records the serialized-argument failure mode and the validation and resource
+  caps required before parallel work starts.
 
 ## Key Code
 
@@ -53,6 +56,27 @@ pipeline view.
   website-hardwired): target project, relevance question, and spawn lane come from
   `ProjectSettings.TaskSpawner`. Driven from `ReviewDecisionOrchestrator`
   (`RunTaskSpawnerPostStepAsync`); template `prompts/runtime/task-spawner-relevance.md`.
+- `backend/Features/Pipeline/AgentsWikiSyncPostStepRunner.cs`: the opt-in
+  `post-agents-wiki-sync` step (AGT-1782). Deterministic (no LLM): it keeps the
+  AGENTS.md -> wiki pointers for a set of designated topics consistent (no dead /
+  missing link) and maintains a machine-owned "Current State / Progress" page per
+  designated topic under `docs/wiki/concepts/designated-topics/`, so agents read
+  the current state of a topic instead of re-discovering it ("gegen im Kreis
+  drehen"). The operator-owned topic list is `designated-topics/registry.json`
+  (self-provisioned as an empty template on first run); a task is matched to a
+  topic by a shared tag or a changed-file path prefix, and the per-topic
+  current-state line is derived from the task's title / newest commit / typed
+  outcome. Driven from `ReviewDecisionOrchestrator` (`RunAgentsWikiSyncPostStep`),
+  next to the wiki-maintenance / wiki-learnings producers.
+- `backend/Features/Pipeline/WorkstreamCollectorPostStepRunner.cs`: the opt-in
+  EW-2 collector pair. The pre-step publishes Current Development State at task
+  onboarding; the completion step gives a one-shot model the fixed frame, known
+  pages, and settled evidence, then server-validates and applies its JSON
+  proposal. The applied proposal appends the Workstream Log, merges Development
+  Signals by identity while updating frequency, updates System Knowledge in
+  place with mandatory `Last Updated From`, persists Decision Log entries, and
+  replaces Current Development State when proposed. Identity, provenance,
+  budgets, and maximum depth are backend rules, not model discretion.
 - `backend/Services/Pipeline/PipelineStepConfigResolver.cs`: effective model and
   step config resolution.
 - `backend/Services/Pipeline/PipelineStepConditionEvaluator.cs`: per-step
@@ -142,6 +166,12 @@ pipeline view.
   (`post-code-review-grade`, wiki-maintenance / wiki-learnings, regression-radar)
   are reporting-only and already swallow a crash into a Skipped/Failed step row,
   so a post-step crash there never gates the lane or counts as a work deficit.
+- `post-build-test-gate` verifies a coding task in its registered
+  `task/<id>` worktree when that worktree is live. It must not build in the
+  shared project checkout for a worktree run: a dev backend can legitimately
+  hold that checkout's build output open, and the shared checkout can contain
+  different source. Sequential and legacy runs with no registered worktree
+  retain the shared-checkout fallback.
 - Abort review is contract-bounded: the model returns a verdict, while
   `PostAbortReviewDecider` owns the binding action and rerun budget.
 - The read-only pipeline drops git steps. Planning and research tasks must not
@@ -183,6 +213,21 @@ pipeline view.
   waits), records a `task_spawned` timeline entry + a `needs-follow-up-task`
   post-processing outcome on the source, and writes the card through the bounded
   `TaskMutationService.CreateJob` path (never a hand-written folder).
+- `post-agents-wiki-sync` (AGT-1782) is an opt-in `StepKind.Tool` post-step,
+  `DefaultEnabled = false`, deterministic (no model), and reporting-only: it NEVER
+  changes the task lane decision. It depends on the core run (not the aspect
+  verdicts) and sits with the sibling wiki producers, before the final decision. It
+  writes only under `docs/wiki/concepts/designated-topics/` plus, when self-healing
+  a missing pointer, a single managed block appended to the project's `AGENTS.md`;
+  it never edits a hand-maintained concept page in place (those HTML/Markdown pages
+  are human-owned), so the machine-maintained current-state block lives in the
+  per-topic `<slug>.md` page referenced by a validated pointer. It is
+  self-provisioning (seeds an empty `registry.json` an operator fills in) and
+  idempotent (a re-run on the same task refreshes timestamps without duplicating a
+  progress row; an unmatched task still validates pointers and regenerates the
+  index). A missing concept page is surfaced as a visible dead-pointer finding in
+  the generated index's "Pointer health" section and the step reason, never
+  silently dropped.
 - Pipeline history is per run. Re-opened tasks append a new attempt and keep
   earlier attempts addressable.
 - Raw step-call prompts are captured once, at central dispatch, into
@@ -213,6 +258,15 @@ pipeline view.
 - Raw step-prompt capture changes need `StepPromptLogTests` (writer/reader
   round-trip with provenance, dedup for main-run shape, capture-before-failure)
   and the `overview-pane.component.spec.ts` step-prompt read-model assertion.
+- Agents/wiki-sync changes need `AgentsWikiSyncPostStepRunnerTests` (registry
+  seed, tag / path matching, per-topic progress dedup, dead-pointer finding, and
+  the AGENTS.md pointer verify / self-heal) plus the `PipelineCatalogueTests`
+  step-shape pin (opt-in Tool step, after wiki-learnings, before the decision,
+  kept in the read-only pipeline).
+- Workstream collector changes need `WorkstreamCollectorPostStepTests` (response
+  parsing, signal frequency merge, System Knowledge update-in-place and
+  provenance, onboarding replacement, depth and budget rejection) plus the
+  `PipelineCatalogueTests` pre/post step shape pins.
 - Task-spawner changes need `TaskSpawnerPostStepTests` (relevance sentinel parse
   yes/no/unparseable, dedup-ledger budget + same-target block, best-available-model
   default, and the end-to-end runner writing the follow-up card into a target

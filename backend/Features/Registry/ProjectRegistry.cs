@@ -126,6 +126,27 @@ public sealed class ProjectRegistry
     }
 
     /// <summary>
+    /// Returns the project whose <see cref="ProjectRecord.ShortCode"/> equals
+    /// the supplied Kürzel (e.g. <c>ASS</c>), matched case-insensitively. Short
+    /// codes are the stable, filesystem-agnostic external handle for a project
+    /// (2–6 chars of A–Z/0–9), so this backs the API-contract goal of
+    /// addressing projects by Kürzel instead of a leaked absolute
+    /// <c>watchPath</c>. Returns null when nothing matches.
+    /// </summary>
+    public ProjectRecord? FindByShortCode(string? shortCode)
+    {
+        if (string.IsNullOrWhiteSpace(shortCode)) return null;
+        var normalised = shortCode.Trim();
+        EnsureLoaded();
+        lock (_gate)
+        {
+            return _state.Projects.FirstOrDefault(p =>
+                !string.IsNullOrWhiteSpace(p.ShortCode) &&
+                string.Equals(p.ShortCode, normalised, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    /// <summary>
     /// Convenience lookup that accepts either a project id (<c>PROJ-001</c>)
     /// or a display name. Display-name match is case-insensitive. Returns
     /// null when nothing matches.

@@ -17,7 +17,7 @@
   // values share one second-column edge by construction.
   --ov-label-col: 100px;
   --ov-pipeline-status-col: 16px;
-  --ov-pipeline-kind-col: 64px;
+  --ov-pipeline-kind-col: 26px;
   // Keep the metric columns visually attached to the step row on wide panes.
   // The surrounding `.studio-measure--tabular-compact` still owns the section
   // cap; this track stops the step name from absorbing all spare width inside
@@ -611,8 +611,7 @@
 }
 
 .ov-pl-phase {
-  --ov-pl-phase-accent: var(--studio-accent-2);
-  --ov-pl-phase-tint: color-mix(in srgb, var(--ov-pl-phase-accent) 12%, transparent);
+  --ov-pl-phase-accent: var(--studio-fg-muted);
 
   appearance: none;
   -webkit-appearance: none;
@@ -625,19 +624,14 @@
   padding: var(--studio-row-pad-block) var(--studio-spacing-2);
   border: 0;
   border-radius: 6px;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--ov-pl-phase-accent) 34%, transparent), transparent 72px),
-    color-mix(in srgb, var(--studio-bg-hover) 62%, transparent);
-  box-shadow: inset 2px 0 0 var(--ov-pl-phase-accent);
+  background: color-mix(in srgb, var(--ov-pl-phase-accent) 10%, var(--studio-bg-hover));
   color: var(--studio-fg-dim);
   font: inherit;
   text-align: left;
   cursor: pointer;
 
   &:hover {
-    background:
-      linear-gradient(90deg, color-mix(in srgb, var(--ov-pl-phase-accent) 44%, transparent), transparent 72px),
-      color-mix(in srgb, var(--studio-bg-hover) 82%, transparent);
+    background: color-mix(in srgb, var(--ov-pl-phase-accent) 15%, var(--studio-bg-hover));
   }
 
   &:focus-visible {
@@ -690,9 +684,7 @@
     cursor: help;
   }
 
-  // Aggregate section state, readable whether the section is open or collapsed.
-  // Tone rides on the status word (with an icon-free label) and the left accent,
-  // never on the individual row content.
+  // Aggregate section state stays readable whether open or collapsed.
   &__summary {
     flex: 0 0 auto;
     display: inline-flex;
@@ -711,6 +703,7 @@
 
     &[data-tone='ok']     { color: var(--severity-pass); }
     &[data-tone='warn']   { color: var(--severity-warn); }
+    &[data-tone='concern'] { color: var(--severity-warn); }
     &[data-tone='danger'] { color: var(--severity-high); }
     &[data-tone='muted']  { color: var(--studio-fg-muted); }
   }
@@ -734,18 +727,13 @@
     color: var(--studio-fg-dim);
   }
 
-  &[data-phase='core'] { --ov-pl-phase-accent: var(--studio-accent-3); }
-  &[data-phase='aspect'] { --ov-pl-phase-accent: var(--severity-pass); }
-  &[data-phase='tool'] { --ov-pl-phase-accent: var(--severity-pending); }
-  &[data-phase='decision'] { --ov-pl-phase-accent: var(--studio-accent-4); }
-  &[data-phase='drift'] { --ov-pl-phase-accent: var(--severity-warn); }
-
   // Aggregate tone wins over the phase-identity accent so the header reads as
   // state first: green when the section passed, amber while it runs, red when
   // something failed / blocked / needs a decision, dimmed when fully disabled.
   // Neutral (nothing run yet) keeps the phase-identity accent above.
   &[data-tone='ok']     { --ov-pl-phase-accent: var(--severity-pass); }
   &[data-tone='warn']   { --ov-pl-phase-accent: var(--severity-warn); }
+  &[data-tone='concern'] { --ov-pl-phase-accent: var(--severity-warn); }
   &[data-tone='danger'] { --ov-pl-phase-accent: var(--severity-high); }
   &[data-tone='muted'] {
     --ov-pl-phase-accent: var(--studio-border-strong, var(--studio-border));
@@ -821,7 +809,6 @@
   margin-left: var(--ov-pipeline-step-indent);
   border-radius: 6px;
   background: color-mix(in srgb, var(--ov-pl-phase-accent) 5%, transparent);
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--ov-pl-phase-accent) 38%, transparent);
   font-size: 12px;
 
   &[data-phase='core'] { --ov-pl-phase-accent: var(--studio-accent-3); }
@@ -843,17 +830,9 @@
     }
   }
 
-  // Active step: tint the whole row and ride a left accent rail so the one
-  // step the pipeline is executing right now is unmistakable at a glance,
-  // not just a small ▶️ glyph. Reuses the board-wide running tokens
-  // (--studio-bg-running, --lane-progress) so card and pipeline agree on
-  // what "running" looks like. The status glyph pulses, matching the card's
-  // execution dot.
+  // Active state uses a whole-row tint and dot, never a side stripe.
   &--running {
-    background:
-      linear-gradient(90deg, color-mix(in srgb, var(--lane-progress) 16%, transparent), transparent 110px),
-      var(--studio-bg-running);
-    box-shadow: inset 2px 0 0 var(--lane-progress);
+    background: color-mix(in srgb, var(--lane-progress) 14%, var(--studio-bg-running));
 
     .ov-pl-step__status {
       animation: ov-pulse 1.3s ease-in-out infinite;
@@ -865,15 +844,12 @@
     }
   }
 
-  // Orchestrator final-verdict row: the single aggregated ruling after the
-  // parallel aspects. A top divider + accent rail sets it apart from the
-  // aspect rows above so the two phases (parallel aspects -> one verdict)
-  // read as clearly-separated steps.
+  // The final verdict keeps a structural top divider and quiet whole tint.
   &--final-verdict {
     margin-top: 3px;
     padding-top: 5px;
     border-top: 1px solid var(--studio-border);
-    box-shadow: inset 2px 0 0 var(--studio-accent-4);
+    background: color-mix(in srgb, var(--studio-accent-4) 8%, transparent);
 
     .ov-pl-step__name {
       color: var(--studio-fg-strong);
@@ -941,33 +917,6 @@
     border: 1px solid color-mix(in srgb, var(--studio-accent-4) 40%, transparent);
   }
 
-  // Run-count badge on the core Agent-execution row. Carries the run count
-  // (same source as the Overview "Runs" value) and a details popover on
-  // hover/focus. A real <button> so it is keyboard-reachable — the popover
-  // must not be mouse-only.
-  &__runs {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 9.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 1px 6px;
-    border-radius: 999px;
-    cursor: help;
-    font-family: inherit;
-    color: var(--studio-fg-strong);
-    background: color-mix(in srgb, var(--studio-accent-4) 18%, var(--studio-bg-elevated));
-    border: 1px solid color-mix(in srgb, var(--studio-accent-4) 40%, transparent);
-
-    &:focus-visible {
-      outline: 2px solid var(--studio-accent-4);
-      outline-offset: 1px;
-    }
-  }
-
   &__status {
     font-size: 12px;
     line-height: 1;
@@ -975,28 +924,19 @@
   }
 
   &__kind {
-    width: 100%;
+    width: 22px;
+    height: 20px;
     box-sizing: border-box;
-    // Compact kind marker: a short code (PRE / CORE / ASPECT / …) that stays on
-    // one line in the fixed narrow column instead of wrapping the full lane
-    // text. The full name rides the tooltip / aria-label.
-    overflow: hidden;
-    font-size: 9.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     color: var(--studio-fg-dim);
     background: var(--studio-bg-hover);
     border-radius: 4px;
-    padding: 1px 5px;
-    text-align: left;
     cursor: help;
   }
 
-  // Name + per-step prompt trigger share grid column 3. The name flexes and
-  // truncates; the prompt affordance never shrinks so it stays clickable.
+  // Name + compact row actions share grid column 3.
   &__name-cell {
     grid-column: 3;
     min-width: 0;
@@ -1017,7 +957,8 @@
     cursor: help;
   }
 
-  &__prompt {
+  &__details,
+  &__toggle {
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
@@ -1674,5 +1615,12 @@
       outline: 2px solid color-mix(in srgb, var(--studio-accent) 60%, transparent);
       outline-offset: 1px;
     }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :host * {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
   }
 }

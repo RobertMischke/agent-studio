@@ -73,10 +73,10 @@
       "total": 1060
     },
     "src/app/features/studio-shell/components/explorer-workspace-tree/explorer-workspace-tree.component.ts": {
-      "typeScript": 500,
-      "template": 284,
-      "styles": 154,
-      "total": 938
+      "typeScript": 508,
+      "template": 276,
+      "styles": 147,
+      "total": 931
     },
     "src/app/features/studio-shell/studio-shell.component.ts": {
       "typeScript": 1333,
@@ -107,12 +107,6 @@
       "template": 579,
       "styles": 1035,
       "total": 2812
-    },
-    "src/app/features/task-detail/components/protocol-pane/run-timeline/run-timeline.component.ts": {
-      "typeScript": 488,
-      "template": 264,
-      "styles": 224,
-      "total": 976
     },
     "src/app/features/task-detail/task-detail.ts": {
       "typeScript": 1510,

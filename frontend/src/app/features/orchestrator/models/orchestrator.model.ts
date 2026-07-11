@@ -29,6 +29,8 @@ export interface OrchestratorLogEntry {
 
 export interface OrchestratorTokenUsage {
   model?: string | null;
+  /** Optional AGT-2055 attribution; older event writers omit it. */
+  thinkingLevel?: string | null;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -62,6 +64,25 @@ export interface OrchestratorSession {
 export interface OrchestratorSessionResponse {
   project: string;
   session: OrchestratorSession | null;
+}
+
+export interface OrchestratorContextSession {
+  contextKey: string;
+  kind: 'global' | 'project' | 'task';
+  projectId: string | null;
+  taskKey: string | null;
+  updatedAt: string;
+  model: string | null;
+  cumulativeInputTokens: number;
+  cumulativeOutputTokens: number;
+  cumulativeCacheReadTokens: number;
+  cumulativeCacheCreationTokens: number;
+  runtimeStatus: 'idle' | 'active' | 'queued' | 'parked';
+  queuePosition: number;
+}
+
+export interface OrchestratorContextSessionsResponse {
+  sessions: OrchestratorContextSession[];
 }
 
 /**

@@ -14,6 +14,7 @@ This folder is the **operator-facing setup guide**. [getting-started.md](./getti
 | [your-first-task.md](./your-first-task.md) | First time using the board on a new project: what to queue, how to watch it run, what counts as a good first task vs. an anti-pattern. |
 | [troubleshooting.md](./troubleshooting.md) | FAQ-style: "agent only shows sandbox errors", "auto-mode flipped to manual", "two jobs in 3-progress", "header counters look wrong". |
 | [linux-runner-host.md](./linux-runner-host.md) | Running a task on a remote Linux host with the standalone `agent-runner` (RM-5): provision, configure, and drive one task end-to-end via the Task Server API. |
+| [remote-runner-persistent-connection.md](./remote-runner-persistent-connection.md) | Unattended remote operation: keep the SSH tunnel to the Task Server up as a supervised, auto-reconnecting service (autossh/systemd or a Windows scheduled task) and use the runner's `--health-check`. |
 
 ## Related references
 

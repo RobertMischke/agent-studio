@@ -491,7 +491,6 @@
                                       data-testid="project-wiki-history"
                                       [history]="history()"
                                       [loading]="loadingHistory()"
-                                      (openTask)="openRelatedTask($event)"
                                       (viewRevision)="onViewRevision($event)" />
               </section>
 
@@ -608,6 +607,19 @@
                   [pulse]="pulse()"
                   [loading]="pulseLoading()"
                   (openPage)="onPulseOpen($event)" />
+
+              <app-wiki-grade-panel
+                  class="pwiki__grade"
+                  [gradingStatus]="gradingStatus()"
+                  [gradeModel]="gradeModel()"
+                  [gradeLevel]="gradeLevel()"
+                  [gradeModels]="gradeModelOptions()"
+                  [critical]="pulse()?.critical ?? null"
+                  (startGrading)="startWikiGrading()"
+                  (abortGrading)="abortWikiGrading()"
+                  (gradeModelChange)="onGradeModelChange($event)"
+                  (gradeLevelChange)="onGradeLevelChange($event)"
+                  (openReport)="openReportPage($event)" />
             </article>
 
             <div class="pwiki__splitter pwiki__splitter--context"

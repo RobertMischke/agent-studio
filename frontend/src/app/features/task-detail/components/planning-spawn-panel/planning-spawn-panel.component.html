@@ -1,0 +1,105 @@
+@if (show()) {
+  <section class="spawn"
+           data-testid="planning-spawn-panel"
+           [class.spawn--ok]="contractSatisfied()"
+           [class.spawn--risk]="!contractSatisfied()">
+    <header class="spawn__head">
+      <span class="spawn__glyph" aria-hidden="true">🗺️</span>
+      <h3 class="spawn__title">Planning follow-ups</h3>
+      @if (contractSatisfied()) {
+        <span class="spawn__contract spawn__contract--ok"
+              data-testid="planning-contract"
+              [cacTooltip]="'Spawn contract satisfied: this planning task either produced follow-up cards or declared no follow-up intended.'">
+          ✓ contract met
+        </span>
+      } @else {
+        <span class="spawn__contract spawn__contract--risk"
+              data-testid="planning-contract"
+              [cacTooltip]="'Spawn contract not satisfied: no follow-up cards and no declaration. Accepting now is the AGT-1915 trap.'">
+          ! no follow-ups
+        </span>
+      }
+    </header>
+
+    @if (hasSpawns()) {
+      <p class="spawn__lead" data-testid="planning-spawn-lead">
+        This planning task spawned
+        {{ spawned().length }} follow-up {{ spawned().length === 1 ? 'card' : 'cards' }}:
+      </p>
+      <div class="spawn__cards" data-testid="planning-spawn-cards">
+        @for (s of spawned(); track s.targetKey || s.targetJobId) {
+          @if (statusFor(s.targetKey); as st) {
+            <app-task-reference-microcard [status]="st" />
+          } @else if (s.targetKey) {
+            <span class="spawn__chip-fallback">{{ s.targetKey }}</span>
+          }
+        }
+      </div>
+    } @else if (noFollowUpDeclared()) {
+      <div class="spawn__declared" data-testid="planning-no-followup-declared">
+        <p class="spawn__declared-line">
+          <span class="spawn__declared-badge">no follow-up intended</span>
+          This planning task was deliberately closed without follow-up cards.
+        </p>
+        @if (noFollowUpReason(); as reason) {
+          <p class="spawn__declared-reason">“{{ reason }}”</p>
+        }
+        <button type="button"
+                class="spawn__btn spawn__btn--ghost"
+                data-testid="planning-clear-declaration"
+                [disabled]="busy()"
+                (click)="clearDeclaration()">
+          Undo declaration
+        </button>
+      </div>
+    } @else {
+      <div class="spawn__warning" data-testid="planning-no-followups-warning" role="alert">
+        <span class="spawn__warning-icon" aria-hidden="true">⚠</span>
+        <div class="spawn__warning-body">
+          <p class="spawn__warning-title">No follow-up cards created</p>
+          <p class="spawn__warning-text">
+            A planning task is only done once it has spawned the concrete work it proposed,
+            or explicitly declared that no follow-up is intended. Promote the plan into a
+            coding task, or record a deliberate no-follow-up decision below.
+          </p>
+        </div>
+      </div>
+
+      @if (declaring()) {
+        <div class="spawn__declare-form" data-testid="planning-declare-form">
+          <label class="spawn__declare-label" for="spawn-reason">
+            Why is no follow-up needed? (optional)
+          </label>
+          <textarea id="spawn-reason"
+                    class="spawn__declare-input"
+                    rows="2"
+                    [ngModel]="reasonDraft()"
+                    (ngModelChange)="reasonDraft.set($event)"
+                    placeholder="e.g. concept archived; superseded by AGT-xxxx; deliberately no code change"></textarea>
+          <div class="spawn__declare-actions">
+            <button type="button"
+                    class="spawn__btn spawn__btn--primary"
+                    data-testid="planning-declare-submit"
+                    [disabled]="busy()"
+                    (click)="submitDeclare()">
+              {{ busy() ? 'Saving…' : 'Confirm: no follow-up intended' }}
+            </button>
+            <button type="button"
+                    class="spawn__btn spawn__btn--ghost"
+                    [disabled]="busy()"
+                    (click)="cancelDeclare()">
+              Cancel
+            </button>
+          </div>
+        </div>
+      } @else {
+        <button type="button"
+                class="spawn__btn spawn__btn--declare"
+                data-testid="planning-declare-open"
+                (click)="openDeclare()">
+          Declare: no follow-up intended
+        </button>
+      }
+    }
+  </section>
+}

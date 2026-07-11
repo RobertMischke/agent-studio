@@ -53,6 +53,19 @@ public class PipelineConfigAndCostTests
     }
 
     [Fact]
+    public void CanDisable_MatchesCatalogueSafetySemantics()
+    {
+        var pipeline = PipelineCatalogue.Standard;
+
+        Assert.False(PipelineStepConfigResolver.CanDisable(
+            pipeline.Core.Single(s => s.Id == PipelineCatalogue.CoreAgentRunStepId)));
+        Assert.False(PipelineStepConfigResolver.CanDisable(
+            pipeline.Pre.Single(s => s.Id == PipelineCatalogue.LoopGuardStepId)));
+        Assert.True(PipelineStepConfigResolver.CanDisable(
+            pipeline.Post.Single(s => s.Id == PipelineCatalogue.LintScssStepId)));
+    }
+
+    [Fact]
     public void ResolveModel_OrdersStepOverride_Then_ProjectModel_Then_RuntimeDefault()
     {
         // 1) step override wins

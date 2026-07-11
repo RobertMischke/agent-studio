@@ -207,7 +207,14 @@ public sealed record CapEvaluation(
     int CapPct = 0,
     double UsedPct = 0d,
     bool Suspicious = false,
-    string? SuspiciousReason = null)
+    string? SuspiciousReason = null,
+    // AGT-2055: set when the block is a forward-looking projection ("this
+    // window will cross the cap before it resets") rather than an already-
+    // breached cap. Callers use this to pre-empt the wall instead of reacting
+    // to it. <see cref="ResetAt"/> carries the offending window's reset time
+    // so a "next reset HH:mm" hint can be surfaced at the waiting slot.
+    bool Projected = false,
+    DateTime? ResetAt = null)
 {
     public static readonly CapEvaluation NotBlocked = new(false);
 
@@ -216,6 +223,8 @@ public sealed record CapEvaluation(
         if (!Blocked) return "ok";
         if (Suspicious)
             return $"{CliType} quota snapshot unconfirmed ({SuspiciousReason ?? "suspicious glitch"}); holding launch until a re-probe confirms";
-        return $"{CliType} {WindowLabel} at {UsedPct:0.#}% (cap {CapPct}%)";
+        return Projected
+            ? $"{CliType} {WindowLabel} projected to reach the {CapPct}% cap before reset (now {UsedPct:0.#}%)"
+            : $"{CliType} {WindowLabel} at {UsedPct:0.#}% (cap {CapPct}%)";
     }
 }

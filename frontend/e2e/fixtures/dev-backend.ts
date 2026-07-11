@@ -13,6 +13,8 @@
  *
  * Resolution rules (no hard-coded paths):
  *   - DEV_CHECKOUT env var wins.
+ *   - A git worktree runs the backend from that worktree, so task verification
+ *     never falls through to a sibling checkout.
  *   - Else: ask the dev backend's `/api/watch-paths` endpoint after start
  *     (Agent Software Studio entry) for the workspace path.
  *   - Else: fall back to the script's own default (sibling folder).
@@ -24,7 +26,7 @@
  */
 import { test as base, expect } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import * as path from 'node:path';
 
 export interface DevBackend {
@@ -36,17 +38,30 @@ export interface DevBackend {
 const DEV_PORT = Number(process.env.DEV_PORT ?? 5030);
 const DEV_BASE_URL = `http://127.0.0.1:${DEV_PORT}`;
 
+function resolveRepoRoot(): string {
+  return path.resolve(__dirname, '..', '..', '..');
+}
+
+function resolveDevCheckout(): string | undefined {
+  if (process.env.DEV_CHECKOUT) return process.env.DEV_CHECKOUT;
+
+  const repoRoot = resolveRepoRoot();
+  const gitMarker = path.join(repoRoot, '.git');
+  if (existsSync(gitMarker) && statSync(gitMarker).isFile()) return repoRoot;
+
+  return undefined;
+}
+
 function resolveScriptPath(): string {
   // The fixture file lives at <repo>/frontend/e2e/fixtures/dev-backend.ts.
   // The script lives at <repo>/scripts/supervisor/dev-lifecycle.sh.
   // __dirname is not available in ESM; derive from import.meta-style cwd.
-  const here = path.resolve(__dirname);
-  const repoRoot = path.resolve(here, '..', '..', '..');
-  return path.join(repoRoot, 'scripts', 'supervisor', 'dev-lifecycle.sh');
+  return path.join(resolveRepoRoot(), 'scripts', 'supervisor', 'dev-lifecycle.sh');
 }
 
 function runScript(cmd: 'start' | 'stop' | 'status'): { code: number; stdout: string; stderr: string } {
   const scriptPath = resolveScriptPath();
+  const devCheckout = resolveDevCheckout();
   if (!existsSync(scriptPath)) {
     throw new Error(`dev-lifecycle.sh not found at ${scriptPath}`);
   }
@@ -55,6 +70,7 @@ function runScript(cmd: 'start' | 'stop' | 'status'): { code: number; stdout: st
     env: {
       ...process.env,
       DEV_PORT: String(DEV_PORT),
+      ...(devCheckout ? { DEV_CHECKOUT: devCheckout } : {}),
     },
     encoding: 'utf8',
     timeout: 60_000,
@@ -76,11 +92,12 @@ async function isHealthy(): Promise<boolean> {
 }
 
 async function discoverWorkspace(): Promise<string> {
-  if (process.env.DEV_CHECKOUT) return process.env.DEV_CHECKOUT;
+  const checkout = resolveDevCheckout();
+  if (checkout) return checkout;
   try {
     const res = await fetch(`${DEV_BASE_URL}/api/watch-paths`, { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
-      const paths: Array<{ name?: string; rootPath?: string }> = await res.json();
+      const paths: { name?: string; rootPath?: string }[] = await res.json();
       const ours = paths.find(p => (p.rootPath ?? '').toLowerCase().includes('agent-taskboard-dev'));
       if (ours?.rootPath) return ours.rootPath;
     }
@@ -88,13 +105,11 @@ async function discoverWorkspace(): Promise<string> {
     // fall through
   }
   // Last resort: same default the script uses.
-  const here = path.resolve(__dirname);
-  const repoRoot = path.resolve(here, '..', '..', '..');
-  return path.resolve(repoRoot, '..', 'agent-taskboard-dev');
+  return path.resolve(resolveRepoRoot(), '..', 'agent-taskboard-dev');
 }
 
 export const test = base.extend<{ devBackend: DevBackend }>({
-  devBackend: async ({}, use, testInfo) => {
+  devBackend: async (_fixtures, use, testInfo) => {
     const startedHealthy = await isHealthy();
     let weStartedIt = false;
 

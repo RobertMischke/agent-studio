@@ -913,8 +913,7 @@
   &__msg {
     margin-top: 4px;
     padding: 6px 8px;
-    background: var(--studio-bg-elevated);
-    border-left: 2px solid var(--studio-accent);
+    background: color-mix(in srgb, var(--studio-accent) 8%, var(--studio-bg-elevated));
     font-size: 11px;
     color: var(--studio-fg-dim);
     border-radius: 2px;
@@ -943,8 +942,7 @@
   &__note {
     margin: 4px 0 0;
     padding: 6px 8px;
-    background: var(--studio-bg-elevated);
-    border-left: 2px solid var(--studio-accent);
+    background: color-mix(in srgb, var(--studio-accent) 8%, var(--studio-bg-elevated));
     font-size: 11px;
     color: var(--studio-fg-dim);
     border-radius: 2px;
@@ -1902,9 +1900,24 @@
   }
 
   &__num {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
     font-family: var(--font-mono);
     font-size: 10px;
+    line-height: 1;
     color: var(--studio-fg-muted);
+  }
+
+  // Angular component hosts participate in the flex row themselves. Making
+  // the host a centred flex item keeps the SVG glyph on the same optical axis
+  // as the project/task abbreviation and title.
+  app-studio-icon {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    flex: 0 0 auto;
+    line-height: 1;
   }
 
   &__title {

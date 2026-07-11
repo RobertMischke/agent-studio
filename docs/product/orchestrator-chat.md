@@ -121,6 +121,23 @@ moving between the board and a task in the same project swaps the visible
 transcript even though the project is unchanged. When no context key is
 derivable it falls back to the per-project route, keeping the board identical.
 
+## Chat Switcher Rail
+
+The side sheet includes an optional, collapsed-by-default chat switcher. Its
+chip reports the number of active or queued contexts; expanding it groups the
+registry into Global, Projects, and Tasks. Rows expose runtime state, local
+unread state, and cumulative token usage. Clicking a row name changes the chat
+context without moving the workspace. The separate arrow navigates to that
+context's all-project board, project board, or task tab.
+
+The rail reads `GET /api/orchestrator/sessions`. Its runtime badge is a snapshot
+of the in-memory turn dispatcher (`active`, `queued`, or `parked`); durable
+usage comes from the session record. Unread state is intentionally local to the
+browser because the registry does not own per-user read receipts. Global is
+listed as a first-class registry context, but until a global transcript endpoint
+exists its selected state renders an explicit empty transcript instead of
+silently borrowing a project's conversation.
+
 ## Memory Model
 
 The orchestrator's memory should be layered, inspectable, and rebuildable:

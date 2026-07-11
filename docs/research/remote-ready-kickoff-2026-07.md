@@ -184,6 +184,7 @@ current `main`.
 | **D5** | **Headless CLI auth on Linux** | Subscription OAuth without a browser is the known weak spot (risk 5.5 in `path-forward-plan`). Options: one-time interactive `ssh -L` login per host, or seeding `~/.claude/.credentials.json` + onboarded `~/.claude.json` (the clean-context allowlist documents the exact file set). Needs a decision on credential rotation. |
 | **D6** | **Runner deploy/update story** | ADR-0021/0031 machinery is same-disk Windows; the Linux runner needs its own (systemd unit + git pull + health check is probably enough to start). |
 | **D7** | **Preview/dev-server access** | Dev servers started by the runner run on the Linux host; browser needs host-qualified project URLs or a preview proxy under the central URL. |
+| **D8** | **Execution assignment scope** | Assign one execution location per project. Project Settings stores the stable host id, defaults legacy projects to `local`, and exposes a guided readiness probe for the operator to run before enabling pickup. Task-level host overrides are intentionally excluded. |
 
 ---
 
@@ -220,6 +221,17 @@ fencing token, heartbeat, log chunk shipping, artifact upload endpoints (to be
 built), git-origin code distribution. `.pickup-lock.json` retires in favor of
 the lease API. This phase must pass the §8.2C acceptance tests before any
 second runner appears.
+
+The project integration surface for this phase lives in Project Settings. Its
+execution card persists the existing `ProjectSettings.ExecutionRunner`
+assignment (`null` for local or a stable runner identity) through the same
+contract consumed by local pickup and remote claims. It runs a four-part
+readiness probe: Git code channel, `develop` integration branch, host toolchain,
+and no-op eligibility. The current UI-first host registry supplies the
+capability and heartbeat snapshot; the Phase 3 runner command surface replaces
+that final eligibility check with the concept's real no-op task execution.
+Board cards continue to show the actual runner identity from the fenced run
+lease, so configured intent and live attribution remain distinct.
 
 **Phase 4 — Playwright + previews remote.**
 E2E and screenshot capture run on the runner host (`PW_BASE_URL` →

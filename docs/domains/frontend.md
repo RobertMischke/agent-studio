@@ -47,6 +47,22 @@ groups, and a failed domain reports an error without hiding successful domains.
 
 - `frontend/src/app/features/board/`: kanban lanes, task cards, project tabs,
   filters, and task creation.
+- `frontend/src/app/features/board/components/epic-overview-screen/`: the
+  read-only Epics overview (`#/epics`, studio tab `epics:<project|__all__>`).
+  It fetches `GET /api/epics` (archive-inclusive) and splits rollups into
+  `Active` and `Completed` sections (`epic-overview-section-active` /
+  `epic-overview-section-completed`); a rollup counts as Completed only when
+  `subTaskTotal > 0` and every child is done. Archived zero-member cleanup
+  epics are hidden, while completed epics with historical children stay visible
+  as history. Each card shows an `x / y done` count, a done/in-progress/open
+  progress bar, and expands (`epic-overview-expand`) to child rows carrying
+  lane status and a project colour dot (`epic-overview-open-sub` /
+  `epic-overview-sub-project`). The screen only navigates (it emits `openTask`);
+  epic assignment stays on the board (create dialog + card context menu).
+  `EpicCreateDialogComponent` requires a title and goal description before it
+  posts. Contract locked by `e2e/board/epic-overview-history.spec.ts` (mocked
+  routes, both themes) and `e2e/board/epic-overview-screen.spec.ts` (real
+  backend seed + navigate).
 - `frontend/src/app/features/task-detail/`: task detail shell, protocol pane,
   prompt pane, git pane, timeline, pipeline overview, and command surfaces.
 - `frontend/src/app/features/project-detail/`: project shell and project-level
@@ -63,6 +79,16 @@ groups, and a failed domain reports an error without hiding successful domains.
   operations, and shows a per-doc History panel (model / when / why + git log);
   its endpoints and tree contract are documented in
   [docs/contracts/wiki-tree.md](../contracts/wiki-tree.md).
+- Project Settings owns the project-dedicated execution assignment. The
+  execution card selects `local` or a healthy runner identity and persists it
+  through the runtime-owned
+  `PUT /api/projects/{projectName}/execution-runner` contract. A null runner is
+  the local default; a remote identity makes the remote daemon the sole
+  auto-pickup owner for that project. The guided check reports code channel,
+  `develop`, toolchain, and no-op readiness from the host registry snapshot.
+  Board cards deliberately show the actual live runner from the fenced run
+  lease, not merely this configured target, so assignment and attribution
+  cannot be confused.
 - `frontend/src/app/services/task.service.ts`: task API integration, optimistic
   lane moves, reorder, and rollback.
 - `frontend/src/app/services/cli-catalog.store.ts`: boot-hydrated CLI model
@@ -94,6 +120,12 @@ groups, and a failed domain reports an error without hiding successful domains.
 - Before adding visual variants, check the style guide and update it if a new
   pattern is truly needed.
 - Use stable `data-testid` hooks for Playwright selectors.
+- The Epics overview keeps completed and archived epics visible as history
+  instead of dropping them once finished; history renders quietly with no acute
+  status signals (R4), and each epic's progress counts are the sum of that
+  epic's visible children (R3). The only rollups withheld from the overview are
+  empty archived cleanup epics (zero members). See the epic domain contract in
+  [docs/domains/tasks.md](./tasks.md#epic-lifecycle).
 - Workspace-level CLI administration is not a separate sheet. Model and
   environment management, completion contracts, sessions, usage caps, and
   token spend belong to Workspace Settings under CLI Management.

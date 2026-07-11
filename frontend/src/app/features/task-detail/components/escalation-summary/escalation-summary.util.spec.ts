@@ -5,11 +5,13 @@ import type { SteeringInfo } from '../../../../components/steering-detail';
 import {
   buildDelivery,
   buildEscalationSummaryView,
+  deriveEscalationClass,
   deriveRecommendation,
   gateItemsFromEvidence,
   gateItemsFromFindings,
   gradeTone,
   parseFollowUpGateItems,
+  parseStatusStubEscalation,
   pickReviewHead,
   resolveGateItems,
 } from './escalation-summary.util';
@@ -271,6 +273,7 @@ describe('buildEscalationSummaryView', () => {
         context: [{ key: 'Cause', value: 'completion-gate' }],
         commits: [],
       },
+      statusMarkdown: null,
     });
 
     expect(view.gateSource).toBe('follow-up');
@@ -282,5 +285,89 @@ describe('buildEscalationSummaryView', () => {
     expect(view.delivery.filesChanged).toBe(4);
     expect(view.delivery.merge?.main.merged).toBe(true);
     expect(view.recommendation?.kind).toBe('needs-decision');
+    // A completion-gate escalation is a logical / quality review, not a give-up.
+    expect(view.escalation?.kind).toBe('needs-review');
+  });
+});
+
+describe('parseStatusStubEscalation', () => {
+  it('lifts the category + reason from a BuildStatusStub status.md', () => {
+    const md = [
+      '# Status',
+      '',
+      '- Result: Escalated to human decision (infra-crash)',
+      '',
+      'This card was routed to 5e-escalated by the orchestrator runtime ...',
+      '',
+      '- Category: infra-crash',
+      '- Reason: The agent CLI crashed hard (exitCode -1) before a verdict.',
+      '- See `logs/` in this folder for the run output.',
+    ].join('\n');
+    expect(parseStatusStubEscalation(md)).toEqual({
+      category: 'infra-crash',
+      reason: 'The agent CLI crashed hard (exitCode -1) before a verdict.',
+    });
+  });
+
+  it('returns null when the status carries a real agent summary (no Category line)', () => {
+    expect(parseStatusStubEscalation('# Status\n\n- Result: Done. Shipped the feature.')).toBeNull();
+    expect(parseStatusStubEscalation(null)).toBeNull();
+  });
+});
+
+describe('deriveEscalationClass', () => {
+  const noSteer = { steering: null };
+
+  it('classifies an infra-crash status stub as a GaveUpToHuman terminal', () => {
+    const cls = deriveEscalationClass({
+      info: info({ orchestratorVerdict: 'escalate' }),
+      statusMarkdown: '# Status\n- Category: infra-crash\n- Reason: process died at exit -1.',
+      ...noSteer,
+    });
+    expect(cls).toEqual({
+      kind: 'gave-up',
+      category: 'infra-crash',
+      categoryLabel: 'Infra crash',
+      reason: 'process died at exit -1.',
+    });
+  });
+
+  it('sniffs the aspect-infra give-up out of the steering cause when no stub exists', () => {
+    const cls = deriveEscalationClass({
+      info: info({ orchestratorVerdict: 'escalate' }),
+      statusMarkdown: null,
+      steering: {
+        verdict: 'escalate',
+        verdictLabel: 'Escalate',
+        tone: 'danger',
+        reason: 'aspect runner died',
+        openItems: [],
+        prompt: null,
+        context: [{ key: 'Cause', value: 'aspect-verdict-infra-crash' }],
+        commits: [],
+      },
+    });
+    expect(cls?.kind).toBe('gave-up');
+    expect(cls?.category).toBe('infra-crash');
+    expect(cls?.reason).toBe('aspect runner died');
+  });
+
+  it('treats an escalate verdict with no give-up category as a logical NeedsReview', () => {
+    const cls = deriveEscalationClass({
+      info: info({ orchestratorVerdict: 'escalate' }),
+      statusMarkdown: '# Status\n- Result: Done. Real summary, no category line.',
+      ...noSteer,
+    });
+    expect(cls).toEqual({ kind: 'needs-review', category: null, categoryLabel: null, reason: null });
+  });
+
+  it('returns null when the card is not an escalation and no give-up stub exists', () => {
+    expect(
+      deriveEscalationClass({
+        info: info({ orchestratorVerdict: 'accept' }),
+        statusMarkdown: null,
+        ...noSteer,
+      }),
+    ).toBeNull();
   });
 });

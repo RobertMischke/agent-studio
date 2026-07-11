@@ -9,7 +9,7 @@
  */
 
 /** Discrete tab kinds the editor area can host. */
-export type StudioTabKind = 'board' | 'epics' | 'epic' | 'task' | 'hub' | 'diff' | 'activity' | 'workspace-settings' | 'welcome';
+export type StudioTabKind = 'board' | 'epics' | 'epic' | 'task' | 'hub' | 'diff' | 'activity' | 'url-preview' | 'workspace-settings' | 'welcome';
 
 /** Sidebar panel kinds reachable from the ActivityBar. */
 export type StudioPanelKind = 'explorer' | 'filters' | 'cli' | 'activity' | 'runbook' | 'admin' | 'settings';
@@ -35,13 +35,21 @@ export interface DiffTab { kind: 'diff'; commitSha: string; }
 /** Full-screen activity tab; key `activity:<taskKey>`. */
 export interface ActivityTab { kind: 'activity'; taskKey: string; }
 
+/**
+ * Embedded Project-URL preview tab (AGT-2067) — one per configured URL;
+ * key `url-preview:<projectName>:<urlId>`. Renders the URL inside a
+ * sandboxed iframe (split-view beside the Orchestrator side sheet) instead
+ * of jumping to an external browser tab.
+ */
+export interface UrlPreviewTab { kind: 'url-preview'; projectName: string; urlId: string; }
+
 /** Workspace settings tab — global settings surface opened from the ActivityBar gear. */
 export interface WorkspaceSettingsTab { kind: 'workspace-settings'; }
 
 /** Welcome screen — no real tab, no key. */
 export interface WelcomeTab { kind: 'welcome'; }
 
-export type StudioTab = BoardTab | EpicsTab | EpicTab | TaskTab | HubTab | DiffTab | ActivityTab | WorkspaceSettingsTab | WelcomeTab;
+export type StudioTab = BoardTab | EpicsTab | EpicTab | TaskTab | HubTab | DiffTab | ActivityTab | UrlPreviewTab | WorkspaceSettingsTab | WelcomeTab;
 
 /** Build the stable string key for a tab; used for selection + persistence. */
 export function studioTabKey(tab: StudioTab): string {
@@ -50,9 +58,12 @@ export function studioTabKey(tab: StudioTab): string {
     case 'epics':    return `epics:${tab.projectName ?? '__all__'}`;
     case 'epic':     return `epic:${tab.epicKey}`;
     case 'task':     return `task:${tab.taskKey}`;
-    case 'hub':      return `hub:${tab.projectName}`;
+    case 'hub':      return tab.section === 'wiki'
+      ? `hub:${tab.projectName}:wiki`
+      : `hub:${tab.projectName}`;
     case 'diff':     return `diff:${tab.commitSha}`;
     case 'activity': return `activity:${tab.taskKey}`;
+    case 'url-preview': return `url-preview:${tab.projectName}:${tab.urlId}`;
     case 'workspace-settings': return 'workspace-settings';
     case 'welcome':  return 'welcome';
   }

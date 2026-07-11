@@ -414,6 +414,11 @@ public class TaskScannerService : ITaskScanner
                 Fixture = raw.TryGetProperty("fixture", out var fix)
                     && fix.ValueKind is JsonValueKind.True,
                 Phase = ReadPhase(raw, resolvedState, jobDir),
+                PhaseEnteredAt = raw.TryGetProperty("phaseEnteredAt", out var phaseEntered)
+                    && phaseEntered.TryGetDateTime(out var phaseEnteredAt)
+                        ? phaseEnteredAt.ToUniversalTime()
+                        : null,
+                SteerPendingSince = ReadSteerPendingSince(jobDir, resolvedState),
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),
                 References = ReadReferences(raw),
@@ -438,7 +443,11 @@ public class TaskScannerService : ITaskScanner
 
     public TaskInfo? FindJob(string jobId, string? watchPath = null)
     {
-        var matches = ScanAllJobs().Where(j => j.Id == jobId);
+        // Public task routes accept both the physical job id/slug and the
+        // stable project key shown on cards. Remote runners receive that key
+        // from the claim endpoint, so every subsequent prompt/log/completion
+        // lookup must resolve the same identity after a lane move.
+        var matches = ScanAllJobs().Where(j => MatchesTaskIdentity(j, jobId));
         if (!string.IsNullOrWhiteSpace(watchPath))
         {
             // Path-aware, OS-correct project match. A raw OrdinalIgnoreCase
@@ -495,12 +504,17 @@ public class TaskScannerService : ITaskScanner
                 var info = ScanJobFolder(jobDir, entry, TaskStates.Archive);
                 if (info == null) continue;
                 if (!string.Equals(info.State, TaskStates.Archive, StringComparison.Ordinal)) continue;
-                if (string.Equals(info.Id, jobId, StringComparison.Ordinal)) matches.Add(info);
+                if (MatchesTaskIdentity(info, jobId)) matches.Add(info);
             }
         }
 
         return matches;
     }
+
+    private static bool MatchesTaskIdentity(TaskInfo info, string identity)
+        => string.Equals(info.Id, identity, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(info.TaskKey, identity, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(info.Key, identity, StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<string> EnumerateArchiveCandidateDirs(string watchPath)
     {
@@ -844,6 +858,33 @@ public class TaskScannerService : ITaskScanner
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Run-Liveness Slice B: the UTC time a 3-progress card's steer-pending wait
+    /// started, read from the durable <c>steer-pending.json</c> marker. Only
+    /// 3-progress cards carry the wait, so the file probe is skipped otherwise.
+    /// The wait-start is read directly (not through the runner marker type) to
+    /// keep the scanner free of a Runner-layer dependency.
+    /// </summary>
+    private static DateTime? ReadSteerPendingSince(string jobFolder, string state)
+    {
+        if (!string.Equals(state, TaskStates.Progress, StringComparison.OrdinalIgnoreCase)) return null;
+        var path = Path.Combine(jobFolder, "steer-pending.json");
+        if (!File.Exists(path)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            if (doc.RootElement.TryGetProperty("waitStartedAt", out var el)
+                && el.ValueKind == JsonValueKind.String
+                && el.TryGetDateTime(out var dt))
+                return dt.ToUniversalTime();
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "TaskScannerService: torn / unreadable steer-pending.json - no wait pill");
+        }
+        return null;
     }
 
     private const int OutcomeIssueTailBytes = 16 * 1024;

@@ -254,7 +254,13 @@
           <td><strong>CooldownRetry</strong></td>
           <td><span class="pill transient">transient</span></td>
           <td class="lane">3-progress</td>
-          <td>An infra crash with retry budget remaining. The task is held with a visible "infra-crashed, retrying k/3 in Ns" banner and a <em>scheduled</em> re-pickup after a backoff delay. This is the <em>only</em> non-live state allowed in <span class="lane">3-progress</span>, and it is always time-bounded by a real timer (never the 60-minute boot sweep, never a busy-loop).</td>
+          <td>An infra crash with retry budget remaining. The task is held with a visible "infra-crashed, retrying k/3 in Ns" banner and a <em>scheduled</em> re-pickup after a backoff delay. It is always time-bounded by a real timer (never the 60-minute boot sweep, never a busy-loop).</td>
+        </tr>
+        <tr>
+          <td><strong>SteerPending</strong></td>
+          <td><span class="pill transient">transient</span></td>
+          <td class="lane">3-progress</td>
+          <td>An auto-mode run asked a steer / NeedsInput question and released its live CLI seat. A durable start time drives the visible "Waiting for answer" timer and a bounded wake: after the configured timeout, the task either receives an unambiguous context-derived answer or reaches a blocked human escalation.</td>
         </tr>
         <tr>
           <td><strong>Succeeded</strong></td>
@@ -278,8 +284,8 @@
     </table>
 
     <p class="small"><strong>Invariant:</strong> a run can only leave <em>Running</em> into one of
-      {Succeeded, NeedsReview, GaveUpToHuman, CooldownRetry}, and CooldownRetry must itself terminate in one of the three
-      terminals. No path leaves a task parked in <span class="lane">3-progress</span> without either a live process or a
+      {Succeeded, NeedsReview, GaveUpToHuman, CooldownRetry, SteerPending}. CooldownRetry and SteerPending must each terminate
+      in one of the three terminals or schedule a concrete continuation. No path leaves a task parked in <span class="lane">3-progress</span> without either a live process or a
       scheduled wake. The 9-day-stranding state is structurally unreachable.</p>
   </section>
 
@@ -478,6 +484,101 @@
             escalates the card flagged <code>environmental</code> + <code>InfraCrash</code> as a chain-ending <code>Escalate</code>
             (no reissue-budget burn). A reviewer that DID reply keeps the existing <code>review:unparseable</code> concern; the other
             post-steps (code-review-grade, wiki) already swallow a crash into a Skipped/Failed row and never gate the lane.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2001</code><br><span class="small">run-liveness B: steer timeout + fallback</span></td>
+          <td>
+            Unattended runs could wait indefinitely after a steer / NeedsInput question. AGT-1936 waited on
+            <em>"provide the task description"</em> with no consumer; later 2062/2067/2068 occupied three slots for about five hours.
+          </td>
+          <td>
+            The intentional steer wait had neither a durable start time nor a bounded wake, so process-liveness recovery correctly
+            left the live-but-waiting run alone and no outcome route ever fired.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> auto-mode steer waits now carry a durable marker and default 120 second timeout.
+            A deterministic branch-state answer resumes the run when available; otherwise the card reaches
+            <span class="lane">5e-escalated</span> with reason <code>steer-unanswered</code>. Both paths emit structured audit and timeline events.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2076</code><br><span class="small">worktree-orphan-resilienz</span></td>
+          <td>
+            Five cards spent a day cycling through worktree preparation while detached <code>ng serve</code> and
+            <code>esbuild</code> helpers held their task worktrees open. About 1,400
+            <code>pick-reverted-no-run</code> events produced 1.7 GB of backend log without a visible terminal.
+          </td>
+          <td>
+            Run teardown killed only the reachable CLI PID tree, detached helpers survived a backend restart, the busy-worktree
+            preparation path had no bounded terminal, and identical revert notices were emitted on every pickup tick.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> Windows runs use a kill-on-close process group plus a boot orphan sweep; a busy
+            worktree retries with exponential cooldown and escalates after five attempts as <code>worktree-blocked</code>, with the
+            busy path in a visible gate item; identical revert logs and chat notices are limited to one per ten minutes with a
+            suppression count. The terminal is <span class="lane">5e-escalated</span>, never an endless ready/progress loop.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+           <td><code>AGT-2077</code><br><span class="small">CPU-Lastwaechter: review OneShots and slot admission under saturation</span></td>
+          <td>
+            Eight parallel worktree installs and Angular builds saturated all 16 cores. Thirty-nine node/esbuild processes
+            left review-decision, post-abort-review, summary-generation, and one main agent call with no CPU time before their
+            60 second deadlines. Empty replies were treated as work-quality failures and ten completed cards reached escalated
+            review within minutes.
+          </td>
+          <td>
+            CLI quota admission knew nothing about local host resources, and the central OneShot path had a fixed timeout with
+            no load-aware queue or retry. Starting more slots amplified the same condition.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> total system CPU is sampled every 15 seconds. One sustained minute above 90
+            percent closes new-slot admission with visible <code>load-throttle</code> events and queues support OneShots until
+             cooling. Calls after saturation get a 3x timeout and one timeout retry; the cause is classified
+             <code>environmental-load</code>, not orchestrator inconclusive. Existing agent runs are not killed.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-08</td>
+          <td><code>AGT-1943</code><br><span class="small">post-build-test-gate worktree isolation<br>(observed on <code>AGT-1937</code>)</span></td>
+          <td>
+            The automatic <code>post-build-test-gate</code> ran <code>dotnet build</code> in the shared dev checkout while a
+            permitted dev backend was running there. The backend held <code>OrchestratorApi.exe</code> open, MSBuild emitted
+            <code>MSB3021</code>/<code>MSB3026</code>/<code>MSB3027</code>, and two red gate attempts falsely escalated a task
+            whose own worktree was green.
+          </td>
+          <td>
+            The review orchestrator always passed the project's configured repository path to the build gate, even when the
+            completed coding run owned a registered <code>task/&lt;id&gt;</code> worktree.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the build gate resolves the live task worktree from its branch and verifies that
+            checkout. Sequential and legacy tasks without a live worktree keep the shared-checkout fallback. A regression test
+            models the shared checkout as <code>MSB3026</code>-locked and proves the green worktree reaches review.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2079</code><br><span class="small">completion gate for documentation and verification-only runs<br>(observed on <code>MKT-1</code>, <code>ASS-1761</code>, <code>AGT-2077</code>)</span></td>
+          <td>
+            Three completed runs with no new commit were reissued or escalated despite <code>[[TASK_DONE]]</code>, a successful run terminal,
+            a successful status, no open items, and concrete delivery evidence in API uploads, <code>results/</code>, or a
+            verification report.
+          </td>
+          <td>
+            <code>CompletionGate.ExtractFindings</code> scanned historical failure vocabulary in the accumulated status and log
+            before it classified the latest run's non-commit evidence. Once the shared reissue budget was spent, the resulting
+            stale finding became the message "unfinished-work evidence after 2 reissues".
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> pure <code>CompletionEvidencePolicy</code> now accepts a clean
+            <code>TASK_DONE</code> close-out with exit 0 or authoritative <code>status=completed</code>, backed by an API delivery, a non-empty <code>results/</code> folder, or
+            documented successful verification. Explicit open items and current, non-reverified build/test failures still use
+            the existing bounded reissue/escalation path. Pure fixtures pin all three night cases.
           </td>
         </tr>
       </tbody>

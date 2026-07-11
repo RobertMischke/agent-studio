@@ -16,7 +16,9 @@
   }
   @defer (when activeRail() === 'project-urls') {
     @if (activeRail() === 'project-urls') {
-      <app-project-urls-panel [projectName]="projectName()" />
+      <app-project-urls-panel
+        [projectName]="projectName()"
+        (openEmbeddedPreview)="openUrlPreview($event)" />
     }
   }
   @defer (when activeRail() === 'git') {

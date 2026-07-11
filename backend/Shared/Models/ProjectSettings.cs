@@ -42,6 +42,21 @@ public record ProjectSettings
     public string? DesiredRunnerMode { get; init; }
 
     /// <summary>
+    /// Server-owned assignment for remote execution. A non-empty value names
+    /// the remote runner allowed to claim this project's ready cards. The local
+    /// in-process runner skips those cards while the project is remote-capable.
+    /// </summary>
+    public string? ExecutionRunner { get; init; }
+
+    /// <summary>
+    /// Whether this project's tasks may execute on a remote host. Defaults to
+    /// true; set false only for machine-bound suites such as UpdateService
+    /// Windows machinery or live-checkout drift scans. Headless UI and
+    /// screenshot work remains remote-capable.
+    /// </summary>
+    public bool RemoteExecutionEnabled { get; init; } = true;
+
+    /// <summary>
     /// Model the orchestrator uses when it makes decisions on behalf of the
     /// user in auto mode (Phase E and later). Null means use the default.
     /// </summary>

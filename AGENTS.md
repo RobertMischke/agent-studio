@@ -4,10 +4,10 @@
 > and future agent surfaces. Keep this file short. Mandatory guardrails live
 > here; domain system-of-record maps live in `docs/`.
 
-Compatibility shims: [CLAUDE.md](CLAUDE.md) and
-[.github/copilot-instructions.md](.github/copilot-instructions.md). Frontend
-scoped rules live in [frontend/AGENTS.md](frontend/AGENTS.md) and apply only
-under `frontend/`.
+Compatibility shims: [CLAUDE.md](CLAUDE.md), [GEMINI.md](GEMINI.md), and
+[.github/copilot-instructions.md](.github/copilot-instructions.md).
+Frontend-scoped rules live in [frontend/AGENTS.md](frontend/AGENTS.md) and
+apply only under `frontend/`.
 
 ## Start Here
 
@@ -19,9 +19,17 @@ under `frontend/`.
 - Familiar runtime, CLI, permission, filesystem, runner, or state-machine
   failure: search [docs/wiki/common-problems/](docs/wiki/common-problems/)
   before debugging from scratch.
+- Current state of a designated topic (so we do not re-discover the same ground):
+  [docs/wiki/concepts/designated-topics/](docs/wiki/concepts/designated-topics/README.md).
+  The opt-in `post-agents-wiki-sync` step keeps these pointers consistent and the
+  per-topic Current State pages fresh.
 
 ## Non-Negotiable Rules
 
+- UI work obeys the style-guide hard rules in
+  [docs/design/style-guide-hard-rules.md](./docs/design/style-guide-hard-rules.md).
+  Most-cited: no coloured left accent line or bar on cards, panels, rows,
+  banners, or pill groups (encode status via background tint, badge, or dot).
 - Work only in the active dev checkout or assigned task worktree. Never edit
   `agent-taskboard-stable/`; stable updates only by the parent
   `update-stable.sh` after a verified dev batch.
@@ -37,10 +45,6 @@ under `frontend/`.
 - Written repo artifacts are English. Do not introduce em dashes. User-facing UI
   strings, backend errors shown to the UI, prompts, comments, docs, commits, and
   PR text are English.
-- UI work obeys the style-guide hard rules in
-  [docs/design/style-guide-hard-rules.md](./docs/design/style-guide-hard-rules.md).
-  Most-cited: no coloured left accent line or bar on cards, panels, rows,
-  banners, or pill groups (encode status via background tint, badge, or dot).
 - When adding a document under `docs/`, add one row to
   [docs/README.md](docs/README.md) in the same change.
 - CLI crashes, run-outcome classification, retries, or orchestrator
@@ -48,6 +52,10 @@ under `frontend/`.
   [docs/wiki/concepts/orchestrator-drive-to-conclusion.html](docs/wiki/concepts/orchestrator-drive-to-conclusion.html)
   before changing that logic, and maintain it after. Append each incident to
   its case log (date, slug, what crashed, which terminal it reached).
+- A repeatedly busy orphan worktree is a bounded drive-to-conclusion failure:
+  after five preparation attempts, escalate it with a visible
+  `worktree-blocked` gate item containing the busy path, and pause retries.
+  Repeated `pick-reverted-no-run` notices remain rate-limited per task.
 - Agent shell policy: default to bash/sh, prefer existing `.sh` scripts, and
   avoid PowerShell-specific file creation.
 
@@ -57,7 +65,7 @@ under `frontend/`.
 |---|---|---|
 | Runner | [docs/domains/runner.md](./docs/domains/runner.md) | Pickup, CLI run loop, outcome policy, supervisor loops, and the standalone remote runner (`runner/`, [runbook](./docs/operations/setup/linux-runner-host.md)). |
 | Pipeline | [docs/domains/pipeline.md](./docs/domains/pipeline.md) | Pre/core/post steps, pipeline history, step contracts, and the review/aspect evidence contract (branch diff + `results/` inventory + card mode; when "deliverables missing" is legitimate). |
-| Tasks | [docs/domains/tasks.md](./docs/domains/tasks.md) | Job folders, lane states, API mutations, task access. |
+| Tasks | [docs/domains/tasks.md](./docs/domains/tasks.md) | Job folders, lane states, API mutations, task access, Epic lifecycle and archive-inclusive history, and the project-source API contract used by onboarding and Workspace Settings. |
 | Frontend | [docs/domains/frontend.md](./docs/domains/frontend.md) | Angular surfaces, design system, Playwright proof. |
 | Design rules | [docs/design/style-guide-hard-rules.md](./docs/design/style-guide-hard-rules.md) | Hard, non-negotiable design rules (no left accent bars, full-bleed views, aggregate = sum of visible children, acute-only signals, both themes). |
 | CLI | [docs/domains/cli.md](./docs/domains/cli.md) | Claude, Codex, Copilot, Gemini drivers and quota probes. |

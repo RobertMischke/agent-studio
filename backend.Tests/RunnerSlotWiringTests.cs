@@ -134,6 +134,24 @@ public sealed class RunnerSlotWiringTests : IDisposable
     }
 
     [Fact]
+    public void ActiveRunRecord_DoesNotOccupySlot_AfterCliProcessExits()
+    {
+        var runs = new ActiveRuns();
+        Assert.True(runs.TryClaim(new ActiveRun { JobId = "live", Intent = RunIntent.AutoPickup }));
+        Assert.Equal(1, runs.Count);
+
+        Assert.True(runs.ReleaseExecutionSlot("live"));
+
+        Assert.Equal(0, runs.Count);
+        Assert.True(runs.Contains("live"));
+        Assert.False(runs.HoldsExecutionSlot("live"));
+        Assert.Null(runs.SingleJobId);
+        Assert.Empty(runs.RunningTasks());
+        Assert.True(runs.HasFreeSlot(1));
+        Assert.False(runs.ReleaseExecutionSlot("live"));
+    }
+
+    [Fact]
     public void RenderPrompt_ForWorktreeRun_RewritesMainCheckoutPathsAndAddsContainmentNotice()
     {
         var (runner, _) = BuildRunner();

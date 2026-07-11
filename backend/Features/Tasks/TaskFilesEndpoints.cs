@@ -3,6 +3,8 @@
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 
+using static AgentStudio.Tasks.TaskEndpointHelpers;
+
 namespace AgentStudio.Tasks;
 
 /// <summary>
@@ -20,13 +22,16 @@ public static class TaskFilesEndpoints
         group.MapGet("/{jobId}/files/{**path}", (
             string jobId,
             string path,
+            [FromQuery] string? project,
             [FromQuery] string? watchPath,
             [FromQuery] string? at,
             [FromQuery] string? scope,
             [FromQuery(Name = "from")] string? fromSha,
             [FromQuery(Name = "to")] string? toSha,
-            TaskFileHistoryService files) =>
+            TaskFileHistoryService files,
+            AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             if (TryStripOperationSuffix(path, "history", out var historyPath))
             {
                 var history = files.GetHistory(jobId, watchPath, historyPath, scope);
@@ -47,14 +52,16 @@ public static class TaskFilesEndpoints
         // Drives the detail view's Files tab (F48): prompt + aspect verdicts +
         // operator notes surface as a sortable, kind-classified manifest, with
         // content fetched lazily through `/files/{fileName}`.
-        group.MapGet("/{jobId}/artifacts", (string jobId, string? watchPath, TaskScannerService scanner) =>
+        group.MapGet("/{jobId}/artifacts", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var response = scanner.ListArtifacts(jobId, watchPath);
             return response is null ? Results.NotFound() : Results.Ok(response);
         });
 
-        group.MapPut("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, UpdateJobFileRequest req, TaskMutationService mutations, TaskRunnerService runner) =>
+        group.MapPut("/{jobId}/files/{fileName}", (string jobId, string fileName, string? project, string? watchPath, UpdateJobFileRequest req, TaskMutationService mutations, TaskRunnerService runner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             if (runner.IsJobLive(jobId, watchPath))
                 return Results.Conflict("Cannot edit while the CLI is running for this task — stop it first.");
 
@@ -75,8 +82,9 @@ public static class TaskFilesEndpoints
 
         // Prompt-editor screenshot uploads — written to <job>/attachments/<id>.<ext> and
         // referenced from prompt.md as a relative path so the CLI agent finds them on disk.
-        group.MapPost("/{jobId}/attachments", async (string jobId, string? watchPath, HttpRequest request, TaskMutationService mutations) =>
+        group.MapPost("/{jobId}/attachments", async (string jobId, string? project, string? watchPath, HttpRequest request, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             if (!request.HasFormContentType)
                 return Results.BadRequest(new { error = "multipart/form-data expected" });
 
@@ -101,8 +109,9 @@ public static class TaskFilesEndpoints
             });
         }).DisableAntiforgery();
 
-        group.MapGet("/{jobId}/attachments/{fileName}", (string jobId, string fileName, string? watchPath, TaskScannerService scanner) =>
+        group.MapGet("/{jobId}/attachments/{fileName}", (string jobId, string fileName, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var (path, contentType) = scanner.ResolveAttachment(jobId, fileName, watchPath);
             return path is null ? Results.NotFound() : Results.File(path, contentType);
         });
@@ -111,8 +120,9 @@ public static class TaskFilesEndpoints
         // place where agents drop screenshots that should survive past the next
         // Playwright run. The protocol pane resolves `results/<name>` references
         // in status.md against this URL. See docs/contracts/protocol-style.md.
-        group.MapGet("/{jobId}/results/{fileName}", (string jobId, string fileName, string? watchPath, TaskScannerService scanner) =>
+        group.MapGet("/{jobId}/results/{fileName}", (string jobId, string fileName, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var (path, contentType) = scanner.ResolveResult(jobId, fileName, watchPath);
             return path is null ? Results.NotFound() : Results.File(path, contentType);
         });
@@ -121,8 +131,9 @@ public static class TaskFilesEndpoints
         // captioned per spec/folder, with pass-fail status pulled from the
         // Playwright harvest index when available. Drives the protocol-pane
         // screenshot strip and the lightbox prev/next navigation.
-        group.MapGet("/{jobId}/screenshots", (string jobId, string? watchPath, ScreenshotIndexService screenshots) =>
+        group.MapGet("/{jobId}/screenshots", (string jobId, string? project, string? watchPath, ScreenshotIndexService screenshots, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var entries = screenshots.ListJobScreenshots(jobId, watchPath);
             return Results.Ok(new TaskScreenshotsResponse
             {
@@ -136,8 +147,9 @@ public static class TaskFilesEndpoints
         // the screenshot listing returns nested paths under
         // results/playwright/<spec>/... which need this dedicated server.
         // Path traversal is rejected inside ResolveScreenshotFile.
-        group.MapGet("/{jobId}/screenshot", (string jobId, string? path, string? watchPath, ScreenshotIndexService screenshots) =>
+        group.MapGet("/{jobId}/screenshot", (string jobId, string? path, string? project, string? watchPath, ScreenshotIndexService screenshots, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             if (string.IsNullOrWhiteSpace(path)) return Results.BadRequest(new { error = "path is required" });
             var (resolved, contentType) = screenshots.ResolveScreenshotFile(jobId, path, watchPath);
             return resolved is null ? Results.NotFound() : Results.File(resolved, contentType);

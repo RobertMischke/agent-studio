@@ -13,12 +13,14 @@ namespace AgentStudio.Tests;
 /// AGT-2046: the board merge signal must read the same worktree -> develop -> main
 /// ground truth the detail landed-state uses, but batched per repository so a big
 /// board never pays a per-card <c>merge-base --is-ancestor</c> fan-out. Every test
-/// drives real git against a throwaway repo so the four states the card renders are
+/// drives real git against a throwaway repo so the states the card renders are
 /// exercised end to end:
 ///   - on the task branch only (neither develop nor main),
 ///   - merged into develop but not main,
 ///   - released to main (both),
-///   - a recorded develop-merge fact standing in for the anchor.
+///   - a sequential commit landed directly on develop.
+/// AGT-2063: the anchor is the task's OWN commit; a card with a branch tip but no
+/// task commit carries no signal (its branch base is trivially in develop/main).
 /// </summary>
 public sealed class BoardMergeStatusServiceTests : IDisposable
 {
@@ -44,26 +46,51 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
     }
 
     [Fact]
-    public void AnchorFor_PrefersMergeCommit_ThenBranchTip_ThenLatestCommit()
+    public void AnchorFor_IsTheLatestTaskCommit_AndNothingElse()
     {
-        // Merge commit wins.
-        var merged = Job("m", prov: Prov(merge: "mergesha"));
-        Assert.Equal("mergesha", BoardMergeStatusService.AnchorFor(merged));
+        // AGT-2063: the anchor is the task's own commit. The latest attributed
+        // commit wins (newest of the chain).
+        var commitOnly = Job("c", commits: new[] { Commit("oldc"), Commit("newc") });
+        Assert.Equal("newc", BoardMergeStatusService.AnchorFor(commitOnly));
 
-        // No merge -> newest recorded branch tip (walking from the end).
-        var branchTip = Job("b", prov: Prov(transitions: new[]
+        // A recorded merge fact WITHOUT any task commit does NOT manufacture an
+        // anchor: no task commit means no signal (the develop segment is still
+        // proven by the merge fact in BuildLookup, but only for an anchored card).
+        var mergeButNoCommit = Job("m", prov: Prov(merge: "mergesha"));
+        Assert.Null(BoardMergeStatusService.AnchorFor(mergeButNoCommit));
+
+        // A recorded branch tip WITHOUT a task commit is the exact bug source: for
+        // a task that produced no commit the tip is the branch base, trivially in
+        // develop/main. It must NOT anchor the signal.
+        var branchTipButNoCommit = Job("b", prov: Prov(transitions: new[]
         {
             new TaskProvenanceTransition { Lane = "3-progress", BranchTip = "tip1" },
             new TaskProvenanceTransition { Lane = "4-auto-review", BranchTip = "tip2" },
         }));
-        Assert.Equal("tip2", BoardMergeStatusService.AnchorFor(branchTip));
-
-        // No provenance branch data -> latest attributed commit.
-        var commitOnly = Job("c", commits: new[] { Commit("oldc"), Commit("newc") });
-        Assert.Equal("newc", BoardMergeStatusService.AnchorFor(commitOnly));
+        Assert.Null(BoardMergeStatusService.AnchorFor(branchTipButNoCommit));
 
         // Nothing committed -> no anchor, so no signal is produced.
         Assert.Null(BoardMergeStatusService.AnchorFor(Job("empty")));
+    }
+
+    [Fact]
+    public void BuildLookup_SkipsCardsWithABranchTipButNoTaskCommit()
+    {
+        // AGT-2063 regression: a card whose task/<id> branch was cut at develop's
+        // tip but produced no commit must carry NO merge signal - the branch base
+        // is an ancestor of develop, which used to light the develop segment on a
+        // card that changed nothing.
+        var repo = SeedDevelopMainRepo(out _, out var developTip);
+        var svc = BuildService(repo, out var project);
+        var job = Job("basetip", project: project, repo: repo,
+            prov: Prov(branch: "task/basetip", transitions: new[]
+            {
+                new TaskProvenanceTransition { Lane = "3-progress", BranchTip = developTip },
+            }));
+
+        var lookup = svc.BuildLookup(new[] { job });
+
+        Assert.False(lookup.ContainsKey(job.TaskKey));
     }
 
     [Fact]
@@ -79,6 +106,7 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
 
         var svc = BuildService(repo, out var project);
         var job = Job("onbranch", project: project, repo: repo,
+            commits: new[] { Commit(tip) },
             prov: Prov(branch: "task/onbranch", transitions: new[]
             {
                 new TaskProvenanceTransition { Lane = "3-progress", BranchTip = tip },
@@ -109,6 +137,7 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
 
         var svc = BuildService(repo, out var project);
         var job = Job("dev", project: project, repo: repo,
+            commits: new[] { Commit(tip) },
             prov: Prov(branch: "task/dev", merge: mergeSha, transitions: new[]
             {
                 new TaskProvenanceTransition { Lane = "3-progress", BranchTip = tip },
@@ -140,6 +169,7 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
 
         var svc = BuildService(repo, out var project);
         var job = Job("rel", project: project, repo: repo,
+            commits: new[] { Commit(tip) },
             prov: Prov(branch: "task/rel", merge: mergeSha, transitions: new[]
             {
                 new TaskProvenanceTransition { Lane = "3-progress", BranchTip = tip },

@@ -77,7 +77,7 @@
 .sheet__header-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--studio-spacing-1);
   align-items: center;
 }
 
@@ -90,7 +90,7 @@
   cursor: pointer;
   font: inherit;
   font-size: 12px;
-  padding: 3px 10px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
 }
 .sheet__btn:hover:not(:disabled) {
   background: var(--studio-bg-elevated);
@@ -113,80 +113,19 @@
   background: color-mix(in srgb, var(--studio-accent) 20%, transparent);
 }
 
-.sheet__project-picker {
-  position: relative;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px 5px 11px;
-  background: var(--studio-bg-hover);
-  border: 1px solid var(--studio-border);
-  border-radius: 6px;
-  color: var(--studio-fg);
-  font-weight: 600;
-  font-size: 12px;
-}
-.sheet__combo-wrap--active {
-  border-color: color-mix(in srgb, var(--studio-accent-3) 42%, transparent);
-  background: color-mix(in srgb, var(--studio-accent-3) 10%, transparent);
-}
-.sheet__combo-wrap--open {
-  border-color: color-mix(in srgb, var(--studio-accent-4) 72%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--studio-accent-4) 25%, transparent);
-}
-.sheet__select-icon,
-.sheet__select-caret { flex: 0 0 auto; opacity: 0.85; }
-.sheet__combo-input {
+.sheet__workspace {
   flex: 1 1 auto;
   min-width: 0;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  font: inherit;
-  padding: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-height: 0;
+  display: flex;
   overflow: hidden;
 }
-.sheet__combo-input::placeholder { color: inherit; opacity: 0.85; }
-.sheet__combo-input:focus { outline: none; }
-.sheet__combo-list {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  max-height: 280px;
-  overflow-y: auto;
-  margin: 0;
-  padding: 4px;
-  list-style: none;
-  background: var(--studio-bg-elevated);
-  border: 1px solid var(--studio-border-strong);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.30);
-  z-index: 30;
-}
-.sheet__combo-option {
-  padding: 6px 10px;
-  border-radius: 6px;
-  color: var(--studio-fg);
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.sheet__combo-option:hover,
-.sheet__combo-option--active { background: var(--studio-bg-selected); color: var(--studio-fg-strong); }
-.sheet__combo-option--current { color: var(--studio-accent); font-weight: 650; }
-
 .sheet__content {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: 10px 18px 14px;
+  padding: var(--studio-spacing-2) var(--studio-spacing-4) var(--studio-spacing-3);
   background: var(--studio-bg-editor);
   display: flex;
   flex-direction: column;
@@ -194,17 +133,17 @@
 .sheet__scope-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 -2px 10px;
+  gap: var(--studio-spacing-2);
+  margin: 0 calc(var(--studio-spacing-1) / -2) var(--studio-spacing-2);
   min-height: 32px;
 }
 .sheet__scope {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--studio-spacing-1);
   border: 1px solid transparent;
   border-radius: 6px;
-  padding: 5px 10px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
   background: transparent;
   color: var(--studio-fg-muted);
   font: inherit;
@@ -230,8 +169,8 @@
   color: var(--studio-accent-success);
 }
 .sheet__error {
-  margin: 0 0 10px;
-  padding: 7px 10px;
+  margin: 0 0 var(--studio-spacing-2);
+  padding: var(--studio-spacing-2);
   background: color-mix(in srgb, var(--severity-high) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--severity-high) 26%, transparent);
   color: var(--severity-high);
@@ -243,12 +182,12 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--studio-spacing-2);
 }
 // `.sheet__placeholder` was a never-rendered sibling; only the
 // `.sheet__no-project` empty-state block stays.
 .sheet__no-project {
-  padding: 22px 16px;
+  padding: var(--studio-spacing-5) var(--studio-spacing-4);
   color: var(--studio-fg-dim);
   border: 1px dashed var(--studio-border);
   border-radius: 8px;
@@ -263,8 +202,8 @@
 .sheet__context-chip {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 4px 4px;
+  gap: var(--studio-spacing-1);
+  padding: calc(var(--studio-spacing-1) / 2) var(--studio-spacing-1) var(--studio-spacing-1);
   color: var(--studio-fg-muted);
   font-size: 11px;
   line-height: 1.3;
@@ -283,7 +222,7 @@
   border: 0;
   color: inherit;
   cursor: pointer;
-  padding: 0 4px;
+  padding: 0 var(--studio-spacing-1);
   font-size: 13px;
   line-height: 1;
   border-radius: 4px;
@@ -298,13 +237,13 @@
 .sheet__draft-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
+  gap: var(--studio-spacing-1);
 }
 .sheet__draft-btn {
   background: var(--studio-bg-hover);
   border: 1px solid var(--studio-border);
   color: var(--studio-fg);
-  padding: 5px 10px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
   border-radius: 6px;
   cursor: pointer;
   font: inherit;
@@ -327,11 +266,4 @@
    width on phones. */
 @media (max-width: 720px) {
   :host(.is-open) { width: min(100vw, 460px); }
-  // `.sheet__header` from the legacy BEM was removed (the header is
-  // owned by `<app-sidesheet>`); the picker still gets a mobile
-  // reflow so it doesn't crowd the title.
-  .sheet__project-picker {
-    width: 100%;
-    margin-top: 4px;
-  }
 }

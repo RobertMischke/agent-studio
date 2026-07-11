@@ -220,6 +220,19 @@ public record TaskInfo
     /// </summary>
     public string? Phase { get; init; }
 
+    /// <summary>UTC timestamp written whenever <see cref="Phase"/> changes.</summary>
+    public DateTime? PhaseEnteredAt { get; init; }
+
+    /// <summary>
+    /// Run-Liveness Slice B (concept Rule 2): when this <c>3-progress</c> card is
+    /// waiting on an unanswered steer / NeedsInput question, the UTC time the wait
+    /// started - read from the durable <c>steer-pending.json</c> marker. Null when
+    /// the card is not steer-pending. Drives the board's "waiting for answer since
+    /// mm:ss" pill so the wait is visible instead of an invisible hang. Paired
+    /// with <see cref="Phase"/> == <see cref="LifecyclePhases.SteerPending"/>.
+    /// </summary>
+    public DateTime? SteerPendingSince { get; init; }
+
     /// <summary>
     /// Structural classification of the task. One of <see cref="TaskTypes.Bug"/>,
     /// <see cref="TaskTypes.Feature"/>, or <see cref="TaskTypes.Chore"/>
@@ -338,6 +351,19 @@ public record TaskInfo
     /// runner badge next to the CLI badge and the task-detail run header.
     /// </summary>
     public TaskRunnerInfo? Runner { get; init; }
+
+    /// <summary>
+    /// AGT-2069 — read-time spawn-visibility + spawn-contract projection for a
+    /// planning task (<c>Mode == planning</c>): which follow-up cards it spawned
+    /// (AGT-2028 ledger), whether the operator declared "no follow-up intended",
+    /// and whether the spawn contract is satisfied. Folded on by
+    /// <c>TaskEndpointHelpers.WithRuntime</c> only for planning-mode tasks (two
+    /// small sidecar reads, gated so the perf contract holds); null on every
+    /// coding / research / epic card. Never persisted to <c>task.json</c>. Drives
+    /// the "spawnt: AGT-xxxx" chips, the "no follow-up cards" warning, and the
+    /// accept-dialog guard against the AGT-1915 trap.
+    /// </summary>
+    public PlanningSpawnSummary? PlanningSpawn { get; init; }
 }
 
 /// <summary>

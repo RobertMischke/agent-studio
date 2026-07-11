@@ -128,6 +128,7 @@ public class ProjectRunner
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
     private readonly CliQuotaFallbackService? _quotaFallback;
+    private readonly ILoadThrottleGate? _loadThrottle;
     private readonly GitService _git;
     private readonly PickupFailureLog _pickupFailures;
     private readonly CrossSlugInfraCircuitBreaker _infraBreaker;
@@ -254,6 +255,10 @@ public class ProjectRunner
     // decision + slot occupancy. Pure observability; never gates execution.
     private string? _lastPickReason;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _pendingPickReasons = new(StringComparer.Ordinal);
+    // AGT-2055: last emitted pre-launch quota decision per job, so a card that
+    // waits/throttles across many pickup ticks records ONE timeline + feed
+    // entry per decision change instead of one per tick.
+    private readonly Dictionary<string, string> _lastAdmissionDecisionByJob = new(StringComparer.Ordinal);
     // Run intent / follow-up / plan / reissue-attempt now live on the
     // ActiveRun record inside _activeRuns (see ActiveRuns.cs), so OnCliFinished
     // reads them per-run rather than from shared single-active scalars.
@@ -332,6 +337,15 @@ public class ProjectRunner
     // so the existing quarantine route parks the task after the threshold.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _rapidCrashBackoffUntil = new(StringComparer.Ordinal);
 
+    private sealed class RevertLogState
+    {
+        public DateTime LastEmittedUtc;
+        public int Suppressed;
+    }
+
+    private static readonly TimeSpan RevertLogInterval = TimeSpan.FromMinutes(10);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, RevertLogState> _revertLogStates = new(StringComparer.Ordinal);
+
     private bool IsInRapidCrashBackoff(string jobId)
         => _rapidCrashBackoffUntil.TryGetValue(jobId, out var until) && until > DateTime.UtcNow;
 
@@ -397,7 +411,8 @@ public class ProjectRunner
         PostAbortReviewStepService? postAbortReview = null,
         AgentStudio.Cli.ClaudeSessionInspector? sessionInspector = null,
         AgentStudio.Registry.OrchestratorDefaultsProvider? orchestratorDefaults = null,
-        CliQuotaFallbackService? quotaFallback = null)
+        CliQuotaFallbackService? quotaFallback = null,
+        ILoadThrottleGate? loadThrottle = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -419,6 +434,7 @@ public class ProjectRunner
         _quotaService = quotaService;
         _quotaCaps = quotaCaps;
         _quotaFallback = quotaFallback;
+        _loadThrottle = loadThrottle;
         _git = git;
         _pickupFailures = pickupFailures;
         _infraBreaker = infraBreaker;
@@ -675,6 +691,96 @@ public class ProjectRunner
     }
 
     /// <summary>
+    /// AGT-2055: the <b>admission</b> quota view - strict cap OR a projected
+    /// breach before the window resets. Used to route the pre-launch decision
+    /// (so a primary about to hit the wall switches to its fallback early) while
+    /// the strict <see cref="EvaluateQuotaCap"/> stays the sole trigger for
+    /// stopping an already-running job. Cheap and non-blocking; safe on a tick.
+    /// </summary>
+    public CapEvaluation EvaluateAdmissionQuota(string? cliType)
+    {
+        if (string.IsNullOrWhiteSpace(cliType)) return CapEvaluation.NotBlocked;
+        var snap = _quotaService.GetCachedFor(cliType);
+        var strict = _quotaCaps.Evaluate(snap);
+        if (strict.Blocked) return strict;
+        return QuotaWindowProjection.EvaluateProjectedBreach(snap, _quotaCaps, DateTime.UtcNow)
+               ?? CapEvaluation.NotBlocked;
+    }
+
+    /// <summary>
+    /// AGT-2055: run the algorithmic pre-launch quota check for a card. Pure
+    /// decision over the cached snapshots + the AGT-2040 routing map; never
+    /// spawns anything. See <see cref="QuotaAdmissionPlanner"/>.
+    /// </summary>
+    private QuotaAdmissionPlan PlanQuotaAdmission(TaskInfo info)
+        => QuotaAdmissionPlanner.Plan(
+            info.CliType, info.Model, info.ThinkingLevel,
+            _quotaFallback, _quotaCaps,
+            c => string.IsNullOrWhiteSpace(c) ? null : _quotaService.GetCachedFor(c!),
+            DateTime.UtcNow,
+            _activeRuns.Count);
+
+    /// <summary>
+    /// Emit the pre-launch load-steering decision (AGT-2055 req 3 + 7). Always a
+    /// structured log line - the data source for the load-distribution view -
+    /// and, for the notable decisions (switch / throttle / wait), a task
+    /// timeline + feed entry. The task-facing entries are de-duplicated per job
+    /// so a card that waits across many ticks does not spam its timeline.
+    /// </summary>
+    private void EmitQuotaAdmissionDecision(TaskInfo info, QuotaAdmissionPlan plan)
+    {
+        var proj = plan.Projection;
+        _logger.LogInformation(
+            "cli_quota_admission_decision jobId={JobId} project={Project} outcome={Outcome} cli={Cli} model={Model} isFallback={IsFallback} projectedPct={Projected} burnPctPerHour={Burn} hoursRemaining={Hours} nextReset={Reset} reason={Reason}",
+            info.Id, ProjectName, plan.Outcome, plan.CliType, plan.Model ?? "<default>", plan.IsFallback,
+            proj?.ProjectedUsedPct, proj?.BurnRatePctPerHour, proj?.HoursRemaining, plan.NextResetAt, plan.Reason);
+
+        // The healthy "launch primary" decision is the silent normal path; only
+        // the load-steering decisions reach the task surface.
+        if (plan.Outcome == QuotaAdmissionOutcome.LaunchPrimary) return;
+
+        var key = $"{plan.Outcome}|{plan.CliType}|{plan.Model}|{plan.Reason}";
+        lock (_lastAdmissionDecisionByJob)
+        {
+            if (_lastAdmissionDecisionByJob.TryGetValue(info.Id, out var prev) && prev == key) return;
+            _lastAdmissionDecisionByJob[info.Id] = key;
+        }
+
+        _chatLog.Append(info, OrchestratorMessageKind.Decision, "[quota-admission] " + plan.Reason);
+        _timeline?.Append(
+            info.FolderPath,
+            TimelineEventKinds.QuotaAdmissionDecision,
+            TimelineActors.System,
+            summary: plan.Reason,
+            details: new()
+            {
+                ["outcome"] = plan.Outcome.ToString(),
+                ["cli"] = plan.CliType,
+                ["model"] = plan.Model ?? string.Empty,
+                ["isFallback"] = plan.IsFallback ? "true" : "false",
+                ["projectedPct"] = proj?.ProjectedUsedPct.ToString("0.#") ?? string.Empty,
+                ["burnPctPerHour"] = proj?.BurnRatePctPerHour.ToString("0.##") ?? string.Empty,
+                ["hoursRemaining"] = proj?.HoursRemaining.ToString("0.##") ?? string.Empty,
+                ["nextReset"] = plan.NextResetAt?.ToString("o") ?? string.Empty,
+            });
+
+        // AGT-2055 req 3 ("+ Feed-Zeile") + req 7: every load-steering decision
+        // also lands on the global orchestrator feed under the load-distribution
+        // topic, carrying the burn-rate / remaining-budget / remaining-time
+        // numbers. That feed is the data source for the separate
+        // load-distribution view, so the switch / throttle / wait is never a
+        // silent decision the operator has to reconstruct from logs.
+        _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
+        {
+            Kind = OrchestratorLogKinds.Decision,
+            Topic = OrchestratorLogTopics.LoadDistribution,
+            JobId = info.Id,
+            Summary = plan.Reason,
+            Reasoning = QuotaAdmissionPlanner.DescribeLoadNumbers(plan),
+        });
+    }
+
+    /// <summary>
     /// If a job is currently running on this project and its CLI has gone
     /// past a configured cap, request a stop. Returns the cap evaluation that
     /// triggered the stop (or "not blocked" when nothing was stopped) so the
@@ -804,6 +910,19 @@ public class ProjectRunner
 
         if (_mode is "manual" or "paused") return;
 
+        // The project record is the single pickup-ownership truth. When it is
+        // assigned to a remote runner and is remote-capable, this in-process
+        // runner must not race it. Explicit user starts remain available.
+        var pickupSettings = _projectSettings.Get(ProjectName);
+        if (pickupSettings.RemoteExecutionEnabled
+            && !string.IsNullOrWhiteSpace(pickupSettings.ExecutionRunner))
+        {
+            _logger.LogDebug(
+                "remote-pickup-owned project={Project} runner={Runner}; local auto-pickup skipped",
+                ProjectName, pickupSettings.ExecutionRunner);
+            return;
+        }
+
         // Onboarding gate (Slice P / ASS-1663): a project that has DECLARED a
         // build profile but has not yet passed a green validation dry-run is not
         // "pipeline-ready" - refuse auto-pickup until install+build went green
@@ -878,6 +997,37 @@ public class ProjectRunner
             // a visible-order deviation; the card is already running.
             if (_activeRuns.Contains(candidate.Info.Id)) continue;
 
+            // CPU-Lastwaechter: do not add another build/install workload while
+            // the host has been saturated for a full minute. Existing runs are
+            // left alone; the next scheduler tick naturally retries admission.
+            if (_loadThrottle?.Current.Throttle == true)
+            {
+                EmitLoadThrottleDecision(candidate.Info, _loadThrottle.Current);
+                _lastPickReason = $"load-throttle: {candidate.Info.Id}: {_loadThrottle.Current.Reason}";
+                continue;
+            }
+
+            // AGT-2055 pre-launch quota gate: an algorithmic check against the
+            // cached quota snapshots BEFORE any launch is attempted. A card whose
+            // target CLI is exhausted (Wait) - or, with a slot already busy, only
+            // projected to breach (Throttle) - is skipped quietly here: no spawn,
+            // no usage-limit error, no burned reissue budget. A different-CLI card
+            // later in the stream can still be picked; when every candidate is
+            // blocked the loop returns null and the runner simply waits for the
+            // next reset (the scheduler re-ticks and wakes on its own). The
+            // switch/throttle/wait decision is emitted (de-duplicated per job) so
+            // the load-steering is never silent.
+            var qplan = PlanQuotaAdmission(candidate.Info);
+            if (qplan.Outcome is QuotaAdmissionOutcome.Wait or QuotaAdmissionOutcome.Throttle)
+            {
+                EmitQuotaAdmissionDecision(candidate.Info, qplan);
+                _lastPickReason = $"quota-defer: {candidate.Info.Id}: {qplan.Reason}";
+                _logger.LogInformation(
+                    "[taskboard] quota admission gate deferring {Job} on {Project}: {Reason}",
+                    candidate.Info.Id, ProjectName, qplan.Reason);
+                continue;
+            }
+
             if (_activeRuns.Count > 0)
             {
                 var adm = DecideAdmission(candidate.Info.Id, PredictParallelism(candidate.Info), slotMax);
@@ -943,8 +1093,8 @@ public class ProjectRunner
     /// Predict a task's parallelisability facts so the pick-gate can prove it
     /// disjoint from running tasks. Heuristic: repo-relative path prefixes
     /// mentioned in the title + prompt.md form the predicted scope; none found =
-    /// unknown scope (the pick-gate then serializes, or admits optimistically
-    /// under worktree isolation - see <see cref="DecideAdmission"/>). The
+    /// unknown scope (the pick-gate admits it optimistically under worktree
+    /// isolation). The
     /// orchestrator can later replace this with an LLM scope prediction.
     /// </summary>
     private TaskParallelism PredictParallelism(TaskInfo info)
@@ -967,19 +1117,15 @@ public class ProjectRunner
 
     /// <summary>
     /// Pick-gate admission for one candidate against what is already running.
-    /// Wraps <see cref="ParallelSlotPolicy.Decide"/> and, under worktree
-    /// isolation (max&gt;1), upgrades the conservative "unknown-scope" serialize
-    /// to an optimistic admit: a real file conflict then surfaces deterministically
-    /// at integrate-merge (-&gt; escalate), never as corruption. Exclusive tasks and
-    /// proven scope conflicts are still serialized.
+    /// Delegates to <see cref="ParallelSlotPolicy.Decide"/>. Unknown scopes are
+    /// admitted optimistically because each coding run is worktree-isolated; a
+    /// real file conflict then surfaces deterministically at integrate-merge
+    /// (-&gt; escalate), never as shared-checkout corruption. Exclusive tasks and
+    /// declared scope conflicts are still serialized.
     /// </summary>
     private SlotAdmission DecideAdmission(string jobId, TaskParallelism p, int slotMax)
     {
-        var dec = ParallelSlotPolicy.Decide(jobId, p, _activeRuns.RunningTasks(), slotMax);
-        if (!dec.Admitted && slotMax > 1 && _activeRuns.Count > 0
-            && dec.Reason.Contains("unknown-scope", StringComparison.OrdinalIgnoreCase))
-            return new SlotAdmission(SlotDecision.Admit, "parallel-ok (optimistic: unknown scope, worktree-isolated)");
-        return dec;
+        return ParallelSlotPolicy.Decide(jobId, p, _activeRuns.RunningTasks(), slotMax);
     }
 
     /// <summary>Where parallel task worktrees live (sibling temp root, off the repo).</summary>
@@ -1787,17 +1933,34 @@ public class ProjectRunner
             // Resolve the workspace route from the latest cached quota. The
             // decision is per-run and never mutates job.json, so a reset makes
             // the next invocation return to primary automatically.
+            //
+            // AGT-2055: route against the PROJECTION-AWARE admission view so a
+            // primary that is about to breach its window switches to the AGT-2040
+            // fallback pre-emptively (before the wall), not after a burned launch.
+            // The hard block below stays on the STRICT cap so a manual start is
+            // never refused purely on a projection - only when a model is truly
+            // exhausted and no fallback saved it.
             var route = _quotaFallback?.Resolve(
-                info.CliType, info.Model, info.ThinkingLevel, EvaluateQuotaCap);
-            var capBlock = route?.PrimaryCap ?? EvaluateQuotaCap(info.CliType);
-            if (capBlock.Blocked && route?.IsFallback != true)
+                info.CliType, info.Model, info.ThinkingLevel, EvaluateAdmissionQuota);
+            var strictCap = EvaluateQuotaCap(info.CliType);
+            // AGT-2055: the algorithmic pre-launch decision for THIS run, computed
+            // once here - before the run claims a slot, so its projected-throttle
+            // slot count matches the pickup gate's view. Reused for the quiet-wait
+            // reject just below and emitted at the commit point further down, so
+            // every launch (a healthy primary or a pre-emptive model switch) is
+            // documented with its burn-rate / projection numbers.
+            var admissionPlan = PlanQuotaAdmission(info);
+            if (strictCap.Blocked && route?.IsFallback != true)
             {
+                // Everything is exhausted: wait quietly with a reason + next
+                // reset, and record the decision. No spawn, no reissue burn.
+                EmitQuotaAdmissionDecision(info, admissionPlan);
                 _logger.LogInformation(
-                    "[taskboard] {Intent} for job {JobId} blocked by quota cap: {Reason}",
-                    intent, jobId, capBlock.DescribeReason());
+                    "[taskboard] {Intent} for job {JobId} deferred by quota admission: {Reason}",
+                    intent, jobId, admissionPlan.Reason);
                 return RunOutcome.Reject(new RunRejection(
                     Reason: RunRejectReason.QuotaCapExceeded,
-                    Message: $"Quota cap exceeded: {route?.Reason ?? capBlock.DescribeReason()}"));
+                    Message: admissionPlan.Reason));
             }
 
             // Auto-pickup consumes a saved pending-intent if there is one,
@@ -1950,7 +2113,9 @@ public class ProjectRunner
                 Followup = followupPrompt,
                 Plan = plan,
                 ReissueAttempt = reissueAttempt,
+                PickupLockFolder = _activePickupLockFolder,
             });
+            _activePickupLockFolder = null;
             // ASS-1732 "always-worktree": a CODING run mutates the source tree, so
             // it ALWAYS executes in its own isolated task/<id> worktree - the
             // primary/sequential slot included, and for every intent (fresh
@@ -1990,11 +2155,8 @@ public class ProjectRunner
                     // cross-contamination this fix exists to prevent. Release the
                     // slot and serialize; the next auto-pickup tick retries once a
                     // worktree can be prepared/reused.
-                    _logger.LogWarning(
-                        "[taskboard] worktree prepare/reuse failed for {Job}: {Err} - serializing (refusing shared main checkout for a coding run)",
-                        jobId, prep.Error);
-                    _activeRuns.Release(jobId);
-                    ReleasePickupLockIfHeld();
+                    RecordWorktreePreparationFailure(jobId, prep.Error);
+                    ReleaseRun(jobId);
                     _mutations.RollbackStashedPendingIntent(info.FolderPath);
                     // The run never started: roll the just-applied 3-progress move
                     // back to 2-ready so the deferred task does not linger as a
@@ -2012,6 +2174,17 @@ public class ProjectRunner
             NotifyStatus();
 
             Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
+
+            // AGT-2055 req 3/7: document the pre-launch admission decision for the
+            // run we are now committing to spawn - a pre-emptive model switch
+            // ("model switched pre-launch: ...") or a healthy primary launch -
+            // as a task timeline entry + a load-distribution feed line carrying
+            // the projection numbers. Deferrals (wait / throttle) are recorded at
+            // the pickup gate; this is the launch side of the same ledger. A
+            // healthy primary launch stays a silent log-only line (the planner's
+            // LaunchPrimary outcome early-returns before the task-facing tee), so
+            // only genuine load-steering reaches the timeline and feed.
+            EmitQuotaAdmissionDecision(info, admissionPlan);
 
             if (route?.IsFallback == true)
             {
@@ -2080,8 +2253,7 @@ public class ProjectRunner
                         ["mainCheckout"] = Entry.RootPath ?? string.Empty,
                         ["mode"] = info.Mode ?? string.Empty,
                     });
-                _activeRuns.Release(jobId);
-                ReleasePickupLockIfHeld();
+                ReleaseRun(jobId);
                 _mutations.RollbackStashedPendingIntent(info.FolderPath);
                 if (movedToProgressThisCall)
                     RevertFailedStartFromProgress(jobId, info, intent);
@@ -2291,18 +2463,13 @@ public class ProjectRunner
 
             if (execution == null)
             {
-                _activeRuns.Release(jobId);
+                ReleaseRun(jobId);
                 // Mandatory diagnostic: a spawn failure used to leave ZERO
                 // trace in the job folder (no cli-output.log, empty logs/),
                 // so an operator could only guess why the run "finished
                 // failed". Write the reason into the job's cli-output.log
                 // before any other cleanup so the failure is never silent.
                 WriteSpawnFailureDiagnostic(info, cli.CliType, cliError);
-                // The OnCliFinished release path never runs (we never got an
-                // execution) so the on-disk pickup lock we just stamped would
-                // otherwise wedge the next auto-pickup tick. Drop it here so
-                // the spawn-failure retry on the next tick sees a clean slot.
-                ReleasePickupLockIfHeld();
                 NotifyStatus();
                 // Roll back the consumed pending-intent on spawn failure so
                 // the next auto-pickup retries instead of losing the user's
@@ -2328,11 +2495,8 @@ public class ProjectRunner
                 // so the budget decision sees this attempt.
                 if (movedToProgressThisCall)
                     RevertFailedStartFromProgress(jobId, info, intent);
-                // Spawn failure is the terminal end of this run's lifecycle:
-                // no OnCliFinishedAsync will fire, so release the pickup lock
-                // and drain any deferred mode change here so the project does
-                // not stay wedged on a stale lock or a never-applied pause.
-                ReleasePickupLockIfHeld();
+                // Spawn failure is the terminal end of this run's lifecycle;
+                // ReleaseRun above already dropped its per-run pickup lock.
                 ApplyPendingModeIfAny(jobId);
                 return RunOutcome.Reject(new RunRejection(
                     Reason: RunRejectReason.CliUnavailable,
@@ -2341,6 +2505,10 @@ public class ProjectRunner
 
             // Spawn succeeded; drop the stashed intent (we've consumed it).
             _mutations.DiscardStashedPendingIntent(info.FolderPath);
+            // Only a confirmed process start ends a visible no-slot wait. Early
+            // admission/quota/spawn failures intentionally leave the wait visible.
+            SteerPendingMarker.Clear(info.FolderPath, _logger);
+            _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.ExecutionRunning);
 
             // Mirror run-start onto the bus. Existing canonical signals
             // (session-events.jsonl + cli-output.log "[taskboard] Started ..."
@@ -2907,7 +3075,7 @@ public class ProjectRunner
     /// </summary>
     public RunActivityFacts GetRunActivity(string jobId)
     {
-        var slotActive = _activeRuns.Contains(jobId);
+        var slotActive = _activeRuns.HoldsExecutionSlot(jobId);
         DateTime? backoffUntil = _rapidCrashBackoffUntil.TryGetValue(jobId, out var until) ? until : null;
         var failures = _consecutiveFailNoProgress.TryGetValue(jobId, out var n) ? n : 0;
         return new RunActivityFacts(slotActive, backoffUntil, failures);
@@ -3210,6 +3378,16 @@ public class ProjectRunner
                 RecordLoopGuard(info, PipelineStepStatus.Failed,
                     verdict: "loop-detected",
                     summary: StuckLoopGuard.FormatBreakerMessage(existingLoop, _stuckLoopBudget));
+                // The card is now waiting on the user with the loop budget spent.
+                // Release the active-job latch (as the STEER / decline branches
+                // below do) so the seat is freed and this card is no longer the
+                // runner's active job - otherwise it would pin the slot with no
+                // live run behind it. Slice B then bounds the wait: the
+                // steer-timeout monitor escalates it after the timeout so it
+                // cannot hang forever.
+                ReleaseRun(jobId);
+                NotifyStatus();
+                MarkSteerPending(info, jobId, SteerPendingKinds.BlockedDeferral, outcome.Summary, ask: null);
                 return;
             }
 
@@ -3227,7 +3405,11 @@ public class ProjectRunner
 
             // Release the active-job latch so the orchestrator's spawned
             // Continue can claim it; we mirror the re-issue path's release.
-            _activeRuns.Release(jobId);
+            ReleaseRun(jobId);
+            _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.LoopWaiting);
+            _logger.LogInformation(
+                "run-loop-waiting project={Project} job={JobId} occupied={Occupied}/{Max}",
+                ProjectName, jobId, _activeRuns.Count, SlotMax());
             NotifyStatus();
 
             var promptPath = Path.Combine(info.FolderPath, "prompt.md");
@@ -3312,6 +3494,9 @@ public class ProjectRunner
                     Reasoning = why,
                     TokenUsage = result.TokenUsage
                 });
+                // Slice B: the orchestrator errored / deferred, so this auto-mode
+                // card is now waiting unattended. Bound the wait via the marker.
+                MarkSteerPending(info, jobId, SteerPendingKinds.BlockedDeferral, outcome.Summary, ask: null);
                 return;
             }
 
@@ -3343,6 +3528,9 @@ public class ProjectRunner
                     Reasoning = why,
                     TokenUsage = result.TokenUsage
                 });
+                // Slice B: the orchestrator deferred to the user, so this auto-mode
+                // card is now waiting unattended. Bound the wait via the marker.
+                MarkSteerPending(info, jobId, SteerPendingKinds.BlockedDeferral, outcome.Summary, ask: null);
                 return;
             }
 
@@ -3399,6 +3587,12 @@ public class ProjectRunner
                     }
                     catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of orchestrator steer token usage failed for {JobId}", jobId); }
                 }
+
+                // Slice B: the job is left in NeedsInput waiting for the user's
+                // answer to the steer. Record the durable steer-pending marker +
+                // visible phase so the wait is bounded (the steer-timeout monitor
+                // auto-answers or escalates after the timeout) and never hangs.
+                MarkSteerPending(info, jobId, SteerPendingKinds.Steer, outcome.Summary, parsed.Need);
                 return;
             }
 
@@ -3462,8 +3656,22 @@ public class ProjectRunner
             // existing path (RunPlanner picks Resume vs Recovery based on
             // captured session id), so this is structurally identical to
             // the user typing the same reply in the chat.
-            await RunCliAsync(jobId, RunIntent.UserContinue, reply, reissueAttempt: 0,
-                              mode: ContinueModes.Continue, CancellationToken.None);
+            var continuation = await RunCliAsync(jobId, RunIntent.UserContinue, reply, reissueAttempt: 0,
+                                                 mode: ContinueModes.Continue, CancellationToken.None);
+            if (continuation.Rejection?.Reason == RunRejectReason.ProjectBusy)
+            {
+                // Another live CLI won the freed seat. Persist the continuation
+                // on this still-visible loop-waiting card; the ordinary progress
+                // pickup path consumes it once admission has room again.
+                _mutations.SavePendingIntent(
+                    jobId, ContinueModes.Continue, reply,
+                    reason: "loop-continuation-slot-wait",
+                    activeJobId: continuation.Rejection.BusyJobId,
+                    watchPath: Entry.Path);
+                _logger.LogInformation(
+                    "loop-continuation-queued project={Project} job={JobId} busyJob={BusyJob} occupied={Occupied}/{Max}",
+                    ProjectName, jobId, continuation.Rejection.BusyJobId, _activeRuns.Count, SlotMax());
+            }
         }
         catch (Exception ex)
         {
@@ -3546,6 +3754,47 @@ public class ProjectRunner
     }
 
     /// <summary>
+    /// Run-Liveness Slice B (concept Rule 2): mark an auto-mode run as waiting on
+    /// an unanswered steer / NeedsInput question the orchestrator could not answer
+    /// on its own. Writes the durable <see cref="SteerPendingRecord"/> marker (so
+    /// <see cref="SteerTimeoutMonitor"/> can enforce a bounded wait even across a
+    /// restart), stamps the visible <see cref="LifecyclePhases.SteerPending"/>
+    /// phase so the card shows "waiting for answer", and tees an
+    /// <see cref="TimelineEventKinds.OrchestratorSteered"/> event onto the
+    /// timeline. Best-effort: a marker/timeline failure must never crash the
+    /// decision path. The wait timeout itself is owned by the monitor's config
+    /// (<c>Runner:SteerTimeout:TimeoutSeconds</c>); the marker leaves it unset.
+    /// </summary>
+    private void MarkSteerPending(TaskInfo info, string jobId, string kind, string? question, string? ask)
+    {
+        if (info == null || string.IsNullOrWhiteSpace(info.FolderPath)) return;
+        try
+        {
+            SteerPendingMarker.Write(info.FolderPath, new SteerPendingRecord
+            {
+                WaitStartedAt = DateTime.UtcNow,
+                Kind = kind,
+                Question = string.IsNullOrWhiteSpace(question) ? null : Truncate(question, 2000),
+                Ask = string.IsNullOrWhiteSpace(ask) ? null : Truncate(ask, 2000),
+                CliType = info.CliType,
+            }, _logger);
+            _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.SteerPending);
+            _timeline?.Append(
+                info.FolderPath,
+                TimelineEventKinds.OrchestratorSteered,
+                TimelineActors.Orchestrator,
+                summary: kind == SteerPendingKinds.Steer
+                    ? $"Steered - waiting for an answer: {Truncate(ask ?? question ?? "", 160)}"
+                    : $"Waiting for an answer (unattended): {Truncate(question ?? ask ?? "", 160)}",
+                details: new Dictionary<string, string> { ["kind"] = kind });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "MarkSteerPending failed for {JobId}", jobId);
+        }
+    }
+
+    /// <summary>
     /// Open (or resume) the job's pipeline-execution record and mark the CORE
     /// "Agent execution" step <see cref="PipelineStepStatus.Running"/> at spawn,
     /// stamping its start time. <see cref="AgentStudio.Pipeline.PipelineExecutionLog.EnsureAgentRunStart"/>
@@ -3560,13 +3809,35 @@ public class ProjectRunner
         if (_pipelineLog == null) return;
         try
         {
+            var settings = _projectSettings.Get(ProjectName);
             var record = _pipelineLog.EnsureAgentRunStart(
                 info.FolderPath,
                 AgentStudio.Pipeline.ProjectPipelineOrder.Apply(
                     AgentStudio.Pipeline.PipelineCatalogue.ForMode(info.Mode),
-                    _projectSettings.Get(ProjectName)),
+                    settings),
                 ProjectName,
                 info.Id);
+            var onboardingStep = AgentStudio.Pipeline.PipelineCatalogue.Standard.Pre.First(s =>
+                s.Id == AgentStudio.Pipeline.PipelineCatalogue.PreWorkstreamOnboardingStepId);
+            if (AgentStudio.Pipeline.PipelineStepConfigResolver.IsEnabled(settings, onboardingStep)
+                && !string.IsNullOrWhiteSpace(Entry.RootPath))
+            {
+                var started = DateTime.UtcNow;
+                var language = AgentStudio.Docs.WorkstreamFrameLanguageResolver.Resolve(
+                    ProjectName, settings.WorkstreamFramePublic);
+                var result = AgentStudio.Pipeline.WorkstreamCollectorPostStepRunner.RecordOnboarding(
+                    Entry.RootPath, info, language, started);
+                _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
+                {
+                    StepId = AgentStudio.Pipeline.PipelineCatalogue.PreWorkstreamOnboardingStepId,
+                    Kind = StepKind.Module,
+                    Status = result.Writes > 0 ? PipelineStepStatus.Passed : PipelineStepStatus.Skipped,
+                    StartedAt = started,
+                    CompletedAt = DateTime.UtcNow,
+                    Verdict = result.Writes > 0 ? "updated" : "skipped",
+                    Reason = $"current development state writes={result.Writes} rejected={result.Rejected}",
+                });
+            }
             // Carry the CORE step's accumulated duration forward. A re-run of
             // the same task reuses one in-flight record, so without preserving
             // this the run-start write would zero the total and the prior
@@ -4150,6 +4421,21 @@ public class ProjectRunner
             if (_activeRuns.Get(jobId) is not { } run) return;
             if (run.CliType != null && !string.Equals(cliType, run.CliType, StringComparison.OrdinalIgnoreCase)) return;
 
+            // Slot ownership follows process life, not lane membership. Keep the
+            // ActiveRun record for finalisation, but free its execution seat as
+            // soon as the CLI process exits. Integration, outcome analysis and
+            // review preparation are post-processing and may overlap another CLI.
+            if (_activeRuns.ReleaseExecutionSlot(jobId))
+            {
+                _mutations.SetJobPhase(
+                    _scanner.FindJob(jobId, Entry.Path)?.FolderPath ?? string.Empty,
+                    LifecyclePhases.PostProcessingRunning);
+                _logger.LogInformation(
+                    "execution-slot-released project={Project} job={JobId} phase={Phase} occupied={Occupied}/{Max}",
+                    ProjectName, jobId, LifecyclePhases.PostProcessingRunning, _activeRuns.Count, SlotMax());
+                NotifyStatus();
+            }
+
             // no-silent-death: every run's exit is logged with code + status +
             // duration on entry to finalization, so even if a downstream step
             // below throws (see the catch) the run's exit context is on record.
@@ -4659,7 +4945,7 @@ public class ProjectRunner
                     // Release the active-job latch on the original run so the
                     // re-issue can claim it. We then schedule the re-issue on
                     // the thread pool so OnCliFinished returns promptly.
-                    _activeRuns.Release(jobId);
+                    ReleaseRun(jobId);
                     NotifyStatus();
                     var wasRecovery = string.Equals(capturedPlan!.EventKind, "recovery", StringComparison.OrdinalIgnoreCase);
                     var retryPrompt = action.IsPreframedRetryPrompt
@@ -4747,12 +5033,13 @@ public class ProjectRunner
                 // needs a human, so both still fall through to review below.
                 if (action.Kind == OutcomeActionKind.NotifyUserAndStop
                     && activeInfo != null
-                    && CompletionRetriggerDecider.ShouldRetrigger(action.IssueKind, RemainingCompletionRetriggerBudget(jobId)))
+                    && CompletionRetriggerDecider.ShouldRetrigger(action.IssueKind, RemainingCompletionRetriggerBudget(jobId, action.IssueKind)))
                 {
                     var used = _completionRetriggerUsed.TryGetValue(jobId, out var spent) ? spent : 0;
                     _completionRetriggerUsed[jobId] = used + 1;
                     var attemptNo = used + 1;
                     var issueTopic = ToIssueTopic(action.IssueKind);
+                    var maxAttempts = CompletionRetriggerDecider.BudgetFor(action.IssueKind);
 
                     _chatLog.Append(activeInfo, OrchestratorMessageKind.Recovery,
                         RecoveryChatLine.Format(
@@ -4760,21 +5047,21 @@ public class ProjectRunner
                             "silence timeout",
                             "reissue",
                             attempt: attemptNo,
-                            maxAttempts: CompletionRetriggerDecider.DefaultBudget,
+                            maxAttempts: maxAttempts,
                             sessionResumed: true));
                     _orchestratorLog.Append(activeInfo.WatchPath, new OrchestratorLogEntry
                     {
                         Kind = OrchestratorLogKinds.Action,
                         Topic = OrchestratorLogTopics.Watchdog,
                         JobId = jobId,
-                        Summary = $"Completion-loop re-triggered \"{activeInfo.Title}\" after {issueTopic} (attempt {attemptNo}/{CompletionRetriggerDecider.DefaultBudget}).",
-                        Reasoning = "Transient process abort (watchdog/timeout) is a runner outcome, not an agent decision. Re-spawning the same job instead of escalating to human review; the budget converges to escalation."
+                        Summary = $"Completion-loop re-triggered \"{activeInfo.Title}\" after {issueTopic} (attempt {attemptNo}/{maxAttempts}).",
+                        Reasoning = "Transient process abort (watchdog/timeout/infra crash) is a runner outcome, not an agent decision. Re-spawning the same job with its unchanged model instead of escalating to human review; the bounded budget converges to escalation."
                     });
 
                     // Release the active-job latch so the re-issue can claim
                     // it, then schedule on the thread pool so OnCliFinished
                     // returns promptly (mirrors the abort-review rerun path).
-                    _activeRuns.Release(jobId);
+                    ReleaseRun(jobId);
                     NotifyStatus();
                     var retryPrompt = BuildCompletionRetriggerPrompt(activeInfo);
                     _ = Task.Run(async () =>
@@ -5063,8 +5350,7 @@ public class ProjectRunner
             // (one slot) and correct for N slots.
             if (_activeRuns.Contains(jobId))
             {
-                _activeRuns.Release(jobId);
-                ReleasePickupLockIfHeld();
+                ReleaseRun(jobId);
                 ApplyPendingModeIfAny(jobId);
                 NotifyStatus();
             }
@@ -5077,14 +5363,22 @@ public class ProjectRunner
     /// still owns the lock - foreign or stale locks are left in place so a
     /// late retry from the real holder cannot be silently clobbered.
     /// </summary>
-    private void ReleasePickupLockIfHeld()
+    private void ReleasePickupLockIfHeld(string? runFolder = null)
     {
         if (_pickupLock == null || _pickupLockOwner == null) return;
-        var folder = _activePickupLockFolder;
-        _activePickupLockFolder = null;
+        var folder = runFolder ?? _activePickupLockFolder;
+        if (runFolder == null) _activePickupLockFolder = null;
         if (string.IsNullOrEmpty(folder)) return;
         try { _pickupLock.Release(folder, _pickupLockOwner); }
         catch (Exception ex) { _logger.LogDebug(ex, "Pickup lock release failed for '{Folder}'", folder); }
+    }
+
+    private ActiveRun? ReleaseRun(string jobId, bool releasePickupLock = true)
+    {
+        var released = _activeRuns.Release(jobId);
+        if (releasePickupLock && released?.PickupLockFolder is { } folder)
+            ReleasePickupLockIfHeld(folder);
+        return released;
     }
 
     /// <summary>
@@ -5193,10 +5487,40 @@ public class ProjectRunner
     /// from <see cref="CompletionRetriggerDecider.DefaultBudget"/> as
     /// transient aborts are re-triggered; reset when the job leaves the run
     /// loop.</summary>
-    private int RemainingCompletionRetriggerBudget(string jobId)
+    private int RemainingCompletionRetriggerBudget(string jobId, RunIssueKind issueKind)
     {
         var used = _completionRetriggerUsed.TryGetValue(jobId, out var c) ? c : 0;
-        return Math.Max(0, CompletionRetriggerDecider.DefaultBudget - used);
+        return Math.Max(0, CompletionRetriggerDecider.BudgetFor(issueKind) - used);
+    }
+
+    private void EmitLoadThrottleDecision(TaskInfo info, LoadThrottleDecision decision)
+    {
+        var key = $"load-throttle|{decision.CurrentPercent:0}";
+        lock (_lastAdmissionDecisionByJob)
+        {
+            if (_lastAdmissionDecisionByJob.TryGetValue(info.Id, out var previous) && previous == key) return;
+            _lastAdmissionDecisionByJob[info.Id] = key;
+        }
+
+        _logger.LogWarning("load_throttle_pick_deferred jobId={JobId} project={Project} cpuPercent={CpuPercent:0.#} sustainedSeconds={SustainedSeconds:0}",
+            info.Id, ProjectName, decision.CurrentPercent, decision.SustainedFor.TotalSeconds);
+        _chatLog.Append(info, OrchestratorMessageKind.Decision, "[load-throttle] " + decision.Reason);
+        _timeline?.Append(info.FolderPath, TimelineEventKinds.LoadThrottleDecision, TimelineActors.System,
+            summary: decision.Reason,
+            details: new()
+            {
+                ["cpuPercent"] = decision.CurrentPercent.ToString("0.#", CultureInfo.InvariantCulture),
+                ["sustainedSeconds"] = decision.SustainedFor.TotalSeconds.ToString("0", CultureInfo.InvariantCulture),
+                ["category"] = "environmental-load",
+            });
+        _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
+        {
+            Kind = OrchestratorLogKinds.Decision,
+            Topic = OrchestratorLogTopics.LoadDistribution,
+            JobId = info.Id,
+            Summary = "load-throttle: new slot admission deferred",
+            Reasoning = decision.Reason,
+        });
     }
 
     /// <summary>
@@ -5411,7 +5735,7 @@ public class ProjectRunner
                 // Release the active-job latch so the re-issue can claim it,
                 // then schedule on the thread pool so OnCliFinished returns
                 // promptly (mirrors the ReissueWithStrongerFraming path).
-                _activeRuns.Release(jobId);
+                ReleaseRun(jobId);
                 NotifyStatus();
                 var stronger = report.Action == PostAbortAction.RerunWithStrongerFraming;
                 var retryPrompt = BuildAbortReviewRerunPrompt(activeInfo, report, stronger);
@@ -5710,8 +6034,7 @@ public class ProjectRunner
             }
         }
 
-        _activeRuns.Release(jobId);
-        ReleasePickupLockIfHeld();
+        ReleaseRun(jobId);
         ApplyPendingModeIfAny(jobId);
 
         // Best-effort: drop a chat-log line on the moved folder so the
@@ -6175,9 +6498,10 @@ public class ProjectRunner
             return null;
 
         var attempts = GetPickupAttempts(slug);
-        if (attempts >= PickupFailureThreshold)
+        var pickupThreshold = GetPickupFailureThreshold(slug);
+        if (attempts >= pickupThreshold)
         {
-            RerouteOverBudgetFolder(candidate, slug, attempts);
+            RerouteOverBudgetFolder(candidate, slug, attempts, thresholdOverride: pickupThreshold);
             return null;
         }
 
@@ -6335,6 +6659,8 @@ public class ProjectRunner
     /// nothing" (escalate to 5-human-review).
     /// </summary>
     internal const string SpawnFailedExecutionStatus = "spawn-failed";
+    internal const string WorktreeBlockedExecutionStatus = "worktree-blocked";
+    internal const int WorktreeBlockedFailureThreshold = 5;
     /// <summary>
     /// Per-attempt deadline (seconds) within which the spawned CLI must
     /// produce at least one streamed output line for the attempt to count
@@ -6394,12 +6720,15 @@ public class ProjectRunner
     /// 2-ready + pause path, or leave it null for the task-shaped ->
     /// 5-human-review path. History is bounded at the threshold to mirror the
     /// real recorder.</summary>
-    internal void SetPickupAttemptsForTest(string slug, int count, string? executionStatus = null)
+    internal void SetPickupAttemptsForTest(string slug, int count, string? executionStatus = null, string? error = null)
     {
         var state = _pickupAttempts.GetOrAdd(slug, _ => new PickupAttemptState());
         state.Count = count;
         state.History.Clear();
-        var entries = Math.Min(count, PickupFailureThreshold);
+        var threshold = string.Equals(executionStatus, WorktreeBlockedExecutionStatus, StringComparison.Ordinal)
+            ? WorktreeBlockedFailureThreshold
+            : PickupFailureThreshold;
+        var entries = Math.Min(count, threshold);
         for (var i = 0; i < entries; i++)
         {
             state.History.Enqueue(new PickupAttemptDiagnostic
@@ -6407,7 +6736,8 @@ public class ProjectRunner
                 At = DateTime.UtcNow,
                 DurationSeconds = 0,
                 OutputLines = 0,
-                ExecutionStatus = executionStatus
+                ExecutionStatus = executionStatus,
+                Error = error
             });
         }
     }
@@ -6415,6 +6745,33 @@ public class ProjectRunner
     /// <summary>Test seam: read the per-slug attempt counter.</summary>
     internal int GetPickupAttempts(string slug)
         => _pickupAttempts.TryGetValue(slug, out var s) ? s.Count : 0;
+
+    internal int GetPickupFailureThreshold(string slug)
+        => _pickupAttempts.TryGetValue(slug, out var state)
+           && IsWorktreeBlockedFailure(state.History.LastOrDefault())
+            ? WorktreeBlockedFailureThreshold
+            : PickupFailureThreshold;
+
+    private static bool IsWorktreeBlockedFailure(PickupAttemptDiagnostic? attempt)
+        => string.Equals(
+            attempt?.ExecutionStatus,
+            WorktreeBlockedExecutionStatus,
+            StringComparison.Ordinal);
+
+    private void RecordWorktreePreparationFailure(string jobId, string? error)
+    {
+        var state = _pickupAttempts.GetOrAdd(jobId, _ => new PickupAttemptState());
+        state.Count++;
+        state.History.Enqueue(new PickupAttemptDiagnostic
+        {
+            At = DateTime.UtcNow,
+            DurationSeconds = 0,
+            OutputLines = 0,
+            ExecutionStatus = WorktreeBlockedExecutionStatus,
+            Error = error
+        });
+        while (state.History.Count > WorktreeBlockedFailureThreshold) state.History.Dequeue();
+    }
 
     /// <summary>Test seam: number of distinct tasks the auto-failure breaker has
     /// parked in 5e-escalated without a success in between - the "3x3"
@@ -6721,9 +7078,11 @@ public class ProjectRunner
                 continue;
 
             var attempts = GetPickupAttempts(slug);
-            if (attempts >= PickupFailureThreshold)
+            var pickupThreshold = GetPickupFailureThreshold(slug);
+            if (attempts >= pickupThreshold)
             {
-                var pausedDuringReroute = RerouteOverBudgetFolder(candidate, slug, attempts);
+                var pausedDuringReroute = RerouteOverBudgetFolder(
+                    candidate, slug, attempts, thresholdOverride: pickupThreshold);
                 // Spawn-failure pause (loop-inventory:
                 // pickup.spawn-failure-budget-pause / cross-slug-infra-circuit-breaker).
                 // If rerouting this over-budget folder just paused the runner
@@ -7061,14 +7420,25 @@ public class ProjectRunner
             && historySnapshot.Count > 0
             && historySnapshot.All(h => string.Equals(h.ExecutionStatus, SpawnFailedExecutionStatus, StringComparison.Ordinal));
 
+        // The latest failure determines both the retry budget and escalation
+        // category. Earlier generic pickup failures must not erase a later
+        // busy-worktree diagnosis and make the visible threshold disagree with
+        // the five-attempt decision used by the picker.
+        var worktreeBlocked = !isZombieEscalation
+            && IsWorktreeBlockedFailure(historySnapshot.LastOrDefault());
         var targetState = spawnFailure ? TaskStates.Ready : TaskStates.Escalated;
+        var worktreeError = worktreeBlocked
+            ? historySnapshot.LastOrDefault(h => !string.IsNullOrWhiteSpace(h.Error))?.Error
+            : null;
 
         // Computed up front so the zombie escalation can carry the reason into
         // the decision journal + status.md stub written by the funnel.
         var reason = reasonOverride
             ?? (spawnFailure
                 ? $"Auto-pickup could not start the {cliTypeBeforeMove ?? "agent"} CLI for '{slug}': {attempts} consecutive attempts (budget {threshold}) failed to spawn a process. The task is unchanged and was returned to {TaskStates.Ready}; the runner paused so it does not spin against an unavailable CLI."
-                : $"Auto-pickup ran the CLI for '{slug}' on {attempts} consecutive attempts (budget {threshold}) but the run never produced a CLI output line within {PickupOutputDeadlineSeconds}s. The task was escalated for a person to decide.");
+                : worktreeBlocked
+                    ? $"Worktree preparation for '{slug}' remained blocked after {attempts} attempts (budget {threshold}). {worktreeError ?? "The orphan worktree directory is still busy."} Automatic retry is paused; release the process holding this path, then re-queue the task."
+                    : $"Auto-pickup ran the CLI for '{slug}' on {attempts} consecutive attempts (budget {threshold}) but the run never produced a CLI output line within {PickupOutputDeadlineSeconds}s. The task was escalated for a person to decide.");
 
         // Spawn failure returns the unchanged task to 2-ready (no verdict - it
         // is re-picked once the CLI is fixed). A task-shaped / zombie folder is
@@ -7078,7 +7448,7 @@ public class ProjectRunner
             ? _states.MoveJob(jobIdBeforeMove, TaskStates.Ready, Entry.Path)
             : _humanReviewEscalation.Escalate(
                 jobIdBeforeMove, Entry.Path, ProjectName,
-                HumanReviewEscalationCategories.PickupZombie, reason);
+                worktreeBlocked ? HumanReviewEscalationCategories.WorktreeBlocked : HumanReviewEscalationCategories.PickupZombie, reason);
         if (moveResult.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -7090,6 +7460,14 @@ public class ProjectRunner
             _zombieResumeFailures.TryRemove(slug, out _);
             return false;
         }
+
+        // The escalation summary turns checklist rows from
+        // orchestrator-follow-up.md into visible gate items. A category in
+        // status.md explains the terminal, but it is not actionable on its own.
+        // Persist the busy path as one open worktree-blocked item so an operator
+        // sees exactly what must be released before re-queuing the card.
+        if (worktreeBlocked && !string.IsNullOrWhiteSpace(moveResult.NewFolderPath))
+            WriteWorktreeBlockedGateItem(moveResult.NewFolderPath!, reason, jobIdBeforeMove);
 
         var record = new PickupFailureRecord
         {
@@ -7158,6 +7536,32 @@ public class ProjectRunner
         // loop is already broken; the runner continues to the next 3-progress
         // folder (then 2-ready) so one stuck task does not stall the queue.
         return false;
+    }
+
+    private void WriteWorktreeBlockedGateItem(string folderPath, string reason, string jobId)
+    {
+        var path = Path.Combine(folderPath, "orchestrator-follow-up.md");
+        var item = $"- [ ] {HumanReviewEscalationCategories.WorktreeBlocked}: {reason}";
+        try
+        {
+            var existing = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+            if (existing.Contains(item, StringComparison.Ordinal)) return;
+
+            var prefix = string.IsNullOrWhiteSpace(existing)
+                ? "# Orchestrator follow-up" + Environment.NewLine + Environment.NewLine
+                : existing.TrimEnd() + Environment.NewLine + Environment.NewLine;
+            File.WriteAllText(path, prefix + item + Environment.NewLine);
+            _logger.LogWarning(
+                "[taskboard] worktree-blocked gate item recorded for {JobId} at {FollowUpPath}",
+                jobId, path);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "[taskboard] failed to record worktree-blocked gate item for {JobId} at {FollowUpPath}",
+                jobId, path);
+        }
     }
 
     /// <summary>
@@ -7316,10 +7720,11 @@ public class ProjectRunner
         // precondition the reroute expects. For a spawn failure it returns the
         // unchanged task to 2-ready and pauses the runner (CLI unavailable);
         // there is nothing more to do.
-        if (intent == RunIntent.AutoPickup && attempts >= PickupFailureThreshold)
+        var threshold = GetPickupFailureThreshold(jobId);
+        if (intent == RunIntent.AutoPickup && attempts >= threshold)
         {
             var candidate = new ProgressPickupCandidate(info.FolderPath, jobId, info, DateTime.UtcNow);
-            RerouteOverBudgetFolder(candidate, jobId, attempts);
+            RerouteOverBudgetFolder(candidate, jobId, attempts, thresholdOverride: threshold);
             return;
         }
 
@@ -7337,9 +7742,15 @@ public class ProjectRunner
         if (intent == RunIntent.AutoPickup)
             _rapidCrashBackoffUntil[jobId] = DateTime.UtcNow + RapidCrashBreaker.Backoff(Math.Max(1, attempts));
 
+        var now = DateTime.UtcNow;
+        var logDecision = TakeRevertLogDecision(jobId, now);
+        if (!logDecision.Emit) return;
+        var suppressed = logDecision.Suppressed;
+
         _logger.LogInformation(
-            "[taskboard] reverted job {JobId} on {Project} from 3-progress back to 2-ready (run never started; no zombie left in 3-progress)",
-            jobId, ProjectName);
+            "[taskboard] pick-reverted-no-run job={JobId} project={Project} attempts={Attempts} suppressedSinceLast={Suppressed} nextRetryNotBefore={NextRetryNotBefore}",
+            jobId, ProjectName, attempts, suppressed,
+            _rapidCrashBackoffUntil.TryGetValue(jobId, out var retryAt) ? retryAt : null);
 
         try
         {
@@ -7350,13 +7761,36 @@ public class ProjectRunner
                     "pick-reverted-no-run",
                     "The task was picked into 3-progress but the agent process never started. " +
                     "It was returned to 2-ready immediately so it is not stranded as a zombie in 3-progress; " +
-                    "the orchestrator will retry it.");
+                    $"the orchestrator will retry it. Repeated identical notices suppressed since the prior notice: {suppressed}.");
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "[taskboard] chat-log append failed for reverted pick {JobId}", jobId);
         }
     }
+
+    private (bool Emit, int Suppressed) TakeRevertLogDecision(string jobId, DateTime nowUtc)
+    {
+        var logState = _revertLogStates.GetOrAdd(jobId, _ => new RevertLogState());
+        lock (logState)
+        {
+            if (logState.LastEmittedUtc != default
+                && nowUtc - logState.LastEmittedUtc < RevertLogInterval)
+            {
+                logState.Suppressed++;
+                return (false, logState.Suppressed);
+            }
+
+            var suppressed = logState.Suppressed;
+            logState.Suppressed = 0;
+            logState.LastEmittedUtc = nowUtc;
+            return (true, suppressed);
+        }
+    }
+
+    /// <summary>Test seam for the ten-minute per-task revert notice limiter.</summary>
+    internal (bool Emit, int Suppressed) TakeRevertLogDecisionForTest(string jobId, DateTime nowUtc)
+        => TakeRevertLogDecision(jobId, nowUtc);
 
     /// <summary>
     /// Pure decision: should the just-finished run trigger a session-chain

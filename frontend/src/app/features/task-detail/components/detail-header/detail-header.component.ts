@@ -3,7 +3,9 @@ import { TaskInfo, TaskState } from '../../../../models/task.model';
 import {
   formatDateTime as fmtDateTime,
   formatRelativeShort as fmtRelativeShort,
-  stateLabel as fmtStateLabel
+  stateLabel as fmtStateLabel,
+  taskModeIcon,
+  taskModeLabel,
 } from '../../../../services/format.util';
 import { NowTickService } from '../../../../services/now-tick.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
@@ -24,6 +26,9 @@ import {
   primaryActionFor,
 } from '../../state/triage-actions.model';
 import type { LandedState } from '../../../git';
+import { buildThinkingLevelIndicator } from '../../../../services/thinking-level.util';
+import { shortModelName } from '../../../../services/format.util';
+import { ThinkingLevelIndicatorComponent } from '../../../../components/thinking-level-indicator/thinking-level-indicator.component';
 /**
  * Top header of the job-detail view: back button, editable title,
  * state pill, and — top-right — the lane's primary triage action plus
@@ -37,12 +42,26 @@ import type { LandedState } from '../../../git';
   selector: 'app-detail-header',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent],
+  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent, ThinkingLevelIndicatorComponent],
   templateUrl: './detail-header.component.html',
   styleUrl: './detail-header.component.scss'
 })
 export class DetailHeaderComponent {
   readonly info = input.required<TaskInfo>();
+  readonly defaultThinkingLevel = input<string | null>(null);
+  readonly headerModel = computed(() => {
+    const info = this.info();
+    return info.execution?.model ?? info.model ?? null;
+  });
+  readonly headerModelLabel = computed(() => shortModelName(this.headerModel()));
+  readonly thinkingLevelIndicator = computed(() =>
+    buildThinkingLevelIndicator(
+      this.info().execution,
+      this.info().thinkingLevel,
+      this.defaultThinkingLevel(),
+      this.headerModel(),
+    )
+  );
   readonly editingTitle = input(false);
   readonly titleDraft = input<string>('');
   readonly savingTitle = input(false);
@@ -405,6 +424,26 @@ export class DetailHeaderComponent {
   readonly runActivityBadge = computed(() => buildRunActivityBadge(this.info(), this.nowTick()));
 
   readonly identity = computed(() => projectIdentity(this.info().projectName));
+
+  /**
+   * AGT-2069 — prominent planning/research badge for the detail header. Only
+   * non-coding modes render one, so the header stays quiet for the common case
+   * while a planning-task detail is unmistakably marked "here work is PLANNED".
+   * Glyph + label come from the same source as the board card + create picker.
+   */
+  readonly modeBadge = computed(() => {
+    const mode = this.info().mode;
+    if (mode !== 'planning' && mode !== 'research') return null;
+    return {
+      mode,
+      icon: taskModeIcon(mode),
+      label: taskModeLabel(mode),
+      tooltip:
+        mode === 'planning'
+          ? 'Planning task: read-only. It investigates and proposes the next work; it is only done once it spawns follow-up cards or declares no follow-up intended.'
+          : 'Research task: read-only with web access. It gathers information and reports findings.',
+    };
+  });
 
   stateLabel(state: string): string { return fmtStateLabel(state); }
 

@@ -21,6 +21,19 @@ or commit attribution.
   and [docs/schemas/task-find-result.schema.json](../schemas/task-find-result.schema.json)
   pin task API shapes.
 
+## Project source contract
+
+`GET /api/project-sources` returns the extensible source catalogue used by
+onboarding and Workspace Settings. `POST /api/projects` accepts an optional
+`sourceType`; omitted values default to `local-folder`. Only catalogue entries
+marked available may be created. `remote-git` and `cloud` are reserved,
+currently unavailable extension points.
+
+Workspace Settings exposes the same catalogue at
+`#/workspace/settings/project-sources`. The onboarding dialog submits the
+selected catalogue id in `sourceType`; source-specific configuration can be
+added without changing the project identity contract.
+
 ## API-First Task Organization
 
 Agents must organize tasks through the application API, never by direct
@@ -79,6 +92,14 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   `CommitAttributionRunner.cs`: deterministic commit-to-task binding.
 - `backend/Services/Tasks/ReviewEvidenceLog.cs` and
   `ScreenshotIndexService.cs`: review evidence and visual proof.
+- `backend/Features/Registry/WorkspaceSettingsService.cs` and
+  `WorkspaceSettingsEndpoints.cs`: per-workspace default orchestrator settings
+  (`WorkspaceSettings` beside `WorkspaceRecord`, persisted to
+  `.metadata/workspace-settings.json`), exposed via
+  `GET /api/workspaces/{id}/settings`, `PUT .../orchestrator-model`, and
+  `PUT .../autonomy` (404 on unknown id). This is the workspace tier of the
+  two-tier orchestrator config; the precedence and read sites live runner-side
+  (ADR-0061, see [runner.md](runner.md)).
 
 ## Invariants
 
@@ -94,9 +115,17 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   [runner.md](./runner.md) and the `references` field in
   [../contracts/filesystem.md](../contracts/filesystem.md).
 - Rendered task references resolve through `POST /api/tasks/reference-status`.
-  The endpoint accepts up to 200 keys, filters them by registry shortcode, and
-  returns one compact live or ghost projection. Merge reachability is computed
-  once for the batch through the existing cached board merge service.
+  Send `{ "keys": ["AGT-2050", "CAR-2"] }`; keys are trimmed, uppercased,
+  deduplicated, and capped at 200. The response is `{ "items": [...] }`, where
+  each item contains `key`, `exists`, `taskKey`, `title`, `lane`, project
+  identity/colour, merge reachability and branch names, and `reviewGrade`.
+  Known-project deleted keys return a ghost (`exists: false`); keys whose
+  shortcode is absent from the project registry are omitted. Consumers must
+  batch page/message references rather than issue one request per reference.
+  The task scan and merge reachability inputs are cached, merge membership is
+  computed once for the batch, and the frontend hydrator also caches resolved
+  keys for its lifetime. The reusable consumer contract and CAC-3 chat host
+  wiring are documented in [frontend/AGENTS.md](../../frontend/AGENTS.md#task-reference-microcards).
 - Successful CLI runs move from `3-progress` to `4-auto-review` through
   application code. Failed or stopped runs remain inspectable.
 - Direct filesystem access by app code is restricted to the bounded service

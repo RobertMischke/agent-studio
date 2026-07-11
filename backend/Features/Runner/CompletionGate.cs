@@ -94,6 +94,10 @@ public static class CompletionGate
         @"^(?:success|succeeded|done|complete|completed|pass|passed)$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex CliExitRegex = new(
+        @"\[taskboard\].*?CLI\s+exited:\s*status=(?<status>\w+).*?exitCode=(?<code>-?\d+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     // A no-op open-item declaration: the agent's close-out lists "nothing open"
     // rather than an actual unfinished item. Matched against the FIRST sentence
     // of the extracted item text (everything up to the first '.'), so a phantom
@@ -184,7 +188,37 @@ public static class CompletionGate
     /// spin independently of NEEDS_INPUT / NOOP / aspect-block recovery.
     /// </summary>
     public static Decision Evaluate(string? statusMarkdown, string? recentLog, int priorReissues, int maxReissues)
+        => Evaluate(statusMarkdown, recentLog, priorReissues, maxReissues, hasResultsArtifacts: false);
+
+    /// <summary>
+    /// Evaluate the gate with run-bound non-commit evidence. A clean DONE/exit-0
+    /// closure backed by API delivery, results artefacts, or documented
+    /// verification is complete even when it creates no fresh commit. This
+    /// decision is made before scanning the accumulated log for historical
+    /// failure words, while explicit current open items still block.
+    /// </summary>
+    public static Decision Evaluate(
+        string? statusMarkdown,
+        string? recentLog,
+        int priorReissues,
+        int maxReissues,
+        bool hasResultsArtifacts)
     {
+        var completionEvidence = CompletionEvidencePolicy.Decide(new CompletionEvidencePolicy.Inputs(
+            HasTaskDoneSentinel: recentLog?.Contains("[[TASK_DONE]]", StringComparison.Ordinal) == true,
+            ExitCode: ExtractLatestExitCode(recentLog),
+            RunStatusCompleted: ExtractLatestRunCompleted(recentLog),
+            StatusResultToken: ExtractResultToken(statusMarkdown),
+            HasOpenItems: ExtractOpenItemsSection(statusMarkdown ?? string.Empty).Any(),
+            HasBuildFailureInStatus: FirstBuildErrorLine(statusMarkdown ?? string.Empty) is not null,
+            HasApiDelivery: CompletionEvidencePolicy.DetectApiDelivery(statusMarkdown) || CompletionEvidencePolicy.DetectApiDelivery(recentLog),
+            HasResultsArtifacts: hasResultsArtifacts,
+            HasDocumentedVerification: CompletionEvidencePolicy.DetectDocumentedVerification(statusMarkdown)));
+        if (completionEvidence.AcceptAsCompleted)
+        {
+            return new Decision { Reason = completionEvidence.Reason };
+        }
+
         var findings = ExtractFindings(statusMarkdown, recentLog);
         if (findings.Count == 0)
         {
@@ -255,6 +289,21 @@ public static class CompletionGate
     /// </summary>
     public static bool IsSuccessResultToken(string? resultToken)
         => resultToken is not null && SuccessResultRegex.IsMatch(resultToken.Trim());
+
+    public static int? ExtractLatestExitCode(string? recentLog)
+    {
+        if (string.IsNullOrWhiteSpace(recentLog)) return null;
+        var matches = CliExitRegex.Matches(recentLog);
+        if (matches.Count == 0) return null;
+        return int.TryParse(matches[^1].Groups["code"].Value, out var code) ? code : null;
+    }
+
+    public static bool ExtractLatestRunCompleted(string? recentLog)
+    {
+        if (string.IsNullOrWhiteSpace(recentLog)) return false;
+        var matches = CliExitRegex.Matches(recentLog);
+        return matches.Count > 0 && matches[^1].Groups["status"].Value.Equals("completed", StringComparison.OrdinalIgnoreCase);
+    }
 
     public static IReadOnlyList<string> ExtractFindings(string? statusMarkdown, string? recentLog)
     {

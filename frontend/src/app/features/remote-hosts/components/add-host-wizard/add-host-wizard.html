@@ -1,0 +1,68 @@
+<div class="wizard-backdrop" data-testid="add-host-wizard" role="dialog" aria-modal="true" aria-labelledby="add-host-title">
+  <section class="wizard">
+    <header class="wizard__header">
+      <div>
+        <span class="wizard__kicker">Remote execution</span>
+        <h2 id="add-host-title">Add a runner host</h2>
+      </div>
+      <button class="wizard__close" type="button" aria-label="Close add host wizard" (click)="cancelled.emit()">×</button>
+    </header>
+
+    <ol class="stepper" aria-label="Host setup progress">
+      @for (item of steps; track item.label; let index = $index) {
+        <li class="stepper__item" [class.stepper__item--active]="index === step()" [class.stepper__item--done]="index < step()" [attr.aria-current]="index === step() ? 'step' : null">
+          <span class="stepper__number">{{ index < step() ? '✓' : index + 1 }}</span>
+          <span>{{ item.label }}</span>
+        </li>
+      }
+    </ol>
+
+    <div class="wizard__body">
+      <main class="wizard__main">
+        <span class="wizard__eyebrow">{{ current().eyebrow }}</span>
+        <h3>{{ current().title }}</h3>
+        <p class="wizard__description">{{ current().description }}</p>
+
+        @switch (step()) {
+          @case (0) {
+            <div class="form-grid">
+              <label>Host name<input data-testid="add-host-name" [ngModel]="name()" (ngModelChange)="name.set($event)" /></label>
+              <label>SSH target<input data-testid="add-host-address" [ngModel]="address()" (ngModelChange)="address.set($event)" /></label>
+            </div>
+            <label class="check-card"><input type="checkbox" data-testid="add-host-connect-check" [ngModel]="connectionChecked()" (ngModelChange)="connectionChecked.set($event)" /><span><strong>Connection verified</strong><small>SSH key accepted · Ubuntu LTS · sudo available</small></span></label>
+          }
+          @case (1) {
+            <div class="command"><span>Provisioning plan</span><code>git + curl + build-essential<br />.NET 10 · Node 22 · Claude · Codex<br />Playwright Chromium · /opt/agent-runner</code></div>
+            <label class="check-card"><input type="checkbox" data-testid="add-host-provision-check" [ngModel]="provisioned()" (ngModelChange)="provisioned.set($event)" /><span><strong>Runner published</strong><small>Dependencies installed and release binary built</small></span></label>
+          }
+          @case (2) {
+            <div class="auth-grid">
+              <label class="check-card"><input type="checkbox" data-testid="add-host-claude-check" [ngModel]="claudeAuthed()" (ngModelChange)="claudeAuthed.set($event)" /><span><strong>Claude authenticated</strong><small>Independent host login verified</small></span></label>
+              <label class="check-card"><input type="checkbox" data-testid="add-host-codex-check" [ngModel]="codexAuthed()" (ngModelChange)="codexAuthed.set($event)" /><span><strong>Codex authenticated</strong><small>Host-owned auth.json verified</small></span></label>
+            </div>
+            <p class="callout">Credentials stay on this host. Never copy the operator workstation's credential files.</p>
+          }
+          @case (3) {
+            <ul class="smoke-list">
+              <li><span>01</span><div><strong>Connectivity</strong><small><code>agent-runner --health-check</code> reaches /healthz</small></div></li>
+              <li><span>02</span><div><strong>Identity</strong><small>Runner self-registers its X-Client-Id</small></div></li>
+              <li><span>03</span><div><strong>Daemon</strong><small>systemd service is enabled and polling</small></div></li>
+              <li><span>04</span><div><strong>Handoff</strong><small>One ready task returns an external completion</small></div></li>
+            </ul>
+            <label class="check-card check-card--success"><input type="checkbox" data-testid="add-host-smoke-check" [ngModel]="smokePassed()" (ngModelChange)="smokePassed.set($event)" /><span><strong>Smoke check passed</strong><small>The host is ready to accept project assignments</small></span></label>
+          }
+        }
+
+        <footer class="wizard__footer">
+          <button class="button button--quiet" type="button" (click)="step() === 0 ? cancelled.emit() : back()">{{ step() === 0 ? 'Cancel' : 'Back' }}</button>
+          <button class="button button--primary" type="button" data-testid="add-host-next" [disabled]="!canContinue()" (click)="next()">{{ step() === 3 ? 'Add host' : 'Continue' }}</button>
+        </footer>
+      </main>
+
+      <aside class="wizard__chat" aria-label="Orchestrator setup chat">
+        <div class="wizard__chat-head"><span class="wizard__orb" aria-hidden="true">O</span><div><strong>Orchestrator</strong><small>Host setup companion</small></div><span class="wizard__online">Online</span></div>
+        <cac-chat variant="embedded" [messages]="messages()" [pending]="chatPending()" [disabled]="chatPending()" placeholder="Ask about this setup step..." emptyState="Ask the orchestrator for help." (submitMessage)="onSubmit($event)" />
+      </aside>
+    </div>
+  </section>
+</div>

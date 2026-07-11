@@ -1,0 +1,6 @@
+<span class="thinking-level"
+      [class.thinking-level--override]="indicator().differsFromDefault"
+      [cacTooltip]="indicator().tooltip"
+      [attr.data-testid]="testId()"
+      [attr.data-thinking-level]="indicator().effective"
+      [attr.data-thinking-level-override]="indicator().differsFromDefault">{{ indicator().short }}</span>

@@ -244,9 +244,13 @@
       }
     },
     {
-      "comment": "Lane-rail spacing-token enforcement. The collapsed lane-rail block in task-column.scss must source padding/margin/gap exclusively from --studio-spacing-* / --studio-rail-* tokens (see _tokens-semantic.scss). This is a scoped enforcement: the rest of the codebase is not yet migrated (1846 raw-px hits across 95 SCSS files as of 2026-05-29). Cleanup tasks lift more files into this enforcement over time; new files written with tokens are not affected. If you legitimately need a raw px value in this file (e.g. component-internal sizing that isn't part of the rhythm contract), inline a stylelint-disable-next-line with a short rationale. NOTE: must come AFTER the legacy override above because later overrides win per-rule in stylelint; the legacy override redeclares strict-value for color properties at warning severity, and this entry replaces that for the rail file with the full spacing+color enforcement at error severity. Color hits inside this file stay at warning by repeating color-no-hex below.",
+      "comment": "Scoped spacing-token enforcement for the lane rail and new components. Padding/margin/gap must source --studio-spacing-* tokens. If a raw value is structurally necessary, use a targeted disable with rationale.",
       "files": [
-        "src/app/features/board/components/task-column/task-column.scss"
+        "src/app/features/board/components/task-column/task-column.scss",
+        "src/app/features/project-detail/components/execution-assignment-card/execution-assignment-card.scss",
+        "src/app/features/task-detail/components/prompt-pane/pipeline-run-history/pipeline-run-history.component.scss",
+        "src/app/features/task-detail/components/prompt-pane/pipeline-step-details/pipeline-step-details.component.scss",
+        "src/app/features/task-detail/components/prompt-pane/pipeline-step-toggle/pipeline-step-toggle.component.scss"
       ],
       "rules": {
         "color-no-hex": [true, { "severity": "warning" }],

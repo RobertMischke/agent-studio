@@ -42,8 +42,9 @@ function makeTask(
   id: string,
   state: string,
   title: string,
-  signal: MergeSignal,
+  signal: MergeSignal | null,
   withMergeFact: boolean,
+  withCommit = true,
 ) {
   return {
     id,
@@ -65,7 +66,12 @@ function makeTask(
     lastUsage: null,
     execution: null,
     commit: null,
-    commits: [],
+    // AGT-2063: the signal is a fact about the task's OWN commit, so a card that
+    // carries git work must carry a commit. A commit-less card (withCommit=false)
+    // must render no signal even when a backend mergeSignal is present.
+    commits: withCommit
+      ? [{ sha: 'c0ffee1234ab', shortSha: 'c0ffee1', message: 'feat: task work', filesChanged: 2, files: ['src/a.ts', 'src/b.ts'], at: '2026-07-10T10:15:00Z' }]
+      : [],
     ownerClientId: 'local-default',
     tags: [],
     mergeSignal: signal,
@@ -87,6 +93,10 @@ const ON_BRANCH = makeTask('ms-branch', '3-progress', 'Merge signal on branch on
 const IN_DEVELOP = makeTask('ms-develop', '5-human-review', 'Merge signal in develop not main', mergeSignal(true, false), true);
 const RELEASED = makeTask('ms-released', '6-completed', 'Merge signal released to main', mergeSignal(true, true), true);
 const ONLY_MAIN = makeTask('ms-onlymain', '5-human-review', 'Merge signal rare only main', mergeSignal(false, true), false);
+// AGT-2063 regression: a commit-less card that still carries a backend mergeSignal
+// (its task/<id> branch base is trivially an ancestor of develop/main) must render
+// NO merge signal - the exact "merge state on a card with no commits" bug.
+const NO_COMMIT = makeTask('ms-nocommit', '5-human-review', 'Merge signal empty card no commits', mergeSignal(true, false), false, false);
 
 const GROUPED_PAYLOAD = {
   backlog: [],
@@ -97,7 +107,7 @@ const GROUPED_PAYLOAD = {
   failedPickup: [],
   review: [],
   autoReview: [],
-  humanReview: [IN_DEVELOP, ONLY_MAIN],
+  humanReview: [IN_DEVELOP, ONLY_MAIN, NO_COMMIT],
   completed: [RELEASED],
   archive: [],
 };
@@ -204,6 +214,21 @@ test.describe('AGT-2046 board card merge signal', () => {
       await expect(sig).toHaveAttribute('aria-label', /develop/);
       await expect(sig).toHaveAttribute('aria-label', /main/);
     }
+  });
+
+  test('AGT-2063: a card without a task commit renders no merge signal', async ({ page }) => {
+    await gotoBoard(page);
+
+    // The commit-less card is on the board ...
+    const empty = cardByTitle(page, NO_COMMIT.title);
+    await expect(empty).toHaveCount(1);
+    // ... but carries no [d|m] indicator, even though its payload has a mergeSignal.
+    await expect(empty.getByTestId('task-card-merge-signal')).toHaveCount(0);
+
+    // A sibling card WITH a commit in the same lane still shows its signal, proving
+    // the suppression is the missing commit and not a board-wide failure.
+    await expect(cardByTitle(page, IN_DEVELOP.title).getByTestId('task-card-merge-signal'))
+      .toHaveCount(1);
   });
 
   test('the develop segment lights up only when merged; the main segment tracks main', async ({ page }) => {

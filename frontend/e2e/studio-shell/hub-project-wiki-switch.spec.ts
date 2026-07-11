@@ -190,4 +190,32 @@ test.describe('Project ⇄ Wiki switch with the Hub tab already open (AGT-2023)'
     // Tabs list holds exactly one entry keyed on the project's Hub tab.
     await expect(page.getByTestId(`studio-explorer-open-tab-hub:${PROJECT}`)).toHaveCount(1);
   });
+
+  test('existing Project Hub plus Explorer Wiki produces two distinct editor tabs', async ({ page }) => {
+    await gotoStudio(page);
+    await expandProject(page);
+
+    await hubRow(page).click();
+    await expect(rail(page, 'overview')).toHaveAttribute('aria-current', 'page');
+    await wikiRow(page).click();
+
+    await expect(rail(page, 'wiki')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId(`studio-explorer-open-tab-hub:${PROJECT}`)).toHaveCount(1);
+    await expect(page.getByTestId(`studio-explorer-open-tab-hub:${PROJECT}:wiki`)).toHaveCount(1);
+    await expect(page.getByRole('tab', { name: 'AGT · Overview' })).toHaveCount(1);
+    await expect(page.getByRole('tab', { name: 'AGT · Wiki' })).toHaveCount(1);
+    await shot(page, '04-hub-and-wiki-separate-tabs--mocked.png');
+  });
+
+  test('Hub rail Wiki click retargets the current editor tab in place', async ({ page }) => {
+    await gotoStudio(page);
+    await expandProject(page);
+    await hubRow(page).click();
+
+    await rail(page, 'wiki').click();
+
+    await expect(rail(page, 'wiki')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId(`studio-explorer-open-tab-hub:${PROJECT}`)).toHaveCount(0);
+    await expect(page.getByTestId(`studio-explorer-open-tab-hub:${PROJECT}:wiki`)).toHaveCount(1);
+  });
 });

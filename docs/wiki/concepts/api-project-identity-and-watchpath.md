@@ -27,7 +27,7 @@ API uses yet.
 
 `/api/tasks` is the only public route. The former `/api/jobs` compatibility
 alias was removed in
-[ADR-0057](../../architecture/decisions/adr-archive.md#adr-0057---apijobs-compatibility-alias-removed-route-is-apitasks-only-2026-06-22)
+[ADR-0058](../../architecture/decisions/adr-archive.md#adr-0058---apijobs-compatibility-alias-removed-route-is-apitasks-only-2026-06-22)
 (Phase 1 of this cleanup) and the create DTO was renamed `CreateJobRequest` ->
 `CreateTaskRequest`, so the domain reads "Task" end to end. There is no `/api/jobs`
 route or `CreateJobRequest` type anymore.
@@ -43,12 +43,16 @@ disk layout to every client:
   specs), concentrated in `task.service.ts`, `undo.service.ts`,
   `dev-tools.service.ts`, `git-hygiene.service.ts`,
   `code-review-activity.store.ts`, and `jobs-hub-client.service.ts`.
-- `CreateJob` (`backend/Features/Tasks/TaskMutationService.cs`) matches the
-  project by exact string equality on `watchPath`. When the field is empty it
-  falls back to the first registered project, which is Runbook. So an omitted or
-  slightly-off path silently lands the task in the wrong project. This is the
-  same trap captured in
-  [../common-problems/project-name-divergence-watchpath-vs-registry/README.md](../common-problems/project-name-divergence-watchpath-vs-registry/README.md).
+- Task creation (`TaskMutationService.CreateJob`,
+  `backend/Features/Tasks/TaskMutationService.cs`) now resolves a path-free
+  handle first: the preferred `CreateTaskRequest.Project` field (or the
+  deprecated `WatchPath` fallback) accepts a `shortCode` / Kürzel (`ASS`) or a
+  `PROJ-NNN` id, which `ResolveRequestedWatchPath` turns into the project's
+  storage location via the registry (see Phase 2a below). A raw absolute path
+  still passes through for legacy callers, and an empty handle still falls back
+  to the first registered project. That last fallback is the trap captured in
+  [../common-problems/project-name-divergence-watchpath-vs-registry/README.md](../common-problems/project-name-divergence-watchpath-vs-registry/README.md);
+  addressing by `shortCode`/`projectId` avoids it.
 - The `/api/jobs` alias and its ~180 consumers have been migrated to `/api/tasks`
   (Phase 1, done). Remaining `/api/jobs` mentions live only in immutable history:
   superseded ADR entries above and dated research snapshots.
@@ -69,10 +73,25 @@ This is epic-sized; split into slices rather than a big-bang change:
 - Phase 1 (**done**): migrated all `/api/jobs` consumers to `/api/tasks` and
   retired the alias; renamed `CreateJobRequest` -> `CreateTaskRequest`.
   Mechanical, low risk.
-- Phase 2a: a central server-side resolver `project (shortCode | projectId) ->
-  watchPath`.
-- Phase 2b: endpoints accept `project` and resolve internally; `watchPath` stays
-  accepted but deprecated, and is dropped from responses.
+- Phase 2a (**create path done**): a server-side resolver `project (shortCode |
+  projectId) -> watchPath`. `ProjectRegistry.FindByShortCode` plus
+  `TaskMutationService.ResolveRequestedWatchPath` resolve a Kürzel or `PROJ-NNN`
+  handle to a storage location; the task-create DTO grew a preferred `Project`
+  field (`WatchPath` kept as a deprecated fallback). Covered by
+  `backend.Tests/CreateTaskByProjectHandleTests.cs`.
+- Phase 2b (**GET/update/delete paths done**): the read / update / delete task
+  endpoints in `TaskCrudEndpoints.cs` now accept a path-free `?project=` handle
+  (Kürzel or `PROJ-NNN`) alongside the deprecated `?watchPath=`. The shared
+  `TaskEndpointHelpers.ResolveWatchPath(projects, project, watchPath)` resolves it
+  through the registry — `project` wins when set, an unknown handle falls through
+  to `watchPath` (so a stale handle can never silently target another project),
+  and `watchPath` stays accepted for legacy callers. `POST
+  /{jobId}/change-project` likewise resolves the destination via a new
+  `ChangeProjectRequest.TargetProject`. Covered by
+  `backend.Tests/TaskEndpointProjectHandleResolutionTests.cs`. Remaining 2b work:
+  extend the same handle to the sibling task endpoint groups (files, runner, git,
+  review-evidence, …) that still bind a raw `watchPath`, and drop the raw path
+  from responses.
 - Phase 2c: frontend sends `shortCode` or `projectId`; unwind
   `projectStorageByName` and `normalizeStorage` where possible.
 

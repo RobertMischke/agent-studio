@@ -6,7 +6,9 @@ import { Injectable, computed, signal } from '@angular/core';
  * AGT-2035 folded the formerly scattered surfaces into one view with a clean
  * Global-vs-Workspace split:
  *   - Global (per-user / app-wide): `appearance` (Theme + Activity bar),
- *     `updates`, `workspaces` (registry management, moved off the sidebar).
+ *     `updates`, `workspaces` (registry management, moved off the sidebar),
+ *     `orchestrator` (the platform-global supervisor / orchestrator lifecycle
+ *     flags — AGT-1812 retired their standalone modal into this section).
  *   - Workspace defaults: `caps`, `working-memory` (extracted from caps),
  *     `prompts`, `tokens` (now the single usage area), `screenshots`.
  * `overview` is the landing rail item that links into each section.
@@ -19,6 +21,9 @@ export type WorkspaceSettingsSection =
   | 'appearance'
   | 'updates'
   | 'workspaces'
+  | 'remote-hosts'
+  | 'project-sources'
+  | 'orchestrator'
   | 'caps'
   | 'working-memory'
   | 'prompts'
@@ -131,6 +136,15 @@ export class WorkspaceOverlaysService {
   togglePromptAdmin(): void { this.toggle('prompts'); }
 
   /**
+   * AGT-1812: open the platform-global orchestrator / supervisor lifecycle
+   * flags. This is the new home of the retired standalone "Orchestrator config"
+   * modal — the header Dev-tools entry and the orchestrator side-sheet gear both
+   * route here now.
+   */
+  openOrchestrator(): void { this.open('orchestrator'); }
+  toggleOrchestrator(): void { this.toggle('orchestrator'); }
+
+  /**
    * Reconcile open state with the current URL hash. Call once on app boot and
    * on every `hashchange` event. A recognised section hash opens (or switches)
    * the view; dropping a hash that opened the view closes it.
@@ -158,6 +172,9 @@ export class WorkspaceOverlaysService {
       case '#/workspace/settings/appearance': return 'appearance';
       case '#/workspace/settings/updates': return 'updates';
       case '#/workspace/settings/workspaces': return 'workspaces';
+      case '#/workspace/settings/remote-hosts': return 'remote-hosts';
+      case '#/workspace/settings/project-sources': return 'project-sources';
+      case '#/workspace/settings/orchestrator': return 'orchestrator';
       case '#/workspace/settings/working-memory': return 'working-memory';
       // Retired 'summary' aliases resolve to the overview (migration: no crash).
       case '#/workspace/summary':
@@ -176,6 +193,9 @@ export class WorkspaceOverlaysService {
       case 'appearance': return '#/workspace/settings/appearance';
       case 'updates': return '#/workspace/settings/updates';
       case 'workspaces': return '#/workspace/settings/workspaces';
+      case 'remote-hosts': return '#/workspace/settings/remote-hosts';
+      case 'project-sources': return '#/workspace/settings/project-sources';
+      case 'orchestrator': return '#/workspace/settings/orchestrator';
       case 'working-memory': return '#/workspace/settings/working-memory';
       case 'overview': return '#/workspace/settings';
     }
@@ -188,6 +208,9 @@ export class WorkspaceOverlaysService {
     '#/workspace/settings/appearance',
     '#/workspace/settings/updates',
     '#/workspace/settings/workspaces',
+    '#/workspace/settings/remote-hosts',
+    '#/workspace/settings/project-sources',
+    '#/workspace/settings/orchestrator',
     '#/workspace/settings/working-memory',
     '#/workspace/caps',
     '#/workspace/prompts',

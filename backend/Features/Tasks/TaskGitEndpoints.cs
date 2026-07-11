@@ -2,6 +2,8 @@
 
 using System.Text;
 
+using static AgentStudio.Tasks.TaskEndpointHelpers;
+
 namespace AgentStudio.Tasks;
 
 /// <summary>
@@ -20,28 +22,39 @@ public static class TaskGitEndpoints
         // main checkout, so a parallel run's dirty files are never cross-attributed
         // to this task (ASS-1731). Falls back to the main checkout when the task
         // has no live worktree.
-        group.MapGet("/{jobId}/git/status", (string jobId, string? watchPath, GitService git) =>
-            Results.Ok(git.GetStatus(jobId, watchPath, preferRunLocation: true)));
+        group.MapGet("/{jobId}/git/status", (string jobId, string? project, string? watchPath, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
+        {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            return Results.Ok(git.GetStatus(jobId, watchPath, preferRunLocation: true));
+        });
 
-        group.MapGet("/{jobId}/git/diff", (string jobId, string? watchPath, string? path, GitService git) =>
-            DiffTextResult(git.GetDiffResult(jobId, watchPath, path, preferRunLocation: true)));
+        group.MapGet("/{jobId}/git/diff", (string jobId, string? project, string? watchPath, string? path, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
+        {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            return DiffTextResult(git.GetDiffResult(jobId, watchPath, path, preferRunLocation: true));
+        });
 
         // Full working-tree text of one file, for the git-pane's rendered
         // md/html preview (AGT-2008). Reads the task's own run location so a
         // per-task worktree previews its own copy, matching /git/diff.
-        group.MapGet("/{jobId}/git/file", (string jobId, string? watchPath, string? path, GitService git) =>
-            FileContentResult(git.GetFileContentResult(jobId, watchPath, path, sha: null, preferRunLocation: true)));
-
-        group.MapPost("/{jobId}/git/commit", (string jobId, string? watchPath, GitCommitRequest req, GitService git) =>
+        group.MapGet("/{jobId}/git/file", (string jobId, string? project, string? watchPath, string? path, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
+            return FileContentResult(git.GetFileContentResult(jobId, watchPath, path, sha: null, preferRunLocation: true));
+        });
+
+        group.MapPost("/{jobId}/git/commit", (string jobId, string? project, string? watchPath, GitCommitRequest req, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
+        {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var result = git.Commit(jobId, watchPath, req.Message);
             return result.Success
                 ? Results.Ok(new { sha = result.Sha })
                 : Results.BadRequest(new { error = result.Error });
         });
 
-        group.MapPost("/{jobId}/git/generate-message", async (string jobId, string? watchPath, GitService git, CancellationToken ct) =>
+        group.MapPost("/{jobId}/git/generate-message", async (string jobId, string? project, string? watchPath, GitService git, AgentStudio.Registry.ProjectRegistry projects, CancellationToken ct) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var result = await git.GenerateCommitMessageAsync(jobId, watchPath, ct);
             return result.Message is not null
                 ? Results.Ok(new { message = result.Message })
@@ -51,8 +64,9 @@ public static class TaskGitEndpoints
         // Per-job commit details: returns the cached snapshot from task.json plus
         // a live re-derivation of the file list from `git show --name-status`,
         // so the detail view stays accurate even after history rewrites.
-        group.MapGet("/{jobId}/commit", (string jobId, string? watchPath, TaskScannerService scanner, GitService git) =>
+        group.MapGet("/{jobId}/commit", (string jobId, string? project, string? watchPath, TaskScannerService scanner, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound();
             if (info.Commit == null) return Results.Ok(new { commit = (object?)null, files = Array.Empty<GitFileChange>() });
@@ -65,8 +79,9 @@ public static class TaskGitEndpoints
         // Diff for the recorded commit, optionally scoped to one path. Lets
         // the detail view show the exact changes the task produced even long
         // after the working tree has moved on.
-        group.MapGet("/{jobId}/commit/diff", (string jobId, string? watchPath, string? path, TaskScannerService scanner, GitService git) =>
+        group.MapGet("/{jobId}/commit/diff", (string jobId, string? project, string? watchPath, string? path, TaskScannerService scanner, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             if (info.Commit == null) return Results.NotFound(new { error = "This task has no recorded commit." });
@@ -79,10 +94,11 @@ public static class TaskGitEndpoints
         // and change set" panel - the user must be able to see what
         // landed without having to drill into individual runs first.
         group.MapGet("/{jobId}/commits", (
-            string jobId, string? watchPath,
+            string jobId, string? project, string? watchPath,
             TaskScannerService scanner, TaskSessionLog sessions, GitService git,
-            TaskMutationService mutations) =>
+            TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
 
@@ -104,10 +120,11 @@ public static class TaskGitEndpoints
         });
 
         group.MapGet("/{jobId}/commits/files", (
-            string jobId, string? watchPath,
+            string jobId, string? project, string? watchPath,
             TaskScannerService scanner, TaskSessionLog sessions, GitService git,
-            TaskMutationService mutations) =>
+            TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             info = TryBackfillAttribution(info, watchPath, scanner, sessions, git, mutations);
@@ -118,10 +135,11 @@ public static class TaskGitEndpoints
         });
 
         group.MapGet("/{jobId}/commits/diff", (
-            string jobId, string? path, string? watchPath,
+            string jobId, string? project, string? path, string? watchPath,
             TaskScannerService scanner, TaskSessionLog sessions, GitService git,
-            TaskMutationService mutations) =>
+            TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             info = TryBackfillAttribution(info, watchPath, scanner, sessions, git, mutations);
@@ -141,9 +159,10 @@ public static class TaskGitEndpoints
         // actually a known commit on this job before calling git so the
         // endpoint can't be coaxed into showing arbitrary repo history.
         group.MapGet("/{jobId}/commits/{sha}/files", (
-            string jobId, string sha, string? watchPath,
-            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
+            string jobId, string sha, string? project, string? watchPath,
+            TaskScannerService scanner, TaskSessionLog sessions, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             if (!IsKnownJobCommit(info, sessions, jobId, watchPath, git, sha))
@@ -153,9 +172,10 @@ public static class TaskGitEndpoints
         });
 
         group.MapGet("/{jobId}/commits/{sha}/diff", (
-            string jobId, string sha, string? path, string? watchPath,
-            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
+            string jobId, string sha, string? project, string? path, string? watchPath,
+            TaskScannerService scanner, TaskSessionLog sessions, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             if (!IsKnownJobCommit(info, sessions, jobId, watchPath, git, sha))
@@ -170,9 +190,10 @@ public static class TaskGitEndpoints
         // preview (AGT-2008). Same known-commit gate as the diff endpoint so the
         // blob can only be read from a commit that actually belongs to this job.
         group.MapGet("/{jobId}/commits/{sha}/file", (
-            string jobId, string sha, string? path, string? watchPath,
-            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
+            string jobId, string sha, string? project, string? path, string? watchPath,
+            TaskScannerService scanner, TaskSessionLog sessions, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             if (!IsKnownJobCommit(info, sessions, jobId, watchPath, git, sha))
@@ -188,9 +209,10 @@ public static class TaskGitEndpoints
         // branch membership. Recomputed on every read so it never lies about
         // where develop / main currently are.
         group.MapGet("/{jobId}/provenance", (
-            string jobId, string? watchPath,
-            TaskScannerService scanner, TaskProvenanceService provenance) =>
+            string jobId, string? project, string? watchPath,
+            TaskScannerService scanner, TaskProvenanceService provenance, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             return Results.Ok(provenance.BuildView(info));
@@ -209,14 +231,15 @@ public static class TaskGitEndpoints
         // non-active tasks get the warning suppressed at the data layer,
         // not just hidden in the UI.
         group.MapGet("/{jobId}/git/hygiene", (
-            string jobId, string? watchPath,
-            GitService git, TaskScannerService scanner, TaskRunnerService runner) =>
+            string jobId, string? project, string? watchPath,
+            GitService git, TaskScannerService scanner, TaskRunnerService runner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             var status = runner.GetStatus();
             var isActive = info != null
-                && status.Projects.TryGetValue(info.ProjectName, out var project)
-                && string.Equals(project.ActiveJobId, info.Id, StringComparison.Ordinal);
+                && status.Projects.TryGetValue(info.ProjectName, out var projectStatus)
+                && string.Equals(projectStatus.ActiveJobId, info.Id, StringComparison.Ordinal);
             var hygiene = git.GetJobHygiene(jobId, watchPath, isActive);
             return string.IsNullOrEmpty(hygiene.Error)
                 ? Results.Ok(hygiene)
@@ -232,10 +255,11 @@ public static class TaskGitEndpoints
         // and writes a [commit] orchestrator-chat entry into the activity
         // log so the action is visible in the protocol pane.
         group.MapPost("/{jobId}/git/commit-accepted-evidence",
-            async (string jobId, string? watchPath,
+            async (string jobId, string? project, string? watchPath,
                    GitService git, TaskScannerService scanner, TaskMutationService mutations,
-                   OrchestratorChatLog chat, CancellationToken ct) =>
+                   OrchestratorChatLog chat, AgentStudio.Registry.ProjectRegistry projects, CancellationToken ct) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
 
@@ -272,8 +296,9 @@ public static class TaskGitEndpoints
             return Results.Ok(new { commit = commitInfo });
         });
 
-        group.MapPost("/{jobId}/open-in-vscode", (string jobId, string? watchPath, GitService git) =>
+        group.MapPost("/{jobId}/open-in-vscode", (string jobId, string? project, string? watchPath, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             return git.OpenInVsCode(jobId, watchPath, out var error)
                 ? Results.Ok()
                 : Results.BadRequest(new { error });

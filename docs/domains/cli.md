@@ -61,6 +61,20 @@ CLI execution tests.
   `quota_fallback_activated` timeline event, task chat note, task-card badge,
   and status-bar warning aligned. When the primary is below its cap again, the
   next run uses it automatically. Cross-CLI fallback starts a fresh session.
+- Admission is algorithmic and pre-launch (AGT-2055). Before a card is admitted
+  the scheduler evaluates the cached quota snapshots for its target CLI - a
+  strict cap check plus a burn-rate projection over the 5-hour and 7-day windows
+  (`QuotaAdmissionPlanner` / `QuotaWindowProjection`; caps in `cli-quota-caps.json`,
+  default 95%). It decides purely from data, without spawning anything, to launch
+  on primary, pre-emptively switch to the AGT-2040 fallback, throttle parallel
+  admissions, or wait quietly for the next reset - never a burned launch or a
+  reissue-budget charge on an exhausted quota (environmental, per the AGT-1944
+  taxonomy). Every load-steering decision (switch / throttle / wait) is
+  documented, never silent: a `quota_admission_decision` timeline event carrying
+  the projection numbers plus a `load-distribution` orchestrator-feed line (the
+  data source for the load-distribution view). A healthy primary launch stays a
+  log-only normal path. The planner reuses the AGT-2040 routing map; it does not
+  duplicate "which model replaces which".
 
 ## Verification
 

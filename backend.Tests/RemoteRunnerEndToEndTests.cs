@@ -1,6 +1,7 @@
 extern alias Runner;
 
 using System.Text;
+using System.Net.Http.Json;
 
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -17,6 +18,8 @@ using RClient = Runner::AgentRunner.TaskServerClient;
 using RAcquire = Runner::AgentRunner.RunLeaseAcquireRequest;
 using RHeartbeat = Runner::AgentRunner.RunLeaseHeartbeatRequest;
 using RRelease = Runner::AgentRunner.RunLeaseReleaseRequest;
+using RClaim = Runner::AgentRunner.RunnerClaimRequest;
+using RClaimStatus = Runner::AgentRunner.RunnerClaimStatus;
 using RLogIngest = Runner::AgentRunner.LogIngestRequest;
 using RCliLine = Runner::AgentRunner.CliOutputLine;
 using RArtifactIngest = Runner::AgentRunner.ArtifactIngestRequest;
@@ -158,6 +161,21 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Health_probe_reports_reachable_against_the_live_server()
+    {
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+
+        // The connectivity preflight hits the server's open /healthz route. A live
+        // server returns a null reason (reachable); the runbook's readiness check
+        // (agent-runner --health-check) and the run preflight both branch on this.
+        var reason = await client.ProbeHealthAsync(CancellationToken.None);
+
+        Assert.Null(reason);
+    }
+
+    [Fact]
     public async Task Second_runner_is_refused_while_the_lease_is_held()
     {
         SeedTask(TaskStates.Progress, TaskKey, "Contended", "Prompt.");
@@ -182,6 +200,60 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             new RAcquire(TaskKey, "runner-b", ProjectName, "host-b", 2, "claude"), ct);
         Assert.False(b.Granted);
         Assert.Equal("Held", b.Outcome);
+    }
+
+    [Fact]
+    public async Task Daemon_claim_only_returns_server_assigned_remote_capable_project()
+    {
+        SeedTask(TaskStates.Ready, TaskKey, "Daemon pickup", "Prompt.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+
+        var assignment = await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/execution-runner",
+            new { executionRunner = ProjectName, remoteExecutionEnabled = true });
+        assignment.EnsureSuccessStatusCode();
+
+        var wrongRunner = await client.ClaimAsync(new RClaim(
+            "runner-other", "runner-other", "other-host", 1, "remote-runner"), CancellationToken.None);
+        Assert.Equal(RClaimStatus.Empty, wrongRunner.Status);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
+
+        var claim = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"), CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Claimed, claim.Status);
+        Assert.False(string.IsNullOrWhiteSpace(claim.TaskKey));
+        Assert.Equal(TaskKey, claim.JobId);
+        Assert.Equal(ProjectName, claim.ProjectName);
+        Assert.NotNull(claim.Lease);
+        Assert.Equal("Prompt.", await client.ReadTaskFileAsync(claim.TaskKey!, "prompt.md", CancellationToken.None));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
+    }
+
+    [Fact]
+    public async Task Daemon_claim_skips_project_that_opts_out_of_remote_execution()
+    {
+        SeedTask(TaskStates.Ready, TaskKey, "Machine-bound", "Prompt.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+
+        var assignment = await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/execution-runner",
+            new { executionRunner = ProjectName, remoteExecutionEnabled = false });
+        assignment.EnsureSuccessStatusCode();
+
+        var claim = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"), CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Empty, claim.Status);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
     }
 
     private WebApplicationFactory<Program> BuildFactory() =>

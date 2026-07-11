@@ -168,15 +168,15 @@
 }
 
 .cr-body-header[data-verdict='pass'] {
-  box-shadow: inset 3px 0 0 var(--severity-pass);
+  background: color-mix(in srgb, var(--severity-pass) 9%, var(--studio-bg-hover));
 }
 
 .cr-body-header[data-verdict='concerns'] {
-  box-shadow: inset 3px 0 0 var(--severity-warn);
+  background: color-mix(in srgb, var(--severity-warn) 9%, var(--studio-bg-hover));
 }
 
 .cr-body-header[data-verdict='block'] {
-  box-shadow: inset 3px 0 0 var(--severity-high);
+  background: color-mix(in srgb, var(--severity-high) 9%, var(--studio-bg-hover));
 }
 
 .cr-body-title {

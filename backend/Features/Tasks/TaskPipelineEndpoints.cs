@@ -1,4 +1,4 @@
-
+using static AgentStudio.Tasks.TaskEndpointHelpers;
 
 namespace AgentStudio.Tasks;
 
@@ -26,11 +26,14 @@ public static class TaskPipelineEndpoints
     {
         group.MapGet("/{jobId}/pipeline", (
             string jobId,
+            string? project,
             string? watchPath,
             TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
             ProjectSettingsService projectSettings,
             PipelineExecutionLog pipelineLog) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
 
@@ -49,6 +52,18 @@ public static class TaskPipelineEndpoints
                 ? null
                 : projectSettings.Get(info.ProjectName);
             var pipeline = ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(info.Mode), settings);
+            var resultFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var step in pipeline.AllSteps)
+            {
+                var relativePath = step.Kind switch
+                {
+                    StepKind.Core => "status.md",
+                    StepKind.Aspect => $"{step.Id}.md",
+                    _ => null,
+                };
+                if (relativePath is not null && File.Exists(Path.Combine(info.FolderPath, relativePath)))
+                    resultFiles[step.Id] = relativePath;
+            }
             var config = pipeline.AllSteps.ToDictionary(
                 step => step.Id,
                 step =>
@@ -59,13 +74,17 @@ public static class TaskPipelineEndpoints
                     // show which model each LLM-backed step WILL run on before the
                     // run, not just after. Null for deterministic / core steps.
                     var resolved = PipelineStepModelDefaults.Resolve(settings, step);
+                    var configured = PipelineStepConfigResolver.Lookup(settings, step.Id);
                     return new
                     {
                         enabled = PipelineStepConfigResolver.IsEnabled(settings, step),
-                        cliType = PipelineStepConfigResolver.Lookup(settings, step.Id)?.CliType ?? step.CliType,
-                        model = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Model,
-                        thinkingLevel = PipelineStepConfigResolver.Lookup(settings, step.Id)?.ThinkingLevel,
-                        mode = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Mode,
+                        canDisable = PipelineStepConfigResolver.CanDisable(step),
+                        cliType = configured?.CliType ?? step.CliType,
+                        model = configured?.Model,
+                        thinkingLevel = configured?.ThinkingLevel,
+                        mode = configured?.Mode,
+                        prompt = configured?.Prompt,
+                        condition = configured?.Condition,
                         resolvedModel = resolved?.Model,
                         modelSource = resolved?.Source,
                     };
@@ -79,6 +98,7 @@ public static class TaskPipelineEndpoints
                 cost,
                 tokensByModel,
                 config,
+                resultFiles,
             });
         });
 
@@ -90,10 +110,13 @@ public static class TaskPipelineEndpoints
         // they already live in the task's prompt.md / chat.
         group.MapGet("/{jobId}/step-prompts", (
             string jobId,
+            string? project,
             string? watchPath,
             TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
             AgentStudio.Cli.StepPromptLog promptLog) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
 

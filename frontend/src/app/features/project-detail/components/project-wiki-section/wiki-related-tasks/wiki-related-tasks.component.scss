@@ -1,0 +1,22 @@
+:host { display: block; }
+
+.wrt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-2);
+}
+
+.wrt__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--studio-fg-muted);
+}
+
+/* Micro-cards are inline pills; wrap them into a compact grid inside the rail. */
+.wrt__cards {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}

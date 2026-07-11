@@ -51,6 +51,15 @@ public class CompletionRetriggerBreakerTest
         // - the runner falls through to human-review escalation.
         Assert.False(CompletionRetriggerDecider.ShouldRetrigger(RunIssueKind.WatchdogTimeout, budgetRemaining: 0));
         Assert.False(CompletionRetriggerDecider.ShouldRetrigger(RunIssueKind.WatchdogTimeout, budgetRemaining: -1));
+        Assert.False(CompletionRetriggerDecider.ShouldRetrigger(RunIssueKind.InfraCrash, budgetRemaining: 0));
+    }
+
+    [Fact]
+    public void InfraCrashBudget_AllowsOneRetryThenEscalation()
+    {
+        Assert.Equal(1, CompletionRetriggerDecider.InfraCrashBudget);
+        Assert.True(CompletionRetriggerDecider.ShouldRetrigger(RunIssueKind.InfraCrash, 1));
+        Assert.False(CompletionRetriggerDecider.ShouldRetrigger(RunIssueKind.InfraCrash, 0));
     }
 
     [Fact]

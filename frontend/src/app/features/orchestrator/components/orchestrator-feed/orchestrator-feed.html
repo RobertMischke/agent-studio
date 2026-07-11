@@ -7,6 +7,14 @@
       </div>
       <p class="orch-feed__sub">{{ projects().length }} projects · {{ visibleEntries().length }} signal events</p>
     </div>
+    <div class="orch-feed__views" role="group" aria-label="Transparency view">
+      <button type="button" [class.orch-feed__view--active]="activeView() === 'activity'"
+              [attr.aria-pressed]="activeView() === 'activity'" (click)="activeView.set('activity')"
+              data-testid="orchestrator-view-activity">Activity</button>
+      <button type="button" [class.orch-feed__view--active]="activeView() === 'load'"
+              [attr.aria-pressed]="activeView() === 'load'" (click)="activeView.set('load')"
+              data-testid="orchestrator-view-load">Load distribution</button>
+    </div>
     <button type="button" class="orch-feed__refresh" (click)="refresh()" [disabled]="loading()" data-testid="orchestrator-refresh">
       {{ loading() ? '...' : 'Refresh' }}
     </button>
@@ -14,9 +22,12 @@
 
   @if (error()) { <div class="orch-feed__error" role="alert">{{ error() }}</div> }
 
-  <section class="orch-feed__global" aria-label="Global orchestrator scope">
-    <app-global-orchestrator-card />
-  </section>
+  @if (activeView() === 'load') {
+    <app-load-distribution [entries]="entries()" />
+  } @else {
+    <section class="orch-feed__global" aria-label="Global orchestrator scope">
+      <app-global-orchestrator-card />
+    </section>
 
   <div class="orch-feed__grid">
     <aside class="orch-feed__filters" aria-label="Feed filters">
@@ -130,5 +141,6 @@
         <p class="orch-feed__empty">Select a feed event to inspect its context and target.</p>
       }
     </aside>
-  </div>
+    </div>
+  }
 </section>

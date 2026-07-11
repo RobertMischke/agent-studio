@@ -15,6 +15,7 @@ import {
   buildHumanReviewBadge,
   buildCodeReviewGradeBadge,
   buildPhaseBadge,
+  formatSteerWait,
   buildOwnerChip,
   buildPipelineDots,
   buildTokenBubble,
@@ -827,6 +828,9 @@ describe('TaskCardComponent (smoke)', () => {
   it('AGT-2046 renders the two-segment merge signal with develop lit, main muted', async () => {
     const fixture = await renderCard(makeJob({
       state: '5-human-review',
+      // A merged card carries the task commit that landed; the signal is a fact
+      // about that commit (AGT-2063), so it must be present for the signal to show.
+      commits: [commit()],
       mergeSignal: {
         branch: 'task/ATP-1',
         inIntegration: true,
@@ -846,6 +850,28 @@ describe('TaskCardComponent (smoke)', () => {
     const main = signal?.querySelector('[data-seg="main"]') as HTMLElement | null;
     expect(dev?.className).toContain('task-card__merge-seg--on');
     expect(main?.className).not.toContain('task-card__merge-seg--on');
+  });
+
+  it('AGT-2063 renders NO merge signal on a card without a task commit', async () => {
+    // The operator bug: an empty card carried a backend mergeSignal (its branch
+    // base is trivially in develop/main) and showed a merge state. With no task
+    // commit the [d|m] indicator must not appear at all.
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      commit: null,
+      commits: [],
+      mergeSignal: {
+        branch: 'task/ATP-1',
+        inIntegration: true,
+        inRelease: false,
+        integrationBranch: 'develop',
+        releaseBranch: 'main',
+        integrationSha: 'a1b2c3d',
+        releaseSha: null,
+      },
+    }));
+
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-merge-signal"]')).toBeNull();
   });
 
   it('AGT-2046 replaces the cryptic BR label chip with a branch icon', async () => {
@@ -1105,6 +1131,52 @@ describe('TaskCardComponent (smoke)', () => {
 });
 
 describe('buildEffectiveModelChip', () => {
+  it('shows the effective run thinking level and strengthens a default mismatch', () => {
+    const job = makeJob({
+      cliType: 'codex',
+      model: 'gpt-5.6-sol',
+      thinkingLevel: 'ultra',
+      execution: {
+        jobId: 'task-1', taskKey: 'test::task-1', processId: 1, startedAt: '2026-07-11T00:00:00Z',
+        status: 'completed', exitCode: 0, durationSeconds: 12,
+        model: 'gpt-5.6-sol', thinkingLevel: 'medium', runOutcome: 'success',
+      },
+    });
+
+    const chip = buildEffectiveModelChip(job, makeOwner({ defaultThinkingLevel: 'high' }));
+
+    expect(chip.thinkingLevel).toMatchObject({
+      short: 'm',
+      effective: 'medium',
+      configured: 'ultra',
+      differsFromConfigured: true,
+      differsFromDefault: true,
+    });
+    expect(chip.tooltip.body).toContain('Thinking level:</b> medium');
+    expect(chip.tooltip.body).toContain('Configured thinking level:</b> ultra');
+  });
+
+  it('keeps a configured/default thinking level quiet before the first run', () => {
+    const chip = buildEffectiveModelChip(
+      makeJob({ cliType: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'high', execution: null }),
+      makeOwner({ defaultThinkingLevel: 'high' }),
+    );
+
+    expect(chip.thinkingLevel).toMatchObject({ short: 'h', effective: 'high', differsFromDefault: false });
+  });
+
+  it('strengthens a task override even when the run matches its configured level', () => {
+    const chip = buildEffectiveModelChip(
+      makeJob({ cliType: 'codex', model: 'gpt-5.6-sol', thinkingLevel: 'ultra', execution: null }),
+      makeOwner({ defaultThinkingLevel: 'high' }),
+    );
+
+    expect(chip.thinkingLevel).toMatchObject({
+      short: 'u', effective: 'ultra', configured: 'ultra', defaultLevel: 'high',
+      differsFromConfigured: false, differsFromDefault: true,
+    });
+  });
+
   it('shows a visible quota-fallback badge with model and reason', () => {
     const job = makeJob({
       cliType: 'claude',
@@ -1508,6 +1580,41 @@ describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
     const blocked = buildPhaseBadge('post-processing-blocked');
     expect(blocked?.label).toBe('Post processing blocked');
     expect(blocked?.tone).toBe('post-processing-blocked');
+  });
+
+  it('surfaces a steer-pending wait with a live "since" timer (Run-Liveness Slice B)', () => {
+    const since = '2026-07-11T00:00:00.000Z';
+    const now = Date.parse(since) + 135_000; // 2m 15s later
+    const pill = buildPhaseBadge('steer-pending', since, now);
+    expect(pill?.tone).toBe('steer-pending');
+    expect(pill?.label).toBe('Waiting for answer · 2:15');
+    expect(pill?.tooltip).toContain('will not hang');
+  });
+
+  it('shows the bare steer-pending label when no wait-start is known', () => {
+    expect(buildPhaseBadge('steer-pending')?.label).toBe('Waiting for answer');
+  });
+
+  it('shows loop-waiting as a timed no-slot phase', () => {
+    const since = '2026-07-11T00:00:00.000Z';
+    const pill = buildPhaseBadge('loop-waiting', since, Date.parse(since) + 42_000);
+    expect(pill?.tone).toBe('loop-waiting');
+    expect(pill?.label).toBe('Waiting for loop continuation 0:42');
+    expect(pill?.tooltip).toContain('freed its execution slot');
+  });
+});
+
+describe('formatSteerWait', () => {
+  it('formats sub-hour waits as m:ss', () => {
+    expect(formatSteerWait(0)).toBe('0:00');
+    expect(formatSteerWait(75_000)).toBe('1:15');
+    expect(formatSteerWait(9_000)).toBe('0:09');
+  });
+  it('keeps hour-plus waits in total-minutes mm:ss form - the 5-hour hang shape', () => {
+    expect(formatSteerWait(5 * 3600_000 + 7 * 60_000 + 9_000)).toBe('307:09');
+  });
+  it('never goes negative on clock skew', () => {
+    expect(formatSteerWait(-5000)).toBe('0:00');
   });
 });
 

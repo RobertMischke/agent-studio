@@ -35,8 +35,6 @@ public sealed class AgentCliProcess
         Action<string> onStdErr,
         CancellationToken ct)
     {
-        Environment.SetEnvironmentVariable("JOB_RESULTS_DIR", _resultsDir);
-
         var args = SplitArgs(_options.CliArgs);
         _log($"exec: {_options.CliBin} {string.Join(' ', args)} (cwd {repoPath}, prompt {prompt.Length} chars on stdin)");
 
@@ -47,6 +45,7 @@ public sealed class AgentCliProcess
             stdin: prompt,
             onStdOut: line => { Console.Out.WriteLine(line); onStdOut(line); },
             onStdErr: line => { Console.Error.WriteLine(line); onStdErr(line); },
+            environment: new Dictionary<string, string?> { ["JOB_RESULTS_DIR"] = _resultsDir },
             ct: ct);
     }
 

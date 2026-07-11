@@ -14,7 +14,7 @@
  */
 
 /** Aggregate section state, mapped to a subtle border/header tint in the template. */
-export type PipelineGroupTone = 'ok' | 'danger' | 'warn' | 'muted' | 'neutral';
+export type PipelineGroupTone = 'ok' | 'danger' | 'warn' | 'concern' | 'muted' | 'neutral';
 
 /** The subset of the effective display status a row can carry. */
 export type PipelineRowStatusLike =
@@ -61,7 +61,7 @@ export interface PipelineGroupVm<R extends PipelineGroupRowLike = PipelineGroupR
   concernCount: number;
   /** Honest sum of the token use present on the section's rows. */
   totalTokens: number;
-  /** True once the section is collapsed by default (no attention + not the frontier). */
+  /** Quiet sections collapse by default; only active/problematic ones open. */
   defaultCollapsed: boolean;
 }
 
@@ -75,6 +75,7 @@ export function groupToneLabel(tone: PipelineGroupTone): string {
     case 'ok':     return 'Passed';
     case 'danger': return 'Attention';
     case 'warn':   return 'Running';
+    case 'concern': return 'Concerns';
     case 'muted':  return 'Disabled';
     default:       return 'Pending';
   }
@@ -144,6 +145,7 @@ function rowIsBlocking(row: PipelineGroupRowLike): boolean {
  * Aggregate tone for a section:
  * - danger  — any contained step failed / blocked / needs a human decision;
  * - warn    — any contained step is running;
+ * - concern — a non-blocking concern needs review;
  * - ok      — there is executable work and every executable step passed;
  * - muted   — the section is entirely disabled/skipped (nothing executable);
  * - neutral — nothing has run yet (pending).
@@ -153,6 +155,7 @@ function rowIsBlocking(row: PipelineGroupRowLike): boolean {
 export function groupTone(rows: readonly PipelineGroupRowLike[]): PipelineGroupTone {
   if (rows.some(rowIsBlocking)) return 'danger';
   if (rows.some(r => r.status === 'running')) return 'warn';
+  if (rows.some(rowHasConcern)) return 'concern';
   const executable = rows.filter(
     r => r.status !== 'disabled' && r.status !== 'skipped' && r.status !== 'planned',
   );
@@ -178,22 +181,9 @@ export function pipelineComplete(rows: readonly PipelineGroupRowLike[]): boolean
   );
 }
 
-/**
- * Default collapse for a section. Attention sections (danger/warn) always open;
- * a not-yet-started pipeline collapses every section (the Empty scenario); a
- * complete pipeline opens every section that produced work (the Done scenario);
- * while in flight only the danger/warn sections and the current frontier open,
- * so quiet already-finished sections recede.
- */
-export function groupDefaultCollapsed(
-  group: Pick<PipelineGroupVm, 'tone' | 'ranCount'>,
-  opts: { started: boolean; complete: boolean; isFrontier: boolean },
-): boolean {
-  if (group.tone === 'danger' || group.tone === 'warn') return false;
-  if (!opts.started) return true;
-  if (opts.complete) return group.ranCount === 0;
-  if (opts.isFrontier) return false;
-  return true;
+/** Only active or problematic sections start open. */
+export function groupDefaultCollapsed(group: Pick<PipelineGroupVm, 'tone'>): boolean {
+  return group.tone !== 'danger' && group.tone !== 'warn' && group.tone !== 'concern';
 }
 
 /**
@@ -233,10 +223,6 @@ export function buildPipelineGroups<R extends PipelineGroupRowLike>(
     }
   }
 
-  const started = pipelineStarted(rows);
-  const complete = pipelineComplete(rows);
-  const frontierKey = frontierGroupKey(groups);
-
   for (const group of groups) {
     group.stepCount = group.rows.length;
     group.ranCount = group.rows.filter(r => rowHasRun(r.status)).length;
@@ -245,28 +231,8 @@ export function buildPipelineGroups<R extends PipelineGroupRowLike>(
     group.concernCount = group.rows.filter(rowHasConcern).length;
     group.totalTokens = group.rows.reduce((sum, r) => sum + (r.totalTokens || 0), 0);
     group.tone = groupTone(group.rows);
-    group.defaultCollapsed = groupDefaultCollapsed(group, {
-      started,
-      complete,
-      isFrontier: group.key === frontierKey,
-    });
+    group.defaultCollapsed = groupDefaultCollapsed(group);
   }
 
   return groups;
-}
-
-/**
- * The frontier is the first section that still holds an enabled step waiting to
- * run — "what happens next". Null when nothing is waiting (complete/empty).
- */
-function frontierGroupKey(groups: readonly PipelineGroupVm[]): string | null {
-  for (const group of groups) {
-    const waiting = group.rows.some(
-      r =>
-        r.status !== 'disabled' &&
-        (r.status === 'pending' || r.status === 'running' || r.status === 'planned'),
-    );
-    if (waiting) return group.key;
-  }
-  return null;
 }

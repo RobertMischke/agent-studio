@@ -133,15 +133,18 @@
 
 .ux-panel__council-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .ux-panel__council-row {
-  background: #181825;
-  border: 1px solid var(--studio-bg-elevated);
+  background: var(--studio-bg-elevated);
+  border: 1px solid var(--studio-border);
   border-radius: 6px;
   padding: 10px 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.ux-panel__council-row--accepted { opacity: 0.75; border-left: 3px solid rgba(166,227,161,0.55); }
+.ux-panel__council-row--accepted {
+  opacity: 0.75;
+  background: color-mix(in srgb, var(--severity-pass) 8%, var(--studio-bg-elevated));
+}
 .ux-panel__council-row--unstructured { border-color: rgba(249, 226, 175, 0.36); background: rgba(249, 226, 175, 0.05); }
 .ux-panel__council-main { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .ux-panel__council-title { color: var(--studio-fg-strong); font-weight: 600; font-size: 0.88rem; flex: 1; min-width: 0; }

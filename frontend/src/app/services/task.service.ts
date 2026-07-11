@@ -611,6 +611,10 @@ export class TaskService {
     return this.http.post<RegistryProjectSummary>(`${this.baseUrl}/projects`, body);
   }
 
+  getProjectSources() {
+    return this.http.get<import('../models/task.model').ProjectSourceDescriptor[]>(`${this.baseUrl}/project-sources`);
+  }
+
   // ----- Project URLs (per-project watchable dev-server / preview URLs) -----
 
   /** Detected URL suggestions from the project's repo (package.json / angular.json / README). */
@@ -697,6 +701,21 @@ export class TaskService {
     );
   }
 
+  /**
+   * AGT-2069 — declare (or clear) "no follow-up intended" on a planning task.
+   * This satisfies the spawn-contract completion gate without producing
+   * follow-up cards, by an explicit operator call. Returns the recomputed
+   * spawn summary so the detail can update without a re-fetch. 400 when the
+   * task is not a planning task.
+   */
+  setPlanningClosure(jobId: string, declared: boolean, reason: string | null, watchPath?: string) {
+    return this.http.post<import('../models/task.model').PlanningSpawnSummary>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/planning-closure`,
+      { declared, reason },
+      this.withWatchPath(watchPath),
+    );
+  }
+
   // Tag registry + per-job tag mutation. Backlog-lane spec.
   listTags() {
     return this.http.get<import('../models/task.model').TagRegistryEntry[]>(`${this.baseUrl}/tags`);
@@ -757,6 +776,23 @@ export class TaskService {
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/dependents`,
       params ? { params } : {},
     );
+  }
+
+  /**
+   * AGT-2050 batch projection (the same one the inline microcard hydrator uses):
+   * resolve a set of task keys to their compact live-or-ghost reference status.
+   * Keys whose project short-code is unknown are dropped by the backend, so the
+   * result may be shorter than the input; a known key with no live task comes
+   * back as a ghost (`exists === false`). Reused by the wiki cross-reference
+   * panel so a wiki page renders its related tasks with the very same microcard.
+   */
+  getReferenceStatuses(keys: string[]) {
+    return this.http
+      .post<{ items: import('../components/task-reference-microcard/task-reference-microcard').TaskReferenceStatus[] }>(
+        `${this.baseUrl}/tasks/reference-status`,
+        { keys },
+      )
+      .pipe(map((r) => r.items ?? []));
   }
 
   /**
@@ -1796,6 +1832,12 @@ export class TaskService {
   getGlobalOrchestratorSession() {
     return this.http.get<OrchestratorSessionResponse>(
       `${this.baseUrl}/runner/global/orchestrator-session`,
+    );
+  }
+
+  getOrchestratorContextSessions() {
+    return this.http.get<import('../features/orchestrator').OrchestratorContextSessionsResponse>(
+      `${this.baseUrl}/orchestrator/sessions`,
     );
   }
 

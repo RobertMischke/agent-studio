@@ -150,6 +150,36 @@ export interface SetTaskReferencesResponse {
   warnings: { code: string; kind: string; target: string; message: string }[];
 }
 
+/**
+ * AGT-2069: one follow-up card a planning task spawned (from the AGT-2028 spawn
+ * ledger). Mirrors backend `PlanningSpawnRef`. Rendered as a "spawnt: AGT-xxxx"
+ * microcard chip on the planning task's detail.
+ */
+export interface PlanningSpawnRef {
+  targetKey?: string | null;
+  targetJobId?: string | null;
+  targetProject?: string | null;
+  reason?: string | null;
+  at: string;
+}
+
+/**
+ * AGT-2069: read-time spawn-visibility + spawn-contract projection for a
+ * planning task. Mirrors backend `PlanningSpawnSummary`. Present (non-null) only
+ * on `mode === 'planning'` cards; drives the "spawnt: AGT-xxxx" chips, the
+ * "no follow-up cards" warning, and the accept-dialog guard against the
+ * AGT-1915 trap. `contractSatisfied` is true when a follow-up card exists OR
+ * the operator declared "no follow-up intended".
+ */
+export interface PlanningSpawnSummary {
+  spawned: PlanningSpawnRef[];
+  spawnedCount: number;
+  noFollowUpDeclared: boolean;
+  noFollowUpReason?: string | null;
+  declaredAt?: string | null;
+  contractSatisfied: boolean;
+}
+
 export interface TaskInfo {
   id: string;
   taskKey: string;
@@ -278,6 +308,16 @@ export interface TaskInfo {
    * same field but are owned by the post-processing slice.
    */
   phase?: string | null;
+  /** UTC time at which the current lifecycle phase was entered. */
+  phaseEnteredAt?: string | null;
+  /**
+   * Run-Liveness Slice B: when this 3-progress card is waiting on an unanswered
+   * steer / NeedsInput question (`phase === 'steer-pending'`), the ISO UTC time
+   * the wait started - read from the durable `steer-pending.json` marker. Null
+   * otherwise. Drives the card's "Waiting for answer since m:ss" pill so the wait
+   * is visible instead of an invisible hang.
+   */
+  steerPendingSince?: string | null;
   /**
    * Structural classification of the task. One of `bug`, `feature`, or
    * `chore` (default for legacy and technical work). Drives the small chip
@@ -364,6 +404,15 @@ export interface TaskInfo {
    * "→ <runner>" next to the CLI badge instead of the quiet local presentation.
    */
   runner?: TaskRunnerInfo | null;
+
+  /**
+   * AGT-2069: read-time spawn-visibility + spawn-contract projection, present
+   * (non-null) only on planning-mode cards. Mirrors backend
+   * `TaskInfo.PlanningSpawn`. Drives the spawn chips / "no follow-up cards"
+   * warning on the planning task's detail and the accept-dialog guard against
+   * the AGT-1915 trap. Null on every coding / research / epic card.
+   */
+  planningSpawn?: PlanningSpawnSummary | null;
 }
 
 /**
@@ -961,6 +1010,7 @@ export interface ProjectUrlSuggestion {
  * `ProjectSummary`.
  */
 export interface RegistryProjectSummary {
+  sourceType: ProjectSourceType;
   id: string;
   displayName: string;
   shortCode: string;
@@ -977,6 +1027,7 @@ export interface RegistryProjectSummary {
 }
 
 export interface CreateRegistryProjectRequest {
+  sourceType?: ProjectSourceType;
   workspaceId: string;
   displayName: string;
   shortCode?: string;
@@ -989,6 +1040,14 @@ export interface CreateRegistryProjectRequest {
    * (or hand-edits the gitignored appsettings.Local.json WatchPaths entry).
    */
   rootPath?: string;
+}
+
+export type ProjectSourceType = 'local-folder' | 'remote-git' | 'cloud';
+export interface ProjectSourceDescriptor {
+  id: ProjectSourceType;
+  label: string;
+  available: boolean;
+  description: string;
 }
 
 /**

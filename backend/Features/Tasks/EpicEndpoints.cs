@@ -1,5 +1,7 @@
 
 
+using static AgentStudio.Tasks.TaskEndpointHelpers;
+
 namespace AgentStudio.Tasks;
 
 /// <summary>
@@ -36,8 +38,9 @@ public static class EpicEndpoints
         });
 
         // Single epic rollup. 404 when the id is unknown or is not an epic.
-        group.MapGet("/{epicId}", (string epicId, string? watchPath, TaskScannerService scanner) =>
+        group.MapGet("/{epicId}", (string epicId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var epic = scanner.FindJob(epicId, watchPath);
             if (epic is null || !TaskKinds.IsEpic(epic.Kind)) return Results.NotFound();
             return Results.Ok(BuildRollup(epic, scanner.ScanAllJobsWithArchive()));
@@ -50,8 +53,9 @@ public static class EpicEndpoints
         // triage, with epicId set (so they round-trip through the same scanner
         // path as assignment way 1). Per-item: a blank title is skipped, not
         // an error, so a partially-good plan still lands its valid sub-tasks.
-        group.MapPost("/{epicId}/sub-tasks", (string epicId, string? watchPath, CreateEpicSubTasksRequest req, TaskScannerService scanner, TaskMutationService mutations) =>
+        group.MapPost("/{epicId}/sub-tasks", (string epicId, string? project, string? watchPath, CreateEpicSubTasksRequest req, TaskScannerService scanner, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
+            watchPath = ResolveWatchPath(projects, project, watchPath);
             var epic = scanner.FindJob(epicId, watchPath);
             if (epic is null || !TaskKinds.IsEpic(epic.Kind)) return Results.NotFound();
             if (req?.SubTasks is null || req.SubTasks.Count == 0)

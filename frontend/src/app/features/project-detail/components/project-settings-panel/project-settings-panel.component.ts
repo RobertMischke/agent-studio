@@ -22,6 +22,7 @@ import {
   WorkspaceOrchestratorSettingsService,
   type WorkspaceOrchestratorSettings,
 } from '../../../../services/workspace-orchestrator-settings.service';
+import { ExecutionAssignmentCardComponent } from '../execution-assignment-card/execution-assignment-card';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
@@ -78,7 +79,7 @@ interface WorkspaceListItemLite {
   selector: 'app-project-settings-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ProjectDetailComponent, CliModelSelectorComponent, TooltipDirective],
+  imports: [ProjectDetailComponent, CliModelSelectorComponent, TooltipDirective, ExecutionAssignmentCardComponent],
   templateUrl: './project-settings-panel.component.html',
   styleUrl: './project-settings-panel.component.scss',
 })

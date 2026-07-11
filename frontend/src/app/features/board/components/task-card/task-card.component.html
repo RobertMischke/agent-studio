@@ -193,6 +193,18 @@
       </span>
     }
   </div>
+  @if (cooldownBanner(); as cd) {
+    <div class="task-card__cooldown"
+         data-testid="task-card-cooldown-retry"
+         [attr.data-attempt]="cd.attempt"
+         [attr.data-seconds-left]="cd.secondsLeft"
+         role="status"
+         [cacTooltip]="cd.tooltip">
+      <span class="task-card__cooldown-glyph" aria-hidden="true">↻</span>
+      <span class="task-card__cooldown-label">{{ cd.label }}</span>
+      <span class="task-card__cooldown-countdown">{{ cd.countdown }}</span>
+    </div>
+  }
   <div class="task-card__meta">
     <span class="task-card__meta-main">
       @if (taskTypeChip(); as tt) {
@@ -216,6 +228,9 @@
           <span class="task-card__effective-model-cli">{{ effectiveModelChip().cliLabel }}</span>
         }
         <span class="task-card__effective-model-name">{{ effectiveModelChip().label }}</span>
+        @if (effectiveModelChip().thinkingLevel; as level) {
+          <app-thinking-level-indicator [indicator]="level" testId="task-card-thinking-level" />
+        }
       </span>
       @if (runnerBadge(); as rn) {
         <span class="task-card__runner-pill"

@@ -68,3 +68,32 @@ public sealed record RunLeaseResponse(
     bool Granted,
     RunLeaseInfoDto? Lease,
     string? Message = null);
+
+/// <summary>
+/// Remote daemon request for the next server-assigned, pickup-eligible card.
+/// The server selects and leases the card as one fenced claim operation.
+/// </summary>
+public sealed record RunnerClaimRequest(
+    string RunnerId,
+    string RunnerName,
+    string Hostname,
+    int Pid,
+    string BackendName,
+    int? RequestedTtlSeconds = null);
+
+/// <summary>Typed status handed back by one daemon pickup poll.</summary>
+public enum RunnerClaimStatus
+{
+    Claimed,
+    Empty,
+    Invalid,
+}
+
+/// <summary>Result of one daemon pickup poll.</summary>
+public sealed record RunnerClaimResponse(
+    RunnerClaimStatus Status,
+    string? TaskKey = null,
+    string? JobId = null,
+    string? ProjectName = null,
+    RunLeaseInfoDto? Lease = null,
+    string? Message = null);

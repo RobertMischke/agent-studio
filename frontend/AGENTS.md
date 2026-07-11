@@ -211,6 +211,25 @@ Host wiring (all in `src/app/app.config.ts`):
 - `PROJECT_CHAT_DATA_SOURCE` → `ProjectChatDataSourceAdapter` (`services/project-chat-data-source.adapter.ts`) over `TaskService`'s `/api/projects/{p}/chat/*` endpoints.
 - `CHAT_HISTORY_CONFIRM` → `ConfirmDialogService` (structural match).
 
+### Task reference microcards
+
+`<app-task-reference-microcard>` in
+`src/app/components/task-reference-microcard/` is the shared live-or-ghost task
+reference control. Reuse it for structured task-reference lists instead of
+reimplementing lane, merge, project-colour, review-grade, tooltip, or task-tab
+navigation semantics. Its required `status` input is the compact projection
+returned by `POST /api/tasks/reference-status`.
+
+Rendered prose is upgraded by
+`TaskReferenceMicrocardHydratorService`: it scans `<cac-markdown>` and rendered
+wiki HTML, batches uncached keys into one endpoint request, and mounts the same
+component. `app.config.ts` starts the hydrator and registers
+`TaskReferenceNavigationService` at the `coding-agent-chat` CAC-3
+`taskReferences` host seam. Keep the library responsible for identifying and
+linking reference candidates; keep Studio responsible for registry validation,
+status hydration, the visual control, and task-tab navigation. Do not add
+per-reference API calls.
+
 Live turns still flow through the host: the orchestrator side sheet holds a `viewChild` of `<cac-project-chat-list>` and calls `resetAndLoad()` / `appendLive(turn)` when SignalR delivers new turns.
 
 New `ChatEvent` kinds, renderer changes, selector changes: **make them in the library repo** (`C:\Projects\coding-agent-chat`), rebuild its dist, `npm install` here. App-only helpers that intentionally stayed behind: `features/task-detail/components/activity-log.parser.ts` (filters, `buildChatMessages`, live-status derivation, tool-burst rollups, `[steer]` parsing).
@@ -233,7 +252,7 @@ New `ChatEvent` kinds, renderer changes, selector changes: **make them in the li
 
 The projection's `classifyToolGroup` then collapses any contiguous run of those tool groups (across either CLI) into a single `toolBurst` carrying per-family counts, failures, file paths, parsed command executions, and test rollups. There is no codex-only or claude-only tool path in the renderer. When you add a new CLI driver, route its tool output into one of the existing activity-log tool kinds so it inherits the same burst chip automatically.
 
-**Orchestrator decisions are elevated.** `decision.orchestrator` events render with their own prominent treatment — an accent rail (`.decision__rail`) and a structured body (`.decision__body`), distinct from a plain agent bubble — carrying `data-decision-type` and `data-severity` so the accent can shift (info / warn / error / accept). The raw kebab/snake kind never reaches the UI: `decisionTypeLabel` maps known kinds (`auto-review` → "Auto-Review", `reissue-open-items` → "Reissue · Open items", `worktree-containment`, `escalate`, `accept`, …) to presentable labels and title-cases unknown kinds so a new decision reads cleanly without code changes.
+**Orchestrator decisions are elevated.** `decision.orchestrator` events render with their own semantic background tint and a structured body (`.decision__body`), distinct from a plain agent bubble, carrying `data-decision-type` and `data-severity` so the tint can shift (info / warn / error / accept). R1 applies here too: do not add an accent rail. The raw kebab/snake kind never reaches the UI: `decisionTypeLabel` maps known kinds (`auto-review` to "Auto-Review", `reissue-open-items` to "Reissue · Open items", `worktree-containment`, `escalate`, `accept`, and others) to presentable labels and title-cases unknown kinds so a new decision reads cleanly without code changes.
 
 Regression coverage is acceptance-level (DOM render via `TestBed`) in the library's `conversation-view.component.spec.ts` (grouping, header-once continuation, dated-time hover, decision elevation+label, subtle session chip, parsed status/needs-input rows) and projection-level in the library's `conversation-projection.spec.ts` (sentinel/marker parsing, codex+claude tool unification). Extend both (in the library repo) when you change event classification or rendering.
 

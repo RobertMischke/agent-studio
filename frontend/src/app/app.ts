@@ -48,7 +48,6 @@ import {
   type TriageButton,
 } from './features/task-detail';
 import {
-  OrchestratorSettingsModalComponent,
   OrchestratorSideSheetComponent,
 } from './features/orchestrator';
 import {
@@ -56,6 +55,7 @@ import {
   ProjectOverlaysComponent,
   ProjectOverlaysService,
   ProjectRailKey,
+  ProjectUrlPreviewTabComponent,
 } from './features/project-detail';
 import {
   AutoReviewIndicatorComponent,
@@ -148,7 +148,6 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     TaskColumnComponent,
     TaskDetailComponent,
     OrchestratorSideSheetComponent,
-    OrchestratorSettingsModalComponent,
     ProjectOverlaysComponent,
     AutoReviewIndicatorComponent,
     StatusBarComponent,
@@ -179,6 +178,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     ProjectHubViewComponent,
     StudioDiffViewComponent,
     StudioActivityViewComponent,
+    ProjectUrlPreviewTabComponent,
     StudioIconComponent,
   ],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
@@ -373,14 +373,6 @@ export class App implements OnInit, OnDestroy {
   // Cycle 9: side-sheet width owned by UiPreferencesService.
   private readonly uiPrefs = inject(UiPreferencesService);
   readonly sideSheetWidth = this.uiPrefs.sideSheetWidth;
-  /**
-   * Orchestrator Settings modal visibility. Replaces the former "Logic" tab
-   * inside the sidesheet; the modal uses the project-shell rail + panel
-   * layout so settings sit visually alongside the project window pattern.
-   * Persisted via UiPreferencesService so an F5 reload reopens the modal
-   * instead of dropping it.
-   */
-  readonly orchestratorSettingsOpen = this.uiPrefs.orchestratorSettingsOpen;
   readonly collapsedGroups = signal<Set<string>>(
     new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')),
   );
@@ -876,12 +868,18 @@ export class App implements OnInit, OnDestroy {
     this.openOrchestratorSettings();
   }
 
+  /**
+   * AGT-1812: the standalone Orchestrator-settings modal was retired. The header
+   * Dev-tools "Orchestrator config" entry and the orchestrator side-sheet gear
+   * now open the platform-global lifecycle flags as the "Orchestrator" section of
+   * the one consolidated Settings view (Global group).
+   */
   openOrchestratorSettings(): void {
-    this.uiPrefs.setOrchestratorSettingsOpen(true);
-  }
-
-  closeOrchestratorSettings(): void {
-    this.uiPrefs.setOrchestratorSettingsOpen(false);
+    if (this.featureFlags.vsCodeLayout()) {
+      this.openWorkspaceSettingsInStudio('orchestrator');
+      return;
+    }
+    this.workspaceOverlays.openOrchestrator();
   }
 
   /**
@@ -1643,6 +1641,25 @@ export class App implements OnInit, OnDestroy {
     this.orchSideSheetRef?.toggle();
   }
 
+  onNavigateToChatContext(contextKey: string): void {
+    if (contextKey === 'global') {
+      this.studioTabState.activateAllProjectsBoard();
+      return;
+    }
+    if (contextKey.startsWith('project:')) {
+      this.studioTabState.open({ kind: 'board', projectName: contextKey.slice('project:'.length) });
+      return;
+    }
+    if (!contextKey.startsWith('task:')) return;
+    const slash = contextKey.indexOf('/');
+    if (slash < 0) return;
+    const projectName = contextKey.slice('task:'.length, slash);
+    const taskKey = contextKey.slice(slash + 1);
+    const task = this.jobService.jobs().find(item => item.projectName === projectName
+      && (item.taskKey === taskKey || item.displayKey === taskKey || item.key === taskKey));
+    if (task) this.studioTabState.open({ kind: 'task', taskKey: task.taskKey });
+  }
+
   /**
    * Phase 5: orchestrator side sheet emitted "make a task from this".
    * Picks the watch path that matches the named project, opens the
@@ -2031,6 +2048,14 @@ export class App implements OnInit, OnDestroy {
       : '';
     const projectName = rawProject || null;
     this.studioTabState.open({ kind: 'epics', projectName });
+  }
+
+  /**
+   * AGT-2067 — settings-gear on the embedded URL preview deep-links to the
+   * Project Hub "Project URLs" management page for that project.
+   */
+  onOpenUrlPreviewSettings(e: { projectName: string }): void {
+    this.studioTabState.open({ kind: 'hub', projectName: e.projectName, section: 'project-urls' });
   }
 
   private openWorkspaceSettingsInStudio(section: WorkspaceSettingsSection): void {

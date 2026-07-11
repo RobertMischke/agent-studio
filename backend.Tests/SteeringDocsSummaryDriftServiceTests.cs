@@ -62,6 +62,7 @@ public class SteeringDocsSummaryDriftServiceTests : IDisposable
         Assert.Contains(scope.Sources, s => s.Id == "roadmap" && !s.Exists);
         Assert.Contains(scope.Sources, s => s.Id == "adr" && !s.Exists);
         Assert.Contains(scope.Sources, s => s.Id == "skills-architecture" && !s.Exists);
+        Assert.Contains(scope.Sources, s => s.Id == "gemini-shim" && !s.Exists);
         Assert.Contains(scope.Sources, s => s.Id == "runtime-prompts");
 
         // ROADMAP missing is not a critical source for warnings, but
@@ -94,19 +95,24 @@ public class SteeringDocsSummaryDriftServiceTests : IDisposable
     [Fact]
     public void SelectScope_FlagsShimDriftWhenCompatibilityShimGrowsBeyondTinyThreshold()
     {
-        // CLAUDE.md is a compatibility shim; >1 KB triggers the warning.
+        // CLI compatibility shims over 1 KB trigger the warning.
         File.WriteAllText(Path.Combine(_repoRoot, "AGENTS.md"), "# AGENTS\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "README.md"), "# README\n", Encoding.UTF8);
         Directory.CreateDirectory(Path.Combine(_repoRoot, "docs", "contracts"));
         File.WriteAllText(
             Path.Combine(_repoRoot, "docs", "contracts", "agent-task.md"), "# Task contract\n", Encoding.UTF8);
         File.WriteAllText(Path.Combine(_repoRoot, "CLAUDE.md"), new string('x', 4096), Encoding.UTF8);
+        File.WriteAllText(Path.Combine(_repoRoot, "GEMINI.md"), new string('x', 4096), Encoding.UTF8);
 
         var svc = new SteeringDocsSummaryDriftService();
         var scope = svc.SelectScope("agent-taskboard", _projectRoot, _repoRoot);
 
         Assert.Contains(scope.Warnings, w =>
             w.SourceId == "claude-shim"
+            && w.Kind == SteeringInventoryWarningKind.PossibleConflict
+            && w.Severity == AnalysisReportSeverity.Warn);
+        Assert.Contains(scope.Warnings, w =>
+            w.SourceId == "gemini-shim"
             && w.Kind == SteeringInventoryWarningKind.PossibleConflict
             && w.Severity == AnalysisReportSeverity.Warn);
     }

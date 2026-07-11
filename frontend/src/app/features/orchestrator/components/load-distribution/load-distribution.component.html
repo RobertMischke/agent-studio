@@ -1,0 +1,79 @@
+<section class="load" data-testid="load-distribution">
+  <header class="load__toolbar">
+    <div>
+      <h3>Budget load distribution</h3>
+      <p>Quota pressure, captured token history, and routing decisions in one operational view.</p>
+    </div>
+    <div class="load__periods" role="group" aria-label="Usage period">
+      @for (item of periods; track item.id) {
+        <button type="button" [class.load__period--active]="period() === item.id"
+                [attr.aria-pressed]="period() === item.id" (click)="selectPeriod(item.id)"
+                [attr.data-testid]="'load-period-' + item.id">{{ item.label }}</button>
+      }
+    </div>
+  </header>
+
+  <div class="load__summary">
+    <article><span>Selected period</span><strong>{{ periods[period() === '1h' ? 0 : period() === '24h' ? 1 : 2].label }}</strong></article>
+    <article><span>Captured tokens</span><strong>{{ formatTokens(totalPeriodTokens()) }}</strong><small>{{ trendTotal() ? formatTokens(trendTotal()) + ' workspace total' : 'event-attributed only' }}</small></article>
+    <article><span>Outcome signal</span><strong>{{ completedCards() }} cards completed</strong><small>Feed-derived, not token causality</small></article>
+    <article><span>Routing decisions</span><strong>{{ decisions().length }}</strong><small>switch / downshift / throttle / wait</small></article>
+  </div>
+
+  <section class="load__section" data-testid="load-quota-windows">
+    <div class="load__section-head"><div><h4>Quota windows</h4><p>Solid bar is reported usage. The marker projects the current burn rate to reset.</p></div></div>
+    <div class="load__quota-grid">
+      @for (row of store.quotaRows(); track row.cliType) {
+        <article class="load__quota-card">
+          <header><span aria-hidden="true">{{ row.icon }}</span><strong>{{ row.label }}</strong><small>{{ row.freshness }}</small></header>
+          @for (label of ['5h', '7d']; track label) {
+            <div class="load__window">
+              <div><strong>{{ label }}</strong><span class="load__num">{{ windowPct(row, $any(label)) === null ? 'unavailable' : windowPct(row, $any(label)) + '% used' }}</span><small>{{ resetLabel(row, $any(label)) }}</small></div>
+              <div class="load__burn" [attr.data-risk]="(projection(row, $any(label)) ?? 0) > 100 ? 'high' : 'ok'">
+                <span [style.width.%]="windowPct(row, $any(label)) ?? 0"></span>
+                @if (projection(row, $any(label)); as projected) { <i [style.left.%]="projected > 100 ? 100 : projected" [attr.title]="'Projected ' + projected.toFixed(0) + '% at reset'"></i> }
+              </div>
+              <p>{{ projection(row, $any(label)) === null ? 'Projection unavailable' : (projection(row, $any(label))! > 100 ? 'Projected to exceed · ' : 'Within window · ') + projection(row, $any(label))!.toFixed(0) + '% at reset' }}</p>
+            </div>
+          }
+        </article>
+      } @empty { <p class="load__empty">Waiting for quota probes.</p> }
+    </div>
+  </section>
+
+  <div class="load__lower">
+    <section class="load__section load__usage" data-testid="load-model-efficiency">
+      <div class="load__section-head"><div><h4>Model efficiency and trend</h4><p>Cost uses the aggregate pricing rate as an estimate. It is not billing precision.</p></div></div>
+      @for (row of modelRows(); track row.model) {
+        <article class="load__model">
+          <header><code>{{ row.model }}</code><span class="load__num">{{ formatTokens(row.tokens) }}</span><span>{{ row.cost === null ? 'cost n/a' : '$' + row.cost.toFixed(3) + ' est.' }}</span></header>
+          <svg viewBox="0 0 100 42" preserveAspectRatio="none" role="img" [attr.aria-label]="row.model + ' cumulative token trend'">
+            <line x1="0" y1="38" x2="100" y2="38"></line><polyline [attr.points]="row.points"></polyline>
+          </svg>
+          <div class="load__effort" aria-label="Reasoning effort split">
+            @for (effort of row.effort; track effort.level) { <span [style.width.%]="effort.pct" [attr.title]="effort.level + ': ' + formatTokens(effort.tokens)"></span> }
+          </div>
+          <footer><span>{{ row.calls }} captured calls</span><span>@for (effort of row.effort; track effort.level) { {{ effort.level }} {{ effort.pct.toFixed(0) }}%&nbsp; }</span></footer>
+        </article>
+      } @empty { <p class="load__empty">No model-attributed events in this period.</p> }
+    </section>
+
+    <section class="load__section load__decisions" data-testid="load-decision-stream">
+      <div class="load__section-head"><div><h4>Decision stream</h4><p>AGT-2055 budget actions with the recorded rationale.</p></div></div>
+      <div class="load__decision-filters" role="group" aria-label="Decision type">
+        @for (kind of decisionKinds; track kind) { <button type="button" [class.load__decision-filter--active]="decisionFilter() === kind" (click)="decisionFilter.set(kind)">{{ kind }}</button> }
+      </div>
+      <div class="load__decision-list">
+        @for (entry of decisions(); track entry.ts + entry.summary) {
+          <button type="button" class="load__decision" (click)="openTask(entry)" [disabled]="!entry.jobId || !entry.watchPath">
+            <span class="load__decision-kind">{{ decisionAction(entry) }}</span><time>{{ formatTime(entry.ts) }}</time>
+            <strong>{{ entry.summary }}</strong>
+            @if (entry.reasoning) { <p>{{ entry.reasoning }}</p> }
+            <small>{{ entry.project || 'workspace' }}{{ entry.jobId ? ' · ' + entry.jobId : '' }}</small>
+          </button>
+        } @empty { <p class="load__empty">No matching budget decisions in this period.</p> }
+      </div>
+    </section>
+  </div>
+  <p class="load__disclaimer">Captured tokens are limited to events with usage attribution. Quota percentages come from CLI probes and may describe subscription units rather than raw tokens; compare them as a plausibility check, not an equivalence.</p>
+</section>

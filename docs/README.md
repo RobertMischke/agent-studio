@@ -47,10 +47,13 @@ Use this page as the first stop when you need the right document quickly.
 | UX doctrine | [product/design-principles.md](product/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](product/orchestrator-chat.md) |
 | Workstream frame (top wiki element; internal name engineering-workstream) | [concepts/engineering-workstream.md](concepts/engineering-workstream.md) |
+| Project relationship model and branch-aware Wiki checkout | [concepts/project-relationship-model.md](concepts/project-relationship-model.md) |
 | Wiki Pulse dashboard (change feed + inbox + drift grading; PULSE-1) | [concepts/wiki-pulse-dashboard.md](concepts/wiki-pulse-dashboard.md) |
+| Wiki grading run (global LLM grade per page; trigger + critical pages; GRADE-1) | [concepts/wiki-grading-run.md](concepts/wiki-grading-run.md) |
 | Run-liveness & slot semantics (heartbeat, process-lost demotion) | [concepts/run-liveness-and-slot-semantics.md](concepts/run-liveness-and-slot-semantics.md) |
 | Result view and case templates | [concepts/result-view-and-case-templates.md](concepts/result-view-and-case-templates.md) |
 | Publishing workflows (publish-target derivation + pending badges; PUB-1) | [concepts/publishing-workflows.md](concepts/publishing-workflows.md) |
+| Planning-task lifecycle (plan → spawn → accept; spawn-contract gate; AGT-2069) | [concepts/planning-task-lifecycle.md](concepts/planning-task-lifecycle.md) |
 | Wiki classification | [product/wiki-document-classification.md](product/wiki-document-classification.md) |
 | Wiki editing flow | [product/wiki-editing-and-branch-flow.md](product/wiki-editing-and-branch-flow.md) |
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](schemas/wiki-document-companion.schema.json) |
@@ -59,8 +62,12 @@ Use this page as the first stop when you need the right document quickly.
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](operations/setup/getting-started.md) |
 | Setup | [operations/setup/README.md](operations/setup/README.md) |
 | Standalone remote runner (Linux host) | [operations/setup/linux-runner-host.md](operations/setup/linux-runner-host.md) |
+| Remote runner persistent connection (tunnel-as-a-service + health-check) | [operations/setup/remote-runner-persistent-connection.md](operations/setup/remote-runner-persistent-connection.md) |
 | Common problems | [wiki/common-problems/README.md](wiki/common-problems/README.md) |
+| Designated topics (AGENTS/wiki-sync current-state index; post-agents-wiki-sync) | [wiki/concepts/designated-topics/README.md](wiki/concepts/designated-topics/README.md) |
 | API project identity / watchPath | [wiki/concepts/api-project-identity-and-watchpath.md](wiki/concepts/api-project-identity-and-watchpath.md) |
+| Workflow arguments become unbounded fan-out | [wiki/common-problems/workflow-args-json-string-fanout/](wiki/common-problems/workflow-args-json-string-fanout/) |
+| Services killed by a harness sweep | [wiki/common-problems/services-killed-by-harness-sweep/](wiki/common-problems/services-killed-by-harness-sweep/) |
 | Orchestrator drive-to-conclusion & CLI-crash resilience | [wiki/concepts/orchestrator-drive-to-conclusion.html](wiki/concepts/orchestrator-drive-to-conclusion.html) |
 | Task integration & worktree/merge workflow | [wiki/concepts/task-integration-and-merge-workflow.md](wiki/concepts/task-integration-and-merge-workflow.md) |
 | Merge config analysis (parallelism coupling) | [wiki/concepts/task-integration-merge-config-analysis.html](wiki/concepts/task-integration-merge-config-analysis.html) |

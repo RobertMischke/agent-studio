@@ -175,10 +175,16 @@ export interface PipelineModelUsageSummary {
 /** Per-project override resolved for one step (from project-settings.json). */
 export interface PipelineStepConfig {
   enabled: boolean;
+  /** Whether this catalogue step is optional and may be toggled by an operator. */
+  canDisable?: boolean;
   cliType?: string | null;
   model?: string | null;
   thinkingLevel?: string | null;
   mode?: string | null;
+  /** Raw project-level prompt override, preserved by inline enable changes. */
+  prompt?: string | null;
+  /** Raw project-level run condition, preserved by inline enable changes. */
+  condition?: PipelineStepCondition | null;
   /**
    * Effective model the step WILL run on before any run, resolved the same way
    * the runtime resolves it (step override -> project model -> global ->
@@ -319,4 +325,10 @@ export interface TaskPipelineResponse {
    */
   tokensByModel?: PipelineModelUsageSummary | null;
   config: Record<string, PipelineStepConfig>;
+  /**
+   * Step id to verified job-root result file. Entries only exist when the
+   * backend found the file on disk, so the UI never guesses result presence
+   * from a step kind or terminal status.
+   */
+  resultFiles?: Record<string, string>;
 }

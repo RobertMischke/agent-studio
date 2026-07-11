@@ -35,6 +35,10 @@ describe('groupTone', () => {
     expect(groupTone([row({ phaseKey: 'core', status: 'running' }), row({ phaseKey: 'core', status: 'passed' })])).toBe('warn');
   });
 
+  it('is concern when a non-blocking concern needs review', () => {
+    expect(groupTone([row({ phaseKey: 'aspect', status: 'passed', verdict: 'concerns' })])).toBe('concern');
+  });
+
   it('is ok when every executable step passed', () => {
     expect(groupTone([row({ phaseKey: 'aspect', status: 'passed' }), row({ phaseKey: 'aspect', status: 'passed' })])).toBe('ok');
   });
@@ -79,6 +83,7 @@ describe('groupToneLabel', () => {
   it('maps each tone to a one-word status label (no colour reliance)', () => {
     expect(groupToneLabel('ok')).toBe('Passed');
     expect(groupToneLabel('warn')).toBe('Running');
+    expect(groupToneLabel('concern')).toBe('Concerns');
     expect(groupToneLabel('danger')).toBe('Attention');
     expect(groupToneLabel('muted')).toBe('Disabled');
     expect(groupToneLabel('neutral')).toBe('Pending');
@@ -163,8 +168,8 @@ describe('default collapse across scenarios', () => {
     expect(groups.every(g => g.defaultCollapsed)).toBe(true);
   });
 
-  // DONE: everything passed — every section that produced work opens.
-  it('done: opens every section that ran once the pipeline is complete', () => {
+  // DONE: quiet completed work recedes until the operator expands it.
+  it('done: collapses every quiet completed section', () => {
     const rows = [
       row({ phaseKey: 'pre', status: 'passed', totalTokens: 120 }),
       row({ phaseKey: 'core', status: 'passed', totalTokens: 61000 }),
@@ -174,16 +179,15 @@ describe('default collapse across scenarios', () => {
     expect(pipelineComplete(rows)).toBe(true);
     const groups = buildPipelineGroups(rows);
     const byPhase = Object.fromEntries(groups.map(g => [g.phaseKey, g]));
-    expect(byPhase['pre'].defaultCollapsed).toBe(false);
-    expect(byPhase['core'].defaultCollapsed).toBe(false);
-    expect(byPhase['aspect'].defaultCollapsed).toBe(false);
-    // The all-disabled drift section produced no work, so it stays collapsed.
+    expect(byPhase['pre'].defaultCollapsed).toBe(true);
+    expect(byPhase['core'].defaultCollapsed).toBe(true);
+    expect(byPhase['aspect'].defaultCollapsed).toBe(true);
     expect(byPhase['drift'].defaultCollapsed).toBe(true);
   });
 
   // BLOCKED: mid-flight with a failed core — danger sections open, quiet
-  // finished sections recede, the frontier opens.
-  it('blocked: opens danger sections and the frontier, collapses quiet finished ones', () => {
+  // finished and pending sections recede.
+  it('blocked: opens danger sections and collapses quiet or pending ones', () => {
     const groups = buildPipelineGroups([
       row({ phaseKey: 'pre', status: 'passed', totalTokens: 120 }), // quiet, finished
       row({ phaseKey: 'core', status: 'failed', totalTokens: 47000 }), // danger
@@ -193,7 +197,7 @@ describe('default collapse across scenarios', () => {
     const byPhase = Object.fromEntries(groups.map(g => [g.phaseKey, g]));
     expect(byPhase['pre'].defaultCollapsed).toBe(true);
     expect(byPhase['core'].defaultCollapsed).toBe(false);
-    expect(byPhase['decision'].defaultCollapsed).toBe(false); // frontier
+    expect(byPhase['decision'].defaultCollapsed).toBe(true);
     expect(byPhase['tool'].defaultCollapsed).toBe(true);
   });
 

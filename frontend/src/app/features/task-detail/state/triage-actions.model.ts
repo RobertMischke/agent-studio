@@ -157,6 +157,24 @@ export const ORCHESTRATOR_CONTROLLED_LANES: ReadonlySet<string> = new Set([
   TaskState.AutoReview,
 ]);
 
+/**
+ * AGT-2069 — whether accepting `info` should surface the spawn-contract warning
+ * (the AGT-1915 trap guard). True only when a planning task is being accepted
+ * into `6-completed` and its spawn contract is not satisfied: it has spawned no
+ * follow-up cards AND carries no deliberate "no follow-up intended" declaration.
+ *
+ * Coding / research tasks are never gated. A planning card whose backend
+ * `planningSpawn` projection is absent (older payload) is not gated either — the
+ * warning fires only on a *known*-unsatisfied contract, never on a guess.
+ */
+export function needsPlanningAcceptWarning(info: TaskInfo, targetState: string): boolean {
+  if (targetState !== TaskState.Completed) return false;
+  if (info.mode !== 'planning') return false;
+  const spawn = info.planningSpawn;
+  if (!spawn) return false;
+  return !spawn.contractSatisfied;
+}
+
 export function laneActionsFor(state: string): TriageButton[] {
   return LANE_ACTIONS[state] ?? [];
 }

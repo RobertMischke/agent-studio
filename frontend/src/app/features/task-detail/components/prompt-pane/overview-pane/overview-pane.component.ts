@@ -27,6 +27,7 @@ import type {
   PipelineCostSummary,
   PipelineStepCost,
   PipelineStep,
+  PipelineStepConfig,
   PipelineStepStatus,
   StepKind,
   StepRunMode,
@@ -34,25 +35,28 @@ import type {
 import { ClientService } from '../../../../../services/client.service';
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { DialogComponent } from '../../../../../components/dialog/dialog.component';
+import {
+  StudioIconComponent,
+  type StudioIconName,
+} from '../../../../../components/studio-icon/studio-icon.component';
 import { RegressionRadarComponent } from '../../../../regression-radar';
 import { AgentWorkDetailComponent } from '../agent-work-detail/agent-work-detail.component';
-import {
-  PipelineStepResultComponent,
-  type PipelineStepResultHeader,
-} from '../pipeline-step-result/pipeline-step-result.component';
+import type { PipelineStepResultHeader } from '../pipeline-step-result/pipeline-step-result.component';
 import { ReferencesSectionComponent } from '../../references-section/references-section.component';
+import { PlanningSpawnPanelComponent } from '../../planning-spawn-panel/planning-spawn-panel.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { StructuredTooltip, TooltipSeverity } from 'coding-agent-chat/shared';
 import { TaskPromptPopoverComponent } from '../task-prompt-popover/task-prompt-popover.component';
+import { PipelineRunHistoryComponent } from '../pipeline-run-history/pipeline-run-history.component';
+import { PipelineStepDetailsComponent } from '../pipeline-step-details/pipeline-step-details.component';
+import { PipelineStepToggleComponent } from '../pipeline-step-toggle/pipeline-step-toggle.component';
+import { lifecyclePhaseLabel } from './lifecycle-phase.util';
 import {
   isSteeringKind,
   steeringInfoFromEvent,
   type SteeringInfo,
 } from '../../../../../components/steering-detail';
-import {
-  cliTypeLabel,
-  formatTokens,
-} from '../../../../../services/format.util';
+import { cliTypeLabel } from '../../../../../services/format.util';
 import { projectIdentity } from '../../../../../services/project-identity.util';
 import { TaskService } from '../../../../../services/task.service';
 import { NotificationService } from '../../../../../services/notification.service';
@@ -89,6 +93,9 @@ interface PipelineRowVm {
    */
   isFinalVerdict: boolean;
   enabled: boolean;
+  canDisable: boolean;
+  hasExecution: boolean;
+  config: PipelineStepConfig | null;
   /** Effective display status: 'disabled' for project-disabled steps. */
   status: PipelineStepStatus | 'disabled';
   model: string | null;
@@ -451,7 +458,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineStepResultComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, StudioIconComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -863,6 +870,9 @@ export class OverviewPaneComponent {
         runMode: step.runMode,
         isFinalVerdict: step.id === FINAL_VERDICT_STEP_ID,
         enabled,
+        canDisable: cfg?.canDisable ?? false,
+        hasExecution: e != null,
+        config: cfg ?? null,
         status,
         model,
         cliType,
@@ -916,6 +926,10 @@ export class OverviewPaneComponent {
 
   toggleDisabledPipelineSteps(): void {
     this.hideDisabledPipelineSteps.update(value => !value);
+  }
+
+  refreshPipeline(): void {
+    this.pipelinePoll.refresh();
   }
 
   /**
@@ -1162,22 +1176,13 @@ export class OverviewPaneComponent {
     };
   }
 
-  /**
-   * Per-step structured result, rendered "where it originates" as an
-   * expandable card under the row. Returns the on-disk markdown file the card
-   * fetches plus a self-contained header (title + status + verdict + run
-   * meta), or null for steps that have no per-job result file. The CORE run
-   * carries `status.md`; each review aspect carries `aspect-{id}.md` (the step
-   * id IS the report stem). Only shown once the step has actually run so the
-   * card never fetches a file that does not exist yet; the final orchestrator
-   * ruling carries its verdict via {@link decisionBadgeForRow}, and tool /
-   * drift steps have no per-job markdown.
-   */
+  /** Build result metadata only for a file the backend verified on disk. */
   resultForRow(row: PipelineRowVm): { fileName: string; header: PipelineStepResultHeader } | null {
     if (!this.selectedPipelineIsCurrent()) return null;
-    let fileName: string | null = null;
-    if (row.kind === 'core') fileName = 'status.md';
-    else if (row.kind === 'aspect') fileName = `${row.id}.md`;
+    const resultFiles = this.pipelinePoll.pipeline()?.resultFiles ?? {};
+    const fileName = Object.entries(resultFiles).find(
+      ([stepId]) => stepId.toLowerCase() === row.id.toLowerCase(),
+    )?.[1] ?? null;
     if (!fileName) return null;
     if (row.status !== 'passed' && row.status !== 'failed' && row.status !== 'skipped') return null;
 
@@ -1746,23 +1751,15 @@ export class OverviewPaneComponent {
     }
   }
 
-  /**
-   * Compact per-row kind marker for the pipeline's second lane column. The
-   * handoff calls for this column to be a compact kind marker (with a tooltip),
-   * not the wide lane text — so the row shows a short code (PRE / CORE / ASPECT
-   * / TOOL / DECISION / DRIFT) that fits the fixed narrow column without
-   * wrapping, while {@link stepKindLabel} still supplies the full name for the
-   * marker's tooltip / accessible label.
-   */
-  stepKindMarker(kind: StepKind): string {
+  stepKindIcon(kind: StepKind): StudioIconName {
     switch (kind) {
-      case 'module':       return 'PRE';
-      case 'core':         return 'CORE';
-      case 'aspect':       return 'ASPECT';
-      case 'orchestrator': return 'DECISION';
-      case 'tool':         return 'TOOL';
-      case 'drift':        return 'DRIFT';
-      default:             return String(kind).toUpperCase();
+      case 'module':       return 'sliders';
+      case 'core':         return 'bot';
+      case 'aspect':       return 'eye';
+      case 'orchestrator': return 'branch';
+      case 'tool':         return 'cli';
+      case 'drift':        return 'diff';
+      default:             return 'dot';
     }
   }
 
@@ -1839,7 +1836,11 @@ export class OverviewPaneComponent {
   }
 
   formatTokens(n: number): string {
-    return formatTokens(n);
+    if (n <= 0) return '—';
+    if (n < 1000) return String(n);
+    const scale = n < 1_000_000 ? 1000 : 1_000_000;
+    const suffix = n < 1_000_000 ? 'k' : 'm';
+    return `${(n / scale).toFixed(1).replace(/\.0$/, '')}${suffix}`;
   }
 
   formatDuration(seconds: number): string {
@@ -1888,16 +1889,7 @@ export class OverviewPaneComponent {
     return cliTypeLabel(t);
   }
 
-  phaseLabel(phase: string | null | undefined): string | null {
-    if (!phase) return null;
-    switch (phase) {
-      case 'human-ready':              return 'Ready';
-      case 'intake-running':           return 'Intake Running';
-      case 'intake-blocked':           return 'Intake Blocked';
-      case 'intake-passed':            return 'Intake Passed';
-      case 'execution-running':        return 'Execution Running';
-      case 'post-processing-running':  return 'Post-Processing';
-      default:                         return phase;
-    }
+  phaseLabel(phase: string | null | undefined, entered?: string | null, steerSince?: string | null): string | null {
+    return lifecyclePhaseLabel(phase, entered, steerSince, this.now());
   }
 }

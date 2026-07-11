@@ -11,6 +11,9 @@ state.
 
 - Start with [docs/wiki/common-problems/](../wiki/common-problems) for recurring
   runner, CLI, permission, filesystem, and state-machine failures.
+- Use [Services killed by a harness sweep](../wiki/common-problems/services-killed-by-harness-sweep/)
+  when choosing whether a command is session-owned, OS-owned, or a child
+  process that must remain owned by one coding run.
 - Use [docs/contracts/run-outcome.md](../contracts/run-outcome.md) for the shared
   classification that drives lane routing, `status.md`, and frontend failure
   surfacing.
@@ -46,6 +49,12 @@ state.
   and `/park` API surface, and session turn dispatch through the existing
   orchestrator CLI runner. Records persist under
   `<TaskRepository>/.metadata/orchestrator-sessions/<encoded>/`.
+- `backend/Features/Registry/OrchestratorSettingsResolver.cs`: pure two-tier
+  resolver for the workspace-shaped orchestrator knobs (model, thinking level,
+  autonomy) - `project override → workspace default → platform constant` - plus
+  the injectable `OrchestratorDefaultsProvider` the read sites call (ADR-0061).
+  The autonomy read sites are `ProjectRunner` (orchestrator model override) and
+  `OrchestratorPrepHostedService` / `IntakeHostedService` (autonomy level).
 - `backend/Services/Runner/OrchestratorReplyParser.cs`: `{REPLY | STEER |
   BLOCK}` grammar.
 - `backend/Services/Runner/RunQuarantineBreaker.cs`: no-progress failure streak
@@ -56,10 +65,12 @@ state.
   state after process failure.
 - `backend/Services/Supervisor/*`: Layer 2 advisory loop, meta-cycle, and rare
   intervention primitives.
-- `runner/*`: the standalone remote runner (RM-5, Runner-Split C). A dependency-
-  free console process that runs one task on a Linux host against the Task Server
-  API only (fenced lease + heartbeat, git-origin checkout, log + artifact upload,
-  external-completion). Owns no task state and never pushes git. Operator runbook:
+- `runner/*`: the standalone remote runner daemon. A dependency-free console
+  process that continuously claims server-assigned projects with bounded host
+  slots (default 2), fenced leases + heartbeat, per-task linked git worktrees,
+  log/artifact upload, and external-completion. The original `--task <key>`
+  one-shot remains for diagnostics. It owns no task state and never pushes git.
+  Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../operations/setup/linux-runner-host.md).
 - `TaskRunnerService.ProjectRunnerBadge` + `TaskEndpointHelpers.WithRuntime`
   (AGT-2003): read-time projection of the active run lease onto `TaskInfo.Runner`
@@ -69,6 +80,17 @@ state.
   disk pickup-lock and holds none, which is exactly the lokal-vs-remote signal.
 
 ## Invariants
+
+- Coding-slot occupancy follows live CLI processes, not lane membership. A
+  `3-progress` card in `loop-waiting`, `steer-pending`, or post-processing keeps
+  no execution seat; a continuation must pass admission again and remains
+  visibly queued when no seat is free. A heartbeat-less `3-progress` card may
+  survive the liveness grace only with one of the explicit waiting phases.
+
+- Remote pickup ownership lives in the project record (`executionRunner` plus
+  `remoteExecutionEnabled`). The remote claim endpoint and local ProjectRunner
+  consult the same record; assigned remote-capable projects are never locally
+  auto-picked. Lease fencing is the hard split-brain guard below that policy.
 
 - Sentinel matches are authoritative. When adding a sentinel, update
   [docs/contracts/agent-task.md](../contracts/agent-task.md) and
@@ -118,6 +140,12 @@ state.
   `ReviewDecisionOrchestrator.CountReissuesInCurrentChain` resets the count on the
   most recent chain-ending verdict (`Escalate` / `AcceptAsDone`) so a reopened
   card gets a fresh budget instead of escalating on the first new concern.
+- Host-load admission (AGT-2077) samples total system CPU every 15 seconds. A
+  continuous minute above 90 percent activates `load-throttle`: existing runs
+  continue, new slot picks are deferred with timeline and orchestrator-feed
+  decisions, and support OneShots queue until cooling. Calls released after a
+  load phase receive a 3x timeout and one timeout retry after cooling. These
+  failures are `environmental-load`, never a work-quality conclusion.
 - No-progress failures count across auto-pickup and `UserContinue` reissues
   until progress, review, or quarantine resets the streak.
 - Orchestrator session turns use the existing CLI session machinery. A context
@@ -134,6 +162,15 @@ state.
   is refused + escalated. Read-only (planning / research) and epic-planning runs
   run in-place. See
   [ADR-0057](../architecture/decisions/adr-archive.md#adr-0057---always-worktree-garantie-every-coding-run-is-worktree-isolated-including-single-slot-resumereissue-with-a-main-checkout-guard-2026-06-22).
+- Steer-timeout (Run-Liveness Slice B): an auto-mode run that asks a steer /
+  `[[TASK_NEEDS_INPUT]]` question the orchestrator cannot answer leaves a durable
+  `steer-pending.json` marker + a visible `steer-pending` phase, and a bounded
+  sweep (`SteerTimeoutMonitor` over `SteerTimeoutPolicy.Decide`) resolves the wait
+  after `Runner:SteerTimeout:TimeoutSeconds` (default 120s): auto-answer from the
+  branch state when the question is unambiguous, else a `steer-timeout` blocked
+  escalation. A steered card never waits indefinitely. See
+  [docs/concepts/run-liveness-and-slot-semantics.md](../concepts/run-liveness-and-slot-semantics.md).
+
 - Supervisor code is advice-first. Emergency primitives must call runner
   services, not poke task state directly.
 - Teardown never drops uncommitted work. `WorktreeTaskLifecycle.TeardownIfIntegrated`
@@ -143,6 +180,15 @@ state.
   a failed auto-commit leaves the branch tip at develop, which reads as "merged"
   and would force-remove the deliverable. Genuine auto-commit failures at
   integration are surfaced as a High `integration-error`, never silent.
+- Workspace-shaped orchestrator settings (model, thinking level, autonomy)
+  resolve `project override → workspace default → platform constant` through
+  `OrchestratorSettingsResolver`, never read ad-hoc at a call site. The provider
+  is tolerant: an unmapped project or an empty workspace tier collapses to the
+  old project-only chain, so an empty workspace-settings store is byte-for-byte
+  identical to pre-migration behaviour. The process-wide supervisor/orchestrator
+  lifecycle flags stay platform-global in `OrchestratorConfigService` and are
+  **not** workspace-shaped. See
+  [ADR-0061](../architecture/decisions/adr-archive.md#adr-0061---orchestrator-settings-are-a-two-tier-config-project-override-wins-over-workspace-default-wins-over-platform-constant-2026-07-11).
 
 ## Verification
 

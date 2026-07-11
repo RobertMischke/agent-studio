@@ -78,8 +78,7 @@
   // visible while the user scrolls through the rows.
   max-height: 360px;
   overflow-y: auto;
-  // Modest inset so the scrollbar doesn't sit flush against the row
-  // border-left severity stripes.
+  // Modest inset so the scrollbar doesn't sit flush against the rows.
   padding-right: 4px;
 }
 .evidence-row {
@@ -88,9 +87,9 @@
   padding: 8px 10px;
   background: var(--studio-bg-editor);
 }
-.evidence-row[data-severity="high"]    { border-left: 3px solid var(--severity-high); }
-.evidence-row[data-severity="warn"]    { border-left: 3px solid var(--severity-warn); }
-.evidence-row[data-severity="info"]    { border-left: 3px solid var(--severity-info); }
+.evidence-row[data-severity="high"] { background: color-mix(in srgb, var(--severity-high) 9%, var(--studio-bg-editor)); }
+.evidence-row[data-severity="warn"] { background: color-mix(in srgb, var(--severity-warn) 9%, var(--studio-bg-editor)); }
+.evidence-row[data-severity="info"] { background: color-mix(in srgb, var(--severity-info) 8%, var(--studio-bg-editor)); }
 .evidence-row[data-acknowledged="true"] { opacity: 0.78; }
 .evidence-row__head {
   display: flex;

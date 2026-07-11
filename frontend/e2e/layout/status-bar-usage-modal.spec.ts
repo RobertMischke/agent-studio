@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
+import { setTheme } from '../helpers/theme';
 
 /**
  * The bottom status-bar's quota strip now follows a single model:
@@ -116,5 +117,105 @@ test.describe('Status bar usage modal', () => {
     await page.getByTestId('cli-usage-modal-manage-caps').click();
     await expect(page.getByTestId('cli-admin-panel')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByTestId('cli-usage-detail')).toBeVisible();
+  });
+
+  test('Codex distinguishes used quota from lifetime usage without double-counting cache', async ({ page }) => {
+    await page.route('**/api/cli/quota**', async route => {
+      if (route.request().method() !== 'GET') return route.continue();
+      await route.fulfill({
+        json: {
+          at: new Date().toISOString(),
+          ttlSeconds: 600,
+          snapshots: [{
+            cliType: 'codex',
+            fetchedAt: new Date().toISOString(),
+            plan: 'Pro',
+            source: '/status',
+            error: null,
+            windows: [
+              { label: '5-hour', usedPct: 3, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '01:49 on 11 Jul' },
+              { label: 'Weekly', usedPct: 0, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '20:49 on 17 Jul' },
+            ],
+          }],
+        },
+      });
+    });
+    await page.route('**/api/runner/token-summary-aggregate**', route => route.fulfill({
+      json: {
+        projects: 11,
+        orchestratorEntries: 13,
+        orchestratorLlmCalls: 13,
+        totalInputTokens: 50_428_112,
+        totalOutputTokens: 164_172,
+        totalCacheReadTokens: 48_503_936,
+        totalCacheCreationTokens: 0,
+        estimatedApiCostUsd: 0,
+        allModelsPriced: false,
+        byModel: [
+          {
+            model: 'gpt-5.6-sol', calls: 5,
+            inputTokens: 39_646_031, outputTokens: 97_412,
+            cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
+            estimatedApiCostUsd: 0, modelPriced: false,
+          },
+          {
+            model: 'GPT-5.5', calls: 8,
+            inputTokens: 10_782_081, outputTokens: 66_760,
+            cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
+            estimatedApiCostUsd: 0, modelPriced: false,
+          },
+        ],
+        byProject: [],
+        fetchedAt: new Date().toISOString(),
+        disclaimer: '',
+      },
+    }));
+    await page.route('**/api/adhoc-usage/**', route => route.fulfill({
+      json: {
+        calls: 11,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        estimatedApiCostUsd: 0,
+        allModelsPriced: false,
+        bySource: [],
+        byDay: [],
+        byModel: [
+          {
+            model: 'gpt-5-codex', calls: 4,
+            inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+            estimatedApiCostUsd: 0, modelPriced: true,
+          },
+          {
+            model: 'gpt-5.6-sol', calls: 7,
+            inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+            estimatedApiCostUsd: 0, modelPriced: false,
+          },
+        ],
+        logPath: '(bus)',
+        logSizeBytes: 0,
+        logModifiedAt: null,
+        disclaimer: '',
+      },
+    }));
+
+    await page.reload();
+    await page.getByTestId('hquota-card-codex').click();
+
+    const modal = page.getByTestId('cli-usage-modal-codex');
+    await expect(modal).toBeVisible();
+    await expect(modal.getByText('3% used')).toBeVisible();
+    await expect(modal.getByText('97% left')).toBeVisible();
+    await expect(modal.getByText('Lifetime telemetry by model. Independent of the active quota windows above.')).toBeVisible();
+    await expect(modal.getByTestId('cli-usage-modal-models').locator('tbody tr')).toHaveCount(2);
+    await expect(modal.getByText('PROJECT RUNTIME')).toHaveCount(2);
+    await expect(modal.getByText('AD-HOC')).toHaveCount(0);
+    await expect(modal.getByText('50.6M')).toHaveCount(2);
+
+    await setTheme(page, 'light');
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-light.png` });
+    await setTheme(page, 'dark');
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-dark.png` });
   });
 });

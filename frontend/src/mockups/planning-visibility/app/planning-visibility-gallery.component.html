@@ -1,0 +1,66 @@
+<div class="harness">
+  <header class="harness__bar">
+    <h1 class="harness__title">AGT-2069 — Planning-task visibility (real components)</h1>
+    <div class="harness__themes" role="group" aria-label="Theme">
+      <button type="button"
+              class="harness__theme"
+              data-testid="harness-theme-dark"
+              [class.harness__theme--active]="theme() === 'dark'"
+              (click)="setTheme('dark')">Dark</button>
+      <button type="button"
+              class="harness__theme"
+              data-testid="harness-theme-light"
+              [class.harness__theme--active]="theme() === 'light'"
+              (click)="setTheme('light')">Light</button>
+    </div>
+  </header>
+
+  <p class="harness__hint">
+    "Hier wird GEPLANT" made visible. A planning/research task carries a prominent
+    mode badge on its board card and detail header; the detail's spawn panel shows
+    whether the plan produced follow-up cards ("spawnt: AGT-xxxx" microcards) or
+    warns loudly when it did not — the spawn contract that guards against the
+    AGT-1915 plan-only-approval trap.
+  </p>
+
+  <section class="harness__section">
+    <h2 class="harness__section-title">A · Board card mode badge</h2>
+    <div class="harness__stage" data-testid="planning-cards-stage">
+      @for (s of cardScenarios; track s.id) {
+        <div class="harness__col" [attr.data-scenario]="s.id">
+          <span class="harness__label">{{ s.label }}</span>
+          <app-task-card [job]="s.job"></app-task-card>
+          <span class="harness__note">{{ s.note }}</span>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section class="harness__section">
+    <h2 class="harness__section-title">B · Spawn microcard (AGT-2050)</h2>
+    <div class="harness__stage" data-testid="planning-microcard-stage">
+      <div class="harness__col" data-scenario="microcard">
+        <span class="harness__label">"spawnt: AGT-2067" follow-up card</span>
+        <app-task-reference-microcard [status]="microcard"></app-task-reference-microcard>
+        <span class="harness__note">
+          Each follow-up a planning task creates renders as a live reference
+          microcard — key, title, lane, project colour, and review grade — so the
+          operator sees the concrete work at a glance.
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="harness__section">
+    <h2 class="harness__section-title">B + Spawn contract · Planning spawn panel</h2>
+    <div class="harness__stage harness__stage--wide" data-testid="planning-panel-stage">
+      @for (s of panelScenarios; track s.id) {
+        <div class="harness__col harness__col--wide" [attr.data-scenario]="s.id">
+          <span class="harness__label">{{ s.label }}</span>
+          <app-planning-spawn-panel [job]="s.job"></app-planning-spawn-panel>
+          <span class="harness__note">{{ s.note }}</span>
+        </div>
+      }
+    </div>
+  </section>
+</div>

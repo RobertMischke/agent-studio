@@ -82,7 +82,7 @@ Merges `task/<id>` → `integrationBranch` (or opens a PR, §5). On merge confli
 Two cheap stages, both rendered on the timeline (§6):
 
 1. **Preparation step (once per task, stored on the task):** `exclusive?` (too big / cross-cutting ⇒ runs alone — the exception) + `predictedScope` (which paths/areas it will touch). Default is parallelisable; `exclusive` is rare. Reuses the existing prep loop (`OrchestratorPrepRules` / `OrchestratorPrepHostedService`).
-2. **Pick-gate (runner, when a slot frees, cheap + fast):** `exclusive` ⇒ run alone; else compare this task's stored `predictedScope` against the scopes of the **currently running** tasks ⇒ `parallel-ok` / `serialize`. This is the gate added at `ProjectRunner.cs:461`: the single `_activeJobId` latch becomes "N slots, admit only if the pick-gate says `parallel-ok`".
+2. **Pick-gate (runner, when a slot frees, cheap + fast):** `exclusive` ⇒ run alone; else compare this task's stored `predictedScope` against the scopes of the **currently running** tasks ⇒ `parallel-ok` / `serialize`. Only two declared, overlapping scopes serialize. An unknown scope is admitted optimistically because every coding run has its own worktree; any real overlap is contained and becomes an integration conflict rather than shared-checkout corruption. This is the gate added at `ProjectRunner.cs:461`: the single `_activeJobId` latch becomes "N slots, admit only if the pick-gate says `parallel-ok`".
 
 ## 6. Integration strategies
 
@@ -112,6 +112,15 @@ Dependency-ordered. Each slice is independently shippable/verifiable and names i
 6. **Integration step — `pull-request`.** Push branch + open PR against `integrationBranch` via `gh`/provider API. The only genuinely new external surface. *Acceptance:* a task in `pull-request` mode leaves an open PR and stops; no auto-merge unless D2 says otherwise.
 
 ### 8.2C Multi-system follow-up: task leases, shared store, and origin distribution
+
+**Implemented daemon slice (2026-07-10).** The standalone runner now polls an
+assignment-aware server claim endpoint and fills bounded host slots (default 2).
+The project record owns `executionRunner` and `remoteExecutionEnabled`; the
+remote claim path and local in-process pickup read those same fields. Each claim
+receives a fenced run lease, moves from `2-ready` to `3-progress`, and runs in a
+task-specific linked worktree. This delivers continuous single-server pickup;
+the stronger durable shared-store and stale-token-on-every-write requirements
+below remain the target for multi-server/high-availability operation.
 
 This is deliberately later than the local worktree/slot slices. Do **not** start a multi-system runner or "agent builder" from this concept without a reviewed design task and close operator supervision. The local slice proves slot admission and worktree isolation inside one backend. Multi-system execution changes the source-of-truth model and must be treated as a separate critical checkpoint.
 

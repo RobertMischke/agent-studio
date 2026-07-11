@@ -559,6 +559,8 @@ public class FilesystemLayerSnapshotService
            || path == "AGENTS.md"
            || path.EndsWith("/CLAUDE.md", StringComparison.OrdinalIgnoreCase)
            || path == "CLAUDE.md"
+           || path.EndsWith("/GEMINI.md", StringComparison.OrdinalIgnoreCase)
+           || path == "GEMINI.md"
            || path.EndsWith("copilot-instructions.md", StringComparison.OrdinalIgnoreCase)
            || path.StartsWith(".github/prompts/", StringComparison.OrdinalIgnoreCase)
            || path.StartsWith("prompts/", StringComparison.OrdinalIgnoreCase)

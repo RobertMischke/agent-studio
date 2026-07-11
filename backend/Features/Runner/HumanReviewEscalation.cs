@@ -15,6 +15,9 @@ public static class HumanReviewEscalationCategories
     public const string EnvironmentBlocker = "environment-blocker";
     public const string AutoFailurePark = "auto-failure-park";
     public const string PickupZombie = "pickup-zombie";
+    /// <summary>A task worktree remained locked after bounded cleanup retries.
+    /// The busy path is included in the escalation reason for operator action.</summary>
+    public const string WorktreeBlocked = "worktree-blocked";
     public const string EmptyFastExit = "empty-fast-exit";
 
     /// <summary>The agent CLI process died hard (exitCode &lt; 0) before it could
@@ -78,6 +81,12 @@ public static class HumanReviewEscalationCategories
     /// a person to decide, never for an agent to run. Routed to 5e-escalated
     /// after the retired 1b-needs-human-review lane was removed.</summary>
     public const string HumanDecisionNeeded = "human-decision-needed";
+
+    /// <summary>An unanswered steer / NeedsInput question timed out (Run-Liveness
+    /// Slice B, concept Rule 2) and the answer was not derivable from the task
+    /// context. Routed to 5e-escalated with a clear reason instead of waiting
+    /// indefinitely (belegt 2062/2067/2068, 2026-07-10).</summary>
+    public const string SteerUnanswered = "steer-unanswered";
 
     /// <summary>Retroactive category for cards parked in 5-human-review before
     /// the escalation funnel existed (boot-time backfill).</summary>

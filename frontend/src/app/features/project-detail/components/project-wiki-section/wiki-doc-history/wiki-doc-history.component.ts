@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { WikiFileHistory } from '../../../../../models/project-docs.model';
+import { WikiRelatedTasksComponent } from '../wiki-related-tasks/wiki-related-tasks.component';
 
 /**
  * Read-only provenance + git-history panel for a single wiki document. Shows
@@ -14,6 +15,7 @@ import { WikiFileHistory } from '../../../../../models/project-docs.model';
   selector: 'app-wiki-doc-history',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [WikiRelatedTasksComponent],
   templateUrl: './wiki-doc-history.component.html',
   styleUrl: './wiki-doc-history.component.scss',
 })
@@ -23,7 +25,6 @@ export class WikiDocHistoryComponent {
 
   /** Emits the SHA of a commit whose historic content the parent should preview. */
   readonly viewRevision = output<string>();
-  readonly openTask = output<string>();
 
   readonly model = computed(() => this.history()?.model ?? null);
   readonly meta = computed(() => this.history()?.metadata ?? null);

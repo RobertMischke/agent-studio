@@ -101,6 +101,14 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     }
 
     [Fact]
+    public void IsAllowed_ProgressAcceptsVisibleNoSlotWaitPhases()
+    {
+        Assert.True(LifecyclePhases.IsAllowed(TaskStates.Progress, LifecyclePhases.LoopWaiting));
+        Assert.True(LifecyclePhases.IsAllowed(TaskStates.Progress, LifecyclePhases.SteerPending));
+        Assert.False(LifecyclePhases.IsAllowed(TaskStates.AutoReview, LifecyclePhases.LoopWaiting));
+    }
+
+    [Fact]
     public void IsAllowed_KnownUnconstrainedStatesRejectNonEmptyPhase()
     {
         Assert.False(LifecyclePhases.IsAllowed(TaskStates.Preparation, LifecyclePhases.HumanReady));

@@ -130,6 +130,8 @@ public static class RegistryEndpoints
 
         // ----- F45b project mutations (ADR-0042) -----
 
+        app.MapGet("/api/project-sources", () => Results.Ok(ProjectSourceCatalog.All));
+
         app.MapPost("/api/projects", (RegistryCreateProjectRequest body, ProjectRegistry projects, WorkspaceRegistry workspaces, WorkspaceManagementService workspaceManagement, ILoggerFactory loggerFactory) =>
         {
             if (body == null || string.IsNullOrWhiteSpace(body.DisplayName))
@@ -138,6 +140,9 @@ public static class RegistryEndpoints
                 return Results.BadRequest(new { error = "workspaceId is required" });
             if (workspaces.Find(body.WorkspaceId) == null)
                 return Results.NotFound(new { error = $"Unknown workspaceId '{body.WorkspaceId}'" });
+            var sourceType = string.IsNullOrWhiteSpace(body.SourceType) ? ProjectSourceCatalog.LocalFolder : body.SourceType.Trim();
+            if (!ProjectSourceCatalog.All.Any(source => source.Id == sourceType && source.Available))
+                return Results.BadRequest(new { error = $"sourceType '{sourceType}' is not available" });
 
             var displayName = body.DisplayName.Trim();
             var allProjects = projects.List();
@@ -160,6 +165,7 @@ public static class RegistryEndpoints
             var record = new ProjectRecord
             {
                 Id = id,
+                SourceType = sourceType,
                 DisplayName = displayName,
                 ShortCode = shortCode,
                 WorkspaceId = body.WorkspaceId.Trim(),
@@ -398,6 +404,7 @@ public sealed record WorkspaceReorderRequest
 /// <summary>F46 — POST /api/projects payload.</summary>
 public sealed record RegistryCreateProjectRequest
 {
+    public string? SourceType { get; init; }
     public string WorkspaceId { get; init; } = "";
     public string DisplayName { get; init; } = "";
     public string? ShortCode { get; init; }
@@ -411,6 +418,19 @@ public sealed record RegistryCreateProjectRequest
     /// <see cref="ProjectRecord.RootPath"/>).
     /// </summary>
     public string? RootPath { get; init; }
+}
+
+public sealed record ProjectSourceDescriptor(string Id, string Label, bool Available, string Description);
+
+public static class ProjectSourceCatalog
+{
+    public const string LocalFolder = "local-folder";
+    public static readonly IReadOnlyList<ProjectSourceDescriptor> All =
+    [
+        new(LocalFolder, "Local folder", true, "A checkout available on this Agent Studio host."),
+        new("remote-git", "Remote Git", false, "Prepared for a future managed remote checkout."),
+        new("cloud", "Cloud workspace", false, "Prepared for a future cloud provider integration."),
+    ];
 }
 
 /// <summary>
@@ -458,6 +478,7 @@ public sealed record WorkspaceListItem
 /// </summary>
 public sealed record ProjectSummary
 {
+    public string SourceType { get; init; } = ProjectSourceCatalog.LocalFolder;
     public string Id { get; init; } = "";
     public string DisplayName { get; init; } = "";
     public string ShortCode { get; init; } = "";
@@ -475,6 +496,7 @@ public sealed record ProjectSummary
     public static ProjectSummary From(ProjectRecord p) => new()
     {
         Id = p.Id,
+        SourceType = p.SourceType,
         DisplayName = p.DisplayName,
         ShortCode = p.ShortCode,
         WorkspaceId = p.WorkspaceId,

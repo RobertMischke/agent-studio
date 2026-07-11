@@ -83,7 +83,35 @@ const PULSE_FIXTURE = {
     ],
     counts: { fresh: 2, aging: 1, stale: 1, graded: 4 },
   },
+  critical: {
+    available: true,
+    reason: null,
+    count: 2,
+    overallGrade: 'D',
+    items: [
+      { relPath: 'engineering-workstream/30-system-knowledge/relocation.md', title: 'Wiki checkout relocation', grade: 'D', assessment: 'Describes an old checkout layout; likely outdated.', gradedAt: '2026-07-10T09:00:00Z', model: 'claude-sonnet-5', reportPath: 'engineering-workstream/30-system-knowledge/relocation.md.report.html', frameAreaTitle: 'System Knowledge' },
+      { relPath: 'scratch-idea.md', title: 'Scratch idea', grade: 'C', assessment: 'Thin, unfiled scratch note with gaps.', gradedAt: '2026-07-10T09:00:00Z', model: 'claude-sonnet-5', reportPath: 'scratch-idea.md.report.html', frameAreaTitle: null },
+    ],
+  },
 };
+
+const MAINTENANCE_MODEL = { cliType: 'claude', model: 'claude-sonnet-5', thinkingLevel: null };
+const GRADING_STATUS_DONE = {
+  status: {
+    projectName: 'demo', runId: 'wg-e2e', state: 'completed', cliType: 'claude', model: 'claude-sonnet-5',
+    thinkingLevel: null, force: false, total: 12, processed: 12, graded: 10, skipped: 2, failed: 0,
+    critical: 2, currentRelPath: null, startedAtUtc: '2026-07-10T09:00:00Z', completedAtUtc: '2026-07-10T09:02:00Z',
+    error: null, recent: [],
+  },
+};
+
+/** Mocks the grading trigger's seed endpoints so the surface is deterministic. */
+async function mockGradingContext(page: import('@playwright/test').Page): Promise<void> {
+  await page.route('**/api/cli/maintenance-model', route =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MAINTENANCE_MODEL) }));
+  await page.route('**/wiki/grading/status**', route =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GRADING_STATUS_DONE) }));
+}
 
 test.describe('Wiki Pulse landing view (PULSE-1)', () => {
   let projectName = '';
@@ -108,6 +136,7 @@ test.describe('Wiki Pulse landing view (PULSE-1)', () => {
     // Overlay a deterministic Pulse payload so the surface is stable (--mocked).
     await page.route('**/wiki/pulse**', route =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PULSE_FIXTURE) }));
+    await mockGradingContext(page);
 
     await page.goto(`/#/projects/${slugFor(projectName)}/wiki`);
 
@@ -149,10 +178,39 @@ test.describe('Wiki Pulse landing view (PULSE-1)', () => {
       }),
     }));
 
+    await mockGradingContext(page);
     await page.goto(`/#/projects/${slugFor(projectName)}/wiki`);
     await expect(page.getByTestId('project-wiki-pulse')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('project-wiki-pulse-feed-empty')).toContainText('No recent edits');
     await expect(page.getByTestId('project-wiki-pulse-inbox-empty')).toContainText('Inbox clear');
     await expect(page.getByTestId('project-wiki-pulse-drift-empty')).toContainText('No knowledge pages filed');
+  });
+
+  test('shows the grading trigger and critical pages (AGT-2051)', async ({ page }) => {
+    await page.route('**/wiki/pulse**', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PULSE_FIXTURE) }));
+    await mockGradingContext(page);
+
+    await page.goto(`/#/projects/${slugFor(projectName)}/wiki`);
+    await expect(page.getByTestId('project-wiki-pulse')).toBeVisible({ timeout: 10_000 });
+
+    // The grading trigger: a model dropdown + a "Grade all pages" button.
+    const grading = page.getByTestId('project-wiki-pulse-grading');
+    await expect(grading).toBeVisible();
+    await expect(page.getByTestId('project-wiki-pulse-grade-start')).toBeVisible();
+    // The last run's outcome is summarised (10 graded, 2 critical).
+    await expect(page.getByTestId('project-wiki-pulse-grade-state')).toContainText('critical');
+
+    // Critical pages: worst-first (D before C), click-through targets present.
+    const critical = page.getByTestId('project-wiki-pulse-critical');
+    await expect(critical).toContainText('Critical pages');
+    await expect(page.getByTestId('project-wiki-pulse-critical-open-engineering-workstream/30-system-knowledge/relocation.md')).toBeVisible();
+    await expect(page.getByTestId('project-wiki-pulse-critical-open-scratch-idea.md')).toBeVisible();
+
+    // No horizontal overflow with the new sections.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+    expect(overflow).toBe(false);
+
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'wiki-grading-trigger-and-critical--mocked.png'), fullPage: true });
   });
 });

@@ -45,6 +45,7 @@ public static class EndpointMapping
         app.MapCrashRecoveryEndpoints();
         app.MapProjectRegressionRadarEndpoints();
         app.MapProjectDocsEndpoints();
+        app.MapWikiGradingEndpoints();
         app.MapProjectSteeringDocsEndpoints();
         app.MapSkillReadinessEndpoints();
         app.MapSecurityReviewEndpoints();

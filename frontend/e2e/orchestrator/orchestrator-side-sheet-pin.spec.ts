@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import * as path from 'node:path';
 
 /**
  * MC-2 (Concept §4): the orchestrator side sheet follows the operator's
@@ -68,6 +69,27 @@ async function stubWorkspace(page: Page) {
     });
   });
 
+  await page.route(/\/api\/orchestrator\/sessions$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ sessions: [
+        {
+          contextKey: `project:${PROJECT}`, kind: 'project', projectId: PROJECT, taskKey: null,
+          updatedAt: '2026-07-11T10:00:00Z', model: 'codex', cumulativeInputTokens: 800,
+          cumulativeOutputTokens: 200, cumulativeCacheReadTokens: 0, cumulativeCacheCreationTokens: 0,
+          runtimeStatus: 'active', queuePosition: 0,
+        },
+        {
+          contextKey: `task:${PROJECT}/AGT-1933`, kind: 'task', projectId: PROJECT, taskKey: 'AGT-1933',
+          updatedAt: '2026-07-11T10:01:00Z', model: 'codex', cumulativeInputTokens: 12_000,
+          cumulativeOutputTokens: 3_000, cumulativeCacheReadTokens: 0, cumulativeCacheCreationTokens: 0,
+          runtimeStatus: 'parked', queuePosition: 0,
+        },
+      ] }),
+    });
+  });
+
   await page.route(/\/api\/runner\/[^/]+\/orchestrator-chat$/, async (route) => {
     const projectMatch = /\/api\/runner\/([^/]+)\/orchestrator-chat/.exec(route.request().url());
     const project = projectMatch ? decodeURIComponent(projectMatch[1]) : '';
@@ -95,6 +117,7 @@ async function dismissErrorDialogs(page: Page) {
 
 async function openSideSheet(page: Page) {
   await page.goto('/');
+  if (process.env.PW_BASE_URL) await expect(page).toHaveURL(new RegExp(process.env.PW_BASE_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   await page.waitForLoadState('domcontentloaded');
   await dismissErrorDialogs(page);
   const toggle = page.getByTestId('orch-side-sheet-toggle');
@@ -120,6 +143,23 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await expect(pinBtn).toContainText('Pin');
     await expect(pinBtn).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByTestId('orch-side-sheet-project-combo')).toBeEnabled();
+
+    const railChip = page.getByTestId('chat-switcher-chip');
+    await expect(railChip).toContainText('1 active');
+    await expect(page.getByTestId('chat-switcher-groups')).toHaveCount(0);
+    const resultsDir = process.env.JOB_RESULTS_DIR;
+    if (resultsDir) {
+      await page.screenshot({ path: path.join(resultsDir, 'chat-switcher-rail-collapsed--mocked.png'), fullPage: false });
+    }
+    await railChip.click();
+    await expect(page.getByTestId('chat-switcher-groups')).toBeVisible();
+    await expect(page.getByTestId(`chat-switcher-row-project:${PROJECT}`)).toContainText('running');
+    await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('parked');
+    await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('15k');
+
+    if (resultsDir) {
+      await page.screenshot({ path: path.join(resultsDir, 'chat-switcher-rail-expanded--mocked.png'), fullPage: false });
+    }
 
     await page.screenshot({
       path: 'screenshots/orchestrator-side-sheet-pin/following--mocked.png',

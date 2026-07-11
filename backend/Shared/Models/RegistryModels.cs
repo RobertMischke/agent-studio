@@ -73,6 +73,8 @@ public record WorkspaceRecord
 /// </summary>
 public record ProjectRecord
 {
+    /// <summary>Extensible project origin. Existing records default to local-folder.</summary>
+    public string SourceType { get; init; } = "local-folder";
     /// <summary>Stable identifier in the form <c>PROJ-001</c>. Immutable.</summary>
     public string Id { get; init; } = "";
     /// <summary>Free-text display label. Renamable without touching the filesystem.</summary>

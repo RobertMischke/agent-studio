@@ -420,6 +420,14 @@ Make continuation after idle, stale, lost, or partially-corrupted sessions a fir
 
 Treat orchestrator-to-CLI communication as a core capability instead of a side-effect of prompt wording. The orchestrator parses CLI output for typed signals, makes deterministic decisions, and speaks for itself in the chat when it does.
 
+Future orchestrator controls must extend the existing scope contract instead of
+reintroducing flat global configuration: project overrides win over defaults for
+their owning `WorkspaceRecord`, which in turn win over platform constants. Only
+controls evaluated inside a project or workspace context belong in that chain;
+process-wide hosted-service lifecycle gates remain global. The shipped foundation,
+persistence boundary, resolver, and retired-modal routing are recorded in
+[ADR-0061](docs/architecture/decisions/adr-archive.md#adr-0061---orchestrator-settings-are-a-two-tier-config-project-override-wins-over-workspace-default-wins-over-platform-constant-2026-07-11).
+
 - Hard agent signals (`[[TASK_DONE]]`, `[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, `[[TASK_NOOP]]`) parsed from CLI output. Authoritative when present.
 - A post-run policy that re-issues a follow-up the agent did not honor, instead of accepting the inconsistency. Bounded retry budget; meta message into the chat on every action.
 - An `Orchestrator` participant in the activity log so the user sees the system's decisions next to the agent's replies. Heuristic fallback always surfaces a warning.

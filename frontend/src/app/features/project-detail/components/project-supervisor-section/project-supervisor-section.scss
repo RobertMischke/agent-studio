@@ -14,9 +14,9 @@
 .psup__actions button:disabled { opacity: 0.4; cursor: not-allowed; }
 .psup__sub { font-size: 0.78rem; color: var(--studio-fg-muted); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.04em; }
 .psup__list { list-style: none; padding: 0; margin: 0; }
-.psup__item { display: grid; grid-template-columns: 70px 110px 1fr; gap: 8px; padding: 6px 8px; border-left: 2px solid rgba(255,255,255,0.10); margin-bottom: 4px; font-size: 0.78rem; background: rgba(255,255,255,0.03); border-radius: 0 4px 4px 0; }
-.psup__item--warn { border-left-color: var(--severity-warn); }
-.psup__item--high { border-left-color: var(--severity-high); background: rgba(243,139,168,0.06); }
+.psup__item { display: grid; grid-template-columns: 70px 110px 1fr; gap: 8px; padding: 6px 8px; margin-bottom: 4px; font-size: 0.78rem; background: rgba(255,255,255,0.03); border-radius: 4px; }
+.psup__item--warn { background: color-mix(in srgb, var(--severity-warn) 7%, transparent); }
+.psup__item--high { background: color-mix(in srgb, var(--severity-high) 8%, transparent); }
 .psup__sev { color: var(--studio-fg-dim); font-weight: 600; }
 .psup__topic { color: var(--studio-accent-3-strong); font-family: ui-monospace, monospace; }
 .psup__msg { color: var(--studio-fg); word-break: break-word; }

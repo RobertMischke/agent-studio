@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { mergeAcceptViewFor, overflowActionsFor, primaryActionFor } from './triage-actions.model';
+import {
+  mergeAcceptViewFor,
+  needsPlanningAcceptWarning,
+  overflowActionsFor,
+  primaryActionFor,
+} from './triage-actions.model';
 import { TaskState } from '../../../models/task.model';
-import type { TaskInfo } from '../../../models/task.model';
+import type { PlanningSpawnSummary, TaskInfo, TaskMode } from '../../../models/task.model';
 import type { TaskProvenanceRecord } from '../../../features/git';
 
 function reviewJob(provenance: TaskProvenanceRecord | null = null): TaskInfo {
@@ -43,6 +48,62 @@ function mergedProvenance(mergeCommit: string | null): TaskProvenanceRecord {
 function overflowIds(state: string): string[] {
   return overflowActionsFor(state).map(b => b.id);
 }
+
+function planningJob(
+  spawn: PlanningSpawnSummary | null | undefined,
+  mode: TaskMode = 'planning',
+): TaskInfo {
+  return { ...reviewJob(), mode, planningSpawn: spawn };
+}
+
+function summary(partial: Partial<PlanningSpawnSummary>): PlanningSpawnSummary {
+  return {
+    spawned: [],
+    spawnedCount: 0,
+    noFollowUpDeclared: false,
+    contractSatisfied: false,
+    ...partial,
+  };
+}
+
+describe('needsPlanningAcceptWarning — AGT-2069 spawn-contract accept guard', () => {
+  const accept = TaskState.Completed;
+
+  it('warns when a planning task with no spawns and no declaration is accepted', () => {
+    const job = planningJob(summary({ contractSatisfied: false }));
+    expect(needsPlanningAcceptWarning(job, accept)).toBe(true);
+  });
+
+  it('does not warn once a follow-up card was spawned', () => {
+    const job = planningJob(summary({
+      spawned: [{ targetKey: 'WEB-1', at: '2026-07-10T00:00:00Z' }],
+      spawnedCount: 1,
+      contractSatisfied: true,
+    }));
+    expect(needsPlanningAcceptWarning(job, accept)).toBe(false);
+  });
+
+  it('does not warn once no-follow-up is declared', () => {
+    const job = planningJob(summary({ noFollowUpDeclared: true, contractSatisfied: true }));
+    expect(needsPlanningAcceptWarning(job, accept)).toBe(false);
+  });
+
+  it('only guards the accept target (6-completed), not other moves', () => {
+    const job = planningJob(summary({ contractSatisfied: false }));
+    expect(needsPlanningAcceptWarning(job, TaskState.Backlog)).toBe(false);
+    expect(needsPlanningAcceptWarning(job, TaskState.Ready)).toBe(false);
+  });
+
+  it('never guards coding or research tasks', () => {
+    expect(needsPlanningAcceptWarning(planningJob(null, 'coding'), accept)).toBe(false);
+    expect(needsPlanningAcceptWarning(planningJob(summary({}), 'research'), accept)).toBe(false);
+  });
+
+  it('does not guess when the planning projection is absent (older payload)', () => {
+    expect(needsPlanningAcceptWarning(planningJob(null), accept)).toBe(false);
+    expect(needsPlanningAcceptWarning(planningJob(undefined), accept)).toBe(false);
+  });
+});
 
 describe('primaryActionFor — Enter-bound primary per source lane', () => {
   it('labels the Completed lane primary "Archive & Next" and moves to 7-archive', () => {

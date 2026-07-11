@@ -1,7 +1,7 @@
 using AgentRunner;
 
-// Standalone remote runner (RM-5, Runner-Split C). Runs one task end-to-end on a
-// Linux host against the local Studio's Task Server API and exits. See
+// Standalone remote runner. With a task key it performs the RM-5 one-shot run;
+// without one (or with --poll) it continuously fills bounded host slots. See
 // docs/operations/setup/linux-runner-host.md.
 
 var (options, taskKey, once, help) = RunnerOptions.Parse(args);
@@ -12,17 +12,10 @@ if (help)
     return 0;
 }
 
-if (taskKey is null)
-{
-    Console.Error.WriteLine("error: no task key given. Pass it positionally or with --task <TASK-KEY>.");
-    PrintUsage();
-    return 64; // EX_USAGE
-}
-
 void Log(string message) => Console.Error.WriteLine($"[{DateTime.UtcNow:HH:mm:ss}] [runner] {message}");
 
-Log($"agent-runner starting: server={options.ServerUrl} task={taskKey} once={once}");
-
+var daemonMode = taskKey is null || !once;
+Log($"agent-runner starting: server={options.ServerUrl} mode={(daemonMode ? "daemon" : "one-shot")} task={taskKey ?? "(assigned projects)"}");
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
@@ -32,11 +25,35 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 using var client = new TaskServerClient(options);
-var runner = new RemoteTaskRunner(options, client, Log);
+
+// Readiness probe (--health-check): confirm the Task Server is reachable over the
+// tunnel and exit, without touching a task. This is the check the reverse-tunnel
+// service runs so a down connection is reported once and cleanly (exit 4) instead
+// of cascading through a launch attempt. No task key is required.
+if (options.HealthCheckOnly)
+{
+    var health = await client.ProbeHealthAsync(shutdown.Token);
+    if (health is null)
+    {
+        Log($"health-check ok: task server reachable at {options.ServerUrl}");
+        return 0;
+    }
+    Log($"health-check failed: cannot reach the task server at {options.ServerUrl} ({health}). " +
+        "The reverse tunnel / autossh service is likely down.");
+    return 4;
+}
+
 
 try
 {
-    var exitCode = await runner.RunAsync(taskKey, shutdown.Token);
+    if (daemonMode)
+    {
+        await new RemoteRunnerDaemon(options, client, Log).RunAsync(shutdown.Token);
+        Log("daemon stopped");
+        return 0;
+    }
+
+    var exitCode = await new RemoteTaskRunner(options, client, Log).RunAsync(taskKey!, shutdown.Token);
     Log($"done, exit code {exitCode}");
     return exitCode;
 }
@@ -69,10 +86,14 @@ static void PrintUsage()
         Usage:
           agent-runner <TASK-KEY> [options]
           agent-runner --task <TASK-KEY> [options]
+          agent-runner --poll [options]
+          agent-runner --health-check [--server <url>]
 
         Most configuration comes from environment variables (see the runbook,
         docs/operations/setup/linux-runner-host.md). Command-line flags override:
 
+          --health-check          Probe the Task Server and exit (0 reachable,
+                                  4 not). Readiness check for the tunnel service.
           --server <url>          Task Server base URL       (RUNNER_SERVER_URL)
           --runner-id <id>        Stable runner identity     (RUNNER_ID)
           --runner-name <name>    Board-facing runner name   (RUNNER_NAME)
@@ -84,6 +105,9 @@ static void PrintUsage()
           --cli-args "<args>"     Headless CLI args           (RUNNER_CLI_ARGS)
           --auth-token <token>    Bearer token               (RUNNER_AUTH_TOKEN)
           --ttl <seconds>         Requested lease TTL         (RUNNER_TTL_SECONDS)
+          --max-parallelism <n>   Daemon host slots            (RUNNER_MAX_PARALLELISM, default 2)
+          --poll-seconds <n>      Empty-queue poll delay       (RUNNER_POLL_SECONDS, default 5)
+          --poll                  Run continuously (also the default without a task key)
           -h, --help              Show this help
         """);
 }

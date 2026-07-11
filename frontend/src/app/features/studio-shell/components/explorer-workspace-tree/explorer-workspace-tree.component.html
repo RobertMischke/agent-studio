@@ -209,24 +209,32 @@
                               [testid]="'studio-explorer-project-epics-' + p.name"
                               (selectRequest)="openEpicsRequest.emit(p.name)" />
                 <!-- Project URLs: 0..N extra rows, one per configured URL,
-                     appended after the five fixed rows. A new globe glyph and a
+                     appended after the five fixed rows. A link glyph and a
                      running/offline status dot instead of a count badge.
-                     Clicking opens the URL directly in a new tab (window.open) —
-                     these are plain external links, NOT tabs, so they do not go
-                     through the StudioTabStateService @Output() emitters. -->
+                     AGT-2067: primary click now opens the URL EMBEDDED in a
+                     sandboxed iframe as its own tab (openUrlPreviewRequest);
+                     a hover-revealed icon keeps the browser-jump fallback. -->
                 @for (u of p.urls; track u.id) {
                   <app-tree-row level="child" glyph="link"
                                 [label]="u.label"
-                                [ariaLabel]="u.label + ', opens ' + u.url + ' in a new tab'"
+                                [ariaLabel]="u.label + ', opens ' + u.url + ' as an embedded preview tab'"
                                 [cacTooltip]="u.url"
                                 [testid]="'studio-explorer-project-url-' + p.name + '-' + u.id"
-                                (selectRequest)="openUrl(u.url)">
+                                (selectRequest)="openUrlPreview(p.name, u.id)">
                     <span class="studio-url-status-dot"
                           [class.studio-url-status-dot--running]="urlProbe.statusFor(u.url) === 'running'"
                           [class.studio-url-status-dot--offline]="urlProbe.statusFor(u.url) === 'offline'"
                           [attr.data-testid]="'studio-explorer-project-url-dot-' + p.name + '-' + u.id"
                           [attr.data-status]="urlProbe.statusFor(u.url)"
                           [attr.aria-label]="urlProbe.statusFor(u.url)"></span>
+                    <button type="button"
+                            class="studio-tree-row__url-ext"
+                            [attr.data-testid]="'studio-explorer-project-url-ext-' + p.name + '-' + u.id"
+                            cacTooltip="Open in external browser"
+                            aria-label="Open in external browser"
+                            (click)="openUrlExternal(u.url, $event)">
+                      <app-studio-icon name="send" [size]="10" />
+                    </button>
                   </app-tree-row>
                 }
               </div>

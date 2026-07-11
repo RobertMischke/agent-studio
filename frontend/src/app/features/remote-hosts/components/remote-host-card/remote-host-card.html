@@ -1,0 +1,88 @@
+@let h = host();
+
+<article class="host" data-testid="remote-host-card">
+  <header class="host__head">
+    <span class="host__dot" [attr.data-tone]="tone()" aria-hidden="true"></span>
+    <span class="host__name" data-testid="remote-host-name">{{ h.name }}</span>
+    <span class="host__role" [attr.data-role]="h.role">{{ roleLabel() }}</span>
+    <span class="host__badge" [attr.data-tone]="tone()" data-testid="remote-host-status">{{ statusLabel() }}</span>
+    <span class="host__spacer"></span>
+    @if (h.address) {
+      <span class="host__addr" [attr.title]="h.address">{{ h.address }}</span>
+    }
+  </header>
+
+  <div class="host__meta">
+    <span class="host__meta-item">{{ h.os }}</span>
+    <span class="host__meta-sep" aria-hidden="true">·</span>
+    <span class="host__meta-item" data-testid="remote-host-heartbeat">heartbeat {{ heartbeatLabel() }}</span>
+    @if (h.uptimeLabel) {
+      <span class="host__meta-sep" aria-hidden="true">·</span>
+      <span class="host__meta-item">up {{ h.uptimeLabel }}</span>
+    }
+  </div>
+
+  @if (h.capabilities.length) {
+    <ul class="chips" aria-label="Capabilities">
+      @for (cap of h.capabilities; track cap) {
+        <li class="chip chip--cap">{{ cap }}</li>
+      }
+    </ul>
+  }
+
+  @if (meters().length) {
+    <div class="meters" data-testid="remote-host-vitals">
+      @for (m of meters(); track m.key) {
+        <div class="meter" [attr.data-meter]="m.key">
+          <div class="meter__top">
+            <span class="meter__label">{{ m.label }}</span>
+            <span class="meter__detail">{{ m.detail }}</span>
+            <span class="meter__pct" [attr.data-tone]="m.tone">{{ m.pct }}%</span>
+          </div>
+          <div class="meter__track">
+            <span class="meter__fill" [attr.data-tone]="m.tone" [style.width.%]="m.pct"></span>
+          </div>
+        </div>
+      }
+    </div>
+  } @else {
+    <p class="host__no-stats" data-testid="remote-host-no-stats">No live system stats reported.</p>
+  }
+
+  @if (h.cliQuotas.length) {
+    <ul class="chips chips--quota" aria-label="Per-CLI quota" data-testid="remote-host-quotas">
+      @for (q of h.cliQuotas; track q.cliType + '|' + q.windowLabel) {
+        <li class="chip chip--quota" [attr.data-tone]="quotaTone(q.usedPct)"
+            [attr.title]="q.resetLabel ? 'resets ' + q.resetLabel : null">
+          <span class="chip__icon" aria-hidden="true">{{ cliIcon(q.cliType) }}</span>
+          <span class="chip__cli">{{ cliLabel(q.cliType) }}</span>
+          <span class="chip__win">{{ q.windowLabel }}</span>
+          @if (q.usedPct !== null) {
+            <span class="chip__pct">{{ q.usedPct }}%</span>
+          }
+        </li>
+      }
+    </ul>
+  }
+
+  <footer class="host__actions">
+    <button class="host__btn" type="button"
+            data-testid="remote-host-action-reprobe"
+            [disabled]="!!h.busyAction"
+            (click)="emit('reprobe')">
+      {{ h.busyAction === 'reprobe' ? 'Re-probing…' : 'Re-Probe' }}
+    </button>
+    <button class="host__btn" type="button"
+            data-testid="remote-host-action-drain"
+            [disabled]="!!h.busyAction || retired() || h.status === 'draining'"
+            (click)="emit('drain')">
+      {{ h.busyAction === 'drain' ? 'Draining…' : 'Drain' }}
+    </button>
+    <button class="host__btn host__btn--danger" type="button"
+            data-testid="remote-host-action-retire"
+            [disabled]="!!h.busyAction || retired()"
+            (click)="emit('retire')">
+      {{ h.busyAction === 'retire' ? 'Retiring…' : 'Retire' }}
+    </button>
+  </footer>
+</article>

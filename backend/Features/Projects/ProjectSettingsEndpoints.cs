@@ -58,6 +58,8 @@ public static class ProjectSettingsEndpoints
                     crashRecoveryEnabled = kv.Value.CrashRecoveryEnabled,
                     autoPushStrategy = AutoPushStrategies.Normalize(kv.Value.AutoPushStrategy),
                     runnerMode = kv.Value.RunnerMode,
+                    executionRunner = kv.Value.ExecutionRunner,
+                    remoteExecutionEnabled = kv.Value.RemoteExecutionEnabled,
                     orchestratorModel = kv.Value.OrchestratorModel,
                     orchestratorThinkingLevel = kv.Value.OrchestratorThinkingLevel,
                     // Epic decomposition (planning) run knobs (way 3): null
@@ -191,8 +193,8 @@ public static class ProjectSettingsEndpoints
                     // the pipeline step only mirrors its state, so it is not an
                     // opt-out toggle - making it disable-able would let a project
                     // hide a loop the breaker still acts on.
-                    canDisable = s.Kind != StepKind.Core
-                        && !string.Equals(s.Id, PipelineCatalogue.LoopGuardStepId, StringComparison.Ordinal),
+                    canDisable =
+                        PipelineStepConfigResolver.CanDisable(s),
                     // The drift post-steps default off (opt-in); every other step
                     // defaults on. The Settings UI uses this to render the toggle's
                     // initial state when the project has no explicit override.
@@ -440,6 +442,19 @@ public static class ProjectSettingsEndpoints
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             settings.SetMaxParallelism(projectName, req.MaxParallelism);
+            return Results.Ok(settings.Get(projectName));
+        });
+
+        // Remote runner assignment is server-owned so local and remote pickup
+        // cannot drift apart. Blank executionRunner hands the project back to
+        // the local runner. Eligibility defaults true; screenshots/headless UI
+        // work is supported remotely, while machine-bound projects opt out.
+        app.MapPut("/api/projects/{projectName}/execution-runner", (string projectName, SetExecutionRunnerRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            settings.SetExecutionRunner(projectName, req.ExecutionRunner, req.RemoteExecutionEnabled);
             return Results.Ok(settings.Get(projectName));
         });
 

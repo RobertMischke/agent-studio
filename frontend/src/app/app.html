@@ -66,6 +66,7 @@
           (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)"
           (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
           (openJobDetail)="onOpenJobDetailFromSheet($event)"
+          (navigateToContext)="onNavigateToChatContext($event)"
           (openSettings)="openOrchestratorSettings()" />
         <!-- Inline filter UI for the activity-bar Filter panel. Same
              component as the right-edge sheet, just rendered without
@@ -444,6 +445,16 @@
                 }
               }
             }
+            @case ('url-preview') {
+              @if (studioTabState.activeTab(); as tab) {
+                @if (tab.kind === 'url-preview') {
+                  <app-project-url-preview-tab
+                    [projectName]="tab.projectName"
+                    [urlId]="tab.urlId"
+                    (openSettings)="onOpenUrlPreviewSettings($event)" />
+                }
+              }
+            }
             @case ('workspace-settings') {
               <app-workspace-overlays [inline]="true"
                                       (openTask)="onOpenTaskFromReel($event)"
@@ -509,10 +520,6 @@
       @if (showTagManager()) {
         <app-tag-manager-dialog
           (closed)="onTagManagerClosed()" />
-      }
-      @if (orchestratorSettingsOpen()) {
-        <app-orchestrator-settings-modal
-          (closed)="closeOrchestratorSettings()" />
       }
       <app-workspace-banner [projects]="bannerProjects()" />
       <app-project-overlays
@@ -782,6 +789,7 @@
           (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)"
           (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
           (openJobDetail)="onOpenJobDetailFromSheet($event)"
+          (navigateToContext)="onNavigateToChatContext($event)"
           (openSettings)="openOrchestratorSettings()" />
       </div>
 
@@ -866,11 +874,6 @@
       }
       <app-notification-stack />
       <app-media-lightbox />
-
-      @if (orchestratorSettingsOpen()) {
-        <app-orchestrator-settings-modal
-          (closed)="closeOrchestratorSettings()" />
-      }
 
       @defer (when verboseDebugContext() !== null) {
         @if (verboseDebugContext(); as ctx) {

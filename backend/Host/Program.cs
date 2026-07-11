@@ -351,6 +351,10 @@ builder.Services.AddSingleton<StaleProgressArchiver>();
 // (boot adoption scan + uptime sweep). See
 // docs/concepts/run-liveness-and-slot-semantics.md.
 builder.Services.AddSingleton<RunLivenessMonitor>();
+// Run-Liveness Slice B: the steer-timeout monitor - no steered / NeedsInput card
+// waits indefinitely. See docs/concepts/run-liveness-and-slot-semantics.md Rule 2.
+builder.Services.AddSingleton<ISteerTimeoutResolver, SteerTimeoutResolver>();
+builder.Services.AddSingleton<SteerTimeoutMonitor>();
 builder.Services.AddSingleton<PickupFailureLog>();
 builder.Services.AddSingleton<InfraHaltLog>();
 builder.Services.AddSingleton<CrossSlugInfraCircuitBreaker>();
@@ -373,10 +377,17 @@ builder.Services.AddSingleton<AgentStudio.Tokens.ITokenAggregator, AgentStudio.T
 // the task's .metadata/prompts.jsonl when the call site sets JobFolderPath +
 // StepId. ICliOneShot resolves to the decorator; the registry enumerates it.
 builder.Services.AddSingleton<AgentStudio.Cli.StepPromptLog>();
+builder.Services.AddSingleton<AgentStudio.Runner.SystemLoadThrottle>();
+builder.Services.AddSingleton<AgentStudio.Runner.ILoadThrottleGate>(sp =>
+    sp.GetRequiredService<AgentStudio.Runner.SystemLoadThrottle>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentStudio.Runner.SystemLoadThrottle>());
 builder.Services.AddSingleton<AgentStudio.Cli.ClaudeOneShot>();
 builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot>(sp =>
     new AgentStudio.Cli.PromptLoggingCliOneShot(
-        sp.GetRequiredService<AgentStudio.Cli.ClaudeOneShot>(),
+        new AgentStudio.Cli.LoadAwareCliOneShot(
+            sp.GetRequiredService<AgentStudio.Cli.ClaudeOneShot>(),
+            sp.GetRequiredService<AgentStudio.Runner.ILoadThrottleGate>(),
+            sp.GetRequiredService<ILogger<AgentStudio.Cli.LoadAwareCliOneShot>>()),
         sp.GetRequiredService<AgentStudio.Cli.StepPromptLog>()));
 builder.Services.AddSingleton<AgentStudio.Cli.CliOneShotRegistry>();
 builder.Services.AddSingleton<CodePatternDriftAnalysisService>();
@@ -415,6 +426,13 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.IBuildTestGateRunner,
     AgentStudio.Pipeline.BuildTestGateRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiMaintenancePostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiLearningsPostStepRunner>();
+builder.Services.AddSingleton<AgentStudio.Docs.WorkstreamCurationService>();
+builder.Services.AddHostedService<AgentStudio.Docs.WorkstreamCuratorHostedService>();
+// Opt-in AGENTS.md <-> wiki designated-topics sync (AGT-1782): keeps the
+// designated-topic pointers consistent and collects each topic's current state.
+// Injected into the review orchestrator; default-OFF per project.
+builder.Services.AddSingleton<AgentStudio.Pipeline.AgentsWikiSyncPostStepRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.WorkstreamCollectorPostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiTaskCrossReferenceService>();
 // Opt-in task-spawner post-step (AGT-2028): relevance judgment + follow-up
 // card creation into a configured target project. Injected into the review
@@ -470,7 +488,19 @@ builder.Services.AddHostedService<StaleProgressSweepHostedService>();
 // within the 60s budget when its owning run dies while the backend stays up;
 // the boot adoption scan below handles zombies already present at startup.
 builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
+// Runtime steer-timeout sweep (Run-Liveness Slice B). Resolves an unanswered
+// steer / NeedsInput wait (auto-answer from the task context, else a blocked
+// escalation) within timeout + one interval, so a steered card never hangs for
+// hours the way 2062/2067/2068 did on 2026-07-10.
+builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
+// Wiki-grading maintenance run (AGT-2051): the maintenance-model default (its own
+// config class in the CLI-management area), the companion sidecar writer, the
+// grader seam (production = the one-shot CLI rail), and the run orchestrator.
+builder.Services.AddSingleton<AgentStudio.Docs.Grading.WikiMaintenanceModelService>();
+builder.Services.AddSingleton<AgentStudio.Docs.Grading.WikiCompanionStore>();
+builder.Services.AddSingleton<AgentStudio.Docs.Grading.IWikiPageGrader, AgentStudio.Docs.Grading.CliWikiPageGrader>();
+builder.Services.AddSingleton<AgentStudio.Docs.Grading.WikiGradingService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();
 builder.Services.AddSingleton<AgentDocsReadAnalyticsService>();
 builder.Services.AddSingleton<SkillReadinessService>();
@@ -912,6 +942,23 @@ cliRouter.OnRunEvent += (cliType, jobId, evt) =>
 // GenericCliExecutionService.ReattachOnStartup. Must run before any new CLI run
 // is started so we never have two processes editing the same repo.
 cliRouter.ReattachAll();
+// A detached ng/esbuild helper is no longer reachable from its original CLI
+// PID and therefore has no useful active-jobs entry. At boot there are no live
+// runs yet, so reclaim helpers whose command line still points into an
+// ephemeral task worktree before pickup starts.
+var worktreeOrphanLogger = app.Services.GetRequiredService<ILoggerFactory>()
+    .CreateLogger("WorktreeOrphanBootSweep");
+if (Environment.GetEnvironmentVariable("ATP_DEV_BACKEND_FROM_FIXTURE") == "1")
+{
+    // The Playwright node process is the backend's launcher in this mode. A
+    // worktree-path sweep would classify and kill its own test harness.
+    worktreeOrphanLogger.LogInformation(
+        "worktree-orphan-boot-sweep-skipped reason=playwright-fixture");
+}
+else
+{
+    WindowsWorktreeOrphanSweeper.Sweep(worktreeOrphanLogger);
+}
 
 // Wire up Runner status → SignalR push
 var taskRunner = app.Services.GetRequiredService<TaskRunnerService>();

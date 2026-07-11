@@ -4,6 +4,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { DialogComponent } from '../../../../components/dialog/dialog.component';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import type { CliType } from '../../../../models/task.model';
+import type { ProjectSourceDescriptor, ProjectSourceType } from '../../../../models/task.model';
 import { TaskService } from '../../../../services/task.service';
 import { NotificationService } from '../../../../services/notification.service';
 import { CliCatalogStore } from '../../../../services/cli-catalog.store';
@@ -50,6 +51,8 @@ export class OnboardProjectDialogComponent {
    * 2026-07-05 "Agent Studio" incident).
    */
   readonly rootPath = signal('');
+  readonly sourceType = signal<ProjectSourceType>('local-folder');
+  readonly projectSources = signal<readonly ProjectSourceDescriptor[]>([]);
   readonly submitting = signal(false);
   readonly errorMsg = signal<string | null>(null);
   readonly registryWorkspaces = signal<readonly { id: string; displayName: string; projects: readonly unknown[] }[]>([]);
@@ -85,11 +88,13 @@ export class OnboardProjectDialogComponent {
       this.modelDefault.set('');
       this.color.set(COLORS[0]);
       this.rootPath.set('');
+      this.sourceType.set('local-folder');
       this.errorMsg.set(null);
       this.tasks.getRegistryWorkspaces().subscribe({
         next: list => this.registryWorkspaces.set(list ?? []),
         error: () => this.registryWorkspaces.set([]),
       });
+      this.tasks.getProjectSources().subscribe({ next: sources => this.projectSources.set(sources), error: () => this.projectSources.set([]) });
       this.catalog.ensure('claude').subscribe({ error: () => void 0 });
       queueMicrotask(() => this.nameInput?.nativeElement.focus());
     });
@@ -124,6 +129,7 @@ export class OnboardProjectDialogComponent {
     if (!this.canSubmit()) return;
     const payload = {
       workspaceId: this.workspaceId(),
+      sourceType: this.sourceType(),
       displayName: this.displayName().trim(),
       shortCode: this.shortCode(),
       cliDefault: this.cliDefault(),

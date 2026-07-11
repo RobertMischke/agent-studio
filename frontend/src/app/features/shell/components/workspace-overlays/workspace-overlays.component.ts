@@ -1,11 +1,12 @@
 ﻿import { NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, output, signal } from '@angular/core';
 import { WorkspaceOverlaysService } from '../../state/workspace-overlays.service';
 import type { WorkspaceSettingsSection } from '../../state/workspace-overlays.service';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import { TokenUsageSectionComponent } from '../../../tokens';
 import { CliAdminPanelComponent, CliWorkingMemoryPanelComponent } from '../../../cli';
-import { PromptAdminPanelComponent } from '../../../orchestrator';
+import { RemoteHostsPanelComponent } from '../../../remote-hosts';
+import { OrchestratorLogicPanelComponent, PromptAdminPanelComponent } from '../../../orchestrator';
 // Direct path (not the studio-shell barrel) so we don't pull StudioShellComponent
 // and re-form the shell <-> studio-shell import cycle (AGT-2035).
 import { AppearanceSettingsComponent } from '../../../studio-shell/components/appearance-settings/appearance-settings.component';
@@ -14,6 +15,8 @@ import { WorkspaceManagementComponent } from '../workspace-management/workspace-
 import type { TaskScreenshot } from '../../../../features/screenshots';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
+import { TaskService } from '../../../../services/task.service';
+import type { ProjectSourceDescriptor } from '../../../../models/task.model';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 
@@ -35,14 +38,16 @@ interface SettingsRailItem {
  * Workspace grouping.
  *
  * Global group (per-user / app-wide): Appearance (Theme + Activity bar),
- * Updates, Workspaces (registry management). Workspace group (defaults applied
- * across the workspace's projects): Usage caps, Working memory, System prompts,
- * Token usage, Visual evidence.
+ * Updates, Workspaces (registry management), Orchestrator (the platform-global
+ * lifecycle flags AGT-1812 moved out of their standalone modal). Workspace group
+ * (defaults applied across the workspace's projects): Usage caps, Working memory,
+ * System prompts, Token usage, Visual evidence.
  *
  * Each content section re-uses a stable outer test id
  * (`cli-admin-overlay`, `prompt-admin-overlay`, `workspace-tokens-overlay`,
- * `workspace-screenshots-overlay`, plus the new appearance/updates/
- * workspaces/working-memory ids) so deep-links and specs keep resolving.
+ * `workspace-screenshots-overlay`, `orchestrator-config-overlay`, plus the new
+ * appearance/updates/workspaces/working-memory ids) so deep-links and specs
+ * keep resolving.
  */
 @Component({
   selector: 'app-workspace-overlays',
@@ -53,7 +58,9 @@ interface SettingsRailItem {
     WorkspaceScreenshotsComponent,
     CliAdminPanelComponent,
     CliWorkingMemoryPanelComponent,
+    RemoteHostsPanelComponent,
     PromptAdminPanelComponent,
+    OrchestratorLogicPanelComponent,
     AppearanceSettingsComponent,
     UpdatesSettingsComponent,
     WorkspaceManagementComponent,
@@ -77,6 +84,8 @@ export class WorkspaceOverlaysComponent {
   readonly openJobDetail = output<{ jobId: string; watchPath: string }>();
 
   private readonly modalStack = inject(ModalStackService);
+  private readonly tasks = inject(TaskService);
+  readonly projectSources = signal<readonly ProjectSourceDescriptor[]>([]);
   private readonly destroyRef = inject(DestroyRef);
   private modalDisposer: (() => void) | null = null;
 
@@ -86,6 +95,9 @@ export class WorkspaceOverlaysComponent {
     { key: 'appearance', label: 'Appearance', description: 'Theme and activity-bar side. Applies to you everywhere.', icon: '\u{1F3A8}', group: 'global' },
     { key: 'updates', label: 'Updates', description: 'Keep this instance in sync with stable.', icon: '\u{1F504}', group: 'global' },
     { key: 'workspaces', label: 'Workspaces', description: 'Manage every workspace and its projects.', icon: '\u{1F5C2}', group: 'global' },
+    { key: 'remote-hosts', label: 'Remote hosts', description: 'Execution locations: heartbeat, vitals, quota, and Re-Probe / Drain / Retire.', icon: '\u{1F4E1}', group: 'global' },
+    { key: 'project-sources', label: 'Project sources', description: 'Available origins for newly onboarded projects.', icon: '\u{1F4C1}', group: 'global' },
+    { key: 'orchestrator', label: 'Orchestrator', description: 'Platform-global supervisor, meta-cycle, and auto-intervention lifecycle flags.', icon: '\u{1F916}', group: 'global' },
     { key: 'caps', label: 'Usage caps', description: 'Per-CLI quota caps and runner rules.', icon: '⚙', group: 'workspace' },
     { key: 'working-memory', label: 'Working memory', description: 'Per-CLI memory and session state. Auth stays protected.', icon: '\u{1F9E0}', group: 'workspace' },
     { key: 'prompts', label: 'System prompts', description: 'Application-wide runtime prompt defaults and overrides.', icon: 'T', group: 'workspace' },
@@ -112,6 +124,7 @@ export class WorkspaceOverlaysComponent {
   }
 
   constructor() {
+    this.tasks.getProjectSources().subscribe({ next: sources => this.projectSources.set(sources), error: () => this.projectSources.set([]) });
     // One modal-stack registration tracks the whole view so Escape and
     // backdrop ordering behave like the other studio modals.
     effect(() => {
@@ -145,6 +158,9 @@ export class WorkspaceOverlaysComponent {
       case 'appearance': return 'workspace-appearance-overlay';
       case 'updates': return 'workspace-updates-overlay';
       case 'workspaces': return 'workspace-management-overlay';
+      case 'remote-hosts': return 'workspace-remote-hosts-overlay';
+      case 'project-sources': return 'workspace-project-sources-overlay';
+      case 'orchestrator': return 'orchestrator-config-overlay';
       case 'working-memory': return 'workspace-working-memory-overlay';
       case 'overview': return 'workspace-settings-overview-panel';
     }

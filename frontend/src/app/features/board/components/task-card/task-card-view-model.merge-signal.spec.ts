@@ -2,14 +2,30 @@ import { describe, expect, it } from 'vitest';
 import { buildMergeSignal } from './task-card-view-model';
 import { TaskState } from '../../../../models/task.model';
 import type { TaskInfo } from '../../../../models/task.model';
-import type { TaskMergeSignal, TaskProvenanceRecord } from '../../../../features/git';
+import type { TaskCommitInfo, TaskMergeSignal, TaskProvenanceRecord } from '../../../../features/git';
 
 /**
- * AGT-2046: the always-on two-segment merge signal ([develop|main]). Primary
- * source is the backend-computed `mergeSignal`; the four state combinations the
- * card must render are exercised here, plus the graceful degradation when the
- * batched signal is absent.
+ * AGT-2046 / AGT-2063: the always-on two-segment merge signal ([develop|main]).
+ * Primary source is the backend-computed `mergeSignal`; the four state
+ * combinations the card must render are exercised here (each on a card that
+ * actually has a task commit), plus the graceful degradation when the batched
+ * signal is absent, plus the AGT-2063 gate: a card WITHOUT a task commit renders
+ * no signal at all, even when a backend `mergeSignal` / branch tip / merge fact
+ * is present (those anchor off the branch base, which is trivially in
+ * develop/main and used to paint commit-less cards as "merged").
  */
+function commit(overrides: Partial<TaskCommitInfo> = {}): TaskCommitInfo {
+  return {
+    sha: 'c0ffee1234',
+    shortSha: 'c0ffee1',
+    message: 'feat: task work',
+    filesChanged: 1,
+    files: ['src/x.ts'],
+    at: '2026-07-10T09:20:00Z',
+    ...overrides,
+  };
+}
+
 function makeJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
     id: 'task-1',
@@ -31,7 +47,9 @@ function makeJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
     lastUsage: null,
     execution: null,
     commit: null,
-    commits: [],
+    // Default fixture carries a task commit so the signal is allowed to render;
+    // the AGT-2063 gate (no commit -> no signal) is exercised explicitly below.
+    commits: [commit()],
     ownerClientId: 'local-default',
     tags: [],
     ...overrides,
@@ -56,8 +74,32 @@ function provenance(overrides: Partial<TaskProvenanceRecord> = {}): TaskProvenan
 }
 
 describe('buildMergeSignal — four merge-state combinations (AGT-2046)', () => {
-  it('is null on a pre-work card with no anchor at all', () => {
-    expect(buildMergeSignal(makeJob({ state: TaskState.Backlog }))).toBeNull();
+  it('is null on a pre-work card with no task commit', () => {
+    expect(buildMergeSignal(makeJob({ state: TaskState.Backlog, commits: [] }))).toBeNull();
+  });
+
+  describe('AGT-2063 - a card without a task commit renders NO signal', () => {
+    it('suppresses the signal even when a backend mergeSignal is present', () => {
+      // The exact operator bug: an empty card carried a backend mergeSignal (its
+      // branch base is trivially in develop/main), so it showed a merge state.
+      expect(buildMergeSignal(makeJob({
+        commit: null,
+        commits: [],
+        mergeSignal: signal({ inIntegration: true, integrationSha: 'a1b2c3d' }),
+      }))).toBeNull();
+    });
+
+    it('suppresses the signal even with a branch-tip / merge-fact anchor but no commit', () => {
+      expect(buildMergeSignal(makeJob({
+        commit: null,
+        commits: [],
+        mergeSignal: null,
+        provenance: provenance({
+          merge: { mergeCommit: 'deadbeef1234', workBranchHeadBefore: null, workBranchHeadAfter: null, atUtc: '2026-07-10T10:00:00Z' },
+          transitions: [{ lane: TaskState.HumanReview, atUtc: '2026-07-10T10:00:00Z', branchTip: 'tip123', workBranchHead: 'dev999' }],
+        }),
+      }))).toBeNull();
+    });
   });
 
   it('[d empty | m empty] — on branch only, neither develop nor main', () => {
@@ -132,10 +174,11 @@ describe('buildMergeSignal — four merge-state combinations (AGT-2046)', () => 
       expect(view.main.merged).toBe(false);
     });
 
-    it('shows the signal for a card with only an attributed commit anchor', () => {
+    it('shows the signal for a card with only the legacy singular commit anchor', () => {
       const view = buildMergeSignal(makeJob({
         mergeSignal: null,
         provenance: null,
+        commits: [],
         commit: { sha: 'abc123', shortSha: 'abc123', message: 'x', filesChanged: 1, files: [], at: '2026-07-10T10:00:00Z' },
       }))!;
       expect(view).not.toBeNull();

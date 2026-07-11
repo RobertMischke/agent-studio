@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   input,
+  output,
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -47,6 +48,11 @@ type UrlPill = ProjectUrlStatus | 'building';
 })
 export class ProjectUrlsPanelComponent {
   readonly projectName = input.required<string>();
+
+  /** AGT-2067 — open this URL as an embedded preview tab (primary action).
+   *  The Hub view (which owns the tab state) turns it into a `url-preview` tab;
+   *  the panel stays presentational and keeps `window.open` as the fallback. */
+  readonly openEmbeddedPreview = output<RegistryProjectUrl>();
 
   private readonly jobService = inject(TaskService);
   private readonly lookup = inject(ProjectLookupService);
@@ -119,6 +125,12 @@ export class ProjectUrlsPanelComponent {
     catch { return rawUrl; }
   }
 
+  /** Primary "Open": embed the URL in a preview tab (AGT-2067). */
+  openEmbedded(url: RegistryProjectUrl): void {
+    this.openEmbeddedPreview.emit(url);
+  }
+
+  /** Secondary/fallback "Open": jump to the URL in a real external browser tab. */
   openUrl(url: RegistryProjectUrl): void {
     window.open(url.url, '_blank', 'noopener');
   }
