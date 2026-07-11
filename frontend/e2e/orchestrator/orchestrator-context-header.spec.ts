@@ -58,7 +58,31 @@ function runningTask() {
   };
 }
 
+/**
+ * Board bootstrap fires ~14 read polls beyond the four this spec cares about
+ * (CLI models, quota, runner status, workspaces, project settings, tags,
+ * sessions, archive, …). With no live backend every one 502s through the dev
+ * proxy; the global `ModalErrorHandler` then pops a blocking error dialog whose
+ * overlay intercepts our clicks. Stub the remainder with benign empty payloads
+ * so the app boots hermetically without a backend. Registered first so the four
+ * focused routes below — matched last-registered-first by Playwright — win.
+ */
+async function stubBoardBootstrap(page: Page) {
+  await page.route(/\/api\//, async (route) => {
+    if (route.request().method() !== 'GET') { await route.continue(); return; }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  // SignalR jobs hub: reject the negotiate so the client fails fast instead of
+  // spamming retries. The offline banner it raises is a fixed top strip that is
+  // cosmetic and non-blocking for the status-bar controls this spec drives.
+  await page.route(/\/hubs\/jobs\/negotiate/, async (route) => {
+    await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
+  });
+}
+
 async function stubWorkspace(page: Page, opts: { withRunningTask: boolean }) {
+  await stubBoardBootstrap(page);
+
   await page.route(/\/api\/watch-paths$/, async (route) => {
     await route.fulfill({
       status: 200,
