@@ -1,0 +1,10 @@
+{
+  "relatedTasks": [
+    {
+      "key": "AGT-2079",
+      "title": "Completion-Gate: Doku-only- und Verifikations-Laeufe ohne neue Commits korrekt einordnen (statt falsch eskalieren)",
+      "linkedAt": "2026-07-11T00:28:28.6565887Z",
+      "source": "auto"
+    }
+  ]
+}
