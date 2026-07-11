@@ -44,6 +44,9 @@ async function baseRoutes(page: Page): Promise<void> {
   ]));
   await page.route('**/api/cli/usage**', route => json(route, { items: [] }));
   await page.route('**/api/cli/quota**', route => json(route, { at: '2026-07-11T12:00:00Z', snapshots: [] }));
+  await page.route('**/api/tasks/archive**', route => json(route, {
+    items: [], total: 0, offset: 0, limit: 50,
+  }));
   await page.route(/\/api\/runner\/status(\?|$)/, route => json(route, { projects: {} }));
   await page.route(/\/api\/tasks\/[^/]+\/provenance(\?|$)/, route => json(route, {
     landedState: 'merged-to-develop', ladder: { mergedToIntegration: true, releasedToRelease: false }, commits: [],
@@ -55,16 +58,22 @@ async function baseRoutes(page: Page): Promise<void> {
 for (const theme of ['light', 'dark'] as Theme[]) {
   test(`delayed board skeleton follows the 200 ms rule in ${theme} theme`, async ({ page }, testInfo) => {
     await baseRoutes(page);
+    let releaseBoard!: () => void;
+    let markBoardRequestStarted!: () => void;
+    const boardGate = new Promise<void>(resolve => { releaseBoard = resolve; });
+    const boardRequestStarted = new Promise<void>(resolve => { markBoardRequestStarted = resolve; });
     await page.route('**/api/tasks', async route => {
-      await new Promise(resolve => setTimeout(resolve, 2500));
+      markBoardRequestStarted();
+      await boardGate;
       await json(route, [task(FIRST_ID, 1), task(NEXT_ID, 2)]);
     });
     await page.route('**/api/tasks/grouped**', async route => {
-      await new Promise(resolve => setTimeout(resolve, 2500));
+      await boardGate;
       await json(route, grouped());
     });
     await page.addInitScript(t => localStorage.setItem('atp.studio.theme', t), theme);
-    await page.goto('/');
+    const navigation = page.goto('/', { waitUntil: 'domcontentloaded' });
+    await boardRequestStarted;
 
     await expect(page.getByTestId('loading-surface-board')).toBeVisible();
     await expect(page.getByText('Loading board…')).toBeVisible({ timeout: 2_000 });
@@ -72,6 +81,8 @@ for (const theme of ['light', 'dark'] as Theme[]) {
     await testInfo.attach(`board-skeleton-${theme}--mocked`, {
       body: await page.screenshot(), contentType: 'image/png',
     });
+    releaseBoard();
+    await navigation;
     await expect(page.getByTestId('loading-surface-board')).toHaveCount(0, { timeout: 5_000 });
   });
 }
