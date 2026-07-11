@@ -9,6 +9,22 @@ recommendation and a follow-up task cut.
 (MVP-Prio 4)": check the Playwright pipeline against a dedicated capture tool,
 give a recommendation, and cut the follow-up tasks.
 
+## Executive decision
+
+| Requirement | Extend Playwright | Dedicated capture tool |
+|---|---|---|
+| Repeatable, current screenshots | **Best fit.** Deterministic, both-theme, CI-capable, and already mostly implemented. | Weak fit. Manual recapture can drift from the product. |
+| Polished GIF or narrated video | Weak fit. Net-new engineering with no native narration, zoom, or click emphasis. | **Best fit.** ScreenToGif covers short slide loops; OBS covers narrated walkthroughs. |
+| Remote-runner compatibility | **Best fit.** Headless stills align with remote-ready Phase 4. | Operator-desktop activity; keep narrated motion local. |
+| Data handling | Local demo seed, automated guardrails. | Prefer local OSS tools over SaaS and record only the demo seed. |
+
+**Final recommendation:** use a hybrid split, not one tool for every output.
+Extend the existing Playwright pipeline for all presentation stills. Use
+ScreenToGif for short silent loops and OBS Studio for narrated MP4
+walkthroughs, always against the ADR-0056 demo workspace. Do not build a
+Playwright video pipeline for the MVP presentation. Queue T1-T4 below as the
+MVP task cut; keep T5 optional and take T6 as independent cleanup.
+
 **Context note.** The task points at `docs/concepts/remote-execution-product-integration.md §7`.
 That file does not exist in the tree. The live plan of record for the remote
 theme is [`remote-ready-kickoff-2026-07.md`](./remote-ready-kickoff-2026-07.md);
