@@ -1,8 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  OnChanges,
   OnDestroy,
   OnInit,
+  SimpleChanges,
   computed,
   inject,
   input,
@@ -47,7 +49,7 @@ const ARCHIVE_SEARCH_DEBOUNCE_MS = 300;
   templateUrl: './task-column.html',
   styleUrl: './task-column.scss'
 })
-export class TaskColumnComponent implements OnInit, OnDestroy {
+export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   private readonly taskService = inject(TaskService);
 
   readonly title = input.required<string>();
@@ -75,6 +77,8 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
    * lane (state = '3-progress') reads these inputs today.
    */
   readonly autoProject = input<string | null>(null);
+  /** Project scope for project-owned lane data such as the lazy archive feed. */
+  readonly projectScope = input<string | null>(null);
   /** Current runner mode for the auto project, drives the chip's on/off look. */
   readonly autoMode = input<string>('manual');
   /**
@@ -444,6 +448,7 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
   readonly archiveLoaded = signal<boolean>(false);
   private archiveSearchTimer: ReturnType<typeof setTimeout> | null = null;
   private archiveSub: Subscription | null = null;
+  private archiveInitialized = false;
 
   /** Unloaded archived rows behind the current page (drives "load more"). */
   readonly archiveRemaining = computed(() => Math.max(0, this.archiveTotal() - this.archiveItems().length));
@@ -454,7 +459,17 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
   readonly headerCount = computed(() => (this.isArchive() ? this.archiveTotal() : this.jobs().length));
 
   ngOnInit(): void {
-    if (this.isArchive()) this.loadArchive(true);
+    if (this.isArchive()) {
+      this.archiveInitialized = true;
+      this.loadArchive(true);
+    }
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!this.archiveInitialized || !changes['projectScope'] || changes['projectScope'].firstChange) return;
+    this.archiveSub?.unsubscribe();
+    this.archiveLoading.set(false);
+    this.loadArchive(true);
   }
 
   ngOnDestroy(): void {
@@ -473,7 +488,12 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
     this.archiveError.set(null);
     this.archiveSub?.unsubscribe();
     this.archiveSub = this.taskService
-      .getArchivedTasks({ offset, limit: ARCHIVE_PAGE_SIZE, search: this.archiveSearch() })
+      .getArchivedTasks({
+        project: this.projectScope() ?? undefined,
+        offset,
+        limit: ARCHIVE_PAGE_SIZE,
+        search: this.archiveSearch(),
+      })
       .subscribe({
         next: (res) => {
           this.archiveItems.set(reset ? res.items : [...this.archiveItems(), ...res.items]);

@@ -442,6 +442,7 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     fixture.componentRef.setInput('title', 'Archive');
     fixture.componentRef.setInput('state', '7-archive');
     fixture.componentRef.setInput('jobs', []);
+    fixture.componentRef.setInput('projectScope', 'Token Economy');
     fixture.detectChanges(); // first CD runs ngOnInit → initial fetch
     return { fixture, httpMock };
   }
@@ -454,6 +455,7 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     const req = httpMock.expectOne((r) => isArchiveReq(r.url));
     expect(req.request.params.get('offset')).toBe('0');
     expect(req.request.params.get('limit')).toBe('50');
+    expect(req.request.params.get('project')).toBe('Token Economy');
     req.flush({
       items: [makeArchived({ id: 'a1', title: 'Archived One' })],
       total: 1,
@@ -472,6 +474,23 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     httpMock.verify();
   });
 
+  it('reloads the archive when the active project scope changes', async () => {
+    const { fixture, httpMock } = await buildArchiveColumn();
+    httpMock.expectOne((r) => r.url === '/api/tasks/archive' && r.params.get('project') === 'Token Economy')
+      .flush({ items: [], total: 0, offset: 0, limit: 50 });
+
+    fixture.componentRef.setInput('projectScope', 'Agent Studio');
+    fixture.detectChanges();
+
+    const req = httpMock.expectOne((r) => r.url === '/api/tasks/archive' && r.params.get('project') === 'Agent Studio');
+    expect(req.request.params.get('offset')).toBe('0');
+    req.flush({ items: [makeArchived({ id: 'agt-archived', projectName: 'Agent Studio' })], total: 1, offset: 0, limit: 50 });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.archiveItems().map((item) => item.id)).toEqual(['agt-archived']);
+    httpMock.verify();
+  });
+
   it('shows the empty state only after a genuine zero-total response', async () => {
     const { fixture, httpMock } = await buildArchiveColumn();
 
@@ -484,6 +503,7 @@ describe('TaskColumnComponent archive lane (ASS-1727)', () => {
     expect(fixture.componentInstance.archiveIsEmpty()).toBe(true);
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('[data-testid="archive-empty"]')).toBeTruthy();
+    expect(host.textContent ?? '').toContain('No archived ticket in this project');
     httpMock.verify();
   });
 
