@@ -678,11 +678,13 @@
           </td>
           <td>
             The evidence scan treated an explicitly disclaimed false-positive phrase and line-numbered durable pipeline-history
-            output as fresh build-failure evidence. Each reissue could therefore rediscover the previous verdict and sustain the loop.
+            output as fresh build-failure evidence. A second reissue exposed the remaining cause: recent-log context was truncated
+            from the end, retaining early failure output while dropping the later passing verification, terminal sentinel, and CLI exit.
           </td>
           <td>
-            <span class="pill ok">fixed</span> the completion gate ignores only explicit false-positive diagnoses and
-            <code>pipeline-execution.json:&lt;line&gt;</code> artifact echoes. A merely earlier or otherwise unresolved build failure
+            <span class="pill ok">fixed</span> recent-log truncation now preserves the terminal end of the run. The completion gate
+            also ignores explicit false-positive or superseded failure diagnoses, negated phrases such as <code>no unfinished evidence</code>,
+            and <code>pipeline-execution.json:&lt;line&gt;</code> artifact echoes. A merely earlier or otherwise unresolved build failure
             still blocks. The reproduced successful close-out now reaches the normal pass terminal and auto-review.
           </td>
         </tr>

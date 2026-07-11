@@ -337,6 +337,33 @@ public class CompletionGateTests
     }
 
     [Fact]
+    public void ExtractFindings_SuccessfulFixedProblemAndNegatedSourceEcho_AreNotReported()
+    {
+        // AGT-2148 second reissue regression: the successful status described
+        // the stale failure that was fixed, while rg echoed source containing
+        // the phrase "no unfinished evidence". Neither is an open item.
+        var status = string.Join('\n',
+            "Result: Success",
+            "## Overview",
+            "- Problem: Completion-gate was incorrectly re-opening tasks by retaining stale \"Build FAILED\" evidence from early pre-restore attempts as unresolved open items.",
+            "- Solution: Later restored verification passed.",
+            "## What Was Done",
+            "- Verified: targeted suite 67/67 tests passed.",
+            "## Open Items",
+            "None.");
+        var log = string.Join('\n',
+            "[20:57:08.894] [stderr] .\\frontend\\e2e\\task-detail\\pipeline-orchestrator-review-distinct.spec.ts:121: verdictSummary: 'Post-core completeness check: no unfinished evidence in the close-out.',",
+            "[21:04:52.418] [stdout] [[TASK_DONE]]",
+            "[21:04:52.980] [system] [taskboard] codex CLI exited: status=completed, exitCode=0, duration=492.0s");
+
+        var findings = CompletionGate.ExtractFindings(status, log);
+        var decision = CompletionGate.Evaluate(status, log, priorReissues: 3, maxReissues: 3);
+
+        Assert.Empty(findings);
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, decision.Action);
+    }
+
+    [Fact]
     public void ExtractFindings_GreppedSourceLineWithKeyword_InLogTail_IsNotReported()
     {
         // ASS-794 regression: the previous run grepped its own source and echoed

@@ -5178,7 +5178,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var task = File.Exists(promptPath) ? File.ReadAllText(promptPath) : string.Empty;
         var logPath = TaskPaths.CliOutputLog(folder);
         var recent = File.Exists(logPath) ? TailLines(File.ReadAllText(logPath), 200) : string.Empty;
-        return (Truncate(task, 4_000), Truncate(recent, 6_000));
+        // The terminal sentinel, final verification summary, and CLI exit are
+        // at the end of the log. Head-truncating a verbose 200-line tail kept
+        // early pre-restore failures while discarding their later successful
+        // restore/re-run, which made the completion gate reissue clean tasks.
+        return (Truncate(task, 4_000), TruncateTail(recent, 6_000));
     }
 
     /// <summary>
@@ -5381,6 +5385,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (string.IsNullOrEmpty(s) || s.Length <= max) return s;
         return s[..max] + "\n... (truncated)";
+    }
+
+    internal static string TruncateTail(string s, int max)
+    {
+        if (string.IsNullOrEmpty(s) || s.Length <= max) return s;
+        return "... (truncated)\n" + s[^max..];
     }
 
     private bool RateLimitOk(int maxPerHour)

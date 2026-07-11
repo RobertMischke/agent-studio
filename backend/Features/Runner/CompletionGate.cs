@@ -185,6 +185,21 @@ public static class CompletionGate
         @"(?ix)\b(?:" + BuildErrorEvidence + @")\b.{0,80}\b(?:as|was|is|diagnosed\s+as|identified\s+as|confirmed\s+as)\s+(?:a\s+)?false[-\s]?positive\b",
         RegexOptions.Compiled);
 
+    // A successful close-out may describe the defect it just fixed. A quoted
+    // failure token explicitly labelled stale/superseded is historical input,
+    // not a current build result. Keep the qualifier and failure phrase on the
+    // same line so an unqualified current "Build FAILED" still blocks.
+    private static readonly Regex SupersededBuildEvidenceRegex = new(
+        @"(?ix)\b(?:stale|superseded|already\s+(?:fixed|resolved|cleared))\b.{0,100}\b(?:" + BuildErrorEvidence + @")\b",
+        RegexOptions.Compiled);
+
+    // Negative evidence statements such as "no unfinished evidence" describe
+    // a clean gate. Matching the bare word "unfinished" reopens a completed
+    // task when that sentence is echoed by rg or appears in a close-out.
+    private static readonly Regex NegatedIncompleteEvidenceRegex = new(
+        @"(?ix)\b(?:no|without)\s+(?:remaining\s+)?(?:unfinished|incomplete|pending)\s+(?:work|items?|evidence)\b",
+        RegexOptions.Compiled);
+
     public enum CompletionGateAction
     {
         Pass,
@@ -448,6 +463,13 @@ public static class CompletionGate
             // Drop only explicitly disclaimed false-positive failure signals.
             // Genuine current or merely historical failures remain evidence.
             if (ExplicitFalsePositiveRegex.IsMatch(line)) continue;
+            // Drop a fixed-problem narrative only when it explicitly calls the
+            // build signal stale/superseded. This covers a successful status
+            // overview without weakening current failure detection.
+            if (SupersededBuildEvidenceRegex.IsMatch(line)) continue;
+            // "No unfinished evidence" is evidence of completion, not an
+            // unfinished-work finding.
+            if (NegatedIncompleteEvidenceRegex.IsMatch(line)) continue;
             yield return line;
         }
     }
