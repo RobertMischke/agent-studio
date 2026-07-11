@@ -28,6 +28,7 @@ test.describe('project source onboarding and administration', () => {
         createdAt: '2026-01-01T00:00:00Z', projects: [],
       }]),
     }));
+    await page.route('**/api/clients', route => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
     await page.setViewportSize({ width: 1280, height: 800 });
   });
 
@@ -61,6 +62,45 @@ test.describe('project source onboarding and administration', () => {
       });
     });
     expect(contained).toBe(true);
-    await dialog.screenshot({ path: path.join(results, 'onboarding-dialog-contained-fields.png') });
+    await dialog.screenshot({ path: path.join(results, 'onboarding-dialog-contained-fields--mocked.png') });
+  });
+
+  test('submits repository and runner fields through the project API', async ({ page }) => {
+    let submitted: Record<string, unknown> | null = null;
+    await page.route('**/api/projects', async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      submitted = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'PROJ-023', displayName: 'Quality Studio', shortCode: 'QS', workspaceId: 'ws-default',
+          sourceType: 'local-folder', storageLocation: 'C:/workspace/projects/PROJ-023/tasks',
+          repositoryPath: 'C:/Projects/quality-studio', rootPath: 'C:/Projects/quality-studio',
+          urls: [], archived: false, createdAt: '2026-07-12T00:00:00Z', sortOrder: 0,
+        }),
+      });
+    });
+    await page.goto('/');
+    await page.locator('[data-testid^="studio-workspace-"][data-testid$="-add-project"]').first().click();
+    await page.getByTestId('onboard-project-display-name').fill('Quality Studio');
+    await page.getByTestId('onboard-project-short-code').fill('QS');
+    await page.getByTestId('onboard-project-root-path').fill('C:/Projects/quality-studio');
+    await page.getByTestId('onboard-project-repository-url').fill('https://github.com/example/quality-studio');
+    const runner = page.getByTestId('onboard-project-runner');
+    const remoteValue = 'agent-runner-01';
+    await expect(runner.locator(`option[value="${remoteValue}"]`)).toHaveCount(1);
+    await runner.selectOption(remoteValue);
+    await page.getByTestId('onboard-project-dialog').screenshot({
+      path: path.join(results, 'onboarding-project-api-payload--mocked.png'),
+    });
+    await page.getByTestId('onboard-project-submit').click();
+
+    await expect(page.getByTestId('onboard-project-dialog')).not.toBeVisible();
+    expect(submitted).toMatchObject({
+      displayName: 'Quality Studio', shortCode: 'QS', workspaceId: 'ws-default',
+      repositoryPath: 'C:/Projects/quality-studio', rootPath: 'C:/Projects/quality-studio',
+      repositoryUrl: 'https://github.com/example/quality-studio', executionRunner: remoteValue,
+    });
   });
 });

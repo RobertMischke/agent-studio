@@ -43,13 +43,32 @@
                (ngModelChange)="onCodeChange($event)" />
       </label>
       <label class="opd__field">
-        <span class="opd__label">Working directory (optional)</span>
+        <span class="opd__label">Repository path (optional)</span>
         <input class="opd__input" type="text"
                placeholder="C:\Projects\my-repo"
                data-testid="onboard-project-root-path"
                [ngModel]="rootPath()"
                (ngModelChange)="rootPath.set($event)" />
-        <span class="opd__hint">The CLI's working directory, if this project has a real checkout. Leave blank for a task-only project - auto-pickup stays off until this is set (here or later in Project Hub &rarr; Settings).</span>
+        <span class="opd__hint">Absolute checkout path on the selected execution host. The task store remains in the Agent Studio workspace.</span>
+      </label>
+      <label class="opd__field">
+        <span class="opd__label">Repository URL (optional)</span>
+        <input class="opd__input" type="url"
+               placeholder="https://github.com/acme/my-repo"
+               data-testid="onboard-project-repository-url"
+               [ngModel]="repositoryUrl()"
+               (ngModelChange)="repositoryUrl.set($event)" />
+        <span class="opd__hint">Stored as the project's <code>repo</code> URL for navigation and remote checkout.</span>
+      </label>
+      <label class="opd__field">
+        <span class="opd__label">Execution runner</span>
+        <select class="opd__input" data-testid="onboard-project-runner"
+                [ngModel]="executionRunner()" (ngModelChange)="executionRunner.set($event)">
+          <option value="local">Local host</option>
+          @for (host of hostRegistry.hosts(); track host.id) {
+            @if (host.id !== 'local' && host.status !== 'retired') { <option [value]="host.id">{{ host.name }}</option> }
+          }
+        </select>
       </label>
       <div class="opd__field">
         <span class="opd__label">CLI Default</span>

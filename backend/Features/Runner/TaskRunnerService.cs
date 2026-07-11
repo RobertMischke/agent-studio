@@ -998,6 +998,66 @@ public class TaskRunnerService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Activates a runner for a project created after host startup. This is
+    /// intentionally idempotent so POST retries cannot duplicate pickup loops.
+    /// </summary>
+    public bool EnsureRunner(WatchPathEntry rawEntry)
+    {
+        if (_runners.ContainsKey(rawEntry.Name)) return true;
+
+        var registryRootPath = _projectRegistry?.FindByStorageLocation(rawEntry.Path)?.RootPath;
+        var entry = string.IsNullOrWhiteSpace(registryRootPath) || registryRootPath == rawEntry.RootPath
+            ? rawEntry
+            : rawEntry with { RootPath = registryRootPath };
+        if (string.IsNullOrWhiteSpace(entry.RootPath) || !Directory.Exists(entry.RootPath))
+        {
+            _logger.LogInformation(
+                "runner-activation-skipped project={Project} reason=root-path-unavailable root={RootPath}",
+                entry.Name, entry.RootPath);
+            return false;
+        }
+
+        var runner = new ProjectRunner(
+            entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService,
+            _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner,
+            _orchestratorSessions, _projectSettings, _quotaService, _quotaCaps, _git,
+            _pickupFailures, _infraBreaker, _taskAccess, _bus,
+            role: Role,
+            pickupLock: _pickupLock,
+            pickupLockOwner: BuildPickupLockOwner(entry.Name),
+            integrationLeases: _integrationLeases,
+            timeline: _timeline,
+            pipelineLog: _pipelineLog,
+            humanReviewEscalation: _humanReviewEscalation,
+            postAbortReview: _postAbortReview,
+            sessionInspector: _sessionInspector,
+            orchestratorDefaults: _orchestratorDefaults,
+            quotaFallback: _quotaFallback,
+            loadThrottle: _loadThrottle);
+        runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
+        runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
+        runner.ConfigureStuckLoopBudget(LoadStuckLoopBudget(_config));
+        runner.OnStatusChanged += status =>
+        {
+            try { OnRunnerStatusChanged?.Invoke(entry.Name, status); }
+            catch (Exception ex) { _logger.LogWarning(ex, "OnRunnerStatusChanged subscriber threw for {Project}", entry.Name); }
+        };
+        runner.OnModePersist += (mode, source) => _projectSettings.SetRunnerMode(entry.Name, mode, source);
+
+        if (!_runners.TryAdd(entry.Name, runner)) return true;
+        var saved = _projectSettings.Get(entry.Name);
+        var savedMode = string.IsNullOrWhiteSpace(saved.DesiredRunnerMode) ? saved.RunnerMode : saved.DesiredRunnerMode;
+        if (!string.IsNullOrWhiteSpace(savedMode) && savedMode != "manual") runner.RestoreMode(savedMode!);
+        _logger.LogInformation("runner-activated project={Project} root={RootPath}", entry.Name, entry.RootPath);
+        _ = Task.Run(async () =>
+        {
+            try { await runner.BootOrchestratorSessionAsync(CancellationToken.None); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Orchestrator boot failed for {Project}", entry.Name); }
+        });
+        return true;
+    }
+
     public bool StartRunner(string projectName)
     {
         if (!_runners.TryGetValue(projectName, out var runner)) return false;

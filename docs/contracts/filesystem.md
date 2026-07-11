@@ -30,6 +30,8 @@ In parallel with the legacy `<projectKey>` slug layout above, projects also live
 
 Per-project task counters move out of the sidecar `.task-counter.json` and onto the project record (`NextTaskKeySeq`). Display-keys like `ATP-130` are formatted as `<ShortCode>-<seq>` (e.g. `ATP` for the historic "Agent Task Processor" / `ASS` for the historic "Agent Software Studio" short code + sequence `130`; existing short codes are not auto-renamed by the agent-orchestrator rebrand because they are persisted on every existing card).
 
+Projects created through `POST /api/projects` use `<TaskRepository>/projects/PROJ-NNN/tasks/` as their watched task-store root. The product repository remains a separate `RepositoryPath` and never receives a new `.orchestrator/jobs` store. Legacy projects can retain their existing storage location until a controlled migration.
+
 The full layout migration (jobs sharded under `projects/PROJ-XXX/jobs/<bucket>/<slug>/`, jobKey moved to `PROJ-NNN::<slug>`) is tracked under F45c and is not active yet; jobs continue to live in the lane-folder layout shown below until that ships. New code that needs to address a project should prefer the registry id over the watch-path string; the resolver in [`backend/Services/Jobs/JobKeyResolver.cs`](../../backend/Services/Jobs/JobKeyResolver.cs) accepts either form.
 
 ## Operational Boundary

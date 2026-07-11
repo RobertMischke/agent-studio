@@ -1027,6 +1027,8 @@ export interface RegistryProjectSummary {
   modelDefault: string | null;
   sortOrder: number;
   storageLocation: string;
+  repositoryPath: string | null;
+  rootPath: string | null;
   /** Configured watchable URLs, ordered; empty for most projects. */
   urls: RegistryProjectUrl[];
   archived: boolean;
@@ -1047,6 +1049,9 @@ export interface CreateRegistryProjectRequest {
    * (or hand-edits the gitignored appsettings.Local.json WatchPaths entry).
    */
   rootPath?: string;
+  repositoryPath?: string;
+  repositoryUrl?: string;
+  executionRunner?: string;
 }
 
 export type ProjectSourceType = 'local-folder' | 'remote-git' | 'cloud';

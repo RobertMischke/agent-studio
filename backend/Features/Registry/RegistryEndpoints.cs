@@ -132,7 +132,10 @@ public static class RegistryEndpoints
 
         app.MapGet("/api/project-sources", () => Results.Ok(ProjectSourceCatalog.All));
 
-        app.MapPost("/api/projects", (RegistryCreateProjectRequest body, ProjectRegistry projects, WorkspaceRegistry workspaces, WorkspaceManagementService workspaceManagement, ILoggerFactory loggerFactory) =>
+        app.MapPost("/api/projects", (RegistryCreateProjectRequest body, ProjectRegistry projects, WorkspaceRegistry workspaces,
+            WorkspaceManagementService workspaceManagement, TaskScannerService scanner, TaskWatcherService watcher,
+            AgentStudio.Runner.TaskRunnerService runners, AgentStudio.Projects.ProjectSettingsService projectSettings,
+            ILoggerFactory loggerFactory) =>
         {
             if (body == null || string.IsNullOrWhiteSpace(body.DisplayName))
                 return Results.BadRequest(new { error = "displayName is required" });
@@ -155,6 +158,25 @@ public static class RegistryEndpoints
             if (allProjects.Any(p => string.Equals(p.ShortCode, shortCode, StringComparison.OrdinalIgnoreCase)))
                 return Results.Conflict(new { error = $"shortCode '{shortCode}' is already used." });
 
+            Uri? repositoryUrl = null;
+            if (!string.IsNullOrWhiteSpace(body.RepositoryUrl)
+                && (!Uri.TryCreate(body.RepositoryUrl.Trim(), UriKind.Absolute, out repositoryUrl)
+                    || (repositoryUrl.Scheme != Uri.UriSchemeHttps && repositoryUrl.Scheme != Uri.UriSchemeHttp)))
+                return Results.BadRequest(new { error = "repositoryUrl must be an absolute http or https URL" });
+
+            string? repositoryPath;
+            string? rootPath;
+            try
+            {
+                repositoryPath = ProjectRegistry.ValidateRepositoryPath(body.RepositoryPath);
+                rootPath = ProjectRegistry.ValidateRootPath(
+                    string.IsNullOrWhiteSpace(body.RootPath) ? repositoryPath : body.RootPath);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+
             var id = projects.AllocateNextId();
             var storage = workspaceManagement.CreateProjectStorage(displayName, id);
             if (storage.Outcome == WorkspaceManagementOutcome.BadRequest)
@@ -175,6 +197,11 @@ public static class RegistryEndpoints
                 SortOrder = allProjects.Count,
                 NextTaskKeySeq = 1,
                 StorageLocation = storage.Entry?.Path ?? "",
+                RepositoryPath = repositoryPath,
+                RootPath = rootPath,
+                Urls = repositoryUrl == null
+                    ? []
+                    : [new ProjectUrlRecord { Id = "repo", Label = "Repository", Url = repositoryUrl.ToString(), SortOrder = 0 }],
                 Archived = false,
                 CreatedAt = DateTime.UtcNow,
             };
@@ -182,14 +209,24 @@ public static class RegistryEndpoints
             try
             {
                 var created = projects.Append(record);
-                if (!string.IsNullOrWhiteSpace(body.RootPath))
-                    created = projects.SetRootPath(created.Id, body.RootPath);
+                if (!string.IsNullOrWhiteSpace(body.ExecutionRunner))
+                    projectSettings.SetExecutionRunner(created.DisplayName, body.ExecutionRunner, remoteExecutionEnabled: true);
+
+                var liveEntry = scanner.GetWatchPaths().First(entry =>
+                    string.Equals(entry.Path, created.StorageLocation, StringComparison.OrdinalIgnoreCase));
+                watcher.EnsureWatching(liveEntry);
+                runners.EnsureRunner(liveEntry);
                 loggerFactory.CreateLogger("ProjectCreate").LogInformation(
-                    "project-created id={Id} workspaceId={WorkspaceId} storage={Storage}",
-                    created.Id, created.WorkspaceId, created.StorageLocation);
+                    "project-onboarded id={Id} workspaceId={WorkspaceId} storage={Storage} repository={Repository} runner={Runner}",
+                    created.Id, created.WorkspaceId, created.StorageLocation,
+                    created.RepositoryPath ?? repositoryUrl?.ToString() ?? "(none)", body.ExecutionRunner ?? "local");
                 return Results.Created($"/api/projects/{created.Id}", ProjectSummary.From(created));
             }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            catch (InvalidOperationException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+            catch (ArgumentException ex)
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
@@ -411,6 +448,12 @@ public sealed record RegistryCreateProjectRequest
     public string? CliDefault { get; init; }
     public string? ModelDefault { get; init; }
     public string? Color { get; init; }
+    /// <summary>Absolute local Git checkout path.</summary>
+    public string? RepositoryPath { get; init; }
+    /// <summary>Optional browser/clone URL, stored as the well-known <c>repo</c> URL.</summary>
+    public string? RepositoryUrl { get; init; }
+    /// <summary>Optional remote runner id assigned immediately after creation.</summary>
+    public string? ExecutionRunner { get; init; }
     /// <summary>
     /// Optional CLI working directory, set at onboarding time so auto-pickup
     /// has a runner from the first boot instead of silently having none
@@ -488,6 +531,8 @@ public sealed record ProjectSummary
     public string? ModelDefault { get; init; }
     public int SortOrder { get; init; }
     public string StorageLocation { get; init; } = "";
+    public string? RepositoryPath { get; init; }
+    public string? RootPath { get; init; }
     /// <summary>Configured watchable URLs, ordered; empty for most projects.</summary>
     public IReadOnlyList<ProjectUrlRecord> Urls { get; init; } = [];
     public bool Archived { get; init; }
@@ -505,6 +550,8 @@ public sealed record ProjectSummary
         ModelDefault = p.ModelDefault,
         SortOrder = p.SortOrder,
         StorageLocation = p.StorageLocation,
+        RepositoryPath = p.RepositoryPath,
+        RootPath = p.RootPath,
         Urls = [.. p.Urls.OrderBy(u => u.SortOrder)],
         Archived = p.Archived,
         CreatedAt = p.CreatedAt,

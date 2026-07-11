@@ -117,6 +117,10 @@ groups, and a failed domain reports an error without hiding successful domains.
   Management, system prompts, token usage, visual evidence, and the workspace
   summary. Legacy CLI-admin and usage links resolve to the CLI Management
   section at `#/workspace/settings/caps`.
+- `frontend/src/app/features/shell/components/onboard-project-dialog/`: the
+  project onboarding workflow. It collects identity, repository location/URL,
+  and execution runner, calls `POST /api/projects`, then refreshes the
+  registry-backed workspace tree so the new project appears immediately.
 
 ## Project Overview Contract
 
