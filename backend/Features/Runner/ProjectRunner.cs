@@ -3364,6 +3364,19 @@ public class ProjectRunner
         || string.Equals(mode, "auto-single", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// A NeedsInput run is unattended when it was auto-picked, even if the
+    /// project mode flipped to manual before the completion callback observed
+    /// the sentinel. Current auto mode also covers automatic continuations.
+    /// This decision deliberately does not depend on a captured run plan: the
+    /// bounded-wait invariant must survive missing optional run metadata.
+    /// </summary>
+    internal static bool ShouldHandleNeedsInputUnattended(
+        AgentOutcomeKind outcomeKind, RunIntent intent, string mode, TaskInfo? activeInfo)
+        => activeInfo != null
+           && outcomeKind == AgentOutcomeKind.NeedsInput
+           && (intent == RunIntent.AutoPickup || IsAutoMode(mode));
+
+    /// <summary>
     /// Boot the long-lived orchestrator session for this project (Phase H).
     /// Reads the persisted session id; if one is already on disk, we
     /// keep it and skip the boot call so a backend restart does not
@@ -5445,12 +5458,9 @@ public class ProjectRunner
             // the orchestrator to decide on the user's behalf and feed the
             // decision back as a Continue follow-up. Manual mode keeps
             // today's path: the question stays in the chat for the user.
-            if (capturedPlan != null
-                && (outcome.Kind == AgentOutcomeKind.NeedsInput)
-                && IsAutoMode(_mode)
-                && activeInfo != null)
+            if (ShouldHandleNeedsInputUnattended(outcome.Kind, capturedIntent, _mode, activeInfo))
             {
-                _ = Task.Run(() => RunOrchestratorDecisionAsync(activeInfo, jobId, outcome));
+                _ = Task.Run(() => RunOrchestratorDecisionAsync(activeInfo!, jobId, outcome));
                 return;
             }
 
