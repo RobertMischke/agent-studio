@@ -17,6 +17,12 @@
       "title": "ORCH-1: Orchestrator-Sicht - vollstaendiger Lese-Kontext (Lanes, Runs, Quota, Health, Journal)",
       "linkedAt": "2026-07-11T01:47:00.0244281Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2083",
+      "title": "Explorer/Tree: Projekt-Stand-Indikator - Design-Exploration mit 5-10 Alternativen \u002B interaktivem Mockup",
+      "linkedAt": "2026-07-11T09:01:37.8576044Z",
+      "source": "auto"
     }
   ]
 }
