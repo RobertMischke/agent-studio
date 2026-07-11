@@ -2556,6 +2556,11 @@ public class ProjectRunner
             try { _ = _bus?.EmitRunStartedAsync(info, cli.CliType, execution.StartedAt, plan.SessionToResume, intent.ToString()); }
             catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of run-start failed for {JobId}", jobId); }
 
+            // AGT-2100: record the CLI's cached quota snapshot at run-start so the
+            // cap-forecast history has a datapoint per run boundary. Cached-only -
+            // no fresh probe is forced.
+            EmitQuotaSnapshotToBus(info, cli.CliType, execution.StartedAt, runModel, runThinkingLevel, QuotaSnapshotPhases.Start);
+
             // Open / resume the pipeline-execution record and mark the CORE
             // "Agent execution" step Running so the Overview pipeline table
             // shows a live running indicator on the most important step from
@@ -2948,6 +2953,34 @@ public class ProjectRunner
     }
 
     /// <summary>
+    /// <summary>
+    /// AGT-2100: mirror the CLI's currently cached quota snapshot onto the bus
+    /// as a compact <c>observation</c> at a run boundary (start / end). This is a
+    /// pure-read datapoint for the cap-forecast history: it uses
+    /// <see cref="QuotaService.GetCachedFor"/> only, never forcing a fresh probe
+    /// (no extra CLI call per run), and records the snapshot's age so a reader can
+    /// tell a fresh reading from a stale one. Best-effort like every other bus
+    /// mirror - a failure is logged and swallowed.
+    /// </summary>
+    private void EmitQuotaSnapshotToBus(
+        TaskInfo? info, string? cliType, DateTime startedAt,
+        string? model, string? thinkingLevel, string phase)
+    {
+        if (_bus == null || info == null || string.IsNullOrWhiteSpace(cliType)) return;
+        try
+        {
+            var snapshot = _quotaService.GetCachedFor(cliType!);
+            var runId = AgentMessageBusBridge.DeriveRunId(info.Id, startedAt);
+            _ = _bus.EmitQuotaSnapshotAsync(
+                ProjectName, info.Id, runId, cliType!, model, thinkingLevel,
+                phase, snapshot, _quotaService.Ttl);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Bus mirror of quota snapshot ({Phase}) failed for {JobId}", phase, info.Id);
+        }
+    }
+
     /// Append one structured line to <c>logs/tool-calls.jsonl</c> per
     /// <see cref="CliRunEvent.ToolStarted"/> / <see cref="CliRunEvent.ToolCompleted"/>
     /// observed. Silent on other event types. The file lives next to
@@ -4520,6 +4553,15 @@ public class ProjectRunner
                 }
             }
             catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of run-finish failed for {JobId}", jobId); }
+
+            // AGT-2100: record the CLI's cached quota snapshot at run-end, the
+            // matching pair to the run-start emit. Cached-only - the run just
+            // consumed quota, but we honour "no extra CLI call per run" and let
+            // the snapshot's recorded age carry the honest freshness signal.
+            if (finishedInfo != null)
+                EmitQuotaSnapshotToBus(
+                    finishedInfo, cliType, execution.StartedAt,
+                    execution.Model, execution.ThinkingLevel, QuotaSnapshotPhases.End);
 
             // ADR-0049: mirror the run-finish onto the unified timeline. The
             // runId pairs with the agent_run_started row's runId so the FE
