@@ -601,6 +601,32 @@
         </tr>
         <tr>
           <td>2026-07-11</td>
+          <td><code>AGT-2143</code><br><span class="small">Codex clean-context resume spiral<br>(observed on <code>CAR-5</code>)</span></td>
+          <td>
+            A successful run committed its change, passed 490 tests, and received a code-review grade. The follow-up then ran
+            <code>codex thread/resume</code> inside a newly-created clean-context <code>CODEX_HOME</code>. That home deliberately
+            contained no rollout, so Codex exited in under one second with <code>no rollout found</code>. The empty launch failure
+            replaced the successful run as the aspect basis, produced the false finding "No reviewable code exists", and drove a
+            reissue spiral while session-index-only corpses accumulated.
+          </td>
+          <td>
+            Resume eligibility checked only the stored UUID and worktree cwd, not the rollout in the effective Codex home. The
+            clean-context home is created after prompt planning, so the deterministic mismatch was discovered only by the child
+            process. Session inventory trusted <code>session_index.jsonl</code> without requiring a rollout, and review helpers
+            could select the latest failed run instead of the last completed run.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> Codex resume now proves the rollout exists before prompt rendering. A missing
+            rollout selects the full recovery prompt and logs <code>codex_resume_precondition_fallback</code>, so no doomed resume
+            is launched. CLI sessions without rollouts are hidden immediately and index rows older than five minutes are compacted
+            with <code>codex_session_stillborn_cleanup</code>. Aspect, grade, changed-file, and abort-review evidence select the last
+            completed run; a launch-only failure after a graded success routes to human review with that successful SHA range and
+            cannot reissue. The 2026-07-11 forensic scan found 7 stale shared-home index-only rows and 10 clean Codex homes in the
+            CAR-5 window; the rows are removed by the first post-deploy session inventory refresh.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
           <td><code>AGT-2147</code><br><span class="small">remote worktree teardown data loss<br>(observed on <code>AGT-2091</code>)</span></td>
           <td>
             A remote CLI exited 0 and reported completed work plus passing Playwright tests, but omitted the terminal sentinel.

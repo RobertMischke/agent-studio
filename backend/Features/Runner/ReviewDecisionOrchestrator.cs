@@ -2663,9 +2663,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (_sessions == null || _git == null) return null;
         try
         {
-            var latest = _sessions.ReadSessionEvents(job.Id, watchPath)
-                .LastOrDefault(e => !string.IsNullOrWhiteSpace(e.HeadShaBefore)
-                                 && !string.IsNullOrWhiteSpace(e.HeadShaAfter));
+            var events = _sessions.ReadSessionEvents(job.Id, watchPath);
+            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(job.FolderPath));
+            var latest = SelectLastSuccessfulReviewRun(
+                RunTimelineBuilder.Build(events, lines, DateTime.UtcNow).Runs);
             if (latest == null) return null;
             return _git.GetFilesChangedInShaRange(job.Id, watchPath, latest.HeadShaBefore, latest.HeadShaAfter)
                 .Select(f => f.Path)
@@ -3258,7 +3259,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 var events = _sessions.ReadSessionEvents(job.Id, watchPath);
                 var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(job.FolderPath));
                 var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
-                var aggregate = TaskCommitsAggregator.Aggregate(job, timeline.Runs,
+                var aggregate = TaskCommitsAggregator.Aggregate(job, SelectAuthoritativeReviewRuns(timeline.Runs),
                     (before, after) => _git!.GetCommitsInShaRange(job.Id, watchPath, before, after));
                 taskShas = aggregate.Commits
                     .Select(c => c.Sha)
@@ -4289,7 +4290,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var events = _sessions.ReadSessionEvents(job.Id, watchPath);
             var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(job.FolderPath));
             var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
-            var aggregate = TaskCommitsAggregator.Aggregate(job, timeline.Runs,
+            var aggregate = TaskCommitsAggregator.Aggregate(job, SelectAuthoritativeReviewRuns(timeline.Runs),
                 (before, after) => _git!.GetCommitsInShaRange(job.Id, watchPath, before, after));
             // Commits surfaced from the persisted chain (task.json) carry only a
             // file count - their +/- line stats are hardcoded 0 because
@@ -5179,6 +5180,24 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var recent = File.Exists(logPath) ? TailLines(File.ReadAllText(logPath), 200) : string.Empty;
         return (Truncate(task, 4_000), Truncate(recent, 6_000));
     }
+
+    /// <summary>
+    /// Review post-steps use the last completed agent run as their run-window
+    /// truth. A later launch-only failure can append an empty range, but it must
+    /// never replace the successful diff that already earned review evidence.
+    /// Legacy timelines without a completed run retain the old all-runs fallback.
+    /// </summary>
+    internal static IReadOnlyList<RunRecord> SelectAuthoritativeReviewRuns(IReadOnlyList<RunRecord> runs)
+    {
+        var last = SelectLastSuccessfulReviewRun(runs);
+        return last == null ? runs : new[] { last };
+    }
+
+    internal static RunRecord? SelectLastSuccessfulReviewRun(IReadOnlyList<RunRecord> runs)
+        => runs.LastOrDefault(r =>
+            string.Equals(r.Status, "completed", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(r.HeadShaBefore)
+            && !string.IsNullOrWhiteSpace(r.HeadShaAfter));
 
     private static bool HasResultsArtifacts(string jobFolderPath)
     {

@@ -2340,6 +2340,30 @@ public class ProjectRunner
                 }
             }
 
+            // Resolve context before rendering the prompt because Codex resume
+            // viability depends on the effective CODEX_HOME. A clean run gets a
+            // brand-new home with no sessions by contract; a shared run must
+            // have the referenced rollout on disk. Falling back here (rather
+            // than after spawn) lets the recovery template carry prompt.md,
+            // job-folder evidence, and the user follow-up in full.
+            var contextMode = _projectSettings.ResolveContextMode(ProjectName, cli.CliType, info.ContextMode).Mode;
+            if (plan.ResumeFlag
+                && string.Equals(cli.CliType, CliTypes.Codex, StringComparison.OrdinalIgnoreCase)
+                && !CodexRolloutStore.CanResume(plan.SessionToResume, contextMode))
+            {
+                var missingSession = plan.SessionToResume;
+                var reason = CliContextModes.Normalize(contextMode) == CliContextModes.Clean
+                    ? "Codex rollout is absent from the new clean-context CODEX_HOME"
+                    : "Codex rollout is absent from the current CODEX_HOME";
+                _logger.LogInformation(
+                    "codex_resume_precondition_fallback job={JobId} session={SessionId} contextMode={ContextMode} reason=no-rollout; starting full-context fresh run",
+                    jobId, missingSession, contextMode);
+                _chatLog.Append(info, OrchestratorMessageKind.Recovery,
+                    $"[codex-resume-fallback] {reason}; starting fresh with full job context instead of thread/resume.");
+                plan = RunPlanner.FallBackToRecovery(
+                    plan, promptPath, info.FolderPath, followupPrompt, reason);
+            }
+
             var prompt = RenderPrompt(plan, info, runWorkingDir);
 
             if (plan.ClearStaleSessionName)
@@ -2454,7 +2478,6 @@ public class ProjectRunner
             // home only when the run resolves to clean AND the CLI supports it;
             // shared-only CLIs run shared regardless. Resolving live here (like
             // permissionMode) makes a toggle take effect on the next run.
-            var contextMode = _projectSettings.ResolveContextMode(ProjectName, cli.CliType, info.ContextMode).Mode;
             // ASS-1732: the CLI keys `--resume <id>` by working directory - it
             // looks for the session marker under the cwd it is launched in. A
             // session is therefore resumable only when this run's cwd matches the
@@ -4923,6 +4946,28 @@ public class ProjectRunner
                     RunOutcomePolicy.PriorCommitLines(activeInfo))
                 : null;
 
+            // A launch-only follow-up must not erase a prior completed run that
+            // already has a code-review grade. Preserve that successful run as
+            // the review basis and hand the infrastructure failure to a human;
+            // reissuing from the empty failure is the CAR-5 spiral.
+            var preserveSuccessfulRunContext = action?.IssueKind == RunIssueKind.CliLaunchFailed
+                && activeInfo != null
+                && HasSuccessfulGradedRun(activeInfo);
+            if (preserveSuccessfulRunContext)
+            {
+                action = new OutcomeAction(
+                    Kind: OutcomeActionKind.NotifyUserAndStop,
+                    MetaMessage: "The follow-up failed before first agent output. A prior completed run with a code-review grade remains the authoritative review basis; routing to human review without reissue.",
+                    IsHeuristicFallback: false)
+                {
+                    IssueKind = RunIssueKind.CliLaunchFailed,
+                    MessageKind = OrchestratorMessageKind.GiveUp,
+                };
+                _logger.LogWarning(
+                    "review_basis_preserved job={JobId} failedAttempt=cli-launch-failed basis=last-successful-graded-run action=human-review",
+                    jobId);
+            }
+
             // Per-task anti-endless-reissue circuit breaker. A run that did not
             // reach review and produced no commit is a "no-progress failure".
             // Count these per task (across the auto-pickup run AND the
@@ -5093,6 +5138,7 @@ public class ProjectRunner
                 if (action.Kind == OutcomeActionKind.NotifyUserAndStop
                     && activeInfo != null
                     && ShouldRouteIssueToHumanReview(action.IssueKind)
+                    && !preserveSuccessfulRunContext
                     // Non-retryable verdicts skip abort-review entirely: rerunning
                     // a context-overflow walks straight back into the same input
                     // window, a model-invalid into the same 400, and a quota-
@@ -5791,7 +5837,7 @@ public class ProjectRunner
             AbortPhase: phase,
             CliOutputTail: BuildCliOutputTail(liveOutputSnapshot),
             ToolCallsLiveness: BuildToolCallsLiveness(activeInfo.FolderPath),
-            GitState: $"{commitsDuringRun} commit(s) during run; HEAD={headShaAfter ?? "unknown"}",
+            GitState: BuildAuthoritativeAbortGitState(activeInfo, commitsDuringRun, headShaAfter),
             TranscriptUsage: BuildTranscriptUsage(usage),
             CliType: cliType,
             Model: model)
@@ -6214,6 +6260,55 @@ public class ProjectRunner
             CliType = cliType,
             Parallelism = predictedScope == null ? TaskParallelism.Default : new TaskParallelism(false, predictedScope)
         });
+    }
+
+    private bool HasSuccessfulGradedRun(TaskInfo info)
+    {
+        try
+        {
+            var events = _sessions.ReadSessionEvents(info.Id, Entry.Path);
+            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
+            return HasSuccessfulGradedRun(info.Tags,
+                RunTimelineBuilder.Build(events, lines, DateTime.UtcNow).Runs);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not resolve prior successful graded run for {JobId}", info.Id);
+            return false;
+        }
+    }
+
+    internal static bool HasSuccessfulGradedRun(
+        IReadOnlyList<string> tags,
+        IReadOnlyList<RunRecord> runs)
+        => tags.Any(t => t.StartsWith(ConcernTagWriter.CodeReviewGradeTagPrefix, StringComparison.OrdinalIgnoreCase))
+           && runs.Any(r => string.Equals(r.Status, "completed", StringComparison.OrdinalIgnoreCase));
+
+    private string BuildAuthoritativeAbortGitState(TaskInfo info, int currentCommits, string? currentHeadAfter)
+    {
+        var current = $"Failed attempt: {currentCommits} commit(s); HEAD={currentHeadAfter ?? "unknown"}.";
+        try
+        {
+            var events = _sessions.ReadSessionEvents(info.Id, Entry.Path);
+            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
+            var successful = ReviewDecisionOrchestrator.SelectLastSuccessfulReviewRun(
+                RunTimelineBuilder.Build(events, lines, DateTime.UtcNow).Runs);
+            if (successful == null) return current;
+
+            var commits = _git.GetCommitsInShaRange(
+                info.Id, Entry.Path, successful.HeadShaBefore, successful.HeadShaAfter);
+            var subjects = commits.Count == 0
+                ? "no commits resolved"
+                : string.Join("; ", commits.Select(c => $"{c.ShortSha} {c.Subject}"));
+            return current +
+                $" Authoritative last successful run diff: {successful.HeadShaBefore}..{successful.HeadShaAfter}; " +
+                $"{commits.Count} commit(s): {subjects}. Do not judge the task from the failed attempt's empty diff.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not resolve authoritative abort-review git state for {JobId}", info.Id);
+            return current;
+        }
     }
 
     /// <summary>Test seam for one slot completing without a real CLI callback.</summary>

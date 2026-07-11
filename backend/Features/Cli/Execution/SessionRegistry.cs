@@ -504,10 +504,16 @@ public sealed class SessionRegistry
 
     private List<CliUsageProjectGroup> BuildCodexProjects()
     {
-        var home = Environment.GetEnvironmentVariable("CODEX_HOME")
-                   ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex");
+        var home = CodexRolloutStore.ResolveSharedHome();
         var indexPath = Path.Combine(home, "session_index.jsonl");
         if (!File.Exists(indexPath)) return [];
+
+        // The index is not proof of a usable session. Codex may append an index
+        // row before the first agent output and then die, leaving no rollout.
+        // Hide those stillborn rows immediately and compact stale ones so the
+        // operator's session list does not grow forever after launch storms.
+        var rolloutIds = CodexRolloutStore.EnumerateRolloutIds(home);
+        PruneStaleCodexIndexEntries(indexPath, rolloutIds, DateTime.UtcNow);
 
         var entries = new List<CodexIndexEntry>();
         foreach (var raw in File.ReadAllLines(indexPath))
@@ -521,7 +527,7 @@ public sealed class SessionRegistry
                 var name = root.TryGetProperty("thread_name", out var nm) ? nm.GetString() : null;
                 DateTime? updated = root.TryGetProperty("updated_at", out var uEl) && uEl.TryGetDateTime(out var dt) ? dt : null;
                 var cwd = root.TryGetProperty("cwd", out var cEl) ? cEl.GetString() : null;
-                if (!string.IsNullOrWhiteSpace(id))
+                if (!string.IsNullOrWhiteSpace(id) && rolloutIds.Contains(id))
                     entries.Add(new CodexIndexEntry(id, name, updated, cwd));
             }
             catch (Exception __ex) { SilentCatch.Note(__ex, "SessionRegistry: skip malformed line"); /* skip malformed line */ }
@@ -548,5 +554,81 @@ public sealed class SessionRegistry
             .ToList();
 
         return grouped;
+    }
+
+    private static readonly TimeSpan CodexStillbornGrace = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Remove old index-only Codex rows while retaining malformed/unknown rows
+    /// and recent rows that may still be in the index-before-rollout creation
+    /// window. The write is skipped when Codex changed the index during the
+    /// scan, avoiding clobbering a concurrently-starting session.
+    /// </summary>
+    internal void PruneStaleCodexIndexEntries(
+        string indexPath,
+        IReadOnlySet<string> rolloutIds,
+        DateTime nowUtc)
+    {
+        try
+        {
+            var observedWrite = File.GetLastWriteTimeUtc(indexPath);
+            var lines = File.ReadAllLines(indexPath);
+            var kept = new List<string>(lines.Length);
+            var removed = 0;
+
+            foreach (var raw in lines)
+            {
+                if (!TryReadStaleIndexOnlyCodexId(raw, rolloutIds, nowUtc, out _))
+                {
+                    kept.Add(raw);
+                    continue;
+                }
+                removed++;
+            }
+
+            if (removed == 0 || File.GetLastWriteTimeUtc(indexPath) != observedWrite) return;
+            var temp = indexPath + $".prune-{Guid.NewGuid():N}.tmp";
+            try
+            {
+                File.WriteAllLines(temp, kept);
+                File.Move(temp, indexPath, overwrite: true);
+                _logger.LogInformation(
+                    "codex_session_stillborn_cleanup index={IndexPath} removed={Removed} retained={Retained}",
+                    indexPath, removed, kept.Count);
+            }
+            finally
+            {
+                try { if (File.Exists(temp)) File.Delete(temp); }
+                catch (Exception ex) { _logger.LogDebug(ex, "Could not delete Codex session-index cleanup temp {Path}", temp); }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Codex stillborn session cleanup skipped for {IndexPath}", indexPath);
+        }
+    }
+
+    internal static bool TryReadStaleIndexOnlyCodexId(
+        string raw,
+        IReadOnlySet<string> rolloutIds,
+        DateTime nowUtc,
+        out string? id)
+    {
+        id = null;
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(raw);
+            var root = doc.RootElement;
+            id = root.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+            if (string.IsNullOrWhiteSpace(id) || rolloutIds.Contains(id)) return false;
+            if (!root.TryGetProperty("updated_at", out var updatedEl)
+                || !updatedEl.TryGetDateTime(out var updatedAt)) return false;
+            return nowUtc - updatedAt.ToUniversalTime() >= CodexStillbornGrace;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

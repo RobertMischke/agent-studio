@@ -702,6 +702,35 @@ public class TaskRunnerPlanTests
         Assert.Equal("Pick up where you left off please.", Var(p, "user_followup"));
     }
 
+    [Fact]
+    public void MissingCodexRollout_FallsBackBeforeRender_WithFullRecoveryContext()
+    {
+        var resume = Plan(
+            RunIntent.UserContinue,
+            TaskStates.Progress,
+            sessionName: ValidUuid,
+            cliType: CliTypes.Codex,
+            compat: ClaudeCompat,
+            followup: "Inspect the successful run and continue.");
+
+        var fallback = RunPlanner.FallBackToRecovery(
+            resume,
+            promptPath: @"C:\jobs\fix-bug\prompt.md",
+            jobFolder: @"C:\jobs\fix-bug",
+            followupPrompt: "Inspect the successful run and continue.",
+            reason: "Codex rollout is absent from the current CODEX_HOME");
+
+        Assert.False(fallback.ResumeFlag);
+        Assert.Null(fallback.SessionToResume);
+        Assert.Equal("recovery", fallback.EventKind);
+        Assert.Equal(RuntimePromptService.RunnerRecoveryContinuation, fallback.PromptTemplate);
+        Assert.Equal(@"C:\jobs\fix-bug\prompt.md", Var(fallback, "prompt_path"));
+        Assert.Equal(@"C:\jobs\fix-bug", Var(fallback, "job_folder"));
+        Assert.Equal("Inspect the successful run and continue.", Var(fallback, "user_followup"));
+        Assert.True(fallback.MarkSessionChainRecovery);
+        Assert.True(fallback.WriteCutMarker);
+    }
+
     /// <summary>
     /// A permissive-compat session whose persisted slug DOESN'T match the
     /// <c>taskboard-...-NNNNNNNNNNNN</c> placeholder shape (e.g. a slug from

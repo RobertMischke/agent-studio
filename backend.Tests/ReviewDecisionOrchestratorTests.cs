@@ -21,6 +21,45 @@ namespace AgentStudio.Tests;
 /// </summary>
 public class ReviewDecisionOrchestratorTests : IDisposable
 {
+    [Fact]
+    public void ReviewBasis_SelectsLastSuccessfulRun_NotLaterLaunchFailure()
+    {
+        var runs = new[]
+        {
+            new RunRecord
+            {
+                Index = 1, Status = "completed", HeadShaBefore = "base", HeadShaAfter = "success",
+            },
+            new RunRecord
+            {
+                Index = 2, Status = "failed", HeadShaBefore = "success", HeadShaAfter = "success",
+            },
+        };
+
+        var selected = ReviewDecisionOrchestrator.SelectAuthoritativeReviewRuns(runs);
+
+        var run = Assert.Single(selected);
+        Assert.Equal(1, run.Index);
+        Assert.Equal("success", run.HeadShaAfter);
+    }
+
+    [Fact]
+    public void LaunchFailure_AfterGradedSuccess_PreservesHumanReviewBasis()
+    {
+        var runs = new[]
+        {
+            new RunRecord { Index = 1, Status = "completed" },
+            new RunRecord { Index = 2, Status = "failed" },
+        };
+
+        Assert.True(ProjectRunner.HasSuccessfulGradedRun(
+            new[] { "code-review:grade-a" }, runs));
+        Assert.False(ProjectRunner.HasSuccessfulGradedRun(
+            Array.Empty<string>(), runs));
+        Assert.False(ProjectRunner.HasSuccessfulGradedRun(
+            new[] { "code-review:grade-a" }, new[] { new RunRecord { Status = "failed" } }));
+    }
+
     private readonly string _workspace;
     private readonly string _watchPath;
     private readonly TimelineLog _timeline = new(NullLogger<TimelineLog>.Instance);
