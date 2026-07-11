@@ -28,7 +28,7 @@ namespace AgentStudio.Shared;
 ///   <see cref="SteerTimeoutReasons.AutoAnswered"/>.</item>
 ///   <item><b>Ambiguous</b> (no confident answer): route the card to a normal
 ///   <c>blocked</c> escalation with a clear reason, reason
-///   <see cref="SteerTimeoutReasons.BlockedAmbiguous"/> - never an endless
+///   <see cref="SteerTimeoutReasons.SteerUnanswered"/> - never an endless
 ///   wait.</item>
 /// </list>
 /// </para>
@@ -83,7 +83,7 @@ public static class SteerTimeoutPolicy
 
         return new SteerTimeoutDecision(
             SteerTimeoutAction.RouteBlocked,
-            SteerTimeoutReasons.BlockedAmbiguous,
+            SteerTimeoutReasons.SteerUnanswered,
             null,
             string.IsNullOrWhiteSpace(facts.AmbiguityReason)
                 ? $"steer unanswered for {facts.SecondsWaiting:F0}s (> {facts.TimeoutSeconds:F0}s) and the answer is not derivable from the task context; routing to blocked + human escalation rather than waiting indefinitely"
@@ -142,5 +142,5 @@ public static class SteerTimeoutReasons
     /// <summary>Timed out; the answer was unambiguous and auto-fed as a Continue.</summary>
     public const string AutoAnswered = "auto-answered";
     /// <summary>Timed out; no confident answer, routed to blocked + human escalation.</summary>
-    public const string BlockedAmbiguous = "blocked-ambiguous";
+    public const string SteerUnanswered = "steer-unanswered";
 }

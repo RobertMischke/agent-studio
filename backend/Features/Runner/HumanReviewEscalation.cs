@@ -86,7 +86,7 @@ public static class HumanReviewEscalationCategories
     /// Slice B, concept Rule 2) and the answer was not derivable from the task
     /// context. Routed to 5e-escalated with a clear reason instead of waiting
     /// indefinitely (belegt 2062/2067/2068, 2026-07-10).</summary>
-    public const string SteerTimeout = "steer-timeout";
+    public const string SteerUnanswered = "steer-unanswered";
 
     /// <summary>Retroactive category for cards parked in 5-human-review before
     /// the escalation funnel existed (boot-time backfill).</summary>

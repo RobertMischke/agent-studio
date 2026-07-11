@@ -75,6 +75,7 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
         var escalated = Path.Combine(_watchPath, TaskStates.Escalated, "card-2062");
         Assert.True(Directory.Exists(escalated), "2062 must be escalated to 5e-escalated");
         Assert.False(File.Exists(Path.Combine(escalated, "steer-pending.json")), "2062 steer marker must be cleared");
+        Assert.Contains("steer-unanswered", File.ReadAllText(Path.Combine(escalated, "status.md")));
 
         // The fresh card is still waiting - never acted on before its timeout.
         var fresh = Path.Combine(_watchPath, TaskStates.Progress, "card-fresh");

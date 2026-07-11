@@ -482,6 +482,23 @@
         </tr>
         <tr>
           <td>2026-07-11</td>
+          <td><code>AGT-2001</code><br><span class="small">run-liveness B: steer timeout + fallback</span></td>
+          <td>
+            Unattended runs could wait indefinitely after a steer / NeedsInput question. AGT-1936 waited on
+            <em>"provide the task description"</em> with no consumer; later 2062/2067/2068 occupied three slots for about five hours.
+          </td>
+          <td>
+            The intentional steer wait had neither a durable start time nor a bounded wake, so process-liveness recovery correctly
+            left the live-but-waiting run alone and no outcome route ever fired.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> auto-mode steer waits now carry a durable marker and default 120 second timeout.
+            A deterministic branch-state answer resumes the run when available; otherwise the card reaches
+            <span class="lane">5e-escalated</span> with reason <code>steer-unanswered</code>. Both paths emit structured audit and timeline events.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
           <td><code>AGT-2076</code><br><span class="small">worktree-orphan-resilienz</span></td>
           <td>
             Five cards spent a day cycling through worktree preparation while detached <code>ng serve</code> and

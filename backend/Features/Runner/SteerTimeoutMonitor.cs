@@ -287,7 +287,7 @@ public sealed class SteerTimeoutMonitor
         {
             var move = await _escalation.EscalateAsync(
                 jobId, entry.Path, entry.Name,
-                HumanReviewEscalationCategories.SteerTimeout, reason, ct);
+                HumanReviewEscalationCategories.SteerUnanswered, reason, ct);
             if (move.Status != MoveJobStatus.Success)
                 return Outcome(SteerTimeoutOutcomeKinds.BlockFailed, entry, c, decision, jobId,
                     target: TaskStates.Escalated, secondsWaiting, timeoutSeconds,
@@ -297,7 +297,7 @@ public sealed class SteerTimeoutMonitor
                 SteerTimeoutOutcomeKinds.Blocked, decision, secondsWaiting, timeoutSeconds, answerGiven: null);
 
             _logger.LogWarning(
-                "SteerTimeoutMonitor: steer for {JobId} unanswered {Silence:F0}s past timeout; escalated 3-progress -> 5e-escalated (steer-timeout).",
+                "SteerTimeoutMonitor: steer for {JobId} unanswered {Silence:F0}s past timeout; escalated 3-progress -> 5e-escalated (steer-unanswered).",
                 jobId, secondsWaiting);
             return Outcome(SteerTimeoutOutcomeKinds.Blocked, entry, c, decision, jobId,
                 target: TaskStates.Escalated, secondsWaiting, timeoutSeconds, reason: decision.Detail, now);

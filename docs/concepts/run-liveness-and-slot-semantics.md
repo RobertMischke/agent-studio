@@ -140,7 +140,7 @@ event. A short-cadence sweep then enforces a bounded wait over one pure policy
 | Attended (manual mode) | leave it - a human is answering | `attended-wait` |
 | Inside the timeout | keep waiting (card shows the wait pill) | `within-timeout` |
 | Timed out, answer derivable from context | auto-answer + resume the run | `auto-answered` |
-| Timed out, no confident answer | route to a blocked `5e-escalated` escalation | `blocked-ambiguous` |
+| Timed out, no confident answer | route to a blocked `5e-escalated` escalation | `steer-unanswered` |
 
 The **auto-answer** is the named 2067 case: for an "is this already
 implemented?" question, the resolver checks the branch/develop state - if the
@@ -148,7 +148,7 @@ task's `task/<id>` branch is already an ancestor of the integration branch, it
 answers "already integrated, finalize" and hands the answer back as a Continue
 (via a queued pending intent + demote to `2-ready`). Every other question shape,
 and every uncertain/errored resolve, is ambiguous -> a normal blocked
-escalation. "When unsure, escalate; never wait forever."
+escalation with category `steer-unanswered`. "When unsure, escalate; never wait forever."
 
 ### Key code
 

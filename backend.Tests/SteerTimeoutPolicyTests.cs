@@ -67,7 +67,7 @@ public sealed class SteerTimeoutPolicyTests
         var d = SteerTimeoutPolicy.Decide(Facts(hasAnswer: true, answer: "   "));
 
         Assert.Equal(SteerTimeoutAction.RouteBlocked, d.Action);
-        Assert.Equal(SteerTimeoutReasons.BlockedAmbiguous, d.ReasonCode);
+        Assert.Equal(SteerTimeoutReasons.SteerUnanswered, d.ReasonCode);
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public sealed class SteerTimeoutPolicyTests
             hasAnswer: false, ambiguity: "the question is a design choice"));
 
         Assert.Equal(SteerTimeoutAction.RouteBlocked, d.Action);
-        Assert.Equal(SteerTimeoutReasons.BlockedAmbiguous, d.ReasonCode);
+        Assert.Equal(SteerTimeoutReasons.SteerUnanswered, d.ReasonCode);
         Assert.Contains("design choice", d.Detail);
     }
 
