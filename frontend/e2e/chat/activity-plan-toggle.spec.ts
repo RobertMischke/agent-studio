@@ -131,6 +131,12 @@ async function installRoutes(page: Page, planPresent: boolean): Promise<void> {
       contentType: 'application/json',
       body: JSON.stringify([{ name: 'fixture', path: TARGET.watchPath, rootPath: TARGET.watchPath }]),
     }));
+  await page.route('**/api/cli/quota**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ snapshots: [], ttlSeconds: 600 }),
+    }));
   await page.route('**/api/runner/status**', (route) =>
     route.fulfill({
       status: 200,
@@ -143,6 +149,12 @@ async function installRoutes(page: Page, planPresent: boolean): Promise<void> {
     route.fulfill({ status: 200, contentType: 'application/json', body: output }));
   await page.route(`**/api/tasks/${esc}/plan**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: plan }));
+  await page.route(`**/api/tasks/${esc}/pipeline**`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ pipeline: { pre: [], core: [], post: [], allSteps: [] }, execution: null, executions: [], config: {}, cost: null }),
+    }));
   await page.route(`**/api/tasks/${esc}/plan**`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: plan }));
   await page.route(`**/api/tasks/${esc}/runs**`, (route) =>
@@ -172,16 +184,15 @@ async function openActivity(page: Page, job: { id: string; watchPath: string }):
   await activityTab.click();
 }
 
-test.describe('Activity tab Plan / CLI toggle', () => {
-  test('plan present (flag off): Plan tab is default-active, toggle is [Plan] [CLI]', async ({ page }) => {
+test.describe('Activity tab compact view switcher', () => {
+  test('plan present (flag off): Plan is the only first-class tab', async ({ page }) => {
     await setFlag(page, false);
     await installRoutes(page, true);
     await openActivity(page, TARGET);
 
     const planTab = page.getByTestId('activity-view-tab-plan');
-    const cliTab = page.getByTestId('activity-view-tab-cli');
     await expect(planTab).toBeVisible({ timeout: 15_000 });
-    await expect(cliTab).toBeVisible();
+    await expect(page.getByTestId('activity-view-tab-cli')).toHaveCount(0);
     // Trace is no longer a primary tab.
     await expect(page.getByTestId('activity-view-tab-trace')).toHaveCount(0);
     // The old Conversation test id was retired in favour of the user-facing CLI label.
@@ -191,7 +202,7 @@ test.describe('Activity tab Plan / CLI toggle', () => {
     await expect(page.getByTestId('plan-strip')).toBeVisible();
     await expect(page.getByTestId('plan-item').first()).toBeVisible();
 
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'plan-default-flag-off.png'), fullPage: false });
+    await page.screenshot({ path: path.join(SHOTS_DIR, 'plan-default-flag-off--mocked.png'), fullPage: false });
   });
 
   test('Trace overflow action hides the plan; Plan switch brings it back', async ({ page }) => {
@@ -206,15 +217,16 @@ test.describe('Activity tab Plan / CLI toggle', () => {
     const traceItem = page.getByTestId('activity-toolbar-menu-item-trace');
     await expect(traceItem).toBeVisible();
     await expect(page.getByTestId('activity-toolbar-menu-item-debug')).toContainText('Debug');
+    await expect(page.getByTestId('activity-toolbar-menu-item-conversation')).toContainText('Agent events');
     await expect(page.getByTestId('activity-toolbar-menu-item-copy')).toContainText('Copy');
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'toolbar-menu-open.png'), fullPage: false });
+    await page.screenshot({ path: path.join(SHOTS_DIR, 'toolbar-menu-open--mocked.png'), fullPage: false });
     await traceItem.click();
     await expect(page.getByTestId('activity-log-body')).toBeVisible();
     await expect(page.getByTestId('activity-log-trace')).toBeVisible();
     await expect(page.getByTestId('plan-strip')).toHaveCount(0);
-    await expect(page.getByTestId('activity-view-tab-cli')).toBeVisible();
+    await expect(page.getByTestId('activity-view-tab-cli')).toHaveCount(0);
 
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'trace-after-switch.png'), fullPage: false });
+    await page.screenshot({ path: path.join(SHOTS_DIR, 'trace-after-switch--mocked.png'), fullPage: false });
 
     // Back to Plan.
     await page.getByTestId('activity-view-tab-plan').click();
@@ -222,39 +234,41 @@ test.describe('Activity tab Plan / CLI toggle', () => {
     await expect(page.getByTestId('activity-log-body')).toHaveCount(0);
   });
 
-  test('no plan (flag off): no Plan tab, CLI is the body and the toggle stays visible', async ({ page }) => {
+  test('no plan (flag off): event body renders without an empty single-tab toggle', async ({ page }) => {
     await setFlag(page, false);
     await installRoutes(page, false);
     await openActivity(page, TARGET);
 
-    // CLI body renders directly; the single-tab toggle stays visible to anchor the overflow menu row.
-    await expect(page.getByTestId('activity-view-tab-cli')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('activity-view-tab-cli')).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('activity-log-body')).toBeVisible();
+    await expect(page.getByTestId('activity-view-tab-cli')).toHaveCount(0);
+    await expect(page.getByTestId('activity-log-body')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('activity-log-conversation')).toBeVisible();
     await expect(page.getByTestId('activity-view-tab-plan')).toHaveCount(0);
     await expect(page.getByTestId('activity-view-tab-trace')).toHaveCount(0);
     await expect(page.getByTestId('plan-strip')).toHaveCount(0);
 
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'no-plan-trace-only.png'), fullPage: false });
+    await page.screenshot({ path: path.join(SHOTS_DIR, 'no-plan-events--mocked.png'), fullPage: false });
   });
 
-  test('plan present (flag on): toggle is [Plan] [CLI], Plan default-active', async ({ page }) => {
+  test('Agent events live in the context menu and render in both themes', async ({ page }) => {
     await setFlag(page, true);
-    await installRoutes(page, true);
+    await installRoutes(page, false);
     await openActivity(page, TARGET);
 
-    await expect(page.getByTestId('activity-view-tab-plan')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('activity-view-tab-cli')).toBeVisible();
+    await expect(page.getByTestId('activity-view-tab-cli')).toHaveCount(0);
     await expect(page.getByTestId('activity-view-tab-trace')).toHaveCount(0);
-    await expect(page.getByTestId('activity-view-tab-plan')).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('plan-strip')).toBeVisible();
+    await page.getByTestId('activity-toolbar-menu').click();
+    const eventsItem = page.getByTestId('activity-toolbar-menu-item-conversation');
+    await expect(eventsItem).toBeVisible();
+    await expect(eventsItem).toContainText('Agent events');
+    await eventsItem.click();
+    await expect(page.getByTestId('conversation-view')).toBeVisible({ timeout: 15_000 });
 
-    // CLI tab swaps in the next-gen renderer when the feature flag is on.
-    await page.getByTestId('activity-view-tab-cli').click();
-    await expect(page.getByTestId('conversation-view')).toBeVisible();
-    await expect(page.getByTestId('plan-strip')).toHaveCount(0);
-
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'plan-default-flag-on.png'), fullPage: false });
+    for (const theme of ['dark', 'light'] as const) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset['studioTheme'] = value;
+        localStorage.setItem('atp.studio.theme', value);
+      }, theme);
+      await page.screenshot({ path: path.join(SHOTS_DIR, `agent-events-${theme}--mocked.png`), fullPage: false });
+    }
   });
 });

@@ -74,6 +74,7 @@ import {
   rateLimitTooltip,
 } from './protocol-pane-view-model';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
+import { presentActivityEvents } from '../activity-event-presentation';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
@@ -924,17 +925,11 @@ export class ProtocolPaneComponent implements OnDestroy {
     return picked ?? this.defaultActivityView();
   });
 
-  /** Primary segmented [Plan] [CLI] toggle in the Activity toolbar. */
   readonly activityPrimaryTabs = computed<PaneTabDef[]>(() => {
     const tabs: PaneTabDef[] = [];
     if (this.planAvailable()) {
       tabs.push({ id: 'plan', label: 'Plan', testid: 'activity-view-tab-plan' });
     }
-    tabs.push({
-      id: 'conversation',
-      label: 'CLI',
-      testid: 'activity-view-tab-cli',
-    });
     return tabs;
   });
 
@@ -945,6 +940,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   });
 
   readonly activityMenuItems = computed<readonly MenuItem[]>(() => [
+    { kind: 'row', id: 'conversation', label: 'Agent events', active: this.activityView() === 'conversation', disabled: this.filteredCliOutput().length === 0 },
     {
       kind: 'row',
       id: 'trace',
@@ -993,6 +989,9 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   onActivityMenuItemClick(ev: MenuItemClickEvent): void {
     switch (ev.id) {
+      case 'conversation':
+        this.setActivityView('conversation');
+        break;
       case 'trace':
         this.setActivityView('trace');
         break;
@@ -1031,7 +1030,7 @@ export class ProtocolPaneComponent implements OnDestroy {
       sourceTool: 'screenshot',
       timestamp: s.timestampUtc,
     }));
-    return projectConversation({
+    const projected = projectConversation({
       source: info.id,
       // Guard the next-gen projection the same way the legacy path is guarded:
       // strip raw stream-json transport frames before the library classifies
@@ -1047,6 +1046,7 @@ export class ProtocolPaneComponent implements OnDestroy {
       emitTraceLink: false,
       emitDebugAggregate: false,
     });
+    return presentActivityEvents(projected, info.id, info.watchPath);
   });
 
   onConversationOpenTrace(range: RawLineRange | null): void {
