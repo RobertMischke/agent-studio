@@ -224,7 +224,8 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
       const pendingPretty = pendingMode === 'paused' ? 'PAUSED' : pendingMode.toUpperCase();
       modeLabel = `${modeLabel} → ${pendingPretty}`;
       const taskDetail = pendingActiveCount === 1 ? ` (${status?.pendingModeActiveTaskTitle ?? pendingAfter ?? 'active task'})` : '';
-      modeTooltip = `Switches to ${pendingPretty} when ${pendingActiveCount} active task${pendingActiveCount === 1 ? '' : 's'} finish${taskDetail}.`;
+      const finishVerb = pendingActiveCount === 1 ? 'finishes' : 'finish';
+      modeTooltip = `Switches to ${pendingPretty} when ${pendingActiveCount} active task${pendingActiveCount === 1 ? '' : 's'} ${finishVerb}${taskDetail}.`;
     }
     // ADR-0044: test-subject backends never auto-pick. The label still
     // shows the configured mode (operators can leave it on auto for
