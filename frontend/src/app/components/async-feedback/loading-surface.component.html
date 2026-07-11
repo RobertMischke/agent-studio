@@ -1,0 +1,20 @@
+@if (visible()) {
+  <section class="loading-surface"
+           [class]="'loading-surface loading-surface--' + kind()"
+           [attr.data-testid]="'loading-surface-' + kind()"
+           aria-busy="true"
+           aria-live="polite">
+    @if (contextual()) {
+      <p class="loading-surface__context">{{ label() }}</p>
+    }
+    <div class="loading-surface__skeleton" aria-hidden="true">
+      @for (item of [1, 2, 3, 4]; track item) {
+        <div class="loading-surface__group">
+          <span class="loading-surface__line loading-surface__line--heading"></span>
+          <span class="loading-surface__block"></span>
+          <span class="loading-surface__block loading-surface__block--short"></span>
+        </div>
+      }
+    </div>
+  </section>
+}

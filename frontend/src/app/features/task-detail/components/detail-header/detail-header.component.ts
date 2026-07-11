@@ -11,7 +11,6 @@ import { NowTickService } from '../../../../services/now-tick.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { buildRunActivityBadge } from '../../../../services/run-activity.util';
 import { ProjectHygieneBadgeComponent } from '../hygiene-strip/project-hygiene-badge/project-hygiene-badge.component';
-
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../components/menu';
 import { NotificationService } from '../../../../services/notification.service';
@@ -29,8 +28,8 @@ import type { LandedState } from '../../../git';
 import { buildThinkingLevelIndicator } from '../../../../services/thinking-level.util';
 import { shortModelName } from '../../../../services/format.util';
 import { ThinkingLevelIndicatorComponent } from '../../../../components/thinking-level-indicator/thinking-level-indicator.component';
-/**
- * Top header of the job-detail view: back button, editable title,
+import { PendingButtonDirective } from '../../../../components/async-feedback';
+/** Top header of the job-detail view: back button, editable title,
  * state pill, and — top-right — the lane's primary triage action plus
  * an overflow menu of the remaining lane actions. The bottom-of-detail
  * triage bar that used to host these is gone (the operator reported the
@@ -42,7 +41,7 @@ import { ThinkingLevelIndicatorComponent } from '../../../../components/thinking
   selector: 'app-detail-header',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent, ThinkingLevelIndicatorComponent],
+  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent, ThinkingLevelIndicatorComponent, PendingButtonDirective],
   templateUrl: './detail-header.component.html',
   styleUrl: './detail-header.component.scss'
 })
