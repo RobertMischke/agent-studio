@@ -113,6 +113,14 @@
     .option.active { border-color: var(--blue); color: var(--text); background: color-mix(in srgb, var(--blue) 9%, var(--surface)); }
     .option kbd { display: inline-block; margin-right: 4px; color: var(--blue); font: 700 10px var(--mono); }
     .option strong { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 10px; white-space: nowrap; }
+    .decision { max-width: 1360px; margin: 16px auto 0; padding: 14px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 18px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
+    .decision-copy b { display: block; margin-bottom: 3px; font-size: 12px; }
+    .decision-copy span { color: var(--muted); font-size: 11px; }
+    .decision-actions { display: flex; align-items: center; gap: 6px; }
+    .decision-button { min-width: 116px; padding: 8px 11px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--surface); cursor: pointer; }
+    .decision-button:hover { border-color: var(--faint); }
+    .decision-button.selected { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, var(--surface)); }
+    .decision-status { min-width: 154px; margin-left: 4px; color: var(--muted); font: 10px var(--mono); }
 
     /* A: sampled micro dashboard */
     .dots { display: flex; align-items: center; gap: 4px; }
@@ -163,6 +171,10 @@
       </section>
     </section>
     <section class="switcher-wrap"><div class="switcher-head"><b>Indicator alternative</b><span>Keys 1 to 8 switch options</span><button class="motion-toggle" id="motion-toggle">Pause motion</button></div><div class="switcher" id="switcher"></div></section>
+    <section class="decision" aria-labelledby="decision-heading">
+      <div class="decision-copy"><b id="decision-heading">Approval proposal: A by default, E only when row-level liveness is mandatory</b><span>Use these controls for the stakeholder review. The selection stays in this browser and does not change product data.</span></div>
+      <div class="decision-actions" role="group" aria-label="A or E review selection"><button class="decision-button" data-decision="dots">Approve A</button><button class="decision-button" data-decision="pulse">Require E</button><span class="decision-status" id="decision-status" aria-live="polite">No selection recorded</span></div>
+    </section>
   </main>
   <script>
     const projects = [
@@ -211,6 +223,15 @@
     }
     document.querySelectorAll('[data-theme-choice]').forEach(b=>b.onclick=()=>{document.documentElement.dataset.theme=b.dataset.themeChoice; document.querySelectorAll('[data-theme-choice]').forEach(x=>x.classList.toggle('active',x===b));});
     document.getElementById('motion-toggle').onclick=e=>{document.body.classList.toggle('motion-off'); e.currentTarget.textContent=document.body.classList.contains('motion-off')?'Resume motion':'Pause motion';};
+    function readDecision() { try { return localStorage.getItem('agt-2083-indicator-decision'); } catch { return null; } }
+    function saveDecision(value) { try { localStorage.setItem('agt-2083-indicator-decision',value); } catch {} }
+    const savedDecision=readDecision();
+    function showDecision(value) {
+      document.querySelectorAll('[data-decision]').forEach(button=>button.classList.toggle('selected',button.dataset.decision===value));
+      document.getElementById('decision-status').textContent=value==='dots'?'Selected: A (proposed)':value==='pulse'?'Selected: E (liveness required)':'No selection recorded';
+    }
+    document.querySelectorAll('[data-decision]').forEach(button=>button.onclick=()=>{const value=button.dataset.decision; saveDecision(value); current=value; history.replaceState(null,'',`?option=${current}`); render(); showDecision(value);});
+    showDecision(savedDecision);
     document.getElementById('tree').onclick=event=>{const target=event.target.closest('.project-row'); if(!target)return; const project=target.closest('.project'); project.classList.toggle('collapsed'); target.setAttribute('aria-expanded',!project.classList.contains('collapsed'));};
     addEventListener('keydown',e=>{const n=Number(e.key); if(n>=1&&n<=8){current=options[n-1].id; history.replaceState(null,'',`?option=${current}`); render();}});
     render();

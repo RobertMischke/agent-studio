@@ -117,17 +117,65 @@ while auto-pickup is actually active, and render escalation as a static alert
 ring. Option H is a useful fallback if "shelf pressure" proves more important
 than work composition in operator testing.
 
-## Decision questions for review
+## Approval proposal: A or E
 
-1. Is the first glance primarily about composition (A/E) or capacity (H)?
-2. Does live auto-pickup need to remain visible at project level (E), or can it
-   stay in a tooltip/details surface (A)?
-3. Can operators correctly distinguish active from escalated in light theme at
+**Status: ready for stakeholder approval. Proposed decision: approve Option A
+for implementation.** Option A is the default because the stated first-glance
+need is project composition, the operator already favors the AGT-2048 dot
+language, and A adds no motion or second signal to a dense Explorer row.
+
+Choose Option E instead only if the stakeholder confirms this requirement:
+**live auto-pickup must remain visible on every project row without hover or
+expansion.** E has the same sampled-dot foundation as A, but spends one reserved
+slot and additional visual attention on liveness. There is no hybrid decision
+left for implementation: E replaces A when that requirement is mandatory.
+
+| Approval choice | What is approved | Acceptance boundary |
+| --- | --- | --- |
+| **Approve A (proposed)** | Six fixed sampled situation dots | Composition at a glance; liveness remains in details or a tooltip |
+| **Approve E** | One reserved live-pickup signal plus four sampled situation dots | Motion only during active pickup; static alert ring for escalation; no motion under reduced-motion preference |
+
+Record one of these statements in the implementation follow-up:
+
+- `Approved: A - Micro dashboard dots`
+- `Approved: E - Pulse plus micro dashboard; project-row liveness is mandatory`
+
+The [interactive mockup, opened on A](../../design/tree-indicator-exploration-2026-07.html?option=dots)
+and [the same mockup opened on E](../../design/tree-indicator-exploration-2026-07.html?option=pulse)
+provide a like-for-like review in both themes. The decision panel inside the
+mockup records a local A/E review selection without sending or changing product
+data.
+
+## Stakeholder review package
+
+The HTML mockup is self-contained and can be opened directly from the repository
+without a build or backend. It supports the on-page switcher, keyboard keys 1
+through 8, dark/light theme controls, project collapse, and motion pause. The
+task `results/` folder contains one review capture per alternative:
+
+| Option | Screenshot in task results |
+| --- | --- |
+| A | `tree-indicator-a-micro-dashboard-dots--mocked.png` |
+| B | `tree-indicator-b-segmented-horizon--mocked.png` |
+| C | `tree-indicator-c-seven-step-sparkline--mocked.png` |
+| D | `tree-indicator-d-glyph-focus-number--mocked.png` |
+| E | `tree-indicator-e-pulse-dashboard--mocked.png` |
+| F | `tree-indicator-f-heat-orb--mocked.png` |
+| G | `tree-indicator-g-compact-state-stack--mocked.png` |
+| H | `tree-indicator-h-capacity-pips--mocked.png` |
+
+## Validation questions after approval
+
+1. Can operators correctly distinguish active from escalated in light theme at
    normal sidebar width?
-4. Does the indicator remain useful when a project has hundreds of tasks?
+2. Does the indicator remain useful when a project has hundreds of tasks?
 
 ## Living knowledge log
 
 - **2026-07-11:** Eight project-level alternatives explored against calm,
   active, escalated, and full-shelf states. A and E recommended for the next
   decision round; no production implementation was made.
+- **2026-07-11 approval handoff:** Option A is the implementation proposal.
+  Option E is the bounded alternative only when always-visible project-row
+  liveness is confirmed as mandatory. The mockup includes a local A/E review
+  selector and direct links to both candidates.
