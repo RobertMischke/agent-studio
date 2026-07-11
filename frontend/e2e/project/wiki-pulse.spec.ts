@@ -129,22 +129,44 @@ async function mockGradingContext(page: import('@playwright/test').Page): Promis
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GRADING_STATUS_DONE) }));
 }
 
+/**
+ * A route callback that rejects fails the test it belongs to. The app keeps
+ * polling in the background (e.g. `GET /api/cli/claude/models`), so a proxied
+ * request can still be mid-flight when a short test's assertions finish and
+ * Playwright tears the browser context down underneath it. `route.fetch` then
+ * rejects with "Target page, context or browser has been closed" — which is the
+ * sporadic failure that only bit the *fast* combined-run scenarios (empty-state,
+ * grading) while the slower landing test outlived its own poll. Treat these
+ * teardown-race errors as benign; they are not a product defect.
+ */
+function isTeardownRace(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  return message.includes('has been closed') || message.includes('target closed') || message.includes('disposed');
+}
+
 async function proxyBackend(page: import('@playwright/test').Page): Promise<void> {
   await page.route('**/api/**', async route => {
-    const url = new URL(route.request().url());
+    const request = route.request();
+    const url = new URL(request.url());
     const target = `${BACKEND}${url.pathname}${url.search}`;
-    let lastError: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const response = await route.fetch({ url: target });
         await route.fulfill({ response });
         return;
       } catch (error) {
-        lastError = error;
+        // Never throw out of a route handler. A closing context is expected at
+        // teardown; a genuinely failing hop is aborted so the *assertion* (not
+        // this callback) surfaces the cause with a readable message.
+        if (isTeardownRace(error)) return;
+        if (attempt === 2) {
+          console.warn(`proxyBackend ${request.method()} ${url.pathname} failed: ${error instanceof Error ? error.message : error}`);
+          await route.abort('failed').catch(() => { /* context already gone */ });
+          return;
+        }
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
-    throw lastError;
   });
 }
 
