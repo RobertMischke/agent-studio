@@ -31,7 +31,16 @@ internal sealed class ActiveRun
     /// registry during finalisation so run-scoped data stays addressable, but
     /// loop waits and post-processing do not consume an execution slot.
     /// </summary>
-    public bool HoldsExecutionSlot { get; set; } = true;
+    private int _holdsExecutionSlot = 1;
+
+    public bool HoldsExecutionSlot => Volatile.Read(ref _holdsExecutionSlot) == 1;
+
+    /// <summary>
+    /// Atomically releases this run's execution seat. Multiple finish signals
+    /// can race, but exactly one caller observes a successful release.
+    /// </summary>
+    public bool TryReleaseExecutionSlot()
+        => Interlocked.Exchange(ref _holdsExecutionSlot, 0) == 1;
 
     /// <summary>Job folder whose process lease belongs to this run.</summary>
     public string? PickupLockFolder { get; set; }
@@ -138,9 +147,7 @@ internal sealed class ActiveRuns
     /// </summary>
     public bool ReleaseExecutionSlot(string jobId)
     {
-        if (!_runs.TryGetValue(jobId, out var run) || !run.HoldsExecutionSlot) return false;
-        run.HoldsExecutionSlot = false;
-        return true;
+        return _runs.TryGetValue(jobId, out var run) && run.TryReleaseExecutionSlot();
     }
 
     /// <summary>Find the active run whose job key matches, or null.</summary>

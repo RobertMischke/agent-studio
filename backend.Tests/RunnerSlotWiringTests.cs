@@ -152,6 +152,21 @@ public sealed class RunnerSlotWiringTests : IDisposable
     }
 
     [Fact]
+    public async Task ExecutionSlotRelease_IsObservedExactlyOnce_WhenFinishSignalsRace()
+    {
+        var runs = new ActiveRuns();
+        Assert.True(runs.TryClaim(new ActiveRun { JobId = "live", Intent = RunIntent.AutoPickup }));
+
+        var releases = await Task.WhenAll(
+            Enumerable.Range(0, 16)
+                .Select(_ => Task.Run(() => runs.ReleaseExecutionSlot("live"))));
+
+        Assert.Single(releases, released => released);
+        Assert.Equal(0, runs.Count);
+        Assert.True(runs.Contains("live"));
+    }
+
+    [Fact]
     public void RenderPrompt_ForWorktreeRun_RewritesMainCheckoutPathsAndAddsContainmentNotice()
     {
         var (runner, _) = BuildRunner();
