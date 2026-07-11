@@ -46,6 +46,7 @@ Use this page as the first stop when you need the right document quickly.
 | Agent message bus | [architecture/bus/agent-message-bus.md](architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](design/style-guide-hard-rules.md) |
 | Application visual survey (2026-07-11) | [design/app-survey-2026-07-11.html](design/app-survey-2026-07-11.html) |
+| Angular performance review (2026-07) | [design/angular-performance-report-2026-07.html](design/angular-performance-report-2026-07.html) |
 | Explorer project state indicator exploration (2026-07) | [design/tree-indicator-exploration-2026-07.html](design/tree-indicator-exploration-2026-07.html) and [alternatives catalog](wiki/concepts/tree-project-indicator-alternatives.md) |
 | UX doctrine | [product/design-principles.md](product/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](product/orchestrator-chat.md) |
