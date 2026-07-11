@@ -17,7 +17,7 @@ import type { TaskScreenshot } from '../../../../features/screenshots';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 import { TaskService } from '../../../../services/task.service';
-import type { ProjectSourceDescriptor } from '../../../../models/task.model';
+import type { ProjectSourceDescriptor, WatchPathEntry } from '../../../../models/task.model';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 
@@ -79,6 +79,7 @@ export class WorkspaceOverlaysComponent {
   readonly overlays = inject(WorkspaceOverlaysService);
   /** Render inside the Studio editor tab instead of as a modal dialog. */
   readonly inline = input(false);
+  readonly watchPaths = input<readonly WatchPathEntry[]>([]);
   readonly openTask = output<TaskScreenshot>();
   /** Project name whose Settings rail the shell should open (bubbled up from
    *  the Token-usage section's per-project usage rows). */

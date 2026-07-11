@@ -35,7 +35,7 @@ async function stubBackgroundApis(page: Page) {
 
   await page.route('**/api/tasks', json([]));
   await page.route('**/api/tasks/grouped', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
-  await page.route('**/api/watch-paths', json([]));
+  await page.route('**/api/watch-paths', json([{ name: 'agent-taskboard', path: 'C:/projects/agent-taskboard', rootPath: 'C:/projects' }]));
   await page.route('**/api/runner/status', json({ projects: {} }));
   await page.route('**/api/cli/quota', json({ ttlMs: 600_000, snapshots: [] }));
   await page.route('**/api/clients', json([]));
@@ -100,6 +100,39 @@ test.describe('Remote Hosts settings section', () => {
     await firstCard.getByTestId('remote-host-action-retire').click();
     await expect(firstCard.getByTestId('remote-host-status')).toContainText('Retired', { timeout: 3_000 });
     await expect(firstCard.getByTestId('remote-host-no-stats')).toBeVisible();
+  });
+
+  test('starts onboarding on the durable CLI task substrate', async ({ page }) => {
+    let createBody: Record<string, unknown> | null = null;
+    await page.route('**/api/tasks', async route => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      createBody = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'onboard-runner-02' }) });
+    });
+    await page.route('**/api/tasks/onboard-runner-02**', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        info: { id: 'onboard-runner-02', title: 'Onboard remote runner host', state: '2-ready', watchPath: 'C:/projects/agent-taskboard', projectName: 'agent-taskboard' },
+        prompt: '', activity: '', result: '',
+      }),
+    }));
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    await expect(page.getByTestId('visible-cli-task-card')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('visible-cli-task-prompt')).toContainText('Guide the operator through connecting the host');
+    await expect(page.getByTestId('visible-cli-task-duration')).toContainText('10 to 20 minutes');
+    await page.getByTestId('visible-cli-task-start').click();
+
+    await expect.poll(() => createBody).not.toBeNull();
+    expect(createBody).toMatchObject({
+      title: 'Onboard remote runner host',
+      agent: 'codex',
+      targetState: '2-ready',
+      watchPath: 'C:/projects/agent-taskboard',
+    });
+    expect(String(createBody?.['promptMarkdown'])).toContain('## CLI input');
+    expect(String(createBody?.['promptMarkdown'])).toContain('agent-runner onboard --interactive');
   });
 
   test('adds a host through the guided four-step setup', async ({ page }) => {

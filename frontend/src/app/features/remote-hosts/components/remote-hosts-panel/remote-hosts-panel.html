@@ -35,6 +35,12 @@
     <span class="rh__count"><strong>{{ remoteCount() }}</strong> remote</span>
   </div>
 
+  <app-visible-cli-task-card
+    class="rh__onboarding"
+    [request]="onboardingTask"
+    [workspaces]="workspaces()"
+    (taskCreated)="openTask.emit($event)" />
+
   @if (error(); as err) {
     <div class="rh__error" data-testid="remote-hosts-error">{{ err }}</div>
   }

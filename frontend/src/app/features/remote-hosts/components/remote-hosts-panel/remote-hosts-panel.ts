@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { RemoteHostsService } from '../../services/remote-hosts.service';
 import { RemoteHostCardComponent } from '../remote-host-card/remote-host-card';
 import type { HostActionKind } from '../../models/remote-host.model';
 import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-wizard/add-host-wizard';
+import { VisibleCliTaskCardComponent, type VisibleCliTaskCreated, type VisibleCliTaskRequest, type VisibleCliTaskWorkspace } from '../../../visible-cli-task';
 
 /**
  * Remote Hosts settings page (AGT-1921).
@@ -20,7 +21,7 @@ import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-w
 @Component({
   selector: 'app-remote-hosts-panel',
   standalone: true,
-  imports: [RemoteHostCardComponent, AddHostWizardComponent],
+  imports: [RemoteHostCardComponent, AddHostWizardComponent, VisibleCliTaskCardComponent],
   templateUrl: './remote-hosts-panel.html',
   styleUrl: './remote-hosts-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -32,6 +33,17 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   readonly loading = this.service.loading;
   readonly error = this.service.error;
   readonly wizardOpen = signal(false);
+  readonly workspaces = input<readonly VisibleCliTaskWorkspace[]>([]);
+  readonly openTask = output<VisibleCliTaskCreated>();
+  readonly onboardingTask: VisibleCliTaskRequest = {
+    title: 'Onboard remote runner host',
+    scope: 'Onboard a remote runner host',
+    reason: 'Provision, authenticate, register, and smoke-test one execution host with a durable task history.',
+    command: 'agent-runner onboard --interactive',
+    expectedDuration: '10 to 20 minutes',
+    prompt: 'Guide the operator through connecting the host, provisioning the runner, authenticating each agent CLI, registering the daemon, and completing one end-to-end smoke handoff. Report live progress and stop for operator input when credentials or host access are required.',
+    context: { surface: 'Workspace Settings / Remote hosts', outcome: 'Healthy registered runner with a successful task handoff' },
+  };
 
   /** Ticking clock so relative heartbeat labels stay fresh without per-card timers. */
   readonly now = signal<number>(Date.now());

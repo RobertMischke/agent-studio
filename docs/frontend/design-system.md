@@ -410,6 +410,17 @@ action ("Run drift scan" / "Generate baseline" / "Capture evidence")
 and the user explicitly triggers work. This rule is what makes the
 shell cheap to navigate.
 
+### Pattern: visible CLI task
+
+Product actions that drive an agent CLI use the existing task chat as their
+execution substrate. The shared `VisibleCliTaskRequest` contract supplies a
+scope title and reason, the exact CLI input, command, expected duration, and
+context. Its standard card creates a lightweight Ready task and then opens the
+normal task detail. Live output, progress, operator input, completion, and
+history therefore come from the canonical task chat and activity rendering.
+Do not build a second console or process-specific streaming view. The Remote
+Hosts onboarding card is the reference consumer.
+
 ### Pattern: monochrome rail with one accent
 
 Vertical lists of navigation items (the activity bar, the Project Hub

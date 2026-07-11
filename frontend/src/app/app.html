@@ -457,6 +457,7 @@
             }
             @case ('workspace-settings') {
               <app-workspace-overlays [inline]="true"
+                                      [watchPaths]="watchPaths()"
                                       (openTask)="onOpenTaskFromReel($event)"
                                       (openProjectSettings)="onOpenProjectSettingsFromUsage($event)"
                                       (openJobDetail)="onOpenTaskFromSession($event)" />
@@ -817,7 +818,8 @@
         (openTask)="onOpenTaskFromReel($event)" />
 
 
-      <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)"
+      <app-workspace-overlays [watchPaths]="watchPaths()"
+                              (openTask)="onOpenTaskFromReel($event)"
                               (openProjectSettings)="onOpenProjectSettingsFromUsage($event)"
                               (openJobDetail)="onOpenTaskFromSession($event)" />
 

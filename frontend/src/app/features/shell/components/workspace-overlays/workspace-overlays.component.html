@@ -104,7 +104,7 @@
           <app-task-server-panel />
         }
         @case ('remote-hosts') {
-          <app-remote-hosts-panel />
+          <app-remote-hosts-panel [workspaces]="watchPaths()" (openTask)="openJobDetail.emit($event)" />
         }
         @case ('project-sources') {
           <section class="ws-settings__section" data-testid="workspace-project-sources">
