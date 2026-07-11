@@ -67,6 +67,41 @@ public static class ClientEndpoints
                 : Results.NotFound(new { error = "client-not-found" });
         });
 
+        clients.MapPost("/{id}/drain", (string id, ClientIdentityStore store) =>
+        {
+            var updated = store.RequestDrain(id, retireAfterDrain: false);
+            return updated is null
+                ? Results.NotFound(new { error = "client-not-found-or-retired" })
+                : Results.Ok(ClientSummary.From(updated));
+        });
+
+        clients.MapPost("/{id}/retire", (string id, ClientIdentityStore store) =>
+        {
+            if (string.Equals(id, DefaultClientIdentity.Id, StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = "default-identity-cannot-be-retired" });
+            var updated = store.RequestDrain(id, retireAfterDrain: true);
+            return updated is null
+                ? Results.NotFound(new { error = "client-not-found-or-retired" })
+                : Results.Ok(ClientSummary.From(updated));
+        });
+
+        clients.MapPost("/{id}/revive", (string id, ClientIdentityStore store) =>
+        {
+            var updated = store.Revive(id);
+            return updated is null
+                ? Results.NotFound(new { error = "client-not-found-or-not-retired" })
+                : Results.Ok(ClientSummary.From(updated));
+        });
+
+        clients.MapDelete("/{id}/permanent", (string id, ClientIdentityStore store) =>
+        {
+            if (string.Equals(id, DefaultClientIdentity.Id, StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = "default-identity-cannot-be-deleted" });
+            return store.PermanentlyDelete(id)
+                ? Results.NoContent()
+                : Results.BadRequest(new { error = "client-must-be-retired-before-delete" });
+        });
+
         clients.MapGet("/{id}/telemetry", (string id, string? window, ClientIdentityStore identities, HostTelemetryStore telemetry) =>
         {
             if (identities.Find(id) is null) return Results.NotFound(new { error = "client-not-found" });

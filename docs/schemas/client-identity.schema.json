@@ -67,6 +67,12 @@
       "type": ["string", "null"],
       "format": "date-time",
       "description": "UTC time of the latest remote-daemon Git push capability probe."
-    }
+    },
+    "drainRequestedAt": { "type": ["string", "null"], "format": "date-time" },
+    "retireRequestedAt": { "type": ["string", "null"], "format": "date-time" },
+    "runnerDaemonState": { "type": ["string", "null"], "enum": ["running", "read-only", "stopped", null] },
+    "runnerLastClaimAt": { "type": ["string", "null"], "format": "date-time" },
+    "runnerActiveSlots": { "type": ["integer", "null"], "minimum": 0 },
+    "runnerAvailableSlots": { "type": ["integer", "null"], "minimum": 0 }
   }
 }

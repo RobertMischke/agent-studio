@@ -144,6 +144,42 @@ public class ClientIdentityTests : IDisposable
     }
 
     [Fact]
+    public void Retire_PersistsAcrossRestart_AndCompletesOnlyAfterActiveWorkEnds()
+    {
+        var config = BuildConfig();
+        var store = BuildStore(config);
+        var runner = store.Register(new RegisterClientRequest { DisplayName = "agent-runner-01", Kind = ClientIdentityKinds.Service });
+
+        store.RecordRunnerActivity(runner.Id, activeSlots: 1, availableSlots: 1, claimed: true);
+        var draining = store.RequestDrain(runner.Id, retireAfterDrain: true);
+        Assert.NotNull(draining?.RetireRequestedAt);
+        Assert.Equal(ClientIdentityKind.Service, draining!.Kind);
+
+        store.RecordRunnerActivity(runner.Id, activeSlots: 0, availableSlots: 2, claimed: false);
+        var afterRestart = BuildStore(config).Find(runner.Id);
+        Assert.Equal(ClientIdentityKind.Retired, afterRestart?.Kind);
+        Assert.False(BuildStore(config).IsRegistered(runner.Id));
+    }
+
+    [Fact]
+    public void RetiredHost_CanBeRevived_ThenPermanentlyDeleted()
+    {
+        var config = BuildConfig();
+        var store = BuildStore(config);
+        var runner = store.Register(new RegisterClientRequest { DisplayName = "revivable-runner", Kind = ClientIdentityKinds.Service });
+        var retired = store.RequestDrain(runner.Id, retireAfterDrain: true);
+        Assert.Equal(ClientIdentityKind.Retired, retired?.Kind);
+
+        var revived = store.Revive(runner.Id);
+        Assert.Equal(ClientIdentityKind.Service, revived?.Kind);
+        Assert.True(store.IsRegistered(runner.Id));
+
+        Assert.True(store.SoftDelete(runner.Id));
+        Assert.True(store.PermanentlyDelete(runner.Id));
+        Assert.Null(BuildStore(config).Find(runner.Id));
+    }
+
+    [Fact]
     public void Scanner_MigratesLegacyJobToLocalDefault()
     {
         var config = BuildConfig();

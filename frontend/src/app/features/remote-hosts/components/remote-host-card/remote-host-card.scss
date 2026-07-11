@@ -101,6 +101,33 @@
 }
 .host__meta-sep { color: var(--studio-fg-muted); }
 
+.activity {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--studio-spacing-2);
+  margin-top: var(--studio-spacing-3);
+}
+.activity > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg);
+}
+.activity span { color: var(--studio-fg-muted); font-size: 11px; }
+.activity strong { color: var(--studio-fg-strong); font-size: 12px; }
+.activity--stale { opacity: 0.62; }
+.host__stale {
+  margin: var(--studio-spacing-3) 0 0;
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border-radius: 8px;
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-muted);
+  font-size: 12px;
+}
+
 // --- chips (capabilities + quota) --------------------------------------------
 .chips {
   list-style: none;

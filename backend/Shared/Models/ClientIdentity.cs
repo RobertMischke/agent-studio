@@ -67,9 +67,18 @@ public record ClientIdentity
     public string? RunnerGitStatus { get; init; }
     public string? RunnerGitDetail { get; init; }
     public DateTime? RunnerGitCheckedAt { get; init; }
+
+    /// <summary>Persisted operator lifecycle. A drain blocks claims; retire completes after active slots reach zero.</summary>
+    public DateTime? DrainRequestedAt { get; init; }
+    public DateTime? RetireRequestedAt { get; init; }
+
+    /// <summary>Latest daemon activity projection, reported on every claim poll.</summary>
+    public string? RunnerDaemonState { get; init; }
+    public DateTime? RunnerLastClaimAt { get; init; }
+    public int? RunnerActiveSlots { get; init; }
+    public int? RunnerAvailableSlots { get; init; }
 }
 
-public enum ClientIdentityKind
 {
     Human,
     AgentInstance,
@@ -135,6 +144,12 @@ public record ClientSummary
     public string? RunnerGitStatus { get; init; }
     public string? RunnerGitDetail { get; init; }
     public DateTime? RunnerGitCheckedAt { get; init; }
+    public DateTime? DrainRequestedAt { get; init; }
+    public DateTime? RetireRequestedAt { get; init; }
+    public string? RunnerDaemonState { get; init; }
+    public DateTime? RunnerLastClaimAt { get; init; }
+    public int? RunnerActiveSlots { get; init; }
+    public int? RunnerAvailableSlots { get; init; }
 
     public static ClientSummary From(ClientIdentity i) => new()
     {
@@ -159,7 +174,13 @@ public record ClientSummary
         DefaultThinkingLevel = i.DefaultThinkingLevel,
         RunnerGitStatus = i.RunnerGitStatus,
         RunnerGitDetail = i.RunnerGitDetail,
-        RunnerGitCheckedAt = i.RunnerGitCheckedAt
+        RunnerGitCheckedAt = i.RunnerGitCheckedAt,
+        DrainRequestedAt = i.DrainRequestedAt,
+        RetireRequestedAt = i.RetireRequestedAt,
+        RunnerDaemonState = i.RunnerDaemonState,
+        RunnerLastClaimAt = i.RunnerLastClaimAt,
+        RunnerActiveSlots = i.RunnerActiveSlots,
+        RunnerAvailableSlots = i.RunnerAvailableSlots
     };
 }
 
@@ -169,8 +190,6 @@ public record RunnerGitCapabilityRequest
     public string? Detail { get; init; }
     public DateTime CheckedAt { get; init; }
 }
-
-/// <summary>
 /// Body for <c>PUT /api/clients/{id}/defaults</c>. Each field is independent;
 /// omit a field to leave it untouched. Set a field to an empty string to
 /// clear that side.

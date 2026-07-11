@@ -71,6 +71,7 @@ Use this page as the first stop when you need the right document quickly.
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](operations/setup/getting-started.md) |
 | Setup | [operations/setup/README.md](operations/setup/README.md) |
 | Standalone remote runner (Linux host) | [operations/setup/linux-runner-host.md](operations/setup/linux-runner-host.md) |
+| Remote hosts operator lifecycle | [operations/remote-hosts.md](operations/remote-hosts.md) |
 | Remote runner persistent connection (tunnel-as-a-service + health-check) | [operations/setup/remote-runner-persistent-connection.md](operations/setup/remote-runner-persistent-connection.md) |
 | Common problems | [wiki/common-problems/README.md](wiki/common-problems/README.md) |
 | Designated topics (AGENTS/wiki-sync current-state index; post-agents-wiki-sync) | [wiki/concepts/designated-topics/README.md](wiki/concepts/designated-topics/README.md) |

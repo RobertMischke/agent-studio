@@ -8,6 +8,7 @@ import {
   formatDisk,
   formatMemory,
   hostRoleLabel,
+  hostIsStale,
   hostStatusLabel,
   hostStatusTone,
   meterTone,
@@ -58,6 +59,7 @@ export class RemoteHostCardComponent {
   readonly roleLabel = computed(() => hostRoleLabel(this.host().role));
   readonly heartbeatLabel = computed(() => relativeHeartbeat(this.host().lastHeartbeatAt, this.now()));
   readonly retired = computed(() => this.host().status === 'retired');
+  readonly stale = computed(() => hostIsStale(this.host().lastHeartbeatAt, this.now()));
   readonly telemetryWindow = signal<'1h' | '6h' | '48h' | '14d'>('6h');
   readonly telemetryPoints = computed(() => {
     const hours = { '1h': 1, '6h': 6, '48h': 48, '14d': 336 }[this.telemetryWindow()];
@@ -81,7 +83,7 @@ export class RemoteHostCardComponent {
   readonly meters = computed<Meter[]>(() => {
     const h = this.host();
     const s = h.stats;
-    if (!s) return [];
+    if (!s || this.stale()) return [];
     const ram = ramUsedPct(s) ?? 0;
     const disk = diskUsedPct(s) ?? 0;
     const load = Math.round(clampPct(s.cpuLoadPct));
@@ -100,15 +102,27 @@ export class RemoteHostCardComponent {
         pct: load,
         tone: meterTone(load),
       },
-      {
+      ...(s.diskTotalGb > 0 ? [{
         key: 'disk',
         label: 'Disk',
         detail: `${formatDisk(s.diskTotalGb - s.diskFreeGb)} / ${formatDisk(s.diskTotalGb)}`,
         pct: disk,
         tone: meterTone(disk),
-      },
+      } as Meter] : []),
     ];
   });
+
+  readonly sessionCount = computed(() => this.stale() || this.retired() ? 0 : 1);
+  readonly taskInflowLabel = computed(() => {
+    const host = this.host();
+    if (this.retired()) return 'retired';
+    if (host.status === 'draining' || host.gitPushStatus === 'read-only') return 'blocked';
+    return this.stale() ? 'unknown' : 'open';
+  });
+  readonly daemonLabel = computed(() => this.stale() ? 'stopped' : (this.host().daemonState ?? 'running'));
+  readonly slotsLabel = computed(() => this.stale()
+    ? '-'
+    : `${this.host().activeTaskCount ?? 0} active / ${this.host().availableSlots ?? 0} free`);
 
   cliIcon(t: CliType): string { return cliTypeIcon(t); }
   cliLabel(t: CliType): string { return cliTypeLabel(t); }

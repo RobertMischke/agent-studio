@@ -55,58 +55,10 @@ describe('RemoteHostsService', () => {
     });
   });
 
-  it('drain flags the row busy, then settles it to draining', () => {
-    svc.ensureLoaded();
-    const id = svc.hosts()[0].id;
-
-    svc.drain(id);
-    expect(svc.hosts().find((h) => h.id === id)?.busyAction).toBe('drain');
-
-    vi.runAllTimers();
-    const host = svc.hosts().find((h) => h.id === id);
-    expect(host?.busyAction).toBeNull();
-    expect(host?.status).toBe('draining');
-  });
-
-  it('retire removes stats and marks the host retired', () => {
-    svc.ensureLoaded();
-    const id = svc.hosts()[0].id;
-
-    svc.retire(id);
-    vi.runAllTimers();
-
-    const host = svc.hosts().find((h) => h.id === id);
-    expect(host?.status).toBe('retired');
-    expect(host?.stats).toBeNull();
-  });
-
-  it('reprobe refreshes the heartbeat timestamp', () => {
-    svc.ensureLoaded();
-    const id = svc.hosts()[0].id;
-    const before = svc.hosts().find((h) => h.id === id)?.lastHeartbeatAt;
-
-    vi.advanceTimersByTime(5_000);
-    svc.reprobe(id);
-    vi.runAllTimers();
-
-    const after = svc.hosts().find((h) => h.id === id)?.lastHeartbeatAt;
-    expect(after).not.toBe(before);
-  });
-
-  it('ignores a second action while one is already in flight for the host', () => {
-    svc.ensureLoaded();
-    const id = svc.hosts()[0].id;
-
-    svc.drain(id);
-    svc.retire(id); // must be ignored: drain is still busy
-    vi.runAllTimers();
-
-    expect(svc.hosts().find((h) => h.id === id)?.status).toBe('draining');
-  });
 });
 
 describe('RemoteHostsService client registry hydration', () => {
-  it('projects fresh and stale LastSeen while preserving retired hosts', () => {
+  it('projects fresh and stale LastSeen and takes retirement only from the server', () => {
     TestBed.configureTestingModule({
       providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
     });
@@ -166,15 +118,29 @@ describe('RemoteHostsService client registry hydration', () => {
     });
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('offline');
 
-    svc.hosts.update(hosts => hosts.map(host =>
-      host.id === 'agent-runner-01' ? { ...host, status: 'retired' } : host));
     svc.reload();
     http.expectOne('/api/clients').flush([{
       id: 'agent-runner-01', displayName: 'agent-runner-01', emoji: null, colour: null,
-      kind: 'agent-instance', registeredAt: new Date(now).toISOString(),
+      kind: 'retired', registeredAt: new Date(now).toISOString(),
       lastSeenAt: new Date(now).toISOString(), tokenBudgetMonthly: null, notes: null,
     }]);
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('retired');
+    http.verify();
+  });
+
+  it('persists drain through the lifecycle API before reloading', () => {
+    TestBed.configureTestingModule({ providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()] });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    svc.reload();
+    http.expectOne('/api/clients').flush([]);
+
+    svc.drain('agent-runner-01');
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.busyAction).toBe('drain');
+    http.expectOne('/api/clients/agent-runner-01/drain').flush({ id: 'agent-runner-01' });
+    http.expectOne('/api/clients').flush([{ id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service', registeredAt: new Date().toISOString(), lastSeenAt: null, drainRequestedAt: new Date().toISOString() }]);
+    http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({ clientId: 'agent-runner-01', window: '14d', points: [], findings: [] });
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')?.status).toBe('draining');
     http.verify();
   });
 });
