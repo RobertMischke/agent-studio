@@ -347,11 +347,14 @@ Weekly: 1%`. `ParseStatusWindows_SparkOnlyWithBumpedHeader_DoesNotMasqueradeAsMa
 locks this.
 
 **Snapshots are guarded before they reach admission (AGT-2064).**
-`QuotaService` runs every probe through `QuotaPlausibilityGate`: a window that
-drops > 50 points with no reset to explain it is re-probed immediately and only
-replaces the old value when a second probe agrees. An unconfirmed drop keeps the
-prior (blocking) value flagged `Suspicious`, and `CliQuotaCapsService.Evaluate`
-blocks any `Suspicious` snapshot regardless of how green it reads. A launch that
+`QuotaService` runs every probe through `QuotaPlausibilityGate`: any Weekly
+decrease before the previously announced reset, or another window that drops
+more than 50 points with no reset to explain it, is re-probed immediately and
+only replaces the old value when a second probe agrees. A candidate cannot
+justify its own Weekly decrease merely by advertising a later reset boundary.
+An unconfirmed drop keeps the prior (blocking) value flagged `Suspicious`, and
+`CliQuotaCapsService.Evaluate` blocks any `Suspicious` snapshot regardless of
+how green it reads. A launch that
 dies with a usage-limit error invalidates the cached snapshot immediately
 (`QuotaService.InvalidateForGroundTruthLimit`, wired from
 `ProjectRunner.OnCliFinishedAsync` on `RunIssueKind.QuotaExhausted`) and
