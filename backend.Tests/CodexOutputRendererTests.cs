@@ -243,6 +243,24 @@ public class CodexOutputRendererTests
         var command = Assert.Single(rendered);
         Assert.Equal("\u25cf Run Get-Process dotnet,vstest.console,testhost -ErrorAction SilentlyContinue", command.Text);
         Assert.Equal("stderr", command.Stream);
+
+        // Drive the same raw stdout frame through the typed parser too. This
+        // proves that the router diagnostic was the orphan: the authoritative
+        // frame is a valid failed tool completion, not a missing tool-result.
+        var completedFrame = Assert.Single(transcript, line =>
+            line.Stream == "stdout" && line.Text.Contains("\"item.completed\"", StringComparison.Ordinal));
+        var toolResult = Assert.IsType<CliRunEvent.ToolCompleted>(
+            Assert.Single(BuiltInCliBehaviors.MapCodexFrame(completedFrame.Text, "AGT-2081").ToList()));
+        Assert.Equal("command_execution", toolResult.ToolName);
+        Assert.True(toolResult.IsError);
+        var captured = BuiltInCliBehaviors.TryExtractCommandExecution(completedFrame.Text);
+        Assert.Equal(1, captured?.ExitCode);
+        Assert.Contains("ProcessName : dotnet", captured?.OutputTail);
+        Assert.Contains("ProcessName : testhost", captured?.OutputTail);
+        Assert.DoesNotContain("ProcessName : vstest.console", captured?.OutputTail);
+        Assert.DoesNotContain(rendered, line =>
+            line.Text.Contains("codex_core::tools::router", StringComparison.Ordinal)
+            || line.Text.Contains("expected: tool-result", StringComparison.Ordinal));
     }
 
     [Fact]
