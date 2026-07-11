@@ -11,6 +11,12 @@
       "title": "Planning-Tasks: krass sichtbar \u002B Spawn-Kontrakt (geplant -\u003E neue Karte, dokumentiert)",
       "linkedAt": "2026-07-10T18:50:11.8427964Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2047",
+      "title": "ORCH-1: Orchestrator-Sicht - vollstaendiger Lese-Kontext (Lanes, Runs, Quota, Health, Journal)",
+      "linkedAt": "2026-07-11T01:47:00.0244281Z",
+      "source": "auto"
     }
   ]
 }
