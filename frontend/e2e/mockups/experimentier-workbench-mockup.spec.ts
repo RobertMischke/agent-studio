@@ -67,6 +67,8 @@ test.describe('@mockup experimentier-workbench', () => {
 
     await page.getByTestId('build-feature').click();
     await expect(page.getByTestId('spawn-preview')).toBeVisible();
+    await expect(page.getByText(/WB-4.*Task draft editor/)).toBeVisible();
+    await expect(page.locator('#taskTitle')).toBeEditable();
     await expect(page.locator('#previewOption')).toHaveText('B · Focus chip');
     await expect(page.locator('#taskPrompt')).toHaveValue(/selected Focus chip signal/);
     await expect(page.locator('#taskPrompt')).toHaveValue(/Source: docs\/workbenches/);

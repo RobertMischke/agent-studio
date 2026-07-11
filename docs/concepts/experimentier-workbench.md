@@ -1,7 +1,8 @@
 # Experiment workbenches
 
-Status: concept v1, 2026-07-11. No product code is defined as implemented by
-this document.
+Status: concept and mockup complete, 2026-07-11. Production implementation is
+intentionally deferred. WB-1 through WB-5 are proposed follow-up feature cards,
+ready for Epic handoff, and are not unfinished scope in this concept card.
 
 Mockup:
 [mockups/experimentier-workbench.html](mockups/experimentier-workbench.html).
@@ -260,6 +261,14 @@ preview, but it never bypasses confirmation.
 - Workbench path, exact source revision, chosen option, and related task keys;
 - the resulting relationship to a source planning task when one exists.
 
+The preview is a user-driven task draft editor in trusted Workbench host chrome.
+The operator can revise generated or chat-prepared defaults before submission,
+including the title, goal, acceptance criteria, evidence, target project, and
+lane. Chat may prepare values and request that the editor open, but it cannot
+persist, confirm, or submit the draft. The sandboxed Workbench HTML cannot read
+or write the editor fields. This keeps the final task authoring decision with
+the operator even though the editor is visually inside the Workbench view.
+
 Confirmation creates the card through `TaskMutationService.CreateJob`, the same
 bounded entry point used by the Project Hub proposal flow and the AGT-2028 task
 spawner. It does not invoke the post-task-spawner pipeline step, because this is
@@ -339,7 +348,7 @@ The first useful read-only cut is medium.
 | **WB-1: Folder contract and current Explorer list** | M | Validate `docs/workbenches/<id>/index.html + workbench.json`, expose a bounded lazy list, and add the collapsible project row. | Current count reconciles to visible children; invalid entries are explicit; decided/archive history is reachable; no viewer or mutation. |
 | **WB-2: Workbench viewer and isolation** | L | Open a tab with branch/revision provenance, a script-capable opaque-origin sandbox, strict CSP, static Wiki fallback, and the tiny presentation event bridge. | Static and interactive fixtures work in both themes and at narrow width; malicious bridge/network/navigation fixtures fail; no chat or task creation. |
 | **WB-3: Canonical orchestrator attachment** | M/L | Reuse the project chat side sheet and attach the bounded Workbench digest plus current selection. Add compact open/close anchors. | The context inspector shows path and revision; no cross-project leakage; no new canonical session key; source editing remains out of scope. |
-| **WB-4: Decision preview, spawn, and receipt** | L | Add Build/Archive previews, shared validated task creation, idempotent operation handling, manifest transition, planning-ledger recording, and AGT-2050 receipts. | Retry cannot duplicate a card; failed partial completion is visible and repairable; a source planning task receives both `relatedTo` and a `SpawnedTaskLedger` record; chat can prepare but not confirm. |
+| **WB-4: Host-owned task editor, decision spawn, and receipt** | L | Add the user-driven task draft editor and Build/Archive previews in trusted host chrome, including field validation, explicit confirmation, shared validated task creation, idempotent operation handling, manifest transition, planning-ledger recording, and AGT-2050 receipts. | Generated and chat-prepared values remain editable; neither chat nor iframe can confirm; retry cannot duplicate a card; failed partial completion is visible and repairable; a source planning task receives both `relatedTo` and a `SpawnedTaskLedger` record. |
 | **WB-5: Curated migration pilot** | M | Promote a small named set such as pipeline workbench, project-state exploration, and app survey; document provenance and leave other mockups untouched. | Each promoted item has one live source, valid metadata, and an explicit owner; incompatible storage/network assumptions are reported; no bulk heuristic migration. |
 
 WB-2, WB-3, and WB-4 are the risk-bearing slices. If the team requires strictly
@@ -349,7 +358,25 @@ dependency order: WB-1 -> WB-2 -> WB-3, with WB-4 after WB-1 and WB-5 last.
 Chat-driven source changes are a separate future ORCH-Hands slice and are not
 hidden inside WB-3.
 
-## 11. Validation plan for implementation
+WB-4 remains a distinct large risk slice even though its editor shares the
+Workbench composition with WB-2 and WB-3. It crosses operator-controlled form
+state, validation, task mutation, Git-aware decision state, idempotent recovery,
+and planning-ledger evidence. It must not be absorbed into the viewer or chat
+cards.
+
+## 11. Feature handoff status
+
+This concept card is complete with the concept, self-contained interactive
+mockup, implementation slice proposal, and second-opinion pass. The original
+scope explicitly excludes production code. Consequently, no WB slice is
+claimed as implemented here and none is an open item on this concept card.
+
+Feature delivery should start by creating an Epic or coordinated card family
+from WB-1 through WB-5. Each card must be accepted against the boundary in the
+slice table. WB-4 is handed off as its own large card, not as residual work in
+WB-3.
+
+## 12. Validation plan for implementation
 
 - Contract tests for path containment, descriptor validation, ordering, visible
   counts, branch provenance, and invalid entries.
@@ -363,7 +390,7 @@ hidden inside WB-3.
   reconciliation, source-task relationship plus planning-ledger recording, and
   host-owned microcard hydration.
 
-## 12. Second-opinion pass
+## 13. Second-opinion pass
 
 An independent product and architecture review was applied on 2026-07-11. It
 challenged the first draft on trust, recoverability, chat ownership, and size.
