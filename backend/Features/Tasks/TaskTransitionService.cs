@@ -101,6 +101,7 @@ public sealed class TaskTransitionService
         var shouldAutoCommit =
             !isReadOnly &&
             info.State == TaskStates.Progress &&
+            targetState == TaskStates.AutoReview &&
             settings.AutoCommit;
 
         TaskCommitInfo? commitToStamp = null;
@@ -144,7 +145,8 @@ public sealed class TaskTransitionService
         // review lane renders it. No LLM, no tokens; same git + windows in,
         // same result out, so re-running is a no-op.
         if (outcome.Status == MoveJobStatus.Success
-            && info.State == TaskStates.Progress)
+            && info.State == TaskStates.Progress
+            && targetState == TaskStates.AutoReview)
         {
             var attributed = _scanner.FindJob(jobId, watchPath);
             if (attributed != null) EnterPostProcessingPhase(attributed);
@@ -158,12 +160,12 @@ public sealed class TaskTransitionService
             // forget and fully guarded - a drift failure (or the absence of any
             // enabled dimension; the runner self-gates default-OFF) must never
             // affect the lane transition that already completed above.
-            if (attributed != null && _driftRunner != null && targetState == TaskStates.AutoReview)
+            if (attributed != null && _driftRunner != null)
             {
                 TriggerDriftPostSteps(attributed, settings);
             }
 
-            if (attributed != null && targetState == TaskStates.AutoReview)
+            if (attributed != null)
             {
                 EnqueueAutoReviewPostProcessing(attributed);
             }

@@ -37,6 +37,17 @@ public static class SteerQuestionClassifier
         @"\b(is|are|was|were|has|have|does|do)\b[\w\s,'""./()-]{0,60}?\b(already\s+)?(merged|integrat\w*|landed|shipped|in)\b[\w\s,'""./()-]{0,20}?\b(develop|main|dev|the\s+integration\s+branch|the\s+work\s+branch)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    // The named 2067 evidence is German ("ist iframe schon implementiert?").
+    // Keep the German surface as narrow as the English one: an explicit
+    // already-word (schon/bereits) plus a completed-state verb.
+    private static readonly Regex GermanAlreadyDone = new(
+        @"\b(schon|bereits)\b[\w\s,'""./()-]{0,60}?\b(implementiert|umgesetzt|erledigt|gebaut|gemergt|integriert|vorhanden|abgeschlossen|ausgeliefert|gelandet|fertig)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex GermanDoneAlready = new(
+        @"\b(implementiert|umgesetzt|erledigt|gebaut|gemergt|integriert|vorhanden|abgeschlossen|ausgeliefert|gelandet|fertig)\b[\w\s,'""./()-]{0,40}?\b(schon|bereits)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     /// <summary>
     /// True when <paramref name="question"/> asks whether some work is already
     /// implemented / done / merged - the class the branch-state check can
@@ -47,6 +58,10 @@ public static class SteerQuestionClassifier
     {
         if (string.IsNullOrWhiteSpace(question)) return false;
         var q = question.Trim();
-        return AlreadyDone.IsMatch(q) || DoneAlready.IsMatch(q) || InIntegration.IsMatch(q);
+        return AlreadyDone.IsMatch(q)
+            || DoneAlready.IsMatch(q)
+            || InIntegration.IsMatch(q)
+            || GermanAlreadyDone.IsMatch(q)
+            || GermanDoneAlready.IsMatch(q);
     }
 }

@@ -142,6 +142,11 @@ public sealed class CrashRecoveryService
         foreach (var jobFolder in Directory.EnumerateDirectories(progressDir))
         {
             ct.ThrowIfCancellationRequested();
+            // A valid Slice B marker owns this no-process wait. Do not let boot
+            // recovery complete a different transition before its configured
+            // steer timeout chooses auto-answer or blocked. Malformed markers
+            // deliberately fall through to the ordinary recovery net.
+            if (SteerPendingMarker.TryRead(jobFolder, _logger) != null) continue;
             var marker = CompletionMarker.TryRead(jobFolder, _logger);
             if (marker == null) continue;
 
@@ -607,6 +612,11 @@ public sealed class CrashRecoveryService
         {
             ct.ThrowIfCancellationRequested();
 
+            // The active run already ended intentionally in a bounded steer
+            // wait. A stale pickup lock from the completion race is not proof
+            // that the task should be requeued; SteerTimeoutMonitor owns it.
+            if (SteerPendingMarker.TryRead(jobFolder, _logger) != null) continue;
+
             // No task.json means this is a folder-shaped orphan, not a real
             // interrupted run; leave it for the runner's own orphan sweep.
             if (!File.Exists(Path.Combine(jobFolder, "task.json"))) continue;
@@ -761,6 +771,7 @@ public sealed class CrashRecoveryService
         {
             var jobJsonPath = Path.Combine(jobFolder, "task.json");
             if (!File.Exists(jobJsonPath)) continue;
+            if (SteerPendingMarker.TryRead(jobFolder) != null) continue;
 
             var slug = Path.GetFileName(jobFolder);
             // Mid-move casualty: same slug already lives in a later lane, so

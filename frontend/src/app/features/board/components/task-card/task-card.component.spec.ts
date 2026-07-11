@@ -1587,7 +1587,7 @@ describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
     const now = Date.parse(since) + 135_000; // 2m 15s later
     const pill = buildPhaseBadge('steer-pending', since, now);
     expect(pill?.tone).toBe('steer-pending');
-    expect(pill?.label).toBe('Waiting for answer 2:15');
+    expect(pill?.label).toBe('Waiting for answer · 2:15');
     expect(pill?.tooltip).toContain('will not hang');
   });
 
@@ -1610,8 +1610,8 @@ describe('formatSteerWait', () => {
     expect(formatSteerWait(75_000)).toBe('1:15');
     expect(formatSteerWait(9_000)).toBe('0:09');
   });
-  it('formats hour-plus waits as h:mm - the 5-hour hang shape', () => {
-    expect(formatSteerWait(5 * 3600_000 + 7 * 60_000)).toBe('5:07h');
+  it('keeps hour-plus waits in total-minutes mm:ss form - the 5-hour hang shape', () => {
+    expect(formatSteerWait(5 * 3600_000 + 7 * 60_000 + 9_000)).toBe('307:09');
   });
   it('never goes negative on clock skew', () => {
     expect(formatSteerWait(-5000)).toBe('0:00');

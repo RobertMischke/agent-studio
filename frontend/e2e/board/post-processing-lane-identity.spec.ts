@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
+import { setTheme } from '../helpers/theme';
 
 const PROJECT = 'post-processing-identity';
 const WATCH_PATH = 'C:/fixtures/post-processing-identity';
@@ -49,6 +50,7 @@ interface JobInfoStub {
   } | null;
   phase: string | null;
   phaseEnteredAt?: string | null;
+  steerPendingSince?: string | null;
   tags: string[];
   taskType: string;
 }
@@ -79,6 +81,7 @@ function jobInfo(over: Partial<JobInfoStub> = {}): JobInfoStub {
     ownerClientId: 'local-default',
     phase: over.phase ?? 'post-processing-running',
     phaseEnteredAt: over.phaseEnteredAt ?? null,
+    steerPendingSince: over.steerPendingSince ?? null,
     tags: [],
     taskType: 'feature',
     tokenSummary: over.tokenSummary ?? {
@@ -141,6 +144,16 @@ async function installRoutes(page: Page, jobs: JobInfoStub[]): Promise<void> {
     const p = url.pathname;
     if (p === '/api/tasks/grouped' || p === '/api/tasks/grouped') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(groupedBody) });
+    }
+    if (p === '/api/tasks/archive') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [], total: 0, offset: 0, limit: 50 }),
+      });
+    }
+    if (p === '/api/crash-recovery/pending') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ pending: [] }) });
     }
     if (p === '/api/tasks' || p === '/api/tasks/' || p === '/api/tasks' || p === '/api/tasks/') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobs) });
@@ -338,5 +351,38 @@ test.describe('Post Processing lane identity', () => {
       path: `${SHOTS}/loop-waiting-phase--mocked.png`,
       fullPage: false,
     });
+  });
+
+  test('shows how long a progress card has been waiting for a steer answer', async ({ page }) => {
+    const fiveHourWait = 5 * 3_600_000 + 7 * 60_000 + 9_000;
+    const waitStarted = new Date(Date.now() - fiveHourWait).toISOString();
+    const job = jobInfo({
+      id: 'steer-pending-card',
+      title: 'Run waiting on an unanswered question',
+      state: '3-progress',
+      phase: 'steer-pending',
+      steerPendingSince: waitStarted,
+      tokenSummary: null,
+    });
+    await seedBoardTab(page);
+    await installRoutes(page, [job]);
+
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const lane = page.getByTestId('lane-3-progress');
+    await expect(lane).toBeVisible({ timeout: 10_000 });
+    const card = lane.locator('[data-testid="task-card"]', { hasText: job.title });
+    await expect(card).toBeVisible({ timeout: 10_000 });
+
+    const phase = card.getByTestId('task-card-phase');
+    await expect(phase).toContainText(/Waiting for answer · 307:\d{2}/);
+
+    mkdirSync(SHOTS, { recursive: true });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await expect(phase).toBeVisible();
+      await page.screenshot({ path: `${SHOTS}/steer-pending-${theme}--mocked.png`, fullPage: false });
+    }
   });
 });

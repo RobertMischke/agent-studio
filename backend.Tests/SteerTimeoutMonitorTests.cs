@@ -41,7 +41,7 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
     public async Task ThreeCardEvidence_ResolvesEveryTimedOutWait_NoneKeepsWaiting()
     {
         // 2067: answerable ("already implemented?") -> auto-answered + resumed.
-        WriteSteerPending("card-2067", question: "Is the iframe embed already implemented in develop?", waitedHours: 5);
+        WriteSteerPending("card-2067", question: "ist iframe schon implementiert?", waitedHours: 5);
         // 2068: answerable ("already there?") -> auto-answered + resumed.
         WriteSteerPending("card-2068", question: "Is the dark-mode toggle already there?", waitedHours: 5);
         // 2062: a design choice, not answerable from context -> blocked escalation.
@@ -89,10 +89,16 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
 
         var timeline2067 = File.ReadAllText(Path.Combine(_watchPath, TaskStates.Ready, "card-2067", "logs", "timeline.jsonl"));
         Assert.Contains("steer_timeout_resolved", timeline2067);
+        Assert.Contains("ist iframe schon implementiert?", timeline2067);
+        Assert.Contains("already integrated", timeline2067);
+
+        var timeline2062 = File.ReadAllText(Path.Combine(escalated, "logs", "timeline.jsonl"));
+        Assert.Contains("Should I also refactor the shared helper?", timeline2062);
+        Assert.Contains("not derivable", timeline2062);
     }
 
     [Fact]
-    public async Task ManualMode_AttendedWait_IsNeverAutoResolved()
+    public async Task PersistedMarker_RemainsBoundedAfterModeChangesToManual()
     {
         WriteSteerPending("attended", question: "Is this already implemented?", waitedHours: 5);
 
@@ -107,9 +113,67 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
         scanner.InvalidateCache();
         var outcomes = await monitor.SweepAsync();
 
-        Assert.Empty(outcomes);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "attended")),
-            "a manual-mode (attended) steer wait must not be auto-resolved");
+        var outcome = Assert.Single(outcomes);
+        Assert.Equal(SteerTimeoutOutcomeKinds.AutoAnswered, outcome.Kind);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "attended")),
+            "project mode is not proof that a human is answering; a persisted marker must remain bounded");
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "attended")));
+    }
+
+    [Fact]
+    public async Task StaleActiveJobId_DoesNotSuppressPersistedTimeout()
+    {
+        WriteSteerPending("stale-active", question: "ist iframe schon implementiert?", waitedHours: 5);
+
+        var (monitor, scanner) = Build();
+        monitor.StatusProviderOverride = () => new RunnerStatus
+        {
+            Projects = new Dictionary<string, ProjectRunnerStatus>
+            {
+                [ProjectName] = new ProjectRunnerStatus
+                {
+                    ProjectName = ProjectName,
+                    Mode = "auto-continuous",
+                    ActiveJobId = "stale-active",
+                    ActiveExecution = null,
+                }
+            }
+        };
+        scanner.InvalidateCache();
+
+        var outcome = Assert.Single(await monitor.SweepAsync());
+        Assert.Equal(SteerTimeoutOutcomeKinds.AutoAnswered, outcome.Kind);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "stale-active")));
+    }
+
+    [Fact]
+    public async Task GenuinelyLiveExecution_IsNotRacedByTimeoutSweep()
+    {
+        WriteSteerPending("live-active", question: "ist iframe schon implementiert?", waitedHours: 5);
+
+        var (monitor, scanner) = Build();
+        monitor.StatusProviderOverride = () => new RunnerStatus
+        {
+            Projects = new Dictionary<string, ProjectRunnerStatus>
+            {
+                [ProjectName] = new ProjectRunnerStatus
+                {
+                    ProjectName = ProjectName,
+                    Mode = "auto-continuous",
+                    ActiveJobId = "live-active",
+                    ActiveExecution = new CliExecution
+                    {
+                        JobId = "live-active",
+                        Status = "running",
+                        ProcessId = Environment.ProcessId,
+                    }
+                }
+            }
+        };
+        scanner.InvalidateCache();
+
+        Assert.Empty(await monitor.SweepAsync());
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "live-active")));
     }
 
     [Fact]
@@ -123,6 +187,76 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
 
         Assert.Empty(outcomes);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "card")));
+    }
+
+    [Fact]
+    public async Task ConcreteSteerAsk_IsPreferredOverGenericAgentSummary()
+    {
+        WriteSteerPending(
+            "ask-first",
+            question: "Agent emitted TASK_NEEDS_INPUT after the follow-up.",
+            waitedHours: 5,
+            ask: "ist iframe schon implementiert?");
+
+        var (monitor, scanner) = Build();
+        scanner.InvalidateCache();
+        var outcome = Assert.Single(await monitor.SweepAsync());
+
+        Assert.Equal(SteerTimeoutOutcomeKinds.AutoAnswered, outcome.Kind);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "ask-first")));
+    }
+
+    [Fact]
+    public async Task AutoAnswerMoveFailure_RetainsMarkerAndRetriesNextSweep()
+    {
+        const string slug = "auto-answer-collision";
+        WriteSteerPending(slug, question: "ist iframe schon implementiert?", waitedHours: 5);
+        var target = Path.Combine(_watchPath, TaskStates.Ready, slug);
+        File.WriteAllText(target, "collision"); // deterministic TargetFolderExists
+
+        var (monitor, scanner) = Build();
+        scanner.InvalidateCache();
+        var failed = Assert.Single(await monitor.SweepAsync());
+
+        Assert.Equal(SteerTimeoutOutcomeKinds.AutoAnswerFailed, failed.Kind);
+        var source = Path.Combine(_watchPath, TaskStates.Progress, slug);
+        Assert.True(Directory.Exists(source));
+        Assert.True(SteerPendingMarker.Exists(source),
+            "a refused move must remain tracked for the next timeout sweep");
+        Assert.Contains(LifecyclePhases.SteerPending, File.ReadAllText(Path.Combine(source, "task.json")));
+
+        File.Delete(target);
+        scanner.InvalidateCache();
+        var retried = Assert.Single(await monitor.SweepAsync());
+        Assert.Equal(SteerTimeoutOutcomeKinds.AutoAnswered, retried.Kind);
+        Assert.True(Directory.Exists(target));
+        Assert.False(SteerPendingMarker.Exists(target));
+    }
+
+    [Fact]
+    public async Task BlockedMoveFailure_RetainsMarkerAndRetriesNextSweep()
+    {
+        const string slug = "blocked-collision";
+        WriteSteerPending(slug, question: "Should I use Postgres or SQLite?", waitedHours: 5);
+        var target = Path.Combine(_watchPath, TaskStates.Escalated, slug);
+        File.WriteAllText(target, "collision"); // deterministic TargetFolderExists
+
+        var (monitor, scanner) = Build();
+        scanner.InvalidateCache();
+        var failed = Assert.Single(await monitor.SweepAsync());
+
+        Assert.Equal(SteerTimeoutOutcomeKinds.BlockFailed, failed.Kind);
+        var source = Path.Combine(_watchPath, TaskStates.Progress, slug);
+        Assert.True(Directory.Exists(source));
+        Assert.True(SteerPendingMarker.Exists(source),
+            "a refused escalation must remain tracked for the next timeout sweep");
+
+        File.Delete(target);
+        scanner.InvalidateCache();
+        var retried = Assert.Single(await monitor.SweepAsync());
+        Assert.Equal(SteerTimeoutOutcomeKinds.Blocked, retried.Kind);
+        Assert.True(Directory.Exists(target));
+        Assert.False(SteerPendingMarker.Exists(target));
     }
 
     // --- harness ---------------------------------------------------------
@@ -176,7 +310,7 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
             scanner, transitions, mutations, escalation, settings, chatLog,
             new FakeResolver(), sp, config, taskAccess,
             NullLogger<SteerTimeoutMonitor>.Instance, timeline);
-        // Default: treat the project as unattended (auto) so the timeout applies.
+        // Default runner status for the ordinary auto-mode path.
         monitor.StatusProviderOverride = () => new RunnerStatus
         {
             Projects = new Dictionary<string, ProjectRunnerStatus>
@@ -189,7 +323,12 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
 
     // (auto-mode status is forced in Build via StatusProviderOverride)
 
-    private void WriteSteerPending(string slug, string question, int? waitedHours = null, int? waitedSeconds = null)
+    private void WriteSteerPending(
+        string slug,
+        string question,
+        int? waitedHours = null,
+        int? waitedSeconds = null,
+        string? ask = null)
     {
         var dir = Path.Combine(_watchPath, TaskStates.Progress, slug);
         Directory.CreateDirectory(dir);
@@ -201,7 +340,10 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
             : DateTime.UtcNow - TimeSpan.FromSeconds(waitedSeconds ?? 0);
         var stamp = wait.ToString("o", System.Globalization.CultureInfo.InvariantCulture);
         var escaped = question.Replace("\"", "\\\"");
+        var askJson = string.IsNullOrWhiteSpace(ask)
+            ? string.Empty
+            : $",\"ask\":\"{ask.Replace("\"", "\\\"")}\"";
         File.WriteAllText(Path.Combine(dir, SteerPendingMarker.FileName),
-            $"{{\"waitStartedAt\":\"{stamp}\",\"kind\":\"steer\",\"question\":\"{escaped}\",\"timeoutSeconds\":0}}");
+            $"{{\"waitStartedAt\":\"{stamp}\",\"kind\":\"steer\",\"question\":\"{escaped}\"{askJson},\"timeoutSeconds\":0}}");
     }
 }

@@ -44,7 +44,7 @@ public sealed class SteerTimeoutMonitorHostedService : BackgroundService
             return;
         }
 
-        var interval = ResolveInterval();
+        var interval = ResolveInterval(_config);
         using var timer = new PeriodicTimer(interval);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -73,9 +73,9 @@ public sealed class SteerTimeoutMonitorHostedService : BackgroundService
         }
     }
 
-    private TimeSpan ResolveInterval()
+    internal static TimeSpan ResolveInterval(IConfiguration config)
     {
-        var seconds = _config.GetValue<int?>("Runner:SteerTimeout:IntervalSeconds") ?? DefaultIntervalSeconds;
+        var seconds = config.GetValue<int?>("Runner:SteerTimeout:IntervalSeconds") ?? DefaultIntervalSeconds;
         return TimeSpan.FromSeconds(Math.Clamp(seconds, 5, 55));
     }
 }

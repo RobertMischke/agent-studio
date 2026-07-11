@@ -111,6 +111,31 @@ describe('TaskTimelinePaneComponent', () => {
     expect(c.kindLabel(TIMELINE_KIND.readOnlyContainmentViolation)).toBe('Containment violation');
     expect(c.kindLabel(TIMELINE_KIND.externalCompletion)).toBe('Completed externally');
     expect(c.rowTone(TIMELINE_KIND.externalCompletion)).toBe('ok');
+    expect(c.kindLabel(TIMELINE_KIND.steerTimeoutResolved)).toBe('Steer timeout resolved');
+    expect(c.rowTone(TIMELINE_KIND.steerTimeoutResolved)).toBe('neutral');
+  });
+
+  it('renders a resolved steer timeout with its answer as a settled event', async () => {
+    const fixture = await build([
+      {
+        ts: '2026-07-11T10:02:00Z',
+        kind: TIMELINE_KIND.steerTimeoutResolved,
+        actor: 'system',
+        summary: 'Steer timeout auto-answered: iframe support is already implemented.',
+        details: {
+          outcome: 'auto-answered',
+          answer: 'Yes. The iframe implementation is present on the task branch.',
+          secondsWaiting: '120',
+          timeoutSeconds: '120',
+        },
+      },
+    ]);
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="timeline-event"]');
+    expect(row?.getAttribute('data-kind')).toBe(TIMELINE_KIND.steerTimeoutResolved);
+    expect(row?.classList.contains('tl-item--neutral')).toBe(true);
+    expect(row?.querySelector('[data-testid="timeline-event-kind"]')?.textContent).toContain('Steer timeout resolved');
+    expect(row?.textContent).toContain('Yes. The iframe implementation is present on the task branch.');
   });
 
   it('renders an external-completion entry in the story', async () => {

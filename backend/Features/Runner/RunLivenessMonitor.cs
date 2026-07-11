@@ -149,6 +149,14 @@ public sealed class RunLivenessMonitor
             {
                 ct.ThrowIfCancellationRequested();
                 var folder = laneFolder.FolderPath;
+                // Slice B owns a valid steer-pending wait: it intentionally has
+                // no live CLI heartbeat and must receive its configured T-second
+                // auto-answer / blocked decision, not Slice A's 30s process-lost
+                // recovery. Only exclude a successfully parsed marker. A torn or
+                // unreadable marker falls through to the ordinary liveness net
+                // instead of creating a new indefinite wait.
+                if (SteerPendingMarker.TryRead(folder, _logger) != null)
+                    continue;
                 var isActiveHere = !string.IsNullOrEmpty(activeJobId)
                     && string.Equals(laneFolder.Slug, activeJobId, StringComparison.OrdinalIgnoreCase);
                 // A folder-shaped orphan (no task.json) is not a runnable run;

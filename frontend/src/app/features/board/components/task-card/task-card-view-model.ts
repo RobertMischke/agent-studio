@@ -1014,16 +1014,14 @@ export type PhaseBadgeTone =
 export interface PhaseBadge { label: string; tone: PhaseBadgeTone; tooltip: string; }
 
 /**
- * Format a steer wait as a compact "m:ss" / "h:mm" elapsed label. Refreshes on
+ * Format a steer wait as a compact total-minutes `mm:ss` elapsed label. Refreshes on
  * the shared 30s card tick, so it reads as a live "waiting for answer since …"
  * without a dedicated per-second timer.
  */
 export function formatSteerWait(elapsedMs: number): string {
   const total = Math.max(0, Math.floor(elapsedMs / 1000));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
+  const m = Math.floor(total / 60);
   const s = total % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}h`;
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
@@ -1031,7 +1029,7 @@ export function formatSteerWait(elapsedMs: number): string {
  * Lifecycle-phase chip. Surfaces the `phase` substate on cards that carry one.
  * Returns null when the job has no explicit phase, so cards that predate the
  * field render exactly like before. When the card is steer-pending, the optional
- * `steerPendingSince` + `nowMs` render the "waiting for answer since m:ss" timer
+ * `steerPendingSince` + `nowMs` render the "waiting for answer · m:ss" timer
  * (Run-Liveness Slice B).
  */
 export function buildPhaseBadge(
@@ -1045,7 +1043,7 @@ export function buildPhaseBadge(
     case 'steer-pending': {
       const since = steerPendingSince ? Date.parse(steerPendingSince) : NaN;
       const suffix = Number.isFinite(since) && typeof nowMs === 'number'
-        ? ` ${formatSteerWait(nowMs - since)}`
+        ? ` · ${formatSteerWait(nowMs - since)}`
         : '';
       return { label: `Waiting for answer${suffix}`, tone: 'steer-pending',
                tooltip: 'The run asked a question and is waiting for an answer. If it stays unanswered it is auto-answered from the task context or escalated - it will not hang (Run-Liveness Slice B).' };

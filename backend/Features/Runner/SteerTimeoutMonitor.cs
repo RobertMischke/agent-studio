@@ -114,8 +114,11 @@ public sealed class SteerTimeoutMonitor
             if (string.IsNullOrWhiteSpace(entry.Path) || !Directory.Exists(entry.Path)) continue;
 
             var projectStatus = status?.Projects != null && status.Projects.TryGetValue(entry.Name, out var ps) ? ps : null;
-            var attended = IsManualMode(projectStatus?.Mode);
             var activeJobId = projectStatus?.ActiveJobId;
+            var hasLiveActiveExecution = string.Equals(
+                projectStatus?.ActiveExecution?.Status,
+                "running",
+                StringComparison.OrdinalIgnoreCase);
 
             // Snapshot candidates before acting on any (matching the Slice A /
             // StaleProgressArchiver measure-then-act discipline): acting moves a
@@ -124,11 +127,12 @@ public sealed class SteerTimeoutMonitor
             foreach (var laneFolder in _taskAccess.ListLaneFolders(entry.Path, TaskStates.Progress))
             {
                 ct.ThrowIfCancellationRequested();
-                // Never act on the runner's still-active job: its owning run holds
-                // the latch (e.g. a circuit-breaker path that has not yet released
-                // it), so moving it would race the runner. Mirrors the Slice A /
-                // StaleProgressArchiver active-job guard.
-                if (!string.IsNullOrEmpty(activeJobId)
+                // A real live execution wins the race. ActiveJobId alone is not
+                // enough: marker creation happens after Release, and a stale or
+                // leaked latch must not suppress the timeout forever. A resumed
+                // run clears the marker before it claims a new slot.
+                if (hasLiveActiveExecution
+                    && !string.IsNullOrEmpty(activeJobId)
                     && string.Equals(laneFolder.Slug, activeJobId, StringComparison.OrdinalIgnoreCase))
                     continue;
                 var marker = SteerPendingMarker.TryRead(laneFolder.FolderPath, _logger);
@@ -146,11 +150,10 @@ public sealed class SteerTimeoutMonitor
                 // Only run the (git-touching) resolver once the wait has actually
                 // timed out; within-timeout cards keep waiting with no I/O.
                 SteerResolveResult? resolved = null;
-                if (!attended && secondsWaiting >= timeoutSeconds)
+                if (secondsWaiting >= timeoutSeconds)
                     resolved = ResolveSafe(entry, c);
 
                 var facts = new SteerTimeoutFacts(
-                    Attended: attended,
                     SecondsWaiting: secondsWaiting,
                     TimeoutSeconds: timeoutSeconds,
                     HasConfidentAutoAnswer: resolved?.HasAnswer ?? false,
@@ -161,7 +164,7 @@ public sealed class SteerTimeoutMonitor
                 switch (decision.Action)
                 {
                     case SteerTimeoutAction.KeepWaiting:
-                        // Still waiting (or attended): no move, no audit noise -
+                        // Still waiting: no move, no audit noise -
                         // the card keeps its "waiting for answer since mm:ss" pill.
                         break;
 
@@ -204,9 +207,12 @@ public sealed class SteerTimeoutMonitor
                 JobId: TryReadJobId(c.JobFolder) ?? c.Slug,
                 JobFolder: c.JobFolder,
                 WatchPath: entry.Path,
-                Question: c.Marker.Question,
+                // Prefer the orchestrator's concrete STEER Need over the raw
+                // agent sentinel summary. The named 2067 question lives in Ask;
+                // Question remains the fallback for decline/circuit-break paths.
+                Question: !string.IsNullOrWhiteSpace(c.Marker.Ask) ? c.Marker.Ask : c.Marker.Question,
                 RepoRoot: string.IsNullOrWhiteSpace(entry.RootPath) ? null : entry.RootPath,
-                TaskBranch: $"task/{TryReadJobId(c.JobFolder) ?? c.Slug}",
+                TaskBranch: WorktreeTaskLifecycle.BranchFor(TryReadJobId(c.JobFolder) ?? c.Slug),
                 ConfiguredIntegrationBranch: settings.IntegrationBranch);
             return _resolver.Resolve(ctx);
         }
@@ -238,25 +244,28 @@ public sealed class SteerTimeoutMonitor
                 target: null, secondsWaiting, timeoutSeconds,
                 reason: "could not save the auto-answer pending intent (job not found)", now);
 
-        SteerPendingMarker.Clear(c.JobFolder, _logger);
-        _mutations.SetJobPhase(c.JobFolder, null); // steer-pending phase is illegal in 2-ready
-
-        _chatLog.Append(_scanner.FindJob(jobId, entry.Path) ?? FallbackInfo(jobId, c.JobFolder, entry.Name),
-            OrchestratorMessageKind.Decision,
-            $"[steer-timeout] No answer after {secondsWaiting:F0}s (> {timeoutSeconds:F0}s). Auto-answered from the task context and resumed the run: {Truncate(answer, 200)}");
-
         var moveOutcome = await _transitions.MoveAsync(jobId, TaskStates.Ready, entry.Path, ct);
         if (moveOutcome.Status != MoveJobStatus.Success)
         {
-            // The intent is saved and the marker cleared; a failed demote leaves
-            // the card in 3-progress but no longer waiting silently - report it.
+            // Keep the marker + phase on a failed move. The next sweep retries,
+            // so a transient transition failure cannot turn this back into an
+            // untracked, indefinitely waiting 3-progress card.
             return Outcome(SteerTimeoutOutcomeKinds.AutoAnswerFailed, entry, c, decision, jobId,
                 target: TaskStates.Ready, secondsWaiting, timeoutSeconds,
                 reason: $"auto-answer saved but demote to {TaskStates.Ready} refused: {moveOutcome.Status} {moveOutcome.Message}", now);
         }
 
-        EmitResolvedTimeline(moveOutcome.NewFolderPath ?? c.JobFolder, jobId,
-            SteerTimeoutOutcomeKinds.AutoAnswered, decision, secondsWaiting, timeoutSeconds, answer);
+        var movedFolder = moveOutcome.NewFolderPath ?? c.JobFolder;
+        SteerPendingMarker.Clear(movedFolder, _logger);
+        _mutations.SetJobPhase(movedFolder, null); // steer-pending phase is illegal in 2-ready
+
+        _chatLog.Append(_scanner.FindJob(jobId, entry.Path) ?? FallbackInfo(jobId, movedFolder, entry.Name),
+            OrchestratorMessageKind.Decision,
+            $"[steer-timeout] No answer after {secondsWaiting:F0}s (> {timeoutSeconds:F0}s). Auto-answered from the task context and resumed the run: {Truncate(answer, 200)}");
+
+        EmitResolvedTimeline(movedFolder, jobId,
+            SteerTimeoutOutcomeKinds.AutoAnswered, decision, secondsWaiting, timeoutSeconds,
+            c.Marker.Ask ?? c.Marker.Question, answer);
 
         _logger.LogWarning(
             "SteerTimeoutMonitor: auto-answered steer for {JobId} after {Silence:F0}s and demoted 3-progress -> 2-ready to resume.",
@@ -272,16 +281,8 @@ public sealed class SteerTimeoutMonitor
         var jobId = TryReadJobId(c.JobFolder) ?? c.Slug;
         var reason =
             $"Steer question unanswered for {secondsWaiting:F0}s (> {timeoutSeconds:F0}s timeout) and not derivable from the task context. " +
-            $"Question: {Truncate(c.Marker.Question ?? c.Marker.Ask ?? "(none)", 200)}. " +
+            $"Question: {Truncate(c.Marker.Ask ?? c.Marker.Question ?? "(none)", 200)}. " +
             (string.IsNullOrWhiteSpace(decision.Detail) ? "" : $"({decision.Detail})");
-
-        _chatLog.Append(_scanner.FindJob(jobId, entry.Path) ?? FallbackInfo(jobId, c.JobFolder, entry.Name),
-            OrchestratorMessageKind.GiveUp,
-            $"[steer-timeout] No answer after {secondsWaiting:F0}s (> {timeoutSeconds:F0}s) and the answer is not derivable from the task context. Escalating to human review instead of waiting.");
-
-        // Clear the marker first so the folder does not carry a stale marker into
-        // 5e-escalated (the escalation funnel renames the folder).
-        SteerPendingMarker.Clear(c.JobFolder, _logger);
 
         try
         {
@@ -293,8 +294,17 @@ public sealed class SteerTimeoutMonitor
                     target: TaskStates.Escalated, secondsWaiting, timeoutSeconds,
                     reason: $"escalation to {TaskStates.Escalated} refused: {move.Status} {move.Message}", now);
 
-            EmitResolvedTimeline(move.NewFolderPath ?? c.JobFolder, jobId,
-                SteerTimeoutOutcomeKinds.Blocked, decision, secondsWaiting, timeoutSeconds, answerGiven: null);
+            var movedFolder = move.NewFolderPath ?? c.JobFolder;
+            SteerPendingMarker.Clear(movedFolder, _logger);
+            _mutations.SetJobPhase(movedFolder, null);
+
+            _chatLog.Append(_scanner.FindJob(jobId, entry.Path) ?? FallbackInfo(jobId, movedFolder, entry.Name),
+                OrchestratorMessageKind.GiveUp,
+                $"[steer-timeout] No answer after {secondsWaiting:F0}s (> {timeoutSeconds:F0}s) and the answer is not derivable from the task context. Escalating to human review instead of waiting.");
+
+            EmitResolvedTimeline(movedFolder, jobId,
+                SteerTimeoutOutcomeKinds.Blocked, decision, secondsWaiting, timeoutSeconds,
+                c.Marker.Ask ?? c.Marker.Question, answerGiven: null);
 
             _logger.LogWarning(
                 "SteerTimeoutMonitor: steer for {JobId} unanswered {Silence:F0}s past timeout; escalated 3-progress -> 5e-escalated (steer-unanswered).",
@@ -311,7 +321,7 @@ public sealed class SteerTimeoutMonitor
 
     private void EmitResolvedTimeline(
         string folderPath, string jobId, string outcomeKind, SteerTimeoutDecision decision,
-        double secondsWaiting, double timeoutSeconds, string? answerGiven)
+        double secondsWaiting, double timeoutSeconds, string? question, string? answerGiven)
     {
         var summary = outcomeKind == SteerTimeoutOutcomeKinds.AutoAnswered
             ? $"Steer timeout: auto-answered after {secondsWaiting:F0}s. {Truncate(answerGiven ?? "", 160)}"
@@ -322,7 +332,9 @@ public sealed class SteerTimeoutMonitor
             ["secondsWaiting"] = ((long)secondsWaiting).ToString(),
             ["timeoutSeconds"] = ((long)timeoutSeconds).ToString(),
             ["outcome"] = outcomeKind,
+            ["reason"] = Truncate(decision.Detail, 500),
         };
+        if (!string.IsNullOrWhiteSpace(question)) details["question"] = Truncate(question!, 500);
         if (!string.IsNullOrWhiteSpace(answerGiven)) details["answer"] = Truncate(answerGiven!, 500);
         _timeline?.Append(folderPath, TimelineEventKinds.SteerTimeoutResolved, TimelineActors.System, summary, details: details);
     }
@@ -337,18 +349,12 @@ public sealed class SteerTimeoutMonitor
         }
         catch (Exception ex)
         {
-            // Treat every project as unattended (auto) if the runner status is
-            // unreadable - the safe posture is to enforce the timeout, not to
-            // assume a human is watching. Manual-mode markers are only written in
-            // auto mode anyway, so this stays correct in practice.
-            _logger.LogDebug(ex, "SteerTimeoutMonitor: could not read runner status; treating projects as unattended.");
+            // Status is used only for the live active-job guard. A persisted
+            // steer marker stays bounded regardless of a later mode change.
+            _logger.LogDebug(ex, "SteerTimeoutMonitor: could not read runner status; enforcing persisted steer timeouts without an active-job guard.");
             return null;
         }
     }
-
-    private static bool IsManualMode(string? mode) =>
-        string.Equals(mode, "manual", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(mode, "paused", StringComparison.OrdinalIgnoreCase);
 
     private static string? TryReadJobId(string jobFolder)
     {

@@ -254,7 +254,13 @@
           <td><strong>CooldownRetry</strong></td>
           <td><span class="pill transient">transient</span></td>
           <td class="lane">3-progress</td>
-          <td>An infra crash with retry budget remaining. The task is held with a visible "infra-crashed, retrying k/3 in Ns" banner and a <em>scheduled</em> re-pickup after a backoff delay. This is the <em>only</em> non-live state allowed in <span class="lane">3-progress</span>, and it is always time-bounded by a real timer (never the 60-minute boot sweep, never a busy-loop).</td>
+          <td>An infra crash with retry budget remaining. The task is held with a visible "infra-crashed, retrying k/3 in Ns" banner and a <em>scheduled</em> re-pickup after a backoff delay. It is always time-bounded by a real timer (never the 60-minute boot sweep, never a busy-loop).</td>
+        </tr>
+        <tr>
+          <td><strong>SteerPending</strong></td>
+          <td><span class="pill transient">transient</span></td>
+          <td class="lane">3-progress</td>
+          <td>An auto-mode run asked a steer / NeedsInput question and released its live CLI seat. A durable start time drives the visible "Waiting for answer" timer and a bounded wake: after the configured timeout, the task either receives an unambiguous context-derived answer or reaches a blocked human escalation.</td>
         </tr>
         <tr>
           <td><strong>Succeeded</strong></td>
@@ -278,8 +284,8 @@
     </table>
 
     <p class="small"><strong>Invariant:</strong> a run can only leave <em>Running</em> into one of
-      {Succeeded, NeedsReview, GaveUpToHuman, CooldownRetry}, and CooldownRetry must itself terminate in one of the three
-      terminals. No path leaves a task parked in <span class="lane">3-progress</span> without either a live process or a
+      {Succeeded, NeedsReview, GaveUpToHuman, CooldownRetry, SteerPending}. CooldownRetry and SteerPending must each terminate
+      in one of the three terminals or schedule a concrete continuation. No path leaves a task parked in <span class="lane">3-progress</span> without either a live process or a
       scheduled wake. The 9-day-stranding state is structurally unreachable.</p>
   </section>
 

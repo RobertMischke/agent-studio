@@ -161,6 +161,12 @@ public sealed class StaleProgressArchiver
             foreach (var laneFolder in _taskAccess.ListLaneFolders(entry.Path, TaskStates.Progress))
             {
                 ct.ThrowIfCancellationRequested();
+                // Valid steer-pending markers are bounded by Slice B. This
+                // legacy stale-progress sweep must not promote/requeue them
+                // first based on an old NEEDS_INPUT sentinel. A malformed
+                // marker falls through to normal recovery.
+                if (SteerPendingMarker.TryRead(laneFolder.FolderPath, _logger) != null)
+                    continue;
                 var (measured, _) = MeasureFolder(laneFolder.FolderPath);
                 candidates.Add((laneFolder.Slug, laneFolder.FolderPath, measured));
             }

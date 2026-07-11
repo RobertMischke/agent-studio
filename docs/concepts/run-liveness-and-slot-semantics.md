@@ -137,10 +137,14 @@ event. A short-cadence sweep then enforces a bounded wait over one pure policy
 
 | Situation | Action | Reason code |
 |---|---|---|
-| Attended (manual mode) | leave it - a human is answering | `attended-wait` |
 | Inside the timeout | keep waiting (card shows the wait pill) | `within-timeout` |
 | Timed out, answer derivable from context | auto-answer + resume the run | `auto-answered` |
 | Timed out, no confident answer | route to a blocked `5e-escalated` escalation | `steer-unanswered` |
+
+Once an auto-mode run has written a durable steer-pending marker, that marker
+remains bounded even if the project mode later changes to manual or paused.
+Project mode is not proof that a human is actively answering. Manual runs do not
+create these markers in the first place.
 
 The **auto-answer** is the named 2067 case: for an "is this already
 implemented?" question, the resolver checks the branch/develop state - if the

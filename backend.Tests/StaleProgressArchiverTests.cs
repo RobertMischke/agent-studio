@@ -406,6 +406,47 @@ public sealed class StaleProgressArchiverTests : IDisposable
     }
 
     [Fact]
+    public async Task Sweep_ValidSteerPendingMarker_IsLeftToSliceB()
+    {
+        WriteJob(TaskStates.Progress, "steer-wait");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "steer-wait");
+        WriteCliLogWithSentinel(folder, "[[TASK_NEEDS_INPUT: ist iframe schon implementiert?]]");
+        SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
+        SetMtimeOldEnough(Path.Combine(folder, "task.json"));
+        SteerPendingMarker.Write(folder, new SteerPendingRecord
+        {
+            WaitStartedAt = DateTime.UtcNow - TimeSpan.FromHours(5),
+            Kind = SteerPendingKinds.Steer,
+            Ask = "ist iframe schon implementiert?"
+        });
+
+        var (archiver, _) = Build();
+        var decisions = await archiver.SweepAsync();
+
+        Assert.Empty(decisions);
+        Assert.True(Directory.Exists(folder));
+        Assert.True(SteerPendingMarker.Exists(folder));
+    }
+
+    [Fact]
+    public async Task Sweep_MalformedSteerMarker_FallsThroughToOrdinaryRecovery()
+    {
+        WriteJob(TaskStates.Progress, "torn-steer-wait");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "torn-steer-wait");
+        WriteCliLog(folder, "interrupted run");
+        SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
+        SetMtimeOldEnough(Path.Combine(folder, "task.json"));
+        File.WriteAllText(Path.Combine(folder, SteerPendingMarker.FileName), "{not-json");
+
+        var (archiver, _) = Build();
+        var decision = Assert.Single(await archiver.SweepAsync());
+
+        Assert.Equal(StaleProgressDecisionKinds.RequeuedToReady, decision.Kind);
+        Assert.False(Directory.Exists(folder));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "torn-steer-wait")));
+    }
+
+    [Fact]
     public async Task Sweep_ActiveJobIsNeverTouchedEvenWhenStale()
     {
         WriteJob(TaskStates.Progress, "running-now");
