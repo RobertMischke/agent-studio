@@ -166,20 +166,37 @@ describe('TaskColumnComponent (smoke)', () => {
   // job was active leaves the live mode at auto-* and queues the requested
   // mode in status.pendingMode. The pill renders an arrow + the deferred
   // value so the operator sees the change took, just not yet.
-  it('cluster: pendingMode on auto-continuous renders "AUTO → MANUAL" with deferred-mode tooltip', async () => {
+  it('cluster: one pending active task renders its count and title in the tooltip', async () => {
     const fixture = await buildColumn({
       mode: 'auto-continuous',
       status: makeStatus({
         mode: 'auto-continuous',
         activeJobId: 'running-task',
         pendingMode: 'manual',
-        pendingModeWillApplyAfter: 'running-task'
+        pendingModeWillApplyAfter: 'running-task',
+        pendingModeActiveTaskCount: 1,
+        pendingModeActiveTaskTitle: 'Publish release notes'
       })
     });
     const cluster = fixture.componentInstance.statusCluster();
     expect(cluster!.mode.label).toBe('AUTO → MANUAL');
-    expect(cluster!.mode.tooltip).toContain('Deferred change pending');
-    expect(cluster!.mode.tooltip).toContain('running-task');
+    expect(cluster!.mode.tooltip).toBe('Switches to MANUAL when 1 active task finishes (Publish release notes).');
+  });
+
+  it('cluster: multiple pending active tasks renders concise plural semantics', async () => {
+    const fixture = await buildColumn({
+      mode: 'auto-continuous',
+      status: makeStatus({
+        mode: 'auto-continuous',
+        activeJobId: 'task-a',
+        pendingMode: 'manual',
+        pendingModeActiveTaskCount: 4
+      })
+    });
+
+    const cluster = fixture.componentInstance.statusCluster();
+    expect(cluster!.mode.label).toBe('AUTO → MANUAL');
+    expect(cluster!.mode.tooltip).toBe('Switches to MANUAL when 4 active tasks finish.');
   });
 
   // ADR-0044: a test-subject backend's lane pill should explain why no

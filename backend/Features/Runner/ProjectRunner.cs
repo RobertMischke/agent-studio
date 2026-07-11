@@ -214,6 +214,8 @@ public class ProjectRunner
     private string? _pendingMode;
     private string? _pendingModeReason;
     private string? _pendingModeWillApplyAfter;
+    private readonly HashSet<string> _pendingModeDrainJobIds = new(StringComparer.Ordinal);
+    private readonly object _modeChangeGate = new();
     // ADR-0052 slice 2: the former single-active scalar fields
     // (_activeJobId/_activeCliType/_activeIntent/_activeFollowup/_activePlan/
     // _activeReissueAttempt) are consolidated into this slot registry — the
@@ -478,9 +480,9 @@ public class ProjectRunner
 
     /// <summary>
     /// True while the operator's last mode-change request is waiting on the
-    /// active job to finish before it lands. The deferred value is exposed via
+    /// request-time active task set to drain. The deferred value is exposed via
     /// <see cref="ProjectRunnerStatus.PendingMode"/> and applied automatically
-    /// by <see cref="ApplyPendingModeIfAny"/> when <c>_activeJobId</c> clears.
+    /// by <see cref="ApplyPendingModeIfAny"/> when the last snapshot task clears.
     /// </summary>
     public bool HasPendingMode => _pendingMode != null;
 
@@ -505,9 +507,13 @@ public class ProjectRunner
         // waiting on the active job. Clear the pending slot so the status DTO
         // does not advertise a "MANUAL (after current)" pill that will never
         // fire because the live mode just moved past it.
-        _pendingMode = null;
-        _pendingModeReason = null;
-        _pendingModeWillApplyAfter = null;
+        lock (_modeChangeGate)
+        {
+            _pendingMode = null;
+            _pendingModeReason = null;
+            _pendingModeWillApplyAfter = null;
+            _pendingModeDrainJobIds.Clear();
+        }
         // Any explicit mode change also supersedes a pending CLI-recovery
         // auto-resume (the pause path re-arms the marker right after its own
         // SetMode call).
@@ -580,10 +586,9 @@ public class ProjectRunner
     ///   <see cref="SetMode"/> and the result is <see cref="ModeChangeOutcome.Applied"/>.</item>
     ///   <item>When a job is active and the requested mode is <c>manual</c> or
     ///   <c>paused</c>, the live mode is left alone and the requested mode is
-    ///   queued; <see cref="ModeChangeOutcome.Deferred"/> is returned with the
-    ///   job slug the change is waiting on. The frontend renders this as
-    ///   "&lt;currentMode&gt; (then &lt;pendingMode&gt; after &lt;slug&gt;)"
-    ///   and applies the queued value on the next active-job clear.</item>
+    ///   queued; auto admission closes immediately, and the current active task
+    ///   set is snapshotted. The queued value applies after the last task in that
+    ///   snapshot clears.</item>
     /// </list>
     /// Invalid mode strings produce <see cref="ModeChangeOutcome.Invalid"/>; the
     /// caller (typically <see cref="AgentStudio.Runner.TaskRunnerService.SetMode"/>)
@@ -595,47 +600,74 @@ public class ProjectRunner
             return new ModeChangeResult(ModeChangeOutcome.Invalid, _mode, null, null);
         var isManualSide = mode is "manual" or "paused";
         var effectiveReason = string.IsNullOrWhiteSpace(reason) ? "api-toggle" : reason!;
-        if (_activeJobId != null && isManualSide && _mode is "auto-single" or "auto-continuous")
+        var activeJobIds = _activeRuns.Snapshot().Select(run => run.JobId).ToArray();
+        if (activeJobIds.Length > 0 && isManualSide && _mode is "auto-single" or "auto-continuous")
         {
-            _pendingMode = mode;
-            _pendingModeReason = effectiveReason + " (deferred until active job clears)";
-            _pendingModeWillApplyAfter = _activeJobId;
+            bool alreadyDrained;
+            lock (_modeChangeGate)
+            {
+                _pendingMode = mode;
+                _pendingModeReason = effectiveReason + " (deferred until active tasks drain)";
+                _pendingModeDrainJobIds.Clear();
+                foreach (var jobId in activeJobIds) _pendingModeDrainJobIds.Add(jobId);
+                _pendingModeDrainJobIds.RemoveWhere(jobId => !_activeRuns.HoldsExecutionSlot(jobId));
+                alreadyDrained = _pendingModeDrainJobIds.Count == 0;
+                _pendingModeWillApplyAfter = _pendingModeDrainJobIds.Count == 1
+                    ? _pendingModeDrainJobIds.First()
+                    : null;
+            }
+            if (alreadyDrained)
+            {
+                SetMode(mode, effectiveReason + " (active tasks drained during mode request)");
+                return new ModeChangeResult(ModeChangeOutcome.Applied, _mode, null, null);
+            }
             _logger.LogInformation(
-                "Runner '{Project}' deferred mode change '{From}' -> '{To}' until active job {JobId} clears (reason '{Reason}')",
-                ProjectName, _mode, mode, _activeJobId, effectiveReason);
+                "Runner '{Project}' deferred mode change '{From}' -> '{To}'; draining {ActiveTaskCount} active task(s) and blocking new auto-picks (reason '{Reason}')",
+                ProjectName, _mode, mode, activeJobIds.Length, effectiveReason);
             NotifyStatus();
-            return new ModeChangeResult(ModeChangeOutcome.Deferred, _mode, mode, _activeJobId);
+            return new ModeChangeResult(ModeChangeOutcome.Deferred, _mode, mode, _pendingModeWillApplyAfter);
         }
         SetMode(mode, effectiveReason);
         return new ModeChangeResult(ModeChangeOutcome.Applied, _mode, null, null);
     }
 
     /// <summary>
-    /// Drains the deferred mode slot when an active job has just cleared. The
+    /// Advances the deferred-mode drain when one request-time active task clears. The
     /// caller (the same <c>finally</c> block that releases <c>_activeJobId</c>
     /// in <see cref="OnCliFinishedAsync"/> / <see cref="ClearActiveJobIfMatches"/>)
     /// pays one comparison when no defer is pending. When a defer is pending
     /// the recorded reason is preserved so the structured log still shows the
-    /// original intent ("api-toggle (deferred until active job clears)") plus
-    /// the slug that triggered the apply.
+    /// original intent is preserved while the remaining snapshot count advances.
     /// </summary>
     private void ApplyPendingModeIfAny(string? clearedJobId)
     {
-        if (_pendingMode == null) return;
-        // Drain even if the slug differs from the one we recorded: in the rare
-        // case the operator deferred against one job and a different job
-        // cleared first (a manual restart, an external move), the intent was
-        // "stop auto-pickup at the next boundary", which is now.
-        var pendingMode = _pendingMode!;
-        var reason = _pendingModeReason ?? "deferred mode change applied on active-job clear";
-        var waitedOn = _pendingModeWillApplyAfter ?? clearedJobId;
-        _pendingMode = null;
-        _pendingModeReason = null;
-        _pendingModeWillApplyAfter = null;
+        string? pendingMode = null;
+        string? reason = null;
+        int remaining;
+        lock (_modeChangeGate)
+        {
+            if (_pendingMode == null) return;
+            if (clearedJobId != null) _pendingModeDrainJobIds.Remove(clearedJobId);
+            remaining = _pendingModeDrainJobIds.Count;
+            _pendingModeWillApplyAfter = remaining == 1 ? _pendingModeDrainJobIds.First() : null;
+            if (remaining == 0)
+            {
+                pendingMode = _pendingMode;
+                reason = _pendingModeReason ?? "deferred mode change applied after active tasks drained";
+            }
+        }
+        if (remaining > 0)
+        {
+            _logger.LogInformation(
+                "Runner '{Project}' deferred mode drain advanced after '{Job}'; {RemainingTaskCount} active task(s) remain",
+                ProjectName, clearedJobId, remaining);
+            NotifyStatus();
+            return;
+        }
         _logger.LogInformation(
-            "Runner '{Project}' applying deferred mode '{Mode}' (was waiting on '{Job}')",
-            ProjectName, pendingMode, waitedOn);
-        SetMode(pendingMode, reason);
+            "Runner '{Project}' applying deferred mode '{Mode}' after the pending active-task set drained",
+            ProjectName, pendingMode);
+        SetMode(pendingMode!, reason);
     }
 
     /// <summary>
@@ -843,6 +875,8 @@ public class ProjectRunner
             Role = RunnerRoles.Format(_role),
             PendingMode = _pendingMode,
             PendingModeWillApplyAfter = _pendingModeWillApplyAfter,
+            PendingModeActiveTaskCount = PendingModeActiveTaskCount(),
+            PendingModeActiveTaskTitle = PendingModeActiveTaskTitle(),
             ModeReason = _modeReason,
             ModeChangedAt = _modeChangedAt,
             ModeSource = _modeSource,
@@ -909,6 +943,11 @@ public class ProjectRunner
         TryAutoResumeGlobalBreaker();
 
         if (_mode is "manual" or "paused") return;
+
+        // A deferred switch to manual/paused closes admission immediately.
+        // Runs active at request time keep going, but no new auto-pick may
+        // refill a slot and move the flip point further into the future.
+        if (!DeferredModePickupPolicy.AllowsAutoPickup(_pendingMode)) return;
 
         // The project record is the single pickup-ownership truth. When it is
         // assigned to a remote runner and is remote-capable, this in-process
@@ -6124,6 +6163,14 @@ public class ProjectRunner
         });
     }
 
+    /// <summary>Test seam for one slot completing without a real CLI callback.</summary>
+    internal bool CompleteActiveJobForTest(string jobId)
+    {
+        if (ReleaseRun(jobId) == null) return false;
+        ApplyPendingModeIfAny(jobId);
+        return true;
+    }
+
     private string RenderPrompt(RunPlan plan, TaskInfo info, string runWorkingDir)
     {
         if (plan.PromptOverride != null)
@@ -6739,6 +6786,27 @@ public class ProjectRunner
                 ExecutionStatus = executionStatus,
                 Error = error
             });
+        }
+    }
+
+    private int PendingModeActiveTaskCount()
+    {
+        lock (_modeChangeGate) return _pendingMode == null ? 0 : _pendingModeDrainJobIds.Count;
+    }
+
+    private string? PendingModeActiveTaskTitle()
+    {
+        string? jobId;
+        lock (_modeChangeGate)
+        {
+            if (_pendingMode == null || _pendingModeDrainJobIds.Count != 1) return null;
+            jobId = _pendingModeDrainJobIds.First();
+        }
+        try { return _scanner.FindJob(jobId, Entry.Path)?.Title; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not resolve pending-mode task title for {JobId}", jobId);
+            return null;
         }
     }
 
@@ -7955,8 +8023,8 @@ public sealed record PendingDecisionEntry(
 /// <summary>
 /// Outcome of <see cref="ProjectRunner.RequestModeChange"/>. <c>Applied</c>
 /// means the live mode moved now; <c>Deferred</c> means the new mode is
-/// queued and will land when the named <see cref="ModeChangeResult.WillApplyAfterJobId"/>
-/// clears; <c>Invalid</c> means the requested mode value was rejected before
+/// queued and will land when the request-time active task set clears;
+/// <c>Invalid</c> means the requested mode value was rejected before
 /// it could be applied (the endpoint turns this into a 400).
 /// </summary>
 public enum ModeChangeOutcome

@@ -1166,25 +1166,26 @@ export interface ProjectRunnerStatus {
    */
   role?: 'orchestrator' | 'test-subject' | string | null;
   /**
-   * Mode the operator asked for while a job was still running. Non-null only
+   * Mode the operator asked for while tasks were still running. Non-null only
    * when a `PUT /api/runner/{project}/mode` with `manual` / `paused` arrived
-   * while {@link activeJobId} was set. The runner applies the value the
-   * moment the active job clears; the lane pill renders as
-   * "MANUAL (after current)" while this is populated. See ADR-0044.
+   * while tasks were active. Auto admission closes immediately, and the runner
+   * applies the value after the request-time active set drains. See ADR-0044.
    */
   pendingMode?: string | null;
-  /** Job id the deferred mode change is waiting on. */
+  /** Job id of the sole remaining request-time task; null while several remain. */
   pendingModeWillApplyAfter?: string | null;
+  /** Remaining tasks from the active snapshot captured when the change was requested. */
+  pendingModeActiveTaskCount?: number;
+  /** Title of the sole remaining snapshot task, when exactly one remains. */
+  pendingModeActiveTaskTitle?: string | null;
 }
 
 /**
  * Response body for `PUT /api/runner/{project}/mode` (ADR-0044).
  * `applied: true` means the live mode moved immediately; `applied: false`
- * means the change is queued behind the active job, in which case
+ * means the change is queued behind the request-time active task set, in which case
  * {@link pendingMode} + {@link willApplyAfterJobId} carry the deferred
- * value. The frontend renders the lane pill as
- * "{mode} (then {pendingMode} after {willApplyAfterJobId})" while the
- * deferred change is pending.
+ * value. `willApplyAfterJobId` is populated only when one snapshot task remains.
  */
 export interface SetRunnerModeResponse {
   applied: boolean;
