@@ -510,6 +510,7 @@
           [(newAllowWebAccess)]="createJobForm.newAllowWebAccess"
           (cliTypeChange)="onCreateCliTypeChange($event)"
           (cancelRequest)="cancelCreate()"
+          (openChatRequest)="cancelCreate(); orchSideSheet.show()"
           (submitRequest)="submitCreate()" />
       }
       @if (showE2ECleanup()) {
@@ -841,6 +842,7 @@
           [(newAllowWebAccess)]="createJobForm.newAllowWebAccess"
           (cliTypeChange)="onCreateCliTypeChange($event)"
           (cancelRequest)="cancelCreate()"
+          (openChatRequest)="cancelCreate(); orchSideSheet.show()"
           (submitRequest)="submitCreate()" />
       }
 

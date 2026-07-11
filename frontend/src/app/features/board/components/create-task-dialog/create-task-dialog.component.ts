@@ -8,7 +8,6 @@ import { TaskState } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../../features/cli';
 import { TaskService } from '../../../../services/task.service';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
-
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { CreateEpicPickerComponent } from '../create-epic-picker/create-epic-picker.component';
@@ -60,7 +59,8 @@ const PENDING_PREFIX = 'pending-attachment-';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, TooltipDirective, CliModelSelectorComponent, CreateEpicPickerComponent, CreateModePickerComponent],
-  templateUrl: './create-task-dialog.component.html'
+  templateUrl: './create-task-dialog.component.html',
+  styleUrl: './create-task-dialog.component.scss'
 })
 export class CreateTaskDialogComponent implements AfterViewInit {
   readonly watchPaths = input<WatchPathEntry[]>([]);
@@ -93,7 +93,6 @@ export class CreateTaskDialogComponent implements AfterViewInit {
   readonly availableTags = computed(() => this.tagRegistryStore.tags());
 
   readonly laneOptions = CREATE_LANE_OPTIONS;
-
   /** Reactive dialog header derived from the chosen target lane. */
   readonly header = computed<string>(() => {
     switch (this.newTargetState()) {
@@ -116,6 +115,7 @@ export class CreateTaskDialogComponent implements AfterViewInit {
 
   readonly cliTypeChange = output<CliType>();
   readonly cancelRequest = output<void>();
+  readonly openChatRequest = output<void>();
   readonly submitRequest = output<void>();
 
   readonly isDragging = model<boolean>(false);
