@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, type Page, type Route } from '@playwright/test';
 
 /**
  * Regression coverage for the orchestrator "where am I right now" header
@@ -21,6 +21,20 @@ import { test, expect, Page } from '@playwright/test';
 const PROJECT = 'project-neuen';
 const RUNNING_TASK_ID = 'run-task-1';
 const RUNNING_TASK_TITLE = 'Wire up the orchestrator header';
+
+async function fulfillKnownGet(route: Route, body: unknown, unexpectedRequests: string[]) {
+  const request = route.request();
+  if (request.method() !== 'GET') {
+    unexpectedRequests.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    await route.fulfill({
+      status: 405,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Unexpected method in mocked regression' }),
+    });
+    return;
+  }
+  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+}
 
 function runningTask() {
   return {
@@ -58,25 +72,86 @@ function runningTask() {
   };
 }
 
-async function stubWorkspace(page: Page, opts: { withRunningTask: boolean }) {
+/**
+ * The board bootstrap reads several endpoints beyond the four this spec cares
+ * about. Stub each known object or list with its valid empty shape so Angular
+ * can boot without a backend. The recorded fallback makes future dependencies
+ * fail an assertion instead of silently broadening the mock surface.
+ */
+async function stubBoardBootstrap(page: Page): Promise<string[]> {
+  const unexpectedRequests: string[] = [];
+
+  // Keep this fallback first so the shape-correct routes below take precedence.
+  // Recording every fallback hit prevents the hermetic boot from masking new
+  // application dependencies when the board bootstrap changes.
+  await page.route('**/api/**', async (route) => {
+    const request = route.request();
+    unexpectedRequests.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+
+  const emptyArrayEndpoints = /\/api\/(?:cli\/(?:claude|codex|gemini)\/models|clients\/?|crash-recovery\/pending|git\/summary|tags|workspaces)(?:\?.*)?$/;
+  await page.route(emptyArrayEndpoints, async (route) => {
+    await fulfillKnownGet(route, [], unexpectedRequests);
+  });
+  await page.route(/\/api\/(?:environment|clients\/[^/]+\/defaults|projects\/settings)(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, {}, unexpectedRequests);
+  });
+  await page.route(/\/api\/orchestrator\/sessions(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, { sessions: [] }, unexpectedRequests);
+  });
+  await page.route(/\/api\/runner\/status(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, { projects: {} }, unexpectedRequests);
+  });
+  await page.route(/\/api\/cli\/quota(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(
+      route,
+      { at: '2026-01-01T00:00:00Z', snapshots: [], ttlSeconds: 600 },
+      unexpectedRequests,
+    );
+  });
+  await page.route(/\/api\/tasks\/archive(?:\?.*)?$/, async (route) => {
+    await fulfillKnownGet(route, { items: [], total: 0, offset: 0, limit: 50 }, unexpectedRequests);
+  });
+
+  // The live hub is outside this mocked regression's scope. Aborting the hub
+  // is the established hermetic-suite behavior and avoids retrying a fake 404.
+  await page.route('**/hubs/**', async (route) => route.abort());
+  return unexpectedRequests;
+}
+
+async function stubWorkspace(page: Page, opts: { withRunningTask: boolean }): Promise<string[]> {
+  const unexpectedRequests = await stubBoardBootstrap(page);
+
   await page.route(/\/api\/watch-paths$/, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify([
+    await fulfillKnownGet(
+      route,
+      [
         { name: PROJECT, path: 'C:/tmp/' + PROJECT, rootPath: 'C:/tmp/' + PROJECT, repositoryPath: '' },
-      ]),
-    });
+      ],
+      unexpectedRequests,
+    );
+  });
+
+  await page.route(new RegExp(`/api/orchestrator/context/project:${PROJECT}$`), async (route) => {
+    await fulfillKnownGet(
+      route,
+      {
+        contextKey: `project:${PROJECT}`,
+        capturedAt: '2026-07-11T10:00:00Z',
+        digest: 'lanes: ready=0 | runs: active=0 | health: ok',
+        sources: [
+          { name: 'lanes', status: 'empty', capturedAt: '2026-07-11T10:00:00Z', detail: null },
+          { name: 'health', status: 'ok', capturedAt: '2026-07-11T10:00:00Z', detail: null },
+        ],
+      },
+      unexpectedRequests,
+    );
   });
 
   const flatTasks = opts.withRunningTask ? [runningTask()] : [];
   await page.route(/\/api\/tasks(?:\?.*)?$/, async (route) => {
-    if (route.request().method() !== 'GET') { await route.continue(); return; }
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(flatTasks),
-    });
+    await fulfillKnownGet(route, flatTasks, unexpectedRequests);
   });
 
   await page.route(/\/api\/tasks\/grouped(?:\?.*)?$/, async (route) => {
@@ -84,43 +159,25 @@ async function stubWorkspace(page: Page, opts: { withRunningTask: boolean }) {
       backlog: [], preparation: [], orchestratorPrep: [], ready: [], progress: [],
       failedPickup: [], autoReview: [], humanReview: [], review: [], completed: [], archive: [],
     };
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(opts.withRunningTask ? { ...empty, progress: [runningTask()] } : empty),
-    });
+    await fulfillKnownGet(
+      route,
+      opts.withRunningTask ? { ...empty, progress: [runningTask()] } : empty,
+      unexpectedRequests,
+    );
   });
 
   await page.route(/\/api\/runner\/[^/]+\/orchestrator-chat$/, async (route) => {
     const projectMatch = /\/api\/runner\/([^/]+)\/orchestrator-chat/.exec(route.request().url());
     const project = projectMatch ? decodeURIComponent(projectMatch[1]) : '';
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ project, turns: [] }),
-    });
+    await fulfillKnownGet(route, { project, turns: [] }, unexpectedRequests);
   });
-}
-
-/**
- * The dev backend is offline in this run, so background polls for endpoints
- * we do not stub fail and pop the shared error dialog. Its overlay would
- * intercept our clicks; dismiss any that are open before proceeding. Polls
- * run on long intervals so, once cleared, they do not recur within the test.
- */
-async function dismissErrorDialogs(page: Page) {
-  for (let i = 0; i < 5; i++) {
-    const overlay = page.getByTestId('error-dialog-overlay');
-    if ((await overlay.count()) === 0) return;
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(150);
-  }
+  return unexpectedRequests;
 }
 
 async function openSideSheet(page: Page) {
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
-  await dismissErrorDialogs(page);
+  await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
   const toggle = page.getByTestId('orch-side-sheet-toggle');
   await expect(toggle).toBeVisible({ timeout: 10_000 });
   await toggle.click();
@@ -129,7 +186,7 @@ async function openSideSheet(page: Page) {
 
 test.describe('Orchestrator context header · where am I', () => {
   test('board scope shows the project chip and the Board scope chip', async ({ page }) => {
-    await stubWorkspace(page, { withRunningTask: false });
+    const unexpectedRequests = await stubWorkspace(page, { withRunningTask: false });
     await openSideSheet(page);
 
     const header = page.getByTestId('orch-context-header');
@@ -139,10 +196,11 @@ test.describe('Orchestrator context header · where am I', () => {
     await expect(page.getByTestId('orch-context-board')).toHaveText('Board');
     // Nothing running -> no live-run pill.
     await expect(page.getByTestId('orch-context-run')).toHaveCount(0);
+    expect(unexpectedRequests).toEqual([]);
   });
 
   test('surfaces the live run (model + duration) when a run is active in the project', async ({ page }) => {
-    await stubWorkspace(page, { withRunningTask: true });
+    const unexpectedRequests = await stubWorkspace(page, { withRunningTask: true });
     await openSideSheet(page);
 
     const header = page.getByTestId('orch-context-header');
@@ -158,5 +216,6 @@ test.describe('Orchestrator context header · where am I', () => {
       path: 'screenshots/orchestrator-context-header/live-run--mocked.png',
       fullPage: false,
     });
+    expect(unexpectedRequests).toEqual([]);
   });
 });

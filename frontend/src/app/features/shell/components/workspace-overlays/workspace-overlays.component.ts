@@ -6,6 +6,7 @@ import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import { TokenUsageSectionComponent } from '../../../tokens';
 import { CliAdminPanelComponent, CliWorkingMemoryPanelComponent } from '../../../cli';
 import { RemoteHostsPanelComponent } from '../../../remote-hosts';
+import { TaskServerPanelComponent } from '../../../task-server';
 import { OrchestratorLogicPanelComponent, PromptAdminPanelComponent } from '../../../orchestrator';
 // Direct path (not the studio-shell barrel) so we don't pull StudioShellComponent
 // and re-form the shell <-> studio-shell import cycle (AGT-2035).
@@ -38,8 +39,10 @@ interface SettingsRailItem {
  * Workspace grouping.
  *
  * Global group (per-user / app-wide): Appearance (Theme + Activity bar),
- * Updates, Workspaces (registry management), Orchestrator (the platform-global
- * lifecycle flags AGT-1812 moved out of their standalone modal). Workspace group
+ * Updates, Workspaces (registry management), Task Server (the durable task
+ * server's URL, store, evidence git, client registry and management sweeps -
+ * AGT-1924), Remote hosts, Orchestrator (the platform-global lifecycle flags
+ * AGT-1812 moved out of their standalone modal). Workspace group
  * (defaults applied across the workspace's projects): Usage caps, Working memory,
  * System prompts, Token usage, Visual evidence.
  *
@@ -59,6 +62,7 @@ interface SettingsRailItem {
     CliAdminPanelComponent,
     CliWorkingMemoryPanelComponent,
     RemoteHostsPanelComponent,
+    TaskServerPanelComponent,
     PromptAdminPanelComponent,
     OrchestratorLogicPanelComponent,
     AppearanceSettingsComponent,
@@ -95,6 +99,7 @@ export class WorkspaceOverlaysComponent {
     { key: 'appearance', label: 'Appearance', description: 'Theme and activity-bar side. Applies to you everywhere.', icon: '\u{1F3A8}', group: 'global' },
     { key: 'updates', label: 'Updates', description: 'Keep this instance in sync with stable.', icon: '\u{1F504}', group: 'global' },
     { key: 'workspaces', label: 'Workspaces', description: 'Manage every workspace and its projects.', icon: '\u{1F5C2}', group: 'global' },
+    { key: 'task-server', label: 'Task Server', description: 'Connected URL, workspace store, evidence git, client registry, and management sweeps.', icon: '\u{1F5C4}', group: 'global' },
     { key: 'remote-hosts', label: 'Remote hosts', description: 'Execution locations: heartbeat, vitals, quota, and Re-Probe / Drain / Retire.', icon: '\u{1F4E1}', group: 'global' },
     { key: 'project-sources', label: 'Project sources', description: 'Available origins for newly onboarded projects.', icon: '\u{1F4C1}', group: 'global' },
     { key: 'orchestrator', label: 'Orchestrator', description: 'Platform-global supervisor, meta-cycle, and auto-intervention lifecycle flags.', icon: '\u{1F916}', group: 'global' },
@@ -158,6 +163,7 @@ export class WorkspaceOverlaysComponent {
       case 'appearance': return 'workspace-appearance-overlay';
       case 'updates': return 'workspace-updates-overlay';
       case 'workspaces': return 'workspace-management-overlay';
+      case 'task-server': return 'workspace-task-server-overlay';
       case 'remote-hosts': return 'workspace-remote-hosts-overlay';
       case 'project-sources': return 'workspace-project-sources-overlay';
       case 'orchestrator': return 'orchestrator-config-overlay';

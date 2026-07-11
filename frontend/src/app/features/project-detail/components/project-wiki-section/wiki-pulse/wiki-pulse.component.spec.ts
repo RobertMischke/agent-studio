@@ -59,6 +59,19 @@ function makePulse(overrides: Partial<WikiPulse> = {}): WikiPulse {
       counts: { fresh: 0, aging: 0, stale: 1, graded: 1 },
     },
     critical: { available: true, reason: 'No pages have been graded yet.', count: 0, overallGrade: 'none', items: [] },
+    warnings: {
+      available: true,
+      reason: null,
+      count: 1,
+      items: [{ kind: 'human-action', title: 'Runner crash', detail: 'Development signal is active.', humanAction: 'Inspect the failed run.', relPath: 'signals/runner.md', status: 'active' }],
+    },
+    activity: {
+      available: true,
+      reason: null,
+      runs: [{ taskKey: 'AGT-2015', lane: '3-progress', startedAtUtc: isoDaysAgo(0), docsFilesChanged: 2 }],
+      collector: { ranAtUtc: isoDaysAgo(1), status: 'ok', error: null, merges: 0, condensations: 0 },
+      curator: { ranAtUtc: isoDaysAgo(1), status: 'ok', error: null, merges: 2, condensations: 1 },
+    },
     ...overrides,
   };
 }
@@ -145,5 +158,14 @@ describe('WikiPulseComponent', () => {
     }));
     expect(html(fixture).querySelector('[data-testid="project-wiki-pulse-drift-empty"]')?.textContent)
       .toContain('No knowledge pages filed');
+  });
+
+  it('renders actionable warnings, docs-touching live runs, and maintenance summaries', async () => {
+    const fixture = await mount(makePulse());
+    const root = html(fixture);
+    expect(root.querySelector('[data-testid="project-wiki-pulse-warnings"]')?.textContent).toContain('Inspect the failed run.');
+    expect(root.querySelector('[data-testid="project-wiki-pulse-live-AGT-2015"]')?.textContent).toContain('2 docs files changed');
+    expect(root.querySelector('[data-testid="project-wiki-pulse-collector-run"]')?.textContent).toContain('ok');
+    expect(root.querySelector('[data-testid="project-wiki-pulse-curator-run"]')?.textContent).toContain('2 merges · 1 condensations');
   });
 });

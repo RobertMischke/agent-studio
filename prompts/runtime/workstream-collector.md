@@ -19,7 +19,9 @@ Area rules:
 - Current Development State: include only when the task changes what is active;
   this replaces `current.md` rather than appending history.
 - Development Signals: merge by stable identity. Set `frequency` to the number
-  of occurrences evidenced by this task, normally 1.
+  of occurrences evidenced by this task, normally 1. Also set `status` to
+  `observed`, `active`, or `resolved`; when status is observed or active, include
+  a concise `humanAction` that says what an operator should do next.
 - System Knowledge: update an existing identity in place. `lastUpdatedFrom` is
   mandatory and must name the task key or stronger source provenance.
 - Decision Log: add or update only an actual decision with trigger, chosen
@@ -52,7 +54,7 @@ item; fill other areas only when task evidence supports them.
 
 Return only this marker followed by one JSON code block. Each item has `area`,
 `identity`, `title`, `content`, optional `frequency`, and optional
-`lastUpdatedFrom`:
+`lastUpdatedFrom`, `status`, and `humanAction`:
 
 <!-- WORKSTREAM_COLLECTOR_JSON -->
 ```json

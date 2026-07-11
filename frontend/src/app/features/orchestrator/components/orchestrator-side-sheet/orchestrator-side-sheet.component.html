@@ -44,11 +44,11 @@
               [cacTooltip]="'Open orchestrator settings'"
               data-testid="orch-side-sheet-settings">⚙</button>
       <button class="sheet__btn"
-              (click)="refresh()"
-              [disabled]="loading()"
-              [cacTooltip]="'Reload active project chat'"
+              (click)="refreshCurrentContext()"
+              [disabled]="loading() || contextDigestState.refreshing()"
+              [cacTooltip]="'Refresh application context, chat, and session state'"
               data-testid="orch-side-sheet-refresh">
-        {{ loading() ? '...' : 'Refresh' }}
+        {{ contextDigestState.refreshing() ? 'Refreshing…' : (loading() ? '...' : 'Refresh') }}
       </button>
     </div>
   </div>
@@ -78,15 +78,12 @@
       [runStartedAt]="activeRun()?.startedAt ?? null" />
 
     <nav class="sheet__scope-row" aria-label="Orchestrator scope">
-      <button type="button" class="sheet__scope sheet__scope--active">
-        <span aria-hidden="true">▱</span>
-        <span>Project</span>
-      </button>
-      <button type="button" class="sheet__scope" disabled>
-        <span aria-hidden="true">⌘</span>
-        <span>Global</span>
-      </button>
-      <span class="sheet__memory">● memory v9 · fresh 12m</span>
+      <span class="sheet__scope sheet__scope--active"
+            aria-current="true"
+            data-testid="orch-context-scope">{{ contextDigestState.scopeLabel() }}</span>
+      <span class="sheet__memory"
+            [attr.title]="contextDigestState.statusTitle()"
+            data-testid="orch-context-freshness">{{ contextDigestState.statusText() }}</span>
     </nav>
 
     @if (errorMsg(); as err) {

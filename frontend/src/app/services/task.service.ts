@@ -37,6 +37,7 @@ import type { GitFileChange, GitStatus, TaskCommitDetail, TaskProvenanceView } f
 import type {
   OrchestratorLogResponse,
   OrchestratorSessionResponse,
+  OrchestratorContextDigest,
   OrchestratorChatResponse,
   OrchestratorChatTurn,
 } from '../features/orchestrator';
@@ -1838,6 +1839,24 @@ export class TaskService {
   getOrchestratorContextSessions() {
     return this.http.get<import('../features/orchestrator').OrchestratorContextSessionsResponse>(
       `${this.baseUrl}/orchestrator/sessions`,
+    );
+  }
+
+  /** Read the compact ORCH-1 application digest for one multichat context. */
+  getOrchestratorContextDigest(contextKey: string) {
+    return this.http.get<OrchestratorContextDigest>(
+      `${this.baseUrl}/orchestrator/context/${orchestratorContextChatSegment(contextKey)}`,
+    );
+  }
+
+  /**
+   * Rebuild one context digest on demand. Unlike the cheap read path this
+   * explicitly asks the backend to re-probe quota before assembling it.
+   */
+  refreshOrchestratorContextDigest(contextKey: string) {
+    return this.http.post<OrchestratorContextDigest>(
+      `${this.baseUrl}/orchestrator/context/${orchestratorContextChatSegment(contextKey)}/refresh`,
+      null,
     );
   }
 

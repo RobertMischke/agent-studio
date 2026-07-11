@@ -41,6 +41,8 @@ public sealed record WorkstreamCollectorItem
     public string Content { get; init; } = "";
     public string? Frequency { get; init; }
     public string? LastUpdatedFrom { get; init; }
+    public string? Status { get; init; }
+    public string? HumanAction { get; init; }
 }
 
 /// <summary>
@@ -322,6 +324,13 @@ public sealed class WorkstreamCollectorPostStepRunner
         sb.AppendLine("updated: " + now.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
         sb.AppendLine("updated-from: " + taskRef);
         if (frequency.HasValue) sb.AppendLine("frequency: " + frequency.Value.ToString(CultureInfo.InvariantCulture));
+        if (string.Equals(item.Area, "20-development-signals", StringComparison.OrdinalIgnoreCase))
+        {
+            var status = item.Status?.Trim().ToLowerInvariant();
+            if (status is "observed" or "active" or "resolved") sb.AppendLine("status: " + status);
+            if (!string.IsNullOrWhiteSpace(item.HumanAction))
+                sb.AppendLine("human-action: \"" + item.HumanAction.Trim().Replace("\"", "\\\"") + "\"");
+        }
         if (lastUpdatedFrom != null) sb.AppendLine("last-updated-from: " + lastUpdatedFrom);
         sb.AppendLine("---");
         sb.AppendLine();

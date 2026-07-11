@@ -108,10 +108,10 @@ unchanged. The literal-prefixed routes are strictly more specific than the
 `{projectName}` route, so routing prefers them without ambiguity — the same
 pattern the session-turn endpoints use.
 
-The shared Claude session, prompt building, and usage accounting stay
-project-level; the context key only selects which on-disk thread turns land in
-and are read back from, so every context still speaks to the one orchestrator
-that owns the scope.
+The shared Claude session and usage accounting stay project-level. The context
+key selects both the on-disk thread and the ORCH-1 read digest for the turn, so
+a task thread gets its focused task facts and a project thread cannot receive
+facts from another project.
 
 The side sheet consumes these routes directly: it derives the context key from
 navigation (`contextKey` on `OrchestratorSideSheetComponent`, frozen while
@@ -120,6 +120,35 @@ pinned) and reads/sends through `getOrchestratorChatByContext` /
 moving between the board and a task in the same project swaps the visible
 transcript even though the project is unchanged. When no context key is
 derivable it falls back to the per-project route, keeping the board identical.
+
+## Application Read Context (ORCH-1)
+
+Both chat dispatch paths use one deterministic context builder:
+
+- the side-sheet path under `/api/runner/{contextKey}/orchestrator-chat`;
+- the canonical session-turn path under
+  `/api/orchestrator/sessions/{contextKey}/turns`.
+
+The builder folds lane counts, recent lane transitions, progress tasks and
+lifecycle phases, cached CLI quota windows, PUB-1 publish targets, backend and
+filesystem-watcher health, and recent decision-journal verdicts into a bounded
+text digest. `global` reads all registered projects. `project:<project>` and
+`task:<project>/<task>` are project-isolated, and task scope adds a focused task
+row. Raw quota samples, full decision prompts/responses, and unbounded logs are
+never copied into the prompt.
+
+The same digest is inspectable without spending a model turn:
+
+- `GET /api/orchestrator/context/global`
+- `GET /api/orchestrator/context/project:{projectId}`
+- `GET /api/orchestrator/context/task:{projectId}/{taskKey}`
+
+Each response carries `contextKey`, `capturedAt`, the compact `digest`, and
+per-source freshness/degradation metadata. The matching `POST .../refresh`
+routes express explicit operator intent: they re-probe quota before rebuilding.
+Normal reads and chat turns stay cheap by using the existing quota cache. The
+side-sheet Refresh action calls this explicit path and shows the real capture
+time instead of a synthetic memory-age label.
 
 ## Chat Switcher Rail
 

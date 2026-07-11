@@ -20,6 +20,7 @@ export { ProjectPipelinePanelComponent } from './components/project-pipeline-pan
 export { ProjectUrlsPanelComponent } from './components/project-urls-panel/project-urls-panel.component';
 export { ProjectUrlPreviewTabComponent } from './components/project-url-preview-tab/project-url-preview-tab.component';
 export { ProjectGitPanelComponent } from './components/project-git-panel/project-git-panel.component';
+export { ProjectProposalsPanelComponent } from './components/project-proposals-panel/project-proposals-panel.component';
 
 // section components used cross-feature
 export { ProjectSteeringDocsSectionComponent } from './components/project-steering-docs-section/project-steering-docs-section';

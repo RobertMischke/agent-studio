@@ -230,6 +230,7 @@ builder.Services.AddSingleton<AgentStudio.Tasks.TaskReader>();
 builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();
 builder.Services.AddSingleton<OrchestratorChat>();
+builder.Services.AddSingleton<OrchestratorContextDigestService>();
 builder.Services.AddSingleton<OrchestratorChatService>();
 builder.Services.AddSingleton<ProjectChatStore>();
 builder.Services.AddSingleton<ProjectChatIndex>();
@@ -494,6 +495,7 @@ builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 // hours the way 2062/2067/2068 did on 2026-07-10.
 builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
+builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();
 // Wiki-grading maintenance run (AGT-2051): the maintenance-model default (its own
 // config class in the CLI-management area), the companion sidecar writer, the
 // grader seam (production = the one-shot CLI rail), and the run orchestrator.

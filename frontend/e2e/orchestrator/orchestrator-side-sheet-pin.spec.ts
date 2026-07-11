@@ -90,6 +90,22 @@ async function stubWorkspace(page: Page) {
     });
   });
 
+  await page.route(new RegExp(`/api/orchestrator/context/project:${PROJECT}(?:/refresh)?$`), async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        contextKey: `project:${PROJECT}`,
+        capturedAt: new Date().toISOString(),
+        digest: 'lanes: ready=0 | runs: active=0 | health: ok',
+        sources: [
+          { name: 'lanes', status: 'empty', capturedAt: new Date().toISOString(), detail: null },
+          { name: 'health', status: 'ok', capturedAt: new Date().toISOString(), detail: null },
+        ],
+      }),
+    });
+  });
+
   await page.route(/\/api\/runner\/[^/]+\/orchestrator-chat$/, async (route) => {
     const projectMatch = /\/api\/runner\/([^/]+)\/orchestrator-chat/.exec(route.request().url());
     const project = projectMatch ? decodeURIComponent(projectMatch[1]) : '';
@@ -135,6 +151,15 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await expect(header).toBeVisible();
     await expect(header).toHaveAttribute('data-scope', 'board');
     await expect(header).toHaveAttribute('data-context-key', `project:${PROJECT}`);
+    await expect(page.getByTestId('orch-context-scope')).toHaveText('Project context');
+    await expect(page.getByTestId('orch-context-freshness')).toContainText('Context captured');
+
+    const forcedRefresh = page.waitForRequest((request) =>
+      request.method() === 'POST'
+      && new URL(request.url()).pathname === `/api/orchestrator/context/project:${PROJECT}/refresh`);
+    await page.getByTestId('orch-side-sheet-refresh').click();
+    await forcedRefresh;
+    await expect(page.getByTestId('orch-context-freshness')).toContainText('Context captured');
     // Not pinned yet.
     await expect(header).not.toHaveAttribute('data-pinned', 'true');
     await expect(page.getByTestId('orch-context-pin')).toHaveCount(0);

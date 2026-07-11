@@ -5,7 +5,7 @@
     </span>
     <div class="wpulse__title-copy">
       <h3 class="wpulse__title">Pulse</h3>
-      <p class="wpulse__subtitle">Generated entry view - the wiki's history, inbox, and drift. Not a wiki page.</p>
+      <p class="wpulse__subtitle">Generated entry view - changes, warnings, live docs work, and drift. Not a wiki page.</p>
     </div>
     @if (loading()) {
       <span class="wpulse__loading" data-testid="project-wiki-pulse-loading">Refreshing…</span>
@@ -57,6 +57,84 @@
   </section>
 
   <div class="wpulse__grid">
+    <article class="wpulse__panel" data-testid="project-wiki-pulse-warnings">
+      <header class="wpulse__panel-head">
+        <app-studio-icon name="warn" [size]="13"></app-studio-icon>
+        <h4>Warnings</h4>
+        <span class="wpulse__badge" [attr.data-tone]="(warnings()?.count ?? 0) > 0 ? 'warn' : 'good'">
+          {{ warnings()?.count ?? 0 }}
+        </span>
+      </header>
+      @if (warnings(); as warningSet) {
+        @if (warningSet.available && warningSet.count === 0) {
+          <div class="wpulse__healthy" data-testid="project-wiki-pulse-warnings-empty">
+            <app-studio-icon name="check" [size]="16"></app-studio-icon>
+            <p>{{ warningSet.reason }}</p>
+          </div>
+        } @else if (warningSet.available) {
+          <ul class="wpulse__list">
+            @for (warning of warningSet.items; track warning.kind + ':' + warning.relPath + ':' + warning.detail) {
+              <li class="wpulse__warning" [attr.data-kind]="warning.kind">
+                <span class="wpulse__row-top">
+                  <span class="wpulse__signal-kind">{{ warning.kind }}</span>
+                  @if (warning.status) { <span class="wpulse__status">{{ warning.status }}</span> }
+                </span>
+                <strong class="wpulse__row-title">{{ warning.title }}</strong>
+                <span class="wpulse__reason">{{ warning.detail }}</span>
+                <span class="wpulse__action">{{ warning.humanAction }}</span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="wpulse__empty">{{ warningSet.reason || 'Warnings unavailable.' }}</p>
+        }
+      }
+    </article>
+
+    <article class="wpulse__panel" data-testid="project-wiki-pulse-activity">
+      <header class="wpulse__panel-head">
+        <app-studio-icon name="play" [size]="13"></app-studio-icon>
+        <h4>In progress</h4>
+        <span class="wpulse__badge" [attr.data-tone]="(activity()?.runs?.length ?? 0) > 0 ? 'info' : null">
+          {{ activity()?.runs?.length ?? 0 }}
+        </span>
+      </header>
+      @if (activity(); as live) {
+        @if (live.runs.length > 0) {
+          <ul class="wpulse__list">
+            @for (run of live.runs; track run.taskKey) {
+              <li class="wpulse__live-run" [attr.data-testid]="'project-wiki-pulse-live-' + run.taskKey">
+                <strong>{{ run.taskKey }}</strong>
+                <span>{{ run.lane }} · {{ runtime(run.startedAtUtc) }}</span>
+                <span>{{ run.docsFilesChanged }} docs {{ run.docsFilesChanged === 1 ? 'file' : 'files' }} changed</span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="wpulse__empty" data-testid="project-wiki-pulse-activity-empty">{{ live.reason }}</p>
+        }
+        <div class="wpulse__run-summaries">
+          <div data-testid="project-wiki-pulse-collector-run">
+            <strong>Collector</strong>
+            @if (live.collector; as run) {
+              <span [attr.data-tone]="run.status === 'ok' ? 'good' : 'bad'">{{ run.status }}</span>
+              <time [cacTooltip]="absoluteTime(run.ranAtUtc)">{{ relativeTime(run.ranAtUtc) }}</time>
+              @if (run.error) { <small>{{ run.error }}</small> }
+            } @else { <span>not run</span> }
+          </div>
+          <div data-testid="project-wiki-pulse-curator-run">
+            <strong>Curator</strong>
+            @if (live.curator; as run) {
+              <span [attr.data-tone]="run.status === 'ok' ? 'good' : 'bad'">{{ run.status }}</span>
+              <time [cacTooltip]="absoluteTime(run.ranAtUtc)">{{ relativeTime(run.ranAtUtc) }}</time>
+              <small>{{ run.merges }} merges · {{ run.condensations }} condensations</small>
+              @if (run.error) { <small>{{ run.error }}</small> }
+            } @else { <span>not run</span> }
+          </div>
+        </div>
+      }
+    </article>
+
     <!-- Change feed -->
     <article class="wpulse__panel wpulse__panel--feed" data-testid="project-wiki-pulse-feed">
       <header class="wpulse__panel-head">

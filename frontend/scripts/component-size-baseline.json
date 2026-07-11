@@ -13,22 +13,28 @@
       "total": 5477
     },
     "src/app/components/markdown-rich-editor/markdown-rich-editor.ts": {
-      "typeScript": 464,
+      "typeScript": 466,
       "template": 102,
       "styles": 184,
-      "total": 750
+      "total": 752
+    },
+    "src/app/features/board/components/create-task-dialog/create-task-dialog.component.ts": {
+      "typeScript": 451,
+      "template": 259,
+      "styles": 0,
+      "total": 710
     },
     "src/app/features/board/components/task-card/task-card.component.ts": {
-      "typeScript": 533,
-      "template": 435,
-      "styles": 1608,
-      "total": 2576
+      "typeScript": 574,
+      "template": 482,
+      "styles": 1726,
+      "total": 2782
     },
     "src/app/features/board/components/task-column/task-column.ts": {
-      "typeScript": 729,
-      "template": 221,
-      "styles": 700,
-      "total": 1650
+      "typeScript": 839,
+      "template": 243,
+      "styles": 738,
+      "total": 1820
     },
     "src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.ts": {
       "typeScript": 1104,
@@ -43,10 +49,34 @@
       "total": 2135
     },
     "src/app/features/project-detail/components/project-drift-overview-section/project-drift-overview-section.ts": {
-      "typeScript": 553,
+      "typeScript": 554,
       "template": 313,
-      "styles": 313,
-      "total": 1179
+      "styles": 307,
+      "total": 1174
+    },
+    "src/app/features/project-detail/components/project-git-panel/project-git-panel.component.ts": {
+      "typeScript": 304,
+      "template": 188,
+      "styles": 415,
+      "total": 907
+    },
+    "src/app/features/project-detail/components/project-pipeline-panel/project-pipeline-panel.component.ts": {
+      "typeScript": 628,
+      "template": 313,
+      "styles": 584,
+      "total": 1525
+    },
+    "src/app/features/project-detail/components/project-steering-docs-section/project-steering-docs-section.ts": {
+      "typeScript": 490,
+      "template": 339,
+      "styles": 719,
+      "total": 1548
+    },
+    "src/app/features/project-detail/components/project-wiki-section/project-wiki-section.ts": {
+      "typeScript": 1769,
+      "template": 845,
+      "styles": 1910,
+      "total": 4524
     },
     "src/app/features/project-detail/components/project-observability/project-observability-panel.component.ts": {
       "typeScript": 508,
@@ -81,14 +111,20 @@
     "src/app/features/studio-shell/studio-shell.component.ts": {
       "typeScript": 1333,
       "template": 838,
-      "styles": 2156,
+      "styles": 2210,
       "total": 4327
     },
     "src/app/features/task-detail/components/activity-log-view/activity-log-view.ts": {
-      "typeScript": 478,
-      "template": 268,
-      "styles": 690,
-      "total": 1436
+      "typeScript": 489,
+      "template": 279,
+      "styles": 703,
+      "total": 1471
+    },
+    "src/app/features/task-detail/components/detail-header/detail-header.component.ts": {
+      "typeScript": 489,
+      "template": 214,
+      "styles": 308,
+      "total": 1011
     },
     "src/app/features/task-detail/components/git-pane/git-pane/git-pane.component.ts": {
       "typeScript": 541,
@@ -98,21 +134,21 @@
     },
     "src/app/features/task-detail/components/prompt-pane/overview-pane/overview-pane.component.ts": {
       "typeScript": 1904,
-      "template": 753,
+      "template": 755,
       "styles": 1679,
       "total": 4336
     },
     "src/app/features/task-detail/components/protocol-pane/protocol-pane/protocol-pane.component.ts": {
-      "typeScript": 1198,
-      "template": 579,
+      "typeScript": 1390,
+      "template": 612,
       "styles": 1035,
-      "total": 2812
+      "total": 3003
     },
     "src/app/features/task-detail/task-detail.ts": {
-      "typeScript": 1510,
+      "typeScript": 1541,
       "template": 208,
       "styles": 1284,
-      "total": 3002
+      "total": 3023
     },
     "src/app/features/tokens/components/workspace-token-timeline/workspace-token-timeline.ts": {
       "typeScript": 432,

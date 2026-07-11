@@ -1,81 +1,60 @@
-# Orchestrator in-app — the operator moves inside
+# Orchestrator in-app: the operator moves inside
 
-**Status:** concept v1, 2026-07-10 — operator-directed ("in der nächsten
-Version möchte ich, dass der Chat der Orchestrator ist, der das Board im
-Blick hat — die ganze Anwendung — und sie am Laufen hält, auch wenn er
-innerhalb der Anwendung lebt"). Related:
-[`multichat-orchestrator.md`](multichat-orchestrator.md) (context model),
-[`run-liveness-and-slot-semantics.md`](run-liveness-and-slot-semantics.md),
-[`post-processing-immediacy-and-parallelism.md`](post-processing-immediacy-and-parallelism.md),
-[`publishing-workflows.md`](publishing-workflows.md).
+Status: concept v1, 2026-07-10. ORCH-1 sight is implemented by the
+context digest described below. ORCH-2 and ORCH-3 remain future work.
 
-## 1. Today vs. target
+The target is an in-app orchestrator chat that can keep the application
+running while it lives inside that application. The app is no longer only the
+patient observed by an external operator. The chat receives the same compact
+operational picture the operator uses to understand the board.
 
-**Today** an external operator session (Claude beside the app) keeps the
-system healthy: reconciles gate false-positives, bounces zombies, parks and
-promotes dependency chains, publishes packages, watches quotas. The app is
-the patient; the operator lives outside it.
+## Three pillars
 
-**Target (v-next):** the in-app orchestrator chat *is* that operator. It
-sees everything the human sees (board, runs, quotas, health) and holds the
-operational levers to keep the application running — from within.
+### Sight
 
-## 2. Three pillars
+The orchestrator receives a current, read-only application digest with:
 
-### 2.1 Sight — the orchestrator sees the whole application
-Full read access as chat context: lanes and transitions, run/lifecycle
-state, quota snapshots, publish targets, health endpoints, decision
-journal. Most of this exists as APIs today; the work is wiring it into the
-orchestrator's context (multichat context keys already point the chat at
-board/task/project scopes).
+- lane counts and the latest lane transitions;
+- active runs and their lifecycle phase;
+- cached CLI quota windows;
+- PUB-1 publish-target status;
+- backend and filesystem-watcher health;
+- recent decision-journal verdicts.
 
-### 2.2 Hands — journaled operational tools
-The new part: the orchestrator chat gets **tools** for exactly the actions
-the external operator performs today, each one written to the decision
-journal (exists) and visible in the feed:
+The digest follows the multichat context key. `global` includes all registered
+projects, `project:<project>` includes only that project, and
+`task:<project>/<task>` adds a focused task row to the same project-scoped
+facts. Project and task contexts must never leak facts from other projects.
 
-- reconcile a card (lane move + status note), requeue/bounce, park/promote
-- restart post-processing for a finished-but-orphaned run
-- trigger a publish (tag path, PUB-2) or a website deploy
-- adjust parallelism, pause/resume a project's auto mode
-- switch model/level per the quota-fallback policy (AGT-2040)
+The representation is bounded and model-oriented rather than a raw API dump.
+Noisy event sections have fixed row caps, long text is truncated, raw quota
+samples and full decision prompts or responses are excluded, and capped event
+headings state the applied limit. Lane and publish summaries retain one compact
+row per in-scope project so global context does not silently omit a project.
+Normal turns use cheap live facts plus cached quota data.
+An explicit refresh may run the expensive quota probes before rebuilding the
+same digest.
 
-Structural fixes (1944 outcome taxonomy, 2000 run-liveness, 2021 aspect
-retry, 2028 spawner, 2029 waits-on) shrink how often these hands are
-needed; the orchestrator handles the remainder — and unknown-unknowns.
+The digest is one backend service shared by the visible side-sheet chat and the
+context-session turn API. This prevents two orchestrator entry points from
+developing different views of application state.
 
-### 2.3 Anchor — self-preservation despite living inside
-**Deprioritized by the operator (2026-07-10):** the dead-host problem is
-deliberately ignored for now — the operator mostly works in other
-applications anyway and restarts a dead host himself; the existing
-watchdog/start scripts stay as they are. The split below remains the
-target picture for later, not a near-term slice.
+### Hands
 
-The honest paradox: a component inside the app cannot restart its own dead
-host. Split responsibilities:
+ORCH-2 will add journaled operational tools for reconciliation, requeue,
+park/promote, post-processing restart, publish, and parallelism changes. It is
+not part of ORCH-1. ORCH-1 does not grant mutation authority.
 
-- **In-app brain** handles everything *except* host death: lane hygiene,
-  chains, publishes, quota policy.
-- **Minimal outside anchor** handles host death only: the existing
-  watchdog/service path (`watchdog-stable.sh`, detached start scripts,
-  later systemd on Linux hosts) restarts an unhealthy backend. The anchor
-  is dumb on purpose — all judgment lives in the brain.
-- On boot, the brain runs the adoption scan (AGT-2000) and resumes its
-  standing orders.
+### Anchor and standing orders
 
-## 3. Standing orders become policy
+ORCH-3 will capture standing operational policy and the minimal outside anchor
+needed when the host itself is unavailable. Host-death recovery remains outside
+the in-app chat for now.
 
-The night-shift playbook (triage categories: infrastructure cut vs. quota
-vs. gate false-positive vs. genuine dependency; reconciliation notes;
-publish duties; "pause until quota reset when both CLIs are dry") is
-captured as the orchestrator's **standing instructions** — versioned in the
-repo, editable by the operator, loaded as the orchestrator chat's system
-context. The human stops being the runbook.
-
-## 4. Slices
+## Slice boundaries
 
 | Slice | Scope | Gate |
 |---|---|---|
-| ORCH-1 | sight: complete read context (lanes, runs, quota, health, journal) in the orchestrator chat | multichat MC-2/3 |
-| ORCH-2 | hands: journaled tools (reconcile, requeue, park/promote, restart post-processing, parallelism) | ORCH-1; 2028/2029 deployed |
-| ORCH-3 | policy + anchor: standing-orders document, quota policy wiring (2040), watchdog contract | ORCH-2 |
+| ORCH-1 | Complete, scoped read context and on-demand refresh | Multichat context keys |
+| ORCH-2 | Journaled intervention tools | ORCH-1 |
+| ORCH-3 | Standing-orders policy and outside anchor | ORCH-2 |

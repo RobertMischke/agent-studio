@@ -1,0 +1,10 @@
+{
+  "relatedTasks": [
+    {
+      "key": "AGT-2047",
+      "title": "ORCH-1: Orchestrator-Sicht - vollstaendiger Lese-Kontext (Lanes, Runs, Quota, Health, Journal)",
+      "linkedAt": "2026-07-11T01:47:00.0244281Z",
+      "source": "auto"
+    }
+  ]
+}

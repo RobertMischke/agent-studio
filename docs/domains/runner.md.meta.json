@@ -5,6 +5,12 @@
       "title": "Runner-Daemon: kontinuierlicher Pickup mit Projekt-Zuweisung (Remote-Dauerbetrieb A)",
       "linkedAt": "2026-07-10T16:43:03.0907018Z",
       "source": "auto"
+    },
+    {
+      "key": "AGT-2047",
+      "title": "ORCH-1: Orchestrator-Sicht - vollstaendiger Lese-Kontext (Lanes, Runs, Quota, Health, Journal)",
+      "linkedAt": "2026-07-11T01:47:00.0244281Z",
+      "source": "auto"
     }
   ]
 }

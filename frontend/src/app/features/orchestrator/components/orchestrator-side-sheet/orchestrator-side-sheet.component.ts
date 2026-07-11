@@ -15,18 +15,17 @@ import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { WatchPathEntry } from '../../../../models/task.model';
 import { TaskState } from '../../../../models/task.model';
-import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
-import type { OrchestratorContextSession } from '../../../../features/orchestrator';
+import type { OrchestratorChatTurn, OrchestratorContextSession } from '../../../../features/orchestrator';
 import { buildChatNavigationContext } from '../../../../features/orchestrator';
 import { ChatComponent } from 'coding-agent-chat/composer';
 import { ChatEvent, ChatMessage, ChatSubmitEvent, ChatToolbarItem } from 'coding-agent-chat/core';
-
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
 import { OrchestratorContextHeaderComponent } from '../orchestrator-context-header/orchestrator-context-header.component';
 import { ChatSwitcherRailComponent } from '../chat-switcher-rail/chat-switcher-rail.component';
 import { OrchestratorProjectPickerComponent } from '../orchestrator-project-picker/orchestrator-project-picker.component';
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
+import { OrchestratorContextDigestService } from '../../state/orchestrator-context-digest.service';
 import {
   suppressLocalDuplicates,
   parseBugHashtags,
@@ -35,20 +34,9 @@ import {
   buildDemoEvents,
 } from './orchestrator-side-sheet.util';
 /**
- * Right-hand side sheet that hosts the orchestrator chat. Shell follows
- * the same flex-collapse pattern as `kanban-filter-sidesheet` (host width
- * animates to 0 when closed so the board reflows instead of being overlaid).
- *
- * Phase 3 wires this to a real bidirectional conversation endpoint
- * (`/api/runner/{project}/orchestrator-chat`): the backend resumes the
- * singleton global Claude session, persists both user and orchestrator
- * turns under `<watchPath>/.orchestrator/orchestrator-chat.jsonl`, and
- * returns the reply turn. Project switching at the top mirrors the
- * board's project-tabs metaphor; threads are independent per project.
- *
- * The composer also emits a `createTaskFromDraft` event (Phase 5) so the
- * host can pre-fill the create-task dialog with the user's draft text and
- * pasted screenshots without reaching back into the chat component.
+ * Push-layout side sheet hosting automatic context-keyed orchestrator chats.
+ * The reusable composer owns chat interaction; this host owns app context,
+ * transcript endpoints, task-draft handoff, and the ORCH-1 read digest.
  */
 @Component({
   selector: 'app-orchestrator-side-sheet',
@@ -64,6 +52,7 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-side-sheet.component.html',
   styleUrl: './orchestrator-side-sheet.component.scss',
+  providers: [OrchestratorContextDigestService],
   host: {
     '[class.is-open]': 'open()',
     // When open, drive the host width from the persisted user choice so
@@ -139,6 +128,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly activeProject = signal<string | null>(null);
   readonly selectedContextKey = signal<string | null>(null);
   readonly contextSessions = signal<OrchestratorContextSession[]>([]);
+  readonly contextDigestState = inject(OrchestratorContextDigestService);
   private readonly seenContexts = signal<Record<string, string>>(this.readSeenContexts());
 
   readonly unreadContextKeys = computed<ReadonlySet<string>>(() => {
@@ -180,27 +170,39 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   } | null>(null);
 
   readonly effectiveProject = computed<string | null>(() =>
-    this.selectedSession()
+    this.selectedContextKey() === 'global'
+      ? null
+      : this.selectedSession()
       ? this.selectedSession()?.projectId ?? null
       : (this.pinned() ? (this.pinnedSnapshot()?.project ?? null) : this.activeProject()));
   readonly effectiveJobId = computed<string | null>(() =>
-    this.selectedSession()?.kind === 'task'
+    this.selectedContextKey() === 'global'
+      ? null
+      : this.selectedSession()?.kind === 'task'
       ? (this.selectedTask()?.id ?? null)
       : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.jobId ?? null) : this.activeJobId())));
   readonly effectiveJobTitle = computed<string | null>(() =>
-    this.selectedSession()?.kind === 'task'
+    this.selectedContextKey() === 'global'
+      ? null
+      : this.selectedSession()?.kind === 'task'
       ? (this.selectedTask()?.title ?? this.selectedSession()?.taskKey ?? null)
       : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.jobTitle ?? null) : this.activeJobTitle())));
   readonly effectiveJobKey = computed<string | null>(() =>
-    this.selectedSession()?.kind === 'task'
+    this.selectedContextKey() === 'global'
+      ? null
+      : this.selectedSession()?.kind === 'task'
       ? (this.selectedSession()?.taskKey ?? null)
       : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.jobKey ?? null) : this.activeJobKey())));
   readonly effectiveJobState = computed<string | null>(() =>
-    this.selectedSession()?.kind === 'task'
+    this.selectedContextKey() === 'global'
+      ? null
+      : this.selectedSession()?.kind === 'task'
       ? (this.selectedTask()?.state ?? null)
       : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.jobState ?? null) : this.activeJobState())));
   readonly effectiveWatchPath = computed<string | null>(() =>
-    this.selectedSession()?.kind === 'task'
+    this.selectedContextKey() === 'global'
+      ? null
+      : this.selectedSession()?.kind === 'task'
       ? (this.selectedTask()?.watchPath ?? null)
       : (this.selectedSession() ? null : (this.pinned() ? (this.pinnedSnapshot()?.watchPath ?? null) : this.activeWatchPath())));
 
@@ -408,11 +410,13 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     // effectiveProject() unchanged — still swaps the visible transcript.
     effect(() => {
       const proj = this.effectiveProject();
-      this.contextKey();
+      const key = this.contextKey();
+      untracked(() => this.contextDigestState.selectContext(key));
       this.open();
-      if (this.open() && proj) {
+      if (this.open() && key) {
         this.localTurns.set([]);
-        this.refresh(false);
+        untracked(() => this.contextDigestState.load(key, false));
+        if (proj) this.refresh(false);
       }
     });
 
@@ -560,6 +564,15 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       error: () => this.contextSessions.set([]),
     });
   }
+
+  refreshCurrentContext(): void {
+    const key = this.contextKey();
+    if (!key || this.contextDigestState.refreshing()) return;
+    this.contextDigestState.load(key, true);
+    if (this.effectiveProject()) this.refresh(false);
+    this.refreshContextSessions();
+  }
+
   private readSeenContexts(): Record<string, string> {
     if (typeof window === 'undefined') return {};
     try { return JSON.parse(window.localStorage?.getItem('atp.chatSwitcher.seen.v1') ?? '{}'); }
@@ -574,7 +587,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   selectProjectTab(proj: string): void {
     this.setActiveProject(proj);
   }
-
 
   /**
    * Drag the left-edge splitter to resize the panel. The orchestrator

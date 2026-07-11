@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import * as fs from 'fs';
 import * as path from 'path';
-import { api } from '../helpers/api';
+import { BACKEND } from '../helpers/api';
 
 /**
  * Wiki Pulse landing view (PULSE-1). The wiki opens on the generated Pulse view
@@ -15,10 +15,6 @@ import { api } from '../helpers/api';
  * PROJECT_WIKI_RESULTS_DIR is set; otherwise a sibling of the spec.
  */
 
-interface WatchPath { name: string; path: string }
-interface WikiTreeNodeFixture { type: 'folder' | 'md' | 'html' | 'json'; children?: WikiTreeNodeFixture[] }
-interface WikiTreeFixture { exists: boolean; root: WikiTreeNodeFixture[] }
-
 const SCREENSHOT_DIR = (() => {
   const fromEnv = process.env.PROJECT_WIKI_RESULTS_DIR;
   if (fromEnv && fromEnv.trim()) return fromEnv;
@@ -27,11 +23,6 @@ const SCREENSHOT_DIR = (() => {
 
 function slugFor(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
-
-function countWikiDocs(nodes: readonly WikiTreeNodeFixture[] = []): number {
-  return nodes.reduce((count, node) =>
-    node.type === 'folder' ? count + countWikiDocs(node.children ?? []) : count + 1, 0);
 }
 
 const PULSE_FIXTURE = {
@@ -93,6 +84,22 @@ const PULSE_FIXTURE = {
       { relPath: 'scratch-idea.md', title: 'Scratch idea', grade: 'C', assessment: 'Thin, unfiled scratch note with gaps.', gradedAt: '2026-07-10T09:00:00Z', model: 'claude-sonnet-5', reportPath: 'scratch-idea.md.report.html', frameAreaTitle: null },
     ],
   },
+  warnings: {
+    available: true,
+    reason: null,
+    count: 2,
+    items: [
+      { kind: 'human-action', title: 'Runner restart loop', detail: 'Development signal is active.', humanAction: 'Inspect the latest failed resume before reissuing.', relPath: 'engineering-workstream/20-development-signals/restart.md', status: 'active' },
+      { kind: 'dead-link', title: 'Dead link in operator guide', detail: '../missing-runbook.md', humanAction: 'Repair or remove this internal link.', relPath: 'operations/operator-guide.md', status: null },
+    ],
+  },
+  activity: {
+    available: true,
+    reason: null,
+    runs: [{ taskKey: 'AGT-2015', lane: '3-progress', startedAtUtc: new Date(Date.now() - 43 * 60_000).toISOString(), docsFilesChanged: 3 }],
+    collector: { ranAtUtc: new Date(Date.now() - 3 * 3600_000).toISOString(), status: 'ok', error: null, merges: 0, condensations: 0 },
+    curator: { ranAtUtc: new Date(Date.now() - 6 * 3600_000).toISOString(), status: 'ok', error: null, merges: 2, condensations: 1 },
+  },
 };
 
 const MAINTENANCE_MODEL = { cliType: 'claude', model: 'claude-sonnet-5', thinkingLevel: null };
@@ -113,26 +120,79 @@ async function mockGradingContext(page: import('@playwright/test').Page): Promis
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GRADING_STATUS_DONE) }));
 }
 
-test.describe('Wiki Pulse landing view (PULSE-1)', () => {
-  let projectName = '';
+/** Keeps the spec independent of the host's configured real projects. */
+async function mockProjectContext(page: import('@playwright/test').Page): Promise<void> {
+  await page.route('**/api/watch-paths', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{ name: 'demo', path: '/throwaway/demo', rootPath: '/throwaway/demo' }]),
+  }));
+  await page.route('**/api/projects/demo/wiki/tree', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ exists: true, root: [{ type: 'md', name: 'README.md', relPath: 'README.md' }] }),
+  }));
+}
 
-  test.beforeAll(async () => {
-    fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
-    const paths = await api<WatchPath[]>('/api/watch-paths');
-    expect(paths.length).toBeGreaterThan(0);
-    const prioritized = [
-      ...paths.filter(p => /agent.?software|agent.?studio|agent.?task/i.test(p.name)),
-      ...paths,
-    ];
-    const candidates = Array.from(new Map(prioritized.map(p => [p.name, p])).values());
-    for (const candidate of candidates) {
-      const tree = await api<WikiTreeFixture>(`/api/projects/${encodeURIComponent(candidate.name)}/wiki/tree`);
-      if (tree.exists && countWikiDocs(tree.root) > 0) { projectName = candidate.name; break; }
+/**
+ * A route callback that rejects fails the test it belongs to. The app keeps
+ * polling in the background (e.g. `GET /api/cli/claude/models`), so a proxied
+ * request can still be mid-flight when a short test's assertions finish and
+ * Playwright tears the browser context down underneath it. `route.fetch` then
+ * rejects with "Target page, context or browser has been closed" — which is the
+ * sporadic failure that only bit the *fast* combined-run scenarios (empty-state,
+ * grading) while the slower landing test outlived its own poll. Treat these
+ * teardown-race errors as benign; they are not a product defect.
+ */
+function isTeardownRace(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  return message.includes('has been closed')
+    || message.includes('target closed')
+    || message.includes('disposed')
+    || message.includes('test ended');
+}
+
+async function proxyBackend(page: import('@playwright/test').Page): Promise<void> {
+  await page.route('**/api/**', async route => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const target = `${BACKEND}${url.pathname}${url.search}`;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await route.fetch({ url: target });
+        await route.fulfill({ response });
+        return;
+      } catch (error) {
+        // Never throw out of a route handler. A closing context is expected at
+        // teardown; a genuinely failing hop is aborted so the *assertion* (not
+        // this callback) surfaces the cause with a readable message.
+        if (isTeardownRace(error)) return;
+        if (attempt === 2) {
+          console.warn(`proxyBackend ${request.method()} ${url.pathname} failed: ${error instanceof Error ? error.message : error}`);
+          await route.abort('failed').catch(() => { /* context already gone */ });
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
-    expect(projectName, 'expected a project with a populated docs/wiki tree').not.toBe('');
+  });
+}
+
+test.describe('Wiki Pulse landing view (PULSE-2)', () => {
+  const projectName = 'demo';
+
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 
-  test('opens on the generated Pulse view with feed, inbox, and drift grade bar', async ({ page }) => {
+  test.beforeAll(() => {
+    fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+  });
+
+  test('opens on the generated Pulse view with feed, inbox, and drift grade bar', async ({ page, devBackend }) => {
+    expect(devBackend.port).toBe(5030);
+    await proxyBackend(page);
+    await mockProjectContext(page);
     // Overlay a deterministic Pulse payload so the surface is stable (--mocked).
     await page.route('**/wiki/pulse**', route =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PULSE_FIXTURE) }));
@@ -158,14 +218,22 @@ test.describe('Wiki Pulse landing view (PULSE-1)', () => {
     await expect(page.getByTestId('project-wiki-pulse-inbox-open-scratch-idea.md')).toBeVisible();
     await expect(page.getByTestId('project-wiki-pulse-inbox')).toContainText('Needs sorting');
 
+    await expect(page.getByTestId('project-wiki-pulse-warnings')).toContainText('Inspect the latest failed resume');
+    await expect(page.getByTestId('project-wiki-pulse-live-AGT-2015')).toContainText('3 docs files changed');
+    await expect(page.getByTestId('project-wiki-pulse-collector-run')).toContainText('ok');
+    await expect(page.getByTestId('project-wiki-pulse-curator-run')).toContainText('2 merges · 1 condensations');
+
     // No horizontal overflow on the landing surface.
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
     expect(overflow).toBe(false);
 
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'wiki-pulse-landing--mocked-real.png'), fullPage: true });
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'wiki-pulse-warnings-in-progress--mocked.png'), fullPage: true });
   });
 
-  test('degrades to labelled empty states when a source is unavailable', async ({ page }) => {
+  test('degrades to labelled empty states when a source is unavailable', async ({ page, devBackend }) => {
+    expect(devBackend.port).toBe(5030);
+    await proxyBackend(page);
+    await mockProjectContext(page);
     await page.route('**/wiki/pulse**', route => route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({
@@ -186,7 +254,10 @@ test.describe('Wiki Pulse landing view (PULSE-1)', () => {
     await expect(page.getByTestId('project-wiki-pulse-drift-empty')).toContainText('No knowledge pages filed');
   });
 
-  test('shows the grading trigger and critical pages (AGT-2051)', async ({ page }) => {
+  test('shows the grading trigger and critical pages (AGT-2051)', async ({ page, devBackend }) => {
+    expect(devBackend.port).toBe(5030);
+    await proxyBackend(page);
+    await mockProjectContext(page);
     await page.route('**/wiki/pulse**', route =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PULSE_FIXTURE) }));
     await mockGradingContext(page);

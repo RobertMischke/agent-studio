@@ -11,6 +11,7 @@ import {
   ProjectWikiSectionComponent,
   ProjectUrlsPanelComponent,
   ProjectGitPanelComponent,
+  ProjectProposalsPanelComponent,
 } from '../../../project-detail';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { PromptAdminPanelComponent } from '../../../orchestrator';
@@ -31,6 +32,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   'git',
   'visual-evidence',
   'security',
+  'proposals',
   'architecture',
   'drift',
   'uxui',
@@ -78,6 +80,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     ProjectWikiSectionComponent,
     ProjectUrlsPanelComponent,
     ProjectGitPanelComponent,
+    ProjectProposalsPanelComponent,
     PromptAdminPanelComponent,
     WorkspaceScreenshotsComponent,
   ],

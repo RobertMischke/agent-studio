@@ -27,6 +27,7 @@ Use this page as the first stop when you need the right document quickly.
 | [schemas/](schemas/README.md) | JSON schemas for wire and disk shapes. |
 | [mockups/](mockups/) | Locked design references and click-dummies. |
 | [assets/](assets/README.md) | Image assets referenced by documentation pages. |
+| [proposals/](proposals/README.md) | Dated improvement proposals with durable approval status and implementation-card references. |
 
 ## Load-Bearing Entry Points
 
@@ -44,8 +45,10 @@ Use this page as the first stop when you need the right document quickly.
 | Architecture model | [architecture/model.md](architecture/model.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](design/style-guide-hard-rules.md) |
+| Application visual survey (2026-07-11) | [design/app-survey-2026-07-11.html](design/app-survey-2026-07-11.html) |
 | UX doctrine | [product/design-principles.md](product/design-principles.md) |
 | Persistent orchestrator chat and session-turn API | [product/orchestrator-chat.md](product/orchestrator-chat.md) |
+| In-app orchestrator sight, tools, and anchor slices | [concepts/orchestrator-in-app.md](concepts/orchestrator-in-app.md) |
 | Workstream frame (top wiki element; internal name engineering-workstream) | [concepts/engineering-workstream.md](concepts/engineering-workstream.md) |
 | Project relationship model and branch-aware Wiki checkout | [concepts/project-relationship-model.md](concepts/project-relationship-model.md) |
 | Wiki Pulse dashboard (change feed + inbox + drift grading; PULSE-1) | [concepts/wiki-pulse-dashboard.md](concepts/wiki-pulse-dashboard.md) |
@@ -73,6 +76,7 @@ Use this page as the first stop when you need the right document quickly.
 | Merge config analysis (parallelism coupling) | [wiki/concepts/task-integration-merge-config-analysis.html](wiki/concepts/task-integration-merge-config-analysis.html) |
 | Auto-review reissue / evidence-gate analysis | [wiki/concepts/auto-review-evidence-gate-analysis.html](wiki/concepts/auto-review-evidence-gate-analysis.html) |
 | Planning & Research task type | [wiki/concepts/planning-research-task-type.html](wiki/concepts/planning-research-task-type.html) |
+| MVP presentation screen-tooling evaluation and recommendation | [research/screen-tooling-mvp-presentation-2026-07.md](research/screen-tooling-mvp-presentation-2026-07.md) |
 | Runtime prompt usage audit | [wiki/concepts/runtime-prompt-usage-audit.html](wiki/concepts/runtime-prompt-usage-audit.html) |
 | Admin CLI onboarding | [wiki/concepts/admin-cli-onboarding.html](wiki/concepts/admin-cli-onboarding.html) |
 | Orchestrator supervision loop | [wiki/concepts/orchestrator-supervision-loop.html](wiki/concepts/orchestrator-supervision-loop.html) |

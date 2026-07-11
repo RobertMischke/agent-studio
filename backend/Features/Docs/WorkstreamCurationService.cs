@@ -73,7 +73,7 @@ public sealed class WorkstreamCurationService
             var manifest = new RetroManifest(1, project.Name, now, history.Count, matched.Count,
                 matched.Select(x => x.pattern.Key).ToArray(), taskIds.Take(100).ToArray());
             File.WriteAllText(marker, JsonSerializer.Serialize(manifest, Json), Encoding.UTF8);
-            WriteContext(controlRoot, new CuratorContext(1, now, null, matched.Count + knowledge + decisions + 2, 0, 0, 0));
+            WriteContext(controlRoot, new CuratorContext(1, now, null, null, null, matched.Count + knowledge + decisions + 2, 0, 0, 0));
 
             _logger.LogInformation(
                 "workstream-retro-pilot-completed project={Project} tasks={Tasks} signals={Signals} knowledge={Knowledge} decisions={Decisions}",
@@ -146,11 +146,21 @@ public sealed class WorkstreamCurationService
 
         var controlRoot = Path.Combine(root, ".curator");
         var previous = ReadContext(controlRoot);
-        WriteContext(controlRoot, new CuratorContext(1, previous?.CreatedAt ?? now, now, verified, merged, condensed, pruned));
+        WriteContext(controlRoot, new CuratorContext(1, previous?.CreatedAt ?? now, now, "ok", null, verified, merged, condensed, pruned));
         _logger.LogInformation(
             "workstream-curation-completed project={Project} verified={Verified} merged={Merged} condensed={Condensed} pruned={Pruned}",
             project.Name, verified, merged, condensed, pruned);
         return new(verified, merged, condensed, pruned, "curation completed");
+    }
+
+    public void RecordFailure(WatchPathEntry project, Exception error, DateTime? nowUtc = null)
+    {
+        if (string.IsNullOrWhiteSpace(project.RootPath)) return;
+        var root = Path.Combine(project.RootPath, "docs", Frame, ".curator");
+        var now = nowUtc ?? DateTime.UtcNow;
+        var previous = ReadContext(root);
+        WriteContext(root, new CuratorContext(1, previous?.CreatedAt ?? now, now, "error", error.Message,
+            previous?.Verified ?? 0, previous?.Merged ?? 0, previous?.Condensed ?? 0, previous?.Pruned ?? 0));
     }
 
     private static TaskEvidence ReadEvidence(TaskInfo task)
@@ -301,7 +311,8 @@ public sealed class WorkstreamCurationService
     private sealed record TaskEvidence(string TaskId, string Title, string Text);
     private sealed record ManagedPage(string Path, string Area, string Key, decimal Confidence, DateTime LastVerified);
     private sealed record RetroManifest(int Version, string Project, DateTime CompletedAt, int TasksScanned, int SignalsCreated, string[] Taxonomy, string[] EvidenceTasks);
-    private sealed record CuratorContext(int Version, DateTime CreatedAt, DateTime? LastRunAt, int Verified, int Merged, int Condensed, int Pruned);
+    private sealed record CuratorContext(int Version, DateTime CreatedAt, DateTime? LastRunAt, string? LastStatus, string? LastError,
+        int Verified, int Merged, int Condensed, int Pruned);
 
     private sealed class PageIdentityComparer : IEqualityComparer<(string Area, string Key)>
     {
@@ -357,9 +368,17 @@ public sealed class WorkstreamCuratorHostedService : BackgroundService
         var history = _scanner.ScanAllJobs();
         foreach (var project in _scanner.GetWatchPaths())
         {
-            var projectHistory = history.Where(t => string.Equals(t.ProjectName, project.Name, StringComparison.OrdinalIgnoreCase)).ToList();
-            _curator.RunRetroPilot(project, projectHistory);
-            _curator.Curate(project);
+            try
+            {
+                var projectHistory = history.Where(t => string.Equals(t.ProjectName, project.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+                _curator.RunRetroPilot(project, projectHistory);
+                _curator.Curate(project);
+            }
+            catch (Exception ex)
+            {
+                _curator.RecordFailure(project, ex);
+                _logger.LogWarning(ex, "workstream-curator-cycle-failed project={Project}", project.Name);
+            }
         }
     }
 }

@@ -43,6 +43,7 @@ public sealed class OrchestratorTurnService
     private readonly OrchestratorRunner _runner;
     private readonly IConfiguration _config;
     private readonly ILogger<OrchestratorTurnService> _logger;
+    private readonly OrchestratorContextDigestService? _contextDigests;
     private readonly object _gate = new();
     private readonly Queue<OrchestratorTurnWorkItem> _queued = new();
     private readonly Dictionary<string, CancellationTokenSource> _active = new(StringComparer.Ordinal);
@@ -52,12 +53,14 @@ public sealed class OrchestratorTurnService
         OrchestratorSessionRegistry registry,
         OrchestratorRunner runner,
         IConfiguration config,
-        ILogger<OrchestratorTurnService> logger)
+        ILogger<OrchestratorTurnService> logger,
+        OrchestratorContextDigestService? contextDigests = null)
     {
         _registry = registry;
         _runner = runner;
         _config = config;
         _logger = logger;
+        _contextDigests = contextDigests;
     }
 
     public OrchestratorTurnResponse Enqueue(string rawContextKey, OrchestratorTurnRequest request)
@@ -169,6 +172,7 @@ public sealed class OrchestratorTurnService
             var before = _registry.GetOrCreate(item.ContextKey);
             var workingDirectory = ResolveWorkingDirectory(item);
             var model = string.IsNullOrWhiteSpace(item.Model) ? before.Model : item.Model;
+            var prompt = await BuildPromptAsync(item, ct).ConfigureAwait(false);
             OrchestratorDecisionResult result;
 
             if (!string.IsNullOrWhiteSpace(before.SessionId))
@@ -176,8 +180,8 @@ public sealed class OrchestratorTurnService
                 var rejected = false;
                 result = await _runner.ResumeWithFallbackAsync(
                     before.SessionId!,
-                    item.Prompt,
-                    fallbackPromptBuilder: () => item.Prompt,
+                    prompt,
+                    fallbackPromptBuilder: () => prompt,
                     onSessionRejected: () => rejected = true,
                     model,
                     workingDirectory,
@@ -194,7 +198,7 @@ public sealed class OrchestratorTurnService
             }
             else
             {
-                result = await _runner.DecideAsync(item.Prompt, model, workingDirectory, ct).ConfigureAwait(false);
+                result = await _runner.DecideAsync(prompt, model, workingDirectory, ct).ConfigureAwait(false);
             }
 
             PersistResult(item, result);
@@ -281,6 +285,32 @@ public sealed class OrchestratorTurnService
             return item.WorkingDirectory!;
         var root = _registry.TaskRepositoryRoot;
         return string.IsNullOrWhiteSpace(root) ? Path.GetTempPath() : root!;
+    }
+
+    private async Task<string> BuildPromptAsync(OrchestratorTurnWorkItem item, CancellationToken ct)
+    {
+        if (_contextDigests == null) return item.Prompt;
+        try
+        {
+            var digest = await _contextDigests.BuildAsync(item.ContextKey, ct: ct).ConfigureAwait(false);
+            return digest.Digest + "\n\n=== USER MESSAGE ===\n" + item.Prompt;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Context is read-only enrichment. A temporarily unavailable source
+            // must not strand a queued user turn, so dispatch the original prompt
+            // and leave a structured warning for diagnosis.
+            _logger.LogWarning(
+                ex,
+                "orchestrator_context_digest_injection_failed contextKey={ContextKey} turnId={TurnId}",
+                item.ContextKey,
+                item.TurnId);
+            return item.Prompt;
+        }
     }
 
     private static string ActiveKey(OrchestratorTurnWorkItem item) => item.ContextKey + "|" + item.TurnId;

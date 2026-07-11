@@ -7,6 +7,8 @@ import { Injectable, computed, signal } from '@angular/core';
  * Global-vs-Workspace split:
  *   - Global (per-user / app-wide): `appearance` (Theme + Activity bar),
  *     `updates`, `workspaces` (registry management, moved off the sidebar),
+ *     `task-server` (the durable task server's URL, store, evidence git,
+ *     client registry and management sweeps — AGT-1924), `remote-hosts`,
  *     `orchestrator` (the platform-global supervisor / orchestrator lifecycle
  *     flags — AGT-1812 retired their standalone modal into this section).
  *   - Workspace defaults: `caps`, `working-memory` (extracted from caps),
@@ -21,6 +23,7 @@ export type WorkspaceSettingsSection =
   | 'appearance'
   | 'updates'
   | 'workspaces'
+  | 'task-server'
   | 'remote-hosts'
   | 'project-sources'
   | 'orchestrator'
@@ -172,6 +175,7 @@ export class WorkspaceOverlaysService {
       case '#/workspace/settings/appearance': return 'appearance';
       case '#/workspace/settings/updates': return 'updates';
       case '#/workspace/settings/workspaces': return 'workspaces';
+      case '#/workspace/settings/task-server': return 'task-server';
       case '#/workspace/settings/remote-hosts': return 'remote-hosts';
       case '#/workspace/settings/project-sources': return 'project-sources';
       case '#/workspace/settings/orchestrator': return 'orchestrator';
@@ -193,6 +197,7 @@ export class WorkspaceOverlaysService {
       case 'appearance': return '#/workspace/settings/appearance';
       case 'updates': return '#/workspace/settings/updates';
       case 'workspaces': return '#/workspace/settings/workspaces';
+      case 'task-server': return '#/workspace/settings/task-server';
       case 'remote-hosts': return '#/workspace/settings/remote-hosts';
       case 'project-sources': return '#/workspace/settings/project-sources';
       case 'orchestrator': return '#/workspace/settings/orchestrator';
@@ -208,6 +213,7 @@ export class WorkspaceOverlaysService {
     '#/workspace/settings/appearance',
     '#/workspace/settings/updates',
     '#/workspace/settings/workspaces',
+    '#/workspace/settings/task-server',
     '#/workspace/settings/remote-hosts',
     '#/workspace/settings/project-sources',
     '#/workspace/settings/orchestrator',

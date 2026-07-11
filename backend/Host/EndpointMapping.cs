@@ -1,5 +1,6 @@
 
 using AgentStudio.Search;
+using AgentStudio.Proposals;
 
 namespace AgentStudio.Host;
 
@@ -34,6 +35,7 @@ public static class EndpointMapping
         app.MapCompletedLaneAuditEndpoints();
         app.MapRunnerEndpoints();
         app.MapOrchestratorSessionEndpoints();
+        app.MapOrchestratorContextEndpoints();
         app.MapLeaseEndpoints();
         app.MapIntegrationLeaseEndpoints();
         app.MapLogIngestionEndpoints();
@@ -45,6 +47,7 @@ public static class EndpointMapping
         app.MapCrashRecoveryEndpoints();
         app.MapProjectRegressionRadarEndpoints();
         app.MapProjectDocsEndpoints();
+        app.MapProjectProposalEndpoints();
         app.MapWikiGradingEndpoints();
         app.MapProjectSteeringDocsEndpoints();
         app.MapSkillReadinessEndpoints();

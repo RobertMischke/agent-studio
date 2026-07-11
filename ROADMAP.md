@@ -727,6 +727,18 @@ The redesign handoff is [docs/product/orchestrator-chat-redesign-handoff.md](./d
 
 Delivered (Multichat, Concept §4): the side sheet follows the operator's navigation and can pin a context (MC-2), per-context transcript history is served by `GET/POST /api/runner/{contextKey}/orchestrator-chat` — a `task:<PROJ>/<KEY>` context keeps its own thread while `project:<PROJ>` resolves to the canonical board thread — and the side sheet reads and sends through the context-keyed route, so a pinned task now shows its own transcript in the app while the board is byte-for-byte unchanged. See [docs/product/orchestrator-chat.md](./docs/product/orchestrator-chat.md#per-context-chat-transcript).
 
+### In-App Orchestrator (Sight, Hands, Anchor)
+
+Move the operator inside the application. The concept ([docs/concepts/orchestrator-in-app.md](./docs/concepts/orchestrator-in-app.md), v1) is that the chat *is* the orchestrator that has the whole board (the whole application) in view and keeps it running from inside the app, not an external console watching a patient. This is the sibling direction to Persistent Orchestrator Chat: that theme makes the conversation durable; this one gives it operational eyes and, later, hands. Three pillars, gated in order:
+
+- **Sight (ORCH-1)**: the chat receives a current, read-only application digest covering the board pulse (lane counts plus latest transitions), active runs and lifecycle phase, cached CLI quota, PUB-1 publish-target status, backend and watcher health, and recent decision-journal verdicts. The digest follows the `global | project:<id> | task:<project>/<task>` multichat context key: global sees every registered project, project and task scopes stay project-isolated, and an unknown project or task is a 404, never a wider fallback.
+- **Hands (ORCH-2)**: journaled operational tools for reconciliation, requeue, park/promote, post-processing restart, publish, and parallelism changes. Every action typed, logged, and visible as a distinct participant. Not started.
+- **Anchor (ORCH-3)**: standing-orders operational policy plus the minimal outside anchor needed when the host itself is down. Host-death recovery stays outside the in-app chat until then. Not started.
+
+Hard boundary: sight grants no mutation authority. ORCH-1 only reads; intervention arrives with ORCH-2 and must be journaled and admitted through the existing slot and worktree-isolation model ([ADR-0052](docs/concepts/parallel-task-execution.md)), never as a hidden parallel actor editing a project outside admission.
+
+Delivered (Sight, ORCH-1): one backend `OrchestratorContextDigestService` builds the bounded digest and is shared by both the visible side-sheet chat turn and the canonical session-turn API, so the two entry points cannot drift into different views of application state. `GET /api/orchestrator/context/{key}` inspects the digest cheaply from cached quota; `POST .../refresh` is the only path that re-probes quota. The read-only, single-builder, fail-closed-scope boundary is archived in [ADR-0062](docs/architecture/decisions/adr-archive.md#adr-0062---the-in-app-orchestrator-read-context-orch-1-is-one-shared-scoped-read-only-digest-builder-2026-07-11). See [docs/product/orchestrator-chat.md](./docs/product/orchestrator-chat.md#application-read-context-orch-1).
+
 ### Focused UX
 
 Keep the app dense, fast, and pleasant to use:

@@ -100,6 +100,23 @@ public sealed class WorkstreamCurationServiceTests : IDisposable
         Assert.True(File.Exists(operatorPage));
     }
 
+    [Fact]
+    public void RecordFailure_PersistsPulseReadableOutcomeWithoutLosingCounts()
+    {
+        Directory.CreateDirectory(_root);
+        var project = new WatchPathEntry { Name = "agent-studio", RootPath = _root };
+        _sut.RunRetroPilot(project, [], new DateTime(2026, 7, 9, 0, 0, 0, DateTimeKind.Utc));
+        _sut.Curate(project, new DateTime(2026, 7, 10, 0, 0, 0, DateTimeKind.Utc));
+
+        _sut.RecordFailure(project, new InvalidOperationException("curator failed"),
+            new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc));
+
+        var context = File.ReadAllText(Path.Combine(_root, "docs", "engineering-workstream", ".curator", "context.json"));
+        Assert.Contains("\"lastStatus\": \"error\"", context);
+        Assert.Contains("\"lastError\": \"curator failed\"", context);
+        Assert.Contains("\"lastRunAt\": \"2026-07-11T00:00:00Z\"", context);
+    }
+
     private TaskInfo Task(string id, string title, string log)
     {
         var folder = Path.Combine(_root, "tasks", id);

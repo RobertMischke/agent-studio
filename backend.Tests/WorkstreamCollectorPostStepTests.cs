@@ -24,6 +24,23 @@ public sealed class WorkstreamCollectorPostStepTests : IDisposable
     }
 
     [Fact]
+    public void Apply_PersistsSignalStatusAndHumanActionFrontmatter()
+    {
+        var docs = PrepareDocs();
+        var item = Item("20-development-signals", "runner-crash", "Runner crash", "Seen again") with
+        {
+            Status = "active",
+            HumanAction = "Inspect the latest failed run."
+        };
+
+        WorkstreamCollectorPostStepRunner.Apply(docs, Context(), Proposal(item), DateTime.UtcNow);
+
+        var text = File.ReadAllText(AreaPage(docs, "20-development-signals", "runner-crash.md"));
+        Assert.Contains("status: active", text);
+        Assert.Contains("human-action: \"Inspect the latest failed run.\"", text);
+    }
+
+    [Fact]
     public void Apply_SameTaskRerun_DoesNotDoubleCountSignalOrLog()
     {
         var docs = PrepareDocs();

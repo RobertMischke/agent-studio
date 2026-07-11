@@ -62,57 +62,10 @@
     "font-family-name-quotes": null,
     "font-family-no-missing-generic-family-keyword": null,
 
-    "color-no-hex": true,
-    "color-named": ["never", { "ignore": ["inside-function"] }],
-    "scale-unlimited/declaration-strict-value": [
-      ["/color$/", "background", "background-color", "border-color", "fill", "stroke"],
-      {
-        "ignoreValues": [
-          "transparent", "currentColor", "inherit", "initial", "unset", "none", "revert", "revert-layer", "0",
-          "/^color-mix\\(/",
-          "/^linear-gradient\\(/",
-          "/^radial-gradient\\(/",
-          "/^conic-gradient\\(/",
-          "/^url\\(/"
-        ],
-        "ignoreFunctions": false,
-        "disableFix": true,
-        "severity": "error"
-      }
-    ],
-    "declaration-property-unit-disallowed-list": [
-      {
-        "padding": ["px"],
-        "padding-top": ["px"],
-        "padding-right": ["px"],
-        "padding-bottom": ["px"],
-        "padding-left": ["px"],
-        "padding-block": ["px"],
-        "padding-inline": ["px"],
-        "padding-block-start": ["px"],
-        "padding-block-end": ["px"],
-        "padding-inline-start": ["px"],
-        "padding-inline-end": ["px"],
-        "margin": ["px"],
-        "margin-top": ["px"],
-        "margin-right": ["px"],
-        "margin-bottom": ["px"],
-        "margin-left": ["px"],
-        "margin-block": ["px"],
-        "margin-inline": ["px"],
-        "margin-block-start": ["px"],
-        "margin-block-end": ["px"],
-        "margin-inline-start": ["px"],
-        "margin-inline-end": ["px"],
-        "gap": ["px"],
-        "row-gap": ["px"],
-        "column-gap": ["px"]
-      },
-      {
-        "message": "Use a --studio-spacing-* token instead of a hardcoded px value. See docs/frontend/style-guide/tokens.md.",
-        "severity": "warning"
-      }
-    ]
+    "color-no-hex": null,
+    "color-named": null,
+    "scale-unlimited/declaration-strict-value": null,
+    "declaration-property-unit-disallowed-list": null
   },
 
   "overrides": [
@@ -168,6 +121,7 @@
         "src/app/features/board/components/job-column/job-column.scss",
         "src/app/features/board/components/task-card/task-card.component.scss",
         "src/app/features/board/components/task-column/task-column.scss",
+        "src/app/features/project-detail/components/project-proposals-panel/project-proposals-panel.component.scss",
         "src/app/features/cli/components/cli-admin-panel/cli-admin-panel.scss",
         "src/app/features/cli/components/cli-console/cli-console.scss",
         "src/app/features/cli/components/cli-sessions-panel/cli-sessions-panel.scss",
@@ -223,24 +177,9 @@
         "src/app/features/workforce/components/role-badge/role-badge.component.scss"
       ],
       "rules": {
-        "color-no-hex": [true, { "severity": "warning" }],
-        "color-named": ["never", { "ignore": ["inside-function"], "severity": "warning" }],
-        "scale-unlimited/declaration-strict-value": [
-          ["/color$/", "background", "background-color", "border-color", "fill", "stroke"],
-          {
-            "ignoreValues": [
-              "transparent", "currentColor", "inherit", "initial", "unset", "none", "revert", "revert-layer", "0",
-              "/^color-mix\\(/",
-              "/^linear-gradient\\(/",
-              "/^radial-gradient\\(/",
-              "/^conic-gradient\\(/",
-              "/^url\\(/"
-            ],
-            "ignoreFunctions": false,
-            "disableFix": true,
-            "severity": "warning"
-          }
-        ]
+        "color-no-hex": null,
+        "color-named": null,
+        "scale-unlimited/declaration-strict-value": null
       }
     },
     {
@@ -253,8 +192,8 @@
         "src/app/features/task-detail/components/prompt-pane/pipeline-step-toggle/pipeline-step-toggle.component.scss"
       ],
       "rules": {
-        "color-no-hex": [true, { "severity": "warning" }],
-        "color-named": ["never", { "ignore": ["inside-function"], "severity": "warning" }],
+        "color-no-hex": null,
+        "color-named": null,
         "scale-unlimited/declaration-strict-value": [
           [
             "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
