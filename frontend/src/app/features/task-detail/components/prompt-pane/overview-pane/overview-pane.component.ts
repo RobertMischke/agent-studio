@@ -59,6 +59,7 @@ import {
 import { cliTypeLabel } from '../../../../../services/format.util';
 import { projectIdentity } from '../../../../../services/project-identity.util';
 import { TaskService } from '../../../../../services/task.service';
+import { CostBreakdownTriggerDirective } from '../../../../tokens';
 import { NotificationService } from '../../../../../services/notification.service';
 import { ModalStackService } from '../../../../../services/modal-stack.service';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
@@ -458,7 +459,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, StudioIconComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, StudioIconComponent, CostBreakdownTriggerDirective],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })

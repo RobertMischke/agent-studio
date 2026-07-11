@@ -62,10 +62,11 @@
             <span class="cum__total-label">Tokens</span>
             <span class="cum__total-value">{{ formatTokens(totals().tokens) }}</span>
           </span>
-          <span class="cum__total cum__total--cost">
+          <button type="button" class="cum__total cum__total--cost cum__cost-button"
+                  (click)="showTotalCalculation()">
             <span class="cum__total-label">Est. cost</span>
             <span class="cum__total-value">{{ totals().anyPriced ? formatUsd(totals().costUsd) : 'n/a' }}</span>
-          </span>
+          </button>
         </div>
       </div>
       <p class="cum__scope-note">Lifetime telemetry by model. Independent of the active quota windows above.</p>
@@ -95,7 +96,11 @@
                     [cacTooltip]="m.cacheIncludedInInput ? 'Cached input is already included in the Input column for Codex' : 'Cache tokens are separate from the Input column'">
                   {{ formatTokens(cacheTokens(m)) }}
                 </td>
-                <td class="cum__num cum__num--cost">{{ costLabel(m.estimatedApiCostUsd, m.modelPriced) }}</td>
+                <td class="cum__num cum__num--cost">
+                  @if (m.modelPriced) {
+                    <button type="button" class="cum__inline-cost" (click)="showModelCalculation(m)">{{ costLabel(m.estimatedApiCostUsd, true) }}</button>
+                  } @else { Unknown }
+                </td>
               </tr>
             }
           </tbody>
@@ -104,7 +109,9 @@
               <tr>
                 <td>Total · {{ totals().models }} models</td>
                 <td class="cum__num" colspan="3">{{ formatTokens(totals().tokens) }}</td>
-                <td class="cum__num cum__num--cost">{{ totals().allPriced ? formatUsd(totals().costUsd) : 'Unknown' }}</td>
+                <td class="cum__num cum__num--cost">
+                  <button type="button" class="cum__inline-cost" (click)="showTotalCalculation()">{{ totals().allPriced ? formatUsd(totals().costUsd) : 'Unknown' }}</button>
+                </td>
               </tr>
             </tfoot>
           }

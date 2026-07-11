@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, input, s
 import type { TokenSummary } from '../../../../features/tokens';
 import { TaskService } from '../../../../services/task.service';
 import { TokensApiService } from '../../../../features/tokens';
+import { CostBreakdownService } from '../../services/cost-breakdown.service';
+import type { TokenSummaryByModel } from '../../models/tokens.model';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
@@ -32,6 +34,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
 })
 export class TokenSummaryBlockComponent implements OnInit, OnDestroy {
   private readonly tokensApi = inject(TokensApiService);
+  private readonly costBreakdown = inject(CostBreakdownService);
   readonly projectName = input.required<string>();
 
   private readonly jobService = inject(TaskService);
@@ -69,5 +72,25 @@ export class TokenSummaryBlockComponent implements OnInit, OnDestroy {
     if (n < 0.1) return '$' + n.toFixed(4);
     if (n < 1)   return '$' + n.toFixed(3);
     return '$' + n.toFixed(2);
+  }
+
+  showTotalCalculation(summary: TokenSummary): void {
+    this.costBreakdown.show(summary.byModel.map(model => this.priceItem(model)),
+      `${summary.project} cost calculation`);
+  }
+
+  showModelCalculation(model: TokenSummaryByModel): void {
+    this.costBreakdown.show([this.priceItem(model)], `${model.model} cost calculation`);
+  }
+
+  private priceItem(model: TokenSummaryByModel) {
+    return {
+      model: model.model,
+      label: `${model.calls} call${model.calls === 1 ? '' : 's'}`,
+      inputTokens: model.inputTokens,
+      outputTokens: model.outputTokens,
+      cacheReadTokens: model.cacheReadTokens,
+      cacheWriteTokens: model.cacheCreationTokens,
+    };
   }
 }

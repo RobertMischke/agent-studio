@@ -30,6 +30,12 @@ public class TokenPricingTests
         Assert.Equal(5.00m,  c.InputUsd);
         Assert.Equal(5.00m,  c.OutputUsd);
         Assert.Equal(10.00m, c.Total);
+        Assert.NotNull(c.PriceBasis);
+        Assert.Equal(5m, c.PriceBasis.InputPerMillion);
+        Assert.Equal(25m, c.PriceBasis.OutputPerMillion);
+        Assert.Equal(0.5m, c.PriceBasis.CacheReadPerMillion);
+        Assert.Equal(6.25m, c.PriceBasis.CacheWritePerMillion);
+        Assert.False(string.IsNullOrWhiteSpace(c.PriceBasis.Source));
     }
 
     [Fact]
@@ -123,6 +129,7 @@ public class TokenPricingTests
         Assert.True(before.ModelKnown);
         Assert.True(after.ModelKnown);
         Assert.NotEqual(before.Total, after.Total);
+        Assert.NotEqual(before.PriceBasis!.ValidFrom, after.PriceBasis!.ValidFrom);
     }
 
     [Fact]
