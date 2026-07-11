@@ -64,7 +64,7 @@ public static class LeaseEndpoints
 
             var clientId = context.Request.Headers["X-Client-Id"].ToString();
             var client = clients.Find(clientId);
-            if (string.Equals(client?.RunnerGitStatus, "read-only", StringComparison.OrdinalIgnoreCase))
+            if (client is not null && string.Equals(client.RunnerGitStatus, "read-only", StringComparison.OrdinalIgnoreCase))
             {
                 logger.LogWarning(
                     "remote-runner-claim-refused-read-only runner={Runner} clientId={ClientId} detail={Detail}",

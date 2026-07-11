@@ -20,6 +20,7 @@ using RHeartbeat = Runner::AgentRunner.RunLeaseHeartbeatRequest;
 using RRelease = Runner::AgentRunner.RunLeaseReleaseRequest;
 using RClaim = Runner::AgentRunner.RunnerClaimRequest;
 using RClaimStatus = Runner::AgentRunner.RunnerClaimStatus;
+using RGitCapability = Runner::AgentRunner.RunnerGitCapabilityRequest;
 using RLogIngest = Runner::AgentRunner.LogIngestRequest;
 using RCliLine = Runner::AgentRunner.CliOutputLine;
 using RArtifactIngest = Runner::AgentRunner.ArtifactIngestRequest;
@@ -279,6 +280,43 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         Assert.Equal("https://github.com/agent-orc/agent-studio.git", claim.RepositoryUrl);
         Assert.Equal("develop", claim.DefaultBranch);
         Assert.Equal("Prompt.", await client.ReadTaskFileAsync(claim.TaskKey!, "prompt.md", CancellationToken.None));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
+    }
+
+    [Fact]
+    public async Task Daemon_claim_is_refused_until_the_runner_reports_push_ready()
+    {
+        SeedTask(TaskStates.Ready, TaskKey, "Push-gated pickup", "Prompt.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        var clientId = await client.RegisterAsync(ProjectName, "service", CancellationToken.None);
+
+        var assignment = await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/execution-runner",
+            new { executionRunner = ProjectName, remoteExecutionEnabled = true });
+        assignment.EnsureSuccessStatusCode();
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
+
+        await client.ReportGitCapabilityAsync(clientId, new RGitCapability(
+            "read-only", "push-dry-run failed (128): permission denied", DateTime.UtcNow), CancellationToken.None);
+
+        var refused = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"), CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Empty, refused.Status);
+        Assert.Contains("read-only", refused.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
+
+        await client.ReportGitCapabilityAsync(clientId, new RGitCapability(
+            "ready", "dry-run succeeded", DateTime.UtcNow), CancellationToken.None);
+
+        var admitted = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"), CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Claimed, admitted.Status);
+        Assert.Equal(TaskKey, admitted.JobId);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
     }
 
