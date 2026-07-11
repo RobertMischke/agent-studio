@@ -101,10 +101,10 @@ test.describe('F48 Files tab — rename + only-prompt + hint', () => {
       // the prompt-card / hint card mount.
       await tab.click();
 
-      // Files-pane shell rendered with the prompt card auto-expanded.
+      // Files-pane shell rendered with no expansion before user action.
       const promptCard = page.getByTestId('file-card-prompt.md');
       await expect(promptCard).toBeVisible();
-      await expect(promptCard).toHaveAttribute('class', /file-card--expanded/);
+      await expect(promptCard).toHaveAttribute('class', /file-card--collapsed/);
 
       // Hint card surfaces so the user knows other .md files would appear here.
       const hint = page.getByTestId('files-pane-hint');

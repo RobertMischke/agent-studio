@@ -93,6 +93,60 @@ describe('FilesPaneComponent (smoke)', () => {
     http.verify();
   });
 
+  it('keeps expansion state across artifact poll ticks and new files', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FilesPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FilesPaneComponent);
+    const prompt = {
+      name: 'prompt.md',
+      sizeBytes: 128,
+      mtime: '2026-07-11T12:00:00Z',
+      kind: 'prompt' as const,
+    };
+    fixture.componentRef.setInput('jobId', 'demo-job');
+    fixture.componentRef.setInput('promptContent', '# Prompt');
+    fixture.componentRef.setInput('artifacts', [prompt]);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const promptHeader = root.querySelector<HTMLElement>('[data-testid="file-card-prompt.md"] .file-card__head')!;
+    expect(promptHeader.getAttribute('aria-expanded')).toBe('false');
+    promptHeader.click();
+    fixture.detectChanges();
+    expect(promptHeader.getAttribute('aria-expanded')).toBe('true');
+
+    // A poll tick returns fresh objects for the same manifest.
+    fixture.componentRef.setInput('artifacts', [{ ...prompt }]);
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="file-card-prompt.md"] .file-card__head')?.getAttribute('aria-expanded')).toBe('true');
+
+    // A newly discovered file starts collapsed without disturbing prompt.md.
+    const aspect = {
+      name: 'aspect-code-quality.json',
+      sizeBytes: 256,
+      mtime: '2026-07-11T12:00:10Z',
+      kind: 'aspect' as const,
+      aspectName: 'code-quality',
+    };
+    fixture.componentRef.setInput('artifacts', [{ ...prompt }, aspect]);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController)
+      .expectOne((r) => r.url.includes('/api/tasks/demo-job/files/aspect-code-quality.json'))
+      .flush(utf8Buffer('{"schemaVersion":1,"aspect":"code-quality","status":"pass","summary":"OK"}'));
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="file-card-prompt.md"] .file-card__head')?.getAttribute('aria-expanded')).toBe('true');
+    expect(root.querySelector('[data-testid="file-card-aspect-code-quality.json"] .file-card__head')?.getAttribute('aria-expanded')).toBe('false');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
   it('renders a structured card for an aspect-*.json artefact instead of raw JSON', async () => {
     await TestBed.configureTestingModule({
       imports: [FilesPaneComponent],
@@ -131,7 +185,7 @@ describe('FilesPaneComponent (smoke)', () => {
     fixture.detectChanges();
 
     const root = fixture.nativeElement as HTMLElement;
-    // Structured card is rendered (single artefact auto-expands).
+    // Structured card is rendered in the collapsed preview.
     const card = root.querySelector('[data-testid="aspect-json-card"]');
     expect(card).not.toBeNull();
     const badge = root.querySelector('[data-testid="aspect-json-status"]');

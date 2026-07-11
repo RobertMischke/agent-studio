@@ -19,11 +19,11 @@ import { parseAspectDocument, type AspectDocument } from './aspect-document.mode
  * sort order produced by the backend.
  *
  * Expand / collapse rules (F48):
- *   - Only prompt.md present → expand by default + show a hint that more
- *     files can be dropped into the folder.
- *   - Multiple files → every card stays in preview mode (first ~12 lines)
- *     until the user expands it. Click anywhere on the header (or the
- *     "Show full" link) to expand to the full markdown.
+ *   - Every card starts in preview mode (first ~12 lines) until the user
+ *     expands it. Click anywhere on the header (or the "Show full" link)
+ *     to expand to the full markdown.
+ *   - Polling may replace the artifact objects or add files without changing
+ *     expansion state. State resets only when a different task is opened.
  *
  * Editing rule: only the prompt card is editable. The card flips from
  * the rendered markdown view to {@link MarkdownRichEditorComponent} when
@@ -57,7 +57,7 @@ export class FilesPaneComponent {
 
   readonly save = output<string>();
 
-  /** Slugs whose card is currently expanded. Multi-file default is empty (preview mode). */
+  /** File names whose card is currently expanded. */
   private readonly expanded = signal<Set<string>>(new Set());
   /** Cached file bodies. `null` marks a load error so the view can render a tidy fallback. */
   private readonly content = signal<Map<string, string | null>>(new Map());
@@ -80,17 +80,16 @@ export class FilesPaneComponent {
   });
 
   constructor() {
-    // Auto-expand the prompt when it's the only artifact. Multi-file lists
-    // intentionally start fully collapsed (preview is the at-a-glance view).
+    // Expansion is user-owned UI state. Artifact polling replaces the input
+    // array every 10 seconds, so reset only at the task boundary.
     effect(() => {
-      const list = this.artifacts();
-      const next = new Set<string>();
-      if (list.length === 1) {
-        next.add(list[0].name);
-      }
-      this.expanded.set(next);
-      // Reset editor state whenever the artifact list changes (new job opened).
+      this.jobId();
+      this.expanded.set(new Set());
       this.editingPrompt.set(false);
+      this.content.set(new Map());
+      this.loading.set(new Set());
+      this.fetched.clear();
+      this.aspectDocCache.clear();
     }, { allowSignalWrites: true });
 
     // Prefetch content for every non-prompt artifact so previews / expansions
