@@ -389,10 +389,18 @@ builder.Services.AddSingleton<AgentStudio.Runner.ILoadThrottleGate>(sp =>
     sp.GetRequiredService<AgentStudio.Runner.SystemLoadThrottle>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentStudio.Runner.SystemLoadThrottle>());
 builder.Services.AddSingleton<AgentStudio.Cli.ClaudeOneShot>();
+builder.Services.AddSingleton<AgentStudio.Cli.CodexOneShot>();
 builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot>(sp =>
     new AgentStudio.Cli.PromptLoggingCliOneShot(
         new AgentStudio.Cli.LoadAwareCliOneShot(
             sp.GetRequiredService<AgentStudio.Cli.ClaudeOneShot>(),
+            sp.GetRequiredService<AgentStudio.Runner.ILoadThrottleGate>(),
+            sp.GetRequiredService<ILogger<AgentStudio.Cli.LoadAwareCliOneShot>>()),
+        sp.GetRequiredService<AgentStudio.Cli.StepPromptLog>()));
+builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot>(sp =>
+    new AgentStudio.Cli.PromptLoggingCliOneShot(
+        new AgentStudio.Cli.LoadAwareCliOneShot(
+            sp.GetRequiredService<AgentStudio.Cli.CodexOneShot>(),
             sp.GetRequiredService<AgentStudio.Runner.ILoadThrottleGate>(),
             sp.GetRequiredService<ILogger<AgentStudio.Cli.LoadAwareCliOneShot>>()),
         sp.GetRequiredService<AgentStudio.Cli.StepPromptLog>()));

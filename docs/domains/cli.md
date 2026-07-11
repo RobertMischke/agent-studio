@@ -39,6 +39,10 @@ CLI execution tests.
   `SessionRegistry.cs`; the `/usage` list report stays body-free.
 - `backend/Services/Runner/OrchestratorSession.cs` and
   `OrchestratorRunner.cs`: runner-to-CLI orchestration boundary.
+- `backend/Features/Cli/Routing/OneShot/ClaudeOneShot.cs` and `CodexOneShot.cs`:
+  central one-prompt adapters used by model-backed pipeline steps. Codex uses
+  stdin plus the JSONL protocol, read-only sandboxing, final-agent-message
+  extraction, and `turn.completed` usage parsing.
 - `prompts/runtime/`: prompt templates handed to the CLIs.
 - `frontend/src/app/features/cli/`, `frontend/src/app/features/tokens/`, and
   `frontend/src/app/components/cli-model-selector/`: CLI status, usage, quota,
@@ -56,6 +60,9 @@ CLI execution tests.
   permission block behind a generic failure.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
+- Codex Spark quota windows are independent windows. Keep their labels and burn
+  percentages separate from the standard 5-hour and weekly windows; never fold
+  a Spark-only snapshot into the main-window admission signal.
 - Workspace CLI Management owns the model-routing policy. Each CLI has one
   primary model and may have a fallback CLI, model, and thinking level in
   `cli-model-routing.json`. `CliQuotaFallbackService` resolves that policy

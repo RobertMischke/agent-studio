@@ -421,8 +421,8 @@ public record PipelineStepSetting
     /// selector vocabulary). Null falls back to the project
     /// <see cref="ProjectSettings.OrchestratorModel"/>, then the global
     /// default model, then the runtime default. Only meaningful for steps that
-    /// invoke an LLM (the aspect and drift post-steps); deterministic tool
-    /// steps ignore it.
+    /// invoke an LLM (including aspects, abort review, grade, and drift);
+    /// deterministic tool steps ignore it.
     /// </summary>
     public string? Model { get; init; }
 

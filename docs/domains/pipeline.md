@@ -115,6 +115,11 @@ pipeline view.
   `StepId` on its `CliOneShotRequest` (today: the review aspects via
   `AspectRunnerService` and the code-review-grade / verdict passes via
   `CodeReviewStepService`).
+- `backend/Features/Cli/Routing/OneShot/CodexOneShot.cs`: read-only Codex JSONL
+  adapter for model-backed pipeline steps. A project can opt an aspect or the
+  abort-review step into Codex through its existing `PipelineSteps` CLI/model
+  override, including a live-discovered Spark model, without changing the core
+  coding run or the default Claude route.
 - `backend/Features/Cli/Routing/OneShot/StepPromptLog.cs`: the per-job
   append/read writer for `.metadata/prompts.jsonl` (see filesystem-contract).
   Writes through the shared `IJsonlAppender` (concurrent aspect fan-out cannot
@@ -133,6 +138,16 @@ pipeline view.
   ids. Explicit card model/reasoning pins always win; legacy cards without
   provenance are treated as pinned. The selected/recommended pair remains
   visible on the step record.
+- Cheap-model routing is explicit and reversible. `PipelineStepSetting` owns the
+  `(cliType, model, thinkingLevel)` override per project and step; absent fields
+  preserve the current runtime default. Aspect reviews and abort review honor
+  all three fields. Spark model ids are selected from the live Codex catalogue,
+  not pinned in the static registry, because the entitlement model can change.
+  This is the execution seam for a future `TokenEconomy.SuggestModel` capability
+  matrix: the advisor may recommend a qualified low-cost model, while
+  `pre-model-qualification` (AGT-2146) remains the evidence-producing guard and
+  explicit operator pins continue to win. Coding CORE runs are not routed to
+  Spark by this feature.
 - Aspect and code-review prompts carry a complete evidence set (AGT-2022): the
   run-window diff summary is appended with the task-branch-vs-base commit range
   (`base..task/<id>` via `GitService.GetCommitsInRangeAtRoot`) so a squash/merge

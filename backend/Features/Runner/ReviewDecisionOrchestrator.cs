@@ -1592,6 +1592,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         Func<string, string>? modelForAspect = settings is null
             ? null
             : aspectId => PipelineStepConfigResolver.ResolveModel(settings, $"aspect-{aspectId}", aspectModel);
+        Func<string, string?>? cliForAspect = settings is null
+            ? null
+            : aspectId => PipelineStepConfigResolver.ResolveCliType(settings, $"aspect-{aspectId}") ?? CliTypes.Claude;
         Func<string, string?>? thinkingLevelForAspect = settings is null
             ? null
             : aspectId =>
@@ -1600,14 +1603,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 return PipelineStepConfigResolver.ResolveThinkingLevel(
                     settings,
                     $"aspect-{aspectId}",
-                    CliTypes.Claude,
+                    cliForAspect?.Invoke(aspectId) ?? CliTypes.Claude,
                     resolvedModel);
             };
         Func<string, string?>? promptForAspect = settings is null
             ? null
             : aspectId => PipelineStepConfigResolver.ResolvePrompt(settings, $"aspect-{aspectId}");
 
-        var report = await _aspectRunner.RunAsync(inputs, enabledAspects, cliBinary, aspectModel, perAspectTimeout, ct, modelForAspect, thinkingLevelForAspect, promptForAspect);
+        var report = await _aspectRunner.RunAsync(inputs, enabledAspects, cliBinary, aspectModel, perAspectTimeout, ct,
+            modelForAspect, thinkingLevelForAspect, promptForAspect, cliForAspect);
 
         // Aspect-verdict infra crash (AGT-2021): one or more aspects produced no
         // verdict because the reviewing CLI died - even after the aspect runner's

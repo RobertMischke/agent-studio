@@ -372,6 +372,30 @@ public class AspectRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task PerAspectCli_RoutesConfiguredCodexCliWithSparkModel()
+    {
+        string? capturedCli = null;
+        string? capturedModel = null;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        runner.CliRunner = (_, cli, model, _, _, _) =>
+        {
+            capturedCli = cli;
+            capturedModel = model;
+            return Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+        };
+
+        await runner.RunAsync(BuildInputs(), new[] { "documentation-impact" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None,
+            modelForAspect: _ => "gpt-5.3-codex-spark",
+            cliForAspect: _ => CliTypes.Codex);
+
+        Assert.Equal(CliTypes.Codex, capturedCli);
+        Assert.Equal("gpt-5.3-codex-spark", capturedModel);
+    }
+
+    [Fact]
     public void AspectVerdictParsing_RoundTripsStatusToken()
     {
         var v = new AspectVerdict("code-quality", AspectStatus.Concerns, "summary text", "body", "quality:concerns");

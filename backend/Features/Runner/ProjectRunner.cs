@@ -5946,10 +5946,13 @@ public class ProjectRunner
             settings,
             AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep,
             runtimeDefault: execution.Model ?? activeInfo.Model ?? ModelIds.ClaudeHaiku45);
+        var reviewCliType = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveCliType(
+            settings,
+            AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep) ?? cliType;
         var thinkingLevel = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveThinkingLevel(
             settings,
             AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep,
-            cliType,
+            reviewCliType,
             model,
             execution.ThinkingLevel ?? activeInfo.ThinkingLevel);
 
@@ -5966,7 +5969,7 @@ public class ProjectRunner
             ToolCallsLiveness: BuildToolCallsLiveness(activeInfo.FolderPath),
             GitState: BuildAuthoritativeAbortGitState(activeInfo, commitsDuringRun, headShaAfter),
             TranscriptUsage: BuildTranscriptUsage(usage),
-            CliType: cliType,
+            CliType: reviewCliType,
             Model: model)
         {
             ThinkingLevel = thinkingLevel,
