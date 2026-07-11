@@ -1551,7 +1551,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var gate = CompletionGate.Evaluate(
             statusSummary, recentLog,
             CountPriorReissues(workspace, entry.Name, current.Id),
-            ConfiguredMaxReissues());
+            ConfiguredMaxReissues(),
+            HasResultsArtifacts(current.FolderPath));
         if (gate.IsIncomplete)
         {
             await HandleCompletionGateAsync(workspace, entry, pending, current, gate, ct);
@@ -5177,6 +5178,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var logPath = TaskPaths.CliOutputLog(folder);
         var recent = File.Exists(logPath) ? TailLines(File.ReadAllText(logPath), 200) : string.Empty;
         return (Truncate(task, 4_000), Truncate(recent, 6_000));
+    }
+
+    private static bool HasResultsArtifacts(string jobFolderPath)
+    {
+        try
+        {
+            var results = Path.Combine(jobFolderPath, "results");
+            return Directory.Exists(results) && Directory.EnumerateFiles(results, "*", SearchOption.AllDirectories).Any();
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string LoadRoadmap(string rootPath)

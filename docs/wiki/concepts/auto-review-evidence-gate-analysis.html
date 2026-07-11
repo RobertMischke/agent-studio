@@ -39,7 +39,8 @@
     <a href="#audit">3. The 9-task audit</a> &middot;
     <a href="#root">4. Root cause</a> &middot;
     <a href="#plan">5. Target and plan</a> &middot;
-    <a href="#open">6. Open questions</a>
+    <a href="#current">6. Current implementation</a> &middot;
+    <a href="#open">7. Open questions</a>
   </div>
 
   <h2 id="summary">1. Executive summary</h2>
@@ -91,7 +92,19 @@
   <p class="sub">Related: this is the review-side counterpart of the
   <a href="orchestrator-drive-to-conclusion.html">drive-to-conclusion concept</a> (over-eager reissue vs. carrying a task home). Never bulk re-pickup the human-review lane; that re-runs from scratch and wipes the committed work.</p>
 
-  <h2 id="open">6. Open questions</h2>
+  <h2 id="current">6. Current implementation</h2>
+  <p><strong>2026-07-11, AGT-2079:</strong> the completion gate now applies a pure
+  <code>CompletionEvidencePolicy</code> before treating historical failure words in the accumulated
+  status and log as current unfinished work. A run is complete without a fresh commit when the
+  latest closure has <code>[[TASK_DONE]]</code>, a successful process terminal (normally
+  <code>exitCode=0</code>; a sentinel-wins <code>status=completed</code> is also authoritative), a successful
+  <code>Result:</code>, no open items, and at least one run-bound delivery signal: an API upload,
+  a non-empty <code>results/</code> folder, or documented successful verification. A current
+  build/test failure still blocks unless the same close-out documents its successful
+  re-verification. The pure policy fixtures reproduce <code>MKT-1</code>, <code>ASS-1761</code>,
+  and <code>AGT-2077</code>.</p>
+
+  <h2 id="open">7. Open questions</h2>
   <ul>
     <li>Should accept-with-concerns auto-complete on grade A, or always wait for a human in <code>5-human-review</code>?</li>
     <li>What is the default per-project visual-evidence policy for a new project (off, on, or inferred from task type)?</li>

@@ -555,6 +555,26 @@
             models the shared checkout as <code>MSB3026</code>-locked and proves the green worktree reaches review.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2079</code><br><span class="small">completion gate for documentation and verification-only runs<br>(observed on <code>MKT-1</code>, <code>ASS-1761</code>, <code>AGT-2077</code>)</span></td>
+          <td>
+            Three completed runs with no new commit were reissued or escalated despite <code>[[TASK_DONE]]</code>, a successful run terminal,
+            a successful status, no open items, and concrete delivery evidence in API uploads, <code>results/</code>, or a
+            verification report.
+          </td>
+          <td>
+            <code>CompletionGate.ExtractFindings</code> scanned historical failure vocabulary in the accumulated status and log
+            before it classified the latest run's non-commit evidence. Once the shared reissue budget was spent, the resulting
+            stale finding became the message "unfinished-work evidence after 2 reissues".
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> pure <code>CompletionEvidencePolicy</code> now accepts a clean
+            <code>TASK_DONE</code> close-out with exit 0 or authoritative <code>status=completed</code>, backed by an API delivery, a non-empty <code>results/</code> folder, or
+            documented successful verification. Explicit open items and current, non-reverified build/test failures still use
+            the existing bounded reissue/escalation path. Pure fixtures pin all three night cases.
+          </td>
+        </tr>
       </tbody>
     </table>
 
