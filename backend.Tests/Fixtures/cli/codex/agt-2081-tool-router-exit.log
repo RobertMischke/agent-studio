@@ -1,0 +1,2 @@
+[09:36:45.807] [stderr] 2026-07-11T09:36:45.807804Z ERROR codex_core::tools::router: error=Exit code: 1
+[09:36:45.808] [stdout] {"type":"item.completed","item":{"id":"item_42","type":"command_execution","command":"Get-Process dotnet,vstest.console,testhost -ErrorAction SilentlyContinue","aggregated_output":"","exit_code":1,"status":"failed"}}

@@ -228,6 +228,37 @@ public class CodexOutputRendererTests
     }
 
     [Fact]
+    public void RealCodexTranscript_ToolRouterExitDiagnostic_IsSuppressed()
+    {
+        // Captured from AGT-2081 on Windows: a harmless Get-Process miss emitted
+        // the duplicate immediately before the authoritative completed item.
+        var fixturePath = Path.Combine(
+            AppContext.BaseDirectory, "Fixtures", "cli", "codex",
+            "agt-2081-tool-router-exit.log");
+        var transcript = CliOutputLogParser.ParseLines(
+            File.ReadLines(fixturePath),
+            new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc));
+        var rendered = transcript.SelectMany(Renderer.Render).ToList();
+
+        var command = Assert.Single(rendered);
+        Assert.Equal("\u25cf Run Get-Process dotnet,vstest.console,testhost -ErrorAction SilentlyContinue", command.Text);
+        Assert.Equal("stderr", command.Stream);
+    }
+
+    [Fact]
+    public void SimilarStderrWithoutCodexRouterPrefix_RemainsVisible()
+    {
+        var raw = new CliOutputLine
+        {
+            Stream = "stderr",
+            Text = "tool router reported an application exit code: 1",
+            Timestamp = DateTime.UtcNow
+        };
+
+        Assert.Same(raw, Assert.Single(Renderer.Render(raw)));
+    }
+
+    [Fact]
     public void NonJsonStdout_PassesThroughUnchanged()
     {
         var lines = Render("plain text, not json");

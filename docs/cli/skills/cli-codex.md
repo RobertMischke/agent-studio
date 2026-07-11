@@ -117,6 +117,17 @@ a Codex run reads as cleanly as a Claude run in the Activity Log.
 | `item.completed` `update_plan` / `todo` | `● Todo update` | stdout |
 | any other frame / item type | `● <type>` (never raw JSON) | stdout |
 
+Codex also writes a tracing diagnostic such as
+`codex_core::tools::router: error=Exit code: 1` to stderr for a non-zero shell
+command. This is not a separate tool result. The following
+`item.completed.command_execution` frame is authoritative and carries the
+command, output, and exit code. `CodexOutputRenderer` suppresses only that exact
+duplicate diagnostic so the activity parser sees one complete tool event. The
+AGT-2081 fixture locks the Windows transcript shape. AGT-2082 independently
+verified that recorded model usage is captured from raw `turn.completed` JSON
+before rendering; therefore this diagnostic caused noisy parser rows but did
+not explain missing usage records.
+
 **Deliberate equivalences (not byte-identical to Claude).** Codex's frame catalogue
 differs from Claude's, so the marker *text* differs, but each maps to a verb the
 frontend `classifyAction` already buckets: `● Session` (vs Claude `● Session init`),
