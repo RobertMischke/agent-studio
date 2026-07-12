@@ -13,6 +13,7 @@ function buildCompletedJobDetail(jobId: string, watchPath: string, statusMarkdow
   return {
     info: {
       id: jobId,
+      taskKey: `${watchPath}::${jobId}`,
       jobKey: `${watchPath}::${jobId}`,
       title: 'Verdict duration spec fixture',
       state: '5-human-review',
@@ -159,7 +160,7 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
     });
   });
 
-  test('review activity without a verdict stays actionable from Result', async ({ page }) => {
+  test('review activity without a verdict stays actionable from Result', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1600, height: 1100 });
 
     const jobs = await listJobs();
@@ -174,9 +175,9 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
     };
 
     await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/summary/regenerate?**`, async (route) => {
-      await route.fulfill({ status: 202, contentType: 'application/json', body: '' });
+      await route.fulfill({ status: 202, contentType: 'application/json', body: '{}' });
     });
-    await page.route(`**/api/tasks/${encodeURIComponent(target.id)}?**`, async (route) => {
+    await page.route((url) => url.pathname === `/api/tasks/${encodeURIComponent(target.id)}`, async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) });
     });
     await page.route(`**/api/tasks/${encodeURIComponent(target.id)}/output?**`, async (route) => {
@@ -219,11 +220,15 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
     await expect(generate).toBeVisible();
     await expect(generate).toBeEnabled();
     await expect(generate).toContainText('Generate result');
+    await testInfo.attach('verdictless-review-result', {
+      body: await page.getByTestId('pane-protocol').screenshot(),
+      contentType: 'image/png',
+    });
 
     const request = page.waitForRequest((candidate) =>
       candidate.method() === 'POST' && candidate.url().includes('/summary/regenerate'),
     );
-    await generate.click();
+    await generate.evaluate((element: HTMLButtonElement) => element.click());
     await request;
   });
 
