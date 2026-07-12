@@ -12,18 +12,21 @@ public sealed class PeriodicProbeService : BackgroundService
     private readonly IGitProbe _git;
     private readonly IBackendProbe _backend;
     private readonly UpdateServiceOptions _options;
+    private readonly ReleasePreflightService _releasePreflight;
     private readonly ILogger<PeriodicProbeService> _logger;
 
     public PeriodicProbeService(
         UpdateStatusStore store,
         IGitProbe git,
         IBackendProbe backend,
+        ReleasePreflightService releasePreflight,
         UpdateServiceOptions options,
         ILogger<PeriodicProbeService> logger)
     {
         _store = store;
         _git = git;
         _backend = backend;
+        _releasePreflight = releasePreflight;
         _options = options;
         _logger = logger;
     }
@@ -57,6 +60,8 @@ public sealed class PeriodicProbeService : BackgroundService
                     if (runtime is not null)
                         _store.SetVersionTopology(runtime, _git.ReadVersionTopology(runtime.Commit));
                 }
+                if (_options.RequireReleaseManifest)
+                    _store.SetReleaseComparison(await _releasePreflight.EvaluateAsync(allowDowngrade: false, stoppingToken));
             }
             catch (OperationCanceledException) { return; }
             catch (Exception ex)

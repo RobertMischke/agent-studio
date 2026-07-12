@@ -10,3 +10,4 @@ Operator-facing setup, runtime, security, and git workflow docs.
 | [git/](git/) | Commit, push, and attribution doctrine. |
 | [testing/](testing/) | Dedicated test workspace and probe contracts. |
 | [remote-hosts.md](remote-hosts.md) | Add, connect, drain, retire, revive, and permanently remove remote runner hosts. |
+| [stable-release-contract.md](stable-release-contract.md) | Immutable Stable tags, build manifests, preflight comparison, rollback identity, and legacy migration. |

@@ -32,12 +32,37 @@ export interface UpdateStatus {
   mode: 'manual' | 'scheduled';
   verificationFailures: VerificationFailure[] | null;
   autoRollbackEnabled: boolean;
+  releaseComparison?: ReleaseComparison | null;
+}
+
+export interface ReleaseComparison {
+  allowed: boolean;
+  direction: 'SameVersion' | 'Upgrade' | 'Downgrade' | 'Divergence' | 'Unknown';
+  summary: string;
+  errors: string[];
+  latestApprovedTag: string | null;
+  offline: boolean;
 }
 
 export interface RuntimeVersion {
   version: string;
   commit: string;
   deployedAt: string;
+  tag?: string | null;
+  dirty?: boolean;
+  builtAt?: string | null;
+  integrity?: string | null;
+  codingAgentRunner?: ReleaseArtifactIdentity | null;
+  codingAgentChat?: ReleaseArtifactIdentity | null;
+  legacy?: boolean;
+}
+
+export interface ReleaseArtifactIdentity {
+  name: string;
+  version: string;
+  tag: string;
+  commit: string;
+  integrity: string;
 }
 
 export interface BranchVersion {
@@ -90,6 +115,10 @@ export interface UpdateHistoryEntry {
   verificationFailures?: VerificationFailure[] | null;
   rollbackStatus?: 'ok' | 'failed' | null;
   runFolder?: string | null;
+  intendedTag?: string | null;
+  observedTag?: string | null;
+  releaseDirection?: string | null;
+  manifestIntegrity?: string | null;
 }
 
 export interface TriggerRequest {

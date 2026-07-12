@@ -26,6 +26,7 @@ public sealed class UpdateOrchestrator
     private readonly IGitProbe _git;
     private readonly IBackendProbe _backend;
     private readonly UpdateVerifier _verifier;
+    private readonly ReleasePreflightService _releasePreflight;
     private readonly UpdateServiceOptions _options;
     private readonly ILogger<UpdateOrchestrator> _logger;
     private readonly ILoggerFactory _loggerFactory;
@@ -36,6 +37,7 @@ public sealed class UpdateOrchestrator
         IGitProbe git,
         IBackendProbe backend,
         UpdateVerifier verifier,
+        ReleasePreflightService releasePreflight,
         UpdateServiceOptions options,
         ILogger<UpdateOrchestrator> logger,
         ILoggerFactory loggerFactory)
@@ -44,6 +46,7 @@ public sealed class UpdateOrchestrator
         _git = git;
         _backend = backend;
         _verifier = verifier;
+        _releasePreflight = releasePreflight;
         _options = options;
         _logger = logger;
         _loggerFactory = loggerFactory;
@@ -158,6 +161,29 @@ public sealed class UpdateOrchestrator
 
             // PHASE 1 — preparing
             SetPhase("preparing", "snapshotting pre-state", runId, startedAt);
+            ReleaseManifest? intendedRelease = null;
+            ReleaseManifest? observedRelease = null;
+            ReleaseComparison? releaseComparison = null;
+            if (_options.RequireReleaseManifest)
+            {
+                var release = await _releasePreflight.EvaluateAsync(allowDowngrade: false, ct);
+                releaseComparison = release;
+                folder.WriteOutput("release-preflight.json", System.Text.Json.JsonSerializer.Serialize(release,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase, WriteIndented = true }));
+                if (!release.Allowed)
+                {
+                    FinishFailed(runId, startedAt, headBefore, headBefore, trigger,
+                        $"release preflight refused: {string.Join("; ", release.Errors)}", null, folder, preSnapshot);
+                    return;
+                }
+                intendedRelease = release.Candidate;
+                if (release.Installed is not null)
+                    folder.WriteOutput("rollback-build-manifest.json", System.Text.Json.JsonSerializer.Serialize(release.Installed,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase, WriteIndented = true }));
+                if (intendedRelease is not null)
+                    folder.WriteOutput("intended-build-manifest.json", System.Text.Json.JsonSerializer.Serialize(intendedRelease,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase, WriteIndented = true }));
+            }
             var preModes = await _backend.ReadProjectModesAsync(ct) ?? new Dictionary<string, string>();
             var shouldQuiesceRunners = ShouldQuiesceRunners();
             restoreModes = shouldQuiesceRunners ? new Dictionary<string, string>(preModes) : null;
@@ -232,6 +258,19 @@ public sealed class UpdateOrchestrator
                 return;
             }
 
+            if (intendedRelease is not null)
+            {
+                observedRelease = ReleasePreflightService.ToManifest(await _backend.ReadRuntimeVersionAsync(ct));
+                if (observedRelease is null || !StableReleaseContract.IdentityEquals(observedRelease, intendedRelease))
+                {
+                    var failure = new VerificationFailure("runtime-identity", observedRelease?.Tag ?? "missing", intendedRelease.Tag);
+                    FinishFailed(runId, startedAt, headBefore, headAfterPull, trigger,
+                        "runtime identity does not equal intended build manifest", new[] { failure }, folder, preSnapshot);
+                    if (_options.AutoRollback) await RunRollbackAsync(runId, manual: false, ct);
+                    return;
+                }
+            }
+
             // PHASE 6 — verifying-after-restart
             SetPhase("verifying-after-restart", "running 6-check matrix", runId, startedAt);
             var verification = await _verifier.RunAsync(runId, preModes, folder.AppendVerification, ct);
@@ -266,7 +305,8 @@ public sealed class UpdateOrchestrator
             folder.WriteSnapshot(postSnapshot);
             folder.WriteSummary(BuildSummaryMarkdown(runId, trigger, startedAt, headBefore, headAfter, preSnapshot, postSnapshot, verification, null));
 
-            FinishHistory(runId, startedAt, headBefore, headAfter, "ok", null, trigger, null, null, folder.Root);
+            FinishHistory(runId, startedAt, headBefore, headAfter, "ok", null, trigger, null, null, folder.Root,
+                intendedRelease?.Tag, observedRelease?.Tag, releaseComparison?.Direction.ToString(), intendedRelease?.Integrity);
             FinishDone(runId, startedAt, headBefore, headAfter,
                 $"updated {headBefore} -> {headAfter}", null);
         }
@@ -643,7 +683,8 @@ public sealed class UpdateOrchestrator
     }
 
     private void FinishHistory(string runId, DateTime startedAt, string headBefore, string headAfter, string status,
-        string? error, string trigger, IReadOnlyList<VerificationFailure>? failures, string? rollbackStatus, string? runFolder)
+        string? error, string trigger, IReadOnlyList<VerificationFailure>? failures, string? rollbackStatus, string? runFolder,
+        string? intendedTag = null, string? observedTag = null, string? releaseDirection = null, string? manifestIntegrity = null)
     {
         var finishedAt = DateTime.UtcNow;
         var entry = new UpdateHistoryEntry(
@@ -658,7 +699,11 @@ public sealed class UpdateOrchestrator
             Trigger: trigger,
             VerificationFailures: failures,
             RollbackStatus: rollbackStatus,
-            RunFolder: runFolder);
+            RunFolder: runFolder,
+            IntendedTag: intendedTag,
+            ObservedTag: observedTag,
+            ReleaseDirection: releaseDirection,
+            ManifestIntegrity: manifestIntegrity);
         _store.AppendHistory(entry);
     }
 

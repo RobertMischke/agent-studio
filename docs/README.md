@@ -71,6 +71,7 @@ Use this page as the first stop when you need the right document quickly.
 | Wiki drift audit | [meta/reports/wiki-drift-audit-2026-06-11.html](meta/reports/wiki-drift-audit-2026-06-11.html) |
 | Supported CLIs | [cli/supported-clis.md](cli/supported-clis.md) |
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](operations/setup/getting-started.md) |
+| Stable release and update contract | [operations/stable-release-contract.md](operations/stable-release-contract.md) |
 | Setup | [operations/setup/README.md](operations/setup/README.md) |
 | Standalone remote runner (Linux host) | [operations/setup/linux-runner-host.md](operations/setup/linux-runner-host.md) |
 | Remote hosts operator lifecycle | [operations/remote-hosts.md](operations/remote-hosts.md) |
