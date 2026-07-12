@@ -95,7 +95,6 @@
     <Using Include="AgentStudio.Design" />
     <Using Include="AgentStudio.Diagnostics" />
     <Using Include="AgentStudio.Docs" />
-    <Using Include="AgentStudio.Docs.Grading" />
     <Using Include="AgentStudio.Drift" />
     <Using Include="AgentStudio.GeneratedFiles" />
     <Using Include="AgentStudio.Git" />

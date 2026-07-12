@@ -521,10 +521,10 @@ builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();
 // Wiki-grading maintenance run (AGT-2051): the maintenance-model default (its own
 // config class in the CLI-management area), the companion sidecar writer, the
 // grader seam (production = the one-shot CLI rail), and the run orchestrator.
-builder.Services.AddSingleton<AgentStudio.Docs.Grading.WikiMaintenanceModelService>();
-builder.Services.AddSingleton<AgentStudio.Docs.Grading.WikiCompanionStore>();
-builder.Services.AddSingleton<AgentStudio.Docs.Grading.IWikiPageGrader, AgentStudio.Docs.Grading.CliWikiPageGrader>();
-builder.Services.AddSingleton<AgentStudio.Docs.Grading.WikiGradingService>();
+builder.Services.AddSingleton<AgentStudio.Docs.WikiMaintenanceModelService>();
+builder.Services.AddSingleton<AgentStudio.Docs.WikiCompanionStore>();
+builder.Services.AddSingleton<AgentStudio.Docs.IWikiPageGrader, AgentStudio.Docs.CliWikiPageGrader>();
+builder.Services.AddSingleton<AgentStudio.Docs.WikiGradingService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();
 builder.Services.AddSingleton<AgentDocsReadAnalyticsService>();
 builder.Services.AddSingleton<SkillReadinessService>();
