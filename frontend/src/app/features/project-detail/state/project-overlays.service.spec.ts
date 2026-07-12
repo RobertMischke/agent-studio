@@ -79,4 +79,16 @@ describe('ProjectOverlaysService · orch-feed deep-link anchor', () => {
     svc.syncFeedFromHash(watchPaths);
     expect(svc.orchFeedProject()).toBe('Runbook');
   });
+
+  it('keeps the open settings shell and hash aligned after a project rename', () => {
+    const svc = new ProjectOverlaysService();
+    svc.projectShellName.set('Old Name');
+    svc.projectShellRail.set('settings');
+    history.replaceState(null, '', '/#/projects/old-name/settings');
+
+    svc.renameOpenProjectShell('New Name');
+
+    expect(svc.projectShellName()).toBe('New Name');
+    expect(window.location.hash).toBe('#/projects/new-name/settings');
+  });
 });

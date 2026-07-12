@@ -67,6 +67,20 @@ describe('StudioTabStateService', () => {
     expect(svc.activeTab()).toEqual(tab);
   });
 
+  it('retargets open project tabs and preserves the active settings tab after rename', () => {
+    svc.open({ kind: 'board', projectName: 'Old Name' });
+    svc.open({ kind: 'hub', projectName: 'Old Name', section: 'settings' });
+    svc.open({ kind: 'url-preview', projectName: 'Old Name', urlId: 'dev' });
+    svc.select('hub:Old Name');
+
+    svc.renameProject('Old Name', 'New Name');
+
+    expect(svc.tabs()).toContainEqual({ kind: 'board', projectName: 'New Name' });
+    expect(svc.tabs()).toContainEqual({ kind: 'hub', projectName: 'New Name', section: 'settings' });
+    expect(svc.tabs()).toContainEqual({ kind: 'url-preview', projectName: 'New Name', urlId: 'dev' });
+    expect(svc.activeKey()).toBe('hub:New Name');
+  });
+
   it('opens workspace settings as a persistent editor tab', () => {
     const tab: StudioTab = { kind: 'workspace-settings' };
     svc.open(tab);

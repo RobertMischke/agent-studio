@@ -1035,6 +1035,8 @@ export interface RegistryProjectSummary {
   storageLocation: string;
   repositoryPath: string | null;
   rootPath: string | null;
+  /** Well-known repository URL (`urls[id=repo]`) projected for project basics editing. */
+  repositoryUrl: string | null;
   /** Configured watchable URLs, ordered; empty for most projects. */
   urls: RegistryProjectUrl[];
   archived: boolean;
@@ -1042,7 +1044,6 @@ export interface RegistryProjectSummary {
 }
 
 export interface CreateRegistryProjectRequest {
-  sourceType?: ProjectSourceType;
   workspaceId: string;
   displayName: string;
   shortCode?: string;
@@ -1060,13 +1061,7 @@ export interface CreateRegistryProjectRequest {
   executionRunner?: string;
 }
 
-export type ProjectSourceType = 'local-folder' | 'remote-git' | 'cloud';
-export interface ProjectSourceDescriptor {
-  id: ProjectSourceType;
-  label: string;
-  available: boolean;
-  description: string;
-}
+export type ProjectSourceType = 'local-folder';
 
 /**
  * F45a / ADR-0042 — workspace listing entry returned by `GET /api/workspaces`.

@@ -602,7 +602,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `explorer-micro-dashboard.spec.ts` | numbers default, dots toggle, cap, order, a11y, and both themes |
 | `explorer-tree-nesting.spec.ts` | AGT-2057: Explorer tree destination nesting |
 | `project-board-lane-counters.spec.ts` | Explorer Project Board row shows subtle live lane counters |
-| `project-sources.spec.ts` | project source onboarding and administration |
+| `project-onboarding-basics.spec.ts` | project onboarding, store separation, validation, and editable Project Basics |
 | `workspace-rename.spec.ts` | F46: workspace-header inline rename |
 | `workspace-tree.spec.ts` | F46: Explorer two-level workspace -> project tree |
 

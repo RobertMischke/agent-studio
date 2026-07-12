@@ -100,6 +100,18 @@ groups, and a failed domain reports an error without hiding successful domains.
   Board cards deliberately show the actual live runner from the fenced run
   lease, not merely this configured target, so assignment and attribution
   cannot be confused.
+- Project Settings starts with an editable **Project basics** section. It owns
+  the workspace, display name, short code, project colour, repository checkout,
+  CLI working directory, repository URL, and default coding CLI/model. It
+  deliberately does not own runtime assignment state. These are the same basic
+  groups shown during onboarding. Saving uses one
+  `PUT /api/projects/{PROJ-NNN}` request, and clearing an optional value uses
+  its explicit `clear*` field rather than an empty path or URL. The adjacent
+  execution-assignment card remains the UI owner for the runner and uses its
+  dedicated `execution-runner` endpoint. Save feedback must not imply
+  local-runner hot reload: changing the display name, repository checkout, or
+  working directory requires a backend restart before the already-instantiated
+  local runner may pick up work.
 - `frontend/src/app/services/task.service.ts`: task API integration, optimistic
   lane moves, reorder, and rollback.
 - `frontend/src/app/services/cli-catalog.store.ts`: boot-hydrated CLI model
@@ -115,12 +127,16 @@ groups, and a failed domain reports an error without hiding successful domains.
 - `frontend/src/app/features/shell/components/workspace-overlays/`: the global
   Workspace Settings home. Its rail is the single navigation surface for CLI
   Management, system prompts, token usage, visual evidence, and the workspace
-  summary. Legacy CLI-admin and usage links resolve to the CLI Management
-  section at `#/workspace/settings/caps`.
+  summary. It does not own project onboarding or a project-source catalogue.
+  Legacy CLI-admin and usage links resolve to the CLI Management section at
+  `#/workspace/settings/caps`.
 - `frontend/src/app/features/shell/components/onboard-project-dialog/`: the
-  project onboarding workflow. It collects identity, repository location/URL,
-  and execution runner, calls `POST /api/projects`, then refreshes the
-  registry-backed workspace tree so the new project appears immediately.
+  project onboarding workflow. Its roomy, scrollable form groups project
+  identity, repository paths/URL, and execution defaults without a source-type
+  selector. It calls `POST /api/projects`, then refreshes the registry-backed
+  workspace tree so the new project appears immediately. Required-field,
+  short-code, absolute-path, and HTTP(S)-URL errors stay visible without
+  discarding the values already entered.
 
 ## Project Overview Contract
 

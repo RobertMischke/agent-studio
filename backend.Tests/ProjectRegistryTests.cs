@@ -13,12 +13,16 @@ namespace AgentStudio.Tests;
 public class ProjectRegistryTests : IDisposable
 {
     private readonly string _root;
+    private readonly string _repository;
     private readonly IConfiguration _config;
 
     public ProjectRegistryTests()
     {
         _root = Path.Combine(Path.GetTempPath(), "rdo-proj-reg-" + Guid.NewGuid().ToString("N"));
+        _repository = Path.Combine(Path.GetTempPath(), "rdo-product-repo-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_root);
+        Directory.CreateDirectory(Path.Combine(_repository, ".git"));
+        Directory.CreateDirectory(Path.Combine(_repository, "src"));
         _config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -29,9 +33,11 @@ public class ProjectRegistryTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); } catch { /* best-effort */ }
+        try { Directory.Delete(_repository, recursive: true); } catch { /* best-effort */ }
     }
 
-    private ProjectRegistry Build() => new(_config, NullLogger<ProjectRegistry>.Instance);
+    private ProjectRegistry Build(IAtomicJsonFileWriter? fileWriter = null) =>
+        new(_config, NullLogger<ProjectRegistry>.Instance, fileWriter);
 
     [Fact]
     public void EnsureProjectForStorage_AllocatesPROJ001_FirstTime()
@@ -48,6 +54,30 @@ public class ProjectRegistryTests : IDisposable
         Assert.Equal(DefaultWorkspace.Id, p.WorkspaceId);
         Assert.Equal(1, p.NextTaskKeySeq);
         Assert.False(p.Archived);
+    }
+
+    [Fact]
+    public void EnsureProjectForStorage_PersistFailure_RestoresProjectAndIdAllocation()
+    {
+        var writer = new ControllableAtomicJsonFileWriter
+        {
+            ShouldFail = (_, _) => true,
+        };
+        var reg = Build(writer);
+
+        Assert.Throws<ProjectPersistenceException>(() => reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "failed"),
+            "Failed Project",
+            DefaultWorkspace.Id));
+        Assert.Empty(reg.List());
+
+        writer.ShouldFail = null;
+        var created = reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "created"),
+            "Created Project",
+            DefaultWorkspace.Id);
+        Assert.Equal("PROJ-001", created.Id);
+        Assert.Single(Build().List());
     }
 
     [Fact]
@@ -175,6 +205,25 @@ public class ProjectRegistryTests : IDisposable
     }
 
     [Fact]
+    public void Rename_PersistFailure_RestoresInMemoryAndDurableRecord()
+    {
+        var writer = new ControllableAtomicJsonFileWriter();
+        var reg = Build(writer);
+        var project = reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "demo"), "Before Failure", DefaultWorkspace.Id);
+        var projectsFile = RegistryPaths.ProjectsFilePath(_root);
+        var durableBefore = File.ReadAllText(projectsFile);
+        writer.ShouldFail = (path, _) =>
+            string.Equals(path, projectsFile, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Throws<ProjectPersistenceException>(() => reg.Rename(project.Id, "Must Roll Back"));
+
+        Assert.Equal("Before Failure", reg.FindById(project.Id)!.DisplayName);
+        Assert.Equal(durableBefore, File.ReadAllText(projectsFile));
+        Assert.Equal("Before Failure", Build().FindById(project.Id)!.DisplayName);
+    }
+
+    [Fact]
     public void SetShortCode_NormalisesUppercase_AndValidates()
     {
         var reg = Build();
@@ -186,6 +235,7 @@ public class ProjectRegistryTests : IDisposable
         Assert.Throws<ArgumentException>(() => reg.SetShortCode(p.Id, "a"));         // too short
         Assert.Throws<ArgumentException>(() => reg.SetShortCode(p.Id, "abcdefg"));   // too long
         Assert.Throws<ArgumentException>(() => reg.SetShortCode(p.Id, "ab-cd"));     // invalid char
+        Assert.Throws<ArgumentException>(() => reg.SetShortCode(p.Id, "1abc"));      // must start with a letter
     }
 
     [Fact]
@@ -235,6 +285,150 @@ public class ProjectRegistryTests : IDisposable
         Assert.False(p.Archived);
         Assert.True(reg.SetArchived(p.Id, true).Archived);
         Assert.False(reg.SetArchived(p.Id, false).Archived);
+    }
+
+    [Fact]
+    public void Update_ValidatesWholePatchBeforePersistingAnyField()
+    {
+        var workspaces = new WorkspaceRegistry(_config, NullLogger<WorkspaceRegistry>.Instance);
+        workspaces.EnsureDefaultWorkspace();
+        var reg = Build();
+        var first = reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "first"), "First Project", DefaultWorkspace.Id);
+        var second = reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "second"), "Second Project", DefaultWorkspace.Id);
+
+        Assert.Throws<InvalidOperationException>(() => reg.Update(first.Id, new UpdateProjectRequest
+        {
+            DisplayName = "Must Not Persist",
+            ShortCode = second.ShortCode,
+            Color = "#123456",
+        }, workspaces));
+
+        var reloaded = Build().FindById(first.Id)!;
+        Assert.Equal("First Project", reloaded.DisplayName);
+        Assert.Equal(first.ShortCode, reloaded.ShortCode);
+        Assert.Null(reloaded.Color);
+    }
+
+    [Fact]
+    public void Update_PersistFailure_RestoresInMemoryAndDurableRecord()
+    {
+        var workspaces = new WorkspaceRegistry(_config, NullLogger<WorkspaceRegistry>.Instance);
+        workspaces.EnsureDefaultWorkspace();
+        var writer = new ControllableAtomicJsonFileWriter();
+        var reg = Build(writer);
+        var project = reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "demo"), "Before Failure", DefaultWorkspace.Id);
+        var projectsFile = RegistryPaths.ProjectsFilePath(_root);
+        var durableBefore = File.ReadAllText(projectsFile);
+        writer.ShouldFail = (path, _) => string.Equals(path, projectsFile, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Throws<ProjectPersistenceException>(() => reg.Update(project.Id, new UpdateProjectRequest
+        {
+            DisplayName = "Must Roll Back",
+            Color = "#123456",
+        }, workspaces));
+
+        var inMemory = reg.FindById(project.Id)!;
+        Assert.Equal("Before Failure", inMemory.DisplayName);
+        Assert.Null(inMemory.Color);
+        Assert.Equal(durableBefore, File.ReadAllText(projectsFile));
+
+        var reloaded = Build().FindById(project.Id)!;
+        Assert.Equal("Before Failure", reloaded.DisplayName);
+        Assert.Null(reloaded.Color);
+    }
+
+    [Fact]
+    public void Update_RoundTripsAllBasics_WithoutChangingStableStorageOrIdentity()
+    {
+        var workspaces = new WorkspaceRegistry(_config, NullLogger<WorkspaceRegistry>.Instance);
+        workspaces.EnsureDefaultWorkspace();
+        var targetWorkspace = workspaces.Create("Product Engineering");
+        var reg = Build();
+        var storage = Path.Combine(_root, "projects", "PROJ-001", "tasks");
+        var project = reg.EnsureProjectForStorage(storage, "Initial Project", DefaultWorkspace.Id);
+        reg.IssueNextTaskKey(project.Id);
+
+        var updated = reg.Update(project.Id, new UpdateProjectRequest
+        {
+            DisplayName = "Edited Project",
+            ShortCode = "edt",
+            Color = " #123456 ",
+            WorkspaceId = targetWorkspace.Id,
+            RepositoryPath = _repository,
+            RootPath = Path.Combine(_repository, "src"),
+            RepositoryUrl = " https://example.test/org/repo.git ",
+            CliDefault = " codex ",
+            ModelDefault = " gpt-test ",
+        }, workspaces);
+
+        Assert.Equal(project.Id, updated.Id);
+        Assert.Equal(project.SourceType, updated.SourceType);
+        Assert.Equal(project.CreatedAt, updated.CreatedAt);
+        Assert.Equal(storage, updated.StorageLocation);
+        Assert.Equal(2, updated.NextTaskKeySeq);
+        Assert.Equal("Edited Project", updated.DisplayName);
+        Assert.Equal("EDT", updated.ShortCode);
+        Assert.Equal("#123456", updated.Color);
+        Assert.Equal(targetWorkspace.Id, updated.WorkspaceId);
+        Assert.Equal(_repository, updated.RepositoryPath);
+        Assert.Equal(Path.Combine(_repository, "src"), updated.RootPath);
+        Assert.Equal("https://example.test/org/repo.git", updated.Urls.Single(url => url.Id == "repo").Url);
+        Assert.Equal("codex", updated.CliDefault);
+        Assert.Equal("gpt-test", updated.ModelDefault);
+        Assert.False(Directory.Exists(Path.Combine(_repository, "tasks")));
+        Assert.False(Directory.Exists(Path.Combine(_repository, ".orchestrator", "jobs")));
+
+        var reloaded = Build().FindById(project.Id)!;
+        Assert.Equal(updated.Id, reloaded.Id);
+        Assert.Equal(updated.DisplayName, reloaded.DisplayName);
+        Assert.Equal(updated.ShortCode, reloaded.ShortCode);
+        Assert.Equal(updated.StorageLocation, reloaded.StorageLocation);
+        Assert.Equal(updated.RepositoryPath, reloaded.RepositoryPath);
+        Assert.Equal(updated.RootPath, reloaded.RootPath);
+        Assert.Equal(updated.CliDefault, reloaded.CliDefault);
+        Assert.Equal(updated.ModelDefault, reloaded.ModelDefault);
+        Assert.Equal(updated.Urls.Single(url => url.Id == "repo").Url,
+            reloaded.Urls.Single(url => url.Id == "repo").Url);
+    }
+
+    [Fact]
+    public void Update_ClearSemantics_RemoveEditableOptionalBasicsOnly()
+    {
+        var workspaces = new WorkspaceRegistry(_config, NullLogger<WorkspaceRegistry>.Instance);
+        workspaces.EnsureDefaultWorkspace();
+        var reg = Build();
+        var project = reg.EnsureProjectForStorage(
+            Path.Combine(_root, "projects", "demo"), "Demo", DefaultWorkspace.Id);
+        reg.Update(project.Id, new UpdateProjectRequest
+        {
+            Color = "#abcdef",
+            RepositoryPath = _repository,
+            RootPath = Path.Combine(_repository, "src"),
+            RepositoryUrl = "https://example.test/repo",
+            CliDefault = "codex",
+            ModelDefault = "gpt-test",
+        }, workspaces);
+
+        var cleared = reg.Update(project.Id, new UpdateProjectRequest
+        {
+            ClearColor = true,
+            ClearRepositoryPath = true,
+            ClearRootPath = true,
+            ClearRepositoryUrl = true,
+            ClearCliDefault = true,
+            ClearModelDefault = true,
+        }, workspaces);
+
+        Assert.Null(cleared.Color);
+        Assert.Null(cleared.RepositoryPath);
+        Assert.Null(cleared.RootPath);
+        Assert.DoesNotContain(cleared.Urls, url => url.Id == "repo");
+        Assert.Null(cleared.CliDefault);
+        Assert.Null(cleared.ModelDefault);
+        Assert.Equal(project.StorageLocation, cleared.StorageLocation);
     }
 
     [Fact]

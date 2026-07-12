@@ -21,18 +21,13 @@ or commit attribution.
   and [docs/schemas/task-find-result.schema.json](../schemas/task-find-result.schema.json)
   pin task API shapes.
 
-## Project source contract
+## Project onboarding contract
 
-`GET /api/project-sources` returns the extensible source catalogue used by
-onboarding and Workspace Settings. `POST /api/projects` accepts an optional
-`sourceType`; omitted values default to `local-folder`. Only catalogue entries
-marked available may be created. `remote-git` and `cloud` are reserved,
-currently unavailable extension points.
-
-Workspace Settings exposes the same catalogue at
-`#/workspace/settings/project-sources`. The onboarding dialog submits the
-selected catalogue id in `sourceType`; source-specific configuration can be
-added without changing the project identity contract.
+Project onboarding is one product workflow, not a configurable project-source
+catalogue. The onboarding UI has no source-type selector and Workspace Settings
+has no Project Sources administration page. A repository URL records the
+project's repository location; it does not promise a managed clone or a cloud
+workspace workflow.
 
 `POST /api/projects` is the product onboarding mutation. It accepts project
 identity plus optional `repositoryPath`, `repositoryUrl`, and
@@ -42,6 +37,18 @@ scanning and watching without editing `WatchPaths` or restarting the backend.
 The repository URL is stored as the well-known `repo` project URL. New projects
 never place task data in the product checkout; legacy in-repository stores stay
 in place until an explicit migration.
+
+The same basic values remain editable after creation in Project Settings.
+`PUT /api/projects/{PROJ-NNN}` is the canonical update mutation for display
+name, short code, workspace, colour, repository checkout, working directory,
+repository URL, default CLI/model, and execution runner. The request uses
+optional patch fields plus explicit `clear*` flags for optional values. Registry
+fields are validated together before they are persisted. The runner value is
+delegated to `ProjectSettingsService`; it is not duplicated in the project
+registry. The Project Settings UI continues to edit runner assignment through
+the dedicated `PUT /api/projects/{projectName}/execution-runner` contract.
+Project id, source type, storage location, creation time, and the task-key
+counter are immutable and are never accepted as update fields.
 
 ## API-First Task Organization
 

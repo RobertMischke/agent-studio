@@ -7,7 +7,6 @@ import { CLI_TYPES, type CliType } from '../../../../models/task.model';
 import { cliTypeLabel, cliTypeIcon } from '../../../../services/format.util';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
 import { CliCatalogStore } from '../../../../services/cli-catalog.store';
-import { ProjectLookupService } from '../../../../services/project-lookup.service';
 import { TokenSummaryBlockComponent } from '../../../../features/tokens';
 import { GlobalOrchestratorCardComponent } from '../../../../features/orchestrator';
 import { ProjectArchitectureSectionComponent } from '../project-architecture-section/project-architecture-section';
@@ -88,7 +87,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   private readonly jobService = inject(TaskService);
   private readonly cliCatalog = inject(CliCatalogStore);
-  private readonly projectLookup = inject(ProjectLookupService);
 
   readonly settings = signal<ProjectSettingsRow | null>(null);
   readonly runnerStatus = signal<RunnerStatus | null>(null);
@@ -109,15 +107,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   crashRecoveryDraft = true;
   autoPushStrategyDraft: AutoPushStrategy = 'always-immediate';
   orchModelDraft = '';
-
-  // Working directory / repository path (Settings). Seeded once from the
-  // first snapshot, then left alone on later polls so an in-progress edit
-  // isn't clobbered every 5s - only a successful save re-syncs them.
-  rootPathDraft = '';
-  repositoryPathDraft = '';
-  private pathsSeeded = false;
-  readonly pathsSaveBusy = signal(false);
-  readonly pathsSaveMessage = signal<string | null>(null);
 
   // Per-CLI permission/sandbox mode (YOLO default). One row per CLI shows the
   // effective mode + where it came from (project override / global config /
@@ -356,11 +345,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         this.recentEntries.set(snap.orchestratorLogTail ?? []);
         this.orchSession.set(snap.orchestratorSession ?? null);
         this.projectPaths.set(snap.paths ?? null);
-        if (!this.pathsSeeded && snap.paths) {
-          this.rootPathDraft = snap.paths.rootPath ?? '';
-          this.repositoryPathDraft = snap.paths.repositoryPath ?? '';
-          this.pathsSeeded = true;
-        }
         this.pendingDecisions.set(snap.reviewDecisionsPending ?? []);
         this.livePendingDecisions.set(snap.runnerPendingDecisions ?? []);
         this.queueHealth.set(snap.queueHealth ?? null);
@@ -425,42 +409,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.jobService.setProjectAutoPushStrategy(this.projectName(), strategy).subscribe({
       next: () => this.refreshAll(true),
       error: () => this.refreshAll(true)
-    });
-  }
-
-  /**
-   * Persist the working directory / repository path via the registry PUT
-   * (PROJ-NNN id, resolved through ProjectLookupService since this panel
-   * only knows the display name). RootPath is what actually gates whether
-   * TaskRunnerService has a runner for this project - see the 2026-07-05
-   * "Agent Studio" mode-toggle 404 incident this UI exists to prevent from
-   * recurring silently.
-   */
-  savePaths(): void {
-    const id = this.projectLookup.getProjectDisplay(this.projectName()).id;
-    if (!id) {
-      this.pathsSaveMessage.set('Could not resolve this project\'s registry id.');
-      return;
-    }
-    this.pathsSaveBusy.set(true);
-    this.pathsSaveMessage.set(null);
-    const rootPath = this.rootPathDraft.trim();
-    const repositoryPath = this.repositoryPathDraft.trim();
-    this.jobService.updateRegistryProject(id, {
-      rootPath: rootPath || undefined,
-      clearRootPath: rootPath.length === 0,
-      repositoryPath: repositoryPath || undefined,
-      clearRepositoryPath: repositoryPath.length === 0,
-    }).subscribe({
-      next: () => {
-        this.pathsSaveBusy.set(false);
-        this.pathsSaveMessage.set('Saved. Takes effect for auto-pickup after the next backend restart.');
-        this.refreshAll(true);
-      },
-      error: (err) => {
-        this.pathsSaveBusy.set(false);
-        this.pathsSaveMessage.set(err?.error?.error || err?.message || 'Save failed.');
-      }
     });
   }
 

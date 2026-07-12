@@ -65,6 +65,9 @@ describe('StudioShellComponent titlebar breadcrumb', () => {
       modelDefault: null,
       sortOrder: 0,
       storageLocation: `C:/proj/${id}`,
+      repositoryPath: null,
+      rootPath: null,
+      repositoryUrl: null,
       sourceType: 'local-folder',
       urls: [],
       archived: false,
@@ -557,6 +560,9 @@ describe('StudioShellComponent hub tab label + icon', () => {
       createdAt: '2026-01-01T00:00:00Z',
       ...over,
       sourceType: over.sourceType ?? 'local-folder',
+      repositoryPath: over.repositoryPath ?? null,
+      rootPath: over.rootPath ?? null,
+      repositoryUrl: over.repositoryUrl ?? null,
     };
   }
 

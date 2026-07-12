@@ -7,18 +7,13 @@ using Xunit;
 
 namespace AgentStudio.Tests;
 
-public sealed class ProjectSourceCatalogTests
+[Collection(ProjectRegistryApiCollection.Name)]
+public sealed class ProjectOnboardingApiTests
 {
     [Fact]
-    public void Catalog_ExposesLocalDefaultAndReservedExtensionPoints()
+    public void ProjectSource_RemainsAnInternalLocalFolderBackcompatDefault()
     {
-        Assert.Equal(ProjectSourceCatalog.LocalFolder, new ProjectRecord().SourceType);
-        Assert.Contains(ProjectSourceCatalog.All, source =>
-            source.Id == ProjectSourceCatalog.LocalFolder && source.Available);
-        Assert.Contains(ProjectSourceCatalog.All, source =>
-            source.Id == "remote-git" && !source.Available);
-        Assert.Contains(ProjectSourceCatalog.All, source =>
-            source.Id == "cloud" && !source.Available);
+        Assert.Equal(ProjectSourceTypes.LocalFolder, new ProjectRecord().SourceType);
     }
 
     [Fact]
@@ -27,15 +22,15 @@ public sealed class ProjectSourceCatalogTests
         var summary = ProjectSummary.From(new ProjectRecord
         {
             Id = "PROJ-001",
-            SourceType = ProjectSourceCatalog.LocalFolder,
+            SourceType = ProjectSourceTypes.LocalFolder,
             DisplayName = "Demo",
         });
 
-        Assert.Equal(ProjectSourceCatalog.LocalFolder, summary.SourceType);
+        Assert.Equal(ProjectSourceTypes.LocalFolder, summary.SourceType);
     }
 
     [Fact]
-    public async Task GetProjectSources_ReturnsThePublicCatalogContract()
+    public async Task ProjectSources_IsNotAPublicProductEndpoint()
     {
         var root = Path.Combine(Path.GetTempPath(), "project-source-api-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -55,12 +50,45 @@ public sealed class ProjectSourceCatalogTests
             using var client = factory.CreateClient();
 
             var response = await client.GetAsync("/api/project-sources");
-            response.EnsureSuccessStatusCode();
-            var catalog = await response.Content.ReadFromJsonAsync<List<ProjectSourceDescriptor>>();
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
 
-            Assert.NotNull(catalog);
-            Assert.Contains(catalog, source => source.Id == ProjectSourceCatalog.LocalFolder && source.Available);
-            Assert.Contains(catalog, source => source.Id == "remote-git" && !source.Available);
+    [Fact]
+    public async Task PostProject_RejectsNonLocalBackcompatSourceValue()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "project-source-reject-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            await using var factory = new WebApplicationFactory<Program>()
+                .WithWebHostBuilder(builder =>
+                {
+                    builder.UseEnvironment("Test");
+                    builder.ConfigureAppConfiguration((_, config) =>
+                        config.AddInMemoryCollection(new Dictionary<string, string?>
+                        {
+                            ["TaskRepository"] = root,
+                            ["Logging:BackendFile:LogDirectory"] = Path.Combine(root, "logs"),
+                        }));
+                });
+            using var client = factory.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
+
+            var response = await client.PostAsJsonAsync("/api/projects", new
+            {
+                displayName = "Unsupported Source",
+                shortCode = "UNS",
+                workspaceId = DefaultWorkspace.Id,
+                sourceType = "remote-git",
+            });
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Empty(await client.GetFromJsonAsync<List<ProjectSummary>>("/api/projects") ?? []);
         }
         finally
         {

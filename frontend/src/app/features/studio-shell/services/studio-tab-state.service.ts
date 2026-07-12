@@ -235,6 +235,35 @@ export class StudioTabStateService {
     this.persist();
   }
 
+  /** Retarget every project-keyed tab after a registry display-name change. */
+  renameProject(previousName: string, currentName: string): void {
+    if (!previousName || !currentName || previousName === currentName) return;
+    const active = this.activeTab();
+    const rename = (tab: StudioTab): StudioTab => {
+      switch (tab.kind) {
+        case 'board':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        case 'epics':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        case 'hub':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        case 'url-preview':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        default:
+          return tab;
+      }
+    };
+    const next = this.dedupe(this._tabs().map(rename));
+    this._tabs.set(next);
+    if (active) {
+      const renamedActiveKey = studioTabKey(rename(active));
+      this._activeKey.set(next.some((tab) => studioTabKey(tab) === renamedActiveKey)
+        ? renamedActiveKey
+        : (next.length ? studioTabKey(next[next.length - 1]) : null));
+    }
+    this.persist();
+  }
+
   // ---- persistence ----------------------------------------------------
 
   /**

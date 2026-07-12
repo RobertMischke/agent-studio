@@ -167,16 +167,18 @@ parser at all.
 The task contract requires that captured runtime events do **not** pollute
 source commits. Three layers protect this:
 
-1. **Job folders live in the watched workspace**, not in this repository
+1. **Task folders live in the central `TaskRepository`**, not in this app's
+   source repository or the product checkout
    (`docs/contracts/filesystem.md`). Anything under
    `<job>/logs/runtime/` or `<job>/results/runtime/` is therefore outside
-   the app's git history by default.
-2. **The watched workspace's `.gitignore` already excludes
-   `**/results/`** (see `docs/contracts/protocol-style.md §4.3`), and the same
-   pattern can be extended with `**/logs/runtime/` if a workspace decides
-   to keep the bus log committed but the runtime log local. The current
-   default keeps both `logs/bus/` and `logs/runtime/` tracked because they
-   are textual JSONL and useful for cross-machine review.
+   product-source Git history by default.
+2. **The task-store evidence checkout owns its ignore policy.** The recommended
+   `.gitignore` excludes task `results/` folders (see
+   `docs/contracts/protocol-style.md §4.3`) and can be extended with task
+   `logs/runtime/` paths if an operator decides to keep the bus log committed
+   but the runtime log local. The current default keeps both `logs/bus/` and
+   `logs/runtime/` tracked because they are textual JSONL and useful for
+   cross-machine review.
 3. **`test-results/` is gitignored in this repository** (`.gitignore` line
    for `test-results/`), so any local-dev runtime capture written under
    `frontend/e2e/test-results/runtime/` cannot be committed.

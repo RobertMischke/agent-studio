@@ -614,17 +614,21 @@ export class TaskService {
     clearRepositoryPath?: boolean;
     rootPath?: string;
     clearRootPath?: boolean;
+    repositoryUrl?: string;
+    clearRepositoryUrl?: boolean;
+    cliDefault?: CliType;
+    clearCliDefault?: boolean;
+    modelDefault?: string;
+    clearModelDefault?: boolean;
+    executionRunner?: string;
+    clearExecutionRunner?: boolean;
   }) {
-    return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projId)}`, patch);
+    return this.http.put<RegistryProjectSummary>(`${this.baseUrl}/projects/${encodeURIComponent(projId)}`, patch);
   }
 
   /** Create a registry project. Backend chooses projects/PROJ-NNN/tasks; no storage path is accepted from the UI. */
   createRegistryProject(body: CreateRegistryProjectRequest) {
     return this.http.post<RegistryProjectSummary>(`${this.baseUrl}/projects`, body);
-  }
-
-  getProjectSources() {
-    return this.http.get<import('../models/task.model').ProjectSourceDescriptor[]>(`${this.baseUrl}/project-sources`);
   }
 
   // ----- Project URLs (per-project watchable dev-server / preview URLs) -----

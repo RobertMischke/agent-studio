@@ -59,23 +59,6 @@ describe('TaskService', () => {
     http.verify();
   });
 
-  it('loads the extensible project source catalogue', () => {
-    let sources: readonly { id: string; available: boolean }[] = [];
-
-    service.getProjectSources().subscribe(value => { sources = value; });
-
-    const req = http.expectOne('/api/project-sources');
-    expect(req.request.method).toBe('GET');
-    req.flush([
-      { id: 'local-folder', label: 'Local folder', available: true, description: 'Local checkout' },
-      { id: 'remote-git', label: 'Remote Git', available: false, description: 'Coming soon' },
-    ]);
-    expect(sources).toEqual([
-      expect.objectContaining({ id: 'local-folder', available: true }),
-      expect.objectContaining({ id: 'remote-git', available: false }),
-    ]);
-  });
-
   it('decodes job file content from UTF-8 bytes', () => {
     const expected = 'Lücken / gehört / für / „Anführung"';
     let actual = '';

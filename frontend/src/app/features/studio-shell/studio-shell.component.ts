@@ -345,6 +345,13 @@ export class StudioShellComponent {
     untracked(() => this.reloadRegistryWorkspaces());
   });
 
+  /** Retarget open project-keyed tabs before the registry refresh purges stale names. */
+  private readonly projectRenamedFx = effect(() => {
+    const rename = this.workspaceManager.projectRenamed();
+    if (!rename) return;
+    this.tabState.renameProject(rename.previousName, rename.currentName);
+  });
+
   reloadRegistryWorkspaces(): void {
     this.registryWorkspacesLoading.set(true);
     this.registryWorkspacesError.set(null);

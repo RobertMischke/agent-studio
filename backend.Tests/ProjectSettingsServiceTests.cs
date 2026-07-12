@@ -98,6 +98,83 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void RekeyProject_MovesAllSettingsAndUpdatesRunnerAcrossReload()
+    {
+        var svc = Build();
+        svc.SetAutoCommit("Old Project", false);
+        svc.SetExecutionRunner("Old Project", "runner-old", remoteExecutionEnabled: false);
+
+        var updated = svc.RekeyProject(
+            "Old Project",
+            "New Project",
+            updateExecutionRunner: true,
+            executionRunner: " runner-new ",
+            remoteExecutionEnabled: true);
+
+        Assert.False(updated.AutoCommit);
+        Assert.Equal("runner-new", updated.ExecutionRunner);
+        Assert.True(updated.RemoteExecutionEnabled);
+        Assert.DoesNotContain("Old Project", svc.GetAll().Keys);
+
+        var reloaded = Build();
+        Assert.DoesNotContain("Old Project", reloaded.GetAll().Keys);
+        Assert.False(reloaded.Get("New Project").AutoCommit);
+        Assert.Equal("runner-new", reloaded.Get("New Project").ExecutionRunner);
+        Assert.True(reloaded.Get("New Project").RemoteExecutionEnabled);
+    }
+
+    [Fact]
+    public void RekeyProject_OldRunnerReadsAndWritesThroughLiveAlias()
+    {
+        var svc = Build();
+        svc.SetExecutionRunner("Old Project", "runner-before", remoteExecutionEnabled: true);
+        svc.RekeyProject("Old Project", "New Project");
+
+        svc.SetExecutionRunner("New Project", "runner-after", remoteExecutionEnabled: true);
+        Assert.Equal("runner-after", svc.Get("Old Project").ExecutionRunner);
+
+        // A runner constructed before the rename persists mode with its captured
+        // old name. The write must land on the new key, not recreate an orphan.
+        svc.SetRunnerMode("Old Project", "paused", source: "system");
+        Assert.Equal("paused", svc.Get("New Project").RunnerMode);
+        Assert.DoesNotContain("Old Project", svc.GetAll().Keys);
+
+        var reloaded = Build();
+        Assert.Equal("runner-after", reloaded.Get("New Project").ExecutionRunner);
+        Assert.Equal("paused", reloaded.Get("New Project").RunnerMode);
+        Assert.DoesNotContain("Old Project", reloaded.GetAll().Keys);
+    }
+
+    [Fact]
+    public void RekeyProject_PersistFailure_RestoresCacheAndDurableKey()
+    {
+        var writer = new ControllableAtomicJsonFileWriter();
+        var svc = Build(writer);
+        svc.SetAutoCommit("Old Project", false);
+        svc.SetExecutionRunner("Old Project", "runner-before", remoteExecutionEnabled: true);
+        var durableBefore = File.ReadAllText(StorePath());
+        writer.ShouldFail = (path, _) => string.Equals(path, StorePath(), StringComparison.OrdinalIgnoreCase);
+
+        Assert.Throws<ProjectPersistenceException>(() => svc.RekeyProject(
+            "Old Project",
+            "New Project",
+            updateExecutionRunner: true,
+            executionRunner: "runner-after",
+            remoteExecutionEnabled: true));
+
+        Assert.Contains("Old Project", svc.GetAll().Keys);
+        Assert.DoesNotContain("New Project", svc.GetAll().Keys);
+        Assert.False(svc.Get("Old Project").AutoCommit);
+        Assert.Equal("runner-before", svc.Get("Old Project").ExecutionRunner);
+        Assert.Equal(durableBefore, File.ReadAllText(StorePath()));
+
+        var reloaded = Build();
+        Assert.Contains("Old Project", reloaded.GetAll().Keys);
+        Assert.DoesNotContain("New Project", reloaded.GetAll().Keys);
+        Assert.Equal("runner-before", reloaded.Get("Old Project").ExecutionRunner);
+    }
+
+    [Fact]
     public void SetAutoCommit_PersistsExplicitFalseAcrossReload()
     {
         var svc = Build();
@@ -616,7 +693,7 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         Assert.Equal("auto-single", s.DesiredRunnerMode); // the operator's toggle, not the system flips
     }
 
-    private ProjectSettingsService Build()
+    private ProjectSettingsService Build(IAtomicJsonFileWriter? fileWriter = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -624,7 +701,7 @@ public sealed class ProjectSettingsServiceTests : IDisposable
                 ["TaskRepository"] = _workspace,
             })
             .Build();
-        return new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        return new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config, fileWriter);
     }
 
     private string StorePath() => Path.Combine(_workspace, "project-settings.json");

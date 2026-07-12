@@ -88,43 +88,6 @@
       [contextModeRows]="cliEnvironmentContextModeRows()" />
 
     <section class="proj-detail__group">
-      <h3>Repository &amp; working directory</h3>
-      <p class="proj-detail__hint">
-        Working directory is the CLI's working directory - a project with none configured has no auto-pickup runner
-        (the mode toggle above reports it as unavailable, not "unknown"). It can be the same as the repository, or a
-        subfolder of it in a monorepo.
-      </p>
-      <label class="proj-detail__path-field">
-        <span>Working directory</span>
-        <input class="proj-detail__path-input"
-               type="text"
-               placeholder="(none configured)"
-               data-testid="project-detail-root-path"
-               [(ngModel)]="rootPathDraft" />
-      </label>
-      <label class="proj-detail__path-field">
-        <span>Repository</span>
-        <input class="proj-detail__path-input"
-               type="text"
-               placeholder="(none configured)"
-               data-testid="project-detail-repository-path"
-               [(ngModel)]="repositoryPathDraft" />
-      </label>
-      <div class="proj-detail__repair-row">
-        <button type="button"
-                class="proj-detail__repair"
-                data-testid="project-detail-save-paths"
-                [disabled]="pathsSaveBusy()"
-                (click)="savePaths()">
-          {{ pathsSaveBusy() ? 'Saving...' : 'Save' }}
-        </button>
-        @if (pathsSaveMessage(); as msg) {
-          <span>{{ msg }}</span>
-        }
-      </div>
-    </section>
-
-    <section class="proj-detail__group">
       <h3>Runner mode</h3>
       <div class="proj-detail__modes">
         @for (m of modes; track m.id) {

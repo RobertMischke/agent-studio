@@ -73,7 +73,10 @@ public record WorkspaceRecord
 /// </summary>
 public record ProjectRecord
 {
-    /// <summary>Extensible project origin. Existing records default to local-folder.</summary>
+    /// <summary>
+    /// Backward-compatible storage discriminator. Product onboarding currently
+    /// supports local folders only; existing records default to local-folder.
+    /// </summary>
     public string SourceType { get; init; } = "local-folder";
     /// <summary>Stable identifier in the form <c>PROJ-001</c>. Immutable.</summary>
     public string Id { get; init; } = "";
