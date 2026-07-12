@@ -129,6 +129,9 @@ public static class ModelIds
     /// tests; <see cref="ModelMetadataRegistry.DefaultForCli"/> returns it when
     /// discovery has detected it, otherwise it falls back to <see cref="Gpt55"/>.</summary>
     public const string Gpt56Sol = "gpt-5.6-sol";
+    /// <summary>Economy Codex model for bounded supporting-agent and pipeline work.
+    /// Availability still comes from live CLI discovery.</summary>
+    public const string Gpt54Mini = "gpt-5.4-mini";
     public const string Gpt5Codex = "gpt-5-codex";
     public const string Gpt41 = "gpt-4.1";
     public const string Gpt4o = "gpt-4o";

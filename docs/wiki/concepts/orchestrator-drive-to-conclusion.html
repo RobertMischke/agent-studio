@@ -688,6 +688,23 @@
             still blocks. The reproduced successful close-out now reaches the normal pass terminal and auto-review.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-12</td>
+          <td><code>AGT-2157</code><br><span class="small">review CLI configuration silently forced Claude</span></td>
+          <td>
+            GPT-only Agent Studio cards ran through Codex on the remote host, but local post-orchestrator outcomes still
+            recorded <code>performerCliType: claude</code> and spawned Claude processes.
+          </td>
+          <td>
+            <code>ReviewDecisionOrchestrator</code> read its configured CLI but <code>RunViaOneShotAsync</code> discarded it
+            and always called <code>CliOneShotRegistry.Get("claude")</code>. Defaults and aspect fallback were Claude-specific too.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> one-shot dispatch now preserves the configured CLI, the bounded review default
+            is Codex with <code>gpt-5.4-mini</code>, and aspect fallback inherits that CLI. AGT-2157 tracks the full Project Hub
+            UI/API surface for pipeline-step and prompt model configuration with Token Economy guidance.
+          </td>
+        </tr>
       </tbody>
     </table>
 
