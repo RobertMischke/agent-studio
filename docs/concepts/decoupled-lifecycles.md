@@ -85,8 +85,11 @@ one runner identity, one execution lease and fencing token, and zero or one live
 CLI process generation. It is not synonymous with a provider conversation id
 or an operating-system PID.
 
-A small **session holder** runs as part of the independently supervised runner
-service on the execution host. It owns:
+A small **session holder** runs as an independently supervised per-session unit
+on the execution host. The runner control service creates and discovers that
+unit through the host service manager, but does not parent it. Restarting the
+runner control plane therefore does not terminate a healthy holder or CLI. The
+holder owns:
 
 - process spawn into a dedicated process group or equivalent containment;
 - stdin and stdout/stderr handles;
@@ -99,10 +102,12 @@ service on the execution host. It owns:
 - terminal-process reaping, including descendants.
 
 The holder must not be launched as a child of the UI, an SSH login, a Playwright
-test, or a disposable backend request. On Linux the natural baseline is a
-systemd-managed runner/holder service. `nohup`, tmux, or an untracked detached
-PID is not the ownership model: it may keep a process alive but cannot prove
-who may command it, fence stale writers, or reconcile terminal state.
+test, a disposable backend request, or the restartable runner control process.
+On Linux the natural baseline is a systemd-managed per-session service or scope
+with a durable descriptor that the runner service can rediscover. `nohup`,
+tmux, or an untracked detached PID is not the ownership model: it may keep a
+process alive but cannot prove who may command it, fence stale writers, or
+reconcile terminal state.
 
 The holder reports five distinct conditions:
 
@@ -148,7 +153,7 @@ different invariants:
 | Lease | Holder | Protects | Loss means |
 |---|---|---|---|
 | Task execution lease | runner/session holder | Exactly one execution authority may mutate run outcome. | Fence writes, then stop and reap the stale execution generation. |
-| Control lease | authenticated user/client attachment | At most one interactive writer issues stdin, steer, approve, cancel, or resume commands at a time. | Session keeps running; the client becomes read-only. |
+| Control lease | authenticated user/client attachment | At most one interactive writer issues stdin, steer, or prompt-response input at a time. | Session keeps running; the client becomes read-only. |
 
 Read attachments need no exclusive lease. A control lease is short, renewable,
 visibly owned, and may be released on detach. A fenced administrative takeover
@@ -182,10 +187,11 @@ does not promise that an operating-system process can survive an OS reboot.
 | UI deployment/restart | Survives unchanged. | Survives unchanged. | Clients reload and reattach. | Same `sessionId`, no duplicated CLI. |
 | Stream gateway restarts inside a live Task Server | Holder and CLI continue; output spools locally. | Rebuilds from durable session metadata and holder replay. | Show reconnecting, then replay. | Lease authority never restarted; no duplicated CLI. |
 | Task Server including lease authority restarts | Holder continues only until its conservative local stop-before deadline. | Unavailable, then rebuilds. | Show authority recovering. | Durable lease/fence continuity is required; otherwise admission stays closed through the restart quarantine described below. |
-| Runner service restarts but host stays up | A service restart normally terminates its contained CLI generation. Logical session becomes `interrupted-recoverable` or `terminal`, never falsely `running`. | Reconciles the new holder generation. | Remain attached or reconnect. | Resume is a new generation and requires valid execution admission/fence. |
+| Runner control service restarts but host stays up | Independently supervised holder and CLI survive. | Reconnects to the rediscovered holder unit. | Show reconnecting, then current state. | Same `sessionId` and process generation; no duplicate CLI. |
+| Per-session holder unit fails | Process state is unknown until the service manager proves the whole containment unit stopped. | Marks holder unavailable and refuses commands. | Show holder recovery, not false running. | Same-boot reconciliation must reap or positively prove the old unit empty before resume. |
 | Host heartbeat is lost | Process state is **unknown**, not dead. The holder may still be running behind a partition. | Marks holder unreachable; starts no replacement. | Show host offline and process unknown. | No resume or takeover based on heartbeat loss alone. |
 | Execution host reboot is proven | A changed host boot id proves the old OS process ended. Durable logical identity and journal survive if the disk does. | Reconciles the new holder incarnation. | Show generation boundary and recovery status. | Auto-resume only when policy, provider resume support, containment proof, and fence permit; otherwise human action. |
-| Network partition, holder to server | CLI continues only before its local stop-before deadline, then the holder cancels and reaps its entire process group. | Shows holder disconnected and refuses commands. | Can read durable history but cannot assume live control. | Server takeover begins only after the old lease expiry; the safety margin prevents overlapping live generations. |
+| Network partition, holder to server | CLI continues only before its local stop-before deadline, then the holder attempts to cancel and reap its entire containment unit. | Shows holder disconnected and refuses commands. | Can read durable history but cannot assume live control. | Lease expiry fences Task Server writes, but no replacement starts until process termination or host fencing is positively proven. |
 | Execution lease expires or is superseded | Holder cancels/reaps its CLI generation. | Retains history and reports superseded. | Stay attached read-only. | A stale holder cannot publish authoritative completion or accept commands. |
 | Control client disappears | Session is unaffected. | Control lease expires after short TTL. | Observers remain. | Another authenticated client can acquire control after expiry. |
 
@@ -208,29 +214,37 @@ preference order:
    authority epoch, and expiry atomically. A restarted server restores them
    before admission and never lowers a fence.
 2. If durable restoration cannot be proven, enter a fail-closed restart
-   quarantine. Grant no task lease until the maximum possible pre-restart lease
-   window plus the declared uncertainty margin has elapsed. This is a recovery
-   fallback, not the steady-state design.
+   quarantine. Elapsed lease time can retire Task Server write authority, but
+   cannot by itself authorize a replacement CLI. This is a recovery fallback,
+   not the steady-state design.
 
 Every successful renewal gives the holder a server expiry and enough timing
 metadata to calculate a conservative deadline on its local monotonic clock. The
 holder subtracts at least one heartbeat interval plus the transport/clock
 uncertainty margin. If it cannot renew by that **stop-before deadline**, it
-cancels and reaps the complete process group before the server may pass lease
-expiry and admit a successor. No new generation starts on a higher fence alone.
-Admission requires durable fence continuity **and** either proof that the
-previous process group ended (changed boot id or same-boot containment
-reconciliation) or expiry of the complete conservative stop-before, lease,
-transport, and clock-uncertainty interval. The fence protects authoritative
-Task Server writes; the process-end or no-overlap proof protects external CLI
-side effects.
+cancels and reaps the complete containment unit. This deadline limits the old
+holder's intended behavior; it is not evidence that the holder ran, woke from
+suspend, or successfully reaped every descendant.
+
+No new generation starts on a higher fence or elapsed deadline alone.
+Admission requires durable fence continuity **and positive no-overlap
+evidence**: a changed boot id, same-boot service-manager proof that the old
+containment unit is empty, or infrastructure-level fencing that makes the old
+host unable to execute. If none is available, the task remains visibly
+`process-unknown` and requires host recovery or operator fencing. This may
+strand work during an ambiguous partition, which is preferable to silently
+duplicating external CLI side effects. The execution fence protects
+authoritative Task Server writes; positive termination or host fencing protects
+effects outside the Task Server.
 
 Host identity uses both the stable registered host id and an observed boot id.
 Each holder service start adds a fresh incarnation id. A missing heartbeat only
 means `process-unknown`. A changed boot id proves reboot. A new incarnation on
 the same boot must first reconcile and reap any process group recorded by the
-old incarnation before it may declare the old generation ended. These proofs,
-not UI presence or reachability, gate resume.
+old incarnation before it may declare the old generation ended. A remote
+machine fencing action must be infrastructure-backed and audited; changing a
+registry flag is not proof. These proofs, not elapsed time, UI presence, or
+reachability, gate resume.
 
 ## 4. Attach, detach, and command semantics
 
@@ -262,15 +276,21 @@ Commands such as `send-input`, `steer`, `approve`, `cancel`, and
 `request-resume` carry:
 
 - authenticated actor and `X-Client-Id` attribution;
-- `sessionId`, process generation, command id, and expected control fence;
+- `sessionId`, process generation, command id, and, for interactive input, the
+  expected control fence;
 - a typed payload with size and policy limits.
 
 The gateway resolves and stamps the current execution fence from server-owned
 state for outcome-affecting commands; it never trusts an execution fence
-supplied by the browser. `send-input` and `steer` require interactive-control
-capability. `approve`, `cancel`, and `request-resume` additionally require the
-matching task-action capability and the ordinary task policy gates. The channel
-validates and durably records the command before delivery. The holder
+supplied by the browser. `send-input`, `steer`, and prompt-response input
+require the control lease plus interactive-control capability. `approve`,
+`cancel`, and `request-resume` use separate task-action capabilities and state
+transition guards; they do not wait for or take over the interactive control
+lease. In particular, an authorized emergency cancel cannot be blocked by a
+healthy or malicious controller. These task actions still carry an idempotent
+command id, current server-stamped execution fence, actor attribution, and an
+audit record. The channel validates and durably records the command before
+delivery. The holder
 deduplicates by command id, rejects a stale generation or fence, and emits an
 accepted/rejected/result event. Raw browser-to-host sockets and free-form host
 commands are out of scope.
@@ -316,8 +336,9 @@ control, the second watches read-only or requests an explicit takeover.
 If only the stream gateway restarts, the holder spools output and reconnects.
 If the Task Server lease authority also restarts, durable lease restoration or
 the fail-closed restart quarantine prevents a second holder. If the remote host
-only becomes unreachable, generation 1 remains `process-unknown`. A changed
-boot id or same-boot containment reconciliation is required to prove it ended.
+only becomes unreachable, generation 1 remains `process-unknown`, even after
+its deadline passes. A changed boot id, same-boot containment reconciliation,
+or infrastructure-level host fencing is required to prove it cannot still run.
 The restarted holder then reports the durable session record and lands by
 default in `interrupted-needs-action`. Only Robert's accepted policy, provider
 resume support, and fresh execution admission may start generation 2. The UI
@@ -355,9 +376,11 @@ acknowledgement. Retention exhaustion produces a visible gap.
 
 - A UI connection never owns, keeps alive, or implicitly cancels a CLI.
 - A detached PID without a supervised holder is never considered healthy.
-- One logical session has at most one authoritative live process generation.
+- One logical session admits at most one live process generation only after
+  positive process-termination or host-fencing evidence. A Task Server fence
+  alone guarantees only one authoritative Task Server writer.
 - Lease-authority restart never opens admission until durable fence continuity
-  or the fail-closed no-overlap quarantine is proven.
+  and positive no-overlap evidence are proven.
 - Heartbeat loss means process unknown. It never proves process death.
 - Many readers are allowed; interactive writing is explicitly leased and
   fenced.
@@ -400,11 +423,11 @@ production cutover may precede that decision.
 | Card | Size | Dependency | Executable acceptance boundary |
 |---|---|---|---|
 | **DL-1: Session protocol fixture and failure simulator** | M | none | In-memory holder/channel/UI fixture proves UI death, second-client attach, gateway restart replay, replay gap, control expiry, process-unknown on heartbeat loss, and proven host-restart generation change. No production process launch. |
-| **DL-2: Host session holder and durable local journal** | L | DL-0, DL-1 | Runner service owns a contained CLI generation, monotonic holder source offsets, boot/incarnation identity, ack-based spool, monotonic stop-before deadline, and process-group reaping. Killing UI/backend test processes does not kill or orphan the holder-owned fixture. |
+| **DL-2: Host session holder and durable local journal** | L | DL-0, DL-1 | A per-session service unit, independent of the runner control-process tree, owns a contained CLI generation, monotonic holder source offsets, boot/incarnation identity, ack-based spool, stop-before behavior, and service-manager-verified reaping. Killing or restarting UI, backend, or runner-control test processes does not kill or orphan the holder-owned fixture. |
 | **DL-3: Authenticated session stream gateway, read-only** | L | DL-0, DL-1 | Machine-authenticated runner ingestion and authorized UI replay/fan-out work with zero or many subscribers; the server allocates canonical event sequence, and reconnect and retention gap are explicit. No stdin or cancel. |
 | **DL-4: Multi-client attach UI** | M | DL-3 | A second authenticated browser attaches from a fresh context, sees host/generation/cursor health, and can close without affecting execution. Both themes, keyboard flow, narrow layout, and reduced motion are covered. |
-| **DL-5: Control lease and fenced command path** | L | DL-2, DL-3 | One controller at a time; expiry/takeover is visible and audited; duplicate or stale-generation commands are rejected; disconnect never cancels execution. |
-| **DL-6: Durable lease restart barrier and provider resume policy** | L | DL-2, DL-3, provider probes | Persisted lease/fence/epoch survives authority restart, with fail-closed quarantine tested as fallback; host loss remains process-unknown until incarnation proof; a new generation requires accepted policy and a fresh fence; unsupported resume lands visibly in `interrupted-needs-action`. |
+| **DL-5: Control lease and fenced command path** | L | DL-2, DL-3 | One interactive controller at a time; expiry/takeover is visible and audited; duplicate or stale-generation commands are rejected; disconnect never cancels execution; authorized task cancel bypasses interactive control while remaining fenced, idempotent, capability-checked, and audited. |
+| **DL-6: Durable lease restart barrier and provider resume policy** | L | DL-2, DL-3, provider probes | Persisted lease/fence/epoch survives authority restart, with fail-closed quarantine tested as fallback; host loss remains process-unknown until positive containment or infrastructure-fencing proof; no elapsed deadline alone admits a replacement; a new generation requires accepted policy and a fresh fence; unsupported resume lands visibly in `interrupted-needs-action`. |
 
 Recommended delivery order is DL-1, then DL-2 and DL-3 in parallel, then DL-4
 and DL-5, with DL-6 last. The production cutover is an Epic boundary because
@@ -417,7 +440,7 @@ This document and its Wiki-browsable Workbench-family mockup are the complete
 deliverables for the concept card. They do not implement session detachment or
 the AGT-2084 Project Hub catalogue in production.
 
-An independent second-opinion pass on 2026-07-12 initially returned **no-go**
+Independent second-opinion passes on 2026-07-12 initially returned **no-go**
 on restart fencing. It found that the current in-memory lease authority could
 forget a live holder on Task Server restart and that heartbeat loss had been
 presented as proof of host reboot. It also challenged partition deadlines,
@@ -429,14 +452,18 @@ The blocking findings were folded into the concept and Workbench:
 
 - durable lease/fence/authority-epoch restoration is now a cutover prerequisite,
   with a fail-closed restart quarantine as fallback;
-- the holder has a conservative monotonic stop-before deadline and reaps its
-  process group before server-side takeover can begin; a higher fence alone is
-  explicitly insufficient to start a successor;
+- the holder has a conservative monotonic stop-before deadline, but neither
+  deadline expiry nor a higher fence is treated as proof of termination;
+- replacement admission requires positive service-manager containment proof,
+  a changed boot id, or audited infrastructure-level host fencing;
+- each holder is its own supervised per-session unit and survives runner
+  control-service restarts;
 - stable host id, boot id, and holder incarnation distinguish partition,
   same-boot service restart, and proven host reboot;
 - heartbeat loss is `process-unknown` and cannot trigger replacement;
 - the gateway, not the browser, stamps execution authority on privileged
-  commands, with stronger capabilities for task actions;
+  commands, with stronger capabilities for task actions; authorized emergency
+  cancellation does not depend on the interactive control lease;
 - the server is the only canonical event-sequence allocator; holder output has
   a separate idempotent source offset and generation metadata;
 - the host-restart simulation ends at `interrupted-needs-action` instead of
@@ -446,5 +473,7 @@ The blocking findings were folded into the concept and Workbench:
 - the HTML is described honestly as a current Wiki artifact pending promotion
   into the not-yet-implemented AGT-2084 folder/catalogue contract.
 
-With these changes, the concept is ready for Robert's DL-0 review. Production
-remains fail-closed until the restart barrier is implemented and verified.
+The final second-opinion pass returned **go for concept review** after these
+corrections. The concept is ready for Robert's DL-0 review. Production remains
+fail-closed until the restart barrier and positive no-overlap proof are
+implemented and verified.

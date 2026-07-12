@@ -310,13 +310,13 @@
           <article class="lease">
             <span class="badge ok">Existing path · persistence required</span>
             <h3>Task execution lease</h3>
-            <p>Held by the runner/session holder. Protects exactly-one execution and every outcome-affecting write.</p>
-            <ul><li>Long enough for heartbeat safety</li><li>Monotonic execution fencing token</li><li>Loss stops and reaps the stale generation</li></ul>
+            <p>Held by the runner/session holder. Protects authoritative Task Server writes; replacement also needs positive process or host fencing.</p>
+            <ul><li>Long enough for heartbeat safety</li><li>Monotonic execution fencing token</li><li>Loss triggers stop and reap, but elapsed time alone is not proof</li></ul>
           </article>
           <article class="lease">
             <span class="badge info">New interaction contract</span>
             <h3>Control lease</h3>
-            <p>Held by one authenticated UI attachment. Protects stdin, steer, approve, cancel, and resume commands.</p>
+            <p>Held by one authenticated UI attachment. Protects stdin, steer, and prompt-response input. Authorized task cancel uses a separate fenced action path.</p>
             <ul><li>Short TTL and explicit owner</li><li>Monotonic control fencing token</li><li>Loss makes the client read-only, not the session terminal</li></ul>
           </article>
         </div>
@@ -332,7 +332,7 @@
               <tr><td>UI closes</td><td><span class="badge ok">unchanged</span></td><td>Drops subscriber after timeout</td><td>Replaceable</td><td>Session remains running</td></tr>
               <tr><td>Second computer attaches</td><td><span class="badge ok">unchanged</span></td><td>Adds read subscriber and replays cursor</td><td>Two consistent views</td><td>Existing controller stays explicit</td></tr>
               <tr><td>Stream gateway restarts</td><td>CLI continues inside its valid lease window and spools</td><td><span class="badge warn">rebuilds + replays</span></td><td>Reconnects</td><td>Lease authority never restarted</td></tr>
-              <tr><td>Task Server authority restarts</td><td>Holder obeys its local stop-before deadline</td><td>Restores durable lease/fence/epoch</td><td>Shows authority recovering</td><td>No admission until continuity or fail-closed quarantine is proven</td></tr>
+              <tr><td>Task Server authority restarts</td><td>Holder obeys its local stop-before deadline</td><td>Restores durable lease/fence/epoch</td><td>Shows authority recovering</td><td>No replacement until continuity plus positive process or host fencing proof</td></tr>
               <tr><td>Host heartbeat is lost</td><td><span class="badge warn">process unknown</span></td><td>Starts no replacement</td><td>Shows host offline</td><td>Loss is not proof of reboot</td></tr>
               <tr><td>Host restart is proven</td><td><span class="badge bad">old PID ended</span> · logical session waits</td><td>Reconciles boot and holder incarnation</td><td>Shows recovery boundary</td><td>Resume needs policy, provider support, and a fresh fence</td></tr>
               <tr><td>Control client vanishes</td><td><span class="badge ok">unchanged</span></td><td>Control TTL expires</td><td>Observers continue</td><td>Next authorized client may acquire control</td></tr>
@@ -392,8 +392,8 @@
         { message: 'Spool acknowledgement reaches the holder. No second CLI was launched.', event: ['1847', 'channel', 'Holder offsets acknowledged; canonical event stream durable'], apply: s => { s.link = 'connected'; s.spool = '0 unacknowledged'; s.cursor = 1847; s.replay = 'current'; s.commands = 'fenced and available'; s.tone = 'ok'; s.outcome = 'Recovered, one CLI'; } }
       ],
       hostRestart: [
-        { message: 'The host heartbeat disappears. This may be a partition, so process state remains unknown and no replacement starts.', event: ['1843', 'holder', 'Heartbeat lost; generation 1 process state unknown'], apply: s => { s.host = 'agent-runner-01 · unreachable'; s.holder = 'unknown · last boot b17'; s.process = 'PID 8421 · state unknown'; s.session = 'running state unconfirmed'; s.link = 'disconnected'; s.commands = 'blocked'; s.control = 'suspended'; s.tone = 'warn'; s.outcome = 'Process unknown, fail closed'; } },
-        { message: 'The host returns with boot b18 and holder incarnation h5. The changed boot id proves generation 1 ended.', event: ['1844', 'holder', 'New boot b18 and incarnation h5 prove old OS process ended'], apply: s => { s.host = 'agent-runner-01 · boot b18'; s.holder = 'reconciling · incarnation h5'; s.process = 'none · generation 1 proven ended'; s.session = 'interrupted-recoverable'; s.link = 'connected'; s.fence = 'old token 73 fenced · no continuation yet'; } },
+        { message: 'The host heartbeat disappears. This may be a partition, so process state remains unknown and no replacement starts.', event: ['1843', 'holder', 'Heartbeat lost; generation 1 process state unknown'], apply: s => { s.host = 'agent-runner-01 · unreachable'; s.holder = 'unknown · last boot b17'; s.process = 'PID 8421 · state unknown'; s.session = 'running state unconfirmed'; s.link = 'disconnected'; s.commands = 'blocked'; s.control = 'suspended'; s.clients[0].role = 'control suspended'; s.tone = 'warn'; s.outcome = 'Process unknown, fail closed'; } },
+        { message: 'The host returns with boot b18 and holder incarnation h5. The changed boot id proves generation 1 ended.', event: ['1844', 'holder', 'New boot b18 and incarnation h5 prove old OS process ended'], apply: s => { s.host = 'agent-runner-01 · boot b18'; s.holder = 'reconciling · incarnation h5'; s.process = 'none · generation 1 proven ended'; s.session = 'interrupted-recoverable'; s.link = 'connected'; s.fence = 'old token 73 fenced · no continuation yet'; s.clients[0].role = 'read-only'; s.outcome = 'Old process ended, reconciling'; } },
         { message: 'The session stops at interrupted-needs-action. Resume awaits Robert\'s policy, provider support, and a fresh execution fence.', event: ['1845', 'policy', 'Automatic resume not assumed; operator decision required'], apply: s => { s.holder = 'connected · waiting'; s.session = 'interrupted-needs-action'; s.control = 'none · available'; s.commands = 'resume action policy-gated'; s.cursor = 1845; s.outcome = 'Decision required, no duplicate CLI'; } }
       ]
     };
