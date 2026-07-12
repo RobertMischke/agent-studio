@@ -322,6 +322,26 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     return `Context: ${proj} · ${tail}`;
   });
 
+  readonly observedViewLabel = computed(() => {
+    const project = this.preferredProject() ?? this.activeProject();
+    if (!project) return 'No project selected';
+    const task = this.activeJobKey() ?? this.activeJobTitle();
+    return task ? `${project} / ${task}` : `${project} board`;
+  });
+
+  readonly selectedHistoryLabel = computed(() => {
+    const key = this.contextKey();
+    if (key === 'global') return 'Global orchestrator';
+    if (key?.startsWith('task:')) return `Task ${this.effectiveJobKey() ?? key.split('/').pop()}`;
+    return this.effectiveProject() ? `Project ${this.effectiveProject()}` : 'No chat history';
+  });
+
+  readonly nextMessageContextLabel = computed(() => {
+    if (this.contextDismissed()) return 'No workspace context will be included';
+    const scope = this.contextDigestState.scopeLabel();
+    return `${scope} will be included${this.pinned() ? ' (pinned)' : ''}`;
+  });
+
   readonly canCreateTaskFromReply = computed(() => {
     const last = [...this.turns()].reverse().find(
       (t) => t.role === 'orchestrator' && !!t.text && !t.errorMessage

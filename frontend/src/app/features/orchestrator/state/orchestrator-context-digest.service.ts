@@ -37,17 +37,17 @@ export class OrchestratorContextDigestService {
       return freshness ? `Refreshing context · captured ${freshness}` : 'Refreshing context…';
     }
     if (this.error()) {
-      return freshness ? `Refresh failed · captured ${freshness}` : 'Context unavailable';
+      return freshness ? `Refresh failed · captured ${freshness}` : 'Next-message context unavailable';
     }
     if (this.loading() && !digest) return 'Loading context…';
-    return freshness ? `Context captured ${freshness}` : 'Context not loaded';
+    return freshness ? `Context captured ${freshness}` : 'Next-message context not loaded';
   });
 
   readonly statusTitle = computed<string>(() => {
     const digest = this.activeDigest();
     const parts = digest ? [`Captured ${digest.capturedAt}`] : [];
     if (this.error()) parts.push(this.error()!);
-    return parts.join(' · ') || 'No context digest has been captured yet';
+    return parts.join(' · ') || 'No next-message context digest has been captured yet';
   });
 
   selectContext(contextKey: string | null): void {

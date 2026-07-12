@@ -186,6 +186,37 @@
   padding: var(--studio-spacing-3) var(--studio-spacing-4) 0;
 }
 
+.sheet__message-context {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg-sidebar);
+}
+
+.sheet__message-context-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: var(--studio-spacing-1);
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+}
+
+.sheet__message-context-copy strong {
+  color: var(--studio-fg-strong);
+  font-size: 12px;
+}
+
+.sheet__message-context-copy span,
+.sheet__message-context-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sheet__scope-row {
   display: flex;
   align-items: center;
@@ -323,6 +354,11 @@
 
   .sheet__context-actions {
     justify-content: flex-start;
+  }
+
+  .sheet__message-context {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

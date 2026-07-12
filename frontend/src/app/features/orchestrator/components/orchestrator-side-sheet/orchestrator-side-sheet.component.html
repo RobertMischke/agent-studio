@@ -25,7 +25,7 @@
             [class.sheet__context-badge--open]="contextMenuOpen()"
             (click)="toggleContextMenu()"
             data-testid="orch-context-badge">
-      <span>Contexts</span>
+      <span>Chat histories</span>
       <strong data-testid="orch-context-count">{{ contextCount() }}</strong>
       <span class="sheet__context-caret" aria-hidden="true">{{ contextMenuOpen() ? '▴' : '▾' }}</span>
     </button>
@@ -35,41 +35,12 @@
     @if (contextMenuOpen()) {
       <section id="orch-context-menu"
                class="sheet__context-menu"
-               aria-label="Chat contexts"
+               aria-label="Chat histories"
                data-testid="orch-context-menu">
         <header class="sheet__context-menu-head">
           <div class="sheet__context-menu-title">
-            <h3>Chat contexts</h3>
-            @if (contextChipText(); as contextLabel) {
-              <p data-testid="orch-context-current">{{ contextLabel }}</p>
-            }
-          </div>
-          <div class="sheet__context-actions" role="group" aria-label="Context actions">
-            <button type="button"
-                    [class.sheet__context-action--active]="pinned()"
-                    [attr.aria-pressed]="pinned()"
-                    (click)="togglePin()"
-                    data-testid="orch-side-sheet-pin">{{ pinned() ? 'Follow navigation' : 'Pin context' }}</button>
-            @if (effectiveJobId() && effectiveWatchPath()) {
-              <button type="button"
-                      (click)="onOpenVerboseDebug()"
-                      data-testid="orch-side-sheet-verbose-debug">Debug</button>
-            }
-            <button type="button"
-                    (click)="onOpenSettings()"
-                    data-testid="orch-side-sheet-settings">Settings</button>
-            <button type="button"
-                    (click)="refreshCurrentContext()"
-                    [disabled]="loading() || contextDigestState.refreshing()"
-                    data-testid="orch-side-sheet-refresh">
-              {{ contextDigestState.refreshing() ? 'Refreshing...' : (loading() ? 'Loading...' : 'Refresh') }}
-            </button>
-            <button type="button"
-                    [attr.aria-pressed]="!contextDismissed()"
-                    (click)="toggleNextMessageContext()"
-                    data-testid="orch-context-send-toggle">
-              {{ contextDismissed() ? 'Include context next' : 'Exclude context once' }}
-            </button>
+            <h3>Chat histories</h3>
+            <p data-testid="orch-context-current">Selected history: {{ selectedHistoryLabel() }}</p>
           </div>
         </header>
 
@@ -84,13 +55,10 @@
             [runActive]="activeRun() !== null"
             [runModel]="activeRun()?.model ?? null"
             [runStartedAt]="activeRun()?.startedAt ?? null" />
-          <nav class="sheet__scope-row" aria-label="Orchestrator scope">
-            <span class="sheet__scope sheet__scope--active"
-                  aria-current="true"
+          <nav class="sheet__scope-row" aria-label="Observed view context">
+            <span class="sheet__scope sheet__scope--active" aria-current="true"
                   data-testid="orch-context-scope">{{ contextDigestState.scopeLabel() }}</span>
-            <span class="sheet__memory"
-                  [attr.title]="contextDigestState.statusTitle()"
-                  data-testid="orch-context-freshness">{{ contextDigestState.statusText() }}</span>
+            <span class="sheet__memory">Observed view: {{ observedViewLabel() }}</span>
           </nav>
         </div>
 
@@ -136,6 +104,35 @@
                 </button>
               }
             }
+
+            <section class="sheet__message-context"
+                     aria-label="Next message context"
+                     data-testid="orch-message-context">
+              <div class="sheet__message-context-copy">
+                <strong>Next message</strong>
+                <span data-testid="orch-message-context-summary">{{ nextMessageContextLabel() }}</span>
+                <small data-testid="orch-observed-view">Observed view: {{ observedViewLabel() }}</small>
+                <small data-testid="orch-selected-history">Selected history: {{ selectedHistoryLabel() }}</small>
+                <small [attr.title]="contextDigestState.statusTitle()"
+                       data-testid="orch-context-freshness">{{ contextDigestState.statusText() }}</small>
+              </div>
+              <div class="sheet__context-actions" role="group" aria-label="Next message context actions">
+                <button type="button" [class.sheet__context-action--active]="pinned()"
+                        [attr.aria-pressed]="pinned()" (click)="togglePin()"
+                        data-testid="orch-side-sheet-pin">{{ pinned() ? 'Unpin' : 'Pin' }}</button>
+                <button type="button" (click)="refreshCurrentContext()"
+                        [disabled]="loading() || contextDigestState.refreshing()"
+                        data-testid="orch-side-sheet-refresh">{{ contextDigestState.refreshing() ? 'Refreshing...' : 'Refresh' }}</button>
+                <button type="button" [attr.aria-pressed]="!contextDismissed()"
+                        (click)="toggleNextMessageContext()" data-testid="orch-context-send-toggle">
+                  {{ contextDismissed() ? 'Include' : 'Exclude once' }}
+                </button>
+                @if (effectiveJobId() && effectiveWatchPath()) {
+                  <button type="button" (click)="onOpenVerboseDebug()" data-testid="orch-side-sheet-verbose-debug">Debug</button>
+                }
+                <button type="button" (click)="onOpenSettings()" data-testid="orch-side-sheet-settings">Settings</button>
+              </div>
+            </section>
 
             <!-- `cac-chat` is deliberately composer-only here. With no
                  messages/events and an empty state, the library suppresses

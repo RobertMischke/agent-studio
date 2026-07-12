@@ -152,9 +152,15 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await expect(badge).toHaveAttribute('aria-expanded', 'false');
     await expect(page.getByTestId('orch-context-count')).toHaveText('3');
     await expect(page.getByTestId('orch-context-menu')).toHaveCount(0);
-    await expect(page.getByTestId('orch-side-sheet-pin')).toHaveCount(0);
-    await expect(page.getByTestId('orch-side-sheet-settings')).toHaveCount(0);
-    await expect(page.getByTestId('orch-side-sheet-refresh')).toHaveCount(0);
+    const messageContext = page.getByTestId('orch-message-context');
+    await expect(messageContext).toBeVisible();
+    await expect(messageContext).toContainText('Next message');
+    await expect(page.getByTestId('orch-observed-view')).toContainText(`${PROJECT} board`);
+    await expect(page.getByTestId('orch-selected-history')).toContainText(`Project ${PROJECT}`);
+    await expect(page.getByTestId('orch-message-context-summary')).toContainText('will be included');
+    await expect(page.getByTestId('orch-side-sheet-pin')).toBeVisible();
+    await expect(page.getByTestId('orch-side-sheet-settings')).toBeVisible();
+    await expect(page.getByTestId('orch-side-sheet-refresh')).toBeVisible();
 
     const resultsDir = process.env.JOB_RESULTS_DIR;
     if (resultsDir) {
@@ -174,11 +180,6 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     expect(Math.abs(menuBox!.x - sheetBox!.x)).toBeLessThanOrEqual(1);
     expect(Math.abs(menuBox!.width - sheetBox!.width)).toBeLessThanOrEqual(2);
 
-    const header = page.getByTestId('orch-context-header');
-    await expect(header).toBeVisible();
-    await expect(header).toHaveAttribute('data-scope', 'board');
-    await expect(header).toHaveAttribute('data-context-key', `project:${PROJECT}`);
-    await expect(page.getByTestId('orch-context-scope')).toHaveText('Project context');
     await expect(page.getByTestId('orch-context-freshness')).toContainText('Context captured');
     await expect(page.getByTestId(`chat-switcher-row-project:${PROJECT}`)).toContainText('running');
     await expect(page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`)).toContainText('parked');
@@ -188,6 +189,11 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
       await page.screenshot({ path: path.join(resultsDir, 'orchestrator-context-expanded--mocked.png'), fullPage: false });
     }
 
+    // History navigation is a separate surface. Close it before exercising
+    // the composer-adjacent controls for the next outbound message.
+    await badge.click();
+    await expect(page.getByTestId('orch-message-context')).toBeVisible();
+
     const forcedRefresh = page.waitForRequest((request) =>
       request.method() === 'POST'
       && new URL(request.url()).pathname === `/api/orchestrator/context/project:${PROJECT}/refresh`);
@@ -196,7 +202,7 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
     await expect(page.getByTestId('orch-context-freshness')).toContainText('Context captured');
 
     const pinBtn = page.getByTestId('orch-side-sheet-pin');
-    await expect(pinBtn).toContainText('Pin context');
+    await expect(pinBtn).toContainText('Pin');
     await expect(pinBtn).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByTestId('orch-side-sheet-project-combo')).toBeEnabled();
 
@@ -207,10 +213,9 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
 
     // Pin: header enters the pinned state, the picker locks.
     await pinBtn.click();
-    await expect(header).toHaveAttribute('data-pinned', 'true');
-    await expect(page.getByTestId('orch-context-pin')).toContainText('Pinned');
     await expect(pinBtn).toHaveAttribute('aria-pressed', 'true');
-    await expect(pinBtn).toContainText('Follow navigation');
+    await expect(pinBtn).toContainText('Unpin');
+    await expect(page.getByTestId('orch-message-context-summary')).toContainText('(pinned)');
     await expect(page.getByTestId('orch-side-sheet-project-combo')).toBeDisabled();
 
     await page.screenshot({
@@ -220,8 +225,30 @@ test.describe('Orchestrator side sheet · navigation context + pin', () => {
 
     // Unpin: back to following navigation.
     await pinBtn.click();
-    await expect(header).not.toHaveAttribute('data-pinned', 'true');
-    await expect(page.getByTestId('orch-context-pin')).toHaveCount(0);
     await expect(page.getByTestId('orch-side-sheet-project-combo')).toBeEnabled();
   });
+
+  for (const colorScheme of ['light', 'dark'] as const) {
+    test(`${colorScheme} narrow layout keeps history and next-message scopes distinct`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme });
+      await page.setViewportSize({ width: 540, height: 820 });
+      await stubWorkspace(page);
+      await openSideSheet(page);
+
+      const context = page.getByTestId('orch-message-context');
+      await expect(context).toBeVisible();
+      await expect(context.getByRole('button', { name: 'Pin', exact: true })).toBeVisible();
+      await page.getByTestId('orch-context-badge').click();
+      await expect(page.getByRole('region', { name: 'Chat histories' })).toBeVisible();
+      await page.getByTestId(`chat-switcher-row-task:${PROJECT}/AGT-1933`).getByRole('button').first().click();
+      await expect(page.getByTestId('orch-selected-history')).toContainText('Task AGT-1933');
+      await expect(page.getByTestId('orch-observed-view')).toContainText(`${PROJECT} board`);
+
+      const toggle = page.getByTestId('orch-context-send-toggle');
+      await toggle.focus();
+      await page.keyboard.press('Enter');
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+      await expect(page.getByTestId('orch-message-context-summary')).toContainText('No workspace context');
+    });
+  }
 });
