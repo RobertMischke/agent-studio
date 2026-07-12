@@ -1983,10 +1983,16 @@ public class ProjectRunner
         }
 
         _processing = true;
+        TaskInfo? admissionInfo = null;
+        var movedToProgressThisCall = false;
+        var claimedRunThisCall = false;
+        var processStartConfirmed = false;
+        string? acquiredPickupLockFolder = null;
         try
         {
             var info = _scanner.FindJob(jobId, Entry.Path);
             if (info == null) return RunOutcome.Reject(new RunRejection(RunRejectReason.TaskNotFound, "Job not found"));
+            admissionInfo = info;
 
             // Resolve the workspace route from the latest cached quota. The
             // decision is per-run and never mutates job.json, so a reset makes
@@ -2083,7 +2089,6 @@ public class ProjectRunner
             // otherwise the task is stranded as a zombie in 3-progress while its
             // slot is already free -> the runner picks the next task and ends up
             // with two folders in 3-progress at maxParallelism=1.
-            var movedToProgressThisCall = false;
             if (plan.MoveJobToProgress && info.State != TaskStates.Progress)
             {
                 var move = _states.MoveJob(jobId, TaskStates.Progress, Entry.Path);
@@ -2108,6 +2113,7 @@ public class ProjectRunner
                 jobFolder = info.FolderPath;
                 plan = RebindPlanJobPaths(plan, promptPath, jobFolder);
                 movedToProgressThisCall = true;
+                admissionInfo = info;
             }
 
             // Way 3 (non-deterministic half): an epic card runs a planning /
@@ -2170,9 +2176,10 @@ public class ProjectRunner
                         BusyJobTitle: info.Title));
                 }
                 _activePickupLockFolder = jobFolder;
+                acquiredPickupLockFolder = jobFolder;
             }
 
-            _activeRuns.TryClaim(new ActiveRun
+            claimedRunThisCall = _activeRuns.TryClaim(new ActiveRun
             {
                 JobId = jobId,
                 Intent = intent,
@@ -2182,6 +2189,22 @@ public class ProjectRunner
                 PickupLockFolder = _activePickupLockFolder,
             });
             _activePickupLockFolder = null;
+            if (!claimedRunThisCall)
+            {
+                if (_pickupLock != null && _pickupLockOwner != null && acquiredPickupLockFolder != null)
+                {
+                    var owner = _pickupLockOwner with { ProjectName = ProjectName, JobId = jobId };
+                    _pickupLock.Release(acquiredPickupLockFolder, owner);
+                }
+                if (movedToProgressThisCall)
+                    RevertFailedStartFromProgress(jobId, info, intent);
+                _logger.LogWarning(
+                    "run_admission_duplicate_prevented jobId={JobId} project={Project} reason=active-run-claim-lost",
+                    jobId, ProjectName);
+                return RunOutcome.Reject(new RunRejection(
+                    RunRejectReason.ProjectBusy,
+                    $"Job '{jobId}' was claimed by another launch before admission completed."));
+            }
             // ASS-1732 "always-worktree": a CODING run mutates the source tree, so
             // it ALWAYS executes in its own isolated task/<id> worktree - the
             // primary/sequential slot included, and for every intent (fresh
@@ -2421,42 +2444,6 @@ public class ProjectRunner
             // run. Stored in its own file (multi-KB), referenced from the event.
             var contextRef = _sessions.PersistRunContext(info.FolderPath, prompt);
 
-            _sessions.AppendSessionEvent(jobId, new SessionEvent
-            {
-                Ts = DateTime.UtcNow,
-                Kind = plan.EventKind,
-                Cli = cli.CliType,
-                InputSessionId = plan.EventInputSessionId,
-                CapturedSessionId = null,
-                // S2 (AGT-1784): record the cwd this session is born in (the
-                // worktree path) so a later reissue can detect a cross-path
-                // resume target and start fresh instead of crashing.
-                Cwd = runWorkingDir,
-                Resumed = plan.ResumeFlag,
-                Reason = plan.EventReason,
-                HeadShaBefore = headShaBefore,
-                ContextRef = contextRef
-            }, Entry.Path);
-
-            // ADR-0049: mirror the run-start onto the unified timeline so the
-            // FE Timeline tab and the Overview strip can render the event
-            // without re-deriving it from session-events.jsonl + cli-output.log.
-            _timeline?.Append(
-                info.FolderPath,
-                TimelineEventKinds.AgentRunStarted,
-                TimelineActors.System,
-                summary: $"{cli.CliType} CLI {plan.EventKind}{(string.IsNullOrWhiteSpace(plan.EventReason) ? "" : $" ({plan.EventReason})")}",
-                runId: plan.EventInputSessionId,
-                details: new()
-                {
-                    ["cli"] = cli.CliType ?? string.Empty,
-                    ["model"] = runModel ?? string.Empty,
-                    ["quotaFallback"] = route?.IsFallback == true ? "true" : "false",
-                    ["fallbackReason"] = route?.Reason ?? string.Empty,
-                    ["intent"] = plan.EventKind ?? string.Empty,
-                    ["resumed"] = plan.ResumeFlag ? "true" : "false",
-                });
-
             // ADR-0052: surface the slot pick-decision + occupancy on the
             // timeline. At MaxParallelism == 1 this is the single sequential
             // slot (one admit, all others serialized); the slot model
@@ -2535,16 +2522,15 @@ public class ProjectRunner
                 isWorktreeRun, activeRunForSpawn?.WorktreeReused == true, runWorkingDir, sessionBirthCwd);
             var effSessionToResume = canResumeSession ? plan.SessionToResume : null;
             var effResumeFlag = canResumeSession && plan.ResumeFlag;
+            var admittedSessionReason = plan.EventReason;
             if (isWorktreeRun && !canResumeSession && plan.ResumeFlag)
             {
                 var why = !string.IsNullOrWhiteSpace(sessionBirthCwd)
                     ? $"prior session born in {sessionBirthCwd} != this run cwd {runWorkingDir}"
                     : "prior session cwd was not this worktree";
                 _logger.LogInformation("[taskboard] {Job}: starting FRESH session ({Why})", jobId, why);
-                // Keep session-events.jsonl truthful — the start event was written
-                // with Resumed=plan.ResumeFlag before this guard ran.
-                try { _sessions.BackfillLatestSessionEventResumed(jobId, false, why, Entry.Path); }
-                catch (Exception ex) { _logger.LogDebug(ex, "[taskboard] {Job}: resumed-backfill best-effort", jobId); }
+                // Keep the admitted session event truthful about the fallback.
+                admittedSessionReason = why;
             }
             var (execution, cliError) = await cli.StartAsync(
                 jobId, GetJobKey(jobId), prompt, runWorkingDir,
@@ -2591,6 +2577,40 @@ public class ProjectRunner
                     Reason: RunRejectReason.CliUnavailable,
                     Message: cliError ?? $"Failed to start {cli.CliType} CLI process"));
             }
+            processStartConfirmed = true;
+
+            // A run-start is durable only after the CLI adapter confirms a
+            // process. Neither the canonical session event nor its timeline
+            // projection may exist for a rejected admission, otherwise a later
+            // read invents a historical run that never owned execution.
+            _sessions.AppendSessionEvent(jobId, new SessionEvent
+            {
+                Ts = execution.StartedAt,
+                Kind = plan.EventKind,
+                Cli = cli.CliType,
+                InputSessionId = effSessionToResume,
+                CapturedSessionId = null,
+                Cwd = runWorkingDir,
+                Resumed = effResumeFlag,
+                Reason = admittedSessionReason,
+                HeadShaBefore = headShaBefore,
+                ContextRef = contextRef
+            }, Entry.Path);
+            _timeline?.Append(
+                info.FolderPath,
+                TimelineEventKinds.AgentRunStarted,
+                TimelineActors.System,
+                summary: $"{cli.CliType} CLI {plan.EventKind}{(string.IsNullOrWhiteSpace(plan.EventReason) ? "" : $" ({plan.EventReason})")}",
+                runId: effSessionToResume,
+                details: new()
+                {
+                    ["cli"] = cli.CliType ?? string.Empty,
+                    ["model"] = runModel ?? string.Empty,
+                    ["quotaFallback"] = route?.IsFallback == true ? "true" : "false",
+                    ["fallbackReason"] = route?.Reason ?? string.Empty,
+                    ["intent"] = plan.EventKind ?? string.Empty,
+                    ["resumed"] = effResumeFlag ? "true" : "false",
+                });
 
             // Spawn succeeded; drop the stashed intent (we've consumed it).
             _mutations.DiscardStashedPendingIntent(info.FolderPath);
@@ -2626,6 +2646,40 @@ public class ProjectRunner
                 RecordReissueOpenItemsPreStep(info, reissueOpenItems, execution.StartedAt);
 
             return RunOutcome.Started(execution);
+        }
+        catch (Exception ex) when (!processStartConfirmed)
+        {
+            // Admission is a transaction until StartAsync returns a live
+            // process. Any unexpected fault before that boundary must release
+            // ownership and undo this call's lane move, otherwise Ready becomes
+            // Progress with neither a run nor a bounded wake.
+            if (claimedRunThisCall)
+            {
+                ReleaseRun(jobId);
+            }
+            else if (_pickupLock != null && _pickupLockOwner != null && acquiredPickupLockFolder != null)
+            {
+                var owner = _pickupLockOwner with { ProjectName = ProjectName, JobId = jobId };
+                _pickupLock.Release(acquiredPickupLockFolder, owner);
+            }
+
+            if (admissionInfo != null)
+            {
+                try { WriteSpawnFailureDiagnostic(admissionInfo, admissionInfo.CliType ?? "unknown", ex.Message); }
+                catch (Exception diagnosticEx) { _logger.LogDebug(diagnosticEx, "Could not persist admission-fault diagnostic for {JobId}", jobId); }
+                _mutations.RollbackStashedPendingIntent(admissionInfo.FolderPath);
+                if (movedToProgressThisCall)
+                    RevertFailedStartFromProgress(jobId, admissionInfo, intent);
+            }
+
+            _logger.LogError(
+                ex,
+                "run_admission_failed jobId={JobId} project={Project} movedToProgress={Moved} claimed={Claimed}; ownership released and lane reconciled",
+                jobId, ProjectName, movedToProgressThisCall, claimedRunThisCall);
+            NotifyStatus();
+            return RunOutcome.Reject(new RunRejection(
+                RunRejectReason.CliUnavailable,
+                $"Run admission failed before the CLI started: {ex.Message}"));
         }
         finally
         {

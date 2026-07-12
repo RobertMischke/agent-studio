@@ -705,6 +705,29 @@
             UI/API surface for pipeline-step and prompt model configuration with Token Economy guidance.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-12</td>
+          <td><code>AGT-2169</code><br><span class="small">progress admission atomicity<br>(observed on <code>AGT-2149</code>)</span></td>
+          <td>
+            AGT-2149 moved from Ready to Progress without a confirmed CLI process. It later showed
+            <code>no-active-run</code> beside a historical execution completed with exit 0, while no live owner or bounded wake
+            could drive the card forward.
+          </td>
+          <td>
+            Explicit spawn-failure branches reverted the lane, but an unexpected exception between the lane move and
+            <code>StartAsync</code> escaped that compensation. The canonical session event and run-start timeline row were also
+            written before process confirmation, and the in-memory claim result was ignored. The disk pickup lock used a read/delete/move sequence
+            that did not serialize two simultaneous backend claims.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> pre-start admission faults now release both ownership layers and return a lane
+            move made by that attempt to <span class="lane">2-ready</span>, where the scheduler provides the bounded wake.
+            Run history and <code>agent_run_started</code> are durable only after the CLI confirms a process. Duplicate in-memory
+            claims fail closed, and the cross-backend pickup record is classified and written under one exclusive file lock.
+            Same-host liveness checks reject a reused PID whose process started after the lock was acquired. Boot liveness
+            recovery continues to route a historical finished run to post-processing and an unfinished zombie back to Ready.
+          </td>
+        </tr>
       </tbody>
     </table>
 
