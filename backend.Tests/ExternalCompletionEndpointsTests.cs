@@ -3,7 +3,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 using Xunit;
 
@@ -170,7 +173,112 @@ public sealed class ExternalCompletionEndpointsTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Completed, "explicit-target")));
     }
 
-    private WebApplicationFactory<Program> BuildFactory() =>
+    [Fact]
+    public async Task ExternalCompletion_FromRegisteredService_UsesProgressToAutoReviewPath()
+    {
+        WriteJob(TaskStates.Progress, "remote-progress-completion", "Remote Progress Completion", "Prompt.");
+        WriteLifecycleRunning(TaskStates.Progress, "remote-progress-completion");
+        var queue = new RecordingAutoReviewQueue();
+
+        using var factory = BuildFactory(queue);
+        using var client = factory.CreateClient();
+        using var registration = await client.PostAsJsonAsync("/api/clients/register", new RegisterClientRequest
+        {
+            DisplayName = "agent-runner-01",
+            Kind = ClientIdentityKinds.Service,
+        });
+        registration.EnsureSuccessStatusCode();
+        using var registrationBody = JsonDocument.Parse(await registration.Content.ReadAsStringAsync());
+        client.DefaultRequestHeaders.Add(
+            "X-Client-Id",
+            registrationBody.RootElement.GetProperty("id").GetString());
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/tasks/remote-progress-completion/external-completion?watchPath={Uri.EscapeDataString(_watchPath)}",
+            new ExternalCompletionRequest
+            {
+                Summary = "Delivered on the remote branch.",
+                Source = "agent-runner-01",
+            });
+
+        response.EnsureSuccessStatusCode();
+        var moved = Path.Combine(_watchPath, TaskStates.AutoReview, "remote-progress-completion");
+        Assert.True(Directory.Exists(moved));
+        Assert.Contains("post-processing-running", File.ReadAllText(Path.Combine(moved, "lifecycle.json")));
+
+        var queued = Assert.Single(queue.Requests);
+        Assert.Equal("remote-progress-completion", queued.JobId);
+        Assert.Contains(queued.Source, new[] { "progress-to-auto-review", "runner-external-completion" });
+    }
+
+    [Fact]
+    public async Task ExternalCompletion_FromRegisteredService_EntersRegularPostProcessing()
+    {
+        // Recovery may move a remote card before its completion arrives. The
+        // registered runner identity must still start the regular review path.
+        WriteJob(TaskStates.Escalated, "remote-completion", "Remote Completion", "Prompt.");
+        var queue = new RecordingAutoReviewQueue();
+
+        using var factory = BuildFactory(queue);
+        using var client = factory.CreateClient();
+        using var registration = await client.PostAsJsonAsync("/api/clients/register", new RegisterClientRequest
+        {
+            DisplayName = "agent-runner-01",
+            Kind = ClientIdentityKinds.Service,
+        });
+        registration.EnsureSuccessStatusCode();
+        using var registrationBody = JsonDocument.Parse(await registration.Content.ReadAsStringAsync());
+        var runnerClientId = registrationBody.RootElement.GetProperty("id").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(runnerClientId));
+        client.DefaultRequestHeaders.Add("X-Client-Id", runnerClientId);
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/tasks/remote-completion/external-completion?watchPath={Uri.EscapeDataString(_watchPath)}",
+            new ExternalCompletionRequest
+            {
+                Summary = "Delivered on the remote branch.",
+                // Deliberately not runner-shaped: routing must use identity kind.
+                Source = "operator-chat",
+                TargetState = TaskStates.HumanReview,
+            });
+
+        response.EnsureSuccessStatusCode();
+        using var responseBody = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(TaskStates.AutoReview, responseBody.RootElement.GetProperty("targetState").GetString());
+        var moved = Path.Combine(_watchPath, TaskStates.AutoReview, "remote-completion");
+        Assert.True(Directory.Exists(moved));
+        var queued = Assert.Single(queue.Requests);
+        Assert.Equal("remote-completion", queued.JobId);
+        Assert.Equal("runner-external-completion", queued.Source);
+    }
+
+    [Fact]
+    public async Task ExternalCompletion_FromChat_RemainsLightweightEvenWithRunnerShapedSource()
+    {
+        WriteJob(TaskStates.Progress, "chat-completion", "Chat Completion", "Prompt.");
+        var queue = new RecordingAutoReviewQueue();
+
+        using var factory = BuildFactory(queue);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+        using var response = await client.PostAsJsonAsync(
+            $"/api/tasks/chat-completion/external-completion?watchPath={Uri.EscapeDataString(_watchPath)}",
+            new ExternalCompletionRequest
+            {
+                Summary = "Relayed by a human operator.",
+                Source = "agent-runner-01",
+            });
+
+        response.EnsureSuccessStatusCode();
+        var moved = Path.Combine(_watchPath, TaskStates.HumanReview, "chat-completion");
+        Assert.True(Directory.Exists(moved));
+        var lifecycle = File.ReadAllText(Path.Combine(moved, "lifecycle.json"));
+        Assert.Contains("awaiting-review", lifecycle);
+        Assert.DoesNotContain("post-processing-running", lifecycle);
+        Assert.Empty(queue.Requests);
+    }
+
+    private WebApplicationFactory<Program> BuildFactory(RecordingAutoReviewQueue? queue = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(b =>
             {
@@ -185,6 +293,14 @@ public sealed class ExternalCompletionEndpointsTests : IDisposable
                         ["WatchPaths:0:RootPath"] = _watchPath,
                     });
                 });
+                if (queue != null)
+                {
+                    b.ConfigureTestServices(services =>
+                    {
+                        services.RemoveAll<IAutoReviewPostProcessingQueue>();
+                        services.AddSingleton<IAutoReviewPostProcessingQueue>(queue);
+                    });
+                }
             });
 
     private void WriteJob(
@@ -217,5 +333,16 @@ public sealed class ExternalCompletionEndpointsTests : IDisposable
             "\"status\":\"running\",\"startedAt\":\"2026-07-07T10:00:00Z\"," +
             "\"detail\":\"still running\"}]}";
         File.WriteAllText(Path.Combine(dir, "lifecycle.json"), lifecycle);
+    }
+
+    private sealed class RecordingAutoReviewQueue : IAutoReviewPostProcessingQueue
+    {
+        public List<AutoReviewPostProcessingRequest> Requests { get; } = [];
+
+        public bool Enqueue(AutoReviewPostProcessingRequest request)
+        {
+            Requests.Add(request);
+            return true;
+        }
     }
 }
