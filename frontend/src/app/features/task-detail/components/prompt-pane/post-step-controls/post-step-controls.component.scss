@@ -1,0 +1,45 @@
+:host {
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+
+.post-step-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+
+  &__source,
+  &__run {
+    border: 1px solid var(--studio-border);
+    border-radius: 999px;
+    background: var(--studio-bg-elevated);
+    color: var(--studio-fg-dim);
+    font: inherit;
+    font-size: 9.5px;
+    line-height: 1.2;
+    /* stylelint-disable-next-line scale-unlimited/declaration-strict-value -- compact inline pill needs half-token vertical padding. */
+    padding: 2px var(--studio-spacing-1);
+    cursor: pointer;
+  }
+
+  &__source {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  &__run {
+    color: var(--studio-fg-strong);
+    background: color-mix(in srgb, var(--studio-accent-3) 11%, var(--studio-bg-elevated));
+  }
+
+  &__run:disabled {
+    cursor: progress;
+    opacity: 0.65;
+  }
+
+  &__attempts {
+    color: var(--studio-fg-dim);
+    font-size: 9.5px;
+    white-space: nowrap;
+  }
+}

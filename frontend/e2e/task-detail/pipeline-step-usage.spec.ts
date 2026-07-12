@@ -140,7 +140,11 @@ function pipeline() {
       totalInputCostUsd: 0, totalOutputCostUsd: 0, totalCacheReadCostUsd: 0,
       totalCacheCreationCostUsd: 0, totalCostUsd: 2.75, anyModelUnknown: false,
     },
-    config: Object.fromEntries(wikiSteps.map(step => [step.id, { enabled: false, canDisable: true }])),
+    config: Object.fromEntries(wikiSteps.map(step => [step.id, {
+      enabled: false,
+      canDisable: true,
+      enabledSource: step.id === 'post-wiki-learnings' ? 'project' : 'catalogue',
+    }])),
     onDemand: {
       plannedStepIds: ['post-wiki-maintenance'],
       attempts: [{
@@ -276,6 +280,23 @@ test('post-step lifecycle actions show card/project source and re-run history in
     catch { /* ignore */ }
   });
   await installFixtureRoutes(page);
+  await page.route('**/api/projects/pipeline-catalogue**', route => route.fulfill(json({ steps: [{
+    id: 'post-wiki-learnings', displayName: 'Wiki learnings', kind: 'tool', phase: 'post',
+    runMode: 'sequential', dependsOn: ['aspect-code-quality'], idempotent: true, stub: false,
+    usesModel: false, usesPrompt: false, supportsMode: false, canDisable: true,
+    defaultEnabled: false, supportsCondition: false,
+  }] })));
+  await page.route('**/api/projects/settings', route => route.fulfill(json({
+    'agent-taskboard': { pipelineSteps: { 'post-wiki-learnings': { enabled: false } } },
+  })));
+  let activationBody: unknown = null;
+  await page.route('**/api/projects/agent-taskboard/pipeline-step', async route => {
+    activationBody = route.request().postDataJSON();
+    await route.fulfill(json({
+      stepId: 'post-wiki-learnings',
+      pipelineSteps: { 'post-wiki-learnings': { enabled: true } },
+    }));
+  });
   await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
 
   await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
@@ -285,6 +306,7 @@ test('post-step lifecycle actions show card/project source and re-run history in
   await expect(maintenance.getByTestId('overview-post-step-source')).toHaveText('card');
   await expect(maintenance.getByTestId('overview-post-step-run')).toHaveText('Run again');
   await expect(maintenance.getByTestId('overview-post-step-attempts')).toContainText('2 attempts');
+  await expect(learnings.getByTestId('overview-post-step-source')).toHaveText('project');
   await expect(learnings.getByTestId('overview-post-step-run')).toHaveText('Add + run');
 
   for (const theme of ['light', 'dark'] as const) {
@@ -294,6 +316,14 @@ test('post-step lifecycle actions show card/project source and re-run history in
       : `test-results/post-step-lifecycle-${theme}--mocked.png`;
     await page.getByTestId('overview-pipeline').screenshot({ path });
   }
+
+  await learnings.getByTestId('overview-post-step-source').click();
+  const activationRow = page.getByTestId('pipeline-step-row-post-wiki-learnings');
+  await expect(page.getByTestId('project-detail-pipeline')).toBeVisible();
+  await expect(activationRow).toBeVisible();
+  await activationRow.locator('summary').click();
+  await page.getByTestId('pipeline-step-enabled-post-wiki-learnings').check();
+  await expect.poll(() => activationBody).toMatchObject({ stepId: 'post-wiki-learnings', enabled: true });
 });
 
 test('retro grading stays available on an existing card and is captured in both themes', async ({ page }) => {

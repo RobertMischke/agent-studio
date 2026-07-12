@@ -79,6 +79,7 @@ public static class TaskPipelineEndpoints
                     return new
                     {
                         enabled = PipelineStepConfigResolver.IsEnabled(settings, step),
+                        enabledSource = configured is null ? "catalogue" : "project",
                         canDisable = PipelineStepConfigResolver.CanDisable(step),
                         cliType = configured?.CliType ?? step.CliType,
                         model = configured?.Model,

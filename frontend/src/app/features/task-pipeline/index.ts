@@ -19,6 +19,7 @@ export type {
   PipelineStepCondition,
   PipelineStepConditionToken,
   TaskPipelineResponse,
+  OnDemandPostStepAttempt,
   StepPromptEntry,
   StepPromptsResponse,
 } from './models/task-pipeline.model';

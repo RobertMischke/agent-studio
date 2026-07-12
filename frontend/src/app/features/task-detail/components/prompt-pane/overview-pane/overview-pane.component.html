@@ -1,5 +1,4 @@
 <div class="overview" data-testid="overview-tab">
-
   <section class="ov-section ov-title-block studio-measure studio-measure--prose" data-testid="overview-title-block">
     @if (editingTitle()) {
       <input #titleInput class="ov-title-input" data-testid="overview-title-input" type="text"
@@ -383,32 +382,7 @@
                   [config]="row.config"
                   (changed)="refreshPipeline()" />
               }
-              @if (supportsOnDemand(row)) {
-                <span class="ov-pl-step__on-demand" data-testid="overview-post-step-actions">
-                  <button type="button"
-                          class="ov-pl-step__source"
-                          data-testid="overview-post-step-source"
-                          [cacTooltip]="'Effective owner: ' + postStepSource(row) + '. Open the project Pipeline to change the durable default.'"
-                          (click)="openPipelineSettings()">{{ postStepSource(row) }}</button>
-                  <button type="button"
-                          class="ov-pl-step__rerun"
-                          data-testid="overview-post-step-run"
-                          [disabled]="postStepBusy(row.id)"
-                          [cacTooltip]="postStepAttemptCount(row.id) > 0
-                            ? 'Run only this post-step again. Earlier attempts and results stay available.'
-                            : 'Add this post-step to the existing card and run it without restarting CORE.'"
-                          (click)="runPostStep(row)">
-                    {{ postStepBusy(row.id)
-                      ? 'Running...'
-                      : (postStepAttemptCount(row.id) > 0 ? 'Run again' : 'Add + run') }}
-                  </button>
-                  @if (postStepAttemptCount(row.id) > 0) {
-                    <span class="ov-pl-step__attempts" data-testid="overview-post-step-attempts">
-                      {{ postStepAttemptCount(row.id) }} {{ postStepAttemptCount(row.id) === 1 ? 'attempt' : 'attempts' }}
-                    </span>
-                  }
-                </span>
-              }
+              <app-post-step-controls [stepId]="row.id" [label]="row.label" [jobId]="job().id" [watchPath]="job().watchPath" [projectName]="job().projectName" [enabledSource]="row.config?.enabledSource ?? 'catalogue'" [plannedStepIds]="pipelinePoll.pipeline()?.onDemand?.plannedStepIds ?? []" [attempts]="pipelinePoll.pipeline()?.onDemand?.attempts ?? []" />
             </span>
             @if (row.runMode === 'parallel') {
               <span class="ov-pl-step__parallel-note"

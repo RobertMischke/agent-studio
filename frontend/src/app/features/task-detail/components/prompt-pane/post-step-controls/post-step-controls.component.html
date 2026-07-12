@@ -1,0 +1,24 @@
+@if (supported()) {
+  <span class="post-step-controls" data-testid="overview-post-step-actions">
+    <button type="button"
+            class="post-step-controls__source"
+            data-testid="overview-post-step-source"
+            [cacTooltip]="'Effective owner: ' + source() + '. Open the project Pipeline to change the durable default.'"
+            (click)="openPipelineSettings()">{{ source() }}</button>
+    <button type="button"
+            class="post-step-controls__run"
+            data-testid="overview-post-step-run"
+            [disabled]="busy()"
+            [cacTooltip]="attemptCount() > 0
+              ? 'Run only this post-step again. Earlier attempts and results stay available.'
+              : 'Add this post-step to the existing card and run it without restarting CORE.'"
+            (click)="run()">
+      {{ busy() ? 'Running...' : (attemptCount() > 0 ? 'Run again' : 'Add + run') }}
+    </button>
+    @if (attemptCount() > 0) {
+      <span class="post-step-controls__attempts" data-testid="overview-post-step-attempts">
+        {{ attemptCount() }} {{ attemptCount() === 1 ? 'attempt' : 'attempts' }}
+      </span>
+    }
+  </span>
+}

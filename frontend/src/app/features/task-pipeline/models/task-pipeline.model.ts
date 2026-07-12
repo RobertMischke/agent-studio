@@ -204,6 +204,19 @@ export interface PipelineStepConfig {
    * operator can see the hierarchy at a glance. Null when no model resolves.
    */
   modelSource?: string | null;
+  /** Whether enabled state comes from an explicit project override or the catalogue default. */
+  enabledSource?: 'project' | 'catalogue';
+}
+
+export interface OnDemandPostStepAttempt {
+  stepId: string;
+  attempt: number;
+  status: string;
+  summary: string;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  artifactRef?: string | null;
 }
 
 /**
@@ -341,15 +354,6 @@ export interface TaskPipelineResponse {
   /** Card-owned additions and append-only attempts from individual post-step runs. */
   onDemand?: {
     plannedStepIds: string[];
-    attempts: Array<{
-      stepId: string;
-      attempt: number;
-      status: string;
-      summary: string;
-      startedAt: string;
-      finishedAt: string;
-      durationMs: number;
-      artifactRef?: string | null;
-    }>;
+    attempts: OnDemandPostStepAttempt[];
   };
 }
