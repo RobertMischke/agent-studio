@@ -338,4 +338,18 @@ export interface TaskPipelineResponse {
    * from a step kind or terminal status.
    */
   resultFiles?: Record<string, string>;
+  /** Card-owned additions and append-only attempts from individual post-step runs. */
+  onDemand?: {
+    plannedStepIds: string[];
+    attempts: Array<{
+      stepId: string;
+      attempt: number;
+      status: string;
+      summary: string;
+      startedAt: string;
+      finishedAt: string;
+      durationMs: number;
+      artifactRef?: string | null;
+    }>;
+  };
 }

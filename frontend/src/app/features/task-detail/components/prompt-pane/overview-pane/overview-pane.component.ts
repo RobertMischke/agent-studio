@@ -29,6 +29,7 @@ import type {
   PipelineStep,
   PipelineStepConfig,
   PipelineStepStatus,
+  TaskPipelineResponse,
   StepKind,
   StepRunMode,
 } from '../../../../task-pipeline';
@@ -61,6 +62,7 @@ import { projectIdentity } from '../../../../../services/project-identity.util';
 import { TaskService } from '../../../../../services/task.service';
 import { CostBreakdownTriggerDirective } from '../../../../tokens';
 import { NotificationService } from '../../../../../services/notification.service';
+import { StudioTabStateService } from '../../../../studio-shell/services/studio-tab-state.service';
 import { ModalStackService } from '../../../../../services/modal-stack.service';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
 import {
@@ -504,6 +506,7 @@ export class OverviewPaneComponent {
   private readonly jobService = inject(TaskService);
   private readonly notifs = inject(NotificationService);
   private readonly modalStack = inject(ModalStackService);
+  private readonly studioTabs = inject(StudioTabStateService);
   private readonly createForm = inject(CreateTaskFormService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -831,15 +834,25 @@ export class OverviewPaneComponent {
     const isCurrentRun = this.selectedPipelineIsCurrent();
     const exec = new Map((selectedExecution?.steps ?? []).map(s => [s.stepId.toLowerCase(), s]));
     const cost = new Map((isCurrentRun ? (res.cost?.steps ?? []) : []).map(c => [c.stepId.toLowerCase(), c]));
+    const cardPlan = new Set((res.onDemand?.plannedStepIds ?? []).map(id => id.toLowerCase()));
+    const latestOnDemand = new Map<string, NonNullable<TaskPipelineResponse['onDemand']>['attempts'][number]>();
+    if (isCurrentRun) {
+      for (const attempt of res.onDemand?.attempts ?? []) {
+        latestOnDemand.set(attempt.stepId.toLowerCase(), attempt);
+      }
+    }
 
     const rows = steps.map(step => {
       const key = step.id.toLowerCase();
       const e = exec.get(key);
+      const onDemand = latestOnDemand.get(key);
       const c = cost.get(key);
       const cfg = res.config?.[step.id];
-      const enabled = cfg?.enabled ?? true;
+      const enabled = cardPlan.has(key) || (cfg?.enabled ?? true);
       let status: PipelineRowVm['status'];
       if (!enabled) status = 'disabled';
+      else if (onDemand) status = onDemand.status.toLowerCase() === 'failed' ? 'failed'
+        : onDemand.status.toLowerCase() === 'skipped' ? 'skipped' : 'passed';
       else if (e) status = e.status;
       else if (step.stub) status = 'planned';
       else status = 'pending';
@@ -879,7 +892,7 @@ export class OverviewPaneComponent {
         isFinalVerdict: step.id === FINAL_VERDICT_STEP_ID,
         enabled,
         canDisable: cfg?.canDisable ?? false,
-        hasExecution: e != null,
+        hasExecution: e != null || onDemand != null,
         config: cfg ?? null,
         status,
         model,
@@ -890,12 +903,12 @@ export class OverviewPaneComponent {
         modelEditable,
         modelOverride,
         thinkingLevelOverride,
-        verdict,
+        verdict: onDemand ? `attempt ${onDemand.attempt}` : verdict,
         concernTooltip: buildConcernTooltip(label, verdict, e?.verdictSummary ?? null),
         explanation: buildStepExplanation(step.id, label, step.kind),
-        durationMs: e?.durationMs ?? 0,
-        startedAt: e?.startedAt ?? null,
-        completedAt: e?.completedAt ?? null,
+        durationMs: onDemand?.durationMs ?? e?.durationMs ?? 0,
+        startedAt: onDemand?.startedAt ?? e?.startedAt ?? null,
+        completedAt: onDemand?.finishedAt ?? e?.completedAt ?? null,
         tokenUsageSource: c?.tokenUsageSource ?? e?.tokenUsageSource ?? null,
         inputTokens,
         outputTokens,
@@ -920,6 +933,7 @@ export class OverviewPaneComponent {
 
   readonly hasPipeline = computed(() => this.pipelineRows().length > 0);
   readonly hideDisabledPipelineSteps = signal(false);
+  private readonly runningPostSteps = signal<ReadonlySet<string>>(new Set());
   readonly disabledPipelineStepCount = computed(() =>
     this.pipelineRows().filter(row => row.status === 'disabled').length,
   );
@@ -939,6 +953,58 @@ export class OverviewPaneComponent {
 
   refreshPipeline(): void {
     this.pipelinePoll.refresh();
+  }
+
+  supportsOnDemand(row: PipelineRowVm): boolean {
+    return row.id === 'post-wiki-maintenance'
+      || row.id === 'post-wiki-learnings'
+      || row.id === 'post-agents-wiki-sync';
+  }
+
+  postStepBusy(stepId: string): boolean {
+    return this.runningPostSteps().has(stepId);
+  }
+
+  postStepAttemptCount(stepId: string): number {
+    return this.pipelinePoll.pipeline()?.onDemand?.attempts
+      ?.filter(attempt => attempt.stepId === stepId)
+      .reduce((max, attempt) => Math.max(max, attempt.attempt), 0) ?? 0;
+  }
+
+  postStepSource(row: PipelineRowVm): 'card' | 'project' | 'catalogue' {
+    if (this.pipelinePoll.pipeline()?.onDemand?.plannedStepIds?.includes(row.id)) return 'card';
+    return row.enabled ? 'project' : 'catalogue';
+  }
+
+  runPostStep(row: PipelineRowVm): void {
+    if (!this.supportsOnDemand(row) || this.postStepBusy(row.id)) return;
+    this.runningPostSteps.update(current => new Set(current).add(row.id));
+    this.jobService.runTaskPostStep(this.job().id, row.id, this.job().watchPath).subscribe({
+      next: result => {
+        this.runningPostSteps.update(current => {
+          const next = new Set(current);
+          next.delete(row.id);
+          return next;
+        });
+        this.pipelinePoll.refresh();
+        this.notifs.success(
+          `${row.label} attempt #${result.attempt}: ${result.summary}`,
+          'Post-step finished',
+        );
+      },
+      error: () => {
+        this.runningPostSteps.update(current => {
+          const next = new Set(current);
+          next.delete(row.id);
+          return next;
+        });
+        this.notifs.warning(`${row.label} could not be run.`, 'Post-step failed');
+      },
+    });
+  }
+
+  openPipelineSettings(): void {
+    this.studioTabs.open({ kind: 'hub', projectName: this.job().projectName, section: 'pipeline' });
   }
 
   /**

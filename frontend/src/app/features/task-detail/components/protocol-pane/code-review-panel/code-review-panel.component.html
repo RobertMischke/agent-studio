@@ -15,16 +15,29 @@
         class="cr-run"
         data-testid="code-review-run"
         type="button"
-        (click)="runReview()"
+        (click)="runReview('verdict')"
         [disabled]="running()"
       >
-        @if (!running()) {
+        @if (!running() || runningMode() !== 'verdict') {
           <span>▶ Run Code Review</span>
         }
-        @if (running()) {
+        @if (running() && runningMode() === 'verdict') {
           <span class="cr-running" data-testid="code-review-running">
             ⟳ Reviewing with {{ selectedModel() }}...
           </span>
+        }
+      </button>
+      <button
+        class="cr-run cr-run--grade"
+        data-testid="code-review-grade-run"
+        type="button"
+        [cacTooltip]="'Grade this card now from its task branch and attributed commits. Each result is kept as a new version.'"
+        (click)="runReview('grade')"
+        [disabled]="running()">
+        @if (!running() || runningMode() !== 'grade') {
+          <span>◆ Grade now</span>
+        } @else {
+          <span class="cr-running" data-testid="code-review-grade-running">⟳ Grading...</span>
         }
       </button>
     </div>
@@ -61,7 +74,7 @@
             [attr.aria-expanded]="expandedFile() === entry.fileName"
           >
             <span class="cr-verdict cr-verdict-{{ verdictTone(entry.verdict) }}">
-              {{ entry.verdict }}
+              {{ entry.grade ? 'Grade ' + entry.grade : entry.verdict }}
             </span>
             <span class="cr-summary">{{ entry.summary || '(no summary)' }}</span>
             <span class="cr-meta">

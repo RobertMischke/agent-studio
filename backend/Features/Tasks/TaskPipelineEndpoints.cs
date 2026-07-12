@@ -31,7 +31,8 @@ public static class TaskPipelineEndpoints
             TaskScannerService scanner,
             AgentStudio.Registry.ProjectRegistry projects,
             ProjectSettingsService projectSettings,
-            PipelineExecutionLog pipelineLog) =>
+            PipelineExecutionLog pipelineLog,
+            OnDemandPostStepService onDemand) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);
             var info = scanner.FindJob(jobId, watchPath);
@@ -99,7 +100,39 @@ public static class TaskPipelineEndpoints
                 tokensByModel,
                 config,
                 resultFiles,
+                onDemand = new
+                {
+                    plannedStepIds = onDemand.ReadPlan(info.FolderPath),
+                    attempts = onDemand.ReadAttempts(info.FolderPath),
+                },
             });
+        });
+
+        // Add a known idempotent post-step to this card and execute only that
+        // step. CORE and the historical orchestrator verdict are untouched.
+        group.MapPost("/{jobId}/pipeline/steps/{stepId}/run", async (
+            string jobId,
+            string stepId,
+            string? project,
+            string? watchPath,
+            RunPostStepRequest? body,
+            TaskScannerService scanner,
+            AgentStudio.Registry.ProjectRegistry projects,
+            OnDemandPostStepService onDemand,
+            CancellationToken ct) =>
+        {
+            watchPath = ResolveWatchPath(projects, project, body?.WatchPath ?? watchPath);
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            if (!OnDemandPostStepService.IsSupported(stepId))
+                return Results.BadRequest(new { error = $"Post-step '{stepId}' cannot run on demand" });
+
+            var entry = scanner.GetWatchPaths().FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, info.ProjectName, StringComparison.OrdinalIgnoreCase));
+            if (entry == null) return Results.BadRequest(new { error = "Project source is not configured" });
+
+            var result = await onDemand.RunAsync(info, entry, stepId, body?.AddToCard ?? true, ct);
+            return Results.Ok(result);
         });
 
         // Read-model for the raw step-call prompts captured at central
@@ -124,4 +157,10 @@ public static class TaskPipelineEndpoints
             return Results.Ok(new { prompts });
         });
     }
+}
+
+public sealed record RunPostStepRequest
+{
+    public string? WatchPath { get; init; }
+    public bool AddToCard { get; init; } = true;
 }

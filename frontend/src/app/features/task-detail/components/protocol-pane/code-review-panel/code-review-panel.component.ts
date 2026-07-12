@@ -71,6 +71,7 @@ export class CodeReviewPanelComponent implements OnInit {
   readonly entries = signal<CodeReviewListEntry[]>([]);
   readonly loading = signal(true);
   readonly running = signal(false);
+  readonly runningMode = signal<'verdict' | 'grade' | null>(null);
   readonly error = signal<string | null>(null);
   readonly expandedFile = signal<string | null>(null);
   readonly expandedBody = signal<string | null>(null);
@@ -192,11 +193,12 @@ export class CodeReviewPanelComponent implements OnInit {
    * resolves HEAD at request time. The button stays disabled and the
    * spinner stays up until the POST resolves.
    */
-  runReview(): void {
+  runReview(mode: 'verdict' | 'grade' = 'verdict'): void {
     const job = this.job();
     if (!job?.id) return;
     if (this.running()) return;
     this.running.set(true);
+    this.runningMode.set(mode);
     this.error.set(null);
     // Register the run in the shared store so the kanban card shows a
     // "code review…" badge for the whole synchronous call, even if the
@@ -209,7 +211,7 @@ export class CodeReviewPanelComponent implements OnInit {
     const model = this.selectedModel().trim();
     if (model) body.model = model;
     if (this.selectedThinkingLevel()) body.thinkingLevel = this.selectedThinkingLevel();
-    this.jobs.runCodeReview(job.id, body, job.watchPath).subscribe({
+    this.jobs.runCodeReview(job.id, { ...body, mode }, job.watchPath).subscribe({
       next: (resp) => {
         // Remember the pair the backend actually ran with, so the next
         // visit seeds from a real run rather than a transient picker state.
@@ -221,12 +223,14 @@ export class CodeReviewPanelComponent implements OnInit {
         this.selectedThinkingLevel.set(ranThinkingLevel ?? null);
         this.rememberLastAgent(ranCli, ranModel, ranThinkingLevel ?? null);
         this.running.set(false);
+        this.runningMode.set(null);
         this.activity.clear(activityKey);
         this.refresh();
       },
       error: (err) => {
         this.error.set(err?.message ?? 'Code review failed.');
         this.running.set(false);
+        this.runningMode.set(null);
         this.activity.clear(activityKey);
       },
     });

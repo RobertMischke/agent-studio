@@ -125,6 +125,10 @@
     "reason": {
       "type": ["string", "null"],
       "description": "Short failure or skip reason; null on success."
+    },
+    "summary": {
+      "type": ["string", "null"],
+      "description": "Short human-readable outcome for an on-demand attempt."
     }
   }
 }

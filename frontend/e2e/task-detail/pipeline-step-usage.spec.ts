@@ -118,11 +118,16 @@ function pipeline() {
     id: 'aspect-code-quality', displayName: 'Code quality', kind: 'aspect',
     runMode: 'parallel', dependsOn: [], idempotent: true, stub: false,
   };
+  const wikiSteps = [
+    { id: 'post-wiki-maintenance', displayName: 'Wiki maintenance', kind: 'tool', runMode: 'sequential', dependsOn: ['core-agent-run'], idempotent: true, stub: false },
+    { id: 'post-wiki-learnings', displayName: 'Wiki learnings', kind: 'tool', runMode: 'sequential', dependsOn: ['aspect-code-quality'], idempotent: true, stub: false },
+    { id: 'post-agents-wiki-sync', displayName: 'Agent skills / AGENTS wiki sync', kind: 'tool', runMode: 'sequential', dependsOn: ['core-agent-run'], idempotent: true, stub: false },
+  ];
   return {
     pipeline: {
       id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
-      pre: [], core: [coreStep], post: [aspectStep],
-      allSteps: [coreStep, aspectStep],
+      pre: [], core: [coreStep], post: [aspectStep, ...wikiSteps],
+      allSteps: [coreStep, aspectStep, ...wikiSteps],
     },
     execution: { ...current, previousAttempts: [previous] },
     cost: {
@@ -135,7 +140,16 @@ function pipeline() {
       totalInputCostUsd: 0, totalOutputCostUsd: 0, totalCacheReadCostUsd: 0,
       totalCacheCreationCostUsd: 0, totalCostUsd: 2.75, anyModelUnknown: false,
     },
-    config: {},
+    config: Object.fromEntries(wikiSteps.map(step => [step.id, { enabled: false, canDisable: true }])),
+    onDemand: {
+      plannedStepIds: ['post-wiki-maintenance'],
+      attempts: [{
+        stepId: 'post-wiki-maintenance', attempt: 2, status: 'Ok',
+        summary: 'updated existing problem entry',
+        startedAt: '2026-07-12T00:15:00Z', finishedAt: '2026-07-12T00:15:01Z', durationMs: 850,
+        artifactRef: 'docs/wiki/common-problems/remote-review/README.md',
+      }],
+    },
   };
 }
 
@@ -254,4 +268,56 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
   await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'dark'; });
   await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
   await saveShot(page, 'cost-breakdown-dialog-dark--mocked.png');
+});
+
+test('post-step lifecycle actions show card/project source and re-run history in both themes', async ({ page }) => {
+  await page.addInitScript(() => {
+    try { localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false })); }
+    catch { /* ignore */ }
+  });
+  await installFixtureRoutes(page);
+  await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+
+  await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
+  await page.getByText('TOOL', { exact: true }).click();
+  const maintenance = page.locator('[data-step-id="post-wiki-maintenance"]');
+  const learnings = page.locator('[data-step-id="post-wiki-learnings"]');
+  await expect(maintenance.getByTestId('overview-post-step-source')).toHaveText('card');
+  await expect(maintenance.getByTestId('overview-post-step-run')).toHaveText('Run again');
+  await expect(maintenance.getByTestId('overview-post-step-attempts')).toContainText('2 attempts');
+  await expect(learnings.getByTestId('overview-post-step-run')).toHaveText('Add + run');
+
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate(t => { document.documentElement.dataset['studioTheme'] = t; }, theme);
+    const path = RESULTS_DIR
+      ? join(RESULTS_DIR, `post-step-lifecycle-${theme}--mocked.png`)
+      : `test-results/post-step-lifecycle-${theme}--mocked.png`;
+    await page.getByTestId('overview-pipeline').screenshot({ path });
+  }
+});
+
+test('retro grading stays available on an existing card and is captured in both themes', async ({ page }) => {
+  await page.addInitScript(() => {
+    try { localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false })); }
+    catch { /* ignore */ }
+  });
+  await installFixtureRoutes(page);
+  await page.route('**/api/tasks/code-review/defaults', route => route.fulfill(json({ cliType: 'claude', model: 'claude-opus-4-8' })));
+  await page.route(`**/api/tasks/${JOB_ID}/code-review/list**`, route => route.fulfill(json({ entries: [{
+    fileName: 'code-review-grade-2026-07-11T22-15-00Z.md', verdict: 'pass', grade: 'B',
+    summary: 'Solid result with one small evidence gap.', model: 'claude-opus-4-8', cliType: 'claude',
+    commit: 'base..task/pipeline-step-usage-fixture', runAt: '2026-07-11T22:15:00Z',
+  }] })));
+  await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+  await page.getByTestId('prompt-tab-code-review').click();
+
+  await expect(page.getByTestId('code-review-grade-run')).toBeVisible();
+  await expect(page.getByTestId('code-review-list')).toContainText('Grade B');
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate(t => { document.documentElement.dataset['studioTheme'] = t; }, theme);
+    const path = RESULTS_DIR
+      ? join(RESULTS_DIR, `retro-grading-${theme}--mocked.png`)
+      : `test-results/retro-grading-${theme}--mocked.png`;
+    await page.getByTestId('code-review-panel').screenshot({ path });
+  }
 });

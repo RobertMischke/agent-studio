@@ -270,7 +270,7 @@ describe('CodeReviewPanelComponent', () => {
     const post = httpCtrl.expectOne(
       (r) => r.method === 'POST' && r.url.includes('/api/tasks/demo-job/code-review')
     );
-    expect(post.request.body).toEqual({ cliType: 'claude', model: 'claude-haiku-4-5-20251001' });
+    expect(post.request.body).toEqual({ cliType: 'claude', model: 'claude-haiku-4-5-20251001', mode: 'verdict' });
     post.flush({
       fileName: 'code-review-2026-05-14T13-00-00Z.md',
       verdict: 'pass',
@@ -307,6 +307,48 @@ describe('CodeReviewPanelComponent', () => {
       model: 'claude-haiku-4-5-20251001',
       thinkingLevel: null,
     });
+    httpCtrl.verify();
+  });
+
+  it('retro-grades a finished card on demand and renders the versioned grade result', async () => {
+    await setup();
+    const fixture = TestBed.createComponent(CodeReviewPanelComponent);
+    fixture.componentRef.setInput('job', { ...seedJob(), state: '6-completed' });
+    fixture.detectChanges();
+
+    const httpCtrl = TestBed.inject(HttpTestingController);
+    httpCtrl.expectOne((r) => r.url.includes('/tasks/code-review/defaults'))
+      .flush({ cliType: 'claude', model: 'claude-opus-4-8' });
+    httpCtrl.expectOne((r) => r.url.includes('/code-review/list')).flush({ entries: [] });
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    (root.querySelector('[data-testid="code-review-grade-run"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(root.querySelector('[data-testid="code-review-grade-running"]')).toBeTruthy();
+    const post = httpCtrl.expectOne((r) => r.method === 'POST' && r.url.includes('/code-review'));
+    expect(post.request.body.mode).toBe('grade');
+    post.flush({
+      fileName: 'code-review-grade-2026-07-12T01-00-00Z.md',
+      verdict: 'pass',
+      grade: 'A',
+      summary: 'Complete and well tested.',
+      model: 'claude-opus-4-8',
+      cliType: 'claude',
+      commit: 'base..task/demo-job',
+      durationMs: 40,
+      startedAt: '2026-07-12T01:00:00Z',
+    });
+    httpCtrl.expectOne((r) => r.method === 'GET' && r.url.includes('/code-review/list')).flush({ entries: [{
+      fileName: 'code-review-grade-2026-07-12T01-00-00Z.md',
+      verdict: 'pass', grade: 'A', summary: 'Complete and well tested.',
+      model: 'claude-opus-4-8', cliType: 'claude', commit: 'base..task/demo-job',
+      runAt: '2026-07-12T01:00:00Z',
+    }] });
+    fixture.detectChanges();
+
+    expect(root.querySelector('.cr-verdict')?.textContent).toContain('Grade A');
     httpCtrl.verify();
   });
 

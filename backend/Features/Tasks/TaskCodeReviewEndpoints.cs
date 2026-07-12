@@ -170,6 +170,8 @@ public static class TaskCodeReviewEndpoints
                    TaskSessionLog sessions,
                    GitService git,
                    CodeReviewStepService service,
+                   AgentStudio.Persistence.IJsonlAppender jsonl,
+                   OnDemandPostStepService onDemand,
                    IConfiguration configuration,
                    AgentStudio.Registry.ProjectRegistry projects,
                    CancellationToken ct) =>
@@ -221,12 +223,45 @@ public static class TaskCodeReviewEndpoints
                 CliType: cli,
                 Model: model)
             {
+                Mode = string.Equals(body?.Mode, "grade", StringComparison.OrdinalIgnoreCase)
+                    ? CodeReviewMode.Grade
+                    : CodeReviewMode.Verdict,
                 ThinkingLevel = thinkingLevel,
                 Commit = scope.Label,
                 Timeout = TimeSpan.FromSeconds(timeoutSeconds),
+                ResultsInventory = ResultsInventory.Render(info.FolderPath),
+                CardMode = ReviewCardMode.Describe(info.Mode),
             };
 
             var report = await service.RunAsync(request, ct);
+
+            if (request.Mode == CodeReviewMode.Grade)
+            {
+                var stepId = PipelineCatalogue.CodeReviewGradeStepId;
+                var attempt = onDemand.ReadAttempts(info.FolderPath).Count(row =>
+                    string.Equals(row.StepId, stepId, StringComparison.OrdinalIgnoreCase)) + 1;
+                var grade = report.Grade is null ? "?" : CodeReviewGradeParsing.GradeToken(report.Grade.Value);
+                var row = new OnDemandStepAttempt(
+                    Id: $"{info.Id}:{stepId}:{attempt}",
+                    ProjectId: info.ProjectName ?? string.Empty,
+                    JobId: info.Id,
+                    JobKey: TaskIdentity.CreateKey(resolvedWatchPath ?? string.Empty, info.Id),
+                    PipelineDefVersion: PipelineCatalogue.Standard.Version,
+                    StepId: stepId,
+                    StepLabel: "Code-review quality grade",
+                    Phase: "Post",
+                    StepType: "Llm",
+                    FailureMode: "Soft",
+                    OrchestratorReaction: "Review",
+                    Attempt: attempt,
+                    Status: report.Grade == CodeReviewGrade.D ? "Failed" : "Ok",
+                    StartedAt: report.StartedAt,
+                    FinishedAt: report.StartedAt.AddMilliseconds(report.DurationMs),
+                    DurationMs: report.DurationMs,
+                    Summary: $"Quality grade {grade}: {report.Summary}",
+                    ArtifactRef: report.FileName);
+                await jsonl.AppendAsync(Path.Combine(info.FolderPath, "logs", OnDemandPostStepService.AttemptsFileName), row, ct: ct);
+            }
 
             return Results.Ok(new CodeReviewStepEndpointResponse
             {
@@ -240,6 +275,7 @@ public static class TaskCodeReviewEndpoints
                 ConcernTagId = report.ConcernTagId,
                 DurationMs = report.DurationMs,
                 StartedAt = report.StartedAt,
+                Grade = report.Grade is null ? null : CodeReviewGradeParsing.GradeToken(report.Grade.Value),
             });
         });
     }
@@ -318,6 +354,7 @@ public sealed record CodeReviewStepEndpointRequest
     public string? CliType { get; init; }
     public string? ThinkingLevel { get; init; }
     public string? Commit { get; init; }
+    public string? Mode { get; init; }
 }
 
 /// <summary>Response shape for the code-review endpoint.</summary>
@@ -333,4 +370,5 @@ public sealed record CodeReviewStepEndpointResponse
     public string? ConcernTagId { get; init; }
     public required long DurationMs { get; init; }
     public required DateTime StartedAt { get; init; }
+    public string? Grade { get; init; }
 }

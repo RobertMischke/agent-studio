@@ -687,7 +687,7 @@ public static class PipelineCatalogue
                 new PipelineStep
                 {
                     Id = AgentsWikiSyncStepId,
-                    DisplayName = "AGENTS/wiki sync",
+                    DisplayName = "Agent skills / AGENTS wiki sync",
                     Kind = StepKind.Tool,
                     RunMode = StepRunMode.Sequential,
                     // Deterministic wiki upkeep keyed off the task's own evidence

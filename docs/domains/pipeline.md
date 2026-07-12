@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-06-10
+Version: 2026-07-12
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -155,6 +155,45 @@ pipeline view.
   Aspect output validation is unchanged and deterministic across models: valid
   sentinels map to the three aspect statuses, while a malformed Spark reply maps
   to `Concerns` plus `review:unparseable` through the existing parser path.
+
+### Post-step lifecycle and ownership
+
+A post-step has four distinct lifecycle states. **Defined** means the code-owned
+catalogue knows its id, capabilities, dependencies, and default. **Enabled**
+means a project override (or the catalogue default) includes it in future task
+pipelines. **Run** means one task has an immutable execution attempt with its
+own start, finish, outcome, and artefact reference. **Re-run** appends another
+attempt for that same task and step; it does not restart CORE, replace an older
+artefact, or rewrite the earlier attempt. The task Overview is the execution
+surface, while Project Hub -> Pipeline is the durable activation surface.
+
+Ownership is deliberately layered. The global catalogue owns what a step is
+and whether it is available. A project owns the effective default configuration
+(enabled, agent, prompt binding, condition, and order). A card owns only its
+execution plan and attempt history: an operator may add a catalogue step to an
+existing card after creation and run it immediately, without changing the
+project default. The Overview must show the effective source as `catalogue`,
+`project`, or `card`, and its activation link must land on the project Pipeline
+control that can actually persist the change. A card-level addition is not a
+new arbitrary executable definition; it can only reference a known catalogue
+step.
+
+On-demand execution is bounded to post-steps that declare themselves
+idempotent and have an implemented runner. It is allowed after the main run and
+after the card has reached a terminal lane. Each invocation appends a
+timestamped result artefact or an append-only execution entry and records the
+CLI-task substrate visibility used by normal pipeline steps. Quality grading is
+the first LLM-backed retro use case: it resolves the task-owned branch/commit
+range, writes a new `code-review-grade-<timestamp>.md`, updates the current
+grade tag, and retains every older grade report. Reporting-only re-runs never
+move the card or revise the historical orchestrator verdict.
+
+Deterministic on-demand tools write one immutable task result at
+`results/post-steps/<step-id>-attempt-<NNN>.md` and append the matching substrate
+row to `logs/step-runs.jsonl`. The result links the project artefact a tool
+created or refreshed. This separates the task's audit history from the tool's
+idempotent project output, which may legitimately converge on one wiki page.
+
 - Aspect and code-review prompts carry a complete evidence set (AGT-2022): the
   run-window diff summary is appended with the task-branch-vs-base commit range
   (`base..task/<id>` via `GitService.GetCommitsInRangeAtRoot`) so a squash/merge

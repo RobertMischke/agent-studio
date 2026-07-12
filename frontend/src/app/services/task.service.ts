@@ -133,6 +133,7 @@ export interface CodeReviewRunResponse {
   concernTagId?: string | null;
   durationMs: number;
   startedAt: string;
+  grade?: string | null;
 }
 
 type LaneKey = keyof GroupedJobs;
@@ -857,13 +858,27 @@ export class TaskService {
    */
   runCodeReview(
     jobId: string,
-    body: { model?: string; cliType?: string; thinkingLevel?: string | null; commit?: string },
+    body: { model?: string; cliType?: string; thinkingLevel?: string | null; commit?: string; mode?: 'verdict' | 'grade' },
     watchPath?: string,
   ) {
     return this.http.post<CodeReviewRunResponse>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/code-review`,
       body,
       this.withWatchPath(watchPath),
+    );
+  }
+
+  /** Add an implemented post-step to an existing card and run only that step. */
+  runTaskPostStep(jobId: string, stepId: string, watchPath?: string) {
+    return this.http.post<{
+      stepId: string;
+      attempt: number;
+      status: string;
+      summary: string;
+      artifactRef?: string | null;
+    }>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/pipeline/steps/${encodeURIComponent(stepId)}/run`,
+      { watchPath, addToCard: true },
     );
   }
 

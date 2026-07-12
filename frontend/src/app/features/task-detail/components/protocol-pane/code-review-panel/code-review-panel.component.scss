@@ -42,6 +42,12 @@
   cursor: progress;
 }
 
+.cr-run--grade {
+  background: color-mix(in srgb, var(--studio-accent-3) 14%, var(--studio-bg-elevated));
+  color: var(--studio-fg-strong);
+  border-color: color-mix(in srgb, var(--studio-accent-3) 38%, var(--studio-border));
+}
+
 .cr-running {
   display: inline-flex;
   align-items: center;
