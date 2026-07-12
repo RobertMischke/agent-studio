@@ -13,7 +13,8 @@ internal static class TaskEndpointHelpers
     /// <summary>
     /// Phase 2b of the watchPath-encapsulation cleanup (ASS-1760): the external
     /// API addresses a project by a path-free handle — a short code / Kürzel
-    /// (e.g. <c>ASS</c>) or a stable <c>PROJ-NNN</c> id — and the server resolves
+    /// (e.g. <c>ASS</c>), a stable <c>PROJ-NNN</c> id, or the display name used
+    /// by project-scoped UI tabs — and the server resolves
     /// it to the project's storage watchPath here, so the filesystem layout never
     /// has to travel over the wire as a query parameter. The deprecated
     /// <paramref name="watchPath"/> query param is still honoured for legacy
@@ -30,9 +31,8 @@ internal static class TaskEndpointHelpers
         if (string.IsNullOrWhiteSpace(project)) return watchPath;
 
         var handle = project.Trim();
-        var record = handle.StartsWith("PROJ-", StringComparison.OrdinalIgnoreCase)
-            ? projects.FindById(handle)
-            : projects.FindByShortCode(handle);
+        var record = projects.FindByShortCode(handle)
+            ?? projects.FindByIdOrDisplayName(handle);
 
         return record is { StorageLocation: { Length: > 0 } storage } ? storage : watchPath;
     }

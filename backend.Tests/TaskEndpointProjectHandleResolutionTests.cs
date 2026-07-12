@@ -8,7 +8,7 @@ namespace AgentStudio.Tests;
 /// <summary>
 /// Phase 2b of the API cleanup (ASS-1760): the read / update / delete task
 /// endpoints resolve a path-free project handle — a short code / Kürzel
-/// (<c>ASS</c>) or a stable <c>PROJ-NNN</c> id — to the project's watchPath
+/// (<c>ASS</c>), a stable <c>PROJ-NNN</c> id, or a display name — to the project's watchPath
 /// server-side via <see cref="TaskEndpointHelpers.ResolveWatchPath"/>, so the
 /// filesystem layout no longer has to be sent as a <c>?watchPath=</c> query
 /// param. The deprecated <c>watchPath</c> param still works for legacy callers.
@@ -48,6 +48,17 @@ public class TaskEndpointProjectHandleResolutionTests : IDisposable
         var registry = BuildRegistryWithProject(out var record);
 
         Assert.Equal(record.StorageLocation, TaskEndpointHelpers.ResolveWatchPath(registry, record.Id, watchPath: null));
+    }
+
+    [Fact]
+    public void ResolveWatchPath_ByDisplayName_ReturnsStorageLocation()
+    {
+        var registry = BuildRegistryWithProject(out var record);
+
+        Assert.Equal(record.StorageLocation,
+            TaskEndpointHelpers.ResolveWatchPath(registry, "Demo Project", watchPath: null));
+        Assert.Equal(record.StorageLocation,
+            TaskEndpointHelpers.ResolveWatchPath(registry, "demo project", watchPath: null));
     }
 
     [Fact]

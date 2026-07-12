@@ -182,7 +182,13 @@ public static class TaskCrudEndpoints
         group.MapGet("/archive", (string? project, string? watchPath, int? offset, int? limit, string? search, bool? includeFixtures,
             TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, ILoggerFactory loggerFactory) =>
         {
+            var projectRequested = !string.IsNullOrWhiteSpace(project);
             watchPath = ResolveWatchPath(projects, project, watchPath);
+            // A project-scoped archive must never degrade to the workspace-wide
+            // archive when a UI sends an unknown/stale handle. That leak made a
+            // Token Economy tab display Agent Studio's 1,000+ archived cards.
+            if (projectRequested && string.IsNullOrWhiteSpace(watchPath))
+                return Results.NotFound(new { error = $"Unknown project '{project}'" });
             var logger = loggerFactory.CreateLogger("TaskArchiveEndpoint");
             var sw = Stopwatch.StartNew();
             var all = scanner.ScanArchivedJobs();
