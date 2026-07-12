@@ -7,14 +7,10 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// Covers the deterministic completion gate wired into
-/// <c>ProcessDoneAsync</c> (requirement 4): a DONE task whose own close-out
-/// still lists unfinished work must never be silently accepted. With budget
-/// left it reissues to 2-ready with the findings foregrounded; with the
-/// reissue budget spent it escalates to 5-human-review. Both record the
-/// post-core <see cref="PipelineCatalogue.OrchestratorReviewStepId"/> row so
-/// the gate's ruling is visible in the Overview pipeline, and both short-
-/// circuit BEFORE the parallel aspect review runs.
+/// Covers the structured completion gate wired into <c>ProcessDoneAsync</c>.
+/// Status prose cannot reopen a TASK_DONE run; explicit terminal/process
+/// evidence controls turn and implementation completion, then deterministic
+/// checks and structured aspect review control task acceptance.
 /// </summary>
 public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
 {
@@ -38,7 +34,7 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
     }
 
     [Fact]
-    public async Task TaskDone_OpenItemsInStatus_BudgetLeft_ReissuesWithGateVerdict()
+    public async Task TaskDone_OpenItemsInStatus_DoesNotTreatProseAsStructuredOpenWork()
     {
         SeedReviewJobWithDone("open-items-job",
             status: "## Open Items\n- [ ] Wire the new route into the shell\n");
@@ -47,18 +43,18 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        var folder = Path.Combine(_watchPath, TaskStates.Ready, "open-items-job");
-        Assert.True(Directory.Exists(folder), "open items with budget left should reissue to 2-ready");
+        var folder = Path.Combine(_watchPath, TaskStates.HumanReview, "open-items-job");
+        Assert.True(Directory.Exists(folder), "status prose should not override a structured TASK_DONE terminal");
 
         var pipelineJson = File.ReadAllText(Path.Combine(folder, PipelineExecutionLog.FileName));
         Assert.Contains("\"stepId\": \"" + PipelineCatalogue.OrchestratorReviewStepId + "\"", pipelineJson);
-        Assert.Contains("\"verdict\": \"reissue\"", pipelineJson);
-
-        Assert.Equal(0, aspect.Invocations);
+        Assert.Contains("\"verdict\": \"complete\"", pipelineJson);
+        Assert.True(aspect.Invocations > 0);
+        Assert.True(File.Exists(Path.Combine(folder, CompletionAcceptanceRecord.FileName)));
     }
 
     [Fact]
-    public async Task TaskDone_SuccessButBuildFailed_BudgetLeft_Reissues()
+    public async Task TaskDone_SuccessButHistoricalBuildFailureProse_ContinuesToDeterministicChecks()
     {
         // ASS-764: the run claims Result: Success while its own Notes report a
         // build failure. The contradiction rule must catch it rather than let
@@ -70,16 +66,16 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        var folder = Path.Combine(_watchPath, TaskStates.Ready, "contradiction-job");
-        Assert.True(Directory.Exists(folder), "a success claim contradicted by a build failure should reissue");
+        var folder = Path.Combine(_watchPath, TaskStates.HumanReview, "contradiction-job");
+        Assert.True(Directory.Exists(folder), "status prose should not replace the deterministic build gate");
 
         var pipelineJson = File.ReadAllText(Path.Combine(folder, PipelineExecutionLog.FileName));
-        Assert.Contains("\"verdict\": \"reissue\"", pipelineJson);
-        Assert.Equal(0, aspect.Invocations);
+        Assert.Contains("\"verdict\": \"complete\"", pipelineJson);
+        Assert.True(aspect.Invocations > 0);
     }
 
     [Fact]
-    public async Task TaskDone_OpenItems_BudgetExhausted_EscalatesToHumanReview()
+    public async Task TaskDone_OpenItemsProse_BudgetExhausted_DoesNotOpaqueCountEscalate()
     {
         SeedReviewJobWithDone("escalate-job",
             status: "## Open Items\n- [ ] Finish the migration\n");
@@ -90,13 +86,13 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        var folder = Path.Combine(_watchPath, TaskStates.Escalated, "escalate-job");
-        Assert.True(Directory.Exists(folder), "open items with no budget left should escalate to 5e-escalated");
+        var folder = Path.Combine(_watchPath, TaskStates.HumanReview, "escalate-job");
+        Assert.True(Directory.Exists(folder), "prose must not escalate even when the reissue budget is exhausted");
 
         var pipelineJson = File.ReadAllText(Path.Combine(folder, PipelineExecutionLog.FileName));
         Assert.Contains("\"stepId\": \"" + PipelineCatalogue.OrchestratorReviewStepId + "\"", pipelineJson);
-        Assert.Contains("\"verdict\": \"escalate\"", pipelineJson);
-        Assert.Equal(0, aspect.Invocations);
+        Assert.Contains("\"verdict\": \"complete\"", pipelineJson);
+        Assert.True(aspect.Invocations > 0);
     }
 
     [Fact]
