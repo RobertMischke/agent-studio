@@ -185,11 +185,14 @@ describe('CodeReviewPanelComponent', () => {
     httpCtrl.verify();
   });
 
-  it('marks the only available grade as older when task activity is newer', async () => {
+  it('marks the only available grade as older when the delivered commit is newer', async () => {
     await setup();
     const fixture = TestBed.createComponent(CodeReviewPanelComponent);
     const job = seedJob();
-    job.lastActivity = '2026-07-11T12:00:00Z';
+    job.commits = [{
+      sha: 'new-delivery', shortSha: 'new-del', message: 'newer delivery',
+      filesChanged: 1, files: ['new.ts'], at: '2026-07-11T12:00:00Z',
+    }];
     fixture.componentRef.setInput('job', job);
     fixture.detectChanges();
 
@@ -206,6 +209,30 @@ describe('CodeReviewPanelComponent', () => {
 
     expect((fixture.nativeElement as HTMLElement)
       .querySelector('[data-testid="code-review-older-grade"]')?.textContent).toContain('older delivery');
+    httpCtrl.verify();
+  });
+
+  it('does not call a current grade an older delivery because of unrelated task activity', async () => {
+    await setup();
+    const fixture = TestBed.createComponent(CodeReviewPanelComponent);
+    const job = seedJob();
+    job.lastActivity = '2026-07-11T12:00:00Z';
+    fixture.componentRef.setInput('job', job);
+    fixture.detectChanges();
+
+    const httpCtrl = TestBed.inject(HttpTestingController);
+    httpCtrl.expectOne((r) => r.url.includes('/tasks/code-review/defaults'))
+      .flush({ cliType: 'claude', model: 'claude-haiku-4-5' });
+    httpCtrl.expectOne((r) => r.url.includes('/code-review/list')).flush({
+      entries: [{
+        fileName: 'code-review-grade-2026-07-09.md', verdict: 'pass', grade: 'B', summary: 'Current grade.',
+        model: 'claude-opus-4-8', cliType: 'claude', runAt: '2026-07-09T19:22:02Z',
+      }],
+    });
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement)
+      .querySelector('[data-testid="code-review-older-grade"]')).toBeNull();
     httpCtrl.verify();
   });
 

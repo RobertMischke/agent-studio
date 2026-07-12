@@ -43,16 +43,23 @@ export class TaskTimelinePollService extends TaskBackgroundPoller<TaskTimelineEv
   }
 
   protected applyResponse(res: TaskTimelineEvent[]): void {
-    this.events.set((res ?? []).map((event) => ({
-      ...event,
-      summary: stripAnsi(event.summary),
-      details: event.details
-        ? Object.fromEntries(Object.entries(event.details).map(([key, value]) => [key, stripAnsi(value)]))
-        : event.details,
-    })));
+    this.events.set(sanitizeTimelineEvents(res));
   }
 
   protected clearValue(): void {
     this.events.set([]);
   }
+}
+
+/** Plain-text timeline surfaces must never expose terminal control codes. */
+export function sanitizeTimelineEvents(
+  events: readonly TaskTimelineEvent[] | null | undefined,
+): TaskTimelineEvent[] {
+  return (events ?? []).map((event) => ({
+    ...event,
+    summary: stripAnsi(event.summary),
+    details: event.details
+      ? Object.fromEntries(Object.entries(event.details).map(([key, value]) => [key, stripAnsi(value)]))
+      : event.details,
+  }));
 }

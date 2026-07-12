@@ -65,6 +65,12 @@ groups, and a failed domain reports an error without hiding successful domains.
   backend seed + navigate).
 - `frontend/src/app/features/task-detail/`: task detail shell, protocol pane,
   prompt pane, git pane, timeline, pipeline overview, and command surfaces.
+  Escalated tasks render a borderless, collapsible decision section that
+  reconciles delivery and decision state in one sentence, lists reissue
+  timestamps and triggers from the timeline, and shows open gate evidence.
+  Timeline and steering text is ANSI-sanitised before rendering. Code Review
+  keeps the last available grade visible with its date when it belongs to an
+  older delivery.
 - `frontend/src/app/features/project-detail/`: project shell and project-level
   quality, settings, architecture, runtime, drift, and supervisor panels. The
   left rail (`project-shell`) is a collapsible-segment tree

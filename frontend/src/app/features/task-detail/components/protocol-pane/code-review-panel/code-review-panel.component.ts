@@ -91,15 +91,21 @@ export class CodeReviewPanelComponent implements OnInit {
     if (!graded) return null;
     const newerReviewExists = graded !== entries[0];
     const reviewAt = Date.parse(graded.runAt);
-    const deliveryTimes = [
-      this.job().lastActivity,
-      ...(this.job().commits ?? []).map((commit) => commit.at),
-    ]
+    const legacyCommit = this.job().commit;
+    const commits = this.job().commits ?? (legacyCommit ? [legacyCommit] : []);
+    const deliveryTimes = commits
+      .map((commit) => commit.at)
       .map((value) => Date.parse(value ?? ''))
       .filter(Number.isFinite);
+    const reviewedCommit = graded.commit?.trim().toLowerCase() || null;
+    const latestCommit = commits.at(-1)?.sha?.trim().toLowerCase() || null;
+    const newerCommitExists = !!reviewedCommit
+      && !!latestCommit
+      && !latestCommit.startsWith(reviewedCommit)
+      && !reviewedCommit.startsWith(latestCommit);
     const newerDeliveryExists = Number.isFinite(reviewAt)
       && deliveryTimes.some((timestamp) => timestamp > reviewAt);
-    return newerReviewExists || newerDeliveryExists ? graded : null;
+    return newerReviewExists || newerCommitExists || newerDeliveryExists ? graded : null;
   });
   readonly bodyIsLarge = computed<boolean>(() => isLargeDiff(this.expandedBody()));
   readonly bodySizeLabel = computed<string>(() => describeDiffSize(this.expandedBody()));
