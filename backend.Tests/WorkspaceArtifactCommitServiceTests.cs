@@ -195,18 +195,27 @@ public sealed class WorkspaceArtifactCommitServiceTests : IDisposable
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["TaskRepository"] = _root,
                 ["WorkspaceArtifacts:PushRetrySeconds"] = "0"
             })
             .Build();
+        var store = new AgentStudio.Bus.AgentMessageBusStore();
+        var bus = new AgentStudio.Bus.AgentMessageBusBridge(
+            store, config, NullLogger<AgentStudio.Bus.AgentMessageBusBridge>.Instance);
         var worker = new WorkspaceArtifactPushWorker(
             new WorkspaceArtifactPushQueue(),
             NullLogger<WorkspaceArtifactPushWorker>.Instance,
-            config);
+            config,
+            bus);
 
         var pushed = await worker.ProcessAsync(
             new WorkspaceArtifactPushRequest(_root, "ASS-OFFLINE"), default);
 
         Assert.False(pushed);
+        var pushFailure = Assert.Single(store.Recent(_root, project: null, limit: 10));
+        Assert.Equal("managed-repo-push-failed", pushFailure.Topic);
+        Assert.Equal("error", pushFailure.Kind);
+        Assert.Equal("ASS-OFFLINE", pushFailure.JobId);
     }
 
     private string JobFolder(string id) =>

@@ -42,6 +42,10 @@ apply only under `frontend/`.
 - Do not commit, push, amend, or mutate remotes unless this exact interactive
   task asks for it. Managed task runs leave git ownership to the platform; see
   [docs/operations/git/commit-push-doctrine.md](./docs/operations/git/commit-push-doctrine.md).
+- Platform-owned commits are remote-durability boundaries: push them
+  immediately by default in every managed repository. Keep network work off
+  the run path, retry failures with bounded backoff, and surface final failures
+  as typed operator-feed events rather than treating a local commit as durable.
 - Written repo artifacts are English. Do not introduce em dashes. User-facing UI
   strings, backend errors shown to the UI, prompts, comments, docs, commits, and
   PR text are English.

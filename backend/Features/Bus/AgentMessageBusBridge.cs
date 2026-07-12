@@ -420,6 +420,40 @@ public sealed class AgentMessageBusBridge
     }
 
     /// <summary>
+    /// Emits the final failure of a platform-owned repository push. Producers
+    /// call this only after their retry budget is exhausted so the operator
+    /// feed stays useful instead of receiving one message per retry attempt.
+    /// </summary>
+    public Task EmitManagedRepoPushFailureAsync(
+        string? project,
+        string? jobId,
+        string repository,
+        string branch,
+        string status,
+        string? error,
+        int attempts,
+        CancellationToken ct = default)
+    {
+        var scope = string.IsNullOrWhiteSpace(project) ? "workspace" : project;
+        var detail = string.IsNullOrWhiteSpace(error) ? status : $"{status}: {error}";
+        var msg = NewMessage(
+            participantId: string.IsNullOrWhiteSpace(project)
+                ? ParticipantOrchestrator
+                : ParticipantOrchestratorFor(project),
+            role: "system",
+            kind: "error",
+            severity: "Warn",
+            project: project,
+            jobId: jobId,
+            topic: "managed-repo-push-failed",
+            summary: TruncateSummary($"Push failed for {scope}/{branch} after {attempts} attempt(s): {detail}"),
+            body: $"Repository: {repository}\nBranch: {branch}\nStatus: {status}\nError: {error ?? "(none)"}",
+            payload: new { repository, branch, status, error, attempts },
+            tags: new[] { "managed-repo-push", "push-failed", $"branch:{branch}" });
+        return EmitAsync(msg, ct);
+    }
+
+    /// <summary>
     /// Token-usage attribution for one orchestrator turn or supporting-agent
     /// call. The aggregate rollup view stays in <c>orchestrator.jsonl</c> /
     /// the token summary service; the bus carries one event per recorded

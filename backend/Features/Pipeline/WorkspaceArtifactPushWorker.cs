@@ -11,15 +11,18 @@ public sealed class WorkspaceArtifactPushWorker : BackgroundService
 {
     private readonly WorkspaceArtifactPushQueue _queue;
     private readonly ILogger<WorkspaceArtifactPushWorker> _logger;
+    private readonly AgentStudio.Bus.AgentMessageBusBridge? _bus;
     private readonly TimeSpan _baseBackoff;
 
     public WorkspaceArtifactPushWorker(
         WorkspaceArtifactPushQueue queue,
         ILogger<WorkspaceArtifactPushWorker> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        AgentStudio.Bus.AgentMessageBusBridge? bus = null)
     {
         _queue = queue;
         _logger = logger;
+        _bus = bus;
         _baseBackoff = TimeSpan.FromSeconds(Math.Max(0,
             configuration.GetValue<int?>("WorkspaceArtifacts:PushRetrySeconds") ?? 30));
     }
@@ -56,6 +59,16 @@ public sealed class WorkspaceArtifactPushWorker : BackgroundService
                 request.JobId, request.RepositoryRoot, attempt, result.Error);
             if (attempt < 3)
                 await Task.Delay(TimeSpan.FromTicks(_baseBackoff.Ticks * (1L << (attempt - 1))), ct);
+            else if (_bus != null)
+                await _bus.EmitManagedRepoPushFailureAsync(
+                    project: null,
+                    jobId: request.JobId,
+                    repository: request.RepositoryRoot,
+                    branch: "main",
+                    status: "failed",
+                    error: result.Error,
+                    attempts: attempt,
+                    ct: ct);
         }
         return false;
     }
