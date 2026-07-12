@@ -269,11 +269,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     private async Task<string> RunViaOneShotAsync(string cli, string model, string prompt, TimeSpan timeout, CancellationToken ct)
     {
-        var oneShot = _oneShotRegistry?.Get("claude");
+        var cliType = NormalizeReviewCliType(cli);
+        var oneShot = _oneShotRegistry?.Get(cliType);
         if (oneShot == null) return await DefaultRunCliAsync(cli, model, prompt, timeout, ct);
 
         var result = await oneShot.RunAsync(new AgentStudio.Cli.CliOneShotRequest(
-            CliType: "claude",
+            CliType: cliType,
             Model: model,
             Prompt: prompt)
         {
@@ -384,8 +385,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private async Task TickOnceCoreAsync(string workspace, CancellationToken ct)
     {
         var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", 30);
-        var cliBinary = _configuration.GetValue("ReviewDecisionOrchestrator:Cli", "claude");
-        var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", ModelIds.ClaudeHaiku45);
+        var cliBinary = _configuration.GetValue("ReviewDecisionOrchestrator:Cli", CliTypes.Codex);
+        var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", ModelIds.Gpt54Mini);
         var aspectModel = _configuration.GetValue("ReviewDecisionOrchestrator:AspectModel", model);
         var aspectTimeoutSeconds = _configuration.GetValue("ReviewDecisionOrchestrator:AspectTimeoutSeconds", 60);
         var maxReissues = _configuration.GetValue("ReviewDecisionOrchestrator:MaxAutoReissueAttempts", MaxAutoReissueAttempts);
@@ -1500,7 +1501,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var cardMode = ReviewCardMode.Describe(current.Mode);
         WritePostProcessingOutcome(current, PostProcessingOutcomes.FindingsAdded,
             summary: "Orchestrator post-processing started.",
-            performerCliType: CliTypes.Claude,
+            performerCliType: NormalizeReviewCliType(cliBinary),
             stepId: PipelineCatalogue.OrchestratorReviewStepId,
             evidenceRef: "pipeline-execution.json");
 
@@ -1611,7 +1612,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             ? null
             : aspectId => economyRecommendations.TryGetValue(aspectId, out var recommendation)
                 ? recommendation.CliType
-                : PipelineStepConfigResolver.ResolveCliType(settings, $"aspect-{aspectId}") ?? CliTypes.Claude;
+                : PipelineStepConfigResolver.ResolveCliType(settings, $"aspect-{aspectId}") ?? NormalizeReviewCliType(cliBinary);
         Func<string, string?>? thinkingLevelForAspect = settings is null
             ? null
             : aspectId =>
@@ -1622,7 +1623,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 return PipelineStepConfigResolver.ResolveThinkingLevel(
                     settings,
                     $"aspect-{aspectId}",
-                    cliForAspect?.Invoke(aspectId) ?? CliTypes.Claude,
+                    cliForAspect?.Invoke(aspectId) ?? NormalizeReviewCliType(cliBinary),
                     resolvedModel);
             };
         Func<string, string?>? promptForAspect = settings is null
@@ -5444,6 +5445,18 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// Stdin-piped — replaces the previous <c>-p &lt;prompt&gt;</c> argv path
     /// that caused the 2026-05-11 empty-reply incident on Windows.
     /// </summary>
+    internal static string NormalizeReviewCliType(string? cli)
+    {
+        var value = cli?.Trim();
+        if (string.IsNullOrWhiteSpace(value)) return CliTypes.Codex;
+
+        var fileName = Path.GetFileNameWithoutExtension(value);
+        if (fileName.Equals(CliTypes.Codex, StringComparison.OrdinalIgnoreCase)) return CliTypes.Codex;
+        if (fileName.Equals(CliTypes.Gemini, StringComparison.OrdinalIgnoreCase)) return CliTypes.Gemini;
+        if (fileName.Equals(CliTypes.Claude, StringComparison.OrdinalIgnoreCase)) return CliTypes.Claude;
+        return value.ToLowerInvariant();
+    }
+
     private static async Task<string> DefaultRunCliAsync(string cli, string model, string prompt, TimeSpan timeout, CancellationToken ct)
     {
         var psi = new ProcessStartInfo
