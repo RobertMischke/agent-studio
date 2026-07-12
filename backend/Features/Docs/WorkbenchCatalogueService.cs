@@ -1,0 +1,175 @@
+using System.Text.Json;
+
+namespace AgentStudio.Docs;
+
+/// <summary>
+/// Read-only repository discovery for experiment Workbenches. Canonical items
+/// live under docs/workbenches/&lt;id&gt;/; the small legacy list is an explicit
+/// migration bridge for named, already-existing artifacts, never a heuristic
+/// scan of arbitrary HTML.
+/// </summary>
+public sealed class WorkbenchCatalogueService
+{
+    private readonly TaskScannerService _scanner;
+    private readonly ProjectRegistry _registry;
+    private readonly GitService _git;
+
+    private static readonly HashSet<string> CurrentStatuses = new(StringComparer.Ordinal)
+        { "active", "decision-pending" };
+    private static readonly HashSet<string> AllowedStatuses = new(StringComparer.Ordinal)
+        { "active", "decision-pending", "decided", "archived" };
+    private static readonly HashSet<string> AllowedPhases = new(StringComparer.Ordinal)
+        { "shaping", "testing", "decision-ready" };
+
+    private sealed record LegacyWorkbench(
+        string Id, string Title, string Summary, string RepoRelPath, string Phase,
+        string[] SourceTaskKeys);
+
+    private static readonly LegacyWorkbench[] LegacyPilot =
+    [
+        new("pipeline-workbench", "Pipeline workbench",
+            "Inspect the pipeline contract and its current implementation signals.",
+            "docs/domains/pipeline.md.report.html", "testing", ["AGT-2091"]),
+        new("workbench-mockup-family", "Workbench mockup family",
+            "Shape the Workbench host, list, viewer, and later decision surfaces.",
+            "docs/concepts/mockups/experimentier-workbench.html", "testing", ["AGT-2122"]),
+        new("app-survey", "Application survey",
+            "Understand the current product surfaces through the visual survey findings.",
+            "docs/design/app-survey-2026-07-11.html", "decision-ready", []),
+        new("decoupled-lifecycles", "Decoupled lifecycles",
+            "Understand and separate task, run, pipeline, and delivery lifecycles.",
+            "docs/concepts/mockups/decoupled-lifecycles.html", "shaping", ["AGT-2091", "AGT-2122"]),
+    ];
+
+    public WorkbenchCatalogueService(TaskScannerService scanner, ProjectRegistry registry, GitService git)
+    {
+        _scanner = scanner;
+        _registry = registry;
+        _git = git;
+    }
+
+    public WorkbenchCatalogue? List(string projectName, bool includeHistory = false)
+    {
+        var root = ResolveRoot(projectName);
+        if (root == null) return null;
+
+        var items = DiscoverCanonical(root);
+        var ids = items.Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var legacy in LegacyPilot)
+        {
+            if (ids.Contains(legacy.Id)) continue;
+            var full = ContainedPath(root, legacy.RepoRelPath);
+            if (full == null || !File.Exists(full)) continue;
+            items.Add(new WorkbenchListItem(
+                legacy.Id, legacy.Title, legacy.Summary, "active", legacy.Phase,
+                File.GetLastWriteTimeUtc(full), legacy.RepoRelPath, true, null,
+                legacy.SourceTaskKeys));
+        }
+
+        var visible = items
+            .Where(x => !x.Valid || includeHistory || CurrentStatuses.Contains(x.Status))
+            .OrderByDescending(x => x.UpdatedAtUtc)
+            .ThenBy(x => x.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return new WorkbenchCatalogue(projectName, includeHistory, visible.Count, visible);
+    }
+
+    public WorkbenchDocument? Read(string projectName, string id)
+    {
+        if (!SafeId(id)) return null;
+        var root = ResolveRoot(projectName);
+        if (root == null) return null;
+        var item = List(projectName, includeHistory: true)?.Items.FirstOrDefault(x => x.Id == id);
+        if (item is not { Valid: true }) return null;
+        var full = ContainedPath(root, item.EntryPath);
+        if (full == null || !File.Exists(full)) return null;
+        var status = _git.GetStatusForRepoRoot(root);
+        return new WorkbenchDocument(item, File.ReadAllText(full), status.Branch,
+            _git.GetHeadShaCached(root));
+    }
+
+    private List<WorkbenchListItem> DiscoverCanonical(string root)
+    {
+        var result = new List<WorkbenchListItem>();
+        var workbenches = Path.Combine(root, "docs", "workbenches");
+        if (!Directory.Exists(workbenches)) return result;
+        foreach (var dir in Directory.EnumerateDirectories(workbenches))
+        {
+            var folder = Path.GetFileName(dir);
+            var descriptor = Path.Combine(dir, "workbench.json");
+            if (!File.Exists(descriptor))
+            {
+                result.Add(Invalid(folder, "Missing workbench.json.", descriptor));
+                continue;
+            }
+            try
+            {
+                using var json = JsonDocument.Parse(File.ReadAllText(descriptor));
+                var obj = json.RootElement;
+                var schema = RequiredInt(obj, "schemaVersion");
+                var id = RequiredString(obj, "id");
+                var title = RequiredString(obj, "title");
+                var summary = RequiredString(obj, "summary");
+                var entrypoint = RequiredString(obj, "entrypoint");
+                var status = RequiredString(obj, "status");
+                var updatedText = RequiredString(obj, "updatedAt");
+                var phase = OptionalString(obj, "phase");
+                if (schema != 1) throw new InvalidDataException("schemaVersion must be 1.");
+                if (!SafeId(id) || id != folder) throw new InvalidDataException("id must match the containing folder.");
+                if (!AllowedStatuses.Contains(status)) throw new InvalidDataException($"Unsupported status '{status}'.");
+                if (phase != null && !AllowedPhases.Contains(phase)) throw new InvalidDataException($"Unsupported phase '{phase}'.");
+                if (!DateTimeOffset.TryParse(updatedText, out var updated)) throw new InvalidDataException("updatedAt must be an ISO timestamp.");
+                var extension = Path.GetExtension(entrypoint);
+                if (!extension.Equals(".html", StringComparison.OrdinalIgnoreCase)
+                    && !extension.Equals(".htm", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("entrypoint must be HTML.");
+                var full = ContainedPath(dir, entrypoint);
+                if (full == null || !File.Exists(full)) throw new InvalidDataException("entrypoint is missing or escapes its Workbench folder.");
+                var repoRel = Path.GetRelativePath(root, full).Replace('\\', '/');
+                result.Add(new WorkbenchListItem(id, title, summary, status, phase,
+                    updated.UtcDateTime, repoRel, true, null, StringArray(obj, "sourceTaskKeys")));
+            }
+            catch (Exception ex) when (ex is JsonException or IOException or InvalidDataException)
+            {
+                result.Add(Invalid(folder, ex.Message, descriptor));
+            }
+        }
+        return result;
+    }
+
+    private static WorkbenchListItem Invalid(string folder, string error, string path) =>
+        new(SafeId(folder) ? folder : "invalid-workbench", folder, "Descriptor needs repair.",
+            "invalid", null, File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.UtcNow,
+            $"docs/workbenches/{folder}/workbench.json", false, error, []);
+
+    private string? ResolveRoot(string projectName) =>
+        ProjectRepoResolver.ResolveForProject(projectName, _scanner, _registry);
+
+    private static string? ContainedPath(string root, string rel)
+    {
+        if (string.IsNullOrWhiteSpace(rel) || Path.IsPathRooted(rel)) return null;
+        var rootFull = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var full = Path.GetFullPath(Path.Combine(root, rel.Replace('/', Path.DirectorySeparatorChar)));
+        return full.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase) ? full : null;
+    }
+
+    private static bool SafeId(string value) => value.Length is > 0 and <= 80
+        && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
+    private static string RequiredString(JsonElement obj, string name) =>
+        obj.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString())
+            ? value.GetString()! : throw new InvalidDataException($"{name} is required.");
+    private static int RequiredInt(JsonElement obj, string name) =>
+        obj.TryGetProperty(name, out var value) && value.TryGetInt32(out var parsed)
+            ? parsed : throw new InvalidDataException($"{name} is required.");
+    private static string? OptionalString(JsonElement obj, string name) =>
+        obj.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+    private static string[] StringArray(JsonElement obj, string name) =>
+        obj.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array
+            ? value.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToArray()
+            : [];
+}
+
+public record WorkbenchCatalogue(string ProjectName, bool IncludesHistory, int Count, List<WorkbenchListItem> Items);
+public record WorkbenchListItem(string Id, string Title, string Summary, string Status, string? Phase,
+    DateTime UpdatedAtUtc, string EntryPath, bool Valid, string? Error, string[] SourceTaskKeys);
+public record WorkbenchDocument(WorkbenchListItem Workbench, string Html, string? Branch, string? Revision);

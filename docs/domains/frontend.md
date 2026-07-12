@@ -79,6 +79,11 @@ groups, and a failed domain reports an error without hiding successful domains.
   operations, and shows a per-doc History panel (model / when / why + git log);
   its endpoints and tree contract are documented in
   [docs/contracts/wiki-tree.md](../contracts/wiki-tree.md).
+- `frontend/src/app/features/project-detail/components/workbench-viewer/` is the
+  read-only Workbench host. Explorer discovery is lazy per expanded project;
+  Pulse reuses the same catalogue as a thinking inbox. Repository HTML runs only
+  in an opaque-origin `srcdoc` iframe with the Workbench CSP and no host API
+  bridge. Chat pinning and decision mutations are intentionally not mounted.
 - `frontend/src/app/features/project-detail/components/project-overview-dashboard/`:
   the operator-first Project Overview composition. It presents project outcomes,
   important runtime entry points, deployment readiness, and work requiring

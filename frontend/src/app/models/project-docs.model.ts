@@ -171,6 +171,35 @@ export interface WikiRevisionContent {
   content: string;
 }
 
+export type WorkbenchStatus = 'active' | 'decision-pending' | 'decided' | 'archived' | 'invalid';
+
+export interface WorkbenchListItem {
+  id: string;
+  title: string;
+  summary: string;
+  status: WorkbenchStatus;
+  phase: 'shaping' | 'testing' | 'decision-ready' | null;
+  updatedAtUtc: string;
+  entryPath: string;
+  valid: boolean;
+  error: string | null;
+  sourceTaskKeys: string[];
+}
+
+export interface WorkbenchCatalogue {
+  projectName: string;
+  includesHistory: boolean;
+  count: number;
+  items: WorkbenchListItem[];
+}
+
+export interface WorkbenchDocument {
+  workbench: WorkbenchListItem;
+  html: string;
+  branch: string | null;
+  revision: string | null;
+}
+
 // ---- Wiki Pulse (PULSE-1: the generated wiki landing view) ----
 
 /** One change-feed row: a recently-edited page + frame-area badge + task key. */
@@ -323,6 +352,7 @@ export interface WikiPulse {
   critical: WikiPulseCritical;
   warnings?: WikiPulseWarnings;
   activity?: WikiPulseActivity;
+  workbenches?: WorkbenchCatalogue | null;
 }
 
 // ---- Wiki grading maintenance run (AGT-2051) ----

@@ -56,6 +56,7 @@ import {
   ProjectOverlaysService,
   ProjectRailKey,
   ProjectUrlPreviewTabComponent,
+  WorkbenchViewerComponent,
 } from './features/project-detail';
 import {
   AutoReviewIndicatorComponent,
@@ -183,6 +184,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     PendingButtonDirective,
     CostBreakdownDialogComponent,
     ProjectUrlPreviewTabComponent,
+    WorkbenchViewerComponent,
     StudioIconComponent,
   ],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many

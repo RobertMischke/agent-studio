@@ -515,6 +515,7 @@ export class StudioShellComponent {
     if (!tab) return null;
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : 'board';
     if (tab.kind === 'hub') return tab.section === 'wiki' ? 'wiki' : 'hub';
+    if (tab.kind === 'workbench') return 'workbench';
     if (tab.kind === 'epics') return tab.projectName === null ? null : 'epics';
     return null;
   });
@@ -531,6 +532,7 @@ export class StudioShellComponent {
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
     if (tab.kind === 'epics') return tab.projectName;
     if (tab.kind === 'hub') return tab.projectName;
+    if (tab.kind === 'workbench') return tab.projectName;
     if (tab.kind === 'task' || tab.kind === 'activity') {
       const job = this.findJob(tab.taskKey);
       return job?.projectName ?? null;
@@ -620,6 +622,10 @@ export class StudioShellComponent {
    */
   openWiki(projectName: string): void {
     this.tabState.open({ kind: 'hub', projectName, section: 'wiki' });
+  }
+
+  openWorkbench(event: { projectName: string; workbench: { id: string; title: string } }): void {
+    this.tabState.open({ kind: 'workbench', projectName: event.projectName, workbenchId: event.workbench.id, title: event.workbench.title });
   }
 
   /**
@@ -1033,6 +1039,8 @@ export class StudioShellComponent {
       }
       case 'hub':
         return `${this.projectShortLabel(tab.projectName)} · ${this.railItemForSection(tab.section).label}`;
+      case 'workbench':
+        return tab.title || tab.workbenchId;
       case 'diff':
         return tab.commitSha;
       case 'activity': {
@@ -1080,6 +1088,7 @@ export class StudioShellComponent {
       return this.railItemForSection(tab.section).railIcon ?? null;
     }
     if (tab.kind === 'url-preview') return 'link';
+    if (tab.kind === 'workbench') return 'eye';
     return null;
   }
 
@@ -1096,6 +1105,7 @@ export class StudioShellComponent {
         return tab.projectName === '__all__' ? null : tab.projectName;
       case 'epics':
       case 'hub':
+      case 'workbench':
       case 'url-preview':
         return tab.projectName;
       case 'task':

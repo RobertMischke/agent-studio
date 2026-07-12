@@ -17,7 +17,9 @@ import {
   WikiPulse,
   WikiRecentEdits,
   WikiRevisionContent,
-  WikiTree
+  WikiTree,
+  WorkbenchCatalogue,
+  WorkbenchDocument,
 } from '../models/project-docs.model';
 
 /**
@@ -84,6 +86,19 @@ export class ProjectDocsService {
   getWikiPulse(projectName: string, feedLimit = 12) {
     return this.http.get<WikiPulse>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/pulse?feedLimit=${feedLimit}`
+    );
+  }
+
+  getWorkbenches(projectName: string, history = false) {
+    return this.http.get<WorkbenchCatalogue>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/workbenches`,
+      { params: history ? { history: 'true' } : {} },
+    );
+  }
+
+  getWorkbench(projectName: string, id: string) {
+    return this.http.get<WorkbenchDocument>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/workbenches/${encodeURIComponent(id)}`,
     );
   }
 

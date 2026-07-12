@@ -66,6 +66,25 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(ov);
         });
 
+        // Repository-owned experiment Workbenches. The list is bounded by the
+        // physical docs/workbenches folders plus a named legacy migration pilot;
+        // HTML is returned as data and is never executed by the backend origin.
+        app.MapGet("/api/projects/{projectName}/workbenches", (string projectName, bool? history, WorkbenchCatalogueService workbenches) =>
+        {
+            var catalogue = workbenches.List(projectName, history == true);
+            return catalogue == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(catalogue);
+        });
+
+        app.MapGet("/api/projects/{projectName}/workbenches/{id}", (string projectName, string id, WorkbenchCatalogueService workbenches) =>
+        {
+            var document = workbenches.Read(projectName, id);
+            return document == null
+                ? Results.NotFound(new { error = "Workbench not found, invalid, or path rejected" })
+                : Results.Ok(document);
+        });
+
         // The physical docs/ folder hierarchy (folders + .md/.html/.json files)
         // that backs the wiki navigation tree. No git is touched here, and a warm
         // cache serves it without opening a file (AGT-2013); the ETag lets a
@@ -98,12 +117,12 @@ public static class ProjectDocsEndpoints
         // composed server-side so the landing
         // surface costs two git walks instead of the tree + recent + per-doc
         // history fan-out. Sits before the /files catch-all for path precedence.
-        app.MapGet("/api/projects/{projectName}/wiki/pulse", (string projectName, ProjectDocsService docs, GitService git, int? feedLimit) =>
+        app.MapGet("/api/projects/{projectName}/wiki/pulse", (string projectName, ProjectDocsService docs, GitService git, WorkbenchCatalogueService workbenches, int? feedLimit) =>
         {
             var pulse = docs.GetWikiPulse(projectName, git, feedLimit ?? 12);
             return pulse == null
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
-                : Results.Ok(pulse);
+                : Results.Ok(pulse with { Workbenches = workbenches.List(projectName) });
         });
 
         app.MapGet("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs) =>

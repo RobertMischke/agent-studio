@@ -606,7 +606,7 @@
                   class="pwiki__pulse"
                   [pulse]="pulse()"
                   [loading]="pulseLoading()"
-                  (openPage)="onPulseOpen($event)" />
+                  (openPage)="onPulseOpen($event)" (openWorkbench)="openWorkbench.emit($event)" />
 
               <app-wiki-grade-panel
                   class="pwiki__grade"

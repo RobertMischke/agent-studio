@@ -202,14 +202,14 @@
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'wiki' ? 'page' : null"
                               [testid]="'studio-explorer-project-wiki-' + p.name"
                               (selectRequest)="openWikiRequest.emit(p.name)" />
+                <app-explorer-workbench-list [projectName]="p.name" [active]="p.isActive && activeProjectSurface() === 'workbench'" (openWorkbench)="openWorkbenchRequest.emit({ projectName: p.name, workbench: $event })" />
                 <app-tree-row level="child" glyph="book"
                               label="Epics"
                               [active]="p.isActive && activeProjectSurface() === 'epics'"
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'epics' ? 'page' : null"
                               [testid]="'studio-explorer-project-epics-' + p.name"
                               (selectRequest)="openEpicsRequest.emit(p.name)" />
-                <!-- Project URLs: 0..N extra rows, one per configured URL,
-                     appended after the five fixed rows. A link glyph and a
+                <!-- Project URLs: 0..N rows appended after fixed rows. A link glyph and a
                      running/offline status dot instead of a count badge.
                      AGT-2067: primary click now opens the URL EMBEDDED in a
                      sandboxed iframe as its own tab (openUrlPreviewRequest);

@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   input,
+  output,
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -28,6 +29,7 @@ import {
   WikiTree,
   WikiTreeMetadata,
   WikiTreeNode,
+  WorkbenchListItem,
 } from '../../../../models/project-docs.model';
 import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor/markdown-rich-editor';
@@ -135,6 +137,7 @@ interface WikiMetricChip {
 })
 export class ProjectWikiSectionComponent {
   readonly projectName = input.required<string>();
+  readonly openWorkbench = output<WorkbenchListItem>();
 
   private readonly docs = inject(ProjectDocsService);
   private readonly drift = inject(DriftService);
@@ -393,7 +396,6 @@ export class ProjectWikiSectionComponent {
 
   readonly firstDoc = computed(() => this.findFirstDoc(this.roots()));
 
-  /** Open a page picked from the Pulse feed or inbox. */
   onPulseOpen(req: WikiPulseOpenRequest): void {
     this.openFile(req.relPath, req.type);
   }

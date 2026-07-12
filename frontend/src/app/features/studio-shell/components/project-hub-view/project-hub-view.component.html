@@ -104,7 +104,7 @@
   }
   @defer (when activeRail() === 'wiki') {
     @if (activeRail() === 'wiki') {
-      <app-project-wiki-section [projectName]="projectName()" />
+      <app-project-wiki-section [projectName]="projectName()" (openWorkbench)="openWorkbench($event)" />
     }
   }
   @defer (when activeRail() === 'pipeline') {

@@ -27,6 +27,7 @@ import {
 import { ProjectOverlaysService } from '../../../project-detail/state/project-overlays.service';
 import { StudioTabStateService } from '../../services/studio-tab-state.service';
 import { studioTabKey } from '../../studio-shell.types';
+import type { WorkbenchListItem } from '../../../../models/project-docs.model';
 
 /** Rails whose content panel is real (not the project-shell placeholder). */
 const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRailKey>([
@@ -159,6 +160,11 @@ export class ProjectHubViewComponent {
    */
   openUrlPreview(url: { id: string }): void {
     this.tabState.open({ kind: 'url-preview', projectName: this.projectName(), urlId: url.id });
+  }
+
+  openWorkbench(workbench: WorkbenchListItem): void {
+    if (!workbench.valid) return;
+    this.tabState.open({ kind: 'workbench', projectName: this.projectName(), workbenchId: workbench.id, title: workbench.title });
   }
 
   /** Hub closes when the user closes the editor tab; the in-rail button only collapses navigation. */
