@@ -25,6 +25,7 @@ namespace AgentStudio.Tests;
 /// modelled on.
 /// </para>
 /// </summary>
+[Trait("Category", "MachineBound")]
 public class ProjectTokenUsageEndpointPerfTests : IDisposable
 {
     private readonly string _watchPath;
