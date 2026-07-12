@@ -681,6 +681,10 @@ export class ProtocolPaneComponent implements OnDestroy {
     buildInspectorTabs({
       summaryStatus: this.summaryStatus(),
       hasStatusMarkdown: !!this.detail().statusMarkdown,
+      hasCliActivity: this.cliOutput().length > 0,
+      isHumanReview:
+        this.detail().info.state === TaskState.HumanReview ||
+        this.detail().info.state === TaskState.Escalated,
       isRunning: this.isRunning(),
     }),
   );
@@ -692,15 +696,11 @@ export class ProtocolPaneComponent implements OnDestroy {
     }
   }
 
-  // The button is meaningful only after the task has produced a cli-output.log.
-  // We can't see the disk from here, so use "summary has been touched" as a
-  // proxy: any non-`none` status means the runner already attempted to summarize
-  // (which only happens after a successful CLI run wrote logs/cli-output.log).
   readonly canRegenerate = computed(() => {
     const status = this.summaryStatus();
     if (status === 'generating') return false;
     if (this.regenerating()) return false;
-    return status !== 'none' || !!this.detail().statusMarkdown;
+    return status !== 'none' || !!this.detail().statusMarkdown || this.cliOutput().length > 0;
   });
 
   /**

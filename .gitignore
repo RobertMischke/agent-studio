@@ -120,3 +120,8 @@ frontend/.frontend-dev.log
 /presentation/
 /scenarios/
 /results/
+
+# Repo-root agent scratch scripts are diagnostic runtime artefacts, never
+# product source. Keep them out of broad platform-owned snapshot commits.
+/.tmp-*.mjs
+/tmp-*.mjs
