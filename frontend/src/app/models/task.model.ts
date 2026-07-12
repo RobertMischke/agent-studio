@@ -1017,6 +1017,15 @@ export interface ProjectUrlSuggestion {
   source: string;
 }
 
+/** Result returned once the backend has spawned a configured URL command. */
+export interface ProjectUrlStartResponse {
+  started: boolean;
+  urlId: string;
+  command: string;
+  cwd: string;
+  processId: number;
+}
+
 /**
  * F45a / ADR-0042 — flat project summary returned by `GET /api/projects`
  * and embedded under `WorkspaceListItem.projects`. Mirrors backend

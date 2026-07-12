@@ -698,10 +698,19 @@ public sealed class ProjectRegistry
         var command = (rule.Command ?? "").Trim();
         if (command.Length == 0) return null; // a rule with no command is no rule
         var source = string.IsNullOrWhiteSpace(rule.Source) ? "manual" : rule.Source.Trim();
+        var cwd = string.IsNullOrWhiteSpace(rule.Cwd) ? null : rule.Cwd.Trim();
+        if (cwd != null)
+        {
+            if (!Path.IsPathRooted(cwd))
+                throw new ArgumentException("startRule.cwd must be an absolute path", nameof(rule));
+            cwd = Path.TrimEndingDirectorySeparator(Path.GetFullPath(cwd));
+            if (!Directory.Exists(cwd))
+                throw new ArgumentException($"startRule.cwd does not exist: {cwd}", nameof(rule));
+        }
         return new ProjectUrlStartRule
         {
             Command = command,
-            Cwd = string.IsNullOrWhiteSpace(rule.Cwd) ? null : rule.Cwd.Trim(),
+            Cwd = cwd,
             Port = rule.Port,
             Source = source,
         };

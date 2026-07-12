@@ -10,6 +10,7 @@ import {
   output,
   signal,
 } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { DomSanitizer, type SafeResourceUrl } from '@angular/platform-browser';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
@@ -19,7 +20,13 @@ import type { RegistryProjectUrl } from '../../../../models/task.model';
 import { ProjectUrlLookupService } from '../../services/project-url-lookup.service';
 
 /** Address-bar status pill vocabulary for the embedded preview. */
-type PreviewPill = 'running' | 'offline' | 'checking' | 'building' | 'blocked';
+type PreviewPill = 'running' | 'offline' | 'checking' | 'building' | 'blocked' | 'failed';
+
+interface StartFailure {
+  explanation: string;
+  command: string;
+  cwd: string;
+}
 
 /**
  * AGT-2067 — embedded Project URL preview tab.
@@ -66,17 +73,23 @@ export class ProjectUrlPreviewTabComponent {
   /** ~6s: a framed dev server that has not fired `load` by now, while the probe
    *  says it is reachable, is treated as "probably refuses embedding". */
   private readonly LOAD_TIMEOUT_MS = 6000;
+  private readonly START_READY_TIMEOUT_MS = 20_000;
+  private readonly START_POLL_MS = 750;
 
   readonly resolveState = signal<'resolving' | 'resolved' | 'not-found' | 'error'>('resolving');
   readonly projectId = signal<string | null>(null);
   readonly urlRecord = signal<RegistryProjectUrl | null>(null);
   readonly frameState = signal<'loading' | 'loaded' | 'blocked'>('loading');
   readonly building = signal(false);
+  readonly repositoryPath = signal<string | null>(null);
+  readonly rootPath = signal<string | null>(null);
+  readonly startFailure = signal<StartFailure | null>(null);
   /** Bumping this re-navigates the iframe (forces a fresh `[src]` reference). */
   private readonly reloadNonce = signal(0);
 
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
   private startTimer: ReturnType<typeof setTimeout> | null = null;
+  private startDeadline = 0;
 
   /** Live probe status for the resolved URL (`unknown` before it resolves). */
   readonly probeStatus = computed(() => {
@@ -87,7 +100,10 @@ export class ProjectUrlPreviewTabComponent {
   /** Embed the iframe when the URL resolved and the server is not known-offline
    *  (running or still-unknown → optimistic load). Offline shows the card. */
   readonly shouldEmbed = computed(() =>
-    this.resolveState() === 'resolved' && !this.building() && this.probeStatus() !== 'offline',
+    this.resolveState() === 'resolved'
+      && !this.building()
+      && !this.startFailure()
+      && this.probeStatus() !== 'offline',
   );
 
   /** Sandboxed iframe source; recomputes on reload but not on probe re-ticks so
@@ -101,6 +117,7 @@ export class ProjectUrlPreviewTabComponent {
 
   readonly statusPill = computed<PreviewPill>(() => {
     if (this.building()) return 'building';
+    if (this.startFailure()) return 'failed';
     if (this.resolveState() !== 'resolved') return 'checking';
     if (this.frameState() === 'blocked') return 'blocked';
     const s = this.probeStatus();
@@ -130,11 +147,14 @@ export class ProjectUrlPreviewTabComponent {
 
     inject(DestroyRef).onDestroy(() => {
       this.clearLoadTimer();
-      if (this.startTimer) clearTimeout(this.startTimer);
+      this.clearStartTimer();
     });
   }
 
   private resolveRecord(name: string, id: string): void {
+    this.clearStartTimer();
+    this.building.set(false);
+    this.startFailure.set(null);
     this.resolveState.set('resolving');
     this.lookup.resolve(name, id).subscribe({
       next: res => {
@@ -143,11 +163,15 @@ export class ProjectUrlPreviewTabComponent {
         if (!res) {
           this.projectId.set(null);
           this.urlRecord.set(null);
+          this.repositoryPath.set(null);
+          this.rootPath.set(null);
           this.resolveState.set('not-found');
           return;
         }
         this.projectId.set(res.projectId);
         this.urlRecord.set(res.url);
+        this.repositoryPath.set(res.repositoryPath);
+        this.rootPath.set(res.rootPath);
         this.frameState.set('loading');
         this.resolveState.set('resolved');
       },
@@ -187,20 +211,67 @@ export class ProjectUrlPreviewTabComponent {
     const projId = this.projectId();
     const u = this.urlRecord();
     if (!projId || !u || !u.startRule || this.building()) return;
+    const rule = u.startRule;
+    this.clearStartTimer();
+    this.startFailure.set(null);
     this.building.set(true);
     this.taskService.startProjectUrl(projId, u.id).subscribe({
       next: () => this.afterStart(u.url),
-      error: () => this.building.set(false),
+      error: (error: HttpErrorResponse) => {
+        const body: Record<string, unknown> = error.error && typeof error.error === 'object'
+          ? error.error as Record<string, unknown>
+          : {};
+        this.startFailure.set({
+          explanation: typeof body['error'] === 'string'
+            ? body['error']
+            : 'The dev server could not be started.',
+          command: typeof body['command'] === 'string' ? body['command'] : rule.command,
+          cwd: typeof body['cwd'] === 'string' && body['cwd'].trim()
+            ? body['cwd']
+            : this.effectiveCwd(),
+        });
+        this.building.set(false);
+      },
     });
   }
 
+  effectiveCwd(): string {
+    return this.urlRecord()?.startRule?.cwd
+      || this.repositoryPath()
+      || this.rootPath()
+      || 'Not configured';
+  }
+
   private afterStart(url: string): void {
-    // Give the server a moment to bind its port, then re-probe; a `running`
-    // result flips `shouldEmbed()` and the iframe mounts on its own.
-    this.startTimer = setTimeout(() => {
-      this.probe.refresh(url);
+    this.startDeadline = Date.now() + this.START_READY_TIMEOUT_MS;
+    this.probe.refresh(url);
+    this.startTimer = setTimeout(() => this.checkStartReadiness(url), this.START_POLL_MS);
+  }
+
+  private checkStartReadiness(url: string): void {
+    this.startTimer = null;
+    if (!this.building() || this.urlRecord()?.url !== url) return;
+
+    if (this.probe.signalFor(url)() === 'running') {
       this.building.set(false);
-    }, 1200);
+      this.frameState.set('loading');
+      this.reloadNonce.update(n => n + 1);
+      return;
+    }
+
+    if (Date.now() >= this.startDeadline) {
+      const rule = this.urlRecord()?.startRule;
+      this.startFailure.set({
+        explanation: 'The command started, but the URL did not become reachable within 20 seconds.',
+        command: rule?.command ?? 'Not configured',
+        cwd: this.effectiveCwd(),
+      });
+      this.building.set(false);
+      return;
+    }
+
+    this.probe.refresh(url);
+    this.startTimer = setTimeout(() => this.checkStartReadiness(url), this.START_POLL_MS);
   }
 
   openExternal(): void {
@@ -216,6 +287,13 @@ export class ProjectUrlPreviewTabComponent {
     if (this.loadTimer) {
       clearTimeout(this.loadTimer);
       this.loadTimer = null;
+    }
+  }
+
+  private clearStartTimer(): void {
+    if (this.startTimer) {
+      clearTimeout(this.startTimer);
+      this.startTimer = null;
     }
   }
 }

@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProjectUrlPreviewTabComponent } from './project-url-preview-tab.component';
 import { ProjectUrlProbeService, type ProjectUrlStatus } from '../../../../services/project-url-probe.service';
 import type { RegistryWorkspaceListItem, RegistryProjectUrl } from '../../../../models/task.model';
@@ -23,7 +23,7 @@ function workspacesWith(urls: RegistryProjectUrl[]): RegistryWorkspaceListItem[]
     projects: [{
       sourceType: 'local-folder', id: 'PROJ-001', displayName: 'Demo', shortCode: 'DEM', workspaceId: 'ws-1',
       color: null, cliDefault: null, modelDefault: null, sortOrder: 0,
-      storageLocation: 'c:/demo', repositoryPath: null, rootPath: null, repositoryUrl: null,
+      storageLocation: 'c:/tasks', repositoryPath: 'c:/demo', rootPath: null, repositoryUrl: null,
       urls, archived: false, createdAt: '2026-01-01T00:00:00Z',
     }],
   }];
@@ -57,6 +57,8 @@ const STARTABLE_URL: RegistryProjectUrl = {
 };
 
 describe('ProjectUrlPreviewTabComponent', () => {
+  afterEach(() => vi.useRealTimers());
+
   it('mounts the sandboxed iframe once the URL resolves (running / unknown)', () => {
     const { fixture, http, probe } = mount();
     probe.status.set('running');
@@ -72,14 +74,20 @@ describe('ProjectUrlPreviewTabComponent', () => {
     expect(el.querySelector('[data-testid="url-preview-addr"]')?.textContent).toContain('localhost:4201');
   });
 
-  it('shows the offline card with a Start button when the server is down', () => {
+  it('shows a contained offline panel with project context and a Start button', () => {
     const { fixture, http, probe } = mount();
     probe.status.set('offline');
     http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
     fixture.detectChanges();
 
     const el: HTMLElement = fixture.nativeElement;
-    expect(el.querySelector('[data-testid="url-preview-offline"]')).toBeTruthy();
+    const offline = el.querySelector('[data-testid="url-preview-offline"]');
+    expect(offline).toBeTruthy();
+    expect(offline?.querySelector('.url-preview__state-card')).toBeTruthy();
+    expect(offline?.textContent).toContain('Demo');
+    expect(offline?.textContent).toContain('Website');
+    expect(offline?.textContent).toContain('npm run website');
+    expect(offline?.textContent).toContain('c:/demo');
     expect(el.querySelector('[data-testid="url-preview-start"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="url-preview-frame"]')).toBeFalsy();
   });
@@ -104,15 +112,72 @@ describe('ProjectUrlPreviewTabComponent', () => {
     expect(emitted).toEqual({ projectName: 'Demo' });
   });
 
-  it('starting the dev server posts to the URL start endpoint', () => {
+  it('keeps the pending state visible until the started URL is reachable', () => {
+    vi.useFakeTimers();
     const { fixture, http, probe } = mount();
     probe.status.set('offline');
     http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
     fixture.detectChanges();
 
     fixture.componentInstance.start();
+    fixture.detectChanges();
+    const startButton = fixture.nativeElement.querySelector('[data-testid="url-preview-start"]') as HTMLButtonElement;
+    expect(startButton.disabled).toBe(true);
+    expect(startButton.textContent).toContain('Starting');
     const post = http.expectOne(req => req.method === 'POST' && req.url.endsWith('/PROJ-001/urls/url-1/start'));
     expect(post.request.method).toBe('POST');
-    post.flush({ started: true, urlId: 'url-1' });
+    post.flush({ started: true, urlId: 'url-1', command: 'npm run website', cwd: 'c:/demo', processId: 42 });
+
+    probe.status.set('running');
+    vi.advanceTimersByTime(1_000);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-frame"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-offline"]')).toBeFalsy();
+  });
+
+  it('renders backend start errors with Retry and Edit settings actions', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('offline');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    fixture.detectChanges();
+
+    fixture.componentInstance.start();
+    http.expectOne(req => req.method === 'POST').flush({
+      error: 'Working directory does not exist: c:/missing',
+      command: 'npm run website',
+      cwd: 'c:/missing',
+    }, { status: 400, statusText: 'Bad Request' });
+    fixture.detectChanges();
+
+    const failed: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-start-failed"]');
+    expect(failed?.textContent).toContain('Working directory does not exist');
+    expect(failed?.textContent).toContain('npm run website');
+    expect(failed?.textContent).toContain('c:/missing');
+    expect(failed?.querySelector('[data-testid="url-preview-retry"]')).toBeTruthy();
+
+    let emitted = false;
+    fixture.componentInstance.openSettings.subscribe(() => (emitted = true));
+    (failed?.querySelector('[data-testid="url-preview-edit-settings"]') as HTMLButtonElement).click();
+    expect(emitted).toBe(true);
+  });
+
+  it('turns an accepted start that never becomes reachable into an actionable failure', () => {
+    vi.useFakeTimers();
+    const { fixture, http, probe } = mount();
+    probe.status.set('offline');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    fixture.detectChanges();
+
+    fixture.componentInstance.start();
+    http.expectOne(req => req.method === 'POST').flush({
+      started: true, urlId: 'url-1', command: 'npm run website', cwd: 'c:/demo', processId: 42,
+    });
+    vi.advanceTimersByTime(25_000);
+    fixture.detectChanges();
+
+    const failed: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-start-failed"]');
+    expect(failed?.textContent).toContain('did not become reachable');
+    expect(failed?.textContent).toContain('c:/demo');
   });
 });

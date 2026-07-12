@@ -29,6 +29,7 @@ import type {
   RegistryProjectSummary,
   ProjectUrlStartRule,
   ProjectUrlSuggestion,
+  ProjectUrlStartResponse,
   PublishActionPanel,
   PublishAutomationMode,
   PublishWorkflowRun,
@@ -659,7 +660,7 @@ export class TaskService {
 
   /** Build &amp; start (or restart) the dev server behind a URL's start rule. */
   startProjectUrl(projId: string, urlId: string) {
-    return this.http.post<{ started: boolean; urlId: string }>(
+    return this.http.post<ProjectUrlStartResponse>(
       `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/start`, {});
   }
 

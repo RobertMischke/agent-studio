@@ -27,7 +27,7 @@ public record ProjectUrlStartRule
 {
     /// <summary>Command to run, e.g. <c>npm run website</c>.</summary>
     public string Command { get; init; } = "";
-    /// <summary>Working directory; defaults to the project's RepositoryPath when null.</summary>
+    /// <summary>Working directory; falls back to a valid project repository/root path.</summary>
     public string? Cwd { get; init; }
     /// <summary>Port the server listens on, when known.</summary>
     public int? Port { get; init; }

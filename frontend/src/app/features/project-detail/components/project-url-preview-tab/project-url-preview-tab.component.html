@@ -1,7 +1,5 @@
 <div class="url-preview" data-testid="url-preview-tab"
      [attr.data-project]="projectName()" [attr.data-url-id]="urlId()">
-
-  <!-- Read-only address bar: reload · URL + status pill · open externally · settings -->
   <div class="url-preview__chrome">
     <button type="button" class="url-preview__nav"
             data-testid="url-preview-reload"
@@ -14,7 +12,12 @@
 
     <div class="url-preview__addr" data-testid="url-preview-addr">
       <app-studio-icon class="url-preview__addr-icon" name="link" [size]="12" />
-      <span class="url-preview__url">{{ urlRecord()?.url ?? '…' }}</span>
+      <div class="url-preview__addr-copy">
+        <span class="url-preview__identity">
+          {{ projectName() }} / {{ urlRecord()?.label ?? urlId() }}
+        </span>
+        <span class="url-preview__url">{{ urlRecord()?.url ?? 'Loading URL…' }}</span>
+      </div>
       <span class="url-preview__pill"
             [attr.data-status]="statusPill()"
             data-testid="url-preview-status">{{ statusPill() }}</span>
@@ -37,37 +40,37 @@
     </button>
   </div>
 
-  <!-- Body: resolve gate → embedded frame / offline / removed states -->
   <div class="url-preview__body">
     @switch (resolveState()) {
       @case ('resolving') {
         <div class="url-preview__state" data-testid="url-preview-resolving">
-          <span class="url-preview__spinner" aria-hidden="true"></span>
-          <p class="url-preview__state-note">Loading preview…</p>
+          <section class="url-preview__state-card url-preview__state-card--compact">
+            <span class="url-preview__spinner" aria-hidden="true"></span>
+            <p class="url-preview__state-title">Loading preview</p>
+          </section>
         </div>
       }
       @case ('not-found') {
         <div class="url-preview__state" data-testid="url-preview-not-found">
-          <p class="url-preview__state-title">This URL was removed from the project</p>
-          <p class="url-preview__state-note">
-            It is no longer configured on <b>{{ projectName() }}</b>. Reopen it
-            from the Project Hub if it was re-added.
-          </p>
-          <button type="button" class="url-preview__btn url-preview__btn--ghost"
-                  (click)="onSettings()">Open Project URLs</button>
+          <section class="url-preview__state-card url-preview__state-card--compact">
+            <p class="url-preview__eyebrow">{{ projectName() }}</p>
+            <p class="url-preview__state-title">URL removed</p>
+            <p class="url-preview__state-note">This URL is no longer configured for the project.</p>
+            <button type="button" class="url-preview__btn url-preview__btn--ghost"
+                    (click)="onSettings()">Open Project URLs</button>
+          </section>
         </div>
       }
       @case ('error') {
         <div class="url-preview__state" data-testid="url-preview-error">
-          <p class="url-preview__state-title">Could not load this URL</p>
-          <p class="url-preview__state-note">The project registry could not be read.</p>
+          <section class="url-preview__state-card url-preview__state-card--compact">
+            <p class="url-preview__state-title">Could not load this URL</p>
+            <p class="url-preview__state-note">The project registry could not be read.</p>
+          </section>
         </div>
       }
       @default {
         @if (shouldEmbed()) {
-          <!-- Sandboxed embed: allow the dev app to run + submit forms + open
-               popups, but never navigate the parent Studio window
-               (no allow-top-navigation). -->
           <iframe class="url-preview__frame"
                   data-testid="url-preview-frame"
                   [src]="iframeSrc()"
@@ -79,44 +82,105 @@
           @if (frameState() === 'loading') {
             <div class="url-preview__overlay" data-testid="url-preview-loading">
               <span class="url-preview__spinner" aria-hidden="true"></span>
-              <p class="url-preview__state-note">Loading {{ urlRecord()?.url }}…</p>
+              <p class="url-preview__state-note">Loading {{ urlRecord()?.label }}…</p>
             </div>
           }
 
           @if (frameState() === 'blocked') {
             <div class="url-preview__banner" role="alert" data-testid="url-preview-blocked">
               <span class="url-preview__banner-text">
-                This page may refuse to be embedded (X-Frame-Options / CSP).
+                This page may block embedded previews through X-Frame-Options or CSP.
               </span>
               <button type="button" class="url-preview__btn url-preview__btn--warn"
-                      (click)="openExternal()">Open in browser instead</button>
+                      (click)="openExternal()">Open externally</button>
             </div>
           }
-        } @else if (building()) {
-          <div class="url-preview__state" data-testid="url-preview-building">
-            <span class="url-preview__spinner" aria-hidden="true"></span>
-            <p class="url-preview__state-note">Starting the dev server…</p>
-          </div>
         } @else {
-          <!-- Offline: not reachable. Offer Start when a start rule exists. -->
           <div class="url-preview__state" data-testid="url-preview-offline">
-            <p class="url-preview__state-title">Not running</p>
-            @if (urlRecord()?.startRule; as rule) {
-              <p class="url-preview__state-note">
-                Start <code>{{ rule.command }}</code> to load
-                <b>{{ urlRecord()?.label }}</b> here.
+            <section class="url-preview__state-card"
+                     [attr.data-testid]="startFailure() ? 'url-preview-start-failed' : null"
+                     [attr.aria-busy]="building()">
+              <header class="url-preview__state-header">
+                <div>
+                  <p class="url-preview__eyebrow">
+                    {{ projectName() }} · {{ urlRecord()?.label }}
+                  </p>
+                  <h2 class="url-preview__state-heading">
+                    @if (startFailure()) {
+                      Preview could not start
+                    } @else if (building()) {
+                      Starting preview
+                    } @else {
+                      Preview is offline
+                    }
+                  </h2>
+                </div>
+                <span class="url-preview__state-badge"
+                      [attr.data-status]="startFailure() ? 'failed' : building() ? 'building' : 'offline'">
+                  @if (startFailure()) {
+                    Failed
+                  } @else if (building()) {
+                    Starting
+                  } @else {
+                    Offline
+                  }
+                </span>
+              </header>
+
+              <p class="url-preview__state-note url-preview__state-note--wide">
+                No server is responding at <code>{{ urlRecord()?.url }}</code>.
               </p>
-              <button type="button" class="url-preview__btn url-preview__btn--primary"
-                      data-testid="url-preview-start"
-                      (click)="start()">Start</button>
-            } @else {
-              <p class="url-preview__state-note">
-                <b>{{ urlRecord()?.label }}</b> has no start command. Start its
-                server yourself, then reload.
-              </p>
-            }
-            <button type="button" class="url-preview__btn url-preview__btn--ghost"
-                    (click)="openExternal()">Open in external browser</button>
+
+              @if (startFailure(); as failure) {
+                <div class="url-preview__failure" role="alert" data-testid="url-preview-start-error">
+                  {{ failure.explanation }}
+                </div>
+              } @else if (building()) {
+                <div class="url-preview__progress" role="status">
+                  <span class="url-preview__spinner url-preview__spinner--small" aria-hidden="true"></span>
+                  Waiting for the server to accept connections
+                </div>
+              }
+
+              @if (urlRecord()?.startRule; as rule) {
+                <dl class="url-preview__details" data-testid="url-preview-start-details">
+                  <div>
+                    <dt>Command</dt>
+                    <dd><code>{{ rule.command }}</code></dd>
+                  </div>
+                  <div>
+                    <dt>Working directory</dt>
+                    <dd><code>{{ effectiveCwd() }}</code></dd>
+                  </div>
+                </dl>
+              } @else {
+                <p class="url-preview__state-note url-preview__state-note--wide">
+                  No start command is configured. Start the server manually, then reload.
+                </p>
+              }
+
+              <div class="url-preview__state-actions">
+                @if (urlRecord()?.startRule) {
+                  @if (startFailure()) {
+                    <button type="button" class="url-preview__btn url-preview__btn--primary"
+                            data-testid="url-preview-retry"
+                            (click)="start()">Retry</button>
+                  } @else {
+                    <button type="button" class="url-preview__btn url-preview__btn--primary"
+                            data-testid="url-preview-start"
+                            [disabled]="building()"
+                            (click)="start()">
+                      {{ building() ? 'Starting…' : 'Start preview' }}
+                    </button>
+                  }
+                }
+                <button type="button" class="url-preview__btn url-preview__btn--ghost"
+                        (click)="openExternal()">Open externally</button>
+                <button type="button" class="url-preview__btn url-preview__btn--quiet"
+                        data-testid="url-preview-edit-settings"
+                        (click)="onSettings()">Settings</button>
+              </div>
+            </section>
           </div>
         }
       }

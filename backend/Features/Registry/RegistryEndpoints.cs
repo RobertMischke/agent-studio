@@ -455,12 +455,19 @@ public static class RegistryEndpoints
                 return Results.BadRequest(new { error = "This URL has no start rule to run." });
             try
             {
-                procs.Start(record, url);
-                return Results.Ok(new { started = true, urlId = url.Id });
+                return Results.Ok(procs.Start(record, url));
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                string? cwd;
+                try { cwd = ProjectUrlProcessService.ResolveWorkingDirectory(record, url.StartRule); }
+                catch (InvalidOperationException) { cwd = url.StartRule.Cwd ?? record.RepositoryPath ?? record.RootPath; }
+                return Results.BadRequest(new
+                {
+                    error = ex.Message,
+                    command = url.StartRule.Command,
+                    cwd,
+                });
             }
         });
     }
