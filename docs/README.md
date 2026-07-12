@@ -61,16 +61,19 @@ Use this page as the first stop when you need the right document quickly.
 | Git-info performance measurements and cache invalidation (AGT-2007) | [reports/git-info-performance-agt-2007.md](reports/git-info-performance-agt-2007.md) |
 | Planning-task lifecycle (plan → spawn → accept; spawn-contract gate; AGT-2069) | [concepts/planning-task-lifecycle.md](concepts/planning-task-lifecycle.md) |
 | Experiment workbenches (Explorer, orchestrator chat, decision-to-task) | [concept](concepts/experimentier-workbench.md) · [interactive mockup](concepts/mockups/experimentier-workbench.html) |
+| Decoupled agent-session lifecycles (holder, consumer channel, multi-client attach) | [concept](concepts/decoupled-lifecycles.md) · [interactive Workbench-family mockup](concepts/mockups/decoupled-lifecycles.html) |
 | Deployment as a first-class citizen (Deployment page, scenario templates, prompt-defined dynamic UI over CLI tasks; DEP-1..5) | [concept](concepts/deployment-first-class.md) · [interactive mockup](concepts/mockups/deployment-first-class.html) |
 | Project Overview operator dashboard (metrics, Visual Evidence Queue, Project URLs, deployment summary, Wiki entry) | [mockup contract](mockups/project-overview-dashboard/README.md) · [interactive mockup](mockups/project-overview-dashboard/ui.html) |
 | Wiki classification | [product/wiki-document-classification.md](product/wiki-document-classification.md) |
 | Wiki editing flow | [product/wiki-editing-and-branch-flow.md](product/wiki-editing-and-branch-flow.md) |
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](schemas/wiki-document-companion.schema.json) |
+| Model qualification benchmark event schema | [schemas/model-qualification-event.schema.json](schemas/model-qualification-event.schema.json) |
 | Wiki drift audit | [meta/reports/wiki-drift-audit-2026-06-11.html](meta/reports/wiki-drift-audit-2026-06-11.html) |
 | Supported CLIs | [cli/supported-clis.md](cli/supported-clis.md) |
 | Getting started (new install, step by step) | [operations/setup/getting-started.md](operations/setup/getting-started.md) |
 | Setup | [operations/setup/README.md](operations/setup/README.md) |
 | Standalone remote runner (Linux host) | [operations/setup/linux-runner-host.md](operations/setup/linux-runner-host.md) |
+| Remote hosts operator lifecycle | [operations/remote-hosts.md](operations/remote-hosts.md) |
 | Remote runner persistent connection (tunnel-as-a-service + health-check) | [operations/setup/remote-runner-persistent-connection.md](operations/setup/remote-runner-persistent-connection.md) |
 | Common problems | [wiki/common-problems/README.md](wiki/common-problems/README.md) |
 | Designated topics (AGENTS/wiki-sync current-state index; post-agents-wiki-sync) | [wiki/concepts/designated-topics/README.md](wiki/concepts/designated-topics/README.md) |

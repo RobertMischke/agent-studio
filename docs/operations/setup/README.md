@@ -9,7 +9,7 @@ This folder is the **operator-facing setup guide**. [getting-started.md](./getti
 | File | Use it when |
 |---|---|
 | [getting-started.md](./getting-started.md) | First time setting up an instance at all: prerequisites, install, start, onboard a project, run a first task, troubleshooting quick list - start here. |
-| [onboard-a-project.md](./onboard-a-project.md) | Adding a new watched project to the board (`WatchPaths` entry, backend restart, first lane bootstrap). |
+| [onboard-a-project.md](./onboard-a-project.md) | Product workflow for project creation through the UI or API, central task-store rules, runtime activation, and troubleshooting. |
 | [onboard-an-agent-cli.md](./onboard-an-agent-cli.md) | A new CLI (Claude, Codex, Copilot, Gemini) needs to be installed and made auto-runnable on this machine. Includes the load-bearing **Codex on Windows sandbox quirk**. |
 | [your-first-task.md](./your-first-task.md) | First time using the board on a new project: what to queue, how to watch it run, what counts as a good first task vs. an anti-pattern. |
 | [troubleshooting.md](./troubleshooting.md) | FAQ-style: "agent only shows sandbox errors", "auto-mode flipped to manual", "two jobs in 3-progress", "header counters look wrong". |

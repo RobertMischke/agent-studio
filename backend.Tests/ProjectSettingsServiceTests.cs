@@ -28,7 +28,7 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         var settings = svc.Get("new-project");
 
         Assert.True(settings.AutoCommit);
-        Assert.Equal(AutoPushStrategies.OnCompleted, settings.AutoPushStrategy);
+        Assert.Equal(AutoPushStrategies.AlwaysImmediate, settings.AutoPushStrategy);
     }
 
     [Fact]
@@ -126,7 +126,7 @@ public sealed class ProjectSettingsServiceTests : IDisposable
 
         svc.SetAutoPushStrategy("runbook", "ship-it");
 
-        Assert.Equal(AutoPushStrategies.OnCompleted, svc.Get("runbook").AutoPushStrategy);
+        Assert.Equal(AutoPushStrategies.AlwaysImmediate, svc.Get("runbook").AutoPushStrategy);
     }
 
     [Fact]

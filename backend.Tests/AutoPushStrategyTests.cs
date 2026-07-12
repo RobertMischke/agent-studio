@@ -101,6 +101,32 @@ public sealed class AutoPushStrategyTests : IDisposable
         Assert.Equal(sha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
     }
 
+    [Fact]
+    public async Task AlwaysImmediate_QueuesAutoCommitPushOffTransitionPath()
+    {
+        InstallSlowPushHook(3);
+        WriteJobWithoutCommit(TaskStates.Progress, "immediate-task");
+        File.WriteAllText(Path.Combine(_repoRoot, "immediate.txt"), "push me\n");
+        var queue = new CompletedPushQueue();
+        var deps = BuildDeps(queue);
+        var remoteBefore = RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main");
+
+        var outcome = await deps.Transitions.MoveAsync(
+            "immediate-task", TaskStates.AutoReview, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.True(queue.Reader.TryRead(out var queued));
+        Assert.False(queued!.RequireCompletedState);
+        var localHead = RunGitCapture(_repoRoot, "rev-parse", "HEAD");
+        Assert.NotEqual(remoteBefore, localHead);
+        Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
+
+        var worker = new CompletedPushWorker(queue, deps.Transitions, NullLogger<CompletedPushWorker>.Instance);
+        await worker.ProcessAsync(queued, CancellationToken.None);
+
+        Assert.Equal(localHead, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
+    }
+
     private void InstallSlowPushHook(int seconds)
     {
         var hooksDir = Path.Combine(_repoRoot, ".git", "hooks");
@@ -245,6 +271,22 @@ public sealed class AutoPushStrategyTests : IDisposable
                 "files": ["work.txt"],
                 "at": "{{DateTime.UtcNow:o}}"
               }
+            }
+            """);
+    }
+
+    private void WriteJobWithoutCommit(string state, string slug)
+    {
+        var dir = Path.Combine(_watchPath, state, slug);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "task.json"),
+            $$"""
+            {
+              "id": "{{slug}}",
+              "title": "{{slug}}",
+              "state": "{{state}}",
+              "order": 1,
+              "agent": "copilot"
             }
             """);
     }

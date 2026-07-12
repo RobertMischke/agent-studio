@@ -1,4 +1,4 @@
-namespace AgentStudio.Docs.Grading;
+namespace AgentStudio.Docs;
 
 /// <summary>
 /// Lifecycle of a wiki-grading maintenance run (AGT-2051). A project has at most

@@ -36,13 +36,17 @@
             <label class="check-card"><input type="checkbox" data-testid="add-host-provision-check" [ngModel]="provisioned()" (ngModelChange)="provisioned.set($event)" /><span><strong>Runner published</strong><small>Dependencies installed and release binary built</small></span></label>
           }
           @case (2) {
+            <div class="command"><span>Host write identity</span><code>ssh-keygen -t ed25519 -f ~/.ssh/agent-studio-deploy -N ''<br />Register .pub as write-enabled repository deploy key<br />Set RUNNER_GIT_PUSH_REMOTE to the SSH repository URL</code></div>
+            <label class="check-card"><input type="checkbox" data-testid="add-host-deploy-key-check" [ngModel]="deployKeyReady()" (ngModelChange)="deployKeyReady.set($event)" /><span><strong>Push probe passed</strong><small>Host and repository key is write-enabled; probe date will appear on the host card</small></span></label>
+          }
+          @case (3) {
             <div class="auth-grid">
               <label class="check-card"><input type="checkbox" data-testid="add-host-claude-check" [ngModel]="claudeAuthed()" (ngModelChange)="claudeAuthed.set($event)" /><span><strong>Claude authenticated</strong><small>Independent host login verified</small></span></label>
               <label class="check-card"><input type="checkbox" data-testid="add-host-codex-check" [ngModel]="codexAuthed()" (ngModelChange)="codexAuthed.set($event)" /><span><strong>Codex authenticated</strong><small>Host-owned auth.json verified</small></span></label>
             </div>
             <p class="callout">Credentials stay on this host. Never copy the operator workstation's credential files.</p>
           }
-          @case (3) {
+          @case (4) {
             <ul class="smoke-list">
               <li><span>01</span><div><strong>Connectivity</strong><small><code>agent-runner --health-check</code> reaches /healthz</small></div></li>
               <li><span>02</span><div><strong>Identity</strong><small>Runner self-registers its X-Client-Id</small></div></li>
@@ -55,7 +59,7 @@
 
         <footer class="wizard__footer">
           <button class="button button--quiet" type="button" (click)="step() === 0 ? cancelled.emit() : back()">{{ step() === 0 ? 'Cancel' : 'Back' }}</button>
-          <button class="button button--primary" type="button" data-testid="add-host-next" [disabled]="!canContinue()" (click)="next()">{{ step() === 3 ? 'Add host' : 'Continue' }}</button>
+          <button class="button button--primary" type="button" data-testid="add-host-next" [disabled]="!canContinue()" (click)="next()">{{ step() === 4 ? 'Add host' : 'Continue' }}</button>
         </footer>
       </main>
 

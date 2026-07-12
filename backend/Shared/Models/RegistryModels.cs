@@ -69,7 +69,7 @@ public record WorkspaceRecord
 /// <para>For legacy projects discovered from <c>WatchPaths</c> on first boot,
 /// <see cref="StorageLocation"/> points at the existing task folder; F45c
 /// will physically relocate those folders to
-/// <c>&lt;TaskRepository&gt;/projects/&lt;Id&gt;/</c> and rewrite the field.</para>
+/// <c>&lt;TaskRepository&gt;/projects/&lt;Id&gt;/tasks/</c> and rewrite the field.</para>
 /// </summary>
 public record ProjectRecord
 {
@@ -93,7 +93,7 @@ public record ProjectRecord
     /// Absolute path to the project's task folder on disk. For legacy
     /// auto-discovered projects this is the resolved <c>WatchPathEntry.Path</c>;
     /// for projects created via the new API it points at
-    /// <c>&lt;TaskRepository&gt;/projects/&lt;Id&gt;/</c>.
+    /// <c>&lt;TaskRepository&gt;/projects/&lt;Id&gt;/tasks/</c>.
     /// </summary>
     public string StorageLocation { get; init; } = "";
     /// <summary>

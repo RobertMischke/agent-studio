@@ -66,6 +66,12 @@ public static class PipelineCatalogue
     /// verdict when the circuit-breaker fires.
     /// </summary>
     public const string LoopGuardStepId = "pre-loop-guard";
+    /// <summary>
+    /// Deterministic, zero-token task qualification performed immediately
+    /// before execution. It maps the task profile onto the selected CLI's live
+    /// model and reasoning ladders. Explicit card pins remain authoritative.
+    /// </summary>
+    public const string ModelQualificationStepId = "pre-model-qualification";
 
     /// <summary>
     /// Optional, parallelisable pre-coding step that surfaces the ADR-0026
@@ -483,6 +489,15 @@ public static class PipelineCatalogue
                     Kind = StepKind.Module,
                     RunMode = StepRunMode.Sequential,
                     Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = ModelQualificationStepId,
+                    DisplayName = "Model qualification",
+                    Kind = StepKind.Module,
+                    RunMode = StepRunMode.Sequential,
+                    Idempotent = true,
+                    DefaultEnabled = true,
                 },
                 new PipelineStep
                 {

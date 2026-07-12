@@ -485,6 +485,12 @@ export interface ClientSummary {
   runnerGitStatus?: 'ready' | 'read-only' | null;
   runnerGitDetail?: string | null;
   runnerGitCheckedAt?: string | null;
+  drainRequestedAt?: string | null;
+  retireRequestedAt?: string | null;
+  runnerDaemonState?: 'running' | 'read-only' | 'stopped' | null;
+  runnerLastClaimAt?: string | null;
+  runnerActiveSlots?: number | null;
+  runnerAvailableSlots?: number | null;
 }
 
 /**
@@ -876,6 +882,8 @@ export interface CreateTaskRequest {
   cliType?: CliType;
   model?: string;
   thinkingLevel?: string;
+  modelExplicit?: boolean;
+  thinkingLevelExplicit?: boolean;
   /** One of `bug`, `feature`, `chore`. Defaults to `chore` server-side. */
   taskType?: string;
   /** Workspace tag ids to attach on create. */
@@ -1025,6 +1033,8 @@ export interface RegistryProjectSummary {
   modelDefault: string | null;
   sortOrder: number;
   storageLocation: string;
+  repositoryPath: string | null;
+  rootPath: string | null;
   /** Configured watchable URLs, ordered; empty for most projects. */
   urls: RegistryProjectUrl[];
   archived: boolean;
@@ -1045,6 +1055,9 @@ export interface CreateRegistryProjectRequest {
    * (or hand-edits the gitignored appsettings.Local.json WatchPaths entry).
    */
   rootPath?: string;
+  repositoryPath?: string;
+  repositoryUrl?: string;
+  executionRunner?: string;
 }
 
 export type ProjectSourceType = 'local-folder' | 'remote-git' | 'cloud';

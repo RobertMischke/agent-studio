@@ -130,7 +130,26 @@ internal static class ReviewEvidenceLog
         // append-only/latest-per-id contract.
         lock (AppendLocks.GetOrAdd(path, _ => new object()))
         {
-            File.AppendAllText(path, json + "\n", Encoding.UTF8);
+            // The API can run in more than one process during a handover or
+            // deploy. The in-process lock keeps local records intact; the
+            // exclusive writer plus bounded retry also serializes with a
+            // writer from another process on Windows.
+            const int maxAttempts = 20;
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    using var stream = new FileStream(
+                        path, FileMode.Append, FileAccess.Write, FileShare.Read);
+                    using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+                    writer.WriteLine(json);
+                    break;
+                }
+                catch (IOException) when (attempt < maxAttempts)
+                {
+                    Thread.Sleep(10);
+                }
+            }
         }
     }
 

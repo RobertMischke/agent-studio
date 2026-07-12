@@ -25,6 +25,14 @@ pipeline view.
 
 ## Key Code
 
+- `backend/Features/Pipeline/ModelQualificationService.cs`: zero-token PRE-step
+  that classifies the task in project context and maps it onto the selected
+  CLI's live model/reasoning ladders. `IModelEconomyAdvisor` is the stable
+  `TokenEconomy.SuggestModel` seam.
+- `backend/Features/Pipeline/PipelineStepEconomyAdvisor.cs`: opt-in automated
+  recommendation layer for cheap pipeline work. It passes only live-discovered
+  Spark candidates to `IModelEconomyAdvisor`, preserves explicit step pins, and
+  falls back to the normal runtime model when no qualified Spark model exists.
 - `backend/Services/Pipeline/PipelineCatalogue.cs`: standard and read-only
   pipeline definitions, step ids, default ordering, step run modes, and display
   names.
@@ -110,6 +118,11 @@ pipeline view.
   `StepId` on its `CliOneShotRequest` (today: the review aspects via
   `AspectRunnerService` and the code-review-grade / verdict passes via
   `CodeReviewStepService`).
+- `backend/Features/Cli/Routing/OneShot/CodexOneShot.cs`: read-only Codex JSONL
+  adapter for model-backed pipeline steps. A project can opt an aspect or the
+  abort-review step into Codex through its existing `PipelineSteps` CLI/model
+  override, including a live-discovered Spark model, without changing the core
+  coding run or the default Claude route.
 - `backend/Features/Cli/Routing/OneShot/StepPromptLog.cs`: the per-job
   append/read writer for `.metadata/prompts.jsonl` (see filesystem-contract).
   Writes through the shared `IJsonlAppender` (concurrent aspect fan-out cannot
@@ -123,6 +136,25 @@ pipeline view.
 
 ## Invariants
 
+- `pre-model-qualification` runs before CORE and never performs quota fallback
+  routing. It recommends from the live CLI catalogue without hardcoded model
+  ids. Explicit card model/reasoning pins always win; legacy cards without
+  provenance are treated as pinned. The selected/recommended pair remains
+  visible on the step record.
+- Cheap-model routing is explicit and reversible. `PipelineStepSetting` owns the
+  `(cliType, model, thinkingLevel)` override per project and step; absent fields
+  preserve the current runtime default. Aspect reviews and abort review honor
+  all three fields. Spark model ids are selected from the live Codex catalogue,
+  not pinned in the static registry, because the entitlement model can change.
+  Setting `economyModel: true` on an aspect activates the automated
+  `TokenEconomy.SuggestModel` path against the live Spark subset. The
+  `pre-model-qualification` step (AGT-2146) remains the evidence-producing guard,
+  explicit step pins continue to win, and a missing Spark candidate preserves
+  the current runtime default. Coding CORE runs are not routed to Spark by this
+  feature.
+  Aspect output validation is unchanged and deterministic across models: valid
+  sentinels map to the three aspect statuses, while a malformed Spark reply maps
+  to `Concerns` plus `review:unparseable` through the existing parser path.
 - Aspect and code-review prompts carry a complete evidence set (AGT-2022): the
   run-window diff summary is appended with the task-branch-vs-base commit range
   (`base..task/<id>` via `GitService.GetCommitsInRangeAtRoot`) so a squash/merge

@@ -32,8 +32,10 @@ Driven by `TaskTransitionService.MoveAsync` (`backend/Features/Tasks/TaskTransit
 - Auto-commit (parallel path): the per-transition auto-commit does not apply; instead `ProjectRunner.IntegrateWorktreeRunAsync` commits the agent's edits onto `task/<id>` at run end via `GitService.WorktreeRunCommit` (line ~933).
 - Push timing is governed by `AutoPushStrategy`:
   - `never` - commits stay local.
-  - `on-completed` (default) - pushed when the task reaches `6-completed` (queued to a background push worker; a periodic backstop covers shutdown drops).
-  - `always-immediate` - pushed immediately when the auto-commit fires on `3-progress -> 4-auto-review`.
+  - `on-completed` - pushed when the task reaches `6-completed` (queued to a background push worker; a periodic backstop covers shutdown drops).
+  - `always-immediate` (default) - queued for push as soon as the platform-owned commit exists. Network work stays off the transition/run path.
+- Integration-branch commits are also queued for push after merge. A final push failure is recorded as the typed `managed-repo-push-failed` operator-feed event; verified remote status remains ahead until a retry succeeds.
+- Workspace artifact commits use the global `WorkspaceArtifacts:AutoPushEnabled` switch (default `true`) and `WorkspaceArtifacts:PushRetrySeconds` retry base (default `30`). Every successful artifact commit queues an immediate `origin/main` push.
 
 ## The deferred "Merge into Develop" step (sequential acceptance path)
 
@@ -87,7 +89,7 @@ Defined in `backend/Shared/Models/ProjectSettings.cs`. Read live on each transit
 | `IntegrationBranch` | `string`, `develop` | Target branch that `task/<id>` branches fork from and merge into. Used by both the parallel run-end integration and the deferred merge. In pure-sequential mode the value is largely unused. |
 | `IntegrationStrategy` | `string`, `direct-merge` | `direct-merge` (rebase + FF) or `pull-request`. Consulted only when `MaxParallelism > 1`. `pull-request` returns `PushedForReview` and is not fully wired; treat as unimplemented. |
 | `AutoCommit` | `bool`, `true` | When true, auto-commit dirty changes on `3-progress -> 4-auto-review` (sequential). Read-only modes skip it. |
-| `AutoPushStrategy` | `string`, `on-completed` | `never` / `on-completed` / `always-immediate` - when committed work is pushed to origin. |
+| `AutoPushStrategy` | `string`, `always-immediate` | `never` / `on-completed` / `always-immediate` - when committed work is queued for push to origin. |
 
 ## Known sharp edges (under review)
 

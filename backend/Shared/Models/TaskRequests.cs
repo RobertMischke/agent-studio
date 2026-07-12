@@ -244,6 +244,13 @@ public record CreateTaskRequest
     public string? PromptMarkdown { get; init; }
     public string? Model { get; init; }
     public string? ThinkingLevel { get; init; }
+    /// <summary>
+    /// Provenance for model qualification. Null preserves the legacy API rule
+    /// that a supplied value is explicit; false means the UI merely
+    /// materialized its default and qualification may replace it.
+    /// </summary>
+    public bool? ModelExplicit { get; init; }
+    public bool? ThinkingLevelExplicit { get; init; }
     public string? TargetState { get; init; }
     /// <summary>Optional CLI backend (claude|codex|gemini). Defaults to claude when omitted.</summary>
     public string? CliType { get; init; }
@@ -490,7 +497,7 @@ public record SetIntegrationStrategyRequest
 
 public record SetAutoPushStrategyRequest
 {
-    public string Strategy { get; init; } = AutoPushStrategies.OnCompleted;
+    public string Strategy { get; init; } = AutoPushStrategies.AlwaysImmediate;
 }
 
 /// <summary>
@@ -566,6 +573,7 @@ public record SetPipelineStepRequest
     /// <summary>Full pipeline step id (e.g. <c>aspect-code-quality</c>) or bare suffix (<c>code-quality</c>).</summary>
     public string StepId { get; init; } = "";
     public bool? Enabled { get; init; }
+    public bool? EconomyModel { get; init; }
     public string? Mode { get; init; }
     public string? CliType { get; init; }
     public string? Model { get; init; }

@@ -118,6 +118,31 @@
     </section>
   </div>
 
+  <section class="operator-dashboard__remote" data-testid="project-overview-remote-truth">
+    <header class="operator-dashboard__section-head">
+      <div>
+        <p class="operator-dashboard__eyebrow">Remote durability</p>
+        <h2>Verified branch state</h2>
+      </div>
+      @if (hasLargeUnpushedDelta()) {
+        <span class="operator-dashboard__remote-warning">More than 50 commits unpushed</span>
+      }
+    </header>
+    @if (managedRemoteBranches().length > 0) {
+      <div class="operator-dashboard__remote-rows">
+        @for (branch of managedRemoteBranches(); track branch.name) {
+          <div class="operator-dashboard__remote-row" [attr.data-state]="branch.ahead === 0 ? 'pushed' : 'pending'">
+            <code>{{ branch.name }}</code>
+            <strong>{{ branch.ahead === 0 ? 'Pushed' : branch.ahead + ' unpushed' }}</strong>
+            <span>{{ branch.upstream || 'No upstream' }} · {{ formatAgo(branch.lastCommitAtUtc) }}</span>
+          </div>
+        }
+      </div>
+    } @else {
+      <p class="operator-dashboard__empty">No managed branches with remote tracking data.</p>
+    }
+  </section>
+
   <section class="operator-dashboard__deployment"
            [attr.data-state]="deploymentState()"
            data-testid="project-overview-deployment">

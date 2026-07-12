@@ -9,6 +9,7 @@ import { TaskService } from '../../../../services/task.service';
 import { NotificationService } from '../../../../services/notification.service';
 import { CliCatalogStore } from '../../../../services/cli-catalog.store';
 import { WorkspaceManagerService } from '../../state/workspace-manager.service';
+import { RemoteHostsService } from '../../../remote-hosts';
 
 const COLORS = ['#569cd6', '#4ec9b0', '#c586c0', '#d97757', '#f59e0b', '#8b5cf6'];
 
@@ -34,6 +35,7 @@ export class OnboardProjectDialogComponent {
   private readonly tasks = inject(TaskService);
   private readonly notifications = inject(NotificationService);
   private readonly catalog = inject(CliCatalogStore);
+  readonly hostRegistry = inject(RemoteHostsService);
 
   readonly swatches = COLORS;
   readonly workspaceId = signal('');
@@ -51,6 +53,8 @@ export class OnboardProjectDialogComponent {
    * 2026-07-05 "Agent Studio" incident).
    */
   readonly rootPath = signal('');
+  readonly repositoryUrl = signal('');
+  readonly executionRunner = signal('local');
   readonly sourceType = signal<ProjectSourceType>('local-folder');
   readonly projectSources = signal<readonly ProjectSourceDescriptor[]>([]);
   readonly submitting = signal(false);
@@ -88,6 +92,8 @@ export class OnboardProjectDialogComponent {
       this.modelDefault.set('');
       this.color.set(COLORS[0]);
       this.rootPath.set('');
+      this.repositoryUrl.set('');
+      this.executionRunner.set('local');
       this.sourceType.set('local-folder');
       this.errorMsg.set(null);
       this.tasks.getRegistryWorkspaces().subscribe({
@@ -96,6 +102,7 @@ export class OnboardProjectDialogComponent {
       });
       this.tasks.getProjectSources().subscribe({ next: sources => this.projectSources.set(sources), error: () => this.projectSources.set([]) });
       this.catalog.ensure('claude').subscribe({ error: () => void 0 });
+      this.hostRegistry.ensureLoaded();
       queueMicrotask(() => this.nameInput?.nativeElement.focus());
     });
     effect(() => {
@@ -136,6 +143,9 @@ export class OnboardProjectDialogComponent {
       modelDefault: this.modelDefault() || null,
       color: this.color(),
       rootPath: this.rootPath().trim() || undefined,
+      repositoryPath: this.rootPath().trim() || undefined,
+      repositoryUrl: this.repositoryUrl().trim() || undefined,
+      executionRunner: this.executionRunner() === 'local' ? undefined : this.executionRunner(),
     };
     this.submitting.set(true);
     this.errorMsg.set(null);

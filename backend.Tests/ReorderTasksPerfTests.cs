@@ -22,6 +22,7 @@ namespace AgentStudio.Tests;
 /// lane in a 200-job workspace) and assert under one second. Pre-fix the
 /// same call took multiple seconds; the fix lands it well below 100 ms.
 /// </summary>
+[Trait("Category", "MachineBound")]
 public class ReorderJobsPerfTests : IDisposable
 {
     private readonly string _watchPath;

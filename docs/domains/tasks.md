@@ -34,6 +34,15 @@ Workspace Settings exposes the same catalogue at
 selected catalogue id in `sourceType`; source-specific configuration can be
 added without changing the project identity contract.
 
+`POST /api/projects` is the product onboarding mutation. It accepts project
+identity plus optional `repositoryPath`, `repositoryUrl`, and
+`executionRunner`, creates the central
+`<TaskRepository>/projects/PROJ-NNN/tasks/` store, and activates registry-backed
+scanning and watching without editing `WatchPaths` or restarting the backend.
+The repository URL is stored as the well-known `repo` project URL. New projects
+never place task data in the product checkout; legacy in-repository stores stay
+in place until an explicit migration.
+
 ## API-First Task Organization
 
 Agents must organize tasks through the application API, never by direct

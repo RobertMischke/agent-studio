@@ -35,14 +35,14 @@ public class FilesystemLayerSnapshotServiceTests : IDisposable
         Directory.CreateDirectory(Path.Combine(repo, "backend", "Services", "Runner"));
         Directory.CreateDirectory(Path.Combine(repo, "backend.Tests"));
         Directory.CreateDirectory(Path.Combine(repo, "coverage"));
-        Directory.CreateDirectory(Path.Combine(repo, "docs", "images"));
+        Directory.CreateDirectory(Path.Combine(repo, "docs", "assets", "images"));
         Directory.CreateDirectory(Path.Combine(repo, "prompts", "runtime"));
 
         File.WriteAllText(Path.Combine(repo, "backend", "Services", "Runner", "ProjectRunner.cs"),
             "line1\nline2\nline3\n");
         File.WriteAllText(Path.Combine(repo, "backend.Tests", "ProjectRunnerTests.cs"),
             "test1\ntest2\n");
-        File.WriteAllText(Path.Combine(repo, "docs", "images", "board.png"), "not really an image");
+        File.WriteAllText(Path.Combine(repo, "docs", "assets", "images", "board.png"), "not really an image");
         File.WriteAllText(Path.Combine(repo, "AGENTS.md"), "agent rules\n");
         File.WriteAllText(Path.Combine(repo, "prompts", "runtime", "runner-fresh-start.md"), "prompt\n");
         File.WriteAllText(Path.Combine(repo, "coverage", "coverage.cobertura.xml"),

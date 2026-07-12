@@ -55,50 +55,7 @@ public class TaskWatcherService : BackgroundService
         }
         foreach (var entry in entries)
         {
-            if (string.IsNullOrWhiteSpace(entry.Path))
-            {
-                _logger.LogWarning("WatchPath '{Name}' resolved to empty path; skipping watcher", entry.Name);
-                continue;
-            }
-            if (!Directory.Exists(entry.Path))
-            {
-                _logger.LogWarning("Watch path does not exist, creating: {Path}", entry.Path);
-                try { Directory.CreateDirectory(entry.Path); }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to create watch path {Path}; skipping watcher", entry.Path);
-                    continue;
-                }
-            }
-
-            try
-            {
-                var watcher = new FileSystemWatcher(entry.Path)
-                {
-                    IncludeSubdirectories = true,
-                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.DirectoryName | NotifyFilters.Size,
-                    EnableRaisingEvents = true,
-                    InternalBufferSize = 64 * 1024
-                };
-
-                watcher.Changed += (_, e) => Debounce(e.FullPath);
-                watcher.Created += (_, e) => Debounce(e.FullPath);
-                watcher.Deleted += (_, e) => Debounce(e.FullPath);
-                watcher.Renamed += (_, e) => Debounce(e.FullPath);
-                watcher.Error += (_, e) =>
-                {
-                    var error = e.GetException();
-                    lock (_lock) _lastError = error?.Message ?? "FileSystemWatcher reported an unknown error.";
-                    _logger.LogWarning(error, "FileSystemWatcher error for {Path}", entry.Path);
-                };
-                lock (_lock) _watchers.Add(watcher);
-                _logger.LogInformation("Watching: {Name} -> {Path}", entry.Name, entry.Path);
-            }
-            catch (Exception ex)
-            {
-                lock (_lock) _lastError = ex.Message;
-                _logger.LogError(ex, "Failed to start watcher for {Path}", entry.Path);
-            }
+            EnsureWatching(entry);
         }
         stoppingToken.Register(() =>
         {
@@ -115,6 +72,57 @@ public class TaskWatcherService : BackgroundService
             }
         });
         return Task.CompletedTask;
+    }
+
+    /// <summary>Add a live watcher for an API-created project.</summary>
+    public bool EnsureWatching(WatchPathEntry entry)
+    {
+        if (string.IsNullOrWhiteSpace(entry.Path))
+        {
+            _logger.LogWarning("WatchPath '{Name}' resolved to empty path; skipping watcher", entry.Name);
+            return false;
+        }
+
+        lock (_lock)
+        {
+            if (_watchers.Any(w => string.Equals(w.Path, entry.Path, StringComparison.OrdinalIgnoreCase)))
+                return true;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(entry.Path);
+            var watcher = new FileSystemWatcher(entry.Path)
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.DirectoryName | NotifyFilters.Size,
+                EnableRaisingEvents = true,
+                InternalBufferSize = 64 * 1024
+            };
+            watcher.Changed += (_, e) => Debounce(e.FullPath);
+            watcher.Created += (_, e) => Debounce(e.FullPath);
+            watcher.Deleted += (_, e) => Debounce(e.FullPath);
+            watcher.Renamed += (_, e) => Debounce(e.FullPath);
+            watcher.Error += (_, e) =>
+            {
+                var error = e.GetException();
+                lock (_lock) _lastError = error?.Message ?? "FileSystemWatcher reported an unknown error.";
+                _logger.LogWarning(error, "FileSystemWatcher error for {Path}", entry.Path);
+            };
+            lock (_lock)
+            {
+                _watchers.Add(watcher);
+                _configuredPathCount = Math.Max(_configuredPathCount, _watchers.Count);
+            }
+            _logger.LogInformation("watch-path-activated project={Name} path={Path}", entry.Name, entry.Path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            lock (_lock) _lastError = ex.Message;
+            _logger.LogError(ex, "Failed to start watcher for {Path}", entry.Path);
+            return false;
+        }
     }
 
     /// <summary>

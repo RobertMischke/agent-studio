@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace AgentStudio.Docs.Grading;
+namespace AgentStudio.Docs;
 
 /// <summary>Outcome of a start request (started, busy, or bad project).</summary>
 public sealed record WikiGradingStartResult(bool Started, string? Error, WikiGradingRunStatus? Status);

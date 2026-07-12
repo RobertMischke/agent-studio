@@ -22,7 +22,7 @@ import { api } from '../helpers/api';
 
 interface WatchPath { name: string; path: string }
 interface PipelineStepCondition { when: string; value?: string | null }
-interface PipelineStepSetting { enabled?: boolean | null; mode?: string | null; cliType?: string | null; model?: string | null; thinkingLevel?: string | null; prompt?: string | null; condition?: PipelineStepCondition | null }
+interface PipelineStepSetting { enabled?: boolean | null; economyModel?: boolean | null; mode?: string | null; cliType?: string | null; model?: string | null; thinkingLevel?: string | null; prompt?: string | null; condition?: PipelineStepCondition | null }
 interface ProjectSettingsProjection { pipelineSteps?: Record<string, PipelineStepSetting> }
 
 const STEP = 'aspect-code-quality';
@@ -60,7 +60,7 @@ async function getStepOverride(): Promise<PipelineStepSetting | undefined> {
   return getOverride(STEP);
 }
 
-async function setStep(body: { stepId: string; enabled?: boolean | null; mode?: string | null; cliType?: string | null; model?: string | null; thinkingLevel?: string | null; prompt?: string | null; condition?: PipelineStepCondition | null }): Promise<void> {
+async function setStep(body: { stepId: string; enabled?: boolean | null; economyModel?: boolean | null; mode?: string | null; cliType?: string | null; model?: string | null; thinkingLevel?: string | null; prompt?: string | null; condition?: PipelineStepCondition | null }): Promise<void> {
   await api(`/api/projects/${enc(projectName)}/pipeline-step`, {
     method: 'PUT',
     body: JSON.stringify(body),
@@ -84,11 +84,13 @@ test.afterAll(async () => {
   await setStep({
     stepId: STEP,
     enabled: originalOverride?.enabled ?? null,
+    economyModel: originalOverride?.economyModel ?? null,
     cliType: originalOverride?.cliType ?? null,
     model: originalOverride?.model ?? null,
     thinkingLevel: originalOverride?.thinkingLevel ?? null,
     prompt: originalOverride?.prompt ?? null,
     mode: originalOverride?.mode ?? null,
+    condition: originalOverride?.condition ?? null,
   });
   await setStep({
     stepId: ABORT_STEP,
@@ -104,7 +106,7 @@ test.afterAll(async () => {
 
 test('pipeline: pipeline-step section renders and a per-step model change persists', async ({ page }) => {
   // Start from a clean override so the model select begins on Inherit.
-  await setStep({ stepId: STEP, enabled: null, cliType: null, model: null, thinkingLevel: null, prompt: null, mode: null });
+  await setStep({ stepId: STEP, enabled: null, economyModel: null, cliType: null, model: null, thinkingLevel: null, prompt: null, mode: null });
 
   // Nav-rebuild step 2 (T5b): the pipeline-steps section moved out of Project
   // Settings onto the Pipeline rail; identical rows/controls, new mount.
@@ -157,6 +159,21 @@ test('pipeline: disabling a step persists enabled=false and line-through styling
 
   await section.scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, '03-step-disabled.png'), fullPage: true });
+});
+
+test('pipeline: economy recommendation opt-in persists for an aspect', async ({ page }) => {
+  await setStep({ stepId: STEP, enabled: null, economyModel: null, cliType: null, model: null, thinkingLevel: null });
+  await page.goto(`/#/projects/${projectSlug}/pipeline`);
+  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+
+  const row = page.getByTestId(`pipeline-step-row-${STEP}`);
+  await row.locator('summary').click();
+  const economy = page.getByTestId(`pipeline-step-economy-${STEP}`);
+  await expect(economy).toBeVisible();
+  await economy.check();
+  await expect.poll(async () => (await getStepOverride())?.economyModel).toBe(true);
+
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04-economy-spark-auto.png'), fullPage: true });
 });
 
 test('pipeline: abort-review exposes a run-condition control that persists', async ({ page }) => {

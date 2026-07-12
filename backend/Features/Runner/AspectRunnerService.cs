@@ -85,11 +85,11 @@ public sealed class AspectRunnerService
 
     private async Task<string> RunViaOneShotAsync(string aspectId, string cli, string model, string prompt, string? thinkingLevel, TimeSpan timeout, string jobFolderPath, CancellationToken ct)
     {
-        var oneShot = _oneShotRegistry?.Get("claude");
+        var oneShot = _oneShotRegistry?.Get(cli);
         if (oneShot == null) return await DefaultRunCliAsync(aspectId, cli, model, prompt, timeout, ct);
 
         var result = await oneShot.RunAsync(new CliOneShotRequest(
-            CliType: "claude",
+            CliType: cli,
             Model: model,
             Prompt: prompt)
         {
@@ -110,7 +110,21 @@ public sealed class AspectRunnerService
                 "Aspect '{AspectId}' CLI call failed: exit={ExitCode} duration={Duration}ms error={Error}",
                 aspectId, result.ExitCode, result.Duration.TotalMilliseconds, result.Error);
         }
-        return result.Stdout; // raw JSON wrapper; caller still runs ParseOrFallback
+        // Keep the legacy runner seam stable: its caller expects a Claude-style
+        // result envelope so it can reuse ParseOrFallback and usage recording.
+        return JsonSerializer.Serialize(new
+        {
+            type = "result",
+            result = result.ParsedText,
+            usage = result.Usage is null ? null : new
+            {
+                input_tokens = result.Usage.InputTokens,
+                output_tokens = result.Usage.OutputTokens,
+                cache_read_input_tokens = result.Usage.CacheReadTokens,
+                cache_creation_input_tokens = result.Usage.CacheCreationTokens,
+            },
+            model = result.Usage?.Model ?? model,
+        });
     }
 
     /// <summary>
@@ -179,7 +193,8 @@ public sealed class AspectRunnerService
         CancellationToken ct,
         Func<string, string>? modelForAspect = null,
         Func<string, string?>? thinkingLevelForAspect = null,
-        Func<string, string?>? promptForAspect = null)
+        Func<string, string?>? promptForAspect = null,
+        Func<string, string?>? cliForAspect = null)
     {
         var now = DateTime.UtcNow;
 
@@ -215,7 +230,9 @@ public sealed class AspectRunnerService
                 if (string.IsNullOrWhiteSpace(stepModel)) stepModel = model;
                 var stepThinkingLevel = thinkingLevelForAspect?.Invoke(entry.Def.Id);
                 var stepPrompt = promptForAspect?.Invoke(entry.Def.Id);
-                return RunOneAspectAsync(entry.Index, entry.Def, inputs, cliBinary, stepModel, stepThinkingLevel,
+                var stepCli = cliForAspect?.Invoke(entry.Def.Id);
+                if (string.IsNullOrWhiteSpace(stepCli)) stepCli = CliTypes.Claude;
+                return RunOneAspectAsync(entry.Index, entry.Def, inputs, stepCli, stepModel, stepThinkingLevel,
                     stepPrompt, perAspectTimeout, gate, now, ct);
             })
             .ToArray();

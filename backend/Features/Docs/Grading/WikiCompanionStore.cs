@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace AgentStudio.Docs.Grading;
+namespace AgentStudio.Docs;
 
 /// <summary>Outcome of writing a grading verdict into a companion sidecar.</summary>
 public sealed record WikiCompanionWriteResult(bool Changed, string CompanionAbsPath);

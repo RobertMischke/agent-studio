@@ -30,6 +30,8 @@ In parallel with the legacy `<projectKey>` slug layout above, projects also live
 
 Per-project task counters move out of the sidecar `.task-counter.json` and onto the project record (`NextTaskKeySeq`). Display-keys like `ATP-130` are formatted as `<ShortCode>-<seq>` (e.g. `ATP` for the historic "Agent Task Processor" / `ASS` for the historic "Agent Software Studio" short code + sequence `130`; existing short codes are not auto-renamed by the agent-orchestrator rebrand because they are persisted on every existing card).
 
+Projects created through `POST /api/projects` use `<TaskRepository>/projects/PROJ-NNN/tasks/` as their watched task-store root. The product repository remains a separate `RepositoryPath` and never receives a new `.orchestrator/jobs` store. Legacy projects can retain their existing storage location until a controlled migration.
+
 The full layout migration (jobs sharded under `projects/PROJ-XXX/jobs/<bucket>/<slug>/`, jobKey moved to `PROJ-NNN::<slug>`) is tracked under F45c and is not active yet; jobs continue to live in the lane-folder layout shown below until that ships. New code that needs to address a project should prefer the registry id over the watch-path string; the resolver in [`backend/Services/Jobs/JobKeyResolver.cs`](../../backend/Services/Jobs/JobKeyResolver.cs) accepts either form.
 
 ## Operational Boundary
@@ -197,6 +199,26 @@ Hard rules:
 - **No state-machine effects.** Findings are review evidence, not blockers. `JobTransitionService` does not consult this file. The user can still move the job through `4-auto-review -> 5-human-review -> 6-completed` while findings are open.
 - **Mutating an existing finding** (acknowledging it, attaching a follow-up id) is done by appending a new line with the same `id` and the updated fields. Readers fold the file into latest-per-id; the file stays append-only.
 - **Storage location.** Inside the job folder, never inside `agent-taskboard-dev/` itself. Meta-level documentation (decisions, ADRs, doctrine) goes in source; task-level evidence stays beside the job.
+
+### model-qualification.jsonl (optional)
+
+Append-only benchmark foundation for the `pre-model-qualification` decision and
+the matching CORE result. It lives at the job root. The decision captures the
+task profile, live catalogue source, recommendation, effective selection,
+override source, and estimated saving. The outcome captures the actual model,
+reasoning level, tokens, run status/verdict, and pipeline attempt.
+
+```jsonl
+{"at":"2026-07-11T18:00:00Z","event":"decision","decisionId":"...","jobId":"ui-polish","project":"agent-taskboard","cliType":"codex","taskType":"chore","surface":"frontend polish","complexity":"small","score":-2,"recommendedModel":"<catalogue economy rung>","recommendedThinkingLevel":"low","selectedModel":"<catalogue economy rung>","selectedThinkingLevel":"low","selectionSource":"qualification","estimatedSavingsPercent":65,"reason":"chore/small/frontend polish; ...","catalogueSource":"cli-pty"}
+{"at":"2026-07-11T18:02:00Z","event":"outcome","jobId":"ui-polish","project":"agent-taskboard","model":"<actual model>","thinkingLevel":"low","status":"completed","verdict":"success","inputTokens":1200,"outputTokens":300,"cacheReadTokens":500,"cacheCreationTokens":0,"attempt":1}
+```
+
+Hard rules:
+
+- `event` is `decision` or `outcome`; consumers join rows by `jobId` and attempt chronology.
+- Model ids and reasoning levels are values from the live CLI catalogue, never a second Studio-owned list.
+- `selectionSource=task-override` means the recommendation was reporting-only and the card pin won.
+- Logging is best-effort observability and never changes the run or lane decision.
 
 ### .metadata/prompts.jsonl (optional)
 

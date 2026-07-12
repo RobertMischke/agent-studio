@@ -117,6 +117,10 @@ groups, and a failed domain reports an error without hiding successful domains.
   Management, system prompts, token usage, visual evidence, and the workspace
   summary. Legacy CLI-admin and usage links resolve to the CLI Management
   section at `#/workspace/settings/caps`.
+- `frontend/src/app/features/shell/components/onboard-project-dialog/`: the
+  project onboarding workflow. It collects identity, repository location/URL,
+  and execution runner, calls `POST /api/projects`, then refreshes the
+  registry-backed workspace tree so the new project appears immediately.
 
 ## Project Overview Contract
 
@@ -138,6 +142,7 @@ The dashboard is a projection over existing domain truths:
 | Deployment readiness | `GET /api/projects/{projectName}/deployment/summary`, the shared DEP-1 read model for the last stable deployment and current pending commit delta | Deployment domain |
 | Wiki activity | `GET /api/projects/{projectName}/wiki/pulse?feedLimit=6` | Wiki rail |
 | Planning work | Active planning-mode tasks from the current board snapshot | Task detail and Board |
+| Visual evidence | `GET /api/projects/{projectName}/visual-evidence`, with append-only review receipts shared with task detail | Existing Visual Evidence detail surface |
 | Publishing | Publish targets from `GET /api/projects/{projectName}/snapshot`, rendered by the existing publish panel | Publishing panel |
 
 The Overview limits URL, Wiki, planning-task, and commit lists to compact
@@ -150,6 +155,12 @@ workflow. Mutating template and prompt-defined controls remain explicit
 follow-up slices. Overview and Deployment both use the DEP-1 summary contract;
 neither parses deployment history in the frontend. Publishing controls remain
 owned by the existing publishing surface.
+
+The Overview owns a compact Visual Evidence review queue over delivered task
+screenshots. Acknowledgements reuse the append-only review-evidence log, so the
+Overview and task detail share one durable unseen/reviewed truth. The queue
+preserves task and artifact provenance, keeps reviewed receipts from becoming
+unseen again, and renders missing reviewed artifacts as no longer actionable.
 
 ## Invariants
 

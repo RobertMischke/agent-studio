@@ -111,8 +111,9 @@ function formatCounts(counts) {
   return `ts=${counts.typeScript}, template=${counts.template}, styles=${counts.styles}, total=${counts.total}`;
 }
 
-const files = execSync(`git ls-files ${roots.join(' ')}`, { encoding: 'utf8' })
+const files = execSync(`git ls-files --cached --others --exclude-standard ${roots.join(' ')}`, { encoding: 'utf8' })
   .split('\n')
+  .filter(existsSync)
   .filter(file => file.endsWith('.ts') && !file.endsWith('.spec.ts') && !file.endsWith('.d.ts'));
 
 for (const file of files) {

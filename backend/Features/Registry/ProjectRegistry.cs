@@ -326,6 +326,13 @@ public sealed class ProjectRegistry
     /// </summary>
     public ProjectRecord SetRepositoryPath(string id, string? repositoryPath)
     {
+        var trimmed = ValidateRepositoryPath(repositoryPath);
+        return MutateLocked(id, p => p with { RepositoryPath = trimmed },
+            trimmed == null ? "repository-path-cleared" : "repository-path-set");
+    }
+
+    internal static string? ValidateRepositoryPath(string? repositoryPath)
+    {
         var trimmed = string.IsNullOrWhiteSpace(repositoryPath) ? null : repositoryPath.Trim();
         if (trimmed != null)
         {
@@ -351,8 +358,7 @@ public sealed class ProjectRegistry
                 throw new ArgumentException(
                     "repositoryPath must point at a git checkout (no .git found)", nameof(repositoryPath));
         }
-        return MutateLocked(id, p => p with { RepositoryPath = trimmed },
-            trimmed == null ? "repository-path-cleared" : "repository-path-set");
+        return trimmed;
     }
 
     /// <summary>
@@ -363,6 +369,13 @@ public sealed class ProjectRegistry
     /// <c>&lt;repo&gt;/App</c>) rather than the checkout root itself.
     /// </summary>
     public ProjectRecord SetRootPath(string id, string? rootPath)
+    {
+        var trimmed = ValidateRootPath(rootPath);
+        return MutateLocked(id, p => p with { RootPath = trimmed },
+            trimmed == null ? "root-path-cleared" : "root-path-set");
+    }
+
+    internal static string? ValidateRootPath(string? rootPath)
     {
         var trimmed = string.IsNullOrWhiteSpace(rootPath) ? null : rootPath.Trim();
         if (trimmed != null)
@@ -381,8 +394,7 @@ public sealed class ProjectRegistry
                 throw new ArgumentException(
                     $"rootPath does not exist: {trimmed}", nameof(rootPath));
         }
-        return MutateLocked(id, p => p with { RootPath = trimmed },
-            trimmed == null ? "root-path-cleared" : "root-path-set");
+        return trimmed;
     }
 
     // ------------------------------------------------------------------
@@ -578,6 +590,8 @@ public sealed class ProjectRegistry
         {
             if (_state.Projects.Any(p => string.Equals(p.Id, record.Id, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException($"Project id already exists: {record.Id}");
+            if (_state.Projects.Any(p => string.Equals(p.ShortCode, record.ShortCode, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"shortCode '{record.ShortCode}' is already used.");
             _state = _state with { Projects = [.. _state.Projects, record] };
             PersistLocked();
             return record;

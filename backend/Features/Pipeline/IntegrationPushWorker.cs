@@ -17,15 +17,18 @@ public sealed class IntegrationPushWorker : BackgroundService
     private readonly IntegrationPushQueue _queue;
     private readonly MergeIntoDevelopRunner _runner;
     private readonly ILogger<IntegrationPushWorker> _logger;
+    private readonly AgentStudio.Bus.AgentMessageBusBridge? _bus;
 
     public IntegrationPushWorker(
         IntegrationPushQueue queue,
         MergeIntoDevelopRunner runner,
-        ILogger<IntegrationPushWorker> logger)
+        ILogger<IntegrationPushWorker> logger,
+        AgentStudio.Bus.AgentMessageBusBridge? bus = null)
     {
         _queue = queue;
         _runner = runner;
         _logger = logger;
+        _bus = bus;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -62,6 +65,18 @@ public sealed class IntegrationPushWorker : BackgroundService
                     "Integration-push worker pushed {Branch} for {JobId} ({Status}) in {ElapsedMs}ms",
                     request.IntegrationBranch, request.JobId, result.Status, sw.ElapsedMilliseconds);
             }
+            else if (_bus != null)
+            {
+                await _bus.EmitManagedRepoPushFailureAsync(
+                    request.Project,
+                    request.JobId,
+                    request.WatchPath ?? "(unresolved)",
+                    request.IntegrationBranch,
+                    result.Status,
+                    result.Error,
+                    attempts: 1,
+                    ct: ct);
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -70,6 +85,16 @@ public sealed class IntegrationPushWorker : BackgroundService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Integration-push worker failed for {JobId}", request.JobId);
+            if (_bus != null)
+                await _bus.EmitManagedRepoPushFailureAsync(
+                    request.Project,
+                    request.JobId,
+                    request.WatchPath ?? "(unresolved)",
+                    request.IntegrationBranch,
+                    "error",
+                    ex.Message,
+                    attempts: 1,
+                    ct: ct);
         }
     }
 }

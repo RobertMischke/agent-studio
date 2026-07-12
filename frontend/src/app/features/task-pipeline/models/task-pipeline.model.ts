@@ -46,6 +46,11 @@ export interface PipelineStepExecution {
   stepId: string;
   kind: StepKind;
   model?: string | null;
+  thinkingLevel?: string | null;
+  recommendedModel?: string | null;
+  recommendedThinkingLevel?: string | null;
+  selectionSource?: string | null;
+  estimatedSavingsPercent?: number | null;
   status: PipelineStepStatus;
   startedAt?: string | null;
   completedAt?: string | null;
@@ -223,6 +228,7 @@ export interface PipelineCatalogueStep {
   resolvedThinkingLevel?: string | null;
   thinkingLevelSource?: string | null;
   usesModel: boolean;
+  supportsEconomyModel?: boolean;
   usesPrompt: boolean;
   supportsMode: boolean;
   cliType?: string | null;
@@ -275,6 +281,7 @@ export interface PipelineCatalogue {
  */
 export interface PipelineStepSetting {
   enabled?: boolean | null;
+  economyModel?: boolean | null;
   mode?: string | null;
   cliType?: string | null;
   model?: string | null;

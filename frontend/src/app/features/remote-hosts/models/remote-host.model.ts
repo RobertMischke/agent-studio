@@ -32,7 +32,7 @@ export type HostHeartbeatStatus =
   | 'retired';
 
 /** Operator actions offered per host row. */
-export type HostActionKind = 'reprobe' | 'drain' | 'retire';
+export type HostActionKind = 'reprobe' | 'drain' | 'retire' | 'revive' | 'delete';
 
 /**
  * Per-CLI quota window lifted from the runner's quota probe. One row per CLI
@@ -120,6 +120,12 @@ export interface RemoteHost {
   /** Latest daemon startup proof of origin write access. */
   gitPushStatus?: 'ready' | 'read-only' | null;
   gitPushDetail?: string | null;
+  gitPushCheckedAt?: string | null;
+  daemonState?: 'running' | 'read-only' | 'stopped';
+  lastClaimAt?: string | null;
+  activeTaskCount?: number;
+  availableSlots?: number;
+  retireRequestedAt?: string | null;
   /** Transient: an action currently in flight for this host. */
   busyAction?: HostActionKind | null;
 }
@@ -220,4 +226,11 @@ export function relativeHeartbeat(iso: string | null | undefined, nowMs: number)
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.round(hrs / 24);
   return `${days}d ago`;
+}
+
+/** Metrics older than the liveness window are history, never live values. */
+export function hostIsStale(iso: string | null | undefined, nowMs: number, thresholdMs = 5 * 60_000): boolean {
+  if (!iso) return true;
+  const seen = Date.parse(iso);
+  return Number.isNaN(seen) || nowMs - seen > thresholdMs;
 }

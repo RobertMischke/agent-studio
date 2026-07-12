@@ -210,6 +210,42 @@ public class WorkspaceManagementServiceTests : IDisposable
     }
 
     [Fact]
+    public void CreateProjectStorage_UsesCentralProjFolder_WithoutEditingWatchPaths()
+    {
+        var (svc, _) = Build();
+        var settingsPath = Path.Combine(_contentRoot, "appsettings.Local.json");
+        var before = File.ReadAllText(settingsPath);
+
+        var result = svc.CreateProjectStorage("Quality Studio", "PROJ-023");
+
+        Assert.Equal(WorkspaceManagementOutcome.Created, result.Outcome);
+        Assert.Equal(Path.Combine(_taskRepository, "projects", "PROJ-023", "tasks"), result.Entry!.Path);
+        Assert.True(Directory.Exists(result.Entry.Path));
+        Assert.Equal(before, File.ReadAllText(settingsPath));
+    }
+
+    [Fact]
+    public void Scanner_MergesRegistryProject_WithoutAConfigWatchPath()
+    {
+        var (_, config) = Build();
+        var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+        var storage = Path.Combine(_taskRepository, "projects", "PROJ-001");
+        Directory.CreateDirectory(storage);
+        registry.EnsureProjectForStorage(storage, "Registry Only", DefaultWorkspace.Id);
+        var scanner = new TaskScannerService(
+            config,
+            NullLogger<TaskScannerService>.Instance,
+            new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config),
+            projectRegistry: registry);
+
+        var entry = Assert.Single(scanner.GetWatchPaths());
+
+        Assert.Equal("Registry Only", entry.Name);
+        Assert.Equal(storage, entry.Path);
+        Assert.Empty(config.GetSection("WatchPaths").GetChildren());
+    }
+
+    [Fact]
     public void Delete_HappyPath_RemovesEntryAndLeavesFolderOnDisk()
     {
         var (svc, _) = Build();
@@ -286,6 +322,20 @@ public class WorkspaceManagementServiceTests : IDisposable
         Assert.True(written.TryGetProperty("WatchPaths", out var watchPaths));
         Assert.Equal(0, watchPaths.GetArrayLength());
         Assert.Empty(config.GetSection("WatchPaths").GetChildren());
+    }
+
+    [Fact]
+    public void DeleteProjectStorage_RemovesEmptyRegistryProjectContainer()
+    {
+        var (svc, _) = Build();
+        var created = svc.CreateProjectStorage("Disposable", "PROJ-124");
+        var projectContainer = Directory.GetParent(created.Entry!.Path)!.FullName;
+
+        var result = svc.DeleteProjectStorage(created.Entry.Path);
+
+        Assert.Equal(WorkspaceManagementOutcome.Ok, result.Outcome);
+        Assert.False(Directory.Exists(created.Entry.Path));
+        Assert.False(Directory.Exists(projectContainer));
     }
 
     [Fact]

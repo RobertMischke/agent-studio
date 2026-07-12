@@ -24,6 +24,7 @@ public class TaskScannerService : ITaskScanner
     private readonly ILogger<TaskScannerService> _logger;
     private readonly SummaryGenerationService _summaryService;
     private readonly FileGenerationIndex? _fileGenerationIndex;
+    private readonly AgentStudio.Registry.ProjectRegistry? _projectRegistry;
 
     /// <summary>
     /// Optional in-memory snapshot cache. Wired by DI through
@@ -51,12 +52,14 @@ public class TaskScannerService : ITaskScanner
         IConfiguration config,
         ILogger<TaskScannerService> logger,
         SummaryGenerationService summaryService,
-        FileGenerationIndex? fileGenerationIndex = null)
+        FileGenerationIndex? fileGenerationIndex = null,
+        AgentStudio.Registry.ProjectRegistry? projectRegistry = null)
     {
         _config = config;
         _logger = logger;
         _summaryService = summaryService;
         _fileGenerationIndex = fileGenerationIndex;
+        _projectRegistry = projectRegistry;
     }
 
     /// <summary>
@@ -91,8 +94,49 @@ public class TaskScannerService : ITaskScanner
         {
             resolved.Add(ResolveWatchPath(entry));
         }
+
+        // WatchPaths is bootstrap compatibility only. API-created projects are
+        // registry records and must be readable without a settings edit or restart.
+        if (_projectRegistry != null)
+        {
+            var registryProjects = _projectRegistry.List().Where(p => !p.Archived).ToList();
+            for (var i = 0; i < resolved.Count; i++)
+            {
+                var project = registryProjects.FirstOrDefault(p => string.Equals(
+                    NormalizeWatchPath(p.StorageLocation), NormalizeWatchPath(resolved[i].Path),
+                    StringComparison.OrdinalIgnoreCase));
+                if (project != null)
+                {
+                    resolved[i] = resolved[i] with
+                    {
+                        Name = project.DisplayName,
+                        RootPath = project.RootPath ?? resolved[i].RootPath,
+                        RepositoryPath = project.RepositoryPath ?? resolved[i].RepositoryPath,
+                    };
+                }
+            }
+
+            foreach (var project in registryProjects)
+            {
+                if (resolved.Any(entry => string.Equals(
+                        NormalizeWatchPath(entry.Path), NormalizeWatchPath(project.StorageLocation),
+                        StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                resolved.Add(new WatchPathEntry
+                {
+                    Name = project.DisplayName,
+                    Path = project.StorageLocation,
+                    RootPath = project.RootPath ?? "",
+                    RepositoryPath = project.RepositoryPath ?? "",
+                });
+            }
+        }
         return resolved;
     }
+
+    private static string NormalizeWatchPath(string? path) =>
+        string.IsNullOrWhiteSpace(path) ? "" : path.Replace('\\', '/').TrimEnd('/');
 
     /// <summary>
     /// Resolves a watch path entry's effective task folder. Resolution order:
@@ -396,7 +440,13 @@ public class TaskScannerService : ITaskScanner
                     ? JsonSerializer.Deserialize<SessionUsage>(lu.GetRawText(), TaskJsonFile.ReadOpts)
                     : null,
                 Model = raw.TryGetProperty("model", out var md) ? md.GetString() : null,
+                // Provenance was added with model qualification. Missing means
+                // legacy and is conservatively treated as an explicit pin.
+                ModelExplicit = !raw.TryGetProperty("modelExplicit", out var modelExplicit)
+                    || modelExplicit.ValueKind != JsonValueKind.False,
                 ThinkingLevel = raw.TryGetProperty("thinkingLevel", out var tl) ? tl.GetString() : null,
+                ThinkingLevelExplicit = !raw.TryGetProperty("thinkingLevelExplicit", out var thinkingExplicit)
+                    || thinkingExplicit.ValueKind != JsonValueKind.False,
                 CliType = raw.TryGetProperty("cliType", out var ct) ? ct.GetString() : null,
                 Kind = TaskKinds.Normalize(raw.TryGetProperty("kind", out var kd) ? kd.GetString() : null),
                 EpicId = raw.TryGetProperty("epicId", out var ep) && !string.IsNullOrWhiteSpace(ep.GetString()) ? ep.GetString() : null,

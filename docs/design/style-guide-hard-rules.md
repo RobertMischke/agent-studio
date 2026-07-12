@@ -66,6 +66,22 @@ driver; dark must not regress. Read tokens (`--studio-*`), never hardcode a hex
 that only works in one theme. Every animation collapses to zero duration under
 `@media (prefers-reduced-motion: reduce)`.
 
+### R6 - Action and loading feedback follows one timing contract
+
+Reversible lane mutations paint optimistically, confirm with a quiet toast and
+offer Undo. A failed persistence rolls the UI back and explains the failure.
+This applies to Accept, Requeue, Archive, and future equivalent moves.
+
+Actions that cannot safely paint ahead use the shared `appPendingButton`
+capability: react immediately, disable while pending, expose `aria-busy`, and
+show the standard spinner plus action-specific label. Do not hand-roll a new
+pending button at each call site.
+
+Main surfaces use `app-loading-surface`, not a blocking page spinner. It stays
+hidden for the first 200 ms, shows a structural skeleton after that threshold,
+and adds contextual loading copy after one second. Loading feedback never
+blocks unrelated navigation or controls.
+
 ## How this is enforced
 
 - **Prompt anchoring:** referenced from [AGENTS.md](../../AGENTS.md) and

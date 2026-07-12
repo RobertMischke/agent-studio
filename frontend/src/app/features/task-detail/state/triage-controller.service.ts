@@ -114,7 +114,9 @@ export class TriageController {
     // Capture prev lane + slot BEFORE the optimistic move so undo can
     // restore the card to its exact origin position.
     const prevState = info.state;
-    const prevIndex = this.jobService.findLaneIndex(info.id, info.watchPath, prevState);
+    const snapshotIndex = this.jobService.findLaneIndex(info.id, info.watchPath, prevState);
+    const peerIndex = peers.findIndex(peer => peer.taskKey === info.taskKey);
+    const prevIndex = snapshotIndex >= 0 ? snapshotIndex : Math.max(peerIndex, 0);
     this.jobSelection.markAcceptClick();
     const snapshot = this.jobService.applyOptimisticMove(info.id, info.watchPath, ev.targetState);
     this.jobService.beginOptimisticPersist();
@@ -136,24 +138,40 @@ export class TriageController {
       advanced = true;
     }
 
+    let persistResolve!: () => void;
+    let persistReject!: (reason: unknown) => void;
+    const persisted = new Promise<void>((resolve, reject) => {
+      persistResolve = resolve;
+      persistReject = reject;
+    });
+    void persisted.catch(() => undefined);
+
+    const actionLabel = ev.targetState === '6-completed'
+        ? 'Accepted'
+        : ev.targetState === '2-ready'
+          ? 'Requeued'
+          : ev.targetState === '7-archive' ? 'Archived' : 'Moved';
+    this.undo.offerLaneRevert({
+      jobId: info.id,
+      watchPath: info.watchPath,
+      jobLabel: info.title || info.id,
+      actionLabel,
+      targetLaneLabel: laneLabelFor(ev.targetState),
+      prevState,
+      prevIndex,
+      persisted,
+    });
+
     this.jobService.moveJob(info.id, ev.targetState, info.watchPath).subscribe({
       next: () => {
         this.jobService.endOptimisticPersist();
-        if (prevIndex >= 0) {
-          this.undo.offerLaneRevert({
-            jobId: info.id,
-            watchPath: info.watchPath,
-            jobLabel: info.title || info.id,
-            actionLabel: 'Moved',
-            targetLaneLabel: laneLabelFor(ev.targetState),
-            prevState,
-            prevIndex,
-          });
-        }
+        persistResolve();
         this.clearActing();
       },
       error: (err) => {
         this.jobService.endOptimisticPersist();
+        persistReject(err);
+        this.undo.cancelActive();
         if (snapshot) this.jobService.revertOptimisticMove(snapshot);
         // Optimistic navigation must roll back too: the user clicked
         // Accept on `info`, the move failed, the only sensible landing

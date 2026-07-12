@@ -618,7 +618,7 @@ export class TaskService {
     return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projId)}`, patch);
   }
 
-  /** F46 — create a registry project. Backend chooses projects/PROJ-NNN; no path is accepted from the UI. */
+  /** Create a registry project. Backend chooses projects/PROJ-NNN/tasks; no storage path is accepted from the UI. */
   createRegistryProject(body: CreateRegistryProjectRequest) {
     return this.http.post<RegistryProjectSummary>(`${this.baseUrl}/projects`, body);
   }
@@ -1819,6 +1819,7 @@ export class TaskService {
     step: {
       stepId: string;
       enabled?: boolean | null;
+      economyModel?: boolean | null;
       mode?: string | null;
       cliType?: string | null;
       model?: string | null;

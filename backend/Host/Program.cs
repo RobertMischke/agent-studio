@@ -389,10 +389,18 @@ builder.Services.AddSingleton<AgentStudio.Runner.ILoadThrottleGate>(sp =>
     sp.GetRequiredService<AgentStudio.Runner.SystemLoadThrottle>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentStudio.Runner.SystemLoadThrottle>());
 builder.Services.AddSingleton<AgentStudio.Cli.ClaudeOneShot>();
+builder.Services.AddSingleton<AgentStudio.Cli.CodexOneShot>();
 builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot>(sp =>
     new AgentStudio.Cli.PromptLoggingCliOneShot(
         new AgentStudio.Cli.LoadAwareCliOneShot(
             sp.GetRequiredService<AgentStudio.Cli.ClaudeOneShot>(),
+            sp.GetRequiredService<AgentStudio.Runner.ILoadThrottleGate>(),
+            sp.GetRequiredService<ILogger<AgentStudio.Cli.LoadAwareCliOneShot>>()),
+        sp.GetRequiredService<AgentStudio.Cli.StepPromptLog>()));
+builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot>(sp =>
+    new AgentStudio.Cli.PromptLoggingCliOneShot(
+        new AgentStudio.Cli.LoadAwareCliOneShot(
+            sp.GetRequiredService<AgentStudio.Cli.CodexOneShot>(),
             sp.GetRequiredService<AgentStudio.Runner.ILoadThrottleGate>(),
             sp.GetRequiredService<ILogger<AgentStudio.Cli.LoadAwareCliOneShot>>()),
         sp.GetRequiredService<AgentStudio.Cli.StepPromptLog>()));
@@ -424,6 +432,12 @@ builder.Services.AddHostedService<MetaCycleHostedService>();
 builder.Services.AddHostedService<OrchestratorPrepHostedService>();
 builder.Services.AddHostedService<ChatNoteHostedService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineExecutionLog>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IModelEconomyAdvisor,
+    AgentStudio.Pipeline.CatalogueModelEconomyAdvisor>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.ModelQualificationService>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IPipelineModelCatalogueProvider,
+    AgentStudio.Pipeline.CliPipelineModelCatalogueProvider>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineStepEconomyAdvisor>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.MergeIntoDevelopRunner>();
 builder.Services.AddSingleton<AgentStudio.GeneratedFiles.FileGenerationIndex>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.ProjectPipelineCostService>();
@@ -448,6 +462,8 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.WikiTaskCrossReferenceService
 builder.Services.AddSingleton<AgentStudio.Pipeline.TaskSpawnerPostStepRunner>();
 builder.Services.AddSingleton<AspectRunnerService>();
 builder.Services.AddSingleton<AgentStudio.Review.CodeReviewStepService>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactPushQueue>();
+builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceArtifactPushWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactCommitService>();
 // Intelligente Abbruch-Bewertung (ADR-0032): the post-abort LLM review step.
 // Forwarded into ProjectRunner via TaskRunnerService; default-OFF per project.
@@ -505,10 +521,10 @@ builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();
 // Wiki-grading maintenance run (AGT-2051): the maintenance-model default (its own
 // config class in the CLI-management area), the companion sidecar writer, the
 // grader seam (production = the one-shot CLI rail), and the run orchestrator.
-builder.Services.AddSingleton<AgentStudio.Docs.Grading.WikiMaintenanceModelService>();
-builder.Services.AddSingleton<AgentStudio.Docs.Grading.WikiCompanionStore>();
-builder.Services.AddSingleton<AgentStudio.Docs.Grading.IWikiPageGrader, AgentStudio.Docs.Grading.CliWikiPageGrader>();
-builder.Services.AddSingleton<AgentStudio.Docs.Grading.WikiGradingService>();
+builder.Services.AddSingleton<AgentStudio.Docs.WikiMaintenanceModelService>();
+builder.Services.AddSingleton<AgentStudio.Docs.WikiCompanionStore>();
+builder.Services.AddSingleton<AgentStudio.Docs.IWikiPageGrader, AgentStudio.Docs.CliWikiPageGrader>();
+builder.Services.AddSingleton<AgentStudio.Docs.WikiGradingService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();
 builder.Services.AddSingleton<AgentDocsReadAnalyticsService>();
 builder.Services.AddSingleton<SkillReadinessService>();

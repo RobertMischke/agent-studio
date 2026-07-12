@@ -57,7 +57,7 @@ describe('ProjectPipelinePanelComponent (render)', () => {
         id: 'aspect-requirement-fit', displayName: 'Requirement fit', kind: 'aspect', phase: 'aspect',
         runMode: 'parallel', dependsOn: ['core-run'], idempotent: true, stub: false,
         resolvedModel: 'claude-opus-4.8', modelSource: 'runtime', resolvedThinkingLevel: 'medium',
-        usesModel: true, usesPrompt: true, supportsMode: true, cliType: 'claude',
+        usesModel: true, supportsEconomyModel: true, usesPrompt: true, supportsMode: true, cliType: 'claude',
         promptTemplate: 'aspect-requirement-fit', canDisable: true, defaultEnabled: true, supportsCondition: true,
       },
       {
@@ -134,6 +134,7 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(host.querySelector('[data-testid="pipeline-step-setting-run-aspect-requirement-fit"]')?.textContent).toContain('parallel after core-run');
     expect(host.querySelector('[data-testid="pipeline-step-setting-active-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-setting-model-aspect-requirement-fit"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-step-setting-economy-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-setting-prompt-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-setting-gate-aspect-requirement-fit"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-setting-condition-aspect-requirement-fit"]')).toBeTruthy();

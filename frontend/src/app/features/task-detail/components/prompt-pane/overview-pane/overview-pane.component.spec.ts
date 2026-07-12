@@ -1066,6 +1066,41 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(passing.concernTooltip).toBeNull();
   });
 
+  it('pipeline block: model qualification renders selected model, reasoning, and override explanation', async () => {
+    const fixture = await build(baseJob({ state: '3-progress' }));
+    TestBed.inject(TaskPipelinePollService).pipeline.set({
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'pre-model-qualification', displayName: 'Model qualification', kind: 'module', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: new Date().toISOString(), completedAt: null,
+        steps: [{
+          stepId: 'pre-model-qualification', kind: 'module', model: 'gpt-balanced', thinkingLevel: 'medium',
+          recommendedModel: 'gpt-economy', recommendedThinkingLevel: 'low', selectionSource: 'task-override',
+          estimatedSavingsPercent: 0, status: 'passed', durationMs: 2,
+          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+          verdict: 'override', verdictSummary: 'chore/small/frontend polish; card override wins, selected gpt-balanced at medium',
+        }],
+      },
+      cost: emptyCost(),
+      config: {},
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const row = fixture.componentInstance.pipelineRows()[0];
+    expect(row.model).toBe('gpt-balanced');
+    expect(row.thinkingLevel).toBe('medium');
+    expect(row.concernTooltip?.title).toBe('Model qualification · Card override');
+    expect(row.concernTooltip?.body).toContain('card override wins');
+  });
+
   it('pipeline block: a circuit-broken loop guard surfaces a loop-detected verdict as the first row with a concern tooltip', async () => {
     const fixture = await build(baseJob({ state: '3-progress' }));
     const pipe: TaskPipelineResponse = {

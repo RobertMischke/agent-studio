@@ -51,6 +51,7 @@ describe('ProjectOverviewDashboardComponent', () => {
     });
     http.expectOne('/api/projects/Demo%20Project/wiki/pulse?feedLimit=6').flush(wikiPulse());
     http.expectOne('/api/projects/Demo%20Project/snapshot').flush(snapshot());
+    http.expectOne(request => request.url === '/api/git/inventory' && request.params.get('project') === 'Demo Project').flush(gitInventory());
     http.expectOne('/api/projects/Demo%20Project/visual-evidence').flush(evidenceQueue());
     http.expectOne('/api/workspaces').flush([{ id: 'ws', displayName: 'Workspace', projects: [{
       id: 'PROJ-1', displayName: 'Demo Project', workspaceId: 'ws', storageLocation: 'C:/tasks/demo',
@@ -68,6 +69,7 @@ describe('ProjectOverviewDashboardComponent', () => {
     expect(host.querySelector('[data-testid="project-overview-wiki"]')?.textContent).toContain('Operator dashboard concept');
     expect(host.querySelector('[data-testid="project-overview-planning-agt-2200"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="project-overview-evidence-count"]')?.textContent).toContain('1 unseen');
+    expect(host.querySelector('[data-testid="project-overview-remote-truth"]')?.textContent).toContain('2 unpushed');
     host.querySelector<HTMLButtonElement>('[data-testid="project-overview-planning-agt-2200"]')!.click();
     expect(openedTasks).toEqual([{ jobId: 'agt-2200', watchPath: 'C:/tasks/demo' }]);
 
@@ -161,10 +163,22 @@ function flushEmpty(http: HttpTestingController): void {
   });
   http.expectOne('/api/projects/Demo%20Project/wiki/pulse?feedLimit=6').flush({ ...wikiPulse(), feed: { available: true, reason: null, items: [] } });
   http.expectOne('/api/projects/Demo%20Project/snapshot').flush(snapshot());
+  http.expectOne(request => request.url === '/api/git/inventory' && request.params.get('project') === 'Demo Project').flush(gitInventory());
   http.expectOne('/api/projects/Demo%20Project/visual-evidence').flush({
     project: 'Demo Project', capturedAt: '2026-07-11T12:00:00Z', unseenCount: 0, items: [],
   });
   http.expectOne('/api/workspaces').flush([]);
+}
+
+function gitInventory() {
+  return {
+    projectName: 'Demo Project', repositoryPath: 'C:/repo', isRepo: true, currentBranch: 'develop',
+    worktrees: [], recentCommits: [], error: null,
+    branches: [
+      { name: 'main', category: 'main', tipSha: 'a'.repeat(40), tipShortSha: 'aaaaaaa', isCurrent: false, upstream: 'origin/main', ahead: 0, behind: 0, lastCommitSubject: 'released', lastCommitAtUtc: '2026-07-11T08:00:00Z', worktreePath: null },
+      { name: 'develop', category: 'develop', tipSha: 'b'.repeat(40), tipShortSha: 'bbbbbbb', isCurrent: true, upstream: 'origin/develop', ahead: 2, behind: 0, lastCommitSubject: 'integrated', lastCommitAtUtc: '2026-07-11T11:00:00Z', worktreePath: 'C:/repo' },
+    ],
+  };
 }
 
 function evidenceQueue() {
