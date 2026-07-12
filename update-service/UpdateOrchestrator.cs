@@ -134,6 +134,7 @@ public sealed class UpdateOrchestrator
         var headBefore = _git.HeadShort();
         UpdateRunSnapshot? preSnapshot = null;
         Dictionary<string, string>? restoreModes = null;
+        ReleaseManifest? intendedRelease = null;
 
         try
         {
@@ -195,6 +196,36 @@ public sealed class UpdateOrchestrator
             var headAfterPull = _git.HeadShort();
             _store.SetHead(headAfterPull);
 
+            // Release preflight runs after the fast-forward made the candidate
+            // manifest available, but before dependency installation or restart.
+            // Legacy checkouts without a manifest remain migratable; once a
+            // candidate manifest exists, every mismatch is a hard gate.
+            if (File.Exists(_options.ReleaseManifestFile) || !string.IsNullOrWhiteSpace(_options.LatestApprovedTag))
+            {
+                try
+                {
+                    if (!File.Exists(_options.ReleaseManifestFile))
+                        throw new InvalidDataException("Candidate release manifest is missing.");
+                    intendedRelease = ReleaseContract.Read(_options.ReleaseManifestFile);
+                    var runningRelease = (await _backend.ReadRuntimeVersionAsync(ct))?.Manifest;
+                    var preflight = ReleaseContract.Compare(runningRelease, null, intendedRelease, _options.LatestApprovedTag);
+                    folder.WriteOutput("release-preflight.json", System.Text.Json.JsonSerializer.Serialize(preflight));
+                    _logger.LogInformation("ReleasePreflight relation={Relation} allowed={Allowed} candidate={Tag}", preflight.Relation, preflight.Allowed, intendedRelease.AppTag);
+                    if (!preflight.Allowed)
+                    {
+                        FinishFailed(runId, startedAt, headBefore, headAfterPull, trigger,
+                            $"release preflight refused update: {preflight.Message}", null, folder, preSnapshot);
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    FinishFailed(runId, startedAt, headBefore, headAfterPull, trigger,
+                        $"release preflight refused update: {ex.Message}", null, folder, preSnapshot);
+                    return;
+                }
+            }
+
             // PHASE 4 — building
             SetPhase("building", "npm install (frontend deps)", runId, startedAt);
             var (buildRc, buildOut, buildRan) = await MaybeRunNpmInstallAsync(headBefore, headAfterPull, ct);
@@ -248,6 +279,22 @@ public sealed class UpdateOrchestrator
                 if (_options.AutoRollback)
                     await RunRollbackAsync(runId, manual: false, ct);
                 return;
+            }
+
+            if (intendedRelease is not null)
+            {
+                var runningAfterRestart = await _backend.ReadRuntimeVersionAsync(ct);
+                if (runningAfterRestart?.Manifest is null || !ReleaseContract.SameIdentity(intendedRelease, runningAfterRestart.Manifest))
+                {
+                    var failure = new VerificationFailure("release-identity",
+                        runningAfterRestart?.Tag ?? runningAfterRestart?.Commit ?? "manifest missing",
+                        $"{intendedRelease.AppTag} {intendedRelease.Commit}");
+                    FinishFailed(runId, startedAt, headBefore, headAfterPull, trigger,
+                        "runtime identity does not equal the intended release manifest", new[] { failure }, folder, preSnapshot);
+                    if (_options.AutoRollback) await RunRollbackAsync(runId, manual: false, ct);
+                    return;
+                }
+                _logger.LogInformation("ReleaseIdentityVerified tag={Tag} commit={Commit}", intendedRelease.AppTag, intendedRelease.Commit);
             }
 
             // PHASE 7 — resuming
@@ -646,6 +693,20 @@ public sealed class UpdateOrchestrator
         string? error, string trigger, IReadOnlyList<VerificationFailure>? failures, string? rollbackStatus, string? runFolder)
     {
         var finishedAt = DateTime.UtcNow;
+        ReleaseManifest? release = null;
+        string? manifestIntegrity = null;
+        try
+        {
+            if (File.Exists(_options.ReleaseManifestFile))
+            {
+                release = ReleaseContract.Read(_options.ReleaseManifestFile);
+                manifestIntegrity = ReleaseContract.Sha256(_options.ReleaseManifestFile);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "DeploymentHistoryManifestReadFailed runId={RunId}", runId);
+        }
         var entry = new UpdateHistoryEntry(
             RunId: runId,
             StartedAt: startedAt,
@@ -658,7 +719,10 @@ public sealed class UpdateOrchestrator
             Trigger: trigger,
             VerificationFailures: failures,
             RollbackStatus: rollbackStatus,
-            RunFolder: runFolder);
+            RunFolder: runFolder,
+            ReleaseTag: release?.AppTag,
+            ReleaseCommit: release?.Commit,
+            ManifestIntegrity: manifestIntegrity);
         _store.AppendHistory(entry);
     }
 

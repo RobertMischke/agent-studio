@@ -124,6 +124,14 @@
 
   <ItemGroup>
     <Content Include="..\prompts\runtime\*.md" Link="prompts\runtime\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\release-manifest.json" Link="release-manifest.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\release-manifest.json')" />
   </ItemGroup>
+
+  <Target Name="GenerateStableReleaseManifest" BeforeTargets="BeforeBuild" Condition="'$(ATPStableBuild)' == 'true'">
+    <Exec Command="node &quot;$(MSBuildProjectDirectory)\..\scripts\generate-release-manifest.mjs&quot;" />
+  </Target>
+  <Target Name="CopyStableReleaseManifest" AfterTargets="Build" DependsOnTargets="GenerateStableReleaseManifest" Condition="'$(ATPStableBuild)' == 'true'">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\release-manifest.json" DestinationFolder="$(TargetDir)" />
+  </Target>
 
 </Project>

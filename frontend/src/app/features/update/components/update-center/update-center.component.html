@@ -29,11 +29,17 @@
 
       <section class="upd-center__hero" data-testid="update-center-runtime">
         <div class="upd-center__eyebrow"><span class="upd-center__dot"></span> Running Agent Studio</div>
-        <strong class="upd-center__version">{{ status()?.runningVersion?.version ?? status()?.productVersion ?? 'Version unknown' }}</strong>
+        <strong class="upd-center__version">{{ status()?.runningVersion?.tag ?? 'Untagged migration build' }}</strong>
         <div class="upd-center__runtime-meta">
           <code>{{ shortSha(status()?.runningVersion?.commit ?? status()?.headLocal) }}</code>
           <span>Deployed {{ formatDate(status()?.runningVersion?.deployedAt) }}</span>
         </div>
+        @if (status()?.runningVersion?.manifest; as manifest) {
+          <div class="upd-center__runtime-meta" data-testid="update-center-package-identity">
+            <span>CodingAgentRunner {{ manifest.codingAgentRunner.version }}</span>
+            <span>Coding Agent Chat {{ manifest.codingAgentChat.version }}</span>
+          </div>
+        }
         @if ((status()?.mainVersion?.behindBy ?? status()?.behindBy ?? 0) === 0) {
           <span class="upd-center__pill upd-center__pill--ok">Matches main</span>
         } @else {

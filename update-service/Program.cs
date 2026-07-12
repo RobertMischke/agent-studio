@@ -21,6 +21,8 @@ if (!builder.Environment.IsEnvironment("Testing"))
     options.TriggerToken    = Environment.GetEnvironmentVariable("ATP_UPDATE_TOKEN")        ?? options.TriggerToken;
     options.BashPath        = Environment.GetEnvironmentVariable("ATP_BASH_PATH")           ?? options.BashPath;
     options.VersionFile     = Environment.GetEnvironmentVariable("ATP_VERSION_FILE")        ?? options.VersionFile;
+    options.ReleaseManifestFile = Environment.GetEnvironmentVariable("AGENT_STUDIO_RELEASE_MANIFEST") ?? options.ReleaseManifestFile;
+    options.LatestApprovedTag = Environment.GetEnvironmentVariable("AGENT_STUDIO_LATEST_APPROVED_TAG") ?? options.LatestApprovedTag;
     options.Mode            = Environment.GetEnvironmentVariable("ATP_UPDATE_MODE")          ?? options.Mode;
 
     // ADR-0031: opt-in auto-rollback. Env flag (ATP_UPDATE_AUTO_ROLLBACK=1/true)
@@ -94,6 +96,17 @@ app.MapGet("/update/status", (UpdateStatusStore store) =>
 
 app.MapGet("/update/history", (UpdateStatusStore store, int? max) =>
     Results.Json(store.ReadHistory(max.GetValueOrDefault(20)), jsonOpts));
+
+app.MapGet("/update/preflight", async (IBackendProbe backend, UpdateServiceOptions opt, CancellationToken ct) =>
+{
+    var running = (await backend.ReadRuntimeVersionAsync(ct))?.Manifest;
+    ReleaseManifest? installed = null;
+    string? error = null;
+    try { if (File.Exists(opt.ReleaseManifestFile)) installed = ReleaseContract.Read(opt.ReleaseManifestFile); }
+    catch (Exception ex) { error = ex.Message; }
+    var result = ReleaseContract.Compare(running, installed, installed, opt.LatestApprovedTag);
+    return Results.Json(new { result.Allowed, relation = result.Relation.ToString().ToLowerInvariant(), result.Message, result.Running, result.Installed, result.Candidate, result.LatestApprovedTag, manifestError = error }, jsonOpts);
+});
 
 app.MapPost("/update/trigger", async (HttpContext ctx, UpdateOrchestrator orch, UpdateServiceOptions opt, IHostApplicationLifetime lifetime, CancellationToken ct) =>
 {

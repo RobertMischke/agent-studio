@@ -12,3 +12,4 @@ Durable contracts that code, CLIs, and agents must respect.
 | [loop-inventory.md](loop-inventory.md) | Re-entry, retry, and loop breaker registry. |
 | [code-patterns.md](code-patterns.md) | Code-pattern drift watchlist read by analysis services. |
 | [wiki-tree.md](wiki-tree.md) | Wiki physical docs tree, mutation, rendering, and history contract. |
+| [stable-release-identity.md](stable-release-identity.md) | Stable build manifest, tag comparison, runtime verification, rollback, and legacy migration. |

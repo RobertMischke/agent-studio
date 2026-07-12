@@ -37,7 +37,31 @@ export interface UpdateStatus {
 export interface RuntimeVersion {
   version: string;
   commit: string;
-  deployedAt: string;
+  deployedAt: string | null;
+  tag?: string | null;
+  dirty?: boolean | null;
+  identitySource?: 'release-manifest' | 'legacy-untagged' | string | null;
+  manifest?: ReleaseManifest | null;
+}
+
+export interface ReleaseArtifact {
+  name: string;
+  version: string;
+  tag: string | null;
+  commit: string | null;
+  integrity: string;
+  source: string;
+}
+
+export interface ReleaseManifest {
+  schemaVersion: number;
+  appTag: string;
+  appVersion: string;
+  commit: string;
+  dirty: boolean;
+  builtAt: string;
+  codingAgentRunner: ReleaseArtifact;
+  codingAgentChat: ReleaseArtifact;
 }
 
 export interface BranchVersion {
@@ -90,6 +114,9 @@ export interface UpdateHistoryEntry {
   verificationFailures?: VerificationFailure[] | null;
   rollbackStatus?: 'ok' | 'failed' | null;
   runFolder?: string | null;
+  releaseTag?: string | null;
+  releaseCommit?: string | null;
+  manifestIntegrity?: string | null;
 }
 
 export interface TriggerRequest {

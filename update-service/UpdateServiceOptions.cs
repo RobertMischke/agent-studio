@@ -26,6 +26,8 @@ public sealed class UpdateServiceOptions
     public string RunsDirectory { get; set; } = @"C:\Projects\agent-taskboard-workspace\logs\update-service-runs";
 
     public string VersionFile { get; set; } = @"C:\Projects\agent-taskboard-devspace\agent-taskboard-stable\VERSION";
+    public string ReleaseManifestFile { get; set; } = @"C:\Projects\agent-taskboard-devspace\agent-taskboard-stable\release-manifest.json";
+    public string? LatestApprovedTag { get; set; }
 
     public int ProbeIntervalSeconds { get; set; } = 30;
     public int HealthWaitSeconds { get; set; } = 180;

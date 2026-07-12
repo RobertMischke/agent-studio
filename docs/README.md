@@ -78,6 +78,7 @@ Use this page as the first stop when you need the right document quickly.
 | Common problems | [wiki/common-problems/README.md](wiki/common-problems/README.md) |
 | Designated topics (AGENTS/wiki-sync current-state index; post-agents-wiki-sync) | [wiki/concepts/designated-topics/README.md](wiki/concepts/designated-topics/README.md) |
 | API project identity / watchPath | [wiki/concepts/api-project-identity-and-watchpath.md](wiki/concepts/api-project-identity-and-watchpath.md) |
+| Stable release identity, manifests, update comparison, and migration | [contracts/stable-release-identity.md](contracts/stable-release-identity.md) |
 | Workflow arguments become unbounded fan-out | [wiki/common-problems/workflow-args-json-string-fanout/](wiki/common-problems/workflow-args-json-string-fanout/) |
 | Services killed by a harness sweep | [wiki/common-problems/services-killed-by-harness-sweep/](wiki/common-problems/services-killed-by-harness-sweep/) |
 | Orchestrator drive-to-conclusion & CLI-crash resilience | [wiki/concepts/orchestrator-drive-to-conclusion.html](wiki/concepts/orchestrator-drive-to-conclusion.html) |

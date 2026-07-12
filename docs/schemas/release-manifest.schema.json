@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-studio.local/schemas/release-manifest.schema.json",
+  "title": "Agent Studio release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "appTag", "appVersion", "commit", "dirty", "builtAt", "codingAgentRunner", "codingAgentChat"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "appTag": { "type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
+    "appVersion": { "type": "string" },
+    "commit": { "type": "string", "minLength": 7 },
+    "dirty": { "type": "boolean" },
+    "builtAt": { "type": "string", "format": "date-time" },
+    "codingAgentRunner": { "$ref": "#/$defs/artifact" },
+    "codingAgentChat": { "$ref": "#/$defs/artifact" }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "integrity", "source"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "tag": { "type": ["string", "null"] },
+        "commit": { "type": ["string", "null"] },
+        "integrity": { "type": "string", "pattern": "^sha(256|384|512)-" },
+        "source": { "type": "string" }
+      }
+    }
+  }
+}

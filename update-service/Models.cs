@@ -39,7 +39,14 @@ public sealed record UpdateStatus(
     BranchVersion? DevelopVersion = null
 );
 
-public sealed record RuntimeVersion(string Version, string Commit, DateTime DeployedAt);
+public sealed record RuntimeVersion(
+    string Version,
+    string Commit,
+    DateTime? DeployedAt,
+    string? Tag = null,
+    bool? Dirty = null,
+    ReleaseManifest? Manifest = null,
+    string? IdentitySource = null);
 public sealed record BranchVersion(string Branch, string Commit, DateTime? CommitAt, int AheadBy, int BehindBy);
 
 public sealed record CommitInfo(string Sha, string Subject, string Author, DateTime AuthorDate);
@@ -62,7 +69,10 @@ public sealed record UpdateHistoryEntry(
     string Trigger,                  // "manual" | "scheduled" | "api"
     IReadOnlyList<VerificationFailure>? VerificationFailures = null,
     string? RollbackStatus = null,   // "ok" | "failed" | null (no rollback ran)
-    string? RunFolder = null
+    string? RunFolder = null,
+    string? ReleaseTag = null,
+    string? ReleaseCommit = null,
+    string? ManifestIntegrity = null
 );
 
 public sealed record TriggerRequest(string? Reason, bool Force);

@@ -3,6 +3,7 @@
 namespace AgentStudio.Host;
 
 using System.Reflection;
+using System.Text.Json;
 
 /// <summary>
 /// Cross-cutting routes that don't fit any of the resource-scoped
@@ -34,30 +35,54 @@ public static class SystemEndpoints
             return Results.Ok(new { isDev, devTools });
         });
 
-        // Runtime identity is taken from the loaded backend assembly, not from
-        // the checkout on disk. This remains truthful when main has advanced or
-        // files were pulled without restarting the running process.
-        app.MapGet("/api/system/version", () =>
+        // Runtime identity is loaded from the manifest copied beside the running
+        // assembly. Never inspect checkout timestamps: those describe files on
+        // disk, not the process that is serving this request.
+        object RuntimeIdentity()
         {
             var assembly = typeof(SystemEndpoints).Assembly;
             var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-            var deployedAt = File.GetLastWriteTimeUtc(assembly.Location);
             var configuredSha = Environment.GetEnvironmentVariable("ATP_DEPLOY_SHA");
-            var configuredAt = Environment.GetEnvironmentVariable("ATP_DEPLOYED_AT");
-            var sourceSha = !string.IsNullOrWhiteSpace(configuredSha)
-                ? configuredSha
-                : informational?.Split('+', 2).ElementAtOrDefault(1)?.Split('.', 2)[0] ?? "unknown";
-            var builtAt = DateTime.TryParse(configuredAt, out var parsedAt)
-                ? parsedAt.ToUniversalTime()
-                : deployedAt;
-            return Results.Ok(new
+            var manifestPath = Environment.GetEnvironmentVariable("AGENT_STUDIO_RELEASE_MANIFEST")
+                ?? Path.Combine(AppContext.BaseDirectory, "release-manifest.json");
+            if (File.Exists(manifestPath))
             {
-                version = $"{builtAt:yyyy.MM.dd-HHmm}+{sourceSha[..Math.Min(8, sourceSha.Length)]}",
+                using var doc = JsonDocument.Parse(File.ReadAllText(manifestPath));
+                var root = doc.RootElement;
+                return new
+                {
+                    version = root.GetProperty("appVersion").GetString(),
+                    tag = root.GetProperty("appTag").GetString(),
+                    commit = root.GetProperty("commit").GetString(),
+                    dirty = root.GetProperty("dirty").GetBoolean(),
+                    deployedAt = root.GetProperty("builtAt").GetDateTime(),
+                    informationalVersion = informational,
+                    manifest = root.Clone(),
+                    identitySource = "release-manifest"
+                };
+            }
+
+            // One-release migration surface for installations made before the
+            // manifest contract. It is visibly untagged and never presented as
+            // fresh or compared using a file timestamp.
+            var sourceSha = configuredSha
+                ?? informational?.Split('+', 2).ElementAtOrDefault(1)?.Split('.', 2)[0]
+                ?? "unknown";
+            return new
+            {
+                version = "untagged",
+                tag = (string?)null,
                 commit = sourceSha,
-                deployedAt = builtAt,
-                informationalVersion = informational
-            });
-        });
+                dirty = (bool?)null,
+                deployedAt = (DateTime?)null,
+                informationalVersion = informational,
+                manifest = (object?)null,
+                identitySource = "legacy-untagged"
+            };
+        }
+
+        app.MapGet("/api/system/version", () => Results.Ok(RuntimeIdentity()));
+        app.MapGet("/api/system/about", () => Results.Ok(RuntimeIdentity()));
 
         // Lists the centrally-managed agent-rule files that are appended as a
         // system-prompt overlay to every Claude job. Used by the Job Detail

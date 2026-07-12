@@ -22,6 +22,7 @@ export class UpdateVersionBadgeComponent {
   readonly productVersion = this.client.productVersion;
   readonly headLocal = this.client.headLocal;
   readonly behindBy = this.client.behindBy;
+  readonly releaseTag = computed(() => this.client.status()?.runningVersion?.tag ?? null);
 
   readonly tooltip = computed(() => {
     const n = this.behindBy();
