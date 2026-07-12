@@ -249,10 +249,29 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
     //    (round 1 used a 3px severity stripe here — the operator hard-rule bans it).
     const borders = await panel.evaluate((el) => {
       const s = getComputedStyle(el);
-      return { left: s.borderLeftWidth, top: s.borderTopWidth };
+      return {
+        left: s.borderLeftWidth,
+        right: s.borderRightWidth,
+        top: s.borderTopWidth,
+        bottom: s.borderBottomWidth,
+      };
     });
-    expect(borders.left).toBe(borders.top);
-    expect(borders.left).toBe('1px');
+    expect(borders.left).toBe('0px');
+    expect(borders.right).toBe('0px');
+    expect(borders.top).toBe('1px');
+    expect(borders.bottom).toBe(borders.top);
+
+    const geometry = await panel.evaluate((el) => {
+      const panelRect = el.getBoundingClientRect();
+      const workspaceRect = el.closest('.workspace__main--studio')?.getBoundingClientRect();
+      return workspaceRect ? {
+        leftDelta: Math.abs(panelRect.left - workspaceRect.left),
+        rightDelta: Math.abs(panelRect.right - workspaceRect.right),
+      } : null;
+    });
+    expect(geometry).not.toBeNull();
+    expect(geometry!.leftDelta).toBeLessThanOrEqual(1);
+    expect(geometry!.rightDelta).toBeLessThanOrEqual(1);
 
     await dismissAppErrorDialog(page);
     const afterShots = await shootBothThemes(page, testInfo, 'escalation-collapsed');

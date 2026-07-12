@@ -6,15 +6,22 @@
   display: flex;
   flex-direction: column;
   gap: var(--studio-spacing-3);
-  padding: var(--studio-spacing-4);
-  // No left accent line (operator hard-rule): the panel reads as escalation
-  // through its tinted all-round border + background wash, not a side stripe.
-  border: 1px solid color-mix(in srgb, var(--severity-high) 45%, var(--studio-border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--severity-high) 6%, var(--studio-bg-raised, var(--studio-bg)));
+  padding: var(--studio-spacing-3) var(--studio-spacing-4);
+  // Workspace-level decision strip, not another inset card. The open inline
+  // edges let it flow into the editor chrome without introducing a status rail.
+  border-block: 1px solid color-mix(in srgb, var(--severity-high) 52%, var(--studio-border));
+  border-inline: 0;
+  border-radius: 0;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--severity-high) 10%, var(--studio-bg-raised, var(--studio-bg))) 0%,
+    color-mix(in srgb, var(--severity-high) 4%, var(--studio-bg-raised, var(--studio-bg))) 48%,
+    var(--studio-bg-raised, var(--studio-bg)) 100%
+  );
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--severity-high) 8%, transparent);
 
   // Collapsed: just the header strip, tightened up so it stops dominating.
-  &--collapsed { padding: var(--studio-spacing-3); }
+  &--collapsed { padding-block: var(--studio-spacing-2); }
 
   // DtC step 6 — a GaveUpToHuman escalation (infra crash / inconclusive / quota /
   // …) wears a distinct amber "system fault" wash instead of the red
@@ -22,8 +29,14 @@
   // at a glance. R1: the state is carried by the all-round tint, never a left
   // bar; R5: both themes read the same severity tokens.
   &--gave-up {
-    border-color: color-mix(in srgb, var(--severity-warn) 48%, var(--studio-border));
-    background: color-mix(in srgb, var(--severity-warn) 7%, var(--studio-bg-raised, var(--studio-bg)));
+    border-block-color: color-mix(in srgb, var(--severity-warn) 52%, var(--studio-border));
+    background: linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--severity-warn) 11%, var(--studio-bg-raised, var(--studio-bg))) 0%,
+      color-mix(in srgb, var(--severity-warn) 4%, var(--studio-bg-raised, var(--studio-bg))) 48%,
+      var(--studio-bg-raised, var(--studio-bg)) 100%
+    );
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--severity-warn) 8%, transparent);
 
     .escalation__eyebrow,
     .escalation__count { color: var(--severity-warn); }
@@ -43,6 +56,7 @@
     font: inherit;
     text-align: left;
     cursor: pointer;
+    border-radius: 6px;
 
     &:focus-visible {
       outline: 2px solid var(--studio-accent);
@@ -50,13 +64,24 @@
       border-radius: 6px;
     }
 
-    &:hover .escalation__chevron { color: var(--studio-fg); }
+    &:hover {
+      .escalation__chevron { color: var(--studio-fg); }
+      .escalation__title { color: var(--severity-high); }
+    }
   }
 
   &__eyebrow {
     flex: 0 0 auto;
-    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    font-size: 12px;
     color: var(--severity-high);
+    background: color-mix(in srgb, var(--severity-high) 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--severity-high) 28%, transparent);
   }
 
   &__headline {
@@ -73,6 +98,7 @@
     font-weight: 700;
     letter-spacing: 0.01em;
     color: var(--studio-fg-strong);
+    transition: color 0.15s ease;
   }
 
   // One-line essence carried by the header at all times (category · grade · merge).
@@ -411,5 +437,10 @@
   &__counts {
     font-size: 11px;
     color: var(--studio-fg-dim);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &__title,
+    &__chevron { transition-duration: 0s; }
   }
 }
