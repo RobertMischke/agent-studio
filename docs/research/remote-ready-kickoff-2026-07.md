@@ -3,6 +3,9 @@
 **Status.** **Committed — remote execution is a major goal** since 2026-07-07
 (**ADR-0059**, [adr-archive.md](../architecture/decisions/adr-archive.md)).
 This document is the plan of record and the working log for the theme.
+**Phase 0 and Phase 1 are complete (2026-07-07)** — see "Phase 1 findings"
+below; next up is Phase 2 (central URL + auth), gated on the security-overview
+rewrite and D1.
 It builds directly on the 2026-05 platform trilogy
 ([`wsl2-vs-windows-decision-2026-05.md`](./wsl2-vs-windows-decision-2026-05.md),
 [`cli-orchestration-survey-2026-05.md`](./cli-orchestration-survey-2026-05.md),
@@ -187,7 +190,7 @@ current `main`.
 
 ## 5. Phased plan
 
-**Phase 0 — SSH test environment (operator, in progress).**
+**Phase 0 — SSH test environment (operator). ✅ done 2026-07-07.**
 Provision a Linux host (decision 2026-07-07: **Ubuntu LTS**; hosting via
 Hetzner — cloud VM vs. Server-Börse dedicated box still open, see kickoff
 discussion). Needs: dotnet 10 SDK or runtime, node 22 + npm, git,
@@ -195,7 +198,8 @@ discussion). Needs: dotnet 10 SDK or runtime, node 22 + npm, git,
 Operator provides SSH access (key-auth, one sudo-capable user); agents can
 then script against it. No inbound ports beyond SSH until Phase 2 auth lands.
 
-**Phase 1 — prove the pieces on Linux (no architecture change).**
+**Phase 1 — prove the pieces on Linux (no architecture change). ✅ done
+2026-07-07 (carry-overs listed in the findings section).**
 1. CI: add a `dotnet build + test` job on `ubuntu-latest` (cheapest first
    step; also fulfils the promise from the WSL2 doc that was never built).
 2. On the SSH host: run backend + one project end-to-end locally (Linux-only
@@ -263,6 +267,68 @@ git clone <repo> && cd agent-taskboard
 Open items to test explicitly on first contact: Porta.Pty on the distro,
 orphan containment (`setsid`/process groups), `~/.claude/projects/<encoded-cwd>`
 heartbeat path encoding on Linux paths, and Playwright headless deps.
+
+---
+
+## Phase 1 findings (2026-07-07)
+
+**Verdict: Phase 1 complete — every piece proven on Linux, including a full
+end-to-end task run through the real runner.** Host: the Phase-0 Hetzner box
+(Ubuntu 24.04); reproducible setup + headless-auth runbook:
+[`linux-runner-host.md`](../operations/setup/linux-runner-host.md).
+
+| Piece | Result |
+|---|---|
+| claude headless (D5 seeding) | ✅ `claude -p` → `RUNNER-OK` (2.1.202). Seeding `~/.claude/.credentials.json` + minimal `~/.claude.json` works exactly as D5 sketched — **no interactive OAuth needed** |
+| codex headless | ✅ `codex exec` → `CODEX-OK` (0.142.5), seeded `~/.codex/auth.json` |
+| Playwright | ✅ headless chromium screenshot |
+| repo access | ✅ public repo, plain https clone (canonical URL is now `agent-studio.git` after the rename) |
+| `dotnet build` (sln) | ✅ 0 errors on `10.0.301` |
+| `dotnet test` | ⚠️ **3295/3337 passed (99.3%), 23 failed, 19 skipped** — clusters below |
+| CI | ✅ `backend-ci.yml` on `ubuntu-latest` added (`e4a7bcbf`), green; test step is `continue-on-error` until the suite is Linux-green |
+| backend boot | ✅ `dotnet run` with a Linux `appsettings.Local.json` + `seed-demo-workspace.mjs --root`; registry bootstrap (ADR-0042) seeded `PROJ-001..003` with Unix paths |
+| **Porta.Pty** | ✅ **quota probe end-to-end on Ubuntu 24.04**: PTY spawn, wizard-gate walk, `/usage` parse → plan *Max* + both windows. The 2026-07 probe hardening carries over unchanged |
+| **E2E task run** | ✅ task created via `POST /api/tasks` + `POST …/start` → runner spawned claude (pid observed), **worktree flow (ADR-0057) worked on Linux** (`/tmp/ass-worktrees/...`, `task/<id>` branch), file artifact produced, lane transitioned `2-ready → 3-progress → 4-auto-review` |
+
+### Test-failure clusters (23)
+
+1. **UpdateServiceIntegrationTests (8)** — same-disk Windows update machinery
+   (ADR-0021/0031); expected, D6 replaces it with systemd on Linux.
+2. **`Analyze_AgainstLiveDevCheckout_*` + CodePatternRuleLoader + SteeringDocs
+   (5)** — machine-bound: expect the live dev checkout / docs tree of the
+   operator machine.
+3. **MergeEndpointsIntegrationTests (3)**, **ProjectRepoResolutionTests (3)**
+   — likely path-separator/derivation assumptions; *these matter for the
+   runner* and need real fixes.
+4. Singles: `TaskFolderAccessIsolationTest`, `FilesystemLayerSnapshotService`,
+   `WorktreeTaskLifecycle` (fs semantics), `ClaudeEventAdapter.RateLimitEvent`
+   (needs a look — pure unit test, shouldn't be OS-bound).
+
+### Gotchas learned (feed into Phase 2/3 design)
+
+- **`watchPath` for in-repo layout is `<RootPath>/.orchestrator/jobs`**, not
+  the RootPath, on create/start API calls — exactly the addressing confusion
+  D1 (`PROJ-NNN`) is meant to kill.
+- **Worktree base branch must exist**: `git worktree add` failed with
+  `invalid reference: develop` on a repo without a `develop` branch; the
+  runner correctly *refused* the run ("refusing shared main checkout").
+  Follow-up: make the base branch configurable or fall back to the default
+  branch.
+- **Process containment confirmed as real**: `nohup … &` over ssh died on
+  session teardown; `setsid` was required. Reinforces the Phase-1 risk item —
+  the Linux runner needs process-group reaping + a systemd unit (D6).
+- `DOTNET_ROOT=/usr/lib/dotnet` must be exported in non-login shells.
+- Credential seeding shares the refresh token with the operator machine —
+  rotation/drift risk documented in the runbook §3; durable per-host answer
+  is part of D5's rotation decision (before Phase 3).
+
+### Carry-over into Phase 1.x (before Phase 2 starts)
+
+1. Classify + fix the 23 Linux test failures (machine-bound → tag/skip with
+   reason; real bugs → fix); then drop `continue-on-error` in `backend-ci.yml`.
+2. Worktree base-branch fallback (above).
+3. `~/.claude/projects/<encoded-cwd>` heartbeat encoding on Linux was not
+   explicitly inspected — verify during the next runner-host session.
 
 ---
 

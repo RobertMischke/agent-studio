@@ -122,3 +122,16 @@ bar above stays unchanged; the LLM grade *supplements* it. See
   the view; the wiki section opens on it when no page is selected.
 - Tests: `backend.Tests/WikiPulseTests.cs` (real temp git repo),
   `wiki-pulse.component.spec.ts`, and the wiki-section spec.
+
+## v1.1 (operator, 2026-07-10): LLM-graded page reports on top
+
+Every page gets a machine-written assessment report ("Meter-Dokument":
+grade + short feedback) stored in its `.meta.json` sidecar. A **global
+trigger on this dashboard** runs the grading over all pages with an
+operator-chosen, relatively strong model (picked at trigger time; default
+from a new workspace "maintenance model" setting - deliberately NOT the
+project pipeline models). Critically graded pages surface in the
+Warnings/Drift tiles next to the deterministic heuristic. Implementation:
+AGT-2051 (run + reports + tile), AGT-2052 (meta panel expand/collapse UX,
+merged), AGT-2053 (bidirectional wiki-task cross-references in JSON
+metadata, tolerant of deletions - dangling refs render as "existed once").
