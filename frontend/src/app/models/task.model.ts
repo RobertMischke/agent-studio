@@ -485,6 +485,12 @@ export interface ClientSummary {
   runnerGitStatus?: 'ready' | 'read-only' | null;
   runnerGitDetail?: string | null;
   runnerGitCheckedAt?: string | null;
+  drainRequestedAt?: string | null;
+  retireRequestedAt?: string | null;
+  runnerDaemonState?: 'running' | 'read-only' | 'stopped' | null;
+  runnerLastClaimAt?: string | null;
+  runnerActiveSlots?: number | null;
+  runnerAvailableSlots?: number | null;
 }
 
 /**

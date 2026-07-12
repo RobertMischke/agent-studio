@@ -20,9 +20,10 @@ upload).
 A single self-contained .NET console process (`agent-runner`) that runs on a
 Linux host and fills a bounded set of task slots without owning task state:
 
-- **Code arrives via git `origin`** - the runner fetches and checks out a branch
-  read-only. It never pushes; the platform still owns git integration on the
-  server side (ADR-0019/0050/0057).
+- **Code arrives and leaves via git `origin`** - the runner fetches over the
+  credential-free URL and pushes with a write-enabled deploy key dedicated to
+  this host and repository. The daemon proves that push identity at startup;
+  a failed probe leaves the host read-only and blocks new claims.
 - **Results leave via the API** - CLI output goes to `POST /api/runner/logs`,
   evidence files under `results/` go to `POST /api/runner/artifacts`, and the
   terminal sentinel is handed off with fenced `POST /api/runner/completion`.
@@ -45,10 +46,9 @@ Linux host and fills a bounded set of task slots without owning task state:
 
 ### MVP boundaries (read before relying on it)
 
-- **No code integration from the remote run.** The runner uploads evidence and a
-  summary, not a git diff. A run that produces committable code changes still
-  needs the platform's own commit/push path; that cutover is later remote-ready
-  work, not this MVP.
+- **Push capability is explicit.** Each host/repository assignment has its own
+  deploy key and push URL. The platform still owns integration policy, while
+  the remote runner may publish its task branch through that bounded identity.
 - **Suitability is explicit and narrow.** `remoteExecutionEnabled` defaults to
   true at project level. Set it false only for machine-bound work such as the
   UpdateService Windows machinery or live-checkout drift scans. Headless

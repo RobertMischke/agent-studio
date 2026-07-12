@@ -55,16 +55,55 @@ public static class ClientEndpoints
             return Results.Ok(detail);
         });
 
+        // Compatibility route: DELETE used to flip kind immediately. Keep the
+        // route for older callers, but give it the same graceful semantics as
+        // the explicit retire action. Permanent deletion is deliberately only
+        // available through DELETE /{id}/permanent after retirement.
         clients.MapDelete("/{id}", (string id, ClientIdentityStore store) =>
         {
             if (string.Equals(id, DefaultClientIdentity.Id, StringComparison.OrdinalIgnoreCase))
             {
                 return Results.BadRequest(new { error = "default-identity-cannot-be-retired" });
             }
-            var changed = store.SoftDelete(id);
-            return changed
-                ? Results.Ok(new { id, kind = ClientIdentityKinds.Retired })
-                : Results.NotFound(new { error = "client-not-found" });
+            var updated = store.RequestDrain(id, retireAfterDrain: true);
+            return updated is not null
+                ? Results.Ok(ClientSummary.From(updated))
+                : Results.NotFound(new { error = "client-not-found-or-retired" });
+        });
+
+        clients.MapPost("/{id}/drain", (string id, ClientIdentityStore store) =>
+        {
+            var updated = store.RequestDrain(id, retireAfterDrain: false);
+            return updated is null
+                ? Results.NotFound(new { error = "client-not-found-or-retired" })
+                : Results.Ok(ClientSummary.From(updated));
+        });
+
+        clients.MapPost("/{id}/retire", (string id, ClientIdentityStore store) =>
+        {
+            if (string.Equals(id, DefaultClientIdentity.Id, StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = "default-identity-cannot-be-retired" });
+            var updated = store.RequestDrain(id, retireAfterDrain: true);
+            return updated is null
+                ? Results.NotFound(new { error = "client-not-found-or-retired" })
+                : Results.Ok(ClientSummary.From(updated));
+        });
+
+        clients.MapPost("/{id}/revive", (string id, ClientIdentityStore store) =>
+        {
+            var updated = store.Revive(id);
+            return updated is null
+                ? Results.NotFound(new { error = "client-not-found-or-not-retired" })
+                : Results.Ok(ClientSummary.From(updated));
+        });
+
+        clients.MapDelete("/{id}/permanent", (string id, ClientIdentityStore store) =>
+        {
+            if (string.Equals(id, DefaultClientIdentity.Id, StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = "default-identity-cannot-be-deleted" });
+            return store.PermanentlyDelete(id)
+                ? Results.NoContent()
+                : Results.BadRequest(new { error = "client-must-be-retired-before-delete" });
         });
 
         clients.MapGet("/{id}/telemetry", (string id, string? window, ClientIdentityStore identities, HostTelemetryStore telemetry) =>

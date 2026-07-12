@@ -64,8 +64,8 @@ describe('RemoteHostCardComponent', () => {
       gitPushStatus: 'read-only',
       gitPushDetail: 'push-dry-run failed (128): permission denied',
     }).nativeElement;
-    const badge = el.querySelector('[data-testid="remote-host-git-read-only"]');
-    expect(badge?.textContent).toContain('Read-only');
+    const badge = el.querySelector('[data-testid="remote-host-git-status"]');
+    expect(badge?.textContent).toContain('Writable: no');
     expect(badge?.getAttribute('title')).toContain('permission denied');
   });
 
@@ -96,6 +96,13 @@ describe('RemoteHostCardComponent', () => {
     const el: HTMLElement = mount({ ...HOST, status: 'retired', stats: null }).nativeElement;
     expect(el.querySelector('[data-testid="remote-host-no-stats"]')).toBeTruthy();
     expect(el.querySelectorAll('.meter').length).toBe(0);
+  });
+
+  it('hides stale metrics instead of presenting the last CPU value as live', () => {
+    const el: HTMLElement = mount({ ...HOST, lastHeartbeatAt: '2026-07-08T12:00:00Z' }).nativeElement;
+    expect(el.querySelector('[data-testid="remote-host-stale"]')?.textContent).toContain('last seen 2d ago');
+    expect(el.querySelectorAll('.meter').length).toBe(0);
+    expect(el.textContent).not.toContain('54%');
   });
 
   it('renders telemetry charts, slot context, findings, and switches windows', () => {

@@ -66,9 +66,21 @@ public static class LeaseEndpoints
             var clientId = context.Request.Headers["X-Client-Id"].ToString();
             if (req.Telemetry is not null && !string.IsNullOrWhiteSpace(clientId))
                 telemetry.Append(clientId, req.Telemetry);
+            int? activeSlots = req.Telemetry is null
+                ? null
+                : Math.Max(0, req.Telemetry.ActiveSlots);
+            var client = string.IsNullOrWhiteSpace(clientId)
+                ? null
+                : clients.RecordRunnerActivity(clientId, activeSlots, req.AvailableSlots, claimed: false);
+            if (client?.DrainRequestedAt is not null || client?.Kind == ClientIdentityKind.Retired)
+                return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty,
+                    Message: client.Kind == ClientIdentityKind.Retired
+                        ? "runner is retired"
+                        : client.RetireRequestedAt is not null
+                            ? "runner is draining and will retire after active work finishes"
+                            : "runner is draining; no new leases are admitted"));
             if (req.AvailableSlots <= 0)
                 return Results.Ok(new RunnerClaimResponse(RunnerClaimStatus.Empty, Message: "telemetry recorded; no free host slots"));
-            var client = clients.Find(clientId);
             if (client is not null && string.Equals(client.RunnerGitStatus, "read-only", StringComparison.OrdinalIgnoreCase))
             {
                 logger.LogWarning(
@@ -153,6 +165,12 @@ public static class LeaseEndpoints
                     "remote-runner-task-claimed project={Project} projectId={ProjectId} task={TaskKey} runner={Runner} lease={LeaseId} token={FencingToken} repositorySource={RepositorySource} defaultBranch={DefaultBranch}",
                     candidate.ProjectName, repository.ProjectId, taskKey, req.RunnerName, acquire.Lease.LeaseId,
                     acquire.Lease.FencingToken, repository.Source, repository.DefaultBranch);
+                if (!string.IsNullOrWhiteSpace(clientId))
+                    clients.RecordRunnerActivity(
+                        clientId,
+                        (activeSlots ?? client?.RunnerActiveSlots ?? 0) + 1,
+                        Math.Max(0, req.AvailableSlots - 1),
+                        claimed: true);
                 return Results.Ok(new RunnerClaimResponse(
                     RunnerClaimStatus.Claimed,
                     taskKey,

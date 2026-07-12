@@ -34,6 +34,20 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   readonly error = this.service.error;
   readonly wizardOpen = signal(false);
   readonly setupHost = signal<RemoteHost | null>(null);
+  readonly pendingConfirmation = signal<{ kind: 'retire' | 'delete'; host: RemoteHost } | null>(null);
+  readonly confirmationTitle = computed(() => {
+    const pending = this.pendingConfirmation();
+    if (!pending) return '';
+    return pending.kind === 'retire' ? `Retire ${pending.host.name}?` : `Delete ${pending.host.name} permanently?`;
+  });
+  readonly confirmationText = computed(() => {
+    const pending = this.pendingConfirmation();
+    if (!pending) return '';
+    if (pending.kind === 'delete') return 'This removes the already-retired identity file and cannot be undone. Historical task attribution may retain the old client id as plain text.';
+    const active = pending.host.activeTaskCount ?? 0;
+    const work = active > 0 ? `The ${active} running task(s) will finish first; then the client retires.` : 'With no running work, the client retires immediately.';
+    return `No new leases will be granted. ${work} It remains visible and can be revived.`;
+  });
   readonly workspaces = input<readonly VisibleCliTaskWorkspace[]>([]);
   readonly openTask = output<VisibleCliTaskCreated>();
 
@@ -42,9 +56,11 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   private tickHandle: ReturnType<typeof setInterval> | null = null;
 
   /** Header tallies - each reconciles to the visible cards (R3 sum invariant). */
-  readonly total = computed(() => this.hosts().length);
-  readonly onlineCount = computed(() => this.hosts().filter((h) => h.status === 'online').length);
-  readonly remoteCount = computed(() => this.hosts().filter((h) => h.role === 'remote').length);
+  readonly activeHosts = computed(() => this.hosts().filter(host => host.status !== 'retired'));
+  readonly retiredHosts = computed(() => this.hosts().filter(host => host.status === 'retired'));
+  readonly total = computed(() => this.activeHosts().length);
+  readonly onlineCount = computed(() => this.activeHosts().filter((h) => h.status === 'online').length);
+  readonly remoteCount = computed(() => this.activeHosts().filter((h) => h.role === 'remote').length);
 
   ngOnInit(): void {
     this.service.ensureLoaded();
@@ -73,10 +89,26 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   }
 
   onAction(evt: { kind: HostActionKind; id: string }): void {
+    const host = this.hosts().find(item => item.id === evt.id);
+    if (!host) return;
+    if (evt.kind === 'retire' || evt.kind === 'delete') {
+      this.pendingConfirmation.set({ kind: evt.kind, host });
+      return;
+    }
     switch (evt.kind) {
       case 'reprobe': this.service.reprobe(evt.id); break;
       case 'drain': this.service.drain(evt.id); break;
-      case 'retire': this.service.retire(evt.id); break;
+      case 'revive': this.service.revive(evt.id); break;
     }
+  }
+
+  cancelConfirmation(): void { this.pendingConfirmation.set(null); }
+
+  confirmLifecycleAction(): void {
+    const pending = this.pendingConfirmation();
+    if (!pending) return;
+    this.pendingConfirmation.set(null);
+    if (pending.kind === 'retire') this.service.retire(pending.host.id);
+    else this.service.permanentlyDelete(pending.host.id);
   }
 }
