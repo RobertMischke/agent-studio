@@ -15,6 +15,47 @@ namespace AgentStudio.Tests;
 /// </summary>
 public class JobCommitsAggregationTests
 {
+    [Fact]
+    public void HasPriorPostProcessingTransition_FirstRunProgressTask_ReturnsFalse()
+    {
+        var info = new TaskInfo
+        {
+            Id = "first-run",
+            State = TaskStates.Progress,
+            Provenance = new TaskProvenance
+            {
+                Transitions =
+                [
+                    new TaskProvenanceTransition { Lane = TaskStates.Progress },
+                ],
+            },
+        };
+
+        Assert.False(JobCommitsAggregation.HasPriorPostProcessingTransition(info));
+    }
+
+    [Fact]
+    public void HasPriorPostProcessingTransition_ReissuedTask_ReturnsTrue()
+    {
+        var info = new TaskInfo
+        {
+            Id = "reissued",
+            State = TaskStates.Progress,
+            Provenance = new TaskProvenance
+            {
+                Transitions =
+                [
+                    new TaskProvenanceTransition { Lane = TaskStates.Progress },
+                    new TaskProvenanceTransition { Lane = TaskStates.AutoReview },
+                    new TaskProvenanceTransition { Lane = TaskStates.Ready },
+                    new TaskProvenanceTransition { Lane = TaskStates.Progress },
+                ],
+            },
+        };
+
+        Assert.True(JobCommitsAggregation.HasPriorPostProcessingTransition(info));
+    }
+
     private static TaskCommitsAggregate Agg(params TaskCommitRecord[] commits)
         => new() { Count = commits.Length, Commits = commits.ToList() };
 

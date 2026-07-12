@@ -97,6 +97,12 @@ public static class JobCommitsAggregation
         var info = detail.Info;
         if (!string.Equals(info.State, TaskStates.Progress, StringComparison.OrdinalIgnoreCase)) return detail;
         if (info.Commits.Count > 1) return detail;
+        // A first-run task cannot have an integrated worktree commit to
+        // reconstruct. Avoid a synchronous `git log --all` on the detail-read
+        // path until provenance proves that an earlier run reached post
+        // processing. Large repositories otherwise make a fresh task appear
+        // to fail loading for several seconds (AGT-2157).
+        if (!HasPriorPostProcessingTransition(info)) return detail;
 
         try
         {
@@ -109,4 +115,8 @@ public static class JobCommitsAggregation
             return detail;
         }
     }
+
+    internal static bool HasPriorPostProcessingTransition(TaskInfo info)
+        => info.Provenance?.Transitions.Any(transition =>
+            string.Equals(transition.Lane, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase)) == true;
 }
