@@ -133,12 +133,6 @@ Attribution is split deliberately: the **caller** (`X-Client-Id`) is the operato
 who *relayed* the result and drives the `lane_changed` ledger row; the completion
 **source** (who actually *did* the work) is the `source` field on the body.
 
-There is one identity-based boundary. A caller whose registered client identity
-has kind `service` is a remote runner completion, independent of the free-form
-`source` value. It is routed through `3-progress -> 4-auto-review`, which starts
-the regular aspect reviews, code-review grade, and completion gate. Human and
-operator-chat identities retain the lightweight out-of-band behavior below.
-
 **What it does, in order** (`ExternalCompletionService.CompleteAsync`). Every
 write targets the task's *current* folder first; the lane move is last so all the
 evidence lands together before the folder is renamed:
@@ -157,7 +151,7 @@ evidence lands together before the folder is renamed:
 4. **`task.json` provenance** - `ExternalCompletionInfo { source, summary,
    completedAt }` is recorded on the card, mirrored to the frontend
    `TaskInfo.externalCompletion` and driving the badge (§4).
-5. **`lifecycle.json` terminalized** - for human/operator completions, the phase is set to `awaiting-review` and
+5. **`lifecycle.json` terminalized** - the phase is set to `awaiting-review` and
    every still-`running`/`pending` intake or post-processing check is flipped to
    `skipped` with a *"Superseded by out-of-band completion"* note, so the card
    stops spamming the `post-processing-running` scanner warning. The mirrored
@@ -167,8 +161,7 @@ evidence lands together before the folder is renamed:
    carry `source` and `targetState`. Appended *before* the move so it lands in
    the same folder as the rest of the evidence; the `lane_changed` row is emitted
    by the state machine.
-7. **Lane move** - `MoveAsync` to `targetState` (default `5-human-review`). A
-   registered service caller instead always moves to `4-auto-review`. A move
+7. **Lane move** - `MoveAsync` to `targetState` (default `5-human-review`). A move
    out of `3-progress` runs `EnterPostProcessingPhase`, which would otherwise
    reset `lifecycle.json` back to `post-processing-running` — the exact stuck
    state this endpoint exists to retire — so the terminal lifecycle is
