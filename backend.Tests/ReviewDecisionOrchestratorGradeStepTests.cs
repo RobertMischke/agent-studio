@@ -85,6 +85,8 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         var pipelineJson = File.ReadAllText(Path.Combine(folder, PipelineExecutionLog.FileName));
         Assert.Contains("\"stepId\": \"" + PipelineCatalogue.CodeReviewGradeStepId + "\"", pipelineJson);
         Assert.Contains("\"verdict\": \"B\"", pipelineJson);
+        var gradeStep = ReadPipelineStep(folder, PipelineCatalogue.CodeReviewGradeStepId);
+        Assert.Equal(PipelineStepModelDefaults.QualityThinkingLevel, gradeStep.ThinkingLevel);
 
         // 3. Exactly one code-review:grade-* tag is stamped on the real task.json.
         var tags = ReadTags(folder);

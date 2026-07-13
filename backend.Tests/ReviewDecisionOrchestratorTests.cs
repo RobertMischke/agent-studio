@@ -171,7 +171,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         SeedReviewJobWithNeedsInput("auth-rewrite", "use OAuth or magic-link?");
         var orchestrator = BuildOrchestrator(
             cliResponse: "[[ORCHESTRATOR_DECISION: action=escalate; reason=Needs strategic call.]]",
-            reviewCli: CliTypes.Gemini);
+            reviewCli: "custom-review-cli");
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
@@ -199,7 +199,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.Contains(outcomes, o =>
             o.Outcome == PostProcessingOutcomes.NeedsHumanInput &&
             o.Performer == PostProcessingPerformers.SupportingAgent &&
-            o.PerformerCliType == CliTypes.Gemini);
+            o.PerformerCliType == "custom-review-cli");
     }
 
     [Fact]

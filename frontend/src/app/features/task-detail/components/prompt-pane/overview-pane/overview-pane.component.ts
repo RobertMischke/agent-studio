@@ -672,10 +672,7 @@ export class OverviewPaneComponent {
     const override = this.thinkingLevelOverride();
     return override !== undefined ? override : (this.job().thinkingLevel ?? null);
   });
-
-  readonly agentConfigReadOnly = computed(() =>
-    this.job().state === TaskState.Completed || this.job().state === TaskState.Archive);
-
+  readonly agentConfigReadOnly = computed(() => this.job().state === TaskState.Completed || this.job().state === TaskState.Archive);
   /** Clear the optimistic override once the real `job().title` catches up
    *  to the saved value (parent re-fetched the detail after PUT). */
   private clearOptimisticOnSync = effect(() => {

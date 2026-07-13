@@ -746,7 +746,8 @@
             decision. Completing a pipeline turns known unreached rows into <code>Skipped</code> with the causal terminal reason
             and interrupted <code>Running</code> rows into <code>Failed</code>; a pure read projection repairs legacy attempts.
             Model-backed pipeline defaults use Codex, with the detected flagship reserved for quality grading and task spawning.
-            The actual AGT-2117 lane terminal remains <span class="lane">Escalated</span>, now with the skipped causes visible.
+            The affected AGT-2117 attempt keeps its recorded <span class="lane">Escalate</span> terminal decision, now with
+            the skipped causes visible even if the card is moved again later.
           </td>
         </tr>
       </tbody>

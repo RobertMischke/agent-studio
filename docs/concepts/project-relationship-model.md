@@ -1,19 +1,27 @@
 # Project Relationship Model And Branch-Aware Wiki
 
-> **Status:** discovery concept, 2026-07-11. This document prepares later
-> implementation slices. It does not describe shipped behavior unless a section
-> explicitly says so.
+> **Status:** historical repository-centric discovery concept, 2026-07-11.
+> This document does not describe shipped behavior. Its project/repository
+> cardinality is superseded; its branch-provenance and checkout-isolation work
+> remains useful.
 >
 > **Target clarification, 2026-07-13:**
 > [Distributed Agent Studio target architecture](distributed-agent-studio-target-architecture.md)
 > separates organizational component projects from repository bindings. The
 > strict `Project 1 represents 1 Git repository` rule below is no longer the
 > target for a monorepo containing Agent Studio, Task Server, and Agent Runner.
-> Branch-context and provenance rules remain applicable.
+> Every cardinality, API shape, invariant, acceptance criterion, or non-goal
+> below that depends on that rule is historical and must not guide new
+> implementation. Branch-context, provenance, and checkout-isolation rules
+> remain applicable.
 >
 > Visual companion: [relationship and Wiki checkout mockup](mockups/project-relationship-model.html).
 
-## Decision summary
+## Historical decision summary
+
+The following relationship spine records the superseded repository-centric
+baseline. It is preserved to explain the branch-aware Wiki design, not as the
+current project model.
 
 The product has one durable relationship spine:
 
@@ -35,7 +43,7 @@ surface uses the same **Branch Context Control**, so a person can answer "which
 branch supplies these data?" without learning a different badge language for
 Wiki, Prompts, Tasks, URLs, and Project Hub.
 
-## 1. Canonical entities and invariants
+## 1. Historical entities and invariants
 
 | Entity | Cardinality and ownership | Durable responsibility |
 |---|---|---|
@@ -47,10 +55,11 @@ Wiki, Prompts, Tasks, URLs, and Project Hub.
 | Task | Application-owned record for one project. | Planning and execution state, with an explicit base/content branch and, when running, a task branch/worktree. |
 | Project URL | Ordered project configuration entry. | URL plus the branch whose build or deployment it represents. |
 
-Hard invariants:
+Historical invariants:
 
-1. A project cannot aggregate several repositories. A multi-repository product
-   is represented by several related projects in a workspace.
+1. **Superseded:** a project cannot aggregate several repositories. The target
+   instead separates component-project identity from explicit repository
+   bindings.
 2. Moving a project between workspaces does not change its repository identity.
 3. A checkout path is replaceable infrastructure. It must never become the
    stable identity of a project or repository.
@@ -275,8 +284,9 @@ recent history. The relationship redesign extends rather than duplicates it:
 
 ## 7. API and persistence direction
 
-The exact wire shape is an implementation decision, but the domain boundary
-should converge on these concepts:
+The singular repository fields below are the historical discovery shape. New
+work must model them as one or more `RepositoryBinding` records as defined by
+the distributed target. The remaining branch-context envelope still applies.
 
 ```text
 ProjectRecord
@@ -321,9 +331,11 @@ control contract. The cards may sequence that foundation between them during
 implementation; it is not a fourth follow-up deliverable from this discovery
 slice.
 
-## 9. Acceptance criteria for later implementation
+## 9. Historical acceptance criteria for later implementation
 
-- A project cannot be configured with two canonical repositories.
+- **Superseded:** a project cannot be configured with two canonical
+  repositories. The current target tests explicit repository bindings and an
+  unambiguous primary binding per simple run plan instead.
 - Wiki reads `develop` while Agent Studio runs from `stable`, without touching
   the running checkout.
 - Wiki, Prompts, Tasks, URLs, and Project Hub render the same Branch Context
@@ -341,7 +353,9 @@ slice.
 
 - Implementing the checkout, refresh scheduler, or UI in this discovery slice.
 - Treating a workspace as a Git repository or monorepo coordinator.
-- Aggregating multiple repositories into one project.
+- **Superseded:** aggregating multiple repositories into one project. The
+  current target permits explicit bindings and forbids only implicit aggregation
+  without a declared run plan.
 - Making the running branch the implicit source of truth.
 - Auto-switching the project working branch when a person browses another Wiki
   branch.

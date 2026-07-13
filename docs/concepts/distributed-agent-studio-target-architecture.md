@@ -360,37 +360,50 @@ wait for a repository split.
 The target needs a topology harness, not only unit tests. It starts each runtime
 as a separate process with separate configuration and data directories.
 
+The required test program is distributed across the delivery tasks. Owner tags
+below identify the task that must supply the scenario and evidence. AGT-2196
+owns the cross-process harness and composes the runtime scenarios; it does not
+absorb the management-console or project-model implementations.
+
 Required scenarios:
 
-1. **Client-off golden path:** start a real task, stop Agent Studio and its BFF,
-   observe Runner and Task Server complete the lifecycle, then reconnect and
-   replay the full history.
-2. **Task Server process independence:** restart Studio repeatedly without a
-   Task Server restart. Restart Task Server without accidentally parenting or
-   killing Runner processes.
-3. **Runner disconnect:** interrupt transport, prove no new claim, bounded
-   spool, renewal safety stop, reconnect, and idempotent replay.
-4. **Durable fencing:** restart Task Server during an active attempt and prove
-   no second Runner overlaps and stale completion cannot win.
-5. **Runner crash:** kill the Runner service and its host process group, verify
-   honest `process-unknown`, containment proof, and safe recovery.
-6. **Authentication:** unauthenticated reads and mutations fail; viewer cannot
-   mutate; revoked Runner cannot renew; password/session and CSRF behavior pass.
-7. **TLS deployment:** Studio and Runner connect through the real HTTPS origin,
-   including event-stream upgrade and certificate renewal rehearsal.
-8. **Management recovery:** bootstrap, backup, restore verification, drain,
-   maintenance mode, and credential rotation work without filesystem edits.
-9. **Compatibility:** supported mixed versions work; unsupported protocol
-   versions fail before a task is claimed.
-10. **Project scope:** workspace aggregate and three component boards show the
-    same cards without duplication; cross-project initiative and dependency
-    links resolve.
+1. **Client-off golden path (AGT-2196):** start a real task, stop Agent Studio
+   and its BFF, observe Runner and Task Server complete the lifecycle, then
+   reconnect and replay the full history.
+2. **Task Server process independence (AGT-2192, AGT-2196):** restart Studio
+   repeatedly without a Task Server restart. Restart Task Server without
+   accidentally parenting or killing Runner processes.
+3. **Runner disconnect (AGT-2183, AGT-2196):** interrupt transport, prove no new
+   claim, bounded spool, renewal safety stop, reconnect, and idempotent replay.
+4. **Durable fencing (AGT-2182, AGT-2196):** restart Task Server during an active
+   attempt and prove no second Runner overlaps and stale completion cannot win.
+5. **Runner crash (AGT-2182, AGT-2185, AGT-2196):** kill the Runner service and
+   its host process group, verify honest `process-unknown`, containment proof,
+   and safe recovery.
+6. **Authentication (AGT-2193, AGT-2196):** unauthenticated reads and mutations
+   fail; viewer cannot mutate; revoked Runner cannot renew; password/session
+   and CSRF behavior pass.
+7. **TLS deployment (AGT-2193, AGT-2196):** Studio and Runner connect through
+   the real HTTPS origin, including event-stream upgrade and certificate
+   renewal rehearsal.
+8. **Management recovery (AGT-2194):** bootstrap, backup, restore verification,
+   drain, maintenance mode, and credential rotation work without filesystem
+   edits.
+9. **Compatibility (AGT-2192, AGT-2170, AGT-2196):** supported mixed versions
+   work; unsupported protocol versions fail before a task is claimed.
+10. **Project scope (AGT-2195):** workspace aggregate and three component boards
+    show the same cards without duplication; cross-project initiative and
+    dependency links resolve.
 
 ## 12. Delivery map
 
 This table is the human-readable synchronization point. Every new task created
 from this target must link this page in its prompt. This page links the stable
 task key back. Task status remains authoritative on the board.
+
+Until the workspace/component model exists, all delivery slices stay in the
+current Agent Studio project and AGT-2129 epic. AGT-2195 owns the migration and
+key-alias decision. Do not duplicate or renumber these tasks in the meantime.
 
 | Area | Existing or planned task | Relationship to target |
 |---|---|---|
