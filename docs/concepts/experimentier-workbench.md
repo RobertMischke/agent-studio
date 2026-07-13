@@ -100,6 +100,12 @@ failure remains `decision-pending` and can be reconciled by operation id.
 Invalid descriptors remain visible as an Explorer error row with their path and
 validation problem; they are never silently omitted.
 
+Catalogue reads are containment-checked against the physical repository path.
+Any symbolic-link or reparse-point component below that root is rejected, so a
+descriptor, entrypoint, or Workbench folder cannot redirect discovery outside
+the checkout. HTML is capped at 20 MiB before it is read; oversized entries are
+reported as invalid rather than loaded into the API or browser.
+
 There is no `docs/workbenches/registry.json`. The physical folders are the
 organization model, consistent with the
 [Wiki tree contract](../contracts/wiki-tree.md). The descriptor adds properties
@@ -170,6 +176,9 @@ Selecting an item opens a Workbench tab and preserves project, path, viewed
 branch, and revision in the header. This uses the shared Branch Context Control
 from the [project relationship model](project-relationship-model.md). The list
 and viewer must never imply that content from one branch represents another.
+When the descriptor or entrypoint has uncommitted working-tree changes, the
+viewer says so explicitly and withholds the HEAD revision instead of attaching
+that SHA to bytes HEAD does not contain.
 
 Because the files remain below `docs/`, they also stay visible in the physical
 Wiki tree and Git/Pulse history. The ordinary Wiki view renders the entrypoint
@@ -192,13 +201,15 @@ The Workbench view is host chrome around isolated content:
 ```
 
 Ordinary Wiki, Git-pane preview, and Files-tab HTML all use the same baseline
-viewer policy: `srcdoc` with `sandbox="allow-scripts"`. Scripts can power
+viewer policy: `srcdoc` with `sandbox="allow-scripts"`. Before assignment, the
+host parses the source in an inert document and moves it into a fixed wrapper
+whose CSP and `about:blank` base precede every artifact node; artifact CSP,
+refresh, and base elements cannot move ahead of that boundary. Scripts can power
 self-contained interactions, while the deliberate omission of
 `allow-same-origin` gives the document an opaque origin and prevents it from
 inheriting Studio's origin or directly reading Studio cookies, storage, and DOM.
-Network requests remain subject to normal browser and CORS policy. The ordinary
-viewer does not promise same-origin integration or network-backed application
-behavior.
+The Workbench CSP denies network requests. The ordinary viewer does not promise
+same-origin integration or network-backed application behavior.
 
 The Workbench remains the distinct viewer for artifacts that need more than
 that baseline, including controlled network-backed previews or a future

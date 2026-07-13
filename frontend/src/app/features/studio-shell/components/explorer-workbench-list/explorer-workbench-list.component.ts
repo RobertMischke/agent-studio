@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import type { WorkbenchCatalogue, WorkbenchListItem } from '../../../../models/project-docs.model';
@@ -21,6 +21,8 @@ export class ExplorerWorkbenchListComponent {
   readonly catalogue = signal<WorkbenchCatalogue | null>(null);
   readonly historyCatalogue = signal<WorkbenchCatalogue | null>(null);
   readonly historyOpen = signal(false);
+  readonly settledHistory = computed(() => (this.historyCatalogue()?.items ?? [])
+    .filter(item => item.status === 'decided' || item.status === 'archived'));
 
   toggle(): void {
     this.expanded.update(value => !value);
@@ -40,10 +42,6 @@ export class ExplorerWorkbenchListComponent {
       next: value => { this.historyCatalogue.set(value); this.loading.set(false); },
       error: () => this.loading.set(false),
     });
-  }
-
-  isSettled(item: WorkbenchListItem): boolean {
-    return item.status === 'decided' || item.status === 'archived';
   }
 
   meta(item: WorkbenchListItem): string {

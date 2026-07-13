@@ -19,13 +19,17 @@
       <span>{{ projectName() }}</span><span aria-hidden="true">·</span>
       <code>{{ doc.workbench.entryPath }}</code><span aria-hidden="true">·</span>
       <span>{{ doc.branch || 'branch unavailable' }}</span>
-      @if (doc.revision) { <code>{{ doc.revision.slice(0, 8) }}</code> }
+      @if (doc.workingTreeModified) {
+        <span data-testid="workbench-viewer-working-tree">working tree · uncommitted</span>
+      } @else if (doc.revision) {
+        <code>{{ doc.revision.slice(0, 8) }}</code>
+      }
     </div>
     <iframe class="workbench-viewer__frame"
+            #workbenchFrame
             data-testid="workbench-viewer-frame"
             title="Workbench artifact: {{ doc.workbench.title }}"
             sandbox="allow-scripts"
-            referrerpolicy="no-referrer"
-            [attr.srcdoc]="srcdoc()"></iframe>
+            referrerpolicy="no-referrer"></iframe>
   }
 </section>

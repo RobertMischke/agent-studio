@@ -89,7 +89,10 @@ groups, and a failed domain reports an error without hiding successful domains.
   read-only Workbench host. Explorer discovery is lazy per expanded project;
   Pulse reuses the same catalogue as a thinking inbox. Repository HTML runs only
   in an opaque-origin `srcdoc` iframe with the Workbench CSP and no host API
-  bridge. Chat pinning and decision mutations are intentionally not mounted.
+  bridge. An inert DOM parse moves artifact nodes into a fixed policy-first
+  wrapper, and dirty working-tree content is labelled as uncommitted instead of
+  receiving the current HEAD revision. Chat pinning and decision mutations are
+  intentionally not mounted.
 - `frontend/src/app/features/project-detail/components/project-overview-dashboard/`:
   the operator-first Project Overview composition. It presents project outcomes,
   important runtime entry points, deployment readiness, and work requiring

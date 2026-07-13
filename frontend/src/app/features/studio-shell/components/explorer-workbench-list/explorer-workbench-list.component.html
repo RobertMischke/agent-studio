@@ -24,15 +24,13 @@
       </button>
       @if (historyOpen()) {
         <div class="studio-workbench-history__items">
-          @for (workbench of historyCatalogue()?.items ?? []; track workbench.id) {
-            @if (isSettled(workbench)) {
-              <button type="button" class="studio-workbench-topic studio-workbench-topic--settled"
-                      [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
-                      (click)="openWorkbench.emit(workbench)">
-                <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
-                <span class="studio-workbench-topic__meta">{{ workbench.status }} · {{ meta(workbench) }}</span>
-              </button>
-            }
+          @for (workbench of settledHistory(); track workbench.id) {
+            <button type="button" class="studio-workbench-topic studio-workbench-topic--settled"
+                    [attr.data-testid]="'studio-explorer-workbench-' + projectName() + '-' + workbench.id"
+                    (click)="openWorkbench.emit(workbench)">
+              <span class="studio-workbench-topic__title">{{ workbench.title }}</span>
+              <span class="studio-workbench-topic__meta">{{ workbench.status }} · {{ meta(workbench) }}</span>
+            </button>
           } @empty { <span class="studio-workbench-topics__state">No settled Workbenches</span> }
         </div>
       }

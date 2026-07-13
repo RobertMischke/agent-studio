@@ -198,6 +198,7 @@ export interface WorkbenchDocument {
   html: string;
   branch: string | null;
   revision: string | null;
+  workingTreeModified: boolean;
 }
 
 // ---- Wiki Pulse (PULSE-1: the generated wiki landing view) ----

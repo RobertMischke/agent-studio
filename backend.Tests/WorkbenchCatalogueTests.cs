@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -7,9 +8,22 @@ namespace AgentStudio.Tests;
 public sealed class WorkbenchCatalogueTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "workbench-tests-" + Guid.NewGuid().ToString("N"));
+    private readonly string _outside = Path.Combine(Path.GetTempPath(), "workbench-outside-" + Guid.NewGuid().ToString("N"));
 
     public WorkbenchCatalogueTests() => Directory.CreateDirectory(_root);
-    public void Dispose() { try { Directory.Delete(_root, true); } catch { } }
+    public void Dispose()
+    {
+        var linkedWorkbench = Path.Combine(_root, "docs", "workbenches", "linked");
+        try
+        {
+            if (Directory.Exists(linkedWorkbench)
+                && (File.GetAttributes(linkedWorkbench) & FileAttributes.ReparsePoint) != 0)
+                Directory.Delete(linkedWorkbench);
+        }
+        catch { }
+        try { Directory.Delete(_root, true); } catch { }
+        try { Directory.Delete(_outside, true); } catch { }
+    }
 
     [Fact]
     public void List_ValidatesSortsAndKeepsInvalidEntriesVisible()
@@ -55,6 +69,72 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         Assert.Equal("<h1>Survey</h1>", service.Read("Project", "app-survey")!.Html);
     }
 
+    [SkippableFact]
+    public void List_RejectsWorkbenchDirectorySymlinkThatEscapesRepository()
+    {
+        Directory.CreateDirectory(_outside);
+        File.WriteAllText(Path.Combine(_outside, "index.html"), "<h1>Outside</h1>");
+        File.WriteAllText(Path.Combine(_outside, "workbench.json"), """
+          {"schemaVersion":1,"id":"linked","title":"Linked","summary":"Bad", "entrypoint":"index.html","status":"active","updatedAt":"2026-07-12T10:00:00Z"}
+          """);
+        var catalogueRoot = Path.Combine(_root, "docs", "workbenches");
+        Directory.CreateDirectory(catalogueRoot);
+        var link = Path.Combine(catalogueRoot, "linked");
+        Skip.IfNot(TryCreateDirectoryLink(link, _outside),
+            "Symbolic links and directory junctions are unavailable on this host.");
+
+        var service = Service();
+        var item = Assert.Single(service.List("Project")!.Items, candidate => candidate.Id == "linked");
+
+        Assert.False(item.Valid);
+        Assert.Contains("symbolic link", item.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(service.Read("Project", "linked"));
+    }
+
+    [Fact]
+    public void List_RejectsHtmlOverTwentyMiBWithoutReadingIt()
+    {
+        var dir = Path.Combine(_root, "docs", "workbenches", "oversized");
+        Directory.CreateDirectory(dir);
+        using (var html = new FileStream(Path.Combine(dir, "index.html"), FileMode.Create, FileAccess.Write))
+            html.SetLength(21L * 1024 * 1024);
+        File.WriteAllText(Path.Combine(dir, "workbench.json"), """
+          {"schemaVersion":1,"id":"oversized","title":"Oversized","summary":"Too large", "entrypoint":"index.html","status":"active","updatedAt":"2026-07-12T10:00:00Z"}
+          """);
+
+        var service = Service();
+        var item = Assert.Single(service.List("Project")!.Items, candidate => candidate.Id == "oversized");
+
+        Assert.False(item.Valid);
+        Assert.Contains("20 MiB", item.Error);
+        Assert.Null(service.Read("Project", "oversized"));
+    }
+
+    [Fact]
+    public void Read_DoesNotLabelDirtyWorkingTreeBytesAsHeadRevision()
+    {
+        WriteWorkbench("provenance", "Provenance", "active", "2026-07-12T10:00:00Z");
+        RunGit("init");
+        RunGit("config", "user.email", "tests@example.invalid");
+        RunGit("config", "user.name", "Workbench Tests");
+        RunGit("add", ".");
+        RunGit("commit", "-m", "seed workbench");
+        var head = RunGit("rev-parse", "HEAD").Trim();
+
+        var service = Service();
+        var clean = service.Read("Project", "provenance")!;
+        Assert.Equal(head, clean.Revision);
+        Assert.False(clean.WorkingTreeModified);
+
+        File.AppendAllText(Path.Combine(_root, "docs", "workbenches", "provenance", "index.html"),
+            "<p>Uncommitted bytes</p>");
+        var dirty = service.Read("Project", "provenance")!;
+
+        Assert.Null(dirty.Revision);
+        Assert.True(dirty.WorkingTreeModified);
+        Assert.Contains("Uncommitted bytes", dirty.Html);
+    }
+
     private void WriteWorkbench(string id, string title, string status, string updatedAt)
     {
         var dir = Path.Combine(_root, "docs", "workbenches", id);
@@ -78,5 +158,49 @@ public sealed class WorkbenchCatalogueTests : IDisposable
         var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         return new WorkbenchCatalogueService(scanner, registry, git);
+    }
+
+    private string RunGit(params string[] args)
+    {
+        var start = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = _root,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var arg in args) start.ArgumentList.Add(arg);
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"git {string.Join(' ', args)} failed: {error}");
+        return output;
+    }
+
+    private static bool TryCreateDirectoryLink(string link, string target)
+    {
+        try
+        {
+            Directory.CreateSymbolicLink(link, target);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            if (!OperatingSystem.IsWindows()) return false;
+        }
+
+        var start = new ProcessStartInfo("cmd.exe")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var arg in new[] { "/c", "mklink", "/J", link, target })
+            start.ArgumentList.Add(arg);
+        using var process = Process.Start(start)!;
+        process.WaitForExit();
+        return process.ExitCode == 0 && Directory.Exists(link);
     }
 }
