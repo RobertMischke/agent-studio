@@ -147,6 +147,65 @@ public sealed class ProjectGraphDiscoveryTests : IDisposable
         Assert.Equal("NEW", Assert.Single(after.Components).ProjectKey);
     }
 
+    [Fact]
+    public void Scan_DoesNotFollowManifestFileLinksOutsideRepository()
+    {
+        var repository = Repo("file-link");
+        Write(repository, "package.json", """{"name":"safe-root"}""");
+        var outside = Repo("file-link-outside");
+        Write(outside, "package.json", """{"name":"must-not-escape"}""");
+        var linkedDirectory = Path.Combine(repository, "linked");
+        Directory.CreateDirectory(linkedDirectory);
+        var linkedManifest = Path.Combine(linkedDirectory, "package.json");
+        var linkCreated = false;
+        try
+        {
+            File.CreateSymbolicLink(linkedManifest, Path.Combine(outside, "package.json"));
+            linkCreated = true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            linkCreated = false;
+        }
+
+        var catalog = ProjectGraphScanner.Scan([
+            Target("PROJ-LINK", "LINK", "File link", repository, 0),
+        ], NullLogger.Instance);
+
+        Assert.Contains(catalog.Components, component => component.Name == "safe-root");
+        Assert.DoesNotContain(catalog.Components, component => component.Name == "must-not-escape");
+        if (linkCreated)
+        {
+            Assert.Single(catalog.Components);
+            Assert.Contains(Assert.Single(catalog.Projects).Warnings, warning =>
+                warning == "Skipped linked file 'linked/package.json'.");
+        }
+    }
+
+    [Fact]
+    public void Scan_SkipsEveryOversizedManifestInputBeforeParsingOrInventory()
+    {
+        var repository = Repo("oversized-manifests");
+        var oversized = new string(' ', (2 * 1024 * 1024) + 1);
+        Write(repository, "package.json", oversized);
+        Write(repository, "angular.json", oversized);
+        Write(repository, "Huge.csproj", oversized);
+        Write(repository, "Huge.sln", oversized);
+        Write(repository, "Huge.slnx", oversized);
+        Write(repository, ".github/workflows/huge.yml", oversized);
+
+        var catalog = ProjectGraphScanner.Scan([
+            Target("PROJ-LARGE", "LARGE", "Oversized", repository, 0),
+        ], NullLogger.Instance);
+
+        var project = Assert.Single(catalog.Projects);
+        Assert.Empty(catalog.Components);
+        Assert.Empty(project.Solutions);
+        Assert.Empty(project.Workflows);
+        Assert.Equal(6, project.Warnings.Count(warning => warning.StartsWith("Skipped oversized manifest", StringComparison.Ordinal)));
+        Assert.All(project.Warnings, warning => Assert.Contains("limit 2 MiB", warning, StringComparison.Ordinal));
+    }
+
     private static (string From, string? To) EdgeProjects(ProjectGraphCatalog catalog, ProjectGraphDependency edge)
     {
         var from = catalog.Components.Single(component => component.Id == edge.FromComponentId).ProjectKey;

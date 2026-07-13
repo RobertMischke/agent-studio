@@ -160,6 +160,7 @@ internal static class ProjectGraphScanner
 {
     private const int MaxFilesPerRepository = 100_000;
     private const long MaxTextFileBytes = 2 * 1024 * 1024;
+    private const int MaxManifestBytes = 2 * 1024 * 1024;
 
     private static readonly HashSet<string> ExcludedDirectories = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -237,19 +238,23 @@ internal static class ProjectGraphScanner
         try
         {
             var files = EnumerateRepositoryFiles(root, draft.Warnings).ToList();
+            var manifests = files
+                .Where(path => IsManifestInput(root, path))
+                .Where(path => ManifestWithinLimit(root, path, draft.Warnings))
+                .ToList();
             draft.Size = Measure(files);
-            draft.Solutions.AddRange(files
+            draft.Solutions.AddRange(manifests
                 .Where(path => string.Equals(Path.GetExtension(path), ".sln", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(Path.GetExtension(path), ".slnx", StringComparison.OrdinalIgnoreCase))
                 .Select(path => Relative(root, path))
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
-            draft.Workflows.AddRange(files
+            draft.Workflows.AddRange(manifests
                 .Where(path => IsWorkflow(root, path))
                 .Select(path => Relative(root, path))
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
             if (draft.Workflows.Count > 0) draft.Technologies.Add("GitHub Actions");
 
-            foreach (var projectFile in files.Where(path => string.Equals(Path.GetExtension(path), ".csproj", StringComparison.OrdinalIgnoreCase)))
+            foreach (var projectFile in manifests.Where(path => string.Equals(Path.GetExtension(path), ".csproj", StringComparison.OrdinalIgnoreCase)))
             {
                 var component = ReadDotNetComponent(target.Record.Id, key, root, projectFile, files, draft.Warnings);
                 if (component is not null)
@@ -259,7 +264,7 @@ internal static class ProjectGraphScanner
                 }
             }
 
-            foreach (var packageFile in files.Where(path => string.Equals(Path.GetFileName(path), "package.json", StringComparison.OrdinalIgnoreCase)))
+            foreach (var packageFile in manifests.Where(path => string.Equals(Path.GetFileName(path), "package.json", StringComparison.OrdinalIgnoreCase)))
             {
                 var component = ReadPackageComponent(target.Record.Id, key, root, packageFile, files, draft.Warnings);
                 if (component is not null)
@@ -269,7 +274,7 @@ internal static class ProjectGraphScanner
                 }
             }
 
-            foreach (var angularFile in files.Where(path => string.Equals(Path.GetFileName(path), "angular.json", StringComparison.OrdinalIgnoreCase)))
+            foreach (var angularFile in manifests.Where(path => string.Equals(Path.GetFileName(path), "angular.json", StringComparison.OrdinalIgnoreCase)))
             {
                 ReadAngularProjects(target.Record.Id, key, root, angularFile, files, draft, allComponents);
             }
@@ -298,8 +303,12 @@ internal static class ProjectGraphScanner
             IEnumerable<string> files;
             try
             {
-                childDirectories = Directory.EnumerateDirectories(directory).ToArray();
-                files = Directory.EnumerateFiles(directory).ToArray();
+                childDirectories = Directory.EnumerateDirectories(directory)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                files = Directory.EnumerateFiles(directory)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -310,6 +319,19 @@ internal static class ProjectGraphScanner
             foreach (var file in files)
             {
                 if (string.Equals(Path.GetFileName(file), ".git", StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0)
+                    {
+                        warnings.Add($"Skipped linked file '{Relative(root, file)}'.");
+                        continue;
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    warnings.Add($"Skipped file with unreadable metadata '{Relative(root, file)}'.");
+                    continue;
+                }
                 if (++count > MaxFilesPerRepository)
                 {
                     warnings.Add($"Discovery stopped at the bounded {MaxFilesPerRepository:N0}-file limit.");
@@ -335,6 +357,60 @@ internal static class ProjectGraphScanner
         }
     }
 
+    private static bool ManifestWithinLimit(string repositoryRoot, string manifest, ICollection<string> warnings)
+    {
+        try
+        {
+            if ((File.GetAttributes(manifest) & FileAttributes.ReparsePoint) != 0)
+            {
+                warnings.Add($"Skipped linked file '{Relative(repositoryRoot, manifest)}'.");
+                return false;
+            }
+            if (new FileInfo(manifest).Length <= MaxManifestBytes) return true;
+            warnings.Add(OversizedManifestWarning(repositoryRoot, manifest));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            warnings.Add($"Skipped manifest with unreadable metadata '{Relative(repositoryRoot, manifest)}'.");
+        }
+        return false;
+    }
+
+    private static MemoryStream ReadBoundedManifest(string manifest)
+    {
+        using var input = new FileStream(
+            manifest,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 64 * 1024,
+            FileOptions.SequentialScan);
+        if (input.Length > MaxManifestBytes) throw new ManifestSizeLimitException();
+
+        var bounded = new MemoryStream((int)Math.Min(input.Length, MaxManifestBytes));
+        var buffer = new byte[64 * 1024];
+        try
+        {
+            while (true)
+            {
+                var read = input.Read(buffer, 0, buffer.Length);
+                if (read == 0) break;
+                if (bounded.Length + read > MaxManifestBytes) throw new ManifestSizeLimitException();
+                bounded.Write(buffer, 0, read);
+            }
+            bounded.Position = 0;
+            return bounded;
+        }
+        catch
+        {
+            bounded.Dispose();
+            throw;
+        }
+    }
+
+    private static string OversizedManifestWarning(string repositoryRoot, string manifest)
+        => $"Skipped oversized manifest '{Relative(repositoryRoot, manifest)}' (limit {MaxManifestBytes / (1024 * 1024)} MiB).";
+
     private static ComponentDraft? ReadDotNetComponent(
         string projectId,
         string projectKey,
@@ -345,7 +421,8 @@ internal static class ProjectGraphScanner
     {
         try
         {
-            var document = XDocument.Load(manifest, LoadOptions.None);
+            using var input = ReadBoundedManifest(manifest);
+            var document = XDocument.Load(input, LoadOptions.None);
             var sdk = document.Root?.Attribute("Sdk")?.Value ?? "";
             var assemblyName = FirstElementValue(document, "AssemblyName");
             var packageId = FirstElementValue(document, "PackageId");
@@ -385,6 +462,11 @@ internal static class ProjectGraphScanner
             }
             return component;
         }
+        catch (ManifestSizeLimitException)
+        {
+            warnings.Add(OversizedManifestWarning(repositoryRoot, manifest));
+            return null;
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
         {
             warnings.Add($"Could not parse '{Relative(repositoryRoot, manifest)}'.");
@@ -402,7 +484,8 @@ internal static class ProjectGraphScanner
     {
         try
         {
-            var rootNode = JsonNode.Parse(File.ReadAllText(manifest))?.AsObject();
+            using var input = ReadBoundedManifest(manifest);
+            var rootNode = JsonNode.Parse(input)?.AsObject();
             if (rootNode is null) return null;
             var name = rootNode["name"]?.GetValue<string>() ?? Path.GetFileName(Path.GetDirectoryName(manifest)) ?? "npm";
             var root = Path.GetDirectoryName(manifest) ?? repositoryRoot;
@@ -430,6 +513,11 @@ internal static class ProjectGraphScanner
             }
             return component;
         }
+        catch (ManifestSizeLimitException)
+        {
+            warnings.Add(OversizedManifestWarning(repositoryRoot, manifest));
+            return null;
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         {
             warnings.Add($"Could not parse '{Relative(repositoryRoot, manifest)}'.");
@@ -448,7 +536,8 @@ internal static class ProjectGraphScanner
     {
         try
         {
-            var document = JsonNode.Parse(File.ReadAllText(manifest))?.AsObject();
+            using var input = ReadBoundedManifest(manifest);
+            var document = JsonNode.Parse(input)?.AsObject();
             if (document?["projects"] is not JsonObject angularProjects) return;
             foreach (var pair in angularProjects)
             {
@@ -483,6 +572,10 @@ internal static class ProjectGraphScanner
                 project.Components.Add(component);
                 allComponents.Add(component);
             }
+        }
+        catch (ManifestSizeLimitException)
+        {
+            project.Warnings.Add(OversizedManifestWarning(repositoryRoot, manifest));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         {
@@ -769,6 +862,23 @@ internal static class ProjectGraphScanner
                 || string.Equals(Path.GetExtension(path), ".yaml", StringComparison.OrdinalIgnoreCase));
     }
 
+    private static bool IsManifestInput(string root, string path)
+    {
+        var fileName = Path.GetFileName(path);
+        if (string.Equals(fileName, "package.json", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(fileName, "angular.json", StringComparison.OrdinalIgnoreCase))
+            return true;
+        var extension = Path.GetExtension(path);
+        return string.Equals(extension, ".csproj", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".sln", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".slnx", StringComparison.OrdinalIgnoreCase)
+            || IsWorkflow(root, path);
+    }
+
+    private sealed class ManifestSizeLimitException : IOException
+    {
+    }
+
     private sealed class ProjectDraft(ProjectRecord record, string key)
     {
         public ProjectRecord Record { get; } = record;
@@ -799,7 +909,10 @@ internal static class ProjectGraphScanner
             Technologies = Technologies.OrderBy(value => value.Slug, StringComparer.OrdinalIgnoreCase).ToList(),
             ComponentIds = Components.Select(component => component.Id).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
             Size = Size,
-            Warnings = Warnings.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            Warnings = Warnings
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToList(),
         };
     }
 
