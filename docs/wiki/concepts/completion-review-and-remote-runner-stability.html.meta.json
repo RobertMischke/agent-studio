@@ -73,6 +73,12 @@
       "source": "manual"
     },
     {
+      "key": "AGT-2142",
+      "title": "AGT-2142: Host-Telemetrie historisch - CPU/Memory/Load/Throttling-Aufzeichnung je Remote-Host, Verlauf in der Host-Ansicht",
+      "linkedAt": "2026-07-13T18:45:00Z",
+      "source": "manual"
+    },
+    {
       "key": "AGT-2170",
       "title": "Integrate typed Runner events and replay into Agent Studio",
       "linkedAt": "2026-07-13T18:07:00Z",
