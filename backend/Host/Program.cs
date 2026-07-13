@@ -519,6 +519,7 @@ builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();
+builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingService>();
 // Wiki-grading maintenance run (AGT-2051): the maintenance-model default (its own
 // config class in the CLI-management area), the companion sidecar writer, the
 // grader seam (production = the one-shot CLI rail), and the run orchestrator.

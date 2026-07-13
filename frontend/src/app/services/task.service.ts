@@ -1965,9 +1965,10 @@ export class TaskService {
     );
   }
 
-  getProjectVisualEvidence(projectName: string) {
+  getProjectVisualEvidence(projectName: string, refresh = false) {
     return this.http.get<ProjectVisualEvidenceQueue>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/visual-evidence`,
+      { params: refresh ? { refresh: 'true' } : undefined },
     );
   }
 

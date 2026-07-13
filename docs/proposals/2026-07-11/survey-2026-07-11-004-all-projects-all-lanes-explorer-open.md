@@ -6,7 +6,7 @@ evidenceScreenshot: "2026-07-11/assets/004-all-projects-all-lanes-explorer-open.
 proposal: "Collapse the Explorer and secondary navigation into drawers. Do not preserve desktop column widths at 430 px; the primary content must get the full readable width."
 estimatedEffort: "medium"
 severity: "critical"
-status: "proposed"
+status: "rejected"
 spawnedTask: null
 ---
 
@@ -18,9 +18,7 @@ Board, All projects all lanes explorer open, narrow, dark: the requested content
 
 ## Evidence
 
-![All projects all lanes explorer open](./assets/004-all-projects-all-lanes-explorer-open.png)
-
-Source capture: `board--all-projects-all-lanes-explorer-open--narrow--dark--real.png`
+![Evidence screenshot](assets/004-all-projects-all-lanes-explorer-open.png)
 
 ## Proposal
 

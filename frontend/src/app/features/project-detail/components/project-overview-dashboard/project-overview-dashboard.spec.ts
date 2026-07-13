@@ -69,7 +69,11 @@ describe('ProjectOverviewDashboardComponent', () => {
     expect(host.querySelector('[data-testid="project-overview-wiki"]')?.textContent).toContain('Operator dashboard concept');
     expect(host.querySelector('[data-testid="project-overview-planning-agt-2200"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="project-overview-evidence-count"]')?.textContent).toContain('1 unseen');
-    expect(host.querySelector('[data-testid="project-overview-remote-truth"]')?.textContent).toContain('2 unpushed');
+    const branchState = host.querySelector('[data-testid="project-overview-remote-truth"]')?.textContent ?? '';
+    expect(branchState).toContain('2 to push');
+    expect(branchState).toContain('3 to pull');
+    expect(branchState).toContain('No upstream · local-only, remote comparison unavailable');
+    expect(host.querySelector('[data-testid="project-overview-branch-task-agt-2200"]')).toBeTruthy();
     host.querySelector<HTMLButtonElement>('[data-testid="project-overview-planning-agt-2200"]')!.click();
     expect(openedTasks).toEqual([{ jobId: 'agt-2200', watchPath: 'C:/tasks/demo' }]);
 
@@ -177,6 +181,8 @@ function gitInventory() {
     branches: [
       { name: 'main', category: 'main', tipSha: 'a'.repeat(40), tipShortSha: 'aaaaaaa', isCurrent: false, upstream: 'origin/main', ahead: 0, behind: 0, lastCommitSubject: 'released', lastCommitAtUtc: '2026-07-11T08:00:00Z', worktreePath: null },
       { name: 'develop', category: 'develop', tipSha: 'b'.repeat(40), tipShortSha: 'bbbbbbb', isCurrent: true, upstream: 'origin/develop', ahead: 2, behind: 0, lastCommitSubject: 'integrated', lastCommitAtUtc: '2026-07-11T11:00:00Z', worktreePath: 'C:/repo' },
+      { name: 'task/AGT-2200-plan-deployment-history', category: 'task', tipSha: 'c'.repeat(40), tipShortSha: 'ccccccc', isCurrent: false, upstream: 'origin/task/AGT-2200-plan-deployment-history', ahead: 0, behind: 3, lastCommitSubject: 'planning', lastCommitAtUtc: '2026-07-11T10:00:00Z', worktreePath: null },
+      { name: 'task/LOCAL-1', category: 'task', tipSha: 'd'.repeat(40), tipShortSha: 'ddddddd', isCurrent: false, upstream: null, ahead: 0, behind: 0, lastCommitSubject: 'local only', lastCommitAtUtc: '2026-07-11T09:00:00Z', worktreePath: null },
     ],
   };
 }

@@ -31,9 +31,13 @@ public sealed record ProjectVisualEvidenceQueue(
 public sealed class ProjectVisualEvidenceService
 {
     internal const string ReceiptPrefix = "visual-screenshot-";
+    private static readonly TimeSpan SnapshotTtl = TimeSpan.FromSeconds(10);
     private readonly TaskScannerService _scanner;
     private readonly ScreenshotIndexService _screenshots;
     private readonly ILogger<ProjectVisualEvidenceService> _logger;
+    private readonly object _cacheLock = new();
+    private readonly Dictionary<string, (DateTime At, ProjectVisualEvidenceQueue Queue)> _cache =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public ProjectVisualEvidenceService(
         TaskScannerService scanner,
@@ -45,7 +49,24 @@ public sealed class ProjectVisualEvidenceService
         _logger = logger;
     }
 
-    public ProjectVisualEvidenceQueue? Build(string projectName)
+    public ProjectVisualEvidenceQueue? Build(string projectName, bool refresh = false)
+    {
+        lock (_cacheLock)
+        {
+            if (!refresh && _cache.TryGetValue(projectName, out var cached) &&
+                DateTime.UtcNow - cached.At < SnapshotTtl)
+                return cached.Queue;
+        }
+
+        var queue = BuildFresh(projectName);
+        if (queue is not null)
+        {
+            lock (_cacheLock) _cache[projectName] = (DateTime.UtcNow, queue);
+        }
+        return queue;
+    }
+
+    private ProjectVisualEvidenceQueue? BuildFresh(string projectName)
     {
         var watch = _scanner.GetWatchPaths().FirstOrDefault(entry =>
             string.Equals(entry.Name, projectName, StringComparison.OrdinalIgnoreCase));
@@ -81,7 +102,7 @@ public sealed class ProjectVisualEvidenceService
 
     public ProjectVisualEvidenceItem? Acknowledge(string projectName, string itemId)
     {
-        var queue = Build(projectName);
+        var queue = Build(projectName, refresh: true);
         var item = queue?.Items.FirstOrDefault(candidate => candidate.Id == itemId);
         if (item is null || item.ReviewStatus == "unavailable") return null;
         var task = _scanner.FindJob(item.JobId, item.WatchPath);
@@ -102,6 +123,7 @@ public sealed class ProjectVisualEvidenceService
             CreatedAt = DateTime.UtcNow
         };
         ReviewEvidenceLog.Append(task.FolderPath, receipt);
+        lock (_cacheLock) _cache.Remove(projectName);
         return item with { ReviewStatus = "reviewed" };
     }
 

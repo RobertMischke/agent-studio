@@ -45,7 +45,7 @@ public sealed class ProjectVisualEvidenceServiceTests : IDisposable
         Assert.Equal(unseen.Id, Assert.Single(ReviewEvidenceLog.ReadLatestPerId(jobFolder)).Id);
 
         File.Delete(screenshot);
-        var unavailable = Assert.IsType<ProjectVisualEvidenceQueue>(service.Build("Demo"));
+        var unavailable = Assert.IsType<ProjectVisualEvidenceQueue>(service.Build("Demo", refresh: true));
         var retained = Assert.Single(unavailable.Items);
         Assert.Equal(unseen.Id, retained.Id);
         Assert.Equal("unavailable", retained.ReviewStatus);
@@ -71,6 +71,20 @@ public sealed class ProjectVisualEvidenceServiceTests : IDisposable
         Assert.Single(queue.Items);
         Assert.Equal("delivered-task", queue.Items[0].JobId);
         Assert.Null(service.Build("Unknown"));
+    }
+
+    [Fact]
+    public void Build_CachesFilesystemProjection_UntilExplicitRefresh()
+    {
+        var (service, jobFolder, _) = BuildStack();
+
+        var initial = Assert.IsType<ProjectVisualEvidenceQueue>(service.Build("Demo"));
+        Assert.Single(initial.Items);
+
+        File.WriteAllBytes(Path.Combine(jobFolder, "results", "second--real.png"), [4, 5, 6]);
+
+        Assert.Single(Assert.IsType<ProjectVisualEvidenceQueue>(service.Build("Demo")).Items);
+        Assert.Equal(2, Assert.IsType<ProjectVisualEvidenceQueue>(service.Build("Demo", refresh: true)).Items.Count);
     }
 
     private (ProjectVisualEvidenceService Service, string JobFolder, string Screenshot) BuildStack()
