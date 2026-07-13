@@ -842,16 +842,32 @@
       </div>
 
       <article class="card live">
-        <span class="label">Read-only live sample · 2026-07-13, 19:25-19:32 CEST</span>
+        <span class="label">Read-only live sample · 2026-07-13, 19:25-19:35 CEST</span>
         <div class="grid three">
-          <div><strong>4 to 5 active slots</strong><p class="small muted">Host reported no free slots during the sample.</p></div>
-          <div><strong>CPU 6.8% to 59%</strong><p class="small muted">Latest 36.2%; load1 ranged approximately 4.7 to 14.3.</p></div>
+          <div><strong>4 to 5 active slots</strong><p class="small muted">A freed slot was reused while its predecessor was still in centralized Auto Review.</p></div>
+          <div><strong>CPU 16.3% to 98.2%</strong><p class="small muted">Load1 rose as high as 23.24 on 12 cores; swap stayed zero and I/O wait stayed low.</p></div>
           <div><strong>Productive runs, failed handoffs</strong><p class="small muted">Remote execution reached <code>TASK_DONE</code> while post-review repeatedly reopened or escalated the cards.</p></div>
         </div>
         <p><strong>Remote execution stayed productive:</strong> AGT-2156 reported <code>TASK_DONE</code> and moved Progress to Auto Review; AGT-2160 later did the same. Freed slots were immediately reused by AGT-2162 and AGT-2163. This is evidence that parallel Remote execution itself continued to perform and hand off work.</p>
         <p><strong>The review loop reproduced live:</strong> AGT-2155 reached Auto Review and escalated roughly 54 seconds later on a historical <code>build-test gate failed twice</code> path with <code>dotnet build exit 1</code>. AGT-2156 then escalated 61 seconds after its own successful Remote handoff for the same reason, while the event called it “twice” but recorded <code>attempt=1</code>. AGT-2160 reached Auto Review, failed <code>dotnet build</code> roughly 47 seconds later, and reopened to Ready. AGT-2168 was reopened again by the Completion Gate and immediately reclaimed.</p>
-        <p><strong>Visibility gap:</strong> live leases remained for AGT-2168, AGT-2159, AGT-2162, and AGT-2163, while the ordinary task runner projection showed <code>runner=null</code> and <code>no-active-run</code>. The lease view was the actual ownership truth. AGT-2176 remained in Progress with neither lease nor active run.</p>
+        <p><strong>Host pressure:</strong> the host did not crash and continued renewing four leases, but a short saturation wave reached 98.2% CPU and load1 23.24. This is a correlation signal to retain, not proof that Remote parallelism caused the gate verdicts.</p>
+        <p><strong>Visibility gap:</strong> live leases remained for AGT-2168, AGT-2159, AGT-2162, and AGT-2163, while the ordinary task runner projection showed <code>runner=null</code>, <code>runId=null</code>, and <code>no-active-run</code>. The lease view was the actual ownership truth. AGT-2176 remained in Progress with neither lease nor active run. Slot counters briefly disagreed with the number of observable leases during handoff.</p>
       </article>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>CEST</th><th>CPU</th><th>Load 1</th><th>Memory</th></tr></thead>
+          <tbody>
+            <tr><td>19:27:21</td><td>36.2%</td><td>5.52</td><td>7.0 GB</td></tr>
+            <tr><td>19:28:24</td><td>52.0%</td><td>4.14</td><td>8.3 GB</td></tr>
+            <tr><td>19:32:32</td><td>16.3%</td><td>2.85</td><td>7.6 GB</td></tr>
+            <tr><td>19:33:32</td><td>51.9%</td><td>10.50</td><td>18.3 GB</td></tr>
+            <tr><td>19:34:03</td><td>98.2%</td><td>19.52</td><td>23.5 GB</td></tr>
+            <tr><td>19:34:33</td><td>92.5%</td><td>23.24</td><td>11.4 GB</td></tr>
+            <tr><td>19:35:35</td><td>75.0%</td><td>21.59</td><td>13.1 GB</td></tr>
+          </tbody>
+        </table>
+      </div>
 
       <h3 style="margin-top: 2rem;">Signals to capture for every parallel run</h3>
       <div class="grid three">
@@ -928,7 +944,7 @@
 
       <div class="timeline">
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Authority inversion confirmed.</strong> LLM aspect prompts describe concerns as non-blocking and Human Review as final, while deterministic evidence and solution-quality gates can turn concern wording and keyword matches into reissue.</div><div class="timeline-action">Open design decision</div></div>
-        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Live parallel sample.</strong> Four to five active Remote slots produced <code>TASK_DONE</code> handoffs for AGT-2156 and AGT-2160 while AGT-2155, AGT-2156, and AGT-2160 repeated post-review gate failure paths and AGT-2168 repeated the prose-gate loop. This supports separating Remote execution concurrency from server-side review correctness.</div><div class="timeline-action">Observed read-only</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Live parallel sample.</strong> Four to five active Remote slots produced <code>TASK_DONE</code> handoffs for AGT-2156 and AGT-2160 while AGT-2155, AGT-2156, and AGT-2160 repeated post-review gate failure paths and AGT-2168 repeated the prose-gate loop. A later host sample reached 98.2% CPU and load1 23.24 without losing its four leases. This supports measuring host pressure while still separating Remote execution concurrency from server-side review correctness.</div><div class="timeline-action">Observed read-only</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Incident inventory.</strong> Twenty-four unique manual resets split into 18 build/test double-fail cases, one direct prose case, and five other incomplete closure paths. Eighty-eight of 91 observed verify commands ran in the shared development checkout.</div><div class="timeline-action">Root causes separated</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Semantic target revised.</strong> Raw prose remains a supported evidence source. Keywords become retrieval signals only. A cheap model interprets the current attempt ending together with immutable process, Git, command, and artifact facts.</div><div class="timeline-action">Proposed</div></div>
       </div>

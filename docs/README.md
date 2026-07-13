@@ -84,6 +84,7 @@ Use this page as the first stop when you need the right document quickly.
 | Task integration & worktree/merge workflow | [wiki/concepts/task-integration-and-merge-workflow.md](wiki/concepts/task-integration-and-merge-workflow.md) |
 | Merge config analysis (parallelism coupling) | [wiki/concepts/task-integration-merge-config-analysis.html](wiki/concepts/task-integration-merge-config-analysis.html) |
 | Auto-review reissue / evidence-gate analysis | [wiki/concepts/auto-review-evidence-gate-analysis.html](wiki/concepts/auto-review-evidence-gate-analysis.html) |
+| Completion, review, and Remote Runner stability | [wiki/concepts/completion-review-and-remote-runner-stability.html](wiki/concepts/completion-review-and-remote-runner-stability.html) |
 | Planning & Research task type | [wiki/concepts/planning-research-task-type.html](wiki/concepts/planning-research-task-type.html) |
 | MVP presentation screen-tooling evaluation and recommendation | [research/screen-tooling-mvp-presentation-2026-07.md](research/screen-tooling-mvp-presentation-2026-07.md) |
 | MVP presentation capture runbook | [operations/setup/presentation-capture.md](operations/setup/presentation-capture.md) |
