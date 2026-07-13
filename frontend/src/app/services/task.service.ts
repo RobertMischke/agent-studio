@@ -898,7 +898,8 @@ export class TaskService {
   /**
    * Create a queued follow-up task in the same project, prefilled with the
    * finding's title + body + linked artifacts/file refs. Returns the new
-   * job's id so the UI can route the user to the new card.
+   * job's id plus its stable key so the UI can route without exposing the
+   * project's filesystem location.
    */
   createReviewEvidenceFollowup(
     jobId: string,
@@ -906,7 +907,7 @@ export class TaskService {
     body: { title?: string; targetState?: string },
     watchPath?: string,
   ) {
-    return this.http.post<{ jobId: string; targetState: string }>(
+    return this.http.post<{ jobId: string; taskKey?: string; targetState: string }>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/review-evidence/${encodeURIComponent(evidenceId)}/follow-up`,
       body,
       this.withWatchPath(watchPath),

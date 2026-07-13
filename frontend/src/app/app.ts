@@ -281,8 +281,8 @@ export class App implements OnInit, OnDestroy {
   /**
    * Whether the studio active tab the active-tab→selection effect last saw
    * was a task. Lets that effect distinguish "user navigated away FROM a task
-   * tab" (strip the stale `?job=`, even if the detail fetch is still in flight)
-   * from "cold boot landed on a non-task tab that carries a `?job=` deep link"
+   * tab" (strip the stale task route, even if the detail fetch is still in flight)
+   * from "cold boot landed on a non-task tab that carries a task deep link"
    * (leave it for `restoreFromUrl`). Without it, a fast task→board switch made
    * before the detail resolved would keep the stale param and let the late
    * fetch yank the user back onto the task — the very F5 symptom, mid-session.
@@ -988,29 +988,45 @@ export class App implements OnInit, OnDestroy {
       untracked(() => this.mirrorSelectionToStudioTab(selected, retargetNav));
     });
 
+    // Browser Back from a key-based task URL to a non-task URL must move the
+    // editor shell with it. Selection alone is not tracked by the active-tab
+    // effect below, so consume the explicit history event from the routing
+    // service and focus the workspace board instead of leaving an empty task
+    // tab active under a board URL.
+    effect(() => {
+      const revision = this.jobSelection.browserRouteCleared();
+      if (revision === 0 || !this.featureFlags.vsCodeLayout()) return;
+      untracked(() => {
+        const tab = this.studioTabState.activeTab();
+        if (tab?.kind === 'task' || tab?.kind === 'epic') {
+          this.studioTabState.activateAllProjectsBoard();
+        }
+      });
+    });
+
     // Studio-shell active-tab → selection sync (F5/reload fix). Makes the
     // active studio tab the single source of truth for `selectedJob()` and
-    // the `?job=` URL param, so a reload restores the *current* view:
+    // the canonical `?task=` URL param, so a reload restores the *current* view:
     //
     //   - Active tab is a task  → ensure `selectedJob` holds that task
     //     (re-hydrating from the persisted tab on a cold reload, so the
     //     task case paints its detail instead of "No task selected"; and
     //     covering in-session selectTab() which only flips the active key).
     //   - Active tab is NOT a task (board / project / hub / diff / activity)
-    //     → drop any lingering selection and strip the stale `?job=` param.
-    //     Without this, switching task→board leaves `?job=` in the URL and
+    //     → drop any lingering selection and strip stale task route params.
+    //     Without this, switching task→board leaves `?task=` in the URL and
     //     the next F5 re-opens the task detail instead of the board.
     //
     // Only `activeTab()` is tracked; `selectedJob()` is read untracked so
     // the effect reacts to tab changes (not to the selection updates it and
     // the mirror effect above make), avoiding a feedback loop.
     //
-    // The non-task branch strips `?job=` when we either still hold a selection
+    // The non-task branch strips task route params when we either still hold a selection
     // OR just came from a task tab (`studioActiveTabWasTask`). The latter
     // catches a task→board switch made before the detail fetch resolved:
     // without it the stale param would survive and the in-flight fetch would
     // re-select the task (mid-session replay of the F5 bug). A cold boot that
-    // lands on a non-task tab carrying a `?job=` deep link is *not* "coming
+    // lands on a non-task tab carrying a task deep link is *not* "coming
     // from a task", so the param is preserved for `restoreFromUrl`.
     effect(() => {
       if (!this.featureFlags.vsCodeLayout()) return;
@@ -1718,13 +1734,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   private selectFetchedDetail(detail: TaskDetail): void {
-    history.replaceState(
-      null,
-      '',
-      `?job=${encodeURIComponent(detail.info.id)}&watchPath=${encodeURIComponent(detail.info.watchPath)}`,
-    );
-    const token = this.jobSelection.bumpOpenDetailToken();
-    this.jobSelection.setSelectedFromAdvance(detail, token);
+    this.jobSelection.selectResolvedDetail(detail, 'push');
   }
 
   private openEpicAsTab(job: TaskInfo, viewTaskKey?: string): void {
@@ -2157,13 +2167,8 @@ export class App implements OnInit, OnDestroy {
   onOpenTaskFromReel(s: Pick<TaskScreenshot, 'jobId' | 'watchPath'>): void {
     this.closeWorkspaceScreenshots();
     if (!s?.jobId || !s?.watchPath) return;
-    history.replaceState(
-      null,
-      '',
-      `?job=${encodeURIComponent(s.jobId)}&watchPath=${encodeURIComponent(s.watchPath)}`,
-    );
     this.jobService.getDetail(s.jobId, s.watchPath).subscribe({
-      next: (detail) => this.selectedJob.set(detail),
+      next: (detail) => this.jobSelection.selectResolvedDetail(detail, 'push'),
       error: () => {
         /* keep the user where they were */
       },
@@ -2194,13 +2199,8 @@ export class App implements OnInit, OnDestroy {
   onOpenTaskFromSession(ref: { jobId: string; watchPath: string }): void {
     this.workspaceOverlays.close();
     if (!ref?.jobId || !ref?.watchPath) return;
-    history.replaceState(
-      null,
-      '',
-      `?job=${encodeURIComponent(ref.jobId)}&watchPath=${encodeURIComponent(ref.watchPath)}`,
-    );
     this.jobService.getDetail(ref.jobId, ref.watchPath).subscribe({
-      next: (detail) => this.selectedJob.set(detail),
+      next: (detail) => this.jobSelection.selectResolvedDetail(detail, 'push'),
       error: () => {
         /* keep the user where they were */
       },

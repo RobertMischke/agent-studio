@@ -380,11 +380,7 @@ export class TriageController {
       // Re-anchor lane to the new job's state (same lane unless poll drift).
       this.jobSelection.triageLaneState = candidate.state;
       const token = this.jobSelection.bumpOpenDetailToken();
-      history.replaceState(
-        null,
-        '',
-        `?job=${encodeURIComponent(candidate.id)}&watchPath=${encodeURIComponent(candidate.watchPath)}`,
-      );
+      this.jobSelection.syncTaskUrl(candidate, 'replace');
       // Optimistic-paint: serve a prefetched TaskDetail when available
       // so the panel re-renders without waiting for the GET roundtrip.
       // The follow-up fetch reconciles any drift on the eventual reply.

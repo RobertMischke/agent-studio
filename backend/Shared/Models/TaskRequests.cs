@@ -14,13 +14,14 @@ public record CreateFollowupFromEvidenceRequest
 }
 
 /// <summary>
-/// Response shape for the follow-up endpoint. <c>JobId</c> is the slug
-/// assigned to the new task; the frontend uses it to route the user to the
-/// new card.
+/// Response shape for the follow-up endpoint. <c>JobId</c> remains the
+/// storage slug for backwards compatibility; <c>TaskKey</c> is the stable,
+/// globally resolvable reference clients should put in links.
 /// </summary>
 public record CreateFollowupFromEvidenceResponse
 {
     public string JobId { get; init; } = "";
+    public string? TaskKey { get; init; }
     public string TargetState { get; init; } = TaskStates.Preparation;
 }
 
