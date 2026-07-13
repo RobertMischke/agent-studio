@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Completion, Review, and Remote Runner Stability</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f7fb;
+      --surface: #ffffff;
+      --surface-soft: #f0f4fa;
+      --surface-strong: #e8eef7;
+      --text: #172033;
+      --muted: #5a6578;
+      --faint: #798397;
+      --line: #d7deea;
+      --line-strong: #bac5d5;
+      --link: #1559b7;
+      --blue: #1d66d2;
+      --blue-soft: #e8f1ff;
+      --green: #177245;
+      --green-soft: #e6f5ed;
+      --amber: #8a5200;
+      --amber-soft: #fff2d9;
+      --red: #a33131;
+      --red-soft: #fdecec;
+      --violet: #6551a6;
+      --violet-soft: #f0ecff;
+      --shadow: 0 18px 48px rgba(30, 49, 78, 0.09);
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1420;
+        --surface: #141d2b;
+        --surface-soft: #192536;
+        --surface-strong: #213149;
+        --text: #e8edf5;
+        --muted: #a8b3c5;
+        --faint: #8290a6;
+        --line: #2b3a50;
+        --line-strong: #41536d;
+        --link: #8dbdff;
+        --blue: #76adfa;
+        --blue-soft: #172b47;
+        --green: #76d2a4;
+        --green-soft: #183529;
+        --amber: #f0bd66;
+        --amber-soft: #3c2d16;
+        --red: #f19a9a;
+        --red-soft: #402326;
+        --violet: #c1b3f5;
+        --violet-soft: #2b2547;
+        --shadow: 0 20px 56px rgba(0, 0, 0, 0.28);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.65 var(--sans);
+    }
+    a { color: var(--link); text-underline-offset: 3px; }
+    a:hover { text-decoration-thickness: 2px; }
+    a:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 3px; }
+    code {
+      padding: 0.08rem 0.32rem;
+      border-radius: 4px;
+      background: var(--surface-strong);
+      font: 0.88em/1.5 var(--mono);
+    }
+    pre {
+      margin: 1rem 0;
+      padding: 1rem;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface-soft);
+      color: var(--text);
+      font: 12.5px/1.6 var(--mono);
+    }
+    pre code { padding: 0; background: transparent; font: inherit; }
+    strong { font-weight: 500; }
+    h1, h2, h3, h4 { line-height: 1.2; font-weight: 500; letter-spacing: -0.018em; }
+    h1 { max-width: 900px; margin: 0.4rem 0 0.8rem; font-size: clamp(2rem, 5vw, 3.7rem); }
+    h2 { margin: 0 0 1rem; font-size: clamp(1.45rem, 3vw, 2rem); }
+    h3 { margin: 0 0 0.55rem; font-size: 1.08rem; }
+    h4 { margin: 0 0 0.35rem; font-size: 0.98rem; }
+    p { margin: 0.55rem 0 0.95rem; }
+    ul, ol { padding-left: 1.25rem; }
+    li + li { margin-top: 0.35rem; }
+
+    .page { width: min(100%, 1320px); margin: 0 auto; padding: 24px clamp(16px, 4vw, 52px) 88px; }
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(26px, 6vw, 64px);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background:
+        radial-gradient(circle at 92% 12%, color-mix(in srgb, var(--blue) 17%, transparent) 0, transparent 36%),
+        linear-gradient(145deg, var(--surface), var(--surface-soft));
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      margin: 0;
+      color: var(--blue);
+      font: 500 0.76rem/1.2 var(--mono);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .lede { max-width: 880px; margin-bottom: 1.3rem; color: var(--muted); font-size: 1.08rem; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--surface) 78%, transparent);
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
+    .dot.green { background: var(--green); }
+    .dot.amber { background: var(--amber); }
+
+    .toc {
+      margin: 22px 0 0;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+    .toc strong { display: block; margin-bottom: 8px; }
+    .toc-links { display: flex; flex-wrap: wrap; gap: 7px 16px; }
+    .toc a { font-size: 0.88rem; text-decoration: none; }
+
+    main > section { padding: clamp(34px, 6vw, 68px) 0; border-bottom: 1px solid var(--line); }
+    .section-head { max-width: 900px; margin-bottom: 1.25rem; }
+    .section-head > p:last-child { color: var(--muted); }
+    .grid { display: grid; gap: 14px; }
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+    .tint-blue { background: var(--blue-soft); }
+    .tint-green { background: var(--green-soft); }
+    .tint-amber { background: var(--amber-soft); }
+    .tint-red { background: var(--red-soft); }
+    .tint-violet { background: var(--violet-soft); }
+    .label {
+      display: inline-block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font: 500 0.72rem/1.2 var(--mono);
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+    .big-number { display: block; margin: 0.12rem 0 0.3rem; font-size: 2.15rem; line-height: 1; font-weight: 500; }
+    .muted { color: var(--muted); }
+    .small { font-size: 0.84rem; }
+    .principle {
+      margin: 18px 0;
+      padding: 18px 20px;
+      border: 1px solid color-mix(in srgb, var(--blue) 35%, var(--line));
+      border-radius: 16px;
+      background: var(--blue-soft);
+    }
+    .principle p:last-child { margin-bottom: 0; }
+
+    .stacked {
+      display: grid;
+      grid-template-columns: 18fr 1fr 5fr;
+      min-height: 54px;
+      margin: 18px 0 8px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .stacked > div { display: grid; place-items: center; padding: 8px; text-align: center; font-size: 0.8rem; }
+    .stacked .build { background: var(--red-soft); }
+    .stacked .completion { background: var(--violet-soft); }
+    .stacked .other { background: var(--amber-soft); }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 0.82rem; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      margin: 18px 0;
+    }
+    .flow-step {
+      position: relative;
+      min-height: 116px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+    .flow-step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      top: 43%;
+      right: -16px;
+      z-index: 2;
+      width: 20px;
+      color: var(--faint);
+      text-align: center;
+    }
+    .flow-step b { display: block; margin-bottom: 5px; font-weight: 500; }
+    .flow-step span { color: var(--muted); font-size: 0.82rem; }
+
+    .glossary dt { margin-bottom: 0.35rem; font-weight: 500; }
+    .glossary dd { margin: 0; color: var(--muted); }
+    .glossary .card { min-height: 170px; }
+
+    .layer {
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr) 210px;
+      align-items: center;
+      gap: 18px;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .layer:last-child { border-bottom: 0; }
+    .layer-name { font-weight: 500; }
+    .layer-copy { color: var(--muted); }
+    .layer-outcome { padding: 9px 11px; border-radius: 10px; background: var(--surface-soft); font-size: 0.82rem; }
+
+    table { width: 100%; margin: 16px 0; border-collapse: collapse; font-size: 0.88rem; }
+    th, td { padding: 11px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--surface-strong); font-weight: 500; }
+    tbody tr:nth-child(even) { background: color-mix(in srgb, var(--surface-soft) 55%, transparent); }
+    .table-wrap { overflow-x: auto; border-radius: 12px; }
+
+    .checklist { list-style: none; padding: 0; }
+    .checklist li { position: relative; padding-left: 28px; }
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      top: 0.02rem;
+      display: grid;
+      place-items: center;
+      width: 19px;
+      height: 19px;
+      border-radius: 50%;
+      background: var(--green-soft);
+      color: var(--green);
+      font-size: 0.72rem;
+    }
+    .anti li::before { content: "×"; background: var(--red-soft); color: var(--red); }
+
+    .timeline { display: grid; gap: 0; margin: 18px 0; }
+    .timeline-row {
+      display: grid;
+      grid-template-columns: 90px minmax(0, 1fr) 160px;
+      gap: 16px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .timeline-row:last-child { border-bottom: 0; }
+    .timeline-id { color: var(--blue); font: 500 0.8rem/1.5 var(--mono); }
+    .timeline-action { color: var(--muted); font-size: 0.82rem; }
+
+    .state-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
+    .state {
+      padding: 7px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font-size: 0.82rem;
+    }
+    .arrow { color: var(--faint); }
+
+    .live {
+      border-color: color-mix(in srgb, var(--amber) 35%, var(--line));
+      background: var(--amber-soft);
+    }
+    .source-list { columns: 2; column-gap: 32px; }
+    .source-list li { break-inside: avoid; }
+    footer { padding-top: 34px; color: var(--muted); font-size: 0.85rem; }
+
+    @media (max-width: 1040px) {
+      .grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .flow-step:nth-child(3)::after { display: none; }
+    }
+    @media (max-width: 720px) {
+      .page { padding: 12px 14px 64px; }
+      .hero { padding: 24px 18px; border-radius: 18px; }
+      .grid.two, .grid.three, .grid.four { grid-template-columns: 1fr; }
+      .stacked { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .flow-step { min-height: auto; }
+      .flow-step:not(:last-child)::after { content: "↓"; top: auto; right: 50%; bottom: -18px; }
+      .flow-step:nth-child(3)::after { display: block; }
+      .layer { grid-template-columns: 1fr; gap: 6px; }
+      .timeline-row { grid-template-columns: 1fr; gap: 5px; }
+      .source-list { columns: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      body { background: #fff; color: #111; }
+      .page { width: 100%; padding: 0; }
+      .hero, .card, .toc { box-shadow: none; break-inside: avoid; }
+      a { color: #111; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <header class="hero">
+    <p class="eyebrow">Working concept · 2026-07-13</p>
+    <h1>Completion, Review, and Remote Runner Stability</h1>
+    <p class="lede">A plain-language and implementation-grounded model for deciding whether agent work is complete, reviewing the exact submitted revision, separating product defects from review infrastructure failures, and operating a parallel Remote Host without turning every fault into a full task rerun.</p>
+    <div class="chips" aria-label="Document status">
+      <span class="chip"><span class="dot green"></span>Analysis and proposal</span>
+      <span class="chip"><span class="dot amber"></span>Remote parallelism unchanged</span>
+      <span class="chip"><span class="dot"></span>Observation only</span>
+      <span class="chip">No issues created yet</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Contents">
+    <strong>Contents</strong>
+    <div class="toc-links">
+      <a href="#verdict">1. Executive verdict</a>
+      <a href="#incident">2. What happened</a>
+      <a href="#terms">3. Terms in plain language</a>
+      <a href="#authority">4. Facts versus judgment</a>
+      <a href="#semantic">5. Raw prose and semantic completion</a>
+      <a href="#gates">6. Build and visual-evidence gates</a>
+      <a href="#exact-review">7. Exact-revision Auto Review</a>
+      <a href="#retry">8. Retry budgets</a>
+      <a href="#abort">9. CLI aborts</a>
+      <a href="#host">10. Remote Host target</a>
+      <a href="#monitoring">11. Live observation</a>
+      <a href="#delivery">12. Delivery map</a>
+      <a href="#decisions">13. Open decisions</a>
+      <a href="#knowledge">14. Living knowledge log</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="verdict">
+      <div class="section-head">
+        <p class="eyebrow">1 · Executive verdict</p>
+        <h2>The system already uses LLM review, but hard-coded gates can overrule it</h2>
+        <p>The operator concern is valid. The current pipeline asks semantic LLM aspects to judge requirement fit, code quality, and evidence. A later deterministic layer then turns broad categories and matching words into a reissue. This reverses the useful authority order.</p>
+      </div>
+
+      <div class="grid three">
+        <article class="card tint-red">
+          <span class="label">Current contradiction</span>
+          <h3>Semantic concern becomes mandatory rework</h3>
+          <p>The tests-and-evidence prompt says a concern is shippable and Human Review is final. <code>EvidenceGate</code> converts every such concern into a coding reissue.</p>
+        </article>
+        <article class="card tint-blue">
+          <span class="label">Recommended authority</span>
+          <h3>Facts constrain; the model interprets</h3>
+          <p>Git SHA, exit code, artifact existence, lease validity, and command result stay deterministic. Meaning, relevance, completion, and severity are judged semantically.</p>
+        </article>
+        <article class="card tint-green">
+          <span class="label">Human boundary</span>
+          <h3>Auto Review remains a recommendation</h3>
+          <p>A positive result advances to Human Review, not straight to Completed. The operator still makes the final product decision.</p>
+        </article>
+      </div>
+
+      <div class="principle">
+        <strong>Revised recommendation.</strong>
+        <p>Keep raw prose as meaningful evidence. Use keywords only to highlight potentially relevant passages. Give a small, inexpensive completion model the task, final status, the final roughly 300 logical events of the current attempt, and structured technical facts. Let that model interpret the whole ending. Never let the word <code>pending</code>, a quoted source line, or a historical error make a lane decision by itself.</p>
+      </div>
+    </section>
+
+    <section id="incident">
+      <div class="section-head">
+        <p class="eyebrow">2 · Incident evidence</p>
+        <h2>The Ready wave mixed three different failure families</h2>
+        <p>The visible symptom was the same, but the causal paths were not. That distinction is essential before changing any gate or retry policy.</p>
+      </div>
+
+      <div class="grid four">
+        <article class="card"><span class="label">Unique tasks</span><span class="big-number">24</span><span class="muted small">Manually reset in the incident window</span></article>
+        <article class="card tint-red"><span class="label">Build/test path</span><span class="big-number">18</span><span class="muted small">Preceded by double-fail escalation</span></article>
+        <article class="card tint-violet"><span class="label">Direct prose path</span><span class="big-number">1</span><span class="muted small">AGT-2168 as primary reset cause</span></article>
+        <article class="card tint-amber"><span class="label">Other incomplete paths</span><span class="big-number">5</span><span class="muted small">Pipeline, CLI, or handoff closure</span></article>
+      </div>
+
+      <div class="stacked" role="img" aria-label="Of 24 unique reset tasks, 18 followed build-test double-fail, one was a direct prose completion case, and five had other pipeline, CLI, or integration causes.">
+        <div class="build"><strong>18 build/test</strong></div>
+        <div class="completion"><strong>1</strong></div>
+        <div class="other"><strong>5 other</strong></div>
+      </div>
+      <div class="legend"><span>18 + 1 + 5 = 24 visible tasks</span><span>25 reset transitions because AGT-2160 moved twice</span></div>
+
+      <h3 style="margin-top: 2rem;">Observed amplification path</h3>
+      <div class="flow" aria-label="Observed task amplification flow">
+        <div class="flow-step tint-green"><b>Remote work finishes</b><span><code>TASK_DONE</code> and a salvage commit are reported.</span></div>
+        <div class="flow-step"><b>Auto Review starts</b><span>The server knows a branch and SHA, but does not review that snapshot directly.</span></div>
+        <div class="flow-step tint-amber"><b>Shared checkout chosen</b><span>No local <code>task/&lt;id&gt;</code> worktree exists, so the resolver falls back.</span></div>
+        <div class="flow-step tint-red"><b>Gate fails</b><span>File locks, foreign intermediate state, timeout, or a potentially real test failure.</span></div>
+        <div class="flow-step"><b>Whole task reruns</b><span>The coding model is invoked again even when only the verifier failed.</span></div>
+        <div class="flow-step tint-red"><b>Historical double-fail</b><span>An old reissue can make the next event count as “twice,” then escalate.</span></div>
+      </div>
+
+      <p><strong>Confidence boundary:</strong> this analysis does not claim that every red test was false. It says the verdict is not attributable to the submitted task while the tested revision and environment are not bound to that task.</p>
+    </section>
+
+    <section id="terms">
+      <div class="section-head">
+        <p class="eyebrow">3 · Terms in plain language</p>
+        <h2>SHA, materialization, claim, Progress, and capability drain</h2>
+        <p>These terms describe different kinds of truth. Keeping them separate makes the Remote Host behavior much easier to reason about.</p>
+      </div>
+
+      <dl class="grid two glossary">
+        <div class="card">
+          <dt>Reported SHA</dt>
+          <dd>A SHA is the unique address of one exact Git commit. When the runner says “my result is <code>d28e505b</code>,” it is naming the sealed version it wants reviewed.</dd>
+        </div>
+        <div class="card">
+          <dt>Materialize that SHA</dt>
+          <dd>The review server fetches the commit and creates a temporary folder containing exactly that version. “Not materializable” simply means the server was told the address but cannot open the package: it was never pushed, cannot be fetched, was deleted, or belongs to another repository.</dd>
+        </div>
+        <div class="card">
+          <dt>Claim</dt>
+          <dd>A claim is a technical reservation. The server grants one runner a time-limited execution lease for a Ready task and moves the task to Progress. It answers “who may work on this?” It does not mean the CLI has already started or that the work will succeed.</dd>
+        </div>
+        <div class="card">
+          <dt>Progress</dt>
+          <dd>Progress is the user-visible lane. It can cover preparation, active CLI work, upload, and final handoff. Without a canonical RunAttempt it may also lie: a card can remain in Progress after the process has died, or the UI can show no runner while a valid remote lease exists.</dd>
+        </div>
+        <div class="card">
+          <dt>Drain</dt>
+          <dd>Drain means “accept no new matching work; let existing work finish or stop safely.” It is admission control, not an immediate kill switch.</dd>
+        </div>
+        <div class="card">
+          <dt>Capability-specific drain</dt>
+          <dd>Only the broken route is closed. A Codex 401 disables new Codex claims while healthy Claude, Git, or non-browser work can continue. Host-wide drain is reserved for shared foundations such as disk-full, lease uncertainty, or network loss.</dd>
+        </div>
+      </dl>
+
+      <div class="grid two" style="margin-top: 14px;">
+        <article class="card tint-blue">
+          <h3>Claim lifecycle below the Progress lane</h3>
+          <div class="state-strip" aria-label="Claim lifecycle">
+            <span class="state">claimed</span><span class="arrow">→</span>
+            <span class="state">preparing</span><span class="arrow">→</span>
+            <span class="state">running</span><span class="arrow">→</span>
+            <span class="state">finalizing</span><span class="arrow">→</span>
+            <span class="state">handed off</span>
+          </div>
+          <p class="small muted">Progress is the umbrella. These sub-states provide operational truth.</p>
+        </article>
+        <article class="card tint-violet">
+          <h3>Capability drain lifecycle</h3>
+          <div class="state-strip" aria-label="Capability drain lifecycle">
+            <span class="state">healthy</span><span class="arrow">→</span>
+            <span class="state">suspect</span><span class="arrow">→</span>
+            <span class="state">draining</span><span class="arrow">→</span>
+            <span class="state">half-open</span><span class="arrow">→</span>
+            <span class="state">healthy</span>
+          </div>
+          <p class="small muted">A cheap probe confirms recovery; one canary runs before full admission resumes.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="authority">
+      <div class="section-head">
+        <p class="eyebrow">4 · Authority model</p>
+        <h2>Hard facts, semantic interpretation, and human decision are three layers</h2>
+        <p>“Use an LLM” should not mean asking it to invent process facts. “Use deterministic code” should not mean asking regexes to understand language. Each layer should decide only what it is good at.</p>
+      </div>
+
+      <div class="card">
+        <div class="layer">
+          <div class="layer-name">Hard facts</div>
+          <div class="layer-copy">Commit availability, expected and tested SHA, command exit, signal, artifact hash, lease validity, runner identity, timestamps, and schema validity.</div>
+          <div class="layer-outcome">Machine-observed evidence</div>
+        </div>
+        <div class="layer">
+          <div class="layer-name">Semantic review</div>
+          <div class="layer-copy">Whether the task is fulfilled, whether “pending” is about deployment or implementation, whether a concern is blocking, and which evidence is appropriate for this specific change.</div>
+          <div class="layer-outcome">Cheap LLM with citations</div>
+        </div>
+        <div class="layer">
+          <div class="layer-name">Human decision</div>
+          <div class="layer-copy">Product acceptance, risk tolerance, waiver, priority, and whether an unusual concern is acceptable in the current context.</div>
+          <div class="layer-outcome">Final Human Review</div>
+        </div>
+      </div>
+
+      <div class="grid two" style="margin-top: 14px;">
+        <article class="card tint-red">
+          <span class="label">Current authority inversion</span>
+          <ul class="checklist anti">
+            <li>Completion regex can stop review before any semantic aspect runs.</li>
+            <li>A semantic <code>concerns</code> verdict becomes a deterministic reissue.</li>
+            <li>Every <code>bug</code> task requires an image, even for backend-only behavior.</li>
+            <li>Solution-quality prose is scanned again with blocking keyword regexes.</li>
+            <li>The high-quality A-D review grade is reporting-only and cannot correct the route.</li>
+          </ul>
+        </article>
+        <article class="card tint-green">
+          <span class="label">Target authority order</span>
+          <ul class="checklist">
+            <li>Deterministic preflight guarantees that the evidence belongs to this attempt and revision.</li>
+            <li>A semantic judge interprets raw prose in the context of the task and current ending.</li>
+            <li>Build and test results remain facts, with typed product-versus-infrastructure attribution.</li>
+            <li>Deterministic routing validates the model schema and applies bounded policy.</li>
+            <li>Human Review receives the evidence, reasoning, concerns, and uncertainty.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="semantic">
+      <div class="section-head">
+        <p class="eyebrow">5 · Semantic completion</p>
+        <h2>Raw prose should work, but it must be interpreted as a whole ending</h2>
+        <p>The proposal is not to eliminate prose. It is to stop pretending that a keyword matcher understands prose. The ending of the current attempt is usually the most relevant evidence, provided that hard technical facts sit beside it.</p>
+      </div>
+
+      <div class="grid two">
+        <article class="card">
+          <span class="label">Evidence bundle for one inexpensive call</span>
+          <ol>
+            <li>Task title, prompt, and acceptance criteria.</li>
+            <li>Current attempt ID, base SHA, result SHA, and tested SHA.</li>
+            <li>Final status report and final agent message.</li>
+            <li>Final approximately 300 logical events from the current attempt, retaining speaker and stream labels.</li>
+            <li>Changed-file and diff summary.</li>
+            <li>Artifact manifest with type, size, and hash.</li>
+            <li>Commands, exit codes, signals, and typed failure classes.</li>
+            <li>Earlier attempts only as clearly marked history, never blended into the current ending.</li>
+          </ol>
+        </article>
+        <article class="card tint-blue">
+          <span class="label">Why “300 lines plus facts”</span>
+          <p>Three hundred logical events are enough to preserve the arc of most finalization phases without paying to reread tens of thousands of lines. The model should see the final agent text, terminal event, and status even if a large tool result would otherwise push them out.</p>
+          <p>Structured command facts remain outside that window. A build failure cannot disappear merely because it occurred 301 lines ago, and a model cannot claim that a test ran when no command record exists.</p>
+          <p>Keywords may mark attention candidates such as <code>pending</code> or <code>failed</code>. They do not carry a verdict.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Semantic distinctions the model must make</h3>
+      <div class="grid three">
+        <article class="card"><h3>Current versus historical</h3><p>“The first build failed, the second passed” is a completed recovery, not an open failure.</p></article>
+        <article class="card"><h3>Implementation versus platform</h3><p>“Push pending” can mean the implementation is complete and only managed delivery remains.</p></article>
+        <article class="card"><h3>Agent prose versus source output</h3><p>A string such as <code>reconciliation-pending</code> inside test code is not a task state.</p></article>
+        <article class="card"><h3>Missing proof versus missing work</h3><p>No screenshot may mean evidence is weak. It does not prove that the behavior was not implemented.</p></article>
+        <article class="card"><h3>Product versus infrastructure</h3><p>A deterministic File-Lock is infrastructure. An unknown diagnostic may require semantic attribution.</p></article>
+        <article class="card"><h3>Blocking versus concern</h3><p>A concrete unmet core requirement blocks. A minor naming or documentation concern can advance to Human Review.</p></article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Schema-bound output</h3>
+      <pre><code>{
+  "verdict": "complete | incomplete | blocked_external | inconclusive",
+  "confidence": 0.93,
+  "dimensions": {
+    "implementation": "complete",
+    "verification": "passed",
+    "delivery": "pending_platform"
+  },
+  "requirements": [
+    {
+      "id": "AC-1",
+      "status": "satisfied",
+      "reason": "The final status and diff show the requested behavior.",
+      "evidenceRefs": ["status:L4-L8", "diff:file-2"]
+    }
+  ],
+  "failureAttribution": "none",
+  "recommendedAction": "advance_to_human_review",
+  "summary": "Implementation and verification are complete; managed delivery remains."
+}</code></pre>
+      <p>Every load-bearing statement needs an evidence reference. If the model cannot identify support, it must choose <code>inconclusive</code>. Low confidence can escalate to a stronger review model or Human Review, but never directly to a full coding rerun.</p>
+
+      <div class="grid two">
+        <article class="card tint-green">
+          <h3>Cost and stability controls</h3>
+          <ul>
+            <li>One cheap call per new evidence digest.</li>
+            <li>Cache by task requirements, attempt, result SHA, log tail, artifacts, and prompt version.</li>
+            <li>Low temperature and strict JSON validation.</li>
+            <li>Stronger model only for conflict, low confidence, or <code>inconclusive</code>.</li>
+            <li>Model timeout is review infrastructure failure, not task failure.</li>
+          </ul>
+        </article>
+        <article class="card tint-amber">
+          <h3>Failure controls</h3>
+          <ul>
+            <li>Treat log contents as untrusted data, not instructions.</li>
+            <li>Never accept hallucinated tests without command records.</li>
+            <li>Do not trust a confident final summary against contradictory hard facts.</li>
+            <li>Keep current-attempt and historical events visibly separated.</li>
+            <li>Record model, prompt version, evidence digest, and full verdict for replay.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="gates">
+      <div class="section-head">
+        <p class="eyebrow">6 · Gate reanalysis</p>
+        <h2>Build/test gates and image-evidence gates solve different problems</h2>
+        <p>Both currently contain useful facts and overly broad policy. They should not be treated as one generic “hard quality standard.”</p>
+      </div>
+
+      <div class="grid two">
+        <article class="card">
+          <span class="label">Build and test gate</span>
+          <h3>A factual verifier, not the whole success judge</h3>
+          <p>A compiler exit and a test result are valuable facts when they run on the exact submitted revision in an isolated environment. A semantic model should not explain away a real red compiler result.</p>
+          <p>But the model can determine whether the command applied to this task, whether the failure is product or infrastructure, whether a later run superseded an earlier failure, and whether the next action is verification-only or code rework.</p>
+        </article>
+        <article class="card tint-violet">
+          <span class="label">Visual or image-evidence gate</span>
+          <h3>Evidence modality must follow the change</h3>
+          <p>The current rule requires an image for every task whose type is <code>bug</code>, or whose title and tags match UI keywords. That makes a backend bug fail for lacking a screenshot and treats file existence as sufficient proof.</p>
+          <p>The semantic judge should decide the appropriate evidence modality: screenshot, video, API response, unit test, log, report, document, or no additional visual proof. Deterministic code should only confirm that referenced evidence exists and matches its manifest.</p>
+        </article>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Observation</th><th>What it actually proves</th><th>Recommended route</th></tr></thead>
+          <tbody>
+            <tr><td>Compiler fails on exact result SHA with a product diagnostic</td><td>The submitted code is not buildable under the declared command.</td><td>Concrete fix attempt using the diagnostic.</td></tr>
+            <tr><td>Build process times out, cannot start, or hits a file lock</td><td>The verifier did not produce a trustworthy product result.</td><td>Retry the gate on the same SHA in a clean environment.</td></tr>
+            <tr><td>UI layout changed and no visual artifact exists</td><td>Visual evidence is missing, not necessarily the implementation.</td><td>Evidence-only follow-up or Human Review concern, based on risk and policy.</td></tr>
+            <tr><td>Backend bug has passing regression tests but no screenshot</td><td>The evidence modality is non-visual and may be fully appropriate.</td><td>Do not block on image absence.</td></tr>
+            <tr><td>A PNG exists but is empty, stale, or unrelated</td><td>Only that a file exists.</td><td>Semantic or vision review of relevance if visual proof is load-bearing.</td></tr>
+            <tr><td>Low-risk docs or analysis task has an HTML report</td><td>The document itself is the deliverable.</td><td>Review the report, not an invented screenshot requirement.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="principle">
+        <strong>Remote parallelism is not changed by this proposal.</strong>
+        <p>The current evidence shows a strong server-side review and checkout-binding problem. It does not yet prove that Remote Host coding concurrency itself is the root cause. Keep the configured parallelism, collect overlap and resource data, and distinguish runner concurrency from review-gate concurrency.</p>
+      </div>
+    </section>
+
+    <section id="exact-review">
+      <div class="section-head">
+        <p class="eyebrow">7 · Exact-revision Auto Review</p>
+        <h2>“Binding” means reviewing the submitted object, not imposing rigid quality rules</h2>
+        <p>The exact-SHA requirement is about evidence identity. It does not make the semantic verdict rigid and it does not remove Human Review.</p>
+      </div>
+
+      <div class="grid two">
+        <article class="card tint-blue">
+          <h3>Simple analogy</h3>
+          <p>A runner submits a sealed package with tracking number <code>d28e505b</code>. The reviewer must open that package. If the package cannot be retrieved, the honest result is “submission temporarily unavailable.” Reviewing whatever happens to be on a nearby desk is not a fallback.</p>
+        </article>
+        <article class="card">
+          <h3>Why it matters even with an intelligent model</h3>
+          <p>An excellent reviewer cannot compensate for seeing the wrong diff, wrong tests, or wrong artifacts. Semantic intelligence only becomes useful after the system proves that all evidence belongs to the same task attempt and revision.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Required Auto Review sequence</h3>
+      <div class="flow" aria-label="Target exact-revision review flow">
+        <div class="flow-step"><b>1. Remote result</b><span>Persist run, attempt, branch, base SHA, and immutable result SHA.</span></div>
+        <div class="flow-step"><b>2. Fetch</b><span>Retrieve that commit from the declared origin and verify repository identity.</span></div>
+        <div class="flow-step"><b>3. Materialize</b><span>Create an isolated temporary review worktree at exactly that SHA.</span></div>
+        <div class="flow-step"><b>4. Verify</b><span>Run applicable build/tests and record expected SHA equals tested SHA.</span></div>
+        <div class="flow-step"><b>5. Interpret</b><span>Semantic judge reads task, final prose, facts, diff, and artifact manifest.</span></div>
+        <div class="flow-step tint-green"><b>6. Human Review</b><span>Advance with verdict, concerns, evidence references, and uncertainty.</span></div>
+      </div>
+
+      <div class="grid two">
+        <article class="card tint-red">
+          <h3>If the SHA cannot be materialized</h3>
+          <ol>
+            <li>Retry fetch with bounded backoff.</li>
+            <li>Ask the same runner to republish the branch or upload a durable bundle.</li>
+            <li>Preserve the task and attempt as waiting for submission recovery.</li>
+            <li>Do not silently test the shared development checkout.</li>
+          </ol>
+        </article>
+        <article class="card tint-green">
+          <h3>What “no full rerun after gate infrastructure failure” means</h3>
+          <p>If commit A exists and the grading machine jams, re-run the grading machine on commit A. Do not ask the coding agent to rewrite the answer as commit B.</p>
+          <p>A coding rerun remains correct when the exact revision reproducibly fails, a requirement is genuinely missing, the original CLI died before durable output, or no recoverable commit or workspace exists.</p>
+        </article>
+      </div>
+
+      <p>The existence of many successful tasks does not contradict this distinction. It shows that implementation frequently succeeds. Reliability work protects that successful output from being discarded when a later verifier, network path, or review model fails.</p>
+    </section>
+
+    <section id="retry">
+      <div class="section-head">
+        <p class="eyebrow">8 · Retry identity</p>
+        <h2>A retry budget needs both revision identity and task-level protection</h2>
+        <p>The earlier shorthand “reset on every new SHA” is incomplete. A new commit changes the object under review, but trivial commits must not buy infinite fresh budgets. Two related budgets are needed.</p>
+      </div>
+
+      <div class="grid two">
+        <article class="card tint-blue">
+          <span class="label">Specific retry budget</span>
+          <h3>Revision + gate + failure fingerprint</h3>
+          <p>Answers: “Did this exact version reproducibly fail in the same way?” It prevents a timeout on version B from being combined with a product defect from version A.</p>
+          <p>Infrastructure retries do not consume coding budget.</p>
+        </article>
+        <article class="card tint-amber">
+          <span class="label">Task-level churn ceiling</span>
+          <h3>Unresolved requirement across revisions</h3>
+          <p>Answers: “Are we repeatedly failing to satisfy the same task requirement?” It follows a stable semantic issue fingerprint across revisions and stops empty commits from resetting the loop forever.</p>
+          <p>A separate overall ceiling remains as a final safety guard.</p>
+        </article>
+      </div>
+
+      <div class="timeline" aria-label="Revision-bound retry example">
+        <div class="timeline-row"><div class="timeline-id">Revision A</div><div>Test <code>Foo.ShouldBar</code> fails reproducibly. Semantic issue fingerprint: <code>AC-2-not-satisfied</code>.</div><div class="timeline-action">Coding fix attempt 1</div></div>
+        <div class="timeline-row"><div class="timeline-id">Revision B</div><div>The same test passes, but the review process hits a file lock.</div><div class="timeline-action">Gate retry on B; no coding budget</div></div>
+        <div class="timeline-row"><div class="timeline-id">Revision B</div><div>Gate rerun passes and semantic review confirms AC-2.</div><div class="timeline-action">Advance to Human Review</div></div>
+        <div class="timeline-row"><div class="timeline-id">Alternative B</div><div>AC-2 still fails despite a new commit.</div><div class="timeline-action">Coding fix attempt 2 for same issue</div></div>
+      </div>
+
+      <pre><code>incident identity =
+  task
+  + attempt chain
+  + revision SHA
+  + gate
+  + normalized failure class
+  + semantic issue fingerprint</code></pre>
+
+      <p>This model prevents historical pollution without offering unlimited retries. It also makes the operator-facing statement honest: “same revision, same product failure, twice” instead of “this task had two negative events at some point.”</p>
+    </section>
+
+    <section id="abort">
+      <div class="section-head">
+        <p class="eyebrow">9 · CLI abort behavior</p>
+        <h2>An abort describes an attempt, not automatically a defective task</h2>
+        <p>The runner should report raw process facts. One shared classifier then decides whether the cause belongs to the task, the CLI capability, the host, the transport, or an external dependency.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Observed ending</th><th>Classification</th><th>Next action</th><th>Task coding budget</th></tr></thead>
+          <tbody>
+            <tr><td>Explicit agent blocker or user input required</td><td>Task-level blocker</td><td>Human Review with exact question</td><td>Not a blind retry</td></tr>
+            <tr><td>Codex 401 or missing authentication</td><td>CLI capability failure</td><td>Drain Codex claims; probe; resume from salvage after repair</td><td>Not consumed</td></tr>
+            <tr><td>Quota, invalid model, or context overflow</td><td>Provider or configuration failure</td><td>Wait, change approved configuration, or escalate visibly</td><td>Not consumed</td></tr>
+            <tr><td>Timeout, OOM, signal, or process crash</td><td>Attempt infrastructure failure</td><td>Checkpoint; resume the same session once; then one fresh attempt from salvage if policy allows</td><td>Not consumed until a product defect exists</td></tr>
+            <tr><td>Operator drain or host shutdown</td><td>Controlled interruption</td><td>Persist state and resume later</td><td>Not consumed</td></tr>
+            <tr><td>Lease lost or authority uncertain</td><td>Execution ownership failure</td><td>Self-fence before expiry, stop the contained process, reject stale writes</td><td>Not consumed</td></tr>
+            <tr><td>Exit 0 without a valid terminal event</td><td>Protocol inconclusive</td><td>One cheap clarification or semantic review, then Human Review if still unclear</td><td>Not automatically consumed</td></tr>
+            <tr><td>Exact SHA reproduces a product test failure</td><td>Product failure</td><td>Continue or start a fix attempt with the concrete diagnostic</td><td>Consumed by semantic issue fingerprint</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="principle">
+        <strong>AGT-2168 is the clearest current example.</strong>
+        <p>The Completion Gate reopened a successful run based on prose. The Remote Host then encountered repeated Codex HTTP 401 responses and <code>Missing bearer or basic authentication</code>. Exit 1 became generic <code>Unknown</code>, which moved the task to Human Review. The correct response was a Codex capability drain and retry after host repair, not a task-quality verdict.</p>
+      </div>
+    </section>
+
+    <section id="host">
+      <div class="section-head">
+        <p class="eyebrow">10 · Remote Host stability target</p>
+        <h2>Parallel execution needs a durable attempt, durable delivery, and honest ownership</h2>
+        <p>The existing decoupled-lifecycle concept is the correct architectural base. The missing work is turning its restart, fencing, journal, and process-containment prerequisites into the productive path.</p>
+      </div>
+
+      <div class="grid three">
+        <article class="card">
+          <span class="label">Server authority</span>
+          <h3>Persisted RunAttempt</h3>
+          <p>Store attempt ID, runner and instance IDs, lease, monotonic fence, CLI session, base and result SHA, lifecycle state, last heartbeat, and terminal facts. It must survive a backend restart.</p>
+        </article>
+        <article class="card">
+          <span class="label">Host durability</span>
+          <h3>Local journal and outbox</h3>
+          <p>Spool logs, artifact manifests, Git facts, terminal state, and acknowledgements to disk. Replay unacknowledged events before claiming new work. Delete the worktree only after durable handoff.</p>
+        </article>
+        <article class="card">
+          <span class="label">Write safety</span>
+          <h3>Fence every mutation</h3>
+          <p>Logs, artifacts, timeline, completion, lane move, integration, and cleanup all carry attempt ID and the current fence. A stale holder receives a deterministic conflict.</p>
+        </article>
+        <article class="card">
+          <span class="label">Process safety</span>
+          <h3>Stop-before deadline</h3>
+          <p>Every successful renewal gives the runner a conservative local deadline. If it cannot renew before the safety margin, it cancels and reaps its contained process group.</p>
+        </article>
+        <article class="card">
+          <span class="label">Admission health</span>
+          <h3>Capability-aware claims</h3>
+          <p>Auth, model, Git, repository, disk, toolchain, browser, and server probes determine which work the host may claim. Healthy capabilities keep their parallelism.</p>
+        </article>
+        <article class="card">
+          <span class="label">Lifecycle isolation</span>
+          <h3>Separate host services</h3>
+          <p>Tunnel, runner control loop, and per-session process holder need independent supervised lifecycles. A transient claim failure must not terminate healthy active slots.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Canonical attempt state</h3>
+      <div class="state-strip" aria-label="Target remote attempt states">
+        <span class="state">claimed</span><span class="arrow">→</span>
+        <span class="state">preparing</span><span class="arrow">→</span>
+        <span class="state">running</span><span class="arrow">→</span>
+        <span class="state">uploading</span><span class="arrow">→</span>
+        <span class="state">verifying</span><span class="arrow">→</span>
+        <span class="state">completion pending</span><span class="arrow">→</span>
+        <span class="state">terminal</span>
+      </div>
+
+      <p>Heartbeat loss alone means <code>process-unknown</code>, not “dead.” A replacement must not begin solely because time elapsed. Durable fence continuity protects server writes; a changed host boot ID, service-manager proof of an empty containment unit, or audited host fencing proves that external execution cannot overlap.</p>
+    </section>
+
+    <section id="monitoring">
+      <div class="section-head">
+        <p class="eyebrow">11 · Live observation at current parallelism</p>
+        <h2>Keep the Remote Host running and observe the causal signals</h2>
+        <p>The operator decision for this analysis is explicit: do not lower Remote Host parallelism and do not change gate configuration. The useful experiment is to correlate claims, attempts, resource load, exact revisions, overlapping reviews, and lane outcomes.</p>
+      </div>
+
+      <article class="card live">
+        <span class="label">Read-only live sample · 2026-07-13, 19:25-19:32 CEST</span>
+        <div class="grid three">
+          <div><strong>4 to 5 active slots</strong><p class="small muted">Host reported no free slots during the sample.</p></div>
+          <div><strong>CPU 6.8% to 59%</strong><p class="small muted">Latest 36.2%; load1 ranged approximately 4.7 to 14.3.</p></div>
+          <div><strong>Productive runs, failed handoffs</strong><p class="small muted">Remote execution reached <code>TASK_DONE</code> while post-review repeatedly reopened or escalated the cards.</p></div>
+        </div>
+        <p><strong>Remote execution stayed productive:</strong> AGT-2156 reported <code>TASK_DONE</code> and moved Progress to Auto Review; AGT-2160 later did the same. Freed slots were immediately reused by AGT-2162 and AGT-2163. This is evidence that parallel Remote execution itself continued to perform and hand off work.</p>
+        <p><strong>The review loop reproduced live:</strong> AGT-2155 reached Auto Review and escalated roughly 54 seconds later on a historical <code>build-test gate failed twice</code> path with <code>dotnet build exit 1</code>. AGT-2156 then escalated 61 seconds after its own successful Remote handoff for the same reason, while the event called it “twice” but recorded <code>attempt=1</code>. AGT-2160 reached Auto Review, failed <code>dotnet build</code> roughly 47 seconds later, and reopened to Ready. AGT-2168 was reopened again by the Completion Gate and immediately reclaimed.</p>
+        <p><strong>Visibility gap:</strong> live leases remained for AGT-2168, AGT-2159, AGT-2162, and AGT-2163, while the ordinary task runner projection showed <code>runner=null</code> and <code>no-active-run</code>. The lease view was the actual ownership truth. AGT-2176 remained in Progress with neither lease nor active run.</p>
+      </article>
+
+      <h3 style="margin-top: 2rem;">Signals to capture for every parallel run</h3>
+      <div class="grid three">
+        <article class="card"><h3>Execution identity</h3><p>Task, run, attempt, runner instance, host slot, lease, base SHA, result SHA, and tested SHA.</p></article>
+        <article class="card"><h3>Overlap</h3><p>Concurrent CLI attempts, concurrent gates in the same repository, shared output paths, and active development services.</p></article>
+        <article class="card"><h3>Host pressure</h3><p>CPU, load, memory, disk, process count, queue wait, heartbeat lag, and capability probe state.</p></article>
+        <article class="card"><h3>Gate facts</h3><p>Worktree path, command, start/end, exit, signal, timeout, cancellation, lock signature, and normalized fingerprint.</p></article>
+        <article class="card"><h3>Semantic result</h3><p>Completion verdict, confidence, evidence references, failure attribution, and recommended route.</p></article>
+        <article class="card"><h3>Lane effect</h3><p>Every state transition, its actor, the decision input digest, and whether task or infrastructure budget changed.</p></article>
+      </div>
+
+      <p>The monitoring question is not simply “did a task fail while many slots were active?” It is: “for the exact submitted revision, did failures correlate with Remote CLI overlap, server-side gate overlap, resource pressure, wrong checkout selection, or a reproducible product defect?”</p>
+    </section>
+
+    <section id="delivery">
+      <div class="section-head">
+        <p class="eyebrow">12 · Delivery and issue map</p>
+        <h2>Extend existing root-cause work; create only the missing durability slices</h2>
+        <p>No Embedded Issues are created by this document. The following map is the proposed deduplicated breakdown after operator approval.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Package</th><th>Reuse or create</th><th>Acceptance boundary</th></tr></thead>
+          <tbody>
+            <tr><td>Exact-SHA Remote Review</td><td>Extend AGT-2121</td><td>Remote completion persists immutable result SHA; every review command runs on that SHA; no shared-checkout fallback.</td></tr>
+            <tr><td>Build/Test Gate Coordination</td><td>Split under AGT-2155</td><td>Isolated outputs, resource-keyed queue, cross-backend review claim, and complete overlap telemetry without changing Remote execution parallelism.</td></tr>
+            <tr><td>Gate Failure Taxonomy</td><td>Split under AGT-2155 and link AGT-1944</td><td>Product, infrastructure, cancellation, timeout, OOM, process launch, and lock failures route differently.</td></tr>
+            <tr><td>Semantic Completion Judge</td><td>Harden AGT-2168</td><td>Raw prose is interpreted by a cheap model over the final attempt window plus hard facts; keyword rules cannot decide the lane.</td></tr>
+            <tr><td>Visual Evidence Policy</td><td>Extend the evidence-gate work</td><td>Evidence modality follows task and diff semantics; backend bugs are not image-blocked; referenced artifacts are verified.</td></tr>
+            <tr><td>Persisted RunAttempt and Fencing</td><td>New Remote P0 under the Remote epic</td><td>Lease, fence, authority epoch, attempt state, and every state-affecting write survive and respect restart.</td></tr>
+            <tr><td>Runner Journal and Outbox</td><td>New Remote P0, building on AGT-2147</td><td>Logs, artifacts, terminal facts, and completion replay idempotently; worktree removal follows confirmed durable handoff.</td></tr>
+            <tr><td>CLI Outcome and Capability Drain</td><td>New slice linked to AGT-2170, AGT-2070, and AGT-2148</td><td>401, quota, timeout, OOM, shutdown, lease loss, and explicit blockers each have one typed route and budget effect.</td></tr>
+            <tr><td>Host-to-Task Truth</td><td>Extend AGT-2173 and AGT-2142</td><td>Host, capability, slot, lease, attempt, worktree, SHA, and task state reconcile in one view.</td></tr>
+            <tr><td>Incident Replay and Fault Injection</td><td>New acceptance package</td><td>AGT-2155, AGT-2168, AGT-2176, and AGT-2148 become fixtures alongside restart, tunnel, stale-write, 401, OOM, and lost-response tests.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Release evidence, not calendar optimism</h3>
+      <ul class="checklist">
+        <li>Zero Remote review commands in the shared development checkout.</li>
+        <li>Expected result SHA equals tested SHA for every gate.</li>
+        <li>Infrastructure failures consume zero coding-rework budget.</li>
+        <li>Keyword-only and prompt-echo fixtures produce zero lane decisions.</li>
+        <li>Every Remote attempt appears in canonical run history.</li>
+        <li>Backend restart accepts zero stale writes and does not lower a fence.</li>
+        <li>Codex 401 drains only Codex claims while healthy capabilities continue.</li>
+        <li>At current Remote parallelism, overlap telemetry can explain every gate result.</li>
+      </ul>
+    </section>
+
+    <section id="decisions">
+      <div class="section-head">
+        <p class="eyebrow">13 · Open operator decisions</p>
+        <h2>Questions to settle before turning this concept into Embedded Issues</h2>
+      </div>
+
+      <div class="grid two">
+        <article class="card"><h3>Semantic authority</h3><p>Should one final cheap synthesis judge own the lane recommendation, using existing aspect verdicts as evidence, or should each aspect remain independently authoritative?</p></article>
+        <article class="card"><h3>Context budget</h3><p>Confirm the final 300 logical events as the default window. Should the judge be allowed one targeted request for earlier context when it detects a contradiction?</p></article>
+        <article class="card"><h3>Visual evidence</h3><p>Should a missing image for clearly visual work trigger an evidence-only follow-up, Human Review with concern, or a coding reissue only when the model also finds the implementation unverifiable?</p></article>
+        <article class="card"><h3>Accept with concerns</h3><p>Should a high-confidence complete verdict with non-blocking concerns always wait in Human Review, or can selected low-risk projects auto-accept under explicit policy?</p></article>
+        <article class="card"><h3>Retry ceilings</h3><p>Choose the specific per-fingerprint retry count and the task-level semantic churn ceiling. Infrastructure retries remain separately bounded.</p></article>
+        <article class="card"><h3>Host restart resume</h3><p>Recommended default: automatic resume is project opt-in and globally off until provider-specific resume, process containment, and fencing probes are green.</p></article>
+      </div>
+    </section>
+
+    <section id="knowledge">
+      <div class="section-head">
+        <p class="eyebrow">14 · Living knowledge log</p>
+        <h2>New findings, newest first</h2>
+      </div>
+
+      <div class="timeline">
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Authority inversion confirmed.</strong> LLM aspect prompts describe concerns as non-blocking and Human Review as final, while deterministic evidence and solution-quality gates can turn concern wording and keyword matches into reissue.</div><div class="timeline-action">Open design decision</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Live parallel sample.</strong> Four to five active Remote slots produced <code>TASK_DONE</code> handoffs for AGT-2156 and AGT-2160 while AGT-2155, AGT-2156, and AGT-2160 repeated post-review gate failure paths and AGT-2168 repeated the prose-gate loop. This supports separating Remote execution concurrency from server-side review correctness.</div><div class="timeline-action">Observed read-only</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Incident inventory.</strong> Twenty-four unique manual resets split into 18 build/test double-fail cases, one direct prose case, and five other incomplete closure paths. Eighty-eight of 91 observed verify commands ran in the shared development checkout.</div><div class="timeline-action">Root causes separated</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Semantic target revised.</strong> Raw prose remains a supported evidence source. Keywords become retrieval signals only. A cheap model interprets the current attempt ending together with immutable process, Git, command, and artifact facts.</div><div class="timeline-action">Proposed</div></div>
+      </div>
+
+      <h3>Related system-of-record and evidence pages</h3>
+      <ul class="source-list">
+        <li><a href="../../domains/runner.md">Runner domain map</a></li>
+        <li><a href="../../domains/pipeline.md">Pipeline domain map</a></li>
+        <li><a href="../../contracts/run-outcome.md">Run outcome contract</a></li>
+        <li><a href="../../concepts/decoupled-lifecycles.md">Decoupled agent-session lifecycles</a></li>
+        <li><a href="../../concepts/parallel-task-execution.md">Parallel task execution</a></li>
+        <li><a href="../../operations/remote-hosts.md">Remote Hosts operations</a></li>
+        <li><a href="auto-review-evidence-gate-analysis.html">Auto-review evidence-gate audit</a></li>
+        <li><a href="orchestrator-drive-to-conclusion.html">Drive to conclusion</a></li>
+        <li><a href="runner-stability-incidents.html">Runner stability incident ledger</a></li>
+        <li><a href="process-termination-scenarios.html">Process termination scenarios</a></li>
+        <li><a href="../../architecture/decisions/proposed/adr-0060-fenced-run-lease-and-runner-identity.md">Proposed ADR-0060</a></li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>This is a living Wiki concept page, not a deployed behavior claim. Update the observation record, authority model, issue links, and acceptance evidence as implementation changes. Keep incident-specific details in the runner incident ledger and durable behavioral contracts in the domain and contract documents linked above.</p>
+  </footer>
+</div>
+</body>
+</html>
