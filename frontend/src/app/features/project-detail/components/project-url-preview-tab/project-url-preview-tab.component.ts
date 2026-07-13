@@ -15,7 +15,10 @@ import { DomSanitizer, type SafeResourceUrl } from '@angular/platform-browser';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { TaskService } from '../../../../services/task.service';
-import { ProjectUrlProbeService } from '../../../../services/project-url-probe.service';
+import {
+  ProjectUrlProbeService,
+  type ProjectUrlReadiness,
+} from '../../../../services/project-url-probe.service';
 import type { RegistryProjectUrl } from '../../../../models/task.model';
 import { ProjectUrlLookupService } from '../../services/project-url-lookup.service';
 
@@ -91,10 +94,19 @@ export class ProjectUrlPreviewTabComponent {
   private startTimer: ReturnType<typeof setTimeout> | null = null;
   private startDeadline = 0;
 
+  readonly readiness = computed<ProjectUrlReadiness>(() => {
+    const projectId = this.projectId();
+    const url = this.urlRecord();
+    return projectId && url
+      ? this.probe.readinessFor(projectId, url.id)
+      : { kind: 'unknown', statusCode: null, framePolicy: 'unknown', detail: null, durationMs: null };
+  });
+
   /** Live probe status for the resolved URL (`unknown` before it resolves). */
   readonly probeStatus = computed(() => {
+    const projectId = this.projectId();
     const u = this.urlRecord();
-    return u ? this.probe.statusFor(u.url) : 'unknown';
+    return projectId && u ? this.probe.statusFor(projectId, u.id) : 'unknown';
   });
 
   /** Embed the iframe when the URL resolved and the server is not known-offline
@@ -103,7 +115,14 @@ export class ProjectUrlPreviewTabComponent {
     this.resolveState() === 'resolved'
       && !this.building()
       && !this.startFailure()
-      && this.probeStatus() !== 'offline',
+      && this.readiness().kind === 'healthy',
+  );
+
+  readonly readinessPending = computed(() =>
+    this.resolveState() === 'resolved'
+      && !this.building()
+      && !this.startFailure()
+      && this.readiness().kind === 'unknown',
   );
 
   /** Sandboxed iframe source; recomputes on reload but not on probe re-ticks so
@@ -124,7 +143,7 @@ export class ProjectUrlPreviewTabComponent {
     return s === 'unknown' ? 'checking' : s;
   });
 
-  readonly canReload = computed(() => this.shouldEmbed());
+  readonly canReload = computed(() => this.resolveState() === 'resolved' && !this.building());
 
   constructor() {
     // Re-resolve whenever the bound project / url changes (established panel
@@ -185,6 +204,7 @@ export class ProjectUrlPreviewTabComponent {
   /** iframe finished (loaded a page — we cannot read cross-origin, only that it
    *  navigated). Clears the suspected-block timer. */
   onFrameLoad(): void {
+    if (this.probeStatus() !== 'running') return;
     this.frameState.set('loaded');
     this.clearLoadTimer();
   }
@@ -202,7 +222,15 @@ export class ProjectUrlPreviewTabComponent {
 
   reload(): void {
     if (!this.canReload()) return;
-    this.reloadNonce.update(n => n + 1);
+    const projectId = this.projectId();
+    const url = this.urlRecord();
+    if (!projectId || !url) return;
+    const wasRunning = this.probeStatus() === 'running';
+    this.probe.refresh(projectId, url.id);
+    if (wasRunning) {
+      this.frameState.set('loading');
+      this.reloadNonce.update(n => n + 1);
+    }
   }
 
   /** Build & start (or restart) the URL's dev server, then re-probe — the same
@@ -216,7 +244,7 @@ export class ProjectUrlPreviewTabComponent {
     this.startFailure.set(null);
     this.building.set(true);
     this.taskService.startProjectUrl(projId, u.id).subscribe({
-      next: () => this.afterStart(u.url),
+      next: () => this.afterStart(u.id),
       error: (error: HttpErrorResponse) => {
         const body: Record<string, unknown> = error.error && typeof error.error === 'object'
           ? error.error as Record<string, unknown>
@@ -242,17 +270,19 @@ export class ProjectUrlPreviewTabComponent {
       || 'Not configured';
   }
 
-  private afterStart(url: string): void {
+  private afterStart(urlId: string): void {
+    const projectId = this.projectId();
+    if (!projectId) return;
     this.startDeadline = Date.now() + this.START_READY_TIMEOUT_MS;
-    this.probe.refresh(url);
-    this.startTimer = setTimeout(() => this.checkStartReadiness(url), this.START_POLL_MS);
+    this.probe.refresh(projectId, urlId);
+    this.startTimer = setTimeout(() => this.checkStartReadiness(projectId, urlId), this.START_POLL_MS);
   }
 
-  private checkStartReadiness(url: string): void {
+  private checkStartReadiness(projectId: string, urlId: string): void {
     this.startTimer = null;
-    if (!this.building() || this.urlRecord()?.url !== url) return;
+    if (!this.building() || this.projectId() !== projectId || this.urlRecord()?.id !== urlId) return;
 
-    if (this.probe.signalFor(url)() === 'running') {
+    if (this.probe.signalFor(projectId, urlId)().kind === 'healthy') {
       this.building.set(false);
       this.frameState.set('loading');
       this.reloadNonce.update(n => n + 1);
@@ -270,8 +300,8 @@ export class ProjectUrlPreviewTabComponent {
       return;
     }
 
-    this.probe.refresh(url);
-    this.startTimer = setTimeout(() => this.checkStartReadiness(url), this.START_POLL_MS);
+    this.probe.refresh(projectId, urlId);
+    this.startTimer = setTimeout(() => this.checkStartReadiness(projectId, urlId), this.START_POLL_MS);
   }
 
   openExternal(): void {

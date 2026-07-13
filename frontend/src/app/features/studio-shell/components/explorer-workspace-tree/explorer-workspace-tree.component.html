@@ -222,11 +222,11 @@
                                 [testid]="'studio-explorer-project-url-' + p.name + '-' + u.id"
                                 (selectRequest)="openUrlPreview(p.name, u.id)">
                     <span class="studio-url-status-dot"
-                          [class.studio-url-status-dot--running]="urlProbe.statusFor(u.url) === 'running'"
-                          [class.studio-url-status-dot--offline]="urlProbe.statusFor(u.url) === 'offline'"
+                          [class.studio-url-status-dot--running]="urlProbe.statusFor(p.projectId ?? '', u.id) === 'running'"
+                          [class.studio-url-status-dot--offline]="urlProbe.statusFor(p.projectId ?? '', u.id) === 'offline'"
                           [attr.data-testid]="'studio-explorer-project-url-dot-' + p.name + '-' + u.id"
-                          [attr.data-status]="urlProbe.statusFor(u.url)"
-                          [attr.aria-label]="urlProbe.statusFor(u.url)"></span>
+                          [attr.data-status]="urlProbe.statusFor(p.projectId ?? '', u.id)"
+                          [attr.aria-label]="urlProbe.statusFor(p.projectId ?? '', u.id)"></span>
                     <button type="button"
                             class="studio-tree-row__url-ext"
                             [attr.data-testid]="'studio-explorer-project-url-ext-' + p.name + '-' + u.id"

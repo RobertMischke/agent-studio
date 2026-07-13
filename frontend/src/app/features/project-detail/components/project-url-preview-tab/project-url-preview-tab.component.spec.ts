@@ -1,18 +1,31 @@
-import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { computed, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProjectUrlPreviewTabComponent } from './project-url-preview-tab.component';
-import { ProjectUrlProbeService, type ProjectUrlStatus } from '../../../../services/project-url-probe.service';
+import {
+  ProjectUrlProbeService,
+  type ProjectUrlReadiness,
+  type ProjectUrlStatus,
+} from '../../../../services/project-url-probe.service';
 import type { RegistryWorkspaceListItem, RegistryProjectUrl } from '../../../../models/task.model';
 
 /** Signal-backed probe stub so tests drive running/offline without a real fetch. */
 class ProbeStub {
   readonly status = signal<ProjectUrlStatus>('unknown');
+  readonly readiness = computed<ProjectUrlReadiness>(() => {
+    const status = this.status();
+    if (status === 'running') return { kind: 'healthy', statusCode: 200, framePolicy: 'allowed', detail: null, durationMs: 1 };
+    if (status === 'failed') return { kind: 'http-error', statusCode: 500, framePolicy: 'allowed', detail: null, durationMs: 1 };
+    if (status === 'blocked') return { kind: 'frame-blocked', statusCode: 200, framePolicy: 'blocked', detail: 'X-Frame-Options is DENY.', durationMs: 1 };
+    if (status === 'offline') return { kind: 'offline', statusCode: null, framePolicy: 'unknown', detail: null, durationMs: 1 };
+    return { kind: 'unknown', statusCode: null, framePolicy: 'unknown', detail: null, durationMs: null };
+  });
   statusFor(): ProjectUrlStatus { return this.status(); }
-  signalFor() { return this.status; }
+  readinessFor(): ProjectUrlReadiness { return this.readiness(); }
+  signalFor() { return this.readiness; }
   refresh(): void { /* no-op */ }
 }
 
@@ -90,6 +103,21 @@ describe('ProjectUrlPreviewTabComponent', () => {
     expect(offline?.textContent).toContain('c:/demo');
     expect(el.querySelector('[data-testid="url-preview-start"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="url-preview-frame"]')).toBeFalsy();
+  });
+
+  it('does not mount an HTTP 500 document and shows status plus recovery actions', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('failed');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    fixture.detectChanges();
+
+    const failure: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-http-error"]');
+    expect(failure?.textContent).toContain('HTTP 500');
+    expect(failure?.querySelector('[data-testid="url-preview-failure-reload"]')).toBeTruthy();
+    expect(failure?.querySelector('[data-testid="url-preview-restart"]')).toBeTruthy();
+    expect(failure?.querySelector('[data-testid="url-preview-failure-open-external"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-frame"]')).toBeFalsy();
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-status"]')?.getAttribute('data-status')).toBe('failed');
   });
 
   it('shows a removed state when the URL is no longer on the project', () => {

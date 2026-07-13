@@ -193,6 +193,7 @@ builder.Services.AddSingleton<AgentStudio.Registry.OrchestratorDefaultsProvider>
 // Project URLs: read-only repo scan for suggestions + minimal dev-server spawn.
 builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlDetectionService>();
 builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlProcessService>();
+builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlReadinessService>();
 builder.Services.AddSingleton<AgentStudio.Tasks.TaskKeyResolver>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
 // F21: per-project write mutex for the lane tree. Must be registered

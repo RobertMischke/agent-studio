@@ -95,8 +95,21 @@
                       (click)="openExternal()">Open externally</button>
             </div>
           }
+        } @else if (readinessPending()) {
+          <div class="url-preview__state" data-testid="url-preview-readiness-checking">
+            <section class="url-preview__state-card url-preview__state-card--compact">
+              <span class="url-preview__spinner" aria-hidden="true"></span>
+              <p class="url-preview__state-title">Checking preview readiness</p>
+              <p class="url-preview__state-note">Waiting for an HTTP response from {{ urlRecord()?.url }}</p>
+            </section>
+          </div>
         } @else {
-          <div class="url-preview__state" data-testid="url-preview-offline">
+          <div class="url-preview__state"
+               [attr.data-testid]="readiness().kind === 'http-error'
+                 ? 'url-preview-http-error'
+                 : readiness().kind === 'frame-blocked'
+                   ? 'url-preview-policy-blocked'
+                   : 'url-preview-offline'">
             <section class="url-preview__state-card"
                      [attr.data-testid]="startFailure() ? 'url-preview-start-failed' : null"
                      [attr.aria-busy]="building()">
@@ -110,17 +123,35 @@
                       Preview could not start
                     } @else if (building()) {
                       Starting preview
+                    } @else if (readiness().kind === 'http-error') {
+                      Preview returned HTTP {{ readiness().statusCode }}
+                    } @else if (readiness().kind === 'frame-blocked') {
+                      Preview cannot be embedded
+                    } @else if (readiness().kind === 'timeout') {
+                      Preview timed out
                     } @else {
                       Preview is offline
                     }
                   </h2>
                 </div>
                 <span class="url-preview__state-badge"
-                      [attr.data-status]="startFailure() ? 'failed' : building() ? 'building' : 'offline'">
+                      [attr.data-status]="startFailure()
+                        ? 'failed'
+                        : building()
+                          ? 'building'
+                          : readiness().kind === 'frame-blocked'
+                            ? 'blocked'
+                            : readiness().kind === 'http-error'
+                              ? 'failed'
+                              : 'offline'">
                   @if (startFailure()) {
                     Failed
                   } @else if (building()) {
                     Starting
+                  } @else if (readiness().kind === 'frame-blocked') {
+                    Blocked
+                  } @else if (readiness().kind === 'http-error') {
+                    HTTP {{ readiness().statusCode }}
                   } @else {
                     Offline
                   }
@@ -128,7 +159,18 @@
               </header>
 
               <p class="url-preview__state-note url-preview__state-note--wide">
-                No server is responding at <code>{{ urlRecord()?.url }}</code>.
+                @if (readiness().kind === 'http-error') {
+                  The server responded with <strong>HTTP {{ readiness().statusCode }}</strong> at
+                  <code>{{ urlRecord()?.url }}</code>. The error document was not loaded in the preview.
+                } @else if (readiness().kind === 'frame-blocked') {
+                  The server returned HTTP {{ readiness().statusCode }}, but its response policy refuses this
+                  cross-origin iframe. {{ readiness().detail }}
+                } @else if (readiness().kind === 'timeout') {
+                  The server did not return an HTTP response before the readiness timeout at
+                  <code>{{ urlRecord()?.url }}</code>.
+                } @else {
+                  No server is responding at <code>{{ urlRecord()?.url }}</code>.
+                }
               </p>
 
               @if (startFailure(); as failure) {
@@ -160,8 +202,17 @@
               }
 
               <div class="url-preview__state-actions">
+                @if (!building()) {
+                  <button type="button" class="url-preview__btn url-preview__btn--ghost"
+                          data-testid="url-preview-failure-reload"
+                          (click)="reload()">Reload</button>
+                }
                 @if (urlRecord()?.startRule) {
-                  @if (startFailure()) {
+                  @if (!building() && (readiness().kind === 'http-error' || readiness().kind === 'frame-blocked')) {
+                    <button type="button" class="url-preview__btn url-preview__btn--primary"
+                            data-testid="url-preview-restart"
+                            (click)="start()">Restart preview</button>
+                  } @else if (startFailure()) {
                     <button type="button" class="url-preview__btn url-preview__btn--primary"
                             data-testid="url-preview-retry"
                             (click)="start()">Retry</button>
@@ -175,6 +226,7 @@
                   }
                 }
                 <button type="button" class="url-preview__btn url-preview__btn--ghost"
+                        data-testid="url-preview-failure-open-external"
                         (click)="openExternal()">Open externally</button>
                 <button type="button" class="url-preview__btn url-preview__btn--quiet"
                         data-testid="url-preview-edit-settings"

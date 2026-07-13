@@ -470,6 +470,28 @@ public static class RegistryEndpoints
                 });
             }
         });
+
+        // Browser no-cors probes hide HTTP status. Probe the registry-owned URL
+        // on the host so previews never mistake an HTTP error page for healthy.
+        app.MapGet(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/readiness",
+            async (string projId, string urlId, HttpRequest request,
+                ProjectRegistry projects, ProjectUrlReadinessService readiness,
+                CancellationToken cancellationToken) =>
+        {
+            var record = projects.FindById(projId);
+            if (record == null)
+                return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
+            var url = record.Urls.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, urlId, StringComparison.Ordinal));
+            if (url == null)
+                return Results.NotFound(new { error = $"Unknown url id '{urlId}'" });
+
+            string? studioOrigin = null;
+            if (Uri.TryCreate(request.Headers.Referer.FirstOrDefault(), UriKind.Absolute, out var referer))
+                studioOrigin = referer.GetLeftPart(UriPartial.Authority);
+            return Results.Ok(await readiness.ProbeAsync(
+                record, url, studioOrigin, cancellationToken));
+        });
     }
 
     private static void CleanupFailedCreate(
