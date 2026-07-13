@@ -172,11 +172,14 @@ and whether it is available. A project owns the effective default configuration
 (enabled, agent, prompt binding, condition, and order). A card owns only its
 execution plan and attempt history: an operator may add a catalogue step to an
 existing card after creation and run it immediately, without changing the
-project default. The Overview must show the effective source as `catalogue`,
-`project`, or `card`, and its activation link must land on the project Pipeline
-control that can actually persist the change. A card-level addition is not a
-new arbitrary executable definition; it can only reference a known catalogue
-step.
+project default. The Overview must show the effective activation source as
+`global`, `project`, or `condition`, with the backend supplying the exact reason
+so the UI never re-derives precedence. Its settings link lands on Project Hub ->
+Pipeline, the control that can persist a project override; a global default is
+code-owned, so that same destination is where an operator overrides it. A
+card-level addition is a separate execution-plan fact, not an activation source
+or a new arbitrary executable definition; it can only reference a known
+catalogue step.
 
 On-demand execution is bounded to post-steps that declare themselves
 idempotent and have an implemented runner. It is allowed after the main run and
@@ -193,6 +196,16 @@ Deterministic on-demand tools write one immutable task result at
 row to `logs/step-runs.jsonl`. The result links the project artefact a tool
 created or refreshed. This separates the task's audit history from the tool's
 idempotent project output, which may legitimately converge on one wiki page.
+Attempt numbers are reserved with create-new filesystem markers before a run,
+and result files are also create-new, so concurrent requests and process
+restarts can leave gaps but can never reuse an attempt or overwrite evidence.
+Rows carry the registry-backed `PROJ-NNN` identity, a canonical
+`PROJ-NNN::jobId` key, and the schema-defined hash id; mutable display names and
+watch paths are not persisted as identity. A project artefact write runs only
+against a clean managed checkout, is committed by the platform as one bounded
+commit, stamped onto the task, and handed to the completed-push queue. Commit
+failure restores only the paths produced inside that boundary; pre-existing
+operator changes cause the step to fail before its writer runs.
 
 - Aspect and code-review prompts carry a complete evidence set (AGT-2022): the
   run-window diff summary is appended with the task-branch-vs-base commit range

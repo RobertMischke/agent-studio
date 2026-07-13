@@ -140,19 +140,50 @@ function pipeline() {
       totalInputCostUsd: 0, totalOutputCostUsd: 0, totalCacheReadCostUsd: 0,
       totalCacheCreationCostUsd: 0, totalCostUsd: 2.75, anyModelUnknown: false,
     },
-    config: Object.fromEntries(wikiSteps.map(step => [step.id, {
-      enabled: false,
-      canDisable: true,
-      enabledSource: step.id === 'post-wiki-learnings' ? 'project' : 'catalogue',
-    }])),
+    config: {
+      'core-agent-run': {
+        enabled: true, canDisable: false, enabledSource: 'catalogue',
+        activation: { state: 'active', source: 'global', reason: 'Enabled by the global catalogue default.' },
+      },
+      'aspect-code-quality': {
+        enabled: true, canDisable: true, enabledSource: 'catalogue',
+        activation: { state: 'active', source: 'global', reason: 'Enabled by the global catalogue default.' },
+      },
+      'post-wiki-maintenance': {
+        enabled: true, canDisable: true, enabledSource: 'catalogue',
+        activation: {
+          state: 'active', source: 'condition',
+          reason: 'Enabled by the global catalogue default; condition "task has tag \'wiki\'" matched this run.',
+        },
+      },
+      'post-wiki-learnings': {
+        enabled: false, canDisable: true, enabledSource: 'project',
+        activation: { state: 'inactive', source: 'project', reason: 'Disabled by the project override.' },
+      },
+      'post-agents-wiki-sync': {
+        enabled: true, canDisable: true, enabledSource: 'catalogue',
+        activation: {
+          state: 'skipped', source: 'condition',
+          reason: 'Condition "an aspect failed" did not match this run.',
+        },
+      },
+    },
     onDemand: {
       plannedStepIds: ['post-wiki-maintenance'],
-      attempts: [{
-        stepId: 'post-wiki-maintenance', attempt: 2, status: 'Ok',
-        summary: 'updated existing problem entry',
-        startedAt: '2026-07-12T00:15:00Z', finishedAt: '2026-07-12T00:15:01Z', durationMs: 850,
-        artifactRef: 'docs/wiki/common-problems/remote-review/README.md',
-      }],
+      attempts: [
+        {
+          stepId: 'post-wiki-maintenance', attempt: 1, status: 'Warn',
+          summary: 'created the first maintenance note',
+          startedAt: '2026-07-11T00:15:00Z', finishedAt: '2026-07-11T00:15:01Z', durationMs: 700,
+          artifactRef: 'results/post-steps/post-wiki-maintenance-attempt-001.md',
+        },
+        {
+          stepId: 'post-wiki-maintenance', attempt: 2, status: 'Ok',
+          summary: 'updated existing problem entry',
+          startedAt: '2026-07-12T00:15:00Z', finishedAt: '2026-07-12T00:15:01Z', durationMs: 850,
+          artifactRef: 'results/post-steps/post-wiki-maintenance-attempt-002.md',
+        },
+      ],
     },
   };
 }
@@ -274,7 +305,7 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
   await saveShot(page, 'cost-breakdown-dialog-dark--mocked.png');
 });
 
-test('post-step lifecycle actions show card/project source and re-run history in both themes', async ({ page }) => {
+test('post-step lifecycle shows backend activation, history, and the exact settings row in both themes', async ({ page }) => {
   await page.addInitScript(() => {
     try { localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false })); }
     catch { /* ignore */ }
@@ -301,13 +332,31 @@ test('post-step lifecycle actions show card/project source and re-run history in
 
   await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
   await page.getByText('TOOL', { exact: true }).click();
+  await page.getByText('ASPECT', { exact: true }).click();
   const maintenance = page.locator('[data-step-id="post-wiki-maintenance"]');
   const learnings = page.locator('[data-step-id="post-wiki-learnings"]');
-  await expect(maintenance.getByTestId('overview-post-step-source')).toHaveText('card');
+  const agentsSync = page.locator('[data-step-id="post-agents-wiki-sync"]');
+  const aspect = page.locator('[data-step-id="aspect-code-quality"]');
+  await expect(maintenance.getByTestId('overview-post-step-source')).toHaveText('active·condition');
+  await expect(maintenance.getByTestId('overview-post-step-source')).toHaveAttribute(
+    'aria-label',
+    'active from condition: Enabled by the global catalogue default; condition "task has tag \'wiki\'" matched this run. Open settings.',
+  );
   await expect(maintenance.getByTestId('overview-post-step-run')).toHaveText('Run again');
   await expect(maintenance.getByTestId('overview-post-step-attempts')).toContainText('2 attempts');
-  await expect(learnings.getByTestId('overview-post-step-source')).toHaveText('project');
+  await maintenance.getByTestId('overview-post-step-attempts').click();
+  await expect(maintenance.getByTestId('overview-post-step-attempt-row')).toHaveCount(2);
+  await expect(maintenance.getByTestId('overview-post-step-attempt-row').first()).toContainText('#2');
+  await expect(maintenance.getByTestId('overview-post-step-artifact').first()).toContainText('attempt-002.md');
+  await expect(learnings.getByTestId('overview-post-step-source')).toHaveText('inactive·project');
   await expect(learnings.getByTestId('overview-post-step-run')).toHaveText('Add + run');
+  await expect(agentsSync.getByTestId('overview-post-step-source')).toHaveText('skipped·condition');
+  await expect(agentsSync.getByTestId('overview-post-step-source')).toHaveAttribute(
+    'aria-label',
+    'skipped from condition: Condition "an aspect failed" did not match this run. Open settings.',
+  );
+  await expect(aspect.getByTestId('overview-post-step-source')).toHaveText('active·global');
+  await expect(aspect.getByTestId('overview-post-step-run')).toHaveCount(0);
 
   for (const theme of ['light', 'dark'] as const) {
     await page.evaluate(t => { document.documentElement.dataset['studioTheme'] = t; }, theme);
@@ -317,11 +366,14 @@ test('post-step lifecycle actions show card/project source and re-run history in
     await page.getByTestId('overview-pipeline').screenshot({ path });
   }
 
+  await maintenance.getByTestId('overview-post-step-attempts').click();
+  await expect(maintenance.getByTestId('overview-post-step-attempt-row')).toHaveCount(0);
   await learnings.getByTestId('overview-post-step-source').click();
   const activationRow = page.getByTestId('pipeline-step-row-post-wiki-learnings');
   await expect(page.getByTestId('project-detail-pipeline')).toBeVisible();
   await expect(activationRow).toBeVisible();
-  await activationRow.locator('summary').click();
+  await expect(activationRow).toHaveAttribute('aria-current', 'location');
+  await expect(activationRow).toHaveJSProperty('open', true);
   await page.getByTestId('pipeline-step-enabled-post-wiki-learnings').check();
   await expect.poll(() => activationBody).toMatchObject({ stepId: 'post-wiki-learnings', enabled: true });
 });

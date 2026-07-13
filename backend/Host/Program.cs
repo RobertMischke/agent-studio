@@ -454,6 +454,8 @@ builder.Services.AddHostedService<AgentStudio.Docs.WorkstreamCuratorHostedServic
 // designated-topic pointers consistent and collects each topic's current state.
 // Injected into the review orchestrator; default-OFF per project.
 builder.Services.AddSingleton<AgentStudio.Pipeline.AgentsWikiSyncPostStepRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IManagedProjectArtifactCommitService,
+    AgentStudio.Pipeline.ManagedProjectArtifactCommitService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.OnDemandPostStepService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkstreamCollectorPostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiTaskCrossReferenceService>();

@@ -37,6 +37,45 @@ internal static class TaskEndpointHelpers
         return record is { StorageLocation: { Length: > 0 } storage } ? storage : watchPath;
     }
 
+    /// <summary>
+    /// Resolves a scanned task back to its immutable registry identity and its
+    /// canonical watch-path entry. Display names are deliberately not used:
+    /// they are mutable and are not unique, while storage location is the
+    /// registry-backed identity bridge used by task scanning.
+    /// </summary>
+    internal static TaskProjectContext? ResolveProjectContext(
+        AgentStudio.Registry.ProjectRegistry projects,
+        TaskScannerService scanner,
+        TaskInfo task)
+    {
+        var project = projects.FindByStorageLocation(task.WatchPath);
+        if (project == null) return null;
+        var entry = scanner.GetWatchPaths().FirstOrDefault(candidate =>
+            SameWatchPath(candidate.Path, project.StorageLocation));
+        return entry == null ? null : new TaskProjectContext(project, entry);
+    }
+
+    private static bool SameWatchPath(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)) return false;
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
+        catch
+        {
+            return string.Equals(
+                left.Replace('\\', '/').TrimEnd('/'),
+                right.Replace('\\', '/').TrimEnd('/'),
+                StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    internal sealed record TaskProjectContext(ProjectRecord Project, WatchPathEntry Entry);
+
     internal static IResult MoveResult(MoveJobOutcome outcome) => outcome.Status switch
     {
         MoveJobStatus.Success => Results.Ok(),

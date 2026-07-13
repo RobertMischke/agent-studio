@@ -3797,6 +3797,43 @@ public class GitService
     }
 
     /// <summary>
+    /// Restores a bounded set of repository-relative paths to HEAD and removes
+    /// only untracked files below those exact pathspecs. This is the rollback
+    /// half of the managed on-demand artifact boundary: its caller first proves
+    /// the checkout was clean, so every supplied path belongs to the failed
+    /// platform write rather than to an operator or another task.
+    /// </summary>
+    public GitWorktreeResult RestorePathsToHead(
+        string repoRoot,
+        IReadOnlyCollection<string> repoRelPaths)
+    {
+        var root = ResolveGitToplevel(repoRoot);
+        if (root == null) return new GitWorktreeResult(false, null, $"Not a git repository: {repoRoot}");
+        var paths = NormalizePaths(repoRelPaths);
+        if (paths.Count == 0) return new GitWorktreeResult(true, null, null);
+
+        var failures = new List<string>();
+        foreach (var path in paths)
+        {
+            var (_, _, trackedCode) = RunGitArgs(root, "ls-files", "--error-unmatch", "--", path);
+            if (trackedCode == 0)
+            {
+                var (_, restoreError, restoreCode) = RunGitArgs(
+                    root, "restore", "--source=HEAD", "--staged", "--worktree", "--", path);
+                if (restoreCode != 0) failures.Add($"{path}: {restoreError.Trim()}");
+                continue;
+            }
+
+            var (_, cleanError, cleanCode) = RunGitArgs(root, "clean", "-fd", "--", path);
+            if (cleanCode != 0) failures.Add($"{path}: {cleanError.Trim()}");
+        }
+
+        return failures.Count == 0
+            ? new GitWorktreeResult(true, null, null)
+            : new GitWorktreeResult(false, null, string.Join("; ", failures));
+    }
+
+    /// <summary>
     /// Moves/renames a wiki node via <c>git mv</c> and commits it. Tracked files
     /// move through git; an untracked source falls back to a filesystem move plus
     /// <c>git add</c> so a never-committed page can still be renamed. Refuses to

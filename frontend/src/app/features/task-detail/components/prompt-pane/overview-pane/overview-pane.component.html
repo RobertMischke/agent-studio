@@ -382,7 +382,7 @@
                   [config]="row.config"
                   (changed)="refreshPipeline()" />
               }
-              <app-post-step-controls [stepId]="row.id" [label]="row.label" [jobId]="job().id" [watchPath]="job().watchPath" [projectName]="job().projectName" [enabledSource]="row.config?.enabledSource ?? 'catalogue'" [plannedStepIds]="pipelinePoll.pipeline()?.onDemand?.plannedStepIds ?? []" [attempts]="pipelinePoll.pipeline()?.onDemand?.attempts ?? []" />
+              @if (selectedPipelineIsCurrent() && row.phaseKey !== 'pre' && row.phaseKey !== 'core') { <app-post-step-controls [stepId]="row.id" [label]="row.label" [jobId]="job().id" [watchPath]="job().watchPath" [projectName]="job().projectName" [activation]="row.config?.activation ?? null" [attempts]="pipelinePoll.pipeline()?.onDemand?.attempts ?? []" /> }
             </span>
             @if (row.runMode === 'parallel') {
               <span class="ov-pl-step__parallel-note"

@@ -12,6 +12,7 @@ export type {
   PipelineModelTokenUsage,
   PipelineRunTokenUsage,
   PipelineModelUsageSummary,
+  PostStepActivation,
   PipelineStepConfig,
   PipelineCatalogueStep,
   PipelineCatalogue,

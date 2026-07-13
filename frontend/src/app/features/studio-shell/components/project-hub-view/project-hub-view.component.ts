@@ -104,6 +104,8 @@ export class ProjectHubViewComponent {
   readonly projectName = input.required<string>();
   /** Optional initial rail; defaults to "overview" if absent or unknown. */
   readonly initialSection = input<string>('overview');
+  /** Exact Project Pipeline row requested by a task-detail activation link. */
+  readonly pipelineStepId = input<string | undefined>();
 
   /** Bubbles to the parent so it can navigate when a row link is clicked. */
   readonly openTask = output<{ jobId: string; watchPath: string }>();

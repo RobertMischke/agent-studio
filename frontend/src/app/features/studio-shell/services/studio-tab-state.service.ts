@@ -333,7 +333,12 @@ export class StudioTabStateService {
       case 'task':
         return { kind: 'task', taskKey: tab.taskKey };
       case 'hub':
-        return { kind: 'hub', projectName: tab.projectName, section: tab.section };
+        return {
+          kind: 'hub',
+          projectName: tab.projectName,
+          section: tab.section,
+          ...(tab.pipelineStepId ? { pipelineStepId: tab.pipelineStepId } : {}),
+        };
       case 'workbench':
         return { kind: 'workbench', projectName: tab.projectName, workbenchId: tab.workbenchId, title: tab.title };
       case 'diff':

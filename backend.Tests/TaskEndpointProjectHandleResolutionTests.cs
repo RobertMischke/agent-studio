@@ -93,6 +93,44 @@ public class TaskEndpointProjectHandleResolutionTests : IDisposable
         Assert.Equal(_watchPath, TaskEndpointHelpers.ResolveWatchPath(registry, "PROJ-999", watchPath: _watchPath));
     }
 
+    [Fact]
+    public void ResolveProjectContext_DuplicateDisplayNamesUseCanonicalStorageIdentity()
+    {
+        var first = Path.Combine(_workspace, "projects", "first", "tasks");
+        var second = Path.Combine(_workspace, "projects", "second", "tasks");
+        Directory.CreateDirectory(first);
+        Directory.CreateDirectory(second);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _workspace,
+                ["WatchPaths:0:Name"] = "same display",
+                ["WatchPaths:0:Path"] = first,
+                ["WatchPaths:0:RootPath"] = Path.GetDirectoryName(first),
+                ["WatchPaths:1:Name"] = "same display",
+                ["WatchPaths:1:Path"] = second,
+                ["WatchPaths:1:RootPath"] = Path.GetDirectoryName(second),
+            })
+            .Build();
+        var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
+        var firstProject = registry.EnsureProjectForStorage(first, "same display", "default");
+        var secondProject = registry.EnsureProjectForStorage(second, "same display", "default");
+        var scanner = new TaskScannerService(
+            config,
+            NullLogger<TaskScannerService>.Instance,
+            new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config));
+
+        var context = TaskEndpointHelpers.ResolveProjectContext(
+            registry,
+            scanner,
+            new TaskInfo { Id = "AGT-77", WatchPath = second, ProjectName = "same display" });
+
+        Assert.NotNull(context);
+        Assert.NotEqual(firstProject.Id, context!.Project.Id);
+        Assert.Equal(secondProject.Id, context.Project.Id);
+        Assert.Equal(second, context.Entry.Path);
+    }
+
     private ProjectRegistry BuildRegistryWithProject(out ProjectRecord record)
     {
         var registry = new ProjectRegistry(BuildConfig(), NullLogger<ProjectRegistry>.Instance);

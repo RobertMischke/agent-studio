@@ -1,24 +1,66 @@
-@if (supported()) {
-  <span class="post-step-controls" data-testid="overview-post-step-actions">
-    <button type="button"
-            class="post-step-controls__source"
-            data-testid="overview-post-step-source"
-            [cacTooltip]="'Effective owner: ' + source() + '. Open the project Pipeline to change the durable default.'"
-            (click)="openPipelineSettings()">{{ source() }}</button>
+@let state = activationView();
+<span class="post-step-controls" data-testid="overview-post-step-actions">
+  <button type="button"
+          class="post-step-controls__source"
+          data-testid="overview-post-step-source"
+          [attr.data-activation-state]="state.state"
+          [attr.data-activation-source]="state.source"
+          [attr.aria-label]="state.state + ' from ' + state.source + ': ' + state.reason + ' Open settings.'"
+          [cacTooltip]="state.reason + ' Open the matching Project Pipeline row.'"
+          (click)="openPipelineSettings()">
+    <span class="post-step-controls__state">{{ state.state }}</span>
+    <span aria-hidden="true">·</span>
+    <span>{{ state.source }}</span>
+  </button>
+
+  @if (supported()) {
     <button type="button"
             class="post-step-controls__run"
             data-testid="overview-post-step-run"
-            [disabled]="busy()"
+            [appPendingButton]="busy()"
+            pendingLabel="Running…"
             [cacTooltip]="attemptCount() > 0
               ? 'Run only this post-step again. Earlier attempts and results stay available.'
               : 'Add this post-step to the existing card and run it without restarting CORE.'"
             (click)="run()">
-      {{ busy() ? 'Running...' : (attemptCount() > 0 ? 'Run again' : 'Add + run') }}
+      <span>{{ attemptCount() > 0 ? 'Run again' : 'Add + run' }}</span>
     </button>
-    @if (attemptCount() > 0) {
-      <span class="post-step-controls__attempts" data-testid="overview-post-step-attempts">
+  }
+
+  @if (stepAttempts().length > 0) {
+    <span class="post-step-controls__history" data-testid="overview-post-step-history">
+      <button type="button"
+              class="post-step-controls__attempts"
+              data-testid="overview-post-step-attempts"
+              [attr.aria-expanded]="historyOpen()"
+              [attr.aria-label]="(historyOpen() ? 'Hide ' : 'Show ') + label() + ' attempt history'"
+              (click)="historyOpen.set(!historyOpen())">
         {{ attemptCount() }} {{ attemptCount() === 1 ? 'attempt' : 'attempts' }}
+      </button>
+      @if (historyOpen()) {
+      <span class="post-step-controls__history-list" role="list" [attr.aria-label]="label() + ' attempt history'">
+        @for (attempt of stepAttempts(); track attempt.attempt) {
+          <span class="post-step-controls__history-row"
+                role="listitem"
+                [attr.data-status]="attempt.status.toLowerCase()"
+                data-testid="overview-post-step-attempt-row">
+            <span class="post-step-controls__attempt-number">#{{ attempt.attempt }}</span>
+            <span class="post-step-controls__attempt-status">{{ attempt.status }}</span>
+            <span class="post-step-controls__attempt-summary">{{ attempt.summary }}</span>
+            @if (attempt.artifactRef) {
+              <code class="post-step-controls__artifact" data-testid="overview-post-step-artifact">
+                {{ attempt.artifactRef }}
+              </code>
+              <app-pipeline-step-result
+                [header]="attemptHeader(attempt)"
+                [jobId]="jobId()"
+                [watchPath]="watchPath()"
+                [fileName]="attempt.artifactRef" />
+            }
+          </span>
+        }
       </span>
-    }
-  </span>
-}
+      }
+    </span>
+  }
+</span>

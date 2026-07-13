@@ -170,7 +170,6 @@ public static class TaskCodeReviewEndpoints
                    TaskSessionLog sessions,
                    GitService git,
                    CodeReviewStepService service,
-                   AgentStudio.Persistence.IJsonlAppender jsonl,
                    OnDemandPostStepService onDemand,
                    IConfiguration configuration,
                    AgentStudio.Registry.ProjectRegistry projects,
@@ -180,6 +179,18 @@ public static class TaskCodeReviewEndpoints
             var resolvedWatchPath = body?.WatchPath ?? watchPath;
             var info = scanner.FindJob(jobId, resolvedWatchPath);
             if (info == null) return Results.NotFound(new { error = $"No job '{jobId}'" });
+
+            var gradeMode = string.Equals(body?.Mode, "grade", StringComparison.OrdinalIgnoreCase);
+            var projectContext = gradeMode
+                ? ResolveProjectContext(projects, scanner, info)
+                : null;
+            if (gradeMode && projectContext == null)
+            {
+                return Results.BadRequest(new
+                {
+                    error = "The task is not associated with a canonical project registry identity.",
+                });
+            }
 
             var detail = scanner.GetJobDetail(jobId, resolvedWatchPath);
             var taskBody = detail?.PromptMarkdown ?? string.Empty;
@@ -223,7 +234,7 @@ public static class TaskCodeReviewEndpoints
                 CliType: cli,
                 Model: model)
             {
-                Mode = string.Equals(body?.Mode, "grade", StringComparison.OrdinalIgnoreCase)
+                Mode = gradeMode
                     ? CodeReviewMode.Grade
                     : CodeReviewMode.Verdict,
                 ThinkingLevel = thinkingLevel,
@@ -238,29 +249,21 @@ public static class TaskCodeReviewEndpoints
             if (request.Mode == CodeReviewMode.Grade)
             {
                 var stepId = PipelineCatalogue.CodeReviewGradeStepId;
-                var attempt = onDemand.ReadAttempts(info.FolderPath).Count(row =>
-                    string.Equals(row.StepId, stepId, StringComparison.OrdinalIgnoreCase)) + 1;
                 var grade = report.Grade is null ? "?" : CodeReviewGradeParsing.GradeToken(report.Grade.Value);
-                var row = new OnDemandStepAttempt(
-                    Id: $"{info.Id}:{stepId}:{attempt}",
-                    ProjectId: info.ProjectName ?? string.Empty,
-                    JobId: info.Id,
-                    JobKey: TaskIdentity.CreateKey(resolvedWatchPath ?? string.Empty, info.Id),
-                    PipelineDefVersion: PipelineCatalogue.Standard.Version,
-                    StepId: stepId,
-                    StepLabel: "Code-review quality grade",
-                    Phase: "Post",
-                    StepType: "Llm",
-                    FailureMode: "Soft",
-                    OrchestratorReaction: "Review",
-                    Attempt: attempt,
-                    Status: report.Grade == CodeReviewGrade.D ? "Failed" : "Ok",
-                    StartedAt: report.StartedAt,
-                    FinishedAt: report.StartedAt.AddMilliseconds(report.DurationMs),
-                    DurationMs: report.DurationMs,
-                    Summary: $"Quality grade {grade}: {report.Summary}",
-                    ArtifactRef: report.FileName);
-                await jsonl.AppendAsync(Path.Combine(info.FolderPath, "logs", OnDemandPostStepService.AttemptsFileName), row, ct: ct);
+                await onDemand.AppendAttemptAsync(
+                    info,
+                    projectContext!.Project.Id,
+                    stepId,
+                    "Code-review quality grade",
+                    "Llm",
+                    "Review",
+                    report.Grade == CodeReviewGrade.D ? "Failed" : "Ok",
+                    report.StartedAt,
+                    report.StartedAt.AddMilliseconds(report.DurationMs),
+                    report.DurationMs,
+                    $"Quality grade {grade}: {report.Summary}",
+                    report.FileName,
+                    ct);
             }
 
             return Results.Ok(new CodeReviewStepEndpointResponse

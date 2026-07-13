@@ -21,7 +21,7 @@
     },
     "jobKey": {
       "type": "string",
-      "description": "watchPath::jobId (internal addressing, AGENTS.md)."
+      "description": "Canonical PROJ-NNN::jobId identity. Display names and filesystem paths are never persisted here."
     },
     "pipelineDefVersion": {
       "type": "integer",

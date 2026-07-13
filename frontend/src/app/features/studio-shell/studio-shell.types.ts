@@ -27,7 +27,13 @@ export interface EpicTab { kind: 'epic'; epicKey: string; viewTaskKey?: string; 
 export interface TaskTab { kind: 'task'; taskKey: string; }
 
 /** Project Hub tab — per project; key `hub:<projectName>`. Section is the initial Hub side-nav anchor. */
-export interface HubTab { kind: 'hub'; projectName: string; section?: string; }
+export interface HubTab {
+  kind: 'hub';
+  projectName: string;
+  section?: string;
+  /** Optional exact row target when a task post-step links into Project Pipeline. */
+  pipelineStepId?: string;
+}
 
 /** Isolated read-only Workbench viewer, one tab per project + Workbench id. */
 export interface WorkbenchTab { kind: 'workbench'; projectName: string; workbenchId: string; title?: string; }

@@ -178,6 +178,13 @@ export interface PipelineModelUsageSummary {
 }
 
 /** Per-project override resolved for one step (from project-settings.json). */
+export interface PostStepActivation {
+  state: 'active' | 'inactive' | 'skipped';
+  source: 'global' | 'project' | 'condition';
+  /** Backend-owned explanation of the exact effective source / condition. */
+  reason: string;
+}
+
 export interface PipelineStepConfig {
   enabled: boolean;
   /** Whether this catalogue step is optional and may be toggled by an operator. */
@@ -206,6 +213,8 @@ export interface PipelineStepConfig {
   modelSource?: string | null;
   /** Whether enabled state comes from an explicit project override or the catalogue default. */
   enabledSource?: 'project' | 'catalogue';
+  /** Effective post-step state and provenance. The frontend renders this verbatim. */
+  activation?: PostStepActivation | null;
 }
 
 export interface OnDemandPostStepAttempt {

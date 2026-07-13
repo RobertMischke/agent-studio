@@ -530,6 +530,9 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.pipelineTotal()?.totalTokens).toBe(100);
 
     const host = fixture.nativeElement as HTMLElement;
+    c.expandAllPipelineGroups();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    expect(host.querySelector('[data-testid="overview-post-step-actions"]')).not.toBeNull();
     const options = Array.from(
       host.querySelectorAll<HTMLButtonElement>('[data-testid="overview-pipeline-run-option"]'),
     );
@@ -561,11 +564,13 @@ describe('OverviewPaneComponent (smoke)', () => {
       host.querySelector('[data-testid="overview-pipeline-run-option"][aria-selected="true"]')
         ?.getAttribute('data-attempt'),
     ).toBe('1');
+    expect(host.querySelector('[data-testid="overview-post-step-actions"]')).toBeNull();
 
     c.selectPipelineRun(2);
     try { fixture.detectChanges(); } catch { /* ignore */ }
     expect(c.selectedPipelineAttemptNumber()).toBe(2);
     expect(c.selectedPipelineIsCurrent()).toBe(true);
+    expect(host.querySelector('[data-testid="overview-post-step-actions"]')).not.toBeNull();
   });
 
   it('runs chip strip: collapses history past 8 chips behind a "+N more" toggle and expands by wrapping (ASS-1735)', async () => {

@@ -26,11 +26,17 @@ public sealed class OnDemandPostStepServiceTests : IDisposable
         };
         var project = new WatchPathEntry { Name = "demo", Path = _root, RootPath = _root };
 
-        var first = await service.RunAsync(task, project, PipelineCatalogue.AgentsWikiSyncStepId, addToCard: true, default);
-        var second = await service.RunAsync(task, project, PipelineCatalogue.AgentsWikiSyncStepId, addToCard: true, default);
+        var first = await service.RunAsync(
+            task, project, "PROJ-042", PipelineCatalogue.AgentsWikiSyncStepId, addToCard: true, default);
+        var second = await service.RunAsync(
+            task, project, "PROJ-042", PipelineCatalogue.AgentsWikiSyncStepId, addToCard: true, default);
 
         Assert.Equal(1, first.Attempt);
         Assert.Equal(2, second.Attempt);
+        Assert.Equal("PROJ-042", first.ProjectId);
+        Assert.Equal("PROJ-042::AGT-1", first.JobKey);
+        Assert.Matches("^[a-f0-9]{64}$", first.Id);
+        Assert.NotEqual(first.Id, second.Id);
         Assert.Equal([PipelineCatalogue.AgentsWikiSyncStepId], service.ReadPlan(jobFolder));
         Assert.Equal(2, service.ReadAttempts(jobFolder).Count);
         Assert.True(File.Exists(Path.Combine(jobFolder, "logs", OnDemandPostStepService.AttemptsFileName)));
@@ -47,9 +53,51 @@ public sealed class OnDemandPostStepServiceTests : IDisposable
         var project = new WatchPathEntry { Name = "demo", Path = _root, RootPath = _root };
 
         await Assert.ThrowsAsync<NotSupportedException>(() =>
-            CreateService().RunAsync(task, project, "post-arbitrary-shell", addToCard: true, default));
+            CreateService().RunAsync(
+                task, project, "PROJ-001", "post-arbitrary-shell", addToCard: true, default));
 
         Assert.Empty(CreateService().ReadPlan(_root));
+    }
+
+    [Fact]
+    public async Task ConcurrentRuns_ReserveUniqueAttemptsAndNeverOverwriteExistingArtifacts()
+    {
+        Directory.CreateDirectory(_root);
+        var jobFolder = Path.Combine(_root, "tasks", "done", "AGT-3");
+        var resultFolder = Path.Combine(jobFolder, "results", "post-steps");
+        Directory.CreateDirectory(resultFolder);
+        var sentinel = Path.Combine(
+            resultFolder,
+            $"{PipelineCatalogue.AgentsWikiSyncStepId}-attempt-001.md");
+        await File.WriteAllTextAsync(sentinel, "do not overwrite");
+
+        var task = new TaskInfo
+        {
+            Id = "AGT-3",
+            Title = "Concurrent completed task",
+            State = TaskStates.Completed,
+            FolderPath = jobFolder,
+            ProjectName = "duplicate display name",
+        };
+        var project = new WatchPathEntry { Name = "duplicate display name", Path = _root, RootPath = _root };
+        var service = CreateService();
+
+        var rows = await Task.WhenAll(
+            service.RunAsync(
+                task, project, "PROJ-009", PipelineCatalogue.AgentsWikiSyncStepId, addToCard: true, default),
+            service.RunAsync(
+                task, project, "PROJ-009", PipelineCatalogue.AgentsWikiSyncStepId, addToCard: true, default));
+
+        Assert.Equal([2, 3], rows.Select(row => row.Attempt).Order().ToArray());
+        Assert.Equal(2, rows.Select(row => row.Id).Distinct(StringComparer.Ordinal).Count());
+        Assert.All(rows, row => Assert.Equal("PROJ-009::AGT-3", row.JobKey));
+        Assert.Equal("do not overwrite", await File.ReadAllTextAsync(sentinel));
+        Assert.True(File.Exists(Path.Combine(
+            resultFolder,
+            $"{PipelineCatalogue.AgentsWikiSyncStepId}-attempt-002.md")));
+        Assert.True(File.Exists(Path.Combine(
+            resultFolder,
+            $"{PipelineCatalogue.AgentsWikiSyncStepId}-attempt-003.md")));
     }
 
     private static OnDemandPostStepService CreateService() => new(

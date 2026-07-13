@@ -1,4 +1,7 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using AgentStudio.Persistence;
 
@@ -30,17 +33,24 @@ public sealed class OnDemandPostStepService
     private readonly WikiLearningsPostStepRunner _learnings;
     private readonly AgentsWikiSyncPostStepRunner _agentsWiki;
     private readonly IJsonlAppender _jsonl;
+    private readonly IManagedProjectArtifactCommitService? _managedArtifacts;
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _runGates =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, object> _planGates =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public OnDemandPostStepService(
         WikiMaintenancePostStepRunner maintenance,
         WikiLearningsPostStepRunner learnings,
         AgentsWikiSyncPostStepRunner agentsWiki,
-        IJsonlAppender jsonl)
+        IJsonlAppender jsonl,
+        IManagedProjectArtifactCommitService? managedArtifacts = null)
     {
         _maintenance = maintenance;
         _learnings = learnings;
         _agentsWiki = agentsWiki;
         _jsonl = jsonl;
+        _managedArtifacts = managedArtifacts;
     }
 
     public static bool IsSupported(string stepId) => Supported.Contains(stepId);
@@ -63,14 +73,18 @@ public sealed class OnDemandPostStepService
     public void AddToPlan(string jobFolderPath, string stepId)
     {
         if (!IsSupported(stepId)) throw new ArgumentOutOfRangeException(nameof(stepId));
-        var ids = ReadPlan(jobFolderPath).Append(stepId)
-            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var dir = Path.Combine(jobFolderPath, ".metadata");
-        Directory.CreateDirectory(dir);
-        var target = Path.Combine(dir, PlanFileName);
-        var temp = target + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(new CardPostStepPlan(ids), JsonOptions));
-        File.Move(temp, target, overwrite: true);
+        var planKey = Path.GetFullPath(jobFolderPath);
+        lock (_planGates.GetOrAdd(planKey, static _ => new object()))
+        {
+            var ids = ReadPlan(jobFolderPath).Append(stepId)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var dir = Path.Combine(jobFolderPath, ".metadata");
+            Directory.CreateDirectory(dir);
+            var target = Path.Combine(dir, PlanFileName);
+            var temp = target + ".tmp";
+            File.WriteAllText(temp, JsonSerializer.Serialize(new CardPostStepPlan(ids), JsonOptions));
+            File.Move(temp, target, overwrite: true);
+        }
     }
 
     public IReadOnlyList<OnDemandStepAttempt> ReadAttempts(string jobFolderPath)
@@ -96,6 +110,7 @@ public sealed class OnDemandPostStepService
     public async Task<OnDemandStepAttempt> RunAsync(
         TaskInfo task,
         WatchPathEntry entry,
+        string projectId,
         string stepId,
         bool addToCard,
         CancellationToken ct)
@@ -103,97 +118,244 @@ public sealed class OnDemandPostStepService
         if (!IsSupported(stepId))
             throw new NotSupportedException($"Post-step '{stepId}' does not support on-demand execution.");
 
-        if (addToCard) AddToPlan(task.FolderPath, stepId);
-        var prior = ReadAttempts(task.FolderPath).Count(row =>
-            string.Equals(row.StepId, stepId, StringComparison.OrdinalIgnoreCase));
-        var attempt = prior + 1;
-        var started = DateTime.UtcNow;
-        var sw = Stopwatch.StartNew();
-        string status;
-        string summary;
-        string? artifactRef = null;
-
+        var gateKey = $"{Path.GetFullPath(task.FolderPath)}::{stepId}";
+        var gate = _runGates.GetOrAdd(gateKey, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
         try
         {
-            switch (stepId)
+            if (addToCard) AddToPlan(task.FolderPath, stepId);
+            var attempt = ReserveAttempt(task.FolderPath, stepId);
+            var started = DateTime.UtcNow;
+            var sw = Stopwatch.StartNew();
+
+            ManagedProjectArtifactOutput RunWriter()
             {
-                case PipelineCatalogue.WikiMaintenanceStepId:
+                switch (stepId)
                 {
-                    var result = _maintenance.Run(task, entry, started);
-                    status = result.Verdict == WikiMaintenanceVerdict.Error ? "Failed"
-                        : result.Verdict == WikiMaintenanceVerdict.Skipped ? "Skipped" : "Ok";
-                    summary = result.Reason;
-                    artifactRef = result.Slug is null ? null : $"docs/wiki/common-problems/{result.Slug}/README.md";
-                    break;
-                }
-                case PipelineCatalogue.WikiLearningsStepId:
-                {
-                    var evidence = new WikiLearningsRun(
-                        Verdict: "on-demand",
-                        VerdictReason: "Operator-triggered post-step",
-                        Findings: [],
-                        AgentNotes: null,
-                        StumblingBlock: task.OutcomeIssue?.Summary,
-                        ChangedSummary: null);
-                    var result = _learnings.Run(task, entry, evidence, started);
-                    status = result.Verdict == WikiLearningsVerdict.Error ? "Failed"
-                        : result.Verdict == WikiLearningsVerdict.Skipped ? "Skipped" : "Ok";
-                    summary = result.Reason;
-                    artifactRef = result.Slug is null ? null : $"docs/wiki/learnings/{result.Slug}.md";
-                    break;
-                }
-                default:
-                {
-                    var result = _agentsWiki.Run(task, entry, changedFiles: null, nowUtc: started);
-                    status = result.Verdict == AgentsWikiSyncVerdict.Error ? "Failed"
-                        : result.Verdict == AgentsWikiSyncVerdict.Skipped ? "Skipped" : "Ok";
-                    summary = result.Reason;
-                    artifactRef = AgentsWikiSyncPostStepRunner.IndexRepoRel;
-                    break;
+                    case PipelineCatalogue.WikiMaintenanceStepId:
+                    {
+                        var result = _maintenance.Run(task, entry, started);
+                        var status = result.Verdict == WikiMaintenanceVerdict.Error ? "Failed"
+                            : result.Verdict == WikiMaintenanceVerdict.Skipped ? "Skipped" : "Ok";
+                        var artifact = result.Slug is null ? null : $"docs/wiki/common-problems/{result.Slug}/README.md";
+                        return new ManagedProjectArtifactOutput(status, result.Reason, artifact);
+                    }
+                    case PipelineCatalogue.WikiLearningsStepId:
+                    {
+                        var evidence = new WikiLearningsRun(
+                            Verdict: "on-demand",
+                            VerdictReason: "Operator-triggered post-step",
+                            Findings: [],
+                            AgentNotes: null,
+                            StumblingBlock: task.OutcomeIssue?.Summary,
+                            ChangedSummary: null);
+                        var result = _learnings.Run(task, entry, evidence, started);
+                        var status = result.Verdict == WikiLearningsVerdict.Error ? "Failed"
+                            : result.Verdict == WikiLearningsVerdict.Skipped ? "Skipped" : "Ok";
+                        var artifact = result.Slug is null ? null : $"docs/wiki/learnings/{result.Slug}.md";
+                        return new ManagedProjectArtifactOutput(status, result.Reason, artifact);
+                    }
+                    default:
+                    {
+                        var result = _agentsWiki.Run(task, entry, changedFiles: null, nowUtc: started);
+                        var status = result.Verdict == AgentsWikiSyncVerdict.Error ? "Failed"
+                            : result.Verdict == AgentsWikiSyncVerdict.Skipped ? "Skipped" : "Ok";
+                        return new ManagedProjectArtifactOutput(
+                            status, result.Reason, AgentsWikiSyncPostStepRunner.IndexRepoRel);
+                    }
                 }
             }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            status = "Failed";
-            summary = ex.Message;
-        }
 
-        sw.Stop();
-        var producedArtifact = artifactRef;
-        var resultRel = Path.Combine("results", "post-steps", $"{stepId}-attempt-{attempt:000}.md")
-            .Replace(Path.DirectorySeparatorChar, '/');
-        var resultPath = Path.Combine(task.FolderPath, resultRel.Replace('/', Path.DirectorySeparatorChar));
-        Directory.CreateDirectory(Path.GetDirectoryName(resultPath)!);
-        await File.WriteAllTextAsync(resultPath,
-            $"# {stepId} attempt {attempt}\n\n" +
-            $"- Status: {status}\n" +
-            $"- Started: {started:O}\n" +
-            $"- Duration: {sw.ElapsedMilliseconds} ms\n" +
-            $"- Produced artifact: {producedArtifact ?? "none"}\n\n" +
-            $"{summary}\n", ct);
-        artifactRef = resultRel;
-        var row = new OnDemandStepAttempt(
-            Id: $"{task.Id}:{stepId}:{attempt}",
-            ProjectId: entry.Name,
+            ManagedProjectArtifactOutput output;
+            try
+            {
+                if (_managedArtifacts is null)
+                {
+                    output = RunWriter();
+                }
+                else
+                {
+                    var durable = await _managedArtifacts.ExecuteAsync(task, stepId, RunWriter, ct);
+                    output = durable.Output ?? new ManagedProjectArtifactOutput(
+                        "Failed", durable.Error ?? "managed commit/push boundary failed", null);
+                    if (!durable.Success)
+                    {
+                        output = output with
+                        {
+                            Status = "Failed",
+                            Summary = string.IsNullOrWhiteSpace(durable.Error)
+                                ? output.Summary
+                                : $"{output.Summary}. Durability: {durable.Error}",
+                        };
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                output = new ManagedProjectArtifactOutput("Failed", ex.Message, null);
+            }
+
+            sw.Stop();
+            var resultRel = Path.Combine("results", "post-steps", $"{stepId}-attempt-{attempt:000}.md")
+                .Replace(Path.DirectorySeparatorChar, '/');
+            var resultPath = Path.Combine(task.FolderPath, resultRel.Replace('/', Path.DirectorySeparatorChar));
+            await WriteImmutableResultAsync(
+                resultPath,
+                $"# {stepId} attempt {attempt}\n\n" +
+                $"- Status: {output.Status}\n" +
+                $"- Started: {started:O}\n" +
+                $"- Duration: {sw.ElapsedMilliseconds} ms\n" +
+                $"- Produced artifact: {output.ProducedArtifact ?? "none"}\n\n" +
+                $"{output.Summary}\n",
+                ct);
+
+            var row = CreateAttemptRow(
+                task,
+                projectId,
+                stepId,
+                PipelineCatalogue.Standard.Post.First(step => step.Id == stepId).DisplayName,
+                "Script",
+                "Scripted",
+                attempt,
+                output.Status,
+                started,
+                DateTime.UtcNow,
+                sw.ElapsedMilliseconds,
+                output.Summary,
+                resultRel);
+            await AppendRowAsync(task.FolderPath, row, ct);
+            return row;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Records an externally executed on-demand step (currently quality grade)
+    /// through the same durable attempt allocator and schema-aligned row builder.
+    /// </summary>
+    public async Task<OnDemandStepAttempt> AppendAttemptAsync(
+        TaskInfo task,
+        string projectId,
+        string stepId,
+        string stepLabel,
+        string stepType,
+        string orchestratorReaction,
+        string status,
+        DateTime startedAt,
+        DateTime finishedAt,
+        long durationMs,
+        string summary,
+        string? artifactRef,
+        CancellationToken ct)
+    {
+        var gateKey = $"{Path.GetFullPath(task.FolderPath)}::{stepId}";
+        var gate = _runGates.GetOrAdd(gateKey, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            var attempt = ReserveAttempt(task.FolderPath, stepId);
+            var row = CreateAttemptRow(
+                task, projectId, stepId, stepLabel, stepType, orchestratorReaction,
+                attempt, status, startedAt, finishedAt, durationMs, summary, artifactRef);
+            await AppendRowAsync(task.FolderPath, row, ct);
+            return row;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    internal int ReserveAttempt(string jobFolderPath, string stepId)
+    {
+        var reservations = Path.Combine(jobFolderPath, ".metadata", "post-step-attempts");
+        Directory.CreateDirectory(reservations);
+        var resultFolder = Path.Combine(jobFolderPath, "results", "post-steps");
+        var existingRows = ReadAttempts(jobFolderPath)
+            .Where(row => string.Equals(row.StepId, stepId, StringComparison.OrdinalIgnoreCase))
+            .Select(row => row.Attempt)
+            .ToHashSet();
+
+        for (var attempt = 1; ; attempt++)
+        {
+            var resultPath = Path.Combine(resultFolder, $"{stepId}-attempt-{attempt:000}.md");
+            if (existingRows.Contains(attempt) || File.Exists(resultPath)) continue;
+
+            var reservation = Path.Combine(reservations, $"{stepId}-attempt-{attempt:000}.reservation");
+            try
+            {
+                using var stream = new FileStream(
+                    reservation, FileMode.CreateNew, FileAccess.Write, FileShare.None, 256, FileOptions.WriteThrough);
+                using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+                writer.Write($"{DateTime.UtcNow:O}\n");
+                return attempt;
+            }
+            catch (IOException ex) when (File.Exists(reservation))
+            {
+                // Another request or process reserved this attempt first.
+                SilentCatch.Note(ex, "OnDemandPostStepService: attempt reservation already exists.");
+            }
+        }
+    }
+
+    internal static string CreateRowId(string jobKey, string stepId, int attempt)
+    {
+        var material = $"{jobKey}\n{stepId}\n{attempt}";
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(material))).ToLowerInvariant();
+    }
+
+    private static string CreateJobKey(string projectId, string jobId) => $"{projectId}::{jobId}";
+
+    private static OnDemandStepAttempt CreateAttemptRow(
+        TaskInfo task,
+        string projectId,
+        string stepId,
+        string stepLabel,
+        string stepType,
+        string orchestratorReaction,
+        int attempt,
+        string status,
+        DateTime startedAt,
+        DateTime finishedAt,
+        long durationMs,
+        string summary,
+        string? artifactRef)
+    {
+        var jobKey = CreateJobKey(projectId, task.Id);
+        return new OnDemandStepAttempt(
+            Id: CreateRowId(jobKey, stepId, attempt),
+            ProjectId: projectId,
             JobId: task.Id,
-            JobKey: TaskIdentity.CreateKey(entry.Path, task.Id),
+            JobKey: jobKey,
             PipelineDefVersion: PipelineCatalogue.Standard.Version,
             StepId: stepId,
-            StepLabel: PipelineCatalogue.Standard.Post.First(step => step.Id == stepId).DisplayName,
+            StepLabel: stepLabel,
             Phase: "Post",
-            StepType: "Script",
+            StepType: stepType,
             FailureMode: "Soft",
-            OrchestratorReaction: "Scripted",
+            OrchestratorReaction: orchestratorReaction,
             Attempt: attempt,
             Status: status,
-            StartedAt: started,
-            FinishedAt: DateTime.UtcNow,
-            DurationMs: sw.ElapsedMilliseconds,
+            StartedAt: startedAt,
+            FinishedAt: finishedAt,
+            DurationMs: durationMs,
             Summary: summary,
             ArtifactRef: artifactRef);
-        await _jsonl.AppendAsync(Path.Combine(task.FolderPath, "logs", AttemptsFileName), row, ct: ct);
-        return row;
+    }
+
+    private async Task AppendRowAsync(string jobFolderPath, OnDemandStepAttempt row, CancellationToken ct)
+        => await _jsonl.AppendAsync(Path.Combine(jobFolderPath, "logs", AttemptsFileName), row, ct: ct);
+
+    private static async Task WriteImmutableResultAsync(string path, string content, CancellationToken ct)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await using var stream = new FileStream(
+            path, FileMode.CreateNew, FileAccess.Write, FileShare.Read, 4096, useAsync: true);
+        await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+        await writer.WriteAsync(content.AsMemory(), ct);
     }
 
     private sealed record CardPostStepPlan(IReadOnlyList<string> StepIds);

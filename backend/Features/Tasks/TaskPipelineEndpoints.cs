@@ -76,10 +76,14 @@ public static class TaskPipelineEndpoints
                     // run, not just after. Null for deterministic / core steps.
                     var resolved = PipelineStepModelDefaults.Resolve(settings, step);
                     var configured = PipelineStepConfigResolver.Lookup(settings, step.Id);
+                    var stepExecution = execution?.Steps.FirstOrDefault(candidate =>
+                        string.Equals(candidate.StepId, step.Id, StringComparison.OrdinalIgnoreCase));
                     return new
                     {
                         enabled = PipelineStepConfigResolver.IsEnabled(settings, step),
-                        enabledSource = configured is null ? "catalogue" : "project",
+                        enabledSource = configured?.Enabled.HasValue == true ? "project" : "catalogue",
+                        activation = PostStepActivationProjection.Build(
+                            step, configured, stepExecution, execution, info),
                         canDisable = PipelineStepConfigResolver.CanDisable(step),
                         cliType = configured?.CliType ?? step.CliType,
                         model = configured?.Model,
@@ -128,11 +132,12 @@ public static class TaskPipelineEndpoints
             if (!OnDemandPostStepService.IsSupported(stepId))
                 return Results.BadRequest(new { error = $"Post-step '{stepId}' cannot run on demand" });
 
-            var entry = scanner.GetWatchPaths().FirstOrDefault(candidate =>
-                string.Equals(candidate.Name, info.ProjectName, StringComparison.OrdinalIgnoreCase));
-            if (entry == null) return Results.BadRequest(new { error = "Project source is not configured" });
+            var context = ResolveProjectContext(projects, scanner, info);
+            if (context == null)
+                return Results.BadRequest(new { error = "Canonical project identity is not configured for this task" });
 
-            var result = await onDemand.RunAsync(info, entry, stepId, body?.AddToCard ?? true, ct);
+            var result = await onDemand.RunAsync(
+                info, context.Entry, context.Project.Id, stepId, body?.AddToCard ?? true, ct);
             return Results.Ok(result);
         });
 

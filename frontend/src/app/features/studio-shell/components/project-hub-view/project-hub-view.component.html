@@ -111,6 +111,7 @@
     @if (activeRail() === 'pipeline') {
       <app-project-pipeline-panel
         [projectName]="projectName()"
+        [focusStepId]="pipelineStepId()"
         (openPrompts)="setRail('prompts')" />
     }
   }
