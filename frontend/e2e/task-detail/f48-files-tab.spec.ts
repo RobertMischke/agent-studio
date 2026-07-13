@@ -270,14 +270,15 @@ test.describe('F48 Files tab — multi-file display', () => {
 
       // Click an aspect card -> it expands and renders markdown (h1 visible).
       const aspect = page.getByTestId('file-card-aspect-code-quality.md');
-      await aspect.getByText('aspect-code-quality.md').click();
+      const aspectHeader = aspect.getByRole('button', { name: /^aspect-code-quality\.md/ });
+      await aspectHeader.click();
       await expect(aspect).toHaveAttribute('class', /file-card--expanded/);
       await expect(aspect.locator('.markdown-body h1')).toBeVisible({ timeout: 5_000 });
 
       await captureScreenshot(page, testInfo, 'f48-files-tab-aspect-expanded-light.png');
 
       // Dark-theme screenshot — same multi-file shape, all-collapsed.
-      await aspect.getByText('aspect-code-quality.md').click(); // collapse again
+      await aspectHeader.click(); // collapse again
       await setTheme(page, 'dark');
       await captureScreenshot(page, testInfo, 'f48-files-tab-multi-collapsed-dark.png');
     } finally {
@@ -307,9 +308,9 @@ test.describe('F48 Files tab — only-prompt theme screenshots + Edit flow', () 
         await dismissUpdateBannerIfPresent(page);
         await setTheme(page, theme);
 
-        // Overview is the default tab on task switch; click into Files so
-        // the prompt card mounts.
-        await page.getByTestId('prompt-tab-description').click();
+        // Click the label itself because the trailing edge sits below the pane
+        // action cluster at this compact screenshot viewport.
+        await page.getByTestId('prompt-tab-description').getByText('Files', { exact: true }).click();
 
         await expect(page.getByTestId('file-card-prompt.md')).toBeVisible({ timeout: 10_000 });
         await expect(page.getByTestId('files-pane-hint')).toBeVisible();
@@ -339,9 +340,11 @@ test.describe('F48 Files tab — only-prompt theme screenshots + Edit flow', () 
       // Initially the editor must not be rendered — read-only markdown only.
       await expect(page.getByTestId('prompt-editor')).toHaveCount(0);
 
-      // Overview is the default tab on task switch; click into Files so the
-      // prompt card / edit button mount.
+      // Overview is the default tab on task switch; click into Files, then
+      // explicitly expand prompt.md before editing it.
       await page.getByTestId('prompt-tab-description').click();
+      const promptCard = page.getByTestId('file-card-prompt.md');
+      await promptCard.getByRole('button', { name: /^prompt\.md/ }).click();
 
       const edit = page.getByTestId('file-card-prompt-edit');
       await expect(edit).toBeVisible({ timeout: 10_000 });
