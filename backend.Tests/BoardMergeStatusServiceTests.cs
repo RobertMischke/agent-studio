@@ -254,6 +254,25 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
         Assert.Equal(2, svc.ComputationCount);
     }
 
+    [Fact]
+    public void BuildLookup_RemoteOnlyOriginHeadFallbackUsesRemoteTrackingBranch()
+    {
+        var repo = SeedDevelopMainRepo(out var mainTip, out _);
+        RunGit(repo, "update-ref refs/remotes/origin/main main");
+        RunGit(repo, "symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main");
+        RunGit(repo, "checkout -q --detach main");
+        RunGit(repo, "branch -D develop main");
+
+        var svc = BuildService(repo, out var project);
+        var job = Job("remote-only", project: project, repo: repo, commits: [Commit(mainTip)]);
+
+        var signal = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.True(signal.InIntegration);
+        Assert.True(signal.InRelease);
+        Assert.Equal("main", signal.IntegrationBranch);
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private BoardMergeStatusService BuildService(

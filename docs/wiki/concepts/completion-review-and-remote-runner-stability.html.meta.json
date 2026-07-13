@@ -67,6 +67,12 @@
       "source": "manual"
     },
     {
+      "key": "AGT-2174",
+      "title": "Pre-commit gate: suspicious artifacts and secrets must be reported before platform snapshot",
+      "linkedAt": "2026-07-13T18:24:00Z",
+      "source": "manual"
+    },
+    {
       "key": "AGT-2170",
       "title": "Integrate typed Runner events and replay into Agent Studio",
       "linkedAt": "2026-07-13T18:07:00Z",

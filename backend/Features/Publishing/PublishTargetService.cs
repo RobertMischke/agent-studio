@@ -20,14 +20,16 @@ namespace AgentStudio.Publishing;
 /// "first publish pending" special state instead of a count.</para>
 ///
 /// <para>Read-only: it forks a handful of cheap plumbing commands and reads a few
-/// files; it never mutates the repository. Cached per project for a few seconds
-/// so the 5 s snapshot poll and the board fold reuse one computation.</para>
+/// files; it never mutates the repository. Successful projections stay cached
+/// across snapshot polls and are invalidated by relevant refs, workflows, and
+/// manifests; transient failures use a one-second retry lifetime.</para>
 /// </summary>
-public sealed class PublishTargetService
+public sealed class PublishTargetService : IDisposable
 {
     private readonly GitService _git;
     private readonly ProjectSettingsService _settings;
     private readonly ILogger<PublishTargetService> _logger;
+    private readonly PublishInputChangeTracker _inputChanges;
 
     /// <summary>Default website source folder when a Pages workflow does not name one.</summary>
     public const string DefaultWebsiteRoot = "website";
@@ -38,6 +40,8 @@ public sealed class PublishTargetService
     // Repository refs/tags are fingerprinted without a git process. Keep the
     // value warm across board heartbeats; the TTL is only a safety refresh.
     internal static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
+    internal static readonly TimeSpan ShortFallbackTtl = TimeSpan.FromSeconds(5);
+    internal static readonly TimeSpan FailureCacheTtl = TimeSpan.FromSeconds(1);
     private readonly GenerationSingleFlightCache<ProjectPublishComputation> _cache;
     private int _computationCount;
 
@@ -59,6 +63,7 @@ public sealed class PublishTargetService
         _settings = settings;
         _logger = logger;
         _cache = new GenerationSingleFlightCache<ProjectPublishComputation>(timeProvider);
+        _inputChanges = new PublishInputChangeTracker();
     }
 
     /// <summary>
@@ -91,24 +96,38 @@ public sealed class PublishTargetService
         var root = _git.ResolveProjectRepoRoot(projectName);
         var configuredBranch = ConfiguredIntegrationBranch(projectName);
         var refFingerprint = string.IsNullOrWhiteSpace(root)
-            ? "missing"
-            : ReadOnlyGitRefFingerprint.Capture(
+            ? new GitRefFingerprint("missing", RequiresShortFallback: true)
+            : ReadOnlyGitRefFingerprint.CaptureDetailed(
                 root,
                 [configuredBranch, BoardMergeStatusService.ReleaseBranch, "gh-pages"],
                 includeTags: true);
+        var inputFingerprint = string.IsNullOrWhiteSpace(root)
+            ? new PublishInputFingerprint("missing", RequiresShortFallback: true)
+            : _inputChanges.Capture(root);
         var cacheKey = $"{projectName}\0{configuredBranch}";
+        var version = $"{refFingerprint.Value}:{inputFingerprint.Value}";
+        var successTtl = refFingerprint.RequiresShortFallback
+            || inputFingerprint.RequiresShortFallback
+                ? ShortFallbackTtl
+                : CacheTtl;
 
-        return _cache.GetOrCreateVersioned(cacheKey, refFingerprint, CacheTtl, () =>
-        {
-            using var _t = GitProcessTelemetry.BeginRequest("publish/derive", _logger);
-            return ReadOnlyGitConcurrencyLimiter.Run(() => Compute(projectName, root));
-        });
+        return _cache.GetOrCreateVersioned(
+            cacheKey,
+            version,
+            value => value.Error is null ? successTtl : FailureCacheTtl,
+            () =>
+            {
+                using var _t = GitProcessTelemetry.BeginRequest("publish/derive", _logger);
+                return ReadOnlyGitConcurrencyLimiter.Run(() => Compute(projectName, root));
+            });
     }
 
     /// <summary>Drops the cached computations. Tests use this after mutating a fixture repo.</summary>
     internal void InvalidateCache() => _cache.Invalidate();
 
     internal int ComputationCount => Volatile.Read(ref _computationCount);
+
+    public void Dispose() => _inputChanges.Dispose();
 
     private ProjectPublishComputation Compute(string projectName, string? root)
     {
@@ -118,19 +137,40 @@ public sealed class PublishTargetService
         if (!_git.IsGitRepo(root))
             return ProjectPublishComputation.Empty(projectName, $"Not a git repository: {root}");
 
-        var workflows = ReadWorkflows(root!);
-        var integrationBranch = ResolveIntegrationBranch(projectName, root!);
-        var latestTag = _git.GetLatestVersionTag(root!);
+        try
+        {
+            var workflows = ReadWorkflows(root!);
+            var integrationBranch = ResolveIntegrationBranch(projectName, root!);
+            if (!_git.TryGetLatestVersionTag(root!, out var latestTag))
+                throw new PublishProjectionReadException("version tags");
 
-        var websiteRoots = ResolveWebsiteRoots(workflows);
-        var targets = new List<PublishTargetComputation>();
+            var websiteRoots = ResolveWebsiteRoots(workflows);
+            var targets = new List<PublishTargetComputation>();
 
-        targets.AddRange(DerivePackageTargets(root!, integrationBranch, workflows, websiteRoots, latestTag));
+            targets.AddRange(DerivePackageTargets(root!, integrationBranch, workflows, websiteRoots, latestTag));
 
-        var websiteTarget = DeriveWebsiteTarget(root!, integrationBranch, workflows, websiteRoots, latestTag);
-        if (websiteTarget != null) targets.Add(websiteTarget);
+            var websiteTarget = DeriveWebsiteTarget(root!, integrationBranch, workflows, websiteRoots, latestTag);
+            if (websiteTarget != null) targets.Add(websiteTarget);
 
-        return new ProjectPublishComputation(projectName, true, null, targets);
+            return new ProjectPublishComputation(projectName, true, null, targets);
+        }
+        catch (PublishProjectionReadException ex)
+        {
+            _logger.LogWarning(
+                "Publish projection for {Project} could not read {Fact}; retrying shortly.",
+                projectName,
+                ex.Fact);
+            return ProjectPublishComputation.Empty(
+                projectName,
+                "Repository publish facts are temporarily unavailable.");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Publish projection for {Project} hit a transient I/O error.", projectName);
+            return ProjectPublishComputation.Empty(
+                projectName,
+                "Repository publish inputs are temporarily unavailable.");
+        }
     }
 
     // ----- package -----
@@ -148,14 +188,27 @@ public sealed class PublishTargetService
         var wantsNuGet = workflows.Any(w => w.PublishesNuGet);
 
         ManifestInfo? npm = null, nuget = null;
-        if (wantsNpm) npm = PublishManifestLocator.LocateNpm(root, websiteRoots);
-        if (wantsNuGet) nuget = PublishManifestLocator.LocateNuGet(root, websiteRoots);
+        if (wantsNpm
+            && !PublishManifestLocator.TryLocateNpm(root, websiteRoots, out npm))
+        {
+            throw new PublishProjectionReadException("npm manifests");
+        }
+        if (wantsNuGet
+            && !PublishManifestLocator.TryLocateNuGet(root, websiteRoots, out nuget))
+        {
+            throw new PublishProjectionReadException("NuGet manifests");
+        }
 
         if (!wantsNpm && !wantsNuGet)
         {
             // Release trigger but no explicit publish step - infer from a manifest.
-            npm = PublishManifestLocator.LocateNpm(root, websiteRoots);
-            if (npm == null) nuget = PublishManifestLocator.LocateNuGet(root, websiteRoots);
+            if (!PublishManifestLocator.TryLocateNpm(root, websiteRoots, out npm))
+                throw new PublishProjectionReadException("npm manifests");
+            if (npm == null
+                && !PublishManifestLocator.TryLocateNuGet(root, websiteRoots, out nuget))
+            {
+                throw new PublishProjectionReadException("NuGet manifests");
+            }
         }
 
         if (npm != null || wantsNpm)
@@ -178,8 +231,16 @@ public sealed class PublishTargetService
         // Since the last release tag, or (first publish) over the whole branch so
         // the per-task chip still resolves; the count is only asserted when a tag
         // anchors it.
-        var commits = _git.GetMainlineCommitsForScope(
-            root, integrationBranch, include, exclude, sinceRef: latestTag);
+        if (!_git.TryGetMainlineCommitsForScope(
+                root,
+                integrationBranch,
+                include,
+                exclude,
+                out var commits,
+                sinceRef: latestTag))
+        {
+            throw new PublishProjectionReadException($"{label} commit history");
+        }
         var shas = commits.Select(c => c.Sha).ToList();
 
         var target = new PublishTarget
@@ -230,8 +291,13 @@ public sealed class PublishTargetService
         string? sinceRef = null;
         string? sinceDateIso = null;
 
-        var deployDate = _git.GetTipCommitDateUtc(root, "gh-pages")
-                         ?? _git.GetTipCommitDateUtc(root, "origin/gh-pages");
+        if (!_git.TryGetTipCommitDateUtc(root, "gh-pages", out var deployDate))
+            throw new PublishProjectionReadException("gh-pages tip");
+        if (deployDate is null
+            && !_git.TryGetTipCommitDateUtc(root, "origin/gh-pages", out deployDate))
+        {
+            throw new PublishProjectionReadException("origin/gh-pages tip");
+        }
         if (deployDate != null)
         {
             referenceKind = PublishReferenceKinds.PagesBranch;
@@ -250,9 +316,17 @@ public sealed class PublishTargetService
             reference = null;
         }
 
-        var commits = _git.GetMainlineCommitsForScope(
-            root, integrationBranch, include, Array.Empty<string>(),
-            sinceRef: sinceRef, sinceDateIso: sinceDateIso);
+        if (!_git.TryGetMainlineCommitsForScope(
+                root,
+                integrationBranch,
+                include,
+                Array.Empty<string>(),
+                out var commits,
+                sinceRef: sinceRef,
+                sinceDateIso: sinceDateIso))
+        {
+            throw new PublishProjectionReadException("website commit history");
+        }
         var shas = commits.Select(c => c.Sha).ToList();
 
         var target = new PublishTarget
@@ -290,17 +364,22 @@ public sealed class PublishTargetService
         IEnumerable<string> files;
         try
         {
-            files = Directory.EnumerateFiles(dir, "*.yml").Concat(Directory.EnumerateFiles(dir, "*.yaml"));
+            files = Directory.EnumerateFiles(dir, "*.yml")
+                .Concat(Directory.EnumerateFiles(dir, "*.yaml"))
+                .ToArray();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return facts;
+            throw new PublishProjectionReadException("workflow directory", ex);
         }
         foreach (var file in files)
         {
             string content;
             try { content = File.ReadAllText(file); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                throw new PublishProjectionReadException(Path.GetFileName(file), ex);
+            }
             facts.Add(PublishWorkflowParser.Parse(Path.GetFileName(file), content));
         }
         return facts;
@@ -308,7 +387,7 @@ public sealed class PublishTargetService
 
     private string ResolveIntegrationBranch(string projectName, string root)
     {
-        return _git.ResolveIntegrationBranch(root, ConfiguredIntegrationBranch(projectName));
+        return _git.ResolveIntegrationReadRef(root, ConfiguredIntegrationBranch(projectName));
     }
 
     private string ConfiguredIntegrationBranch(string projectName)
@@ -324,6 +403,17 @@ public sealed class PublishTargetService
         if (string.IsNullOrWhiteSpace(tag)) return null;
         var t = tag.Trim();
         return t.StartsWith('v') || t.StartsWith('V') ? t[1..] : t;
+    }
+
+    private sealed class PublishProjectionReadException : Exception
+    {
+        public PublishProjectionReadException(string fact, Exception? inner = null)
+            : base($"Could not read {fact}.", inner)
+        {
+            Fact = fact;
+        }
+
+        public string Fact { get; }
     }
 }
 

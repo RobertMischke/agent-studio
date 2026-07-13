@@ -39,14 +39,16 @@ public sealed class BoardMergeStatusService
     public const string ReleaseBranch = "main";
 
     /// <summary>
-    /// How long a repository's develop/main reachability sets are reused. Merges
-    /// are infrequent relative to the board poll, so a few seconds of staleness is
-    /// invisible while it collapses a burst of polls to a single pair of reads.
+    /// Safety lifetime for a repository's reachability sets. Normal invalidation
+    /// is ref-driven, so stable repositories reuse one projection across board
+    /// polls while branch moves become visible immediately.
     /// </summary>
     // Ref fingerprints invalidate immediately when develop/main moves. The long
     // TTL is only a safety refresh for unusual git layouts the fingerprint
     // cannot observe, not the normal board-poll invalidation mechanism.
     internal static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
+    internal static readonly TimeSpan ShortFallbackTtl = TimeSpan.FromSeconds(5);
+    internal static readonly TimeSpan FailureCacheTtl = TimeSpan.FromSeconds(1);
 
     private readonly GenerationSingleFlightCache<RepoReachability> _cache;
     private int _computationCount;
@@ -109,13 +111,15 @@ public sealed class BoardMergeStatusService
             {
                 var configuredBranch = ConfiguredIntegrationBranch(pair.Value[0].ProjectName);
                 var cacheKey = $"{pair.Key}\0{configuredBranch}";
-                var refFingerprint = ReadOnlyGitRefFingerprint.Capture(
+                var refFingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(
                     pair.Key,
                     [configuredBranch, ReleaseBranch]);
                 reaches[pair.Key] = _cache.GetOrCreateVersioned(
                     cacheKey,
-                    refFingerprint,
-                    CacheTtl,
+                    refFingerprint.Value,
+                    value => value.Succeeded
+                        ? refFingerprint.RequiresShortFallback ? ShortFallbackTtl : CacheTtl
+                        : FailureCacheTtl,
                     () => ComputeReachability(pair.Key, configuredBranch));
             });
 
@@ -196,14 +200,23 @@ public sealed class BoardMergeStatusService
             // Branch resolution is part of the cached computation. Previously
             // every board request resolved it before checking the reachability
             // cache, which still spawned git processes on an otherwise-hot hit.
-            var integrationBranch = _git.ResolveIntegrationBranch(root, configuredBranch);
-            var integration = _git.GetAncestorShaSet(
+            var integrationRef = _git.ResolveIntegrationReadRef(root, configuredBranch);
+            var integrationBranch = integrationRef.StartsWith("origin/", StringComparison.Ordinal)
+                ? integrationRef["origin/".Length..]
+                : integrationRef;
+            var integrationSucceeded = _git.TryGetAncestorShaSet(
                 root,
-                [integrationBranch, "origin/" + integrationBranch]);
-            var release = _git.GetAncestorShaSet(
+                [integrationBranch, "origin/" + integrationBranch],
+                out var integration);
+            var releaseSucceeded = _git.TryGetAncestorShaSet(
                 root,
-                [ReleaseBranch, "origin/" + ReleaseBranch]);
-            return new RepoReachability(integrationBranch, integration, release);
+                [ReleaseBranch, "origin/" + ReleaseBranch],
+                out var release);
+            return new RepoReachability(
+                integrationBranch,
+                integration,
+                release,
+                integrationSucceeded && releaseSucceeded);
         });
     }
 
@@ -225,5 +238,6 @@ public sealed class BoardMergeStatusService
     private sealed record RepoReachability(
         string IntegrationBranch,
         HashSet<string> Integration,
-        HashSet<string> Release);
+        HashSet<string> Release,
+        bool Succeeded);
 }

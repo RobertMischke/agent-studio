@@ -1023,6 +1023,15 @@
         <p><strong>Truth gaps remained:</strong> live cards still projected <code>runner=null</code> and <code>no-active-run</code>; Remote timeline events still had no <code>runId</code>; AGT-2176 remained stale Progress without lease or runner. Planning issues AGT-2182 through AGT-2187 appeared during the sample, but issue creation is not code landing.</p>
       </article>
 
+      <article class="card live" style="margin-top: 14px;">
+        <span class="label">Targeted program watch · 2026-07-13, 20:11-20:18 CEST</span>
+        <p><strong>The first stabilization root started:</strong> AGT-2155 was claimed by the Remote Host at 20:12:17 with fencing token 2 and remained live at the end of the sample. AGT-2182 through AGT-2187 remained Ready and dependency-blocked or queued. The plan is executing, but no stabilization code has completed or reached Stable yet.</p>
+        <p><strong>The semantic false reissue was captured exactly:</strong> AGT-2169's close-out said <code>4,049 passed, 30 skipped, 9 unrelated failures</code> and <code>No AGT-2169 test failed</code>. At 20:07:01 the Completion Gate nevertheless classified three unfinished items, reopened the task, and caused another coding claim at 20:11:44. This is direct evidence that isolated failure words were treated as stronger than the meaning of the final statement.</p>
+        <p><strong>Retry identity also leaked across a chain:</strong> AGT-2159 escalated at 20:06:57 as <code>build-test gate failed twice</code>, while the same event recorded <code>attempt=1</code>. AGT-2163 remained in Auto Review for more than 22 minutes without a subsequent event, and AGT-2174 showed the same emerging wait. No Auto Review completed successfully during this window.</p>
+        <p><strong>The review subject itself drifted:</strong> AGT-2174 reported Remote <code>TASK_DONE</code> with salvage SHA <code>2fe0f07d</code>, but its Auto Review transition recorded shared development head <code>34c2df1f</code>. That head contained this Wiki update and unrelated cache tests, not the submitted Remote result. The gate later escalated AGT-2174 as a double failure while recording <code>attempt=1</code>. This is direct proof that the current review path can test ambient Task Server checkout state instead of the immutable Remote result. The fixture is now mandatory in AGT-2187.</p>
+        <p><strong>Deployment and observability remained unchanged:</strong> Stable stayed on <code>2026.07.12-1055+18fd1f89</code>. Four Remote leases were live, but cards still showed <code>runner=null</code> and <code>no-active-run</code>, Remote events still had <code>runId=null</code>, and canonical run records were absent for most of those tasks. CPU again reached 91.7% with load1 19.94, while the host stayed alive, Git-ready, swap-free, and low on I/O wait.</p>
+      </article>
+
       <div class="table-wrap">
         <table>
           <thead><tr><th>CEST</th><th>CPU</th><th>Load 1</th><th>Memory</th></tr></thead>

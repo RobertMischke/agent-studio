@@ -13,9 +13,15 @@ internal static class ReadOnlyGitRefFingerprint
         string repoRoot,
         IEnumerable<string> branchNames,
         bool includeTags = false)
+        => CaptureDetailed(repoRoot, branchNames, includeTags).Value;
+
+    public static GitRefFingerprint CaptureDetailed(
+        string repoRoot,
+        IEnumerable<string> branchNames,
+        bool includeTags = false)
     {
         var metadata = ResolveMetadataDirectories(repoRoot);
-        if (metadata is null) return "missing";
+        if (metadata is null) return new GitRefFingerprint("missing", RequiresShortFallback: true);
 
         var comparer = OperatingSystem.IsWindows()
             ? StringComparer.OrdinalIgnoreCase
@@ -23,7 +29,6 @@ internal static class ReadOnlyGitRefFingerprint
         var paths = new HashSet<string>(comparer)
         {
             Path.Combine(metadata.Worktree, "HEAD"),
-            Path.Combine(metadata.Common, "packed-refs"),
             Path.Combine(metadata.Common, "refs", "remotes", "origin", "HEAD"),
         };
 
@@ -33,34 +38,61 @@ internal static class ReadOnlyGitRefFingerprint
         // A configured integration branch may be absent, in which case
         // GitService falls back through origin/HEAD or HEAD. Include the target
         // of those symbolic refs so a commit on that fallback invalidates too.
-        AddSymbolicTarget(metadata.Common, Path.Combine(metadata.Worktree, "HEAD"), paths);
-        AddSymbolicTarget(
+        var reliable = AddSymbolicTarget(
+            metadata.Common,
+            Path.Combine(metadata.Worktree, "HEAD"),
+            paths);
+        reliable &= AddSymbolicTarget(
             metadata.Common,
             Path.Combine(metadata.Common, "refs", "remotes", "origin", "HEAD"),
             paths);
 
-        if (includeTags)
-        {
-            var tagsRoot = Path.Combine(metadata.Common, "refs", "tags");
-            try
-            {
-                if (Directory.Exists(tagsRoot))
-                {
-                    foreach (var tag in Directory.EnumerateFiles(tagsRoot, "*", SearchOption.AllDirectories))
-                        paths.Add(Path.GetFullPath(tag));
-                }
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                SilentCatch.Note(ex, "ReadOnlyGitRefFingerprint: tag enumeration failed");
-            }
-        }
-
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         Append(hash, Path.GetFullPath(repoRoot));
         foreach (var path in paths.OrderBy(p => p, comparer))
-            AppendFile(hash, metadata.Common, path);
-        return Convert.ToHexString(hash.GetHashAndReset());
+            reliable &= AppendFile(hash, metadata.Common, path);
+
+        // packed-refs may contain hundreds or thousands of unrelated task refs.
+        // Git rewrites it atomically, so file metadata is a constant-time change
+        // stamp; do not hash the complete file on every board heartbeat.
+        reliable &= AppendFileMetadata(
+            hash,
+            metadata.Common,
+            Path.Combine(metadata.Common, "packed-refs"));
+
+        // Loose version tags are created/replaced atomically. Directory metadata
+        // detects those normal Git updates without recursively enumerating every
+        // tag on a cache hit. Packed tags are covered by packed-refs above.
+        if (includeTags)
+        {
+            reliable &= AppendDirectoryMetadata(
+                hash,
+                metadata.Common,
+                Path.Combine(metadata.Common, "refs", "tags"));
+        }
+
+        var commonReftableRoot = Path.Combine(metadata.Common, "reftable");
+        var worktreeReftableRoot = Path.Combine(metadata.Worktree, "reftable");
+        var usesReftable = IsReftableDirectory(commonReftableRoot)
+            || IsReftableDirectory(worktreeReftableRoot);
+        if (usesReftable)
+        {
+            reliable &= AppendFileMetadata(
+                hash,
+                metadata.Common,
+                Path.Combine(commonReftableRoot, "tables.list"));
+            if (!string.Equals(metadata.Worktree, metadata.Common, StringComparison.OrdinalIgnoreCase))
+            {
+                reliable &= AppendFileMetadata(
+                    hash,
+                    metadata.Worktree,
+                    Path.Combine(worktreeReftableRoot, "tables.list"));
+            }
+        }
+
+        return new GitRefFingerprint(
+            Convert.ToHexString(hash.GetHashAndReset()),
+            RequiresShortFallback: usesReftable || !reliable);
     }
 
     private static void AddBranchPaths(string commonDir, string? branchName, HashSet<string> paths)
@@ -76,19 +108,33 @@ internal static class ReadOnlyGitRefFingerprint
         AddSafeRefPath(commonDir, Path.Combine("refs", "remotes", "origin"), branch, paths);
     }
 
-    private static void AddSymbolicTarget(string commonDir, string symbolicRefPath, HashSet<string> paths)
+    private static bool AddSymbolicTarget(
+        string commonDir,
+        string symbolicRefPath,
+        HashSet<string> paths)
     {
         try
         {
-            if (!File.Exists(symbolicRefPath)) return;
+            if (!File.Exists(symbolicRefPath)) return true;
             var text = File.ReadAllText(symbolicRefPath).Trim();
             const string prefix = "ref: ";
-            if (!text.StartsWith(prefix, StringComparison.Ordinal)) return;
-            AddSafeRelativePath(commonDir, text[prefix.Length..], paths);
+            if (!text.StartsWith(prefix, StringComparison.Ordinal)) return true;
+            var target = text[prefix.Length..].Replace('\\', '/');
+            AddSafeRelativePath(commonDir, target, paths);
+
+            // ResolveIntegrationBranch turns origin/HEAD into a branch name and
+            // then requires the corresponding local branch. Fingerprint both
+            // mirrors, otherwise moving refs/heads/trunk could leave a warm
+            // fallback projection stale when configured develop is absent.
+            const string originPrefix = "refs/remotes/origin/";
+            if (target.StartsWith(originPrefix, StringComparison.Ordinal))
+                AddBranchPaths(commonDir, target[originPrefix.Length..], paths);
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             SilentCatch.Note(ex, "ReadOnlyGitRefFingerprint: symbolic ref read failed");
+            return false;
         }
     }
 
@@ -120,7 +166,7 @@ internal static class ReadOnlyGitRefFingerprint
         }
     }
 
-    private static void AppendFile(IncrementalHash hash, string commonDir, string path)
+    private static bool AppendFile(IncrementalHash hash, string commonDir, string path)
     {
         Append(hash, Path.GetRelativePath(commonDir, path).Replace('\\', '/'));
         try
@@ -128,7 +174,7 @@ internal static class ReadOnlyGitRefFingerprint
             if (!File.Exists(path))
             {
                 Append(hash, "missing");
-                return;
+                return true;
             }
 
             var info = new FileInfo(path);
@@ -142,11 +188,59 @@ internal static class ReadOnlyGitRefFingerprint
             int read;
             while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
                 hash.AppendData(buffer, 0, read);
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Append(hash, "unreadable");
             SilentCatch.Note(ex, "ReadOnlyGitRefFingerprint: ref read failed");
+            return false;
+        }
+    }
+
+    private static bool AppendFileMetadata(IncrementalHash hash, string commonDir, string path)
+    {
+        Append(hash, Path.GetRelativePath(commonDir, path).Replace('\\', '/'));
+        try
+        {
+            if (!File.Exists(path))
+            {
+                Append(hash, "missing");
+                return true;
+            }
+
+            var info = new FileInfo(path);
+            Append(hash, $"{info.Length}:{info.LastWriteTimeUtc.Ticks}");
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Append(hash, "unreadable");
+            SilentCatch.Note(ex, "ReadOnlyGitRefFingerprint: ref metadata read failed");
+            return false;
+        }
+    }
+
+    private static bool AppendDirectoryMetadata(IncrementalHash hash, string commonDir, string path)
+    {
+        Append(hash, Path.GetRelativePath(commonDir, path).Replace('\\', '/'));
+        try
+        {
+            if (!Directory.Exists(path))
+            {
+                Append(hash, "missing");
+                return true;
+            }
+
+            var info = new DirectoryInfo(path);
+            Append(hash, $"{info.CreationTimeUtc.Ticks}:{info.LastWriteTimeUtc.Ticks}");
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Append(hash, "unreadable");
+            SilentCatch.Note(ex, "ReadOnlyGitRefFingerprint: directory metadata read failed");
+            return false;
         }
     }
 
@@ -155,6 +249,9 @@ internal static class ReadOnlyGitRefFingerprint
         hash.AppendData(Encoding.UTF8.GetBytes(value));
         hash.AppendData([0]);
     }
+
+    private static bool IsReftableDirectory(string path)
+        => Directory.Exists(path) || File.Exists(Path.Combine(path, "tables.list"));
 
     private static MetadataDirectories? ResolveMetadataDirectories(string repoRoot)
     {
@@ -210,3 +307,7 @@ internal static class ReadOnlyGitRefFingerprint
 
     private sealed record MetadataDirectories(string Worktree, string Common);
 }
+
+internal readonly record struct GitRefFingerprint(
+    string Value,
+    bool RequiresShortFallback);

@@ -60,6 +60,39 @@ public sealed class ReadOnlyGitRefFingerprintTests : IDisposable
         Assert.NotEqual(afterBranch, afterTag);
     }
 
+    [Fact]
+    public void Capture_OriginHeadFallbackAlsoTracksCorrespondingLocalBranch()
+    {
+        Git("branch", "trunk", "main");
+        Git("update-ref", "refs/remotes/origin/trunk", "main");
+        Git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk");
+        var before = ReadOnlyGitRefFingerprint.Capture(_root, ["develop", "main"]);
+
+        Git("checkout", "-q", "trunk");
+        File.WriteAllText(Path.Combine(_root, "trunk.txt"), "change");
+        Git("add", "-A");
+        Git("commit", "-q", "-m", "trunk change");
+
+        var after = ReadOnlyGitRefFingerprint.Capture(_root, ["develop", "main"]);
+        Assert.NotEqual(before, after);
+    }
+
+    [Fact]
+    public void CaptureDetailed_ReftableUsesShortFallbackAndTablesListStamp()
+    {
+        var reftable = Path.Combine(_root, ".git", "reftable");
+        Directory.CreateDirectory(reftable);
+        var tablesList = Path.Combine(reftable, "tables.list");
+        File.WriteAllText(tablesList, "0x000000000001-0x000000000002.ref\n");
+
+        var before = ReadOnlyGitRefFingerprint.CaptureDetailed(_root, ["develop", "main"]);
+        Assert.True(before.RequiresShortFallback);
+
+        File.AppendAllText(tablesList, "0x000000000003-0x000000000004.ref\n");
+        var after = ReadOnlyGitRefFingerprint.CaptureDetailed(_root, ["develop", "main"]);
+        Assert.NotEqual(before.Value, after.Value);
+    }
+
     private void Git(params string[] args)
     {
         var start = new ProcessStartInfo

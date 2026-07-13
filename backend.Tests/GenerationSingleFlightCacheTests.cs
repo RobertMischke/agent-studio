@@ -91,4 +91,64 @@ public sealed class GenerationSingleFlightCacheTests
         Assert.Equal(2, cache.GetOrCreateVersioned(
             "repo", "ref-b", TimeSpan.FromHours(1), () => 3));
     }
+
+    [Fact]
+    public void ValueDependentZeroTtl_RetriesAndDoesNotRetainLogicalKeys()
+    {
+        var cache = new GenerationSingleFlightCache<int>(maxEntries: 2);
+        var calls = 0;
+
+        for (var i = 0; i < 20; i++)
+        {
+            var value = cache.GetOrCreateVersioned(
+                "repo-" + i,
+                "v1",
+                _ => TimeSpan.Zero,
+                () => Interlocked.Increment(ref calls));
+            Assert.Equal(i + 1, value);
+        }
+
+        Assert.Equal(0, cache.ValueCount);
+        Assert.Equal(0, cache.TrackedKeyCount);
+        Assert.Equal(21, cache.GetOrCreateVersioned(
+            "repo-0", "v1", _ => TimeSpan.Zero, () => Interlocked.Increment(ref calls)));
+    }
+
+    [Fact]
+    public void BoundedCache_EvictsLeastRecentlyUsedLogicalKey()
+    {
+        var cache = new GenerationSingleFlightCache<int>(maxEntries: 2);
+
+        Assert.Equal(1, cache.GetOrCreate("a", TimeSpan.FromHours(1), () => 1));
+        Assert.Equal(2, cache.GetOrCreate("b", TimeSpan.FromHours(1), () => 2));
+        Assert.Equal(1, cache.GetOrCreate("a", TimeSpan.FromHours(1), () => 99));
+        Assert.Equal(3, cache.GetOrCreate("c", TimeSpan.FromHours(1), () => 3));
+
+        Assert.Equal(2, cache.ValueCount);
+        Assert.Equal(2, cache.TrackedKeyCount);
+        Assert.Equal(20, cache.GetOrCreate("b", TimeSpan.FromHours(1), () => 20));
+    }
+
+    [Fact]
+    public async Task InvalidateWhileFactoryRuns_LeavesNoOldGenerationValueOrTracking()
+    {
+        var cache = new GenerationSingleFlightCache<int>();
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+
+        var old = Task.Run(() => cache.GetOrCreate("repo", TimeSpan.FromHours(1), () =>
+        {
+            entered.Set();
+            release.Wait();
+            return 1;
+        }));
+
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+        cache.Invalidate();
+        release.Set();
+        Assert.Equal(1, await old);
+
+        Assert.Equal(0, cache.ValueCount);
+        Assert.Equal(0, cache.TrackedKeyCount);
+    }
 }

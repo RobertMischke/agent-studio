@@ -9,6 +9,8 @@ namespace AgentStudio.Shared;
 /// </summary>
 internal sealed class GenerationSingleFlightCache<TValue>
 {
+    private const int DefaultMaxEntries = 256;
+
     private readonly ConcurrentDictionary<string, CacheEntry> _values =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Lazy<TValue>> _flights =
@@ -16,11 +18,21 @@ internal sealed class GenerationSingleFlightCache<TValue>
     private readonly ConcurrentDictionary<string, string> _latestVersions =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly TimeProvider _timeProvider;
+    private readonly int _maxEntries;
+    private readonly object _generationLock = new();
+    private readonly object _evictionLock = new();
+    private readonly LinkedList<string> _evictionOrder = new();
+    private readonly Dictionary<string, LinkedListNode<string>> _evictionNodes =
+        new(StringComparer.OrdinalIgnoreCase);
     private long _generation;
 
-    public GenerationSingleFlightCache(TimeProvider? timeProvider = null)
+    public GenerationSingleFlightCache(
+        TimeProvider? timeProvider = null,
+        int maxEntries = DefaultMaxEntries)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxEntries, 1);
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _maxEntries = maxEntries;
     }
 
     public TValue GetOrCreate(string key, TimeSpan ttl, Func<TValue> valueFactory)
@@ -35,19 +47,37 @@ internal sealed class GenerationSingleFlightCache<TValue>
         string version,
         TimeSpan ttl,
         Func<TValue> valueFactory)
+        => GetOrCreateVersioned(key, version, _ => ttl, valueFactory);
+
+    /// <summary>
+    /// Variant whose cache lifetime depends on the computed value. This lets
+    /// callers single-flight transient failures without retaining them for the
+    /// normal successful projection lifetime.
+    /// </summary>
+    public TValue GetOrCreateVersioned(
+        string key,
+        string version,
+        Func<TValue, TimeSpan> ttlSelector,
+        Func<TValue> valueFactory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ArgumentNullException.ThrowIfNull(version);
+        ArgumentNullException.ThrowIfNull(ttlSelector);
         ArgumentNullException.ThrowIfNull(valueFactory);
 
-        var generation = Volatile.Read(ref _generation);
-        _latestVersions[key] = version;
+        long generation;
+        lock (_generationLock)
+        {
+            generation = _generation;
+            _latestVersions[key] = version;
+        }
         var now = _timeProvider.GetUtcNow();
         if (_values.TryGetValue(key, out var cached)
             && cached.Generation == generation
             && string.Equals(cached.Version, version, StringComparison.Ordinal)
             && cached.ExpiresAt > now)
         {
+            Touch(key, generation);
             return cached.Value;
         }
 
@@ -61,17 +91,36 @@ internal sealed class GenerationSingleFlightCache<TValue>
         try
         {
             var value = flight.Value;
-            if (generation == Volatile.Read(ref _generation)
-                && _latestVersions.TryGetValue(key, out var latestVersion)
-                && string.Equals(latestVersion, version, StringComparison.Ordinal))
+            var ttl = ttlSelector(value);
+            lock (_generationLock)
             {
-                _values[key] = new CacheEntry(
-                    generation,
-                    version,
-                    _timeProvider.GetUtcNow().Add(ttl),
-                    value);
+                if (generation == _generation
+                    && ttl > TimeSpan.Zero
+                    && _latestVersions.TryGetValue(key, out var latestVersion)
+                    && string.Equals(latestVersion, version, StringComparison.Ordinal))
+                {
+                    _values[key] = new CacheEntry(
+                        generation,
+                        version,
+                        _timeProvider.GetUtcNow().Add(ttl),
+                        value);
+                    TouchUnderGenerationLock(key);
+                }
+                else if (generation == _generation && ttl <= TimeSpan.Zero)
+                {
+                    RemoveLatestVersion(key, version);
+                }
             }
             return value;
+        }
+        catch
+        {
+            lock (_generationLock)
+            {
+                if (generation == _generation)
+                    RemoveLatestVersion(key, version);
+            }
+            throw;
         }
         finally
         {
@@ -92,12 +141,53 @@ internal sealed class GenerationSingleFlightCache<TValue>
     /// </summary>
     public void Invalidate()
     {
-        Interlocked.Increment(ref _generation);
-        _values.Clear();
-        _latestVersions.Clear();
+        lock (_generationLock)
+        {
+            _generation++;
+            _values.Clear();
+            _latestVersions.Clear();
+            lock (_evictionLock)
+            {
+                _evictionOrder.Clear();
+                _evictionNodes.Clear();
+            }
+        }
     }
 
     internal int ValueCount => _values.Count;
+    internal int TrackedKeyCount => _latestVersions.Count;
+
+    private void Touch(string key, long generation)
+    {
+        lock (_generationLock)
+        {
+            if (generation != _generation || !_values.ContainsKey(key)) return;
+            TouchUnderGenerationLock(key);
+        }
+    }
+
+    private void TouchUnderGenerationLock(string key)
+    {
+        lock (_evictionLock)
+        {
+            if (_evictionNodes.TryGetValue(key, out var existing))
+                _evictionOrder.Remove(existing);
+
+            _evictionNodes[key] = _evictionOrder.AddLast(key);
+            while (_evictionOrder.Count > _maxEntries
+                   && _evictionOrder.First is { } oldest)
+            {
+                _evictionOrder.RemoveFirst();
+                _evictionNodes.Remove(oldest.Value);
+                _values.TryRemove(oldest.Value, out _);
+                _latestVersions.TryRemove(oldest.Value, out _);
+            }
+        }
+    }
+
+    private void RemoveLatestVersion(string key, string version)
+        => ((ICollection<KeyValuePair<string, string>>)_latestVersions).Remove(
+            new KeyValuePair<string, string>(key, version));
 
     private sealed record CacheEntry(
         long Generation,
