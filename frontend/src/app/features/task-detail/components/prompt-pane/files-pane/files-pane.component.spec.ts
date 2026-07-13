@@ -176,6 +176,45 @@ describe('FilesPaneComponent (smoke)', () => {
     expect(root.querySelector('[data-testid="aspect-json-card"]')).toBeNull();
     http.verify();
   });
+
+  it('renders HTML in a script-enabled opaque-origin sandbox', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FilesPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FilesPaneComponent);
+    fixture.componentRef.setInput('jobId', 'demo-job');
+    fixture.componentRef.setInput('artifacts', [
+      {
+        name: 'interactive-report.html',
+        sizeBytes: 256,
+        mtime: '2026-07-11T08:00:00Z',
+        kind: 'other',
+      },
+    ]);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    const html = '<button id="switch">Switch</button><script>document.body.dataset.ran="true"</script>';
+    http.expectOne((r) => r.url.includes('/api/tasks/demo-job/files/interactive-report.html'))
+      .flush(utf8Buffer(html));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const frame = root.querySelector<HTMLIFrameElement>('[data-testid="file-card-html-frame"]');
+    expect(frame).not.toBeNull();
+    expect(frame?.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame?.getAttribute('sandbox')).not.toContain('allow-same-origin');
+    expect(frame?.getAttribute('srcdoc') ?? '').toContain('dataset.ran');
+    expect(root.querySelector('[data-testid="file-card-html-isolation-chip"]')?.textContent)
+      .toContain('interactive, isolated');
+    http.verify();
+  });
 });
 
 function utf8Buffer(value: string): ArrayBuffer {

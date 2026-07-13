@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-07-10
+Version: 2026-07-13
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -76,6 +76,18 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   why integration semantics should not depend on `maxParallelism`.
 - [../wiki/concepts/auto-review-evidence-gate-analysis.html](../wiki/concepts/auto-review-evidence-gate-analysis.html):
   why auto-review reissues good work ("Needs rework") and the evidence-gate fix.
+
+## Files-tab document projection
+
+`GET /api/tasks/{id}/artifacts` projects supported top-level task documents into
+the Files tab: Markdown, self-contained `.html` / `.htm`, and structured
+`aspect-*.json`. `status.md` remains owned by Result, and subfolders remain out
+of scope. HTML content is fetched through the existing task-file endpoint and
+rendered through `srcdoc` with `sandbox="allow-scripts"`. The deliberate omission
+of `allow-same-origin` keeps an opaque origin, so interactive artifacts cannot
+read Studio cookies, storage, DOM, or APIs. Artifacts that require same-origin
+or controlled network integration belong to the Workbench viewer described in
+[Experimentier-Workbench](../concepts/experimentier-workbench.md#5-viewer-interactive-html-and-project-previews).
 
 ## Project proposals
 

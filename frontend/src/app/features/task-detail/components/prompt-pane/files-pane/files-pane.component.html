@@ -25,6 +25,10 @@
         } @else if (file.kind === 'note') {
           <span class="file-card__chip file-card__chip--note">note</span>
         }
+        @if (isHtmlFile(file)) {
+          <span class="file-card__chip file-card__chip--html"
+                data-testid="file-card-html-isolation-chip">interactive, isolated</span>
+        }
         @if (provenanceFor(file); as generation) {
           <span class="file-card__provenance"
                 data-testid="file-card-provenance"
@@ -68,6 +72,12 @@
                                        [content]="promptContent()"
                                        [dense]="true" />
             }
+          } @else if (isHtmlFile(file) && trustedHtmlFor(file); as html) {
+            <iframe class="file-card__html-frame"
+                    data-testid="file-card-html-frame"
+                    [attr.title]="'Interactive isolated HTML preview: ' + file.name"
+                    sandbox="allow-scripts"
+                    [srcdoc]="html"></iframe>
           } @else if (isAspectJson(file) && aspectDoc(file); as doc) {
             <app-aspect-json-card class="file-card__aspect-json" [doc]="doc" />
           } @else {
@@ -89,6 +99,13 @@
         <div class="file-card__preview">
           @if (isLoading(file.name)) {
             <div class="file-card__loading">Loading preview…</div>
+          } @else if (isHtmlFile(file)) {
+            <div class="file-card__preview-empty">Interactive HTML - expand to run in an isolated sandbox.</div>
+            <button type="button" class="file-card__expand-link"
+                    [attr.data-testid]="'file-card-expand-' + file.name"
+                    (click)="toggleExpanded(file.name)">
+              Open interactive preview
+            </button>
           } @else if (isAspectJson(file) && aspectDoc(file); as doc) {
             <app-aspect-json-card class="file-card__aspect-json" [doc]="doc" [compact]="true" />
             <button type="button" class="file-card__expand-link"

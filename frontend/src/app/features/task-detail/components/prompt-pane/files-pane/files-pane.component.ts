@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { TaskService } from '../../../../../services/task.service';
 import { MarkdownRichEditorComponent } from '../../../../../components/markdown-rich-editor/markdown-rich-editor';
 import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
@@ -12,10 +13,10 @@ import { AspectJsonCardComponent } from './aspect-json-card/aspect-json-card.com
 import { parseAspectDocument, type AspectDocument } from './aspect-document.model';
 
 /**
- * Files tab body. Renders every `.md` file directly in the job folder
- * (prompt + aspect verdicts + operator notes + anything else) as a list
- * of cards. The first card is always `prompt.md`; the rest follow the
- * Files-tab sort order produced by the backend.
+ * Files tab body. Renders supported documents directly in the job folder
+ * (prompt + aspect verdicts + operator notes + HTML explorations) as a list of
+ * cards. The first card is always `prompt.md`; the rest follow the Files-tab
+ * sort order produced by the backend.
  *
  * Expand / collapse rules (F48):
  *   - Only prompt.md present → expand by default + show a hint that more
@@ -45,6 +46,7 @@ import { parseAspectDocument, type AspectDocument } from './aspect-document.mode
 export class FilesPaneComponent {
   private readonly jobs = inject(TaskService);
   private readonly nowTick = inject(NowTickService);
+  private readonly sanitizer = inject(DomSanitizer);
 
   readonly artifacts = input<TaskArtifact[]>([]);
   /** Prefilled body for `prompt.md` so we don't re-fetch what `TaskDetail` already loaded. */
@@ -70,6 +72,7 @@ export class FilesPaneComponent {
    * `JSON.parse` every cycle.
    */
   private readonly aspectDocCache = new Map<string, { raw: string; doc: AspectDocument | null }>();
+  private readonly htmlDocCache = new Map<string, { raw: string; doc: SafeHtml }>();
 
   readonly onlyPrompt = computed(() => {
     const list = this.artifacts();
@@ -144,6 +147,26 @@ export class FilesPaneComponent {
   /** True for a structured `aspect-*.json` artefact (rendered as a card). */
   isAspectJson(file: TaskArtifact): boolean {
     return file.kind === 'aspect' && file.name.toLowerCase().endsWith('.json');
+  }
+
+  isHtmlFile(file: TaskArtifact): boolean {
+    return /\.html?$/i.test(file.name);
+  }
+
+  /**
+   * `allow-scripts` powers self-contained interaction in the template iframe.
+   * `allow-same-origin` is deliberately omitted so the document receives an
+   * opaque origin and cannot read Studio cookies, storage, DOM, or APIs.
+   */
+  trustedHtmlFor(file: TaskArtifact): SafeHtml | null {
+    if (!this.isHtmlFile(file)) return null;
+    const raw = this.bodyFor(file);
+    if (raw == null) return null;
+    const cached = this.htmlDocCache.get(file.name);
+    if (cached && cached.raw === raw) return cached.doc;
+    const doc = this.sanitizer.bypassSecurityTrustHtml(raw);
+    this.htmlDocCache.set(file.name, { raw, doc });
+    return doc;
   }
 
   /**

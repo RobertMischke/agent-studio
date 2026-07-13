@@ -95,6 +95,8 @@ test('AGT-2083 exploration runs scripts while parent access stays blocked', asyn
   await exploration.locator('[data-option="pulse"]').click();
   await expect(exploration.locator('body')).toHaveAttribute('data-option', 'pulse');
   await expect(exploration.locator('#option-title')).toHaveText('E. Pulse + dashboard');
+  await exploration.locator('body').evaluate(() => window.scrollTo(0, 0));
+  await expect(exploration.locator('#option-title')).toBeVisible();
 
   const handle = await frameElement.elementHandle();
   const childFrame = await handle?.contentFrame();

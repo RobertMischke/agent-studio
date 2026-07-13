@@ -196,7 +196,7 @@ public record TaskLogEntry
 }
 
 /// <summary>
-/// Kind classification for a job-folder markdown artifact, used by
+/// Kind classification for a job-folder document artifact, used by
 /// <c>GET /api/tasks/{id}/artifacts</c>. The frontend Files tab styles each
 /// card by kind (prompt is editable; aspect carries the auto-review verdict
 /// section; note marks operator/recovery hand-offs).
@@ -234,7 +234,7 @@ public record FileGenerationMeta
 }
 
 /// <summary>
-/// One markdown file in the job root surfaced by the Files tab. The
+/// One supported document in the job root surfaced by the Files tab. The
 /// content is not embedded; the existing
 /// <c>GET /api/tasks/{id}/files/{fileName}</c> endpoint serves it on
 /// demand so the listing stays cheap.

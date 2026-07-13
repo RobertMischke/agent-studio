@@ -918,9 +918,10 @@ export class TaskService {
   }
 
   /**
-   * Lists every `.md` file in the job root (status.md excluded). Drives the
-   * Files tab in the detail view; cheap manifest call so the tab can fetch
-   * individual file contents lazily through {@link readJobFile}.
+   * Lists supported Markdown, HTML, and aspect JSON documents in the job root
+   * (status.md excluded). Drives the Files tab in the detail view; cheap
+   * manifest call so the tab can fetch individual contents lazily through
+   * {@link readJobFile}.
    */
   listJobArtifacts(jobId: string, watchPath?: string) {
     return this.http.get<TaskArtifactsResponse>(
@@ -931,8 +932,8 @@ export class TaskService {
 
   /**
    * Reads one file from the job root. Used by the Files tab to lazily
-   * fetch the content of an aspect / note / other markdown card when the
-   * user expands it. Returns the body as plain text.
+   * fetch the content of an aspect, note, HTML, or other document card when
+   * the user expands it. Returns the body as plain text.
    */
   readJobFile(jobId: string, fileName: string, watchPath?: string) {
     const opts = this.withWatchPath(watchPath);

@@ -17,7 +17,7 @@ async function captureScreenshot(
 ): Promise<void> {
   const buf = await page.screenshot({ fullPage: false });
   await testInfo.attach(fileName, { body: buf, contentType: 'image/png' });
-  const dir = process.env.F48_RESULTS_DIR;
+  const dir = process.env.F48_RESULTS_DIR ?? process.env.JOB_RESULTS_DIR;
   if (dir) {
     try {
       await mkdir(dir, { recursive: true });
@@ -117,6 +117,76 @@ test.describe('F48 Files tab — rename + only-prompt + hint', () => {
 });
 
 test.describe('F48 Files tab — multi-file display', () => {
+  test('HTML artifact runs scripts while Studio parent access stays blocked', async ({ page }, testInfo) => {
+    const watchPath = await pickWatchPath();
+    const job = await createJob({
+      title: `f48-html-${Date.now()}`,
+      watchPath,
+      cliType: 'claude',
+      agent: 'claude',
+      promptMarkdown: '# Interactive report test',
+      targetState: '2-ready'
+    });
+
+    const html = `<!doctype html><html><body>
+      <button id="switch">Switch alternative</button>
+      <output id="status">waiting</output>
+      <script>
+        document.body.dataset.scriptRan = 'true';
+        document.querySelector('#switch').addEventListener('click', () => {
+          document.querySelector('#status').textContent = 'alternative active';
+        });
+        try {
+          void window.parent.document.body;
+          document.body.dataset.parentAccess = 'allowed';
+        } catch {
+          document.body.dataset.parentAccess = 'blocked';
+        }
+      </script>
+    </body></html>`;
+
+    try {
+      await page.route(`**/api/tasks/${job.id}/artifacts**`, route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          jobId: job.id,
+          files: [
+            { name: 'prompt.md', sizeBytes: 25, mtime: '2026-07-11T08:00:00Z', kind: 'prompt' },
+            { name: 'interactive-report.html', sizeBytes: html.length, mtime: '2026-07-11T08:01:00Z', kind: 'other' },
+          ],
+        }),
+      }));
+      await page.route(`**/api/tasks/${job.id}/files/interactive-report.html**`, route => route.fulfill({
+        status: 200,
+        contentType: 'text/html; charset=utf-8',
+        body: html,
+      }));
+
+      await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
+      await dismissUpdateBannerIfPresent(page);
+      await page.getByTestId('prompt-tab-description').click();
+
+      const card = page.getByTestId('file-card-interactive-report.html');
+      await expect(card).toBeVisible({ timeout: 10_000 });
+      await expect(card.getByTestId('file-card-html-isolation-chip')).toHaveText('interactive, isolated');
+      await card.getByTestId('file-card-expand-interactive-report.html').click();
+
+      const frame = card.getByTestId('file-card-html-frame');
+      await expect(frame).toBeVisible();
+      await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
+      const preview = card.frameLocator('[data-testid="file-card-html-frame"]');
+      await expect(preview.locator('body')).toHaveAttribute('data-script-ran', 'true');
+      await expect(preview.locator('body')).toHaveAttribute('data-parent-access', 'blocked');
+      await preview.locator('#switch').click();
+      await expect(preview.locator('#status')).toHaveText('alternative active');
+
+      await captureScreenshot(page, testInfo, 'files-tab-html-interactive-isolated.png');
+    } finally {
+      await deleteJob(job.id, watchPath);
+    }
+  });
+
   test('aspect + note files render in the spec sort order; cards start collapsed', async ({ page }, testInfo) => {
     const watchPath = await pickWatchPath();
     const job = await createJob({

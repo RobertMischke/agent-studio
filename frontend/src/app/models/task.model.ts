@@ -754,7 +754,8 @@ export interface FileGenerationMeta {
 }
 
 /**
- * One `.md` file in the job root surfaced by the Files tab. The content
+ * One supported document in the job root surfaced by the Files tab. Markdown,
+ * HTML, and structured aspect JSON are listed. The content
  * itself is not embedded — the Files tab fetches it lazily through
  * `GET /api/tasks/{id}/files/{fileName}` only when the user expands the
  * card (or when it's the sole prompt and auto-expanded).
