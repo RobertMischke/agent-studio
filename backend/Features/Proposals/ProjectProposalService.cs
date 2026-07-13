@@ -116,7 +116,7 @@ public sealed class ProjectProposalService
             var createdId = _mutations.CreateJob(new CreateTaskRequest
             {
                 Id = $"proposal-{proposal.Id}",
-                Title = proposal.Proposal,
+                Title = $"[{proposal.Topic}] {proposal.Proposal}",
                 WatchPath = watchPath,
                 TargetState = TaskStates.Backlog,
                 Agent = "codex",
@@ -154,7 +154,7 @@ public sealed class ProjectProposalService
         var normalizedTopic = topic.Trim();
         if (normalizedTopic.Length == 0) throw new ArgumentException("Topic is required.");
         var draft = await _drafting.GenerateAsync(root, normalizedTopic, guidance, ct);
-        var generation = DateTime.UtcNow.ToString("yyyy-MM-dd-HHmmss");
+        var generation = DateTime.UtcNow.ToString("yyyy-MM-dd-HHmmssfff");
         var slug = Slug(normalizedTopic);
         var id = $"operator-{generation}-{slug}";
         var proposal = new ProjectProposal(id, generation, draft.Finding, "", draft.Proposal,
@@ -201,6 +201,12 @@ public sealed class ProjectProposalService
         ## Finding
 
         {p.Finding}
+
+        ## Provenance
+
+        Topic: {p.Topic}
+        Categories: {string.Join(", ", p.Categories)}
+        Source: {p.Source}
 
         ## Evidence
 

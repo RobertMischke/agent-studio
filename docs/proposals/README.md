@@ -3,6 +3,7 @@
 This directory stores dated proposal generations produced from measured product findings or an explicit operator topic. Each proposal is a Markdown document with structured frontmatter and one durable status: `proposed`, `approved`, `rejected`, or `spawned`.
 
 Every proposal carries visible provenance: `topic`, `categories`, and `source`. Survey generations classify common topics such as Responsiveness from the measured finding. Operator-generated proposals retain the entered topic verbatim and identify the source as an operator request.
+Approved implementation cards repeat this provenance in the task prompt and prefix the card title with the topic, so the governing concern remains visible after the proposal leaves the review queue.
 
 Generate a new batch without changing older decisions:
 
