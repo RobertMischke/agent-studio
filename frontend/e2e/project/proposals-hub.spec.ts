@@ -54,3 +54,26 @@ test('Project proposal evidence reports progress while the prioritized image loa
   await expect(page.getByLabel('Proposal metadata')).toContainText('Generation');
   await expect(page.getByTestId('proposal-approve')).toHaveText('Approve and create card');
 });
+
+test('Project proposal rejection explains and records the CLI-refined reason', async ({ page }) => {
+  await routes(page);
+  await page.route('**/api/projects/Proposal%20Demo/proposals/refine-feedback', route => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ refinedFeedback: 'Make Responsiveness explicit as the governing topic.' }),
+  }));
+  await page.route('**/api/projects/Proposal%20Demo/proposals/survey-001/decision', async route => {
+    const body = route.request().postDataJSON();
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ proposal: {
+      id: 'survey-001', generation: '2026-07-11', finding: 'Narrow layout clips content.', evidenceScreenshot: '2026-07-11/assets/001.png', proposal: 'Keep controls visible.', estimatedEffort: 'medium', severity: 'critical', status: 'rejected', spawnedTask: null, topic: 'Responsiveness', categories: ['responsiveness'], source: 'Visual survey: narrow-board.png', rejectionReason: body.rejectionReason, rejectionReasonRaw: body.rejectionReasonRaw, relPath: '2026-07-11/survey-001.md', updatedAt: '2026-07-13T08:00:00Z',
+    } }) });
+  });
+  await page.addInitScript(name => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({ v: 1, tabs: [{ kind: 'hub', projectName: name, section: 'proposals' }], activeKey: `hub:${name}` })), projectName);
+  await page.goto('/');
+
+  await page.getByTestId('proposal-reject').click();
+  await page.getByLabel('Original feedback').fill('Da muss ganz klar Responsiveness stehen.');
+  await page.getByRole('button', { name: 'Refine with CLI' }).click();
+  await expect(page.getByLabel('Refined historical record')).toHaveValue('Make Responsiveness explicit as the governing topic.');
+  await page.getByTestId('proposal-reject-confirm').click();
+  await expect(page.getByText('Decision recorded: rejected')).toBeVisible();
+  await expect(page.getByText('Make Responsiveness explicit as the governing topic.')).toBeVisible();
+});
