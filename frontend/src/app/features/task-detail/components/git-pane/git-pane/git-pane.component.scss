@@ -488,8 +488,9 @@
   flex: 1;
   flex-direction: row;
   align-items: stretch;
-  gap: var(--studio-spacing-2);
+  gap: 0;
   min-height: 0;
+  overflow: hidden;
 }
 .git-view--split .git-view__tree-col {
   // Width is driven by the draggable splitter through the
@@ -502,38 +503,36 @@
   min-width: 200px;
   display: flex;
   min-height: 0;
+  overflow: hidden;
 }
 /*
- * Draggable divider between the file-change tree (left) and the diff
- * window (right). Only meaningful in the split (pane-maximized) row
- * layout - in the stacked in-pane layout the tree sits above the diff so
- * the splitter is hidden. A thin visible line with a wider pointer
- * hit-box (::before) so a near-miss still starts the drag; hover / drag
- * turn it accent-orange, matching the outer pane splitter.
+ * Draggable divider for the maximized tree/diff layout. The element is a
+ * comfortable hit area; ::before paints the full-height one-pixel line.
  */
 .git-view__splitter { display: none; }
 .git-view--split .git-view__splitter {
-  flex: 0 0 2px;
+  flex: 0 0 calc(var(--studio-spacing-2) * 2 + 1px);
   align-self: stretch;
   position: relative;
+  z-index: 1;
   display: block;
   cursor: col-resize;
   touch-action: none;
-  border-radius: 2px;
-  background: var(--studio-border);
-  transition: background 120ms ease;
+  background: transparent;
 }
 .git-view--split .git-view__splitter::before {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(var(--studio-spacing-1) * -1);
-  right: calc(var(--studio-spacing-1) * -1);
-  cursor: col-resize;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--studio-border);
+  transition: background 120ms ease;
 }
-.git-view--split .git-view__splitter:hover,
-.git-view--split .git-view__splitter--dragging {
+.git-view--split .git-view__splitter:hover::before,
+.git-view--split .git-view__splitter--dragging::before {
   background: var(--studio-accent);
 }
 .git-view--split .git-view__splitter:focus-visible {
