@@ -143,7 +143,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `create-job-with-screenshot.spec.ts` | Add Task dialog - drop + paste screenshot uploads |
 | `promote-planning-to-coding.spec.ts` | Promote planning result -> coding task |
 
-### `board/` - 72 specs
+### `board/` - 73 specs
 
 | Spec | Summary |
 |------|---------|
@@ -213,6 +213,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `no-redundant-scrollbars.spec.ts` | F60 - no redundant scrollbars in super-column layout |
 | `optimistic-reorder-evidence.spec.ts` | @evidence capture optimistic reorder before/after screenshots |
 | `post-processing-lane-identity.spec.ts` | Post Processing lane identity |
+| `remote-running-card.spec.ts` | Remote-running card visibility, steer wait, and timeout recovery |
 | `signalr-jobs-hub.spec.ts` | SignalR jobs hub - push delivery |
 | `task-filter-removed.spec.ts` | Task filter axis removed from filter list |
 | `thinking-level-indicator.spec.ts` | shows the effective level and highlights deviations from the client default in both themes |
