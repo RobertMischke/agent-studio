@@ -168,7 +168,7 @@ The dashboard is a projection over existing domain truths:
 |---|---|---|
 | Delivered work | `GET /api/projects/{projectName}/throughput`, including archived task history and exact rolling 24-hour and 7-day windows | Board and task history |
 | Token use | `GET /api/projects/{projectName}/token-usage/summary`, including rolling 24-hour and 7-day totals | Token Usage rail |
-| Project URLs | Embedded project URLs from `GET /api/workspaces`, live URL probes, and the existing `POST /api/projects/{projectId}/urls/{urlId}/start` action | Project URLs rail and registry |
+| Project URLs | Embedded project URLs from `GET /api/workspaces`; host-side readiness probes; per-embed URL/start settings; and owned process start, snapshot, output, and stop through `POST .../start` plus `GET/DELETE .../process` | Project URL embed, Project URLs rail, and registry |
 | Deployment readiness | `GET /api/projects/{projectName}/deployment/summary`, the shared DEP-1 read model for the last stable deployment and current pending commit delta | Deployment domain |
 | Wiki activity | `GET /api/projects/{projectName}/wiki/pulse?feedLimit=6` | Wiki rail |
 | Planning work | Active planning-mode tasks from the current board snapshot | Task detail and Board |

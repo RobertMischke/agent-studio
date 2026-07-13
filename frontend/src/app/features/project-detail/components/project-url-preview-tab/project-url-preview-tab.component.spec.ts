@@ -10,7 +10,11 @@ import {
   type ProjectUrlReadiness,
   type ProjectUrlStatus,
 } from '../../../../services/project-url-probe.service';
-import type { RegistryWorkspaceListItem, RegistryProjectUrl } from '../../../../models/task.model';
+import type {
+  ProjectUrlProcessSnapshot,
+  RegistryWorkspaceListItem,
+  RegistryProjectUrl,
+} from '../../../../models/task.model';
 
 /** Signal-backed probe stub so tests drive running/offline without a real fetch. */
 class ProbeStub {
@@ -68,6 +72,25 @@ const STARTABLE_URL: RegistryProjectUrl = {
   id: 'url-1', label: 'Website', url: 'http://localhost:4202', sortOrder: 0,
   startRule: { command: 'npm run website', cwd: null, port: null, source: 'manual' },
 };
+
+function processSnapshot(
+  state: ProjectUrlProcessSnapshot['state'] = 'running',
+  output = ['ready in 412 ms'],
+): ProjectUrlProcessSnapshot {
+  return {
+    started: true,
+    projectId: 'PROJ-001',
+    urlId: 'url-1',
+    command: 'npm run website',
+    cwd: 'c:/demo',
+    state,
+    processId: 42,
+    startedAtUtc: '2026-07-13T20:00:00Z',
+    finishedAtUtc: state === 'running' ? null : '2026-07-13T20:01:00Z',
+    exitCode: state === 'running' ? null : 0,
+    output,
+  };
+}
 
 describe('ProjectUrlPreviewTabComponent', () => {
   afterEach(() => vi.useRealTimers());
@@ -129,15 +152,16 @@ describe('ProjectUrlPreviewTabComponent', () => {
     expect(el.querySelector('[data-testid="url-preview-not-found"]')).toBeTruthy();
   });
 
-  it('emits openSettings with the project name for the settings deep link', () => {
+  it('opens settings for the current embed without leaving the preview', () => {
     const { fixture, http } = mount();
     http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([RUNNING_URL]));
     fixture.detectChanges();
 
-    let emitted: { projectName: string } | null = null;
-    fixture.componentInstance.openSettings.subscribe(e => (emitted = e));
     fixture.componentInstance.onSettings();
-    expect(emitted).toEqual({ projectName: 'Demo' });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.settingsOpen()).toBe(true);
+    expect(document.querySelector('[data-testid="url-preview-settings-dialog"]')).toBeTruthy();
   });
 
   it('keeps the pending state visible until the started URL is reachable', () => {
@@ -154,7 +178,7 @@ describe('ProjectUrlPreviewTabComponent', () => {
     expect(startButton.textContent).toContain('Starting');
     const post = http.expectOne(req => req.method === 'POST' && req.url.endsWith('/PROJ-001/urls/url-1/start'));
     expect(post.request.method).toBe('POST');
-    post.flush({ started: true, urlId: 'url-1', command: 'npm run website', cwd: 'c:/demo', processId: 42 });
+    post.flush(processSnapshot());
 
     probe.status.set('running');
     vi.advanceTimersByTime(1_000);
@@ -184,10 +208,8 @@ describe('ProjectUrlPreviewTabComponent', () => {
     expect(failed?.textContent).toContain('c:/missing');
     expect(failed?.querySelector('[data-testid="url-preview-retry"]')).toBeTruthy();
 
-    let emitted = false;
-    fixture.componentInstance.openSettings.subscribe(() => (emitted = true));
     (failed?.querySelector('[data-testid="url-preview-edit-settings"]') as HTMLButtonElement).click();
-    expect(emitted).toBe(true);
+    expect(fixture.componentInstance.settingsOpen()).toBe(true);
   });
 
   it('turns an accepted start that never becomes reachable into an actionable failure', () => {
@@ -198,14 +220,72 @@ describe('ProjectUrlPreviewTabComponent', () => {
     fixture.detectChanges();
 
     fixture.componentInstance.start();
-    http.expectOne(req => req.method === 'POST').flush({
-      started: true, urlId: 'url-1', command: 'npm run website', cwd: 'c:/demo', processId: 42,
-    });
+    http.expectOne(req => req.method === 'POST').flush(processSnapshot());
     vi.advanceTimersByTime(25_000);
     fixture.detectChanges();
 
     const failed: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-start-failed"]');
     expect(failed?.textContent).toContain('did not become reachable');
     expect(failed?.textContent).toContain('c:/demo');
+  });
+
+  it('shows bounded live output in place and stops the owned process explicitly', () => {
+    const { fixture, http, probe } = mount();
+    probe.status.set('offline');
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    http.expectOne(req => req.method === 'GET' && req.url.endsWith('/process'))
+      .flush(null, { status: 204, statusText: 'No Content' });
+    fixture.detectChanges();
+
+    fixture.componentInstance.start();
+    http.expectOne(req => req.method === 'POST' && req.url.endsWith('/start'))
+      .flush(processSnapshot('running', ['vite --port 4202', 'ready in 412 ms']));
+    fixture.detectChanges();
+
+    const console: HTMLElement | null = fixture.nativeElement.querySelector('[data-testid="url-preview-process-console"]');
+    expect(console?.textContent).toContain('npm run website');
+    expect(console?.querySelector('[data-testid="url-preview-process-output"]')?.textContent)
+      .toContain('ready in 412 ms');
+
+    fixture.componentInstance.stop();
+    http.expectOne(req => req.method === 'DELETE' && req.url.endsWith('/process'))
+      .flush(processSnapshot('stopped', ['[studio] Process stopped by operator.']));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="url-preview-process-status"]')?.textContent)
+      .toContain('Stopped');
+  });
+
+  it('offers start, console, stop, settings, and external actions in the embed menu', () => {
+    const { fixture, http } = mount();
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    http.expectOne(req => req.method === 'GET' && req.url.endsWith('/process')).flush(processSnapshot());
+    fixture.detectChanges();
+
+    const rows = fixture.componentInstance.menuItems().filter(item => item.kind === 'row');
+    expect(rows.map(item => item.id)).toEqual(['start', 'console', 'stop', 'settings', 'external']);
+    expect(rows.find(item => item.id === 'stop')?.disabled).toBe(false);
+  });
+
+  it('saves URL, command, cwd, and port from the per-embed settings dialog', () => {
+    const { fixture, http } = mount();
+    http.expectOne(req => req.url.endsWith('/workspaces')).flush(workspacesWith([STARTABLE_URL]));
+    fixture.detectChanges();
+
+    fixture.componentInstance.saveSettings({
+      label: 'Website',
+      url: 'http://localhost:4300',
+      startRule: { command: 'npm run preview', cwd: 'c:/demo/web', port: 4300, source: 'manual' },
+    });
+    const request = http.expectOne(req => req.method === 'PUT' && req.url.endsWith('/PROJ-001/urls/url-1'));
+    expect(request.request.body).toMatchObject({
+      url: 'http://localhost:4300',
+      startRule: { command: 'npm run preview', cwd: 'c:/demo/web', port: 4300 },
+    });
+    request.flush(workspacesWith([STARTABLE_URL])[0].projects[0]);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.urlRecord()?.url).toBe('http://localhost:4300');
+    expect(fixture.componentInstance.urlRecord()?.startRule?.cwd).toBe('c:/demo/web');
   });
 });

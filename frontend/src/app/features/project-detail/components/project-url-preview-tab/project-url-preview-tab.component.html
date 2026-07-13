@@ -1,5 +1,4 @@
-<div class="url-preview" data-testid="url-preview-tab"
-     [attr.data-project]="projectName()" [attr.data-url-id]="urlId()">
+<div class="url-preview" data-testid="url-preview-tab" (contextmenu)="showMenu($event)" [attr.data-project]="projectName()" [attr.data-url-id]="urlId()">
   <div class="url-preview__chrome">
     <button type="button" class="url-preview__nav"
             data-testid="url-preview-reload"
@@ -33,11 +32,21 @@
     </button>
     <button type="button" class="url-preview__nav"
             data-testid="url-preview-settings"
-            cacTooltip="Manage this URL in Project Hub"
-            aria-label="Manage this URL in Project Hub"
+            cacTooltip="Embed settings"
+            aria-label="Embed settings"
             (click)="onSettings()">
       <app-studio-icon name="settings" [size]="13" />
     </button>
+    <button #menuTrigger type="button" class="url-preview__nav" data-testid="url-preview-menu"
+            cacTooltip="Embed actions" aria-label="Embed actions" aria-haspopup="menu"
+            [attr.aria-expanded]="menuOpen()"
+            (click)="showMenu()">
+      <app-studio-icon name="more" [size]="14" />
+    </button>
+
+    <app-menu [items]="menuItems()" [open]="menuOpen()" [anchorEl]="menuTrigger"
+              [position]="menuPosition()" ariaLabel="Embed actions" testIdPrefix="url-preview-menu"
+              (itemClick)="onMenuItem($event)" (closeRequest)="menuOpen.set(false)" />
   </div>
 
   <div class="url-preview__body">
@@ -238,4 +247,13 @@
       }
     }
   </div>
+
+  <app-project-url-process-console [label]="projectName() + ' / ' + (urlRecord()?.label ?? urlId())"
+    [session]="process.session()" [open]="process.consoleOpen()" [stopping]="process.stopping()"
+    (stopRequest)="stop()" (closeRequest)="process.consoleOpen.set(false)" />
 </div>
+
+@if (settingsOpen() && urlRecord(); as url) {
+  <app-project-url-settings-dialog [url]="url" [saving]="settingsSaving()" [error]="settingsError()"
+    (saveRequest)="saveSettings($event)" (closeRequest)="settingsOpen.set(false)" />
+}

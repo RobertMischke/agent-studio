@@ -29,7 +29,7 @@ import type {
   RegistryProjectSummary,
   ProjectUrlStartRule,
   ProjectUrlSuggestion,
-  ProjectUrlStartResponse,
+  ProjectUrlProcessSnapshot,
   PublishActionPanel,
   PublishAutomationMode,
   PublishWorkflowRun,
@@ -662,10 +662,22 @@ export class TaskService {
       `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}`);
   }
 
-  /** Build &amp; start (or restart) the dev server behind a URL's start rule. */
+  /** Start/restart the owned dev server and return its observable session. */
   startProjectUrl(projId: string, urlId: string) {
-    return this.http.post<ProjectUrlStartResponse>(
+    return this.http.post<ProjectUrlProcessSnapshot>(
       `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/start`, {});
+  }
+
+  /** Current owned process, or null (HTTP 204) when Studio did not start one. */
+  getProjectUrlProcess(projId: string, urlId: string) {
+    return this.http.get<ProjectUrlProcessSnapshot | null>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/process`);
+  }
+
+  /** Explicitly stop the process tree owned for this URL. */
+  stopProjectUrlProcess(projId: string, urlId: string) {
+    return this.http.delete<ProjectUrlProcessSnapshot>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/process`);
   }
 
   /**

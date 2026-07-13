@@ -384,7 +384,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `perf-frontend.spec.ts` | Frontend perceived latency |
 | `perf-stress.spec.ts` | Frontend stress: render perf at scale |
 
-### `project/` - 38 specs
+### `project/` - 39 specs
 
 | Spec | Summary |
 |------|---------|
@@ -418,6 +418,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `project-steering-docs.spec.ts` | Project detail - Agent Docs section |
 | `project-tab-tokens.spec.ts` | Per-project token total badge |
 | `project-token-usage-panel.spec.ts` | empty state - no orchestrator entries renders explicit empty copy |
+| `project-url-preview-in-place.spec.ts` | keeps start, settings, live output, and stop in the embed in both themes |
 | `project-uxui-panel.spec.ts` | empty state - no design folder, all action buttons render |
 | `project-wiki-interactive-html.spec.ts` | AGT-2083 exploration runs scripts while parent access stays blocked |
 | `project-wiki-section.spec.ts` | Project detail - Knowledge section |

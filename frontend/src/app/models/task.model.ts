@@ -997,6 +997,21 @@ export interface ProjectUrlStartRule {
   source: string;
 }
 
+/** Snapshot of a backend-owned dev-server process for a project URL. */
+export interface ProjectUrlProcessSnapshot {
+  started: boolean;
+  projectId: string;
+  urlId: string;
+  command: string;
+  cwd: string;
+  state: 'starting' | 'running' | 'exited' | 'stopped' | 'failed';
+  processId: number | null;
+  startedAtUtc: string;
+  finishedAtUtc: string | null;
+  exitCode: number | null;
+  output: string[];
+}
+
 /** Mirrors backend `ProjectUrlRecord`: one watchable URL on a project. */
 export interface RegistryProjectUrl {
   id: string;
@@ -1017,14 +1032,8 @@ export interface ProjectUrlSuggestion {
   source: string;
 }
 
-/** Result returned once the backend has spawned a configured URL command. */
-export interface ProjectUrlStartResponse {
-  started: boolean;
-  urlId: string;
-  command: string;
-  cwd: string;
-  processId: number;
-}
+/** Compatibility name retained for existing start-only consumers. */
+export type ProjectUrlStartResponse = ProjectUrlProcessSnapshot;
 
 /**
  * F45a / ADR-0042 — flat project summary returned by `GET /api/projects`

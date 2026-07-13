@@ -64,6 +64,14 @@ registry, `ProjectUrlProbeService`, and the existing URL start endpoint. It
 shows at most four configured URLs, emits navigation to the full Project URLs
 rail, and does not duplicate URL configuration or process-start logic.
 
+`components/project-url-preview-tab/` owns the embedded-preview state machine.
+It keeps HTTP readiness separate from process ownership: the backend probe
+decides whether an iframe is safe to mount, while `ProjectUrlProcessService`
+owns commands started by Studio. The tab exposes start/restart, a bounded
+stdout/stderr console, explicit stop, and URL/command/CWD/port settings in
+place. Closing the console or tab does not detach the process; URL/project
+removal and backend shutdown stop its whole process tree.
+
 Every Overview request has an independent unavailable state. Detail links emit
 rail navigation or task navigation through the shell. The Visual Evidence queue
 projects delivered task screenshots and stores review receipts in each task's
