@@ -349,7 +349,7 @@
                [attr.data-run-mode]="row.runMode"
                data-testid="overview-pipeline-step">
             <span class="ov-pl-step__status"
-                  [cacTooltip]="stepStatusLabel(row.status)"
+                  [cacTooltip]="row.statusTooltip ?? stepStatusLabel(row.status)"
                   aria-hidden="true">{{ stepStatusIcon(row.status) }}</span>
             <span class="ov-pl-step__kind"
                   [cacTooltip]="stepKindLabel(row.kind)"

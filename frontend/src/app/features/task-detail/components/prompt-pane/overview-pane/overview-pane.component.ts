@@ -99,6 +99,11 @@ interface PipelineRowVm {
   config: PipelineStepConfig | null;
   /** Effective display status: 'disabled' for project-disabled steps. */
   status: PipelineStepStatus | 'disabled';
+  /**
+   * Recorded failure / skip detail shown from the status icon. Null for
+   * successful or not-yet-reached steps, and for legacy rows with no reason.
+   */
+  statusTooltip: StructuredTooltip | null;
   model: string | null;
   thinkingLevel: string | null;
   cliType: CliType | null;
@@ -295,6 +300,21 @@ function buildConcernTooltip(
   const kind = verdictTitle(verdict);
   if (!kind) return null;
   return { title: `${label} · ${kind}`, body: text };
+}
+
+/** Show the recorded cause behind an executed Failed / Skipped status. */
+function buildStepStatusTooltip(
+  label: string,
+  status: PipelineRowVm['status'],
+  detail: string | null,
+): StructuredTooltip | null {
+  if (status !== 'failed' && status !== 'skipped') return null;
+  const body = detail?.trim();
+  if (!body) return null;
+  return {
+    title: `${label}: ${status === 'failed' ? 'Failed' : 'Skipped'}`,
+    body,
+  };
 }
 
 /** Map a steering tone to the tooltip accent colour. */
@@ -886,6 +906,7 @@ export class OverviewPaneComponent {
       const thinkingLevelOverride = cfg?.thinkingLevel ?? null;
       let verdict = e?.verdict ?? null;
       if (step.kind === 'core') verdict = reconcileCoreVerdict(status, verdict);
+      const statusDetail = e?.verdictSummary ?? e?.reason ?? null;
       const tokenTooltip = this.buildStepTokenTooltip(label, c ?? null);
       const costTooltip = this.buildStepCostTooltip(label, c ?? null);
       const phase = pipelinePhaseForKind(step.kind);
@@ -909,6 +930,7 @@ export class OverviewPaneComponent {
         hasExecution: e != null,
         config: cfg ?? null,
         status,
+        statusTooltip: buildStepStatusTooltip(label, status, statusDetail),
         model,
         thinkingLevel,
         cliType,
@@ -918,7 +940,7 @@ export class OverviewPaneComponent {
         modelOverride,
         thinkingLevelOverride,
         verdict,
-        concernTooltip: buildConcernTooltip(label, verdict, e?.verdictSummary ?? e?.reason ?? null),
+        concernTooltip: buildConcernTooltip(label, verdict, statusDetail),
         explanation: buildStepExplanation(step.id, label, step.kind),
         durationMs: e?.durationMs ?? 0,
         startedAt: e?.startedAt ?? null,
