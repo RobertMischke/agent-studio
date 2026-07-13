@@ -411,7 +411,7 @@
       <span class="chip"><span class="dot amber"></span>Remote parallelism unchanged</span>
       <span class="chip"><span class="dot green"></span>Fully remote review target</span>
       <span class="chip"><span class="dot"></span>Observation only</span>
-      <span class="chip">No issues created yet</span>
+      <span class="chip">AGT-2129 program queued</span>
     </div>
   </header>
 
@@ -430,7 +430,7 @@
       <a href="#host">10. Remote Host target</a>
       <a href="#monitoring">11. Live observation</a>
       <a href="#delivery">12. Delivery map</a>
-      <a href="#decisions">13. Open decisions</a>
+      <a href="#decisions">13. Remaining policy decisions</a>
       <a href="#knowledge">14. Living knowledge log</a>
     </div>
   </nav>
@@ -1016,6 +1016,13 @@
         <p><strong>Visibility gap:</strong> live leases remained for AGT-2168, AGT-2159, AGT-2162, and AGT-2163, while the ordinary task runner projection showed <code>runner=null</code>, <code>runId=null</code>, and <code>no-active-run</code>. The lease view was the actual ownership truth. AGT-2176 remained in Progress with neither lease nor active run. Slot counters briefly disagreed with the number of observable leases during handoff.</p>
       </article>
 
+      <article class="card tint-amber" style="margin-top: 14px;">
+        <span class="label">Read-only follow-up · 2026-07-13, 19:56-20:06 CEST</span>
+        <p><strong>No new implementation was deployed:</strong> Stable remained on <code>18fd1f89</code> from 12 July. AGT-2159, AGT-2163, and AGT-2169 reached Remote <code>TASK_DONE</code> and Auto Review, but AGT-2159 and AGT-2163 still had no gate outcome after more than ten minutes. This is a post-processing backlog or hang signal, not fix evidence.</p>
+        <p><strong>Remote execution continued:</strong> AGT-2164 and AGT-2165 preserved salvage commits and moved to Human Review after <code>TASK_BLOCKED</code>. Slots were refilled by AGT-2171, AGT-2173, AGT-2174, and AGT-2178. Host pressure peaked at 92.6% CPU and load1 24.1 without swap.</p>
+        <p><strong>Truth gaps remained:</strong> live cards still projected <code>runner=null</code> and <code>no-active-run</code>; Remote timeline events still had no <code>runId</code>; AGT-2176 remained stale Progress without lease or runner. Planning issues AGT-2182 through AGT-2187 appeared during the sample, but issue creation is not code landing.</p>
+      </article>
+
       <div class="table-wrap">
         <table>
           <thead><tr><th>CEST</th><th>CPU</th><th>Load 1</th><th>Memory</th></tr></thead>
@@ -1033,12 +1040,12 @@
 
       <h3 style="margin-top: 2rem;">Signals to capture for every parallel run</h3>
       <div class="grid three">
-        <article class="card"><h3>Execution identity</h3><p>Task, run, attempt, runner instance, host slot, lease, base SHA, result SHA, and tested SHA.</p></article>
-        <article class="card"><h3>Overlap</h3><p>Concurrent CLI attempts, concurrent gates in the same repository, shared output paths, and active development services.</p></article>
-        <article class="card"><h3>Host pressure</h3><p>CPU, load, memory, disk, process count, queue wait, heartbeat lag, and capability probe state.</p></article>
-        <article class="card"><h3>Gate facts</h3><p>Worktree path, command, start/end, exit, signal, timeout, cancellation, lock signature, and normalized fingerprint.</p></article>
-        <article class="card"><h3>Semantic result</h3><p>Completion verdict, confidence, evidence references, failure attribution, and recommended route.</p></article>
-        <article class="card"><h3>Lane effect</h3><p>Every state transition, its actor, the decision input digest, and whether task or infrastructure budget changed.</p></article>
+        <article class="card"><span class="label">M1</span><h3>Execution identity</h3><p>Task, run, attempt, runner instance, host slot, lease, base SHA, result SHA, and tested SHA.</p></article>
+        <article class="card"><span class="label">M2</span><h3>Overlap</h3><p>Concurrent CLI attempts, concurrent gates in the same repository, shared output paths, and active development services.</p></article>
+        <article class="card"><span class="label">M3</span><h3>Host pressure</h3><p>CPU, load, memory, disk, process count, queue wait, heartbeat lag, and capability probe state.</p></article>
+        <article class="card"><span class="label">M4</span><h3>Gate facts</h3><p>Worktree path, command, start/end, exit, signal, timeout, cancellation, lock signature, and normalized fingerprint.</p></article>
+        <article class="card"><span class="label">M5</span><h3>Semantic result</h3><p>Completion verdict, confidence, evidence references, failure attribution, and recommended route.</p></article>
+        <article class="card"><span class="label">M6</span><h3>Lane effect</h3><p>Every state transition, its actor, the decision input digest, and whether task or infrastructure budget changed.</p></article>
       </div>
 
       <p>The monitoring question is not simply “did a task fail while many slots were active?” It is: “for the exact submitted revision, did failures correlate with Remote CLI overlap, current Task-Server gate overlap, resource pressure, wrong checkout selection, or a reproducible product defect?”</p>
@@ -1046,57 +1053,95 @@
 
     <section id="delivery">
       <div class="section-head">
-        <p class="eyebrow">12 · Delivery and issue map</p>
-        <h2>Extend existing root-cause work; create only the missing durability slices</h2>
-        <p>No Embedded Issues are created by this document. The following map is the proposed deduplicated breakdown after operator approval.</p>
+        <p class="eyebrow">12 · Roadmap, live status, and delivery evidence</p>
+        <h2>One Remote epic, retained root-cause issues, and six missing implementation slices</h2>
+        <p>The operator-approved program is grouped under AGT-2129. Existing issues retain their narrow ownership; new issues cover only the authority, durable handoff, Remote Review Executor, CLI recovery, capability drain, and final replay gaps that did not already exist.</p>
+      </div>
+
+      <div class="principle">
+        <strong>Source-of-truth rule</strong>
+        <p>This page owns target architecture, phase order, dependency intent, and exit criteria. The taskboard owns current lane, runner, attempt, merge reachability, review grade, and evidence. Do not copy volatile lane values into this page. Use the Wiki related-task rail, Epic Overview, and Task Detail for live status.</p>
+      </div>
+
+      <h3>Evidence-driven phase sequence</h3>
+      <div class="state-strip" aria-label="Stabilization delivery phases">
+        <span class="state tint-amber"><strong>P0</strong> Contain and measure</span><span class="arrow">→</span>
+        <span class="state"><strong>P1</strong> Durable authority and recovery</span><span class="arrow">→</span>
+        <span class="state"><strong>P2</strong> Fully remote review and semantic decision</span><span class="arrow">→</span>
+        <span class="state"><strong>P3</strong> Capability and operator truth</span><span class="arrow">→</span>
+        <span class="state tint-green"><strong>P4</strong> Replay, canary, and handoff</span>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Where the operator looks now</h3>
+      <div class="grid four">
+        <article class="card tint-blue">
+          <span class="label">Program rollup</span>
+          <h3>Epic Overview · AGT-2129</h3>
+          <p>Shows the authoritative child count, lanes, waits-on relationships, and completed versus open work. The Epic itself is parked as a non-runnable container.</p>
+        </article>
+        <article class="card">
+          <span class="label">Live navigation</span>
+          <h3>Wiki related-task rail</h3>
+          <p>Hydrates the keys beside this page into live task microcards with lane, merge reachability, and review grade. Select one to open its Task Detail.</p>
+        </article>
+        <article class="card">
+          <span class="label">Acceptance evidence</span>
+          <h3>Task Detail</h3>
+          <p>Use Prompt, Timeline, Pipeline, Runs, Results, Files, and Git provenance. The roadmap does not duplicate that live evidence.</p>
+        </article>
+        <article class="card tint-violet">
+          <span class="label">Runtime truth</span>
+          <h3>Workspace Settings · Remote Hosts</h3>
+          <p>Use heartbeat, daemon, slots, capabilities, automatic or operator drain, CPU/load/memory, and telemetry findings to understand host health.</p>
+        </article>
       </div>
 
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Package</th><th>Reuse or create</th><th>Acceptance boundary</th></tr></thead>
+          <thead><tr><th>Phase</th><th>Work package</th><th>Issue</th><th>Capability owner</th><th>Depends on</th><th>Exit evidence</th><th>Monitor</th></tr></thead>
           <tbody>
-            <tr><td>Exact-SHA Remote Review</td><td>Extend AGT-2121</td><td>The Task Server persists an immutable result envelope and issues a remote review claim. Every aspect runs in an isolated Remote ReviewAttempt at that exact SHA; the Task Server performs no checkout, materialization, or repository command.</td></tr>
-            <tr><td>Build/Test Gate Coordination</td><td>Split under AGT-2155</td><td>Isolated outputs, a server-issued remote review lease, per-repository coordination across review workers, and complete overlap telemetry without changing Remote coding parallelism.</td></tr>
-            <tr><td>Gate Failure Taxonomy</td><td>Split under AGT-2155 and link AGT-1944</td><td>Product, infrastructure, cancellation, timeout, OOM, process launch, and lock failures route differently.</td></tr>
-            <tr><td>Semantic Completion Judge</td><td>Harden AGT-2168</td><td>Raw prose is interpreted by a cheap model over the final attempt window plus hard facts; keyword rules cannot decide the lane.</td></tr>
-            <tr><td>Visual Evidence Policy</td><td>Extend the evidence-gate work</td><td>Evidence modality follows task and diff semantics; backend bugs are not image-blocked; referenced artifacts are verified.</td></tr>
-            <tr><td>Persisted RunAttempt, ReviewAttempt, and Fencing</td><td>New Remote P0 under the Remote epic</td><td>Coding and review have separate persisted identities, leases, fences, states, and retry paths. Every state-affecting write survives and respects restart.</td></tr>
-            <tr><td>Runner Journal and Outbox</td><td>New Remote P0, building on AGT-2147</td><td>Logs, artifacts, terminal facts, and completion replay idempotently; worktree removal follows confirmed durable handoff.</td></tr>
-            <tr><td>CLI Outcome and Capability Drain</td><td>New slice linked to AGT-2170, AGT-2070, and AGT-2148</td><td>401, quota, timeout, OOM, shutdown, lease loss, and explicit blockers each have one typed route and budget effect.</td></tr>
-            <tr><td>Host-to-Task Truth</td><td>Extend AGT-2173 and AGT-2142</td><td>Host, capability, slot, lease, attempt, worktree, SHA, and task state reconcile in one view.</td></tr>
-            <tr><td>Incident Replay and Fault Injection</td><td>New acceptance package</td><td>AGT-2155, AGT-2168, AGT-2176, and AGT-2148 become fixtures alongside restart, tunnel, stale-write, 401, OOM, and lost-response tests.</td></tr>
+            <tr><td>P0</td><td>Gate-storm containment and revision-bound failure identity</td><td><strong>AGT-2155</strong> retained</td><td>Gate scheduler and classifier</td><td>None</td><td>A2, A5, A6</td><td>M2, M4, M6</td></tr>
+            <tr><td>P1</td><td>Persisted RunAttempt and ReviewAttempt authority</td><td><strong>AGT-2182</strong> new</td><td>Task Server control plane</td><td>AGT-2155</td><td>A3, A9</td><td>M1, M6</td></tr>
+            <tr><td>P1</td><td>Durable outbox and immutable result handoff</td><td><strong>AGT-2183</strong> new</td><td>Remote Coding Executor</td><td>AGT-2182</td><td>A4</td><td>M1, M6</td></tr>
+            <tr><td>P1</td><td>Typed CLI outcome and bounded recovery</td><td><strong>AGT-2185</strong> new</td><td>Runner adapters</td><td>AGT-2182</td><td>A5</td><td>M1, M5, M6</td></tr>
+            <tr><td>P2</td><td>Exact-SHA Remote Review Executor</td><td><strong>AGT-2184</strong> new</td><td>Remote review data plane</td><td>AGT-2182, AGT-2183</td><td>A1, A2, A6</td><td>M1-M4</td></tr>
+            <tr><td>P2</td><td>Full Remote completion-to-review integration</td><td><strong>AGT-2121</strong> retained</td><td>Review scheduler</td><td>AGT-2184</td><td>A1, A2, A4</td><td>M1, M5, M6</td></tr>
+            <tr><td>P2</td><td>Semantic final-attempt completion judge</td><td><strong>AGT-2168</strong> corrected</td><td>Semantic review</td><td>AGT-2184</td><td>A7</td><td>M5, M6</td></tr>
+            <tr><td>P3</td><td>Capability-specific drain and canary admission</td><td><strong>AGT-2186</strong> new</td><td>Host admission</td><td>AGT-2185</td><td>A8</td><td>M3, M6</td></tr>
+            <tr><td>P3</td><td>Host-to-task and operator truth</td><td><strong>AGT-2173</strong>, AGT-2170, AGT-2142</td><td>Projection and existing UI</td><td>AGT-2182 plus upstream events</td><td>A9</td><td>M1, M3, M6</td></tr>
+            <tr><td>P4</td><td>Incident replay, Remote canary, and operator handoff</td><td><strong>AGT-2187</strong> new</td><td>Integration and test harness</td><td>AGT-2184, AGT-2186, AGT-2121, AGT-2168, AGT-2173</td><td>A1-A9</td><td>M1-M6</td></tr>
           </tbody>
         </table>
       </div>
 
       <h3 style="margin-top: 2rem;">Release evidence, not calendar optimism</h3>
       <ul class="checklist">
-        <li>Zero project checkout, materialization, build/test, visual inspection, or semantic repository review on the Task Server; 100% occur in fenced Remote ReviewAttempts.</li>
-        <li>Expected result SHA equals tested SHA for every gate.</li>
-        <li>A ReviewAttempt infrastructure retry keeps the task in Auto Review and does not start a new coding RunAttempt.</li>
-        <li>Infrastructure failures consume zero coding-rework budget.</li>
-        <li>Keyword-only and prompt-echo fixtures produce zero lane decisions.</li>
-        <li>Every Remote attempt appears in canonical run history.</li>
-        <li>Backend restart accepts zero stale writes and does not lower a fence.</li>
-        <li>Codex 401 drains only Codex claims while healthy capabilities continue.</li>
-        <li>At current Remote parallelism, overlap telemetry can explain every gate result.</li>
+        <li><code>A1</code> Zero project checkout, materialization, build/test, visual inspection, or semantic repository review on the Task Server; 100% occur in fenced Remote ReviewAttempts.</li>
+        <li><code>A2</code> Expected result SHA equals tested SHA for every Git-backed gate; non-Git subjects use a verified content digest.</li>
+        <li><code>A3</code> RunAttempt and ReviewAttempt, monotonic fence, and authority epoch survive restart; stale writes are rejected.</li>
+        <li><code>A4</code> Lost response and restart replay the immutable result envelope exactly once; teardown follows acknowledged durable handoff.</li>
+        <li><code>A5</code> Review and CLI infrastructure failures consume zero coding-rework budget and do not start a new coding attempt.</li>
+        <li><code>A6</code> Three or more parallel Remote reviews show no cross-task output, cache, port, container, database, or evidence contamination.</li>
+        <li><code>A7</code> Keyword-only, prompt-echo, historical-failure, and deployment-pending fixtures produce zero false lane decisions.</li>
+        <li><code>A8</code> Codex 401 drains only Codex claims while healthy capabilities continue; common host failure drains all.</li>
+        <li><code>A9</code> Every active Remote coding and review attempt appears in canonical history and operator surfaces; no live lease projects <code>runner=null</code> or <code>no-active-run</code>.</li>
       </ul>
     </section>
 
     <section id="decisions">
       <div class="section-head">
-        <p class="eyebrow">13 · Open operator decisions</p>
-        <h2>Questions to settle before turning this concept into Embedded Issues</h2>
+        <p class="eyebrow">13 · Remaining policy decisions</p>
+        <h2>Implementation is scheduled; unresolved policy stays visible</h2>
       </div>
 
       <div class="grid two">
-        <article class="card"><h3>Semantic authority</h3><p>Should one final cheap synthesis judge own the lane recommendation, using existing aspect verdicts as evidence, or should each aspect remain independently authoritative?</p></article>
+        <article class="card tint-green"><span class="label">Direction recorded</span><h3>Semantic authority</h3><p>One cheap synthesis judge owns the lane recommendation and treats existing aspect verdicts as evidence. Hard Git, process, command, artifact, lease, and schema facts constrain that judgment.</p></article>
         <article class="card"><h3>Context budget</h3><p>Confirm the final 300 logical events as the default window. Should the judge be allowed one targeted request for earlier context when it detects a contradiction?</p></article>
         <article class="card"><h3>Visual evidence</h3><p>Should a missing image for clearly visual work trigger an evidence-only follow-up, Human Review with concern, or a coding reissue only when the model also finds the implementation unverifiable?</p></article>
         <article class="card"><h3>Accept with concerns</h3><p>Should a high-confidence complete verdict with non-blocking concerns always wait in Human Review, or can selected low-risk projects auto-accept under explicit policy?</p></article>
         <article class="card"><h3>Retry ceilings</h3><p>Choose the specific per-fingerprint retry count and the task-level semantic churn ceiling. Infrastructure retries remain separately bounded.</p></article>
         <article class="card"><h3>Host restart resume</h3><p>Recommended default: automatic resume is project opt-in and globally off until provider-specific resume, process containment, and fencing probes are green.</p></article>
-        <article class="card"><h3>Remote review placement</h3><p>The fully remote contract is fixed; placement is the open choice. Recommended rollout: allow an isolated review role on existing Remote Hosts first, add a dedicated review pool, and let high-risk project policy require a different host failure domain.</p></article>
+        <article class="card tint-green"><span class="label">Rollout recorded</span><h3>Remote review placement</h3><p>The fully remote contract is fixed. Allow an isolated review role on existing Remote Hosts first, add a dedicated review pool, and let high-risk project policy require a different host failure domain.</p></article>
       </div>
     </section>
 
@@ -1107,6 +1152,8 @@
       </div>
 
       <div class="timeline">
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Stabilization program queued.</strong> AGT-2129 now groups the retained AGT-2155, AGT-2121, AGT-2168, AGT-2173, and AGT-2170 work with six missing slices: AGT-2182 attempt authority, AGT-2183 durable outbox, AGT-2184 Remote Review Executor, AGT-2185 typed CLI recovery, AGT-2186 capability drain, and AGT-2187 final replay and canary. Hard <code>dependsOn</code> edges keep later work visible in Ready without allowing premature pickup.</div><div class="timeline-action">Queued via Task API</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>No deployed fix evidence yet.</strong> Stable remained on <code>18fd1f89</code>. AGT-2159, AGT-2163, and AGT-2169 reached Remote <code>TASK_DONE</code> and Auto Review, but two remained there without a gate outcome for more than ten minutes. Remote cards still lacked canonical runner and run identity, AGT-2176 remained stale Progress, and host load again peaked above twice the core count.</div><div class="timeline-action">Observed read-only</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Fully remote target clarified.</strong> Exact-SHA materialization and all completion, build/test, evidence, vision, and quality aspects run inside a fenced Remote ReviewAttempt. The Task Server remains the authority and scheduler but owns no project checkout. Coding and review may initially share a physical Remote Host only as isolated roles; a dedicated review pool is the stronger stability target.</div><div class="timeline-action">Target corrected</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Authority inversion confirmed.</strong> LLM aspect prompts describe concerns as non-blocking and Human Review as final, while deterministic evidence and solution-quality gates can turn concern wording and keyword matches into reissue.</div><div class="timeline-action">Open design decision</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Live parallel sample.</strong> Four to five active Remote slots produced <code>TASK_DONE</code> handoffs for AGT-2156 and AGT-2160 while AGT-2155, AGT-2156, and AGT-2160 repeated post-review gate failure paths and AGT-2168 repeated the prose-gate loop. A later host sample reached 98.2% CPU and load1 23.24 without losing its four leases. This supports measuring host pressure while still separating Remote execution concurrency from the current Task-Server review implementation.</div><div class="timeline-action">Observed read-only</div></div>

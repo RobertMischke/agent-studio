@@ -340,6 +340,88 @@ public class TaskIndexCacheTests : IDisposable
         Assert.Equal(3, Volatile.Read(ref scans));
     }
 
+    [Fact]
+    public async Task SnapshotPartitions_AlwaysComeFromOnePublishedGeneration()
+    {
+        var secondScanEntered = new ManualResetEventSlim(false);
+        var releaseSecondScan = new ManualResetEventSlim(false);
+        var scans = 0;
+        var cache = new TaskIndexCache(
+            _scanner,
+            NullLogger<TaskIndexCache>.Instance,
+            _config,
+            () =>
+            {
+                var scan = Interlocked.Increment(ref scans);
+                if (scan == 2)
+                {
+                    secondScanEntered.Set();
+                    Assert.True(releaseSecondScan.Wait(TimeSpan.FromSeconds(5)));
+                }
+                return
+                [
+                    new TaskInfo { Id = $"live-{scan}", State = TaskStates.Ready },
+                    new TaskInfo { Id = $"archive-{scan}", State = TaskStates.Archive },
+                ];
+            });
+
+        var first = cache.GetSnapshotPartitions();
+        Assert.Equal("live-1", Assert.Single(first.Live).Id);
+        Assert.Equal("archive-1", Assert.Single(first.Archive).Id);
+
+        cache.Invalidate(TaskIndexCache.InvalidationSource.External);
+        var refresher = Task.Run(() => cache.GetSnapshot());
+        Assert.True(secondScanEntered.Wait(TimeSpan.FromSeconds(5)));
+
+        var stale = cache.GetSnapshotPartitions();
+        Assert.Equal("live-1", Assert.Single(stale.Live).Id);
+        Assert.Equal("archive-1", Assert.Single(stale.Archive).Id);
+
+        releaseSecondScan.Set();
+        _ = await refresher;
+        var fresh = cache.GetSnapshotPartitions();
+        Assert.Equal("live-2", Assert.Single(fresh.Live).Id);
+        Assert.Equal("archive-2", Assert.Single(fresh.Archive).Id);
+        Assert.Equal(2, Volatile.Read(ref scans));
+    }
+
+    [Fact]
+    public async Task MutationBeforeGenerationCapture_IsAbsorbedByCurrentRefresh()
+    {
+        var secondCaptureEntered = new ManualResetEventSlim(false);
+        var releaseSecondCapture = new ManualResetEventSlim(false);
+        var refreshes = 0;
+        var scans = 0;
+        var cache = new TaskIndexCache(
+            _scanner,
+            NullLogger<TaskIndexCache>.Instance,
+            _config,
+            () =>
+            {
+                var scan = Interlocked.Increment(ref scans);
+                return [new TaskInfo { Id = $"job-{scan}", State = TaskStates.Ready }];
+            },
+            beforeRefreshGenerationCapture: () =>
+            {
+                if (Interlocked.Increment(ref refreshes) != 2) return;
+                secondCaptureEntered.Set();
+                Assert.True(releaseSecondCapture.Wait(TimeSpan.FromSeconds(5)));
+            });
+
+        Assert.Equal("job-1", Assert.Single(cache.GetSnapshot()).Id);
+        cache.Invalidate(TaskIndexCache.InvalidationSource.External);
+        var refresher = Task.Run(() => cache.GetSnapshot());
+        Assert.True(secondCaptureEntered.Wait(TimeSpan.FromSeconds(5)));
+
+        cache.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
+        releaseSecondCapture.Set();
+
+        Assert.Equal("job-2", Assert.Single(await refresher).Id);
+        Assert.Equal("job-2", Assert.Single(cache.GetSnapshot()).Id);
+        Assert.Equal(2, Volatile.Read(ref scans));
+        Assert.Equal(2, cache.Misses);
+    }
+
     private void WriteJob(string state, string slug, string title)
     {
         var dir = Path.Combine(_watchPath, state, slug);
