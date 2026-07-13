@@ -705,6 +705,73 @@
             UI/API surface for pipeline-step and prompt model configuration with Token Economy guidance.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-12</td>
+          <td><code>AGT-2169</code><br><span class="small">progress admission atomicity<br>(observed on <code>AGT-2149</code>)</span></td>
+          <td>
+            AGT-2149 moved from Ready to Progress without a confirmed CLI process. It later showed
+            <code>no-active-run</code> beside a historical execution completed with exit 0, while no live owner or bounded wake
+            could drive the card forward.
+          </td>
+          <td>
+            Explicit spawn-failure branches reverted the lane, but an unexpected exception between the lane move and
+            <code>StartAsync</code> escaped that compensation. The canonical session event and run-start timeline row were also
+            written before process confirmation, and the in-memory claim result was ignored. The disk pickup lock used a read/delete/move sequence
+            that did not serialize two simultaneous backend claims.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> pre-start admission faults now release both ownership layers and return a lane
+            move made by that attempt to <span class="lane">2-ready</span>, where the scheduler provides the bounded wake.
+            Run history and <code>agent_run_started</code> are durable only after the CLI confirms a process. Duplicate in-memory
+            claims fail closed, and the cross-backend pickup record is classified and written under one exclusive file lock.
+            Same-host liveness checks reject a reused PID whose process started after the lock was acquired. Boot liveness
+            recovery continues to route a historical finished run to post-processing and an unfinished zombie back to Ready.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-13</td>
+          <td><code>AGT-2117</code><br><span class="small">quality-grade starvation and stale Pending rows<br>(also observed on <code>AGT-2112</code>, <code>AGT-2114</code>, <code>AGT-2118</code>, and <code>AGT-2108</code>)</span></td>
+          <td>
+            Attempt 8 failed its deterministic build/test gate and ultimately escalated, but Code-review quality grade,
+            the aspect rows, and later pipeline rows remained <code>Pending</code> without a reason. If the grade had been
+            reached, its configured fallback still selected Claude despite the GPT-only operating constraint.
+          </td>
+          <td>
+            The red build-gate and aspect-infrastructure branches returned before the reporting grade. Pipeline completion
+            only stamped <code>CompletedAt</code>; it did not close rows that the terminal branch never dispatched, so the UI
+            represented a finished attempt as work still waiting to start.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the reporting grade now runs before both short-circuits and never gates the lane
+            decision. Completing a pipeline turns known unreached rows into <code>Skipped</code> with the causal terminal reason
+            and interrupted <code>Running</code> rows into <code>Failed</code>; a pure read projection repairs legacy attempts.
+            Model-backed pipeline defaults use Codex, with the detected flagship reserved for quality grading and task spawning.
+            The affected AGT-2117 attempt keeps its recorded <span class="lane">Escalate</span> terminal decision, now with
+            the skipped causes visible even if the card is moved again later.
+          </td>
+        </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2134</code><br><span class="small">steer timeout bypass<br>(observed on <code>AGT-2087</code>)</span></td>
+          <td>
+            AGT-2087 remained visibly in "waiting for answer" for 155 minutes although the default steer timeout was
+            120 seconds and the uptime monitor was deployed. No runtime artefacts for the 13:45-16:20 window were present
+            in this checkout, so the code-path audit reconstructed the bypasses and locked them with fixtures.
+          </td>
+          <td>
+            NeedsInput ownership was inferred from the project's mode at completion time and was unnecessarily gated on
+            an optional captured run plan. An auto-picked run could therefore look manual after a mode flip. Separately,
+            the timeout sweep considered only <code>steer-pending.json</code>; a card whose durable phase said
+            <code>steer-pending</code> but whose sidecar write was missing remained visible yet untracked.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> original <code>AutoPickup</code> intent now keeps NeedsInput unattended
+            regardless of a later mode flip and without run-plan metadata. A missing steer marker is reconstructed from
+            the persisted phase timestamp. Timed-out waits therefore reach either <code>auto-answered</code> and
+            <span class="lane">2-ready</span>, or the <code>steer-unanswered</code> blocked terminal in
+            <span class="lane">5e-escalated</span>; they cannot remain in progress indefinitely.
+          </td>
+        </tr>
       </tbody>
     </table>
 
@@ -854,6 +921,8 @@
     This page is a living concept doc. It must be maintained: keep the four-terminal model accurate and append every CLI-crash /
     drive-to-conclusion incident to the case log in Section 3. Code references are grounded in
     <code>agent-taskboard-dev/backend</code> as of the seed case (2026-06-19); update line numbers if they drift.
+    The current July 2026 umbrella analysis of semantic completion, exact-revision review, and Remote Host stability is
+    <a href="completion-review-and-remote-runner-stability.html">Completion, Review, and Remote Runner Stability</a>.
   </footer>
 
 </div>

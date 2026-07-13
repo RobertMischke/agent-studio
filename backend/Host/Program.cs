@@ -193,6 +193,7 @@ builder.Services.AddSingleton<AgentStudio.Registry.OrchestratorDefaultsProvider>
 // Project URLs: read-only repo scan for suggestions + minimal dev-server spawn.
 builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlDetectionService>();
 builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlProcessService>();
+builder.Services.AddSingleton<AgentStudio.Registry.ProjectUrlReadinessService>();
 builder.Services.AddSingleton<AgentStudio.Tasks.TaskKeyResolver>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
 // F21: per-project write mutex for the lane tree. Must be registered
@@ -225,6 +226,7 @@ builder.Services.AddSingleton<TaskSessionLog>();
 builder.Services.AddSingleton<TimelineLog>();
 builder.Services.AddSingleton<ProjectThroughputService>();
 builder.Services.AddSingleton<ProjectVisualEvidenceService>();
+builder.Services.AddSingleton<ProjectGraphDiscoveryService>();
 // T2b (ASS-1740): the single per-task read layer. Loads all raw sources
 // (detail, session-events, cli-output, timeline ledger) once and projects the
 // run timeline + meshed ledger so the /runs and /timeline views stop
@@ -453,6 +455,9 @@ builder.Services.AddHostedService<AgentStudio.Docs.WorkstreamCuratorHostedServic
 // designated-topic pointers consistent and collects each topic's current state.
 // Injected into the review orchestrator; default-OFF per project.
 builder.Services.AddSingleton<AgentStudio.Pipeline.AgentsWikiSyncPostStepRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IManagedProjectArtifactCommitService,
+    AgentStudio.Pipeline.ManagedProjectArtifactCommitService>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.OnDemandPostStepService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkstreamCollectorPostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiTaskCrossReferenceService>();
 // Opt-in task-spawner post-step (AGT-2028): relevance judgment + follow-up
@@ -517,7 +522,10 @@ builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 // hours the way 2062/2067/2068 did on 2026-07-10.
 builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
+builder.Services.AddSingleton<ProjectStyleGuideService>();
+builder.Services.AddSingleton<WorkbenchCatalogueService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();
+builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingService>();
 // Wiki-grading maintenance run (AGT-2051): the maintenance-model default (its own
 // config class in the CLI-management area), the companion sidecar writer, the
 // grader seam (production = the one-shot CLI rail), and the run orchestrator.
@@ -950,10 +958,10 @@ transitionsForRunner.OnJobMoved += (projectName, jobId, _, toState) =>
         publishActionsForTransitions.HandleTaskAccepted(projectName, jobId);
 };
 
-// Defensive: when a non-API folder change touches the watch tree (external
-// script, manual edit, boot-time stuck-folder sweep), sweep every runner so
-// a stale active-job latch is cleared before the next pickup tick.
-watcher.OnJobChanged += _ => runnerForTransitions.ReconcileAllRunners();
+// Defensive: when a non-API task change touches the watch tree, reconcile only
+// the affected project's active runner against its captured task folder. This
+// deliberately avoids a global FindJob/index scan on the watcher callback.
+watcher.OnJobChanged += path => runnerForTransitions.ReconcileRunnerForPath(path);
 
 // Wire up CLI events → SignalR push (across all CLI backends via the router)
 var cliRouter = app.Services.GetRequiredService<CliRouter>();

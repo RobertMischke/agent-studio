@@ -14,6 +14,7 @@ Use this page as the first stop when you need the right document quickly.
 | [domains/](domains/README.md) | Current system-of-record domain maps for runner, pipeline, tasks, frontend, CLI, tokens, and token pricing. |
 | [contracts/](contracts/README.md) | Durable filesystem, task, protocol, run outcome, code-pattern, and wiki organization contracts. |
 | [design/](design/README.md) | Product-wide, prompt-known design hard rules (no left accent bars, full-bleed views, aggregate = sum, acute-only signals, both themes). |
+| [quality/](quality/README.md) | Technology-aware Angular and .NET style guides, applicability metadata, and the rule-authoring workflow used by Project Hub and intake prompts. |
 | [product/](product/README.md) | Product and UX direction: design principles, orchestrator chat, companion app, and skills architecture. |
 | [frontend/](frontend/README.md) | Frontend design system, style guide, testing contract, performance playbook, and audits. |
 | [cli/](cli/README.md) | Supported CLI contract, per-CLI skills, audits, and investigations. |
@@ -43,8 +44,11 @@ Use this page as the first stop when you need the right document quickly.
 | Tokens | [domains/tokens.md](domains/tokens.md) |
 | ADR archive | [architecture/decisions/adr-archive.md](architecture/decisions/adr-archive.md) |
 | Architecture model | [architecture/model.md](architecture/model.md) |
+| Architecture and Quality layer (Project Map, mapped guides, analysis inventory, component grading) | [concept](concepts/architecture-quality-layer.md) · [interactive Workbench](workbenches/architecture-quality-layer/index.html) |
+| Managed project manifest map | [architecture/project-map.md](architecture/project-map.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](design/style-guide-hard-rules.md) |
+| Engineering style guides (technology-aware and prompt-injected) | [quality/README.md](quality/README.md) |
 | Application visual survey (2026-07-11) | [design/app-survey-2026-07-11.html](design/app-survey-2026-07-11.html) |
 | Angular performance review (2026-07) | [design/angular-performance-report-2026-07.html](design/angular-performance-report-2026-07.html) |
 | Explorer project state indicator exploration (2026-07) | [design/tree-indicator-exploration-2026-07.html](design/tree-indicator-exploration-2026-07.html) and [alternatives catalog](wiki/concepts/tree-project-indicator-alternatives.md) |
@@ -62,7 +66,9 @@ Use this page as the first stop when you need the right document quickly.
 | Planning-task lifecycle (plan → spawn → accept; spawn-contract gate; AGT-2069) | [concepts/planning-task-lifecycle.md](concepts/planning-task-lifecycle.md) |
 | Experiment workbenches (Explorer, orchestrator chat, decision-to-task) | [concept](concepts/experimentier-workbench.md) · [interactive mockup](concepts/mockups/experimentier-workbench.html) |
 | Decoupled agent-session lifecycles (holder, consumer channel, multi-client attach) | [concept](concepts/decoupled-lifecycles.md) · [interactive Workbench-family mockup](concepts/mockups/decoupled-lifecycles.html) |
+| Distributed Agent Studio target architecture (Studio, Task Server, Runner, security, lifecycle, and component projects) | [concepts/distributed-agent-studio-target-architecture.md](concepts/distributed-agent-studio-target-architecture.md) |
 | Deployment as a first-class citizen (Deployment page, scenario templates, prompt-defined dynamic UI over CLI tasks; DEP-1..5) | [concept](concepts/deployment-first-class.md) · [interactive mockup](concepts/mockups/deployment-first-class.html) |
+| Release semantics (integration vs acceptance vs release vs stable freeze; transparent watering-can model) | [concept](concepts/release-semantics.md) |
 | Project Overview operator dashboard (metrics, Visual Evidence Queue, Project URLs, deployment summary, Wiki entry) | [mockup contract](mockups/project-overview-dashboard/README.md) · [interactive mockup](mockups/project-overview-dashboard/ui.html) |
 | Wiki classification | [product/wiki-document-classification.md](product/wiki-document-classification.md) |
 | Wiki editing flow | [product/wiki-editing-and-branch-flow.md](product/wiki-editing-and-branch-flow.md) |
@@ -84,6 +90,7 @@ Use this page as the first stop when you need the right document quickly.
 | Task integration & worktree/merge workflow | [wiki/concepts/task-integration-and-merge-workflow.md](wiki/concepts/task-integration-and-merge-workflow.md) |
 | Merge config analysis (parallelism coupling) | [wiki/concepts/task-integration-merge-config-analysis.html](wiki/concepts/task-integration-merge-config-analysis.html) |
 | Auto-review reissue / evidence-gate analysis | [wiki/concepts/auto-review-evidence-gate-analysis.html](wiki/concepts/auto-review-evidence-gate-analysis.html) |
+| Completion, review, runner provenance, host handoff, and Remote Runner stability | [wiki/concepts/completion-review-and-remote-runner-stability.html](wiki/concepts/completion-review-and-remote-runner-stability.html) |
 | Planning & Research task type | [wiki/concepts/planning-research-task-type.html](wiki/concepts/planning-research-task-type.html) |
 | MVP presentation screen-tooling evaluation and recommendation | [research/screen-tooling-mvp-presentation-2026-07.md](research/screen-tooling-mvp-presentation-2026-07.md) |
 | MVP presentation capture runbook | [operations/setup/presentation-capture.md](operations/setup/presentation-capture.md) |

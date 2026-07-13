@@ -19,6 +19,7 @@ contract; the concept page owns the explanation and the running knowledge log.
 
 | Page | Area | System-of-record doc |
 |---|---|---|
+| [completion-review-and-remote-runner-stability.html](completion-review-and-remote-runner-stability.html) | Living umbrella analysis for semantic completion, exact-revision Auto Review, runner/host provenance, controlled cross-host continuation, build/test and visual-evidence gates, retry identity, CLI aborts, and parallel Remote Host stability. | [`docs/domains/runner.md`](../../domains/runner.md), [`docs/domains/pipeline.md`](../../domains/pipeline.md), [`docs/contracts/run-outcome.md`](../../contracts/run-outcome.md) |
 | [docs-structure-migration.md](docs-structure-migration.md) | Record of the real `docs/` folder migration into clearer domains, reports, architecture, frontend, CLI, and Wiki areas while keeping Markdown as default and HTML for visual maps. | [`docs/contracts/wiki-tree.md`](../../contracts/wiki-tree.md) |
 | [token-aggregation.md](token-aggregation.md) | Token aggregators -> bus-backed shims (ASS-881): one canonical `ITokenAggregator` over the Agent Message Bus, the legacy shims, and the architecture guard test. | [`docs/domains/tokens.md`](../../domains/tokens.md) |
 | [tree-project-indicator-alternatives.md](tree-project-indicator-alternatives.md) | Eight alternatives and recommendation for a project-level Explorer state indicator that shows situation instead of a total. | [`docs/design/tree-indicator-exploration-2026-07.html`](../../design/tree-indicator-exploration-2026-07.html) |

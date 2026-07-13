@@ -1201,6 +1201,12 @@
     padding-top: 0;
   }
 
+  // Escalation is a workspace decision strip, so it spans the editor instead
+  // of floating inside the detail view's horizontal content inset.
+  app-escalation-summary {
+    margin-inline: calc(-1 * var(--studio-spacing-3));
+  }
+
   .detail__header {
     background: transparent;
     border-bottom: 1px solid var(--studio-border);

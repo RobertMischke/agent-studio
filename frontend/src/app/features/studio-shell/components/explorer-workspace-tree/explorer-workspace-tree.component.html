@@ -202,14 +202,14 @@
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'wiki' ? 'page' : null"
                               [testid]="'studio-explorer-project-wiki-' + p.name"
                               (selectRequest)="openWikiRequest.emit(p.name)" />
+                <app-explorer-workbench-list [projectName]="p.name" [active]="p.isActive && activeProjectSurface() === 'workbench'" (openWorkbench)="openWorkbenchRequest.emit({ projectName: p.name, workbench: $event })" />
                 <app-tree-row level="child" glyph="book"
                               label="Epics"
                               [active]="p.isActive && activeProjectSurface() === 'epics'"
                               [ariaCurrent]="p.isActive && activeProjectSurface() === 'epics' ? 'page' : null"
                               [testid]="'studio-explorer-project-epics-' + p.name"
                               (selectRequest)="openEpicsRequest.emit(p.name)" />
-                <!-- Project URLs: 0..N extra rows, one per configured URL,
-                     appended after the five fixed rows. A link glyph and a
+                <!-- Project URLs: 0..N rows appended after fixed rows. A link glyph and a
                      running/offline status dot instead of a count badge.
                      AGT-2067: primary click now opens the URL EMBEDDED in a
                      sandboxed iframe as its own tab (openUrlPreviewRequest);
@@ -222,11 +222,11 @@
                                 [testid]="'studio-explorer-project-url-' + p.name + '-' + u.id"
                                 (selectRequest)="openUrlPreview(p.name, u.id)">
                     <span class="studio-url-status-dot"
-                          [class.studio-url-status-dot--running]="urlProbe.statusFor(u.url) === 'running'"
-                          [class.studio-url-status-dot--offline]="urlProbe.statusFor(u.url) === 'offline'"
+                          [class.studio-url-status-dot--running]="urlProbe.statusFor(p.projectId ?? '', u.id) === 'running'"
+                          [class.studio-url-status-dot--offline]="urlProbe.statusFor(p.projectId ?? '', u.id) === 'offline'"
                           [attr.data-testid]="'studio-explorer-project-url-dot-' + p.name + '-' + u.id"
-                          [attr.data-status]="urlProbe.statusFor(u.url)"
-                          [attr.aria-label]="urlProbe.statusFor(u.url)"></span>
+                          [attr.data-status]="urlProbe.statusFor(p.projectId ?? '', u.id)"
+                          [attr.aria-label]="urlProbe.statusFor(p.projectId ?? '', u.id)"></span>
                     <button type="button"
                             class="studio-tree-row__url-ext"
                             [attr.data-testid]="'studio-explorer-project-url-ext-' + p.name + '-' + u.id"

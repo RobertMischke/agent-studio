@@ -81,7 +81,8 @@
 }
 .operator-dashboard__remote-row {
   display: grid;
-  grid-template-columns: minmax(8rem, 1fr) auto minmax(12rem, 1fr);
+  grid-template-columns: minmax(12rem, 1.2fr) auto minmax(14rem, 1fr);
+  align-items: center;
   gap: var(--studio-spacing-3);
   padding: var(--studio-spacing-3);
   border-radius: 8px;
@@ -89,12 +90,52 @@
   color: var(--studio-fg-muted);
   font-size: 0.74rem;
 }
-.operator-dashboard__remote-row strong { color: var(--studio-success); }
+.operator-dashboard__branch-identity { display: grid; min-width: 0; gap: var(--studio-spacing-1); }
+.operator-dashboard__branch-identity > span {
+  color: var(--studio-fg-muted);
+  font-size: 0.64rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.operator-dashboard__branch-identity button {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--studio-accent);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.operator-dashboard__branch-identity code,
+.operator-dashboard__tracking { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.operator-dashboard__sync-directions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(6rem, auto));
+  gap: var(--studio-spacing-2);
+}
+.operator-dashboard__sync-directions span {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-2);
+  border-radius: 7px;
+  background: var(--studio-bg-editor);
+  color: var(--studio-fg-muted);
+  font-size: 0.64rem;
+}
+.operator-dashboard__sync-directions strong { color: var(--studio-success); font-size: 0.72rem; }
 .operator-dashboard__remote-row[data-state='pending'] {
   background: color-mix(in srgb, var(--studio-accent-warn) 8%, var(--studio-bg-surface));
 }
-.operator-dashboard__remote-row[data-state='pending'] strong { color: var(--studio-accent-warn); }
+.operator-dashboard__remote-row[data-state='pending'] .operator-dashboard__sync-directions strong { color: var(--studio-accent-warn); }
+.operator-dashboard__remote-row[data-state='untracked'] .operator-dashboard__sync-directions strong { color: var(--studio-fg-muted); }
 .operator-dashboard__remote-warning { color: var(--studio-accent-warn); font-size: 0.72rem; }
+.operator-dashboard__remote-help { max-width: 56rem; margin: var(--studio-spacing-2) 0 0; color: var(--studio-fg-muted); font-size: 0.7rem; line-height: 1.45; }
 
 .operator-dashboard__section-head h2,
 .operator-dashboard__deployment h2 {
@@ -118,13 +159,14 @@
 
 .operator-dashboard__metric-lines {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--studio-spacing-2);
   margin-top: var(--studio-spacing-3);
 }
 
 .operator-dashboard__metric-line {
   display: grid;
-  grid-template-columns: auto minmax(12rem, 1fr) minmax(16rem, auto);
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: var(--studio-spacing-3);
   padding: var(--studio-spacing-3);
@@ -158,6 +200,7 @@
   grid-template-columns: repeat(2, minmax(7rem, 1fr));
   gap: var(--studio-spacing-2);
   margin: 0;
+  grid-column: 1 / -1;
   font-variant-numeric: tabular-nums;
 }
 .operator-dashboard__metric-line dl div {
@@ -180,7 +223,7 @@
 
 .operator-dashboard__split {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--studio-spacing-4);
   align-items: stretch;
 }
@@ -339,7 +382,10 @@ summary:focus-visible {
 }
 
 @media (max-width: 64rem) {
-  .operator-dashboard__split { grid-template-columns: 1fr; }
+  .operator-dashboard__split { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .operator-dashboard__metrics { grid-column: 1 / -1; }
+  .operator-dashboard__remote-row { grid-template-columns: minmax(10rem, 1fr) auto; }
+  .operator-dashboard__tracking { grid-column: 1 / -1; }
 }
 
 @media (max-width: 48rem) {
@@ -347,6 +393,11 @@ summary:focus-visible {
   .operator-dashboard__metric-line dl { grid-column: 1 / -1; }
   .operator-dashboard__wiki-columns,
   .operator-dashboard__deploy-summary { grid-template-columns: 1fr; }
+  .operator-dashboard__split,
+  .operator-dashboard__metric-lines { grid-template-columns: 1fr; }
+  .operator-dashboard__metrics { grid-column: auto; }
+  .operator-dashboard__remote-row { grid-template-columns: 1fr; }
+  .operator-dashboard__tracking { grid-column: auto; }
 }
 
 @media (max-width: 34rem) {

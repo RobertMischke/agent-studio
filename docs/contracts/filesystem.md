@@ -2,37 +2,46 @@
 
 ## Where Jobs Live
 
-Jobs belong to the watched target project, not to the agent-orchestrator source repository.
+For every newly onboarded project, task metadata and evidence live in the
+central `TaskRepository`, never in the product repository. This is the
+canonical layout:
 
+```text
+<TaskRepository>/
+  .metadata/
+    projects.json
+    workspaces.json
+  projects/
+    PROJ-023/
+      tasks/
+        0-backlog/
+        1-preparation/
+        ...
 ```
-<target-project>/
-  .orchestrator/
-    jobs/
-      feature-login/
-      bugfix-navbar/
-      ...
-```
 
-Modern targets may use a pointer file instead:
+The product checkout is a separate location referenced by `RepositoryPath`.
+It contains source code and the project's own `docs/` tree, but Agent Studio
+must not create `.orchestrator/jobs`, task prompts, logs, attachments, results,
+or task metadata there.
 
-```yaml
-# <target-project>/.orchestrator.yml
-projectKey: my-project
-```
-
-With that pointer, jobs are resolved under the configured `TaskRepository` at `projects/<projectKey>/`. The CLI still runs in the configured `RootPath`; the job folders are task metadata and evidence.
+Older projects may still resolve an in-repository `.orchestrator/jobs` folder,
+or may use an `.orchestrator.yml` pointer to the legacy
+`<TaskRepository>/projects/<projectKey>/` layout. Those are compatibility-only
+layouts. Do not create either layout during onboarding and do not copy a
+central task store into a product checkout. Move a legacy store only through a
+controlled migration that updates its registry record.
 
 `RootPath` is the implementation working directory for CLI runs and pointer lookup. A watch entry may also set `RepositoryPath` when Git operations should run from a different directory, such as a parent repository that contains the app folder. If `RepositoryPath` is omitted, Git operations fall back to `RootPath` and resolve the Git work-tree top-level from there.
 
 ### Project + workspace registry (ADR-0042)
 
-In parallel with the legacy `<projectKey>` slug layout above, projects also live as records in `<TaskRepository>/.metadata/projects.json` with immutable identifiers (`PROJ-001`, `PROJ-002`, …) and a workspace membership in `<TaskRepository>/.metadata/workspaces.json`. At boot, every `WatchPaths` entry without a matching record is auto-registered. The id is monotonic and never re-used; the display name and storage location can change freely without breaking jobKeys derived from the id.
+In parallel with the legacy `<projectKey>` slug layout above, projects also live as records in `<TaskRepository>/.metadata/projects.json` with immutable identifiers (`PROJ-001`, `PROJ-002`, …) and a workspace membership in `<TaskRepository>/.metadata/workspaces.json`. At boot, every `WatchPaths` entry without a matching record is auto-registered. The id is monotonic and never re-used; the display name can change without breaking task keys derived from the id. `StorageLocation` is immutable during ordinary project editing and changes only through a controlled legacy-store migration.
 
 Per-project task counters move out of the sidecar `.task-counter.json` and onto the project record (`NextTaskKeySeq`). Display-keys like `ATP-130` are formatted as `<ShortCode>-<seq>` (e.g. `ATP` for the historic "Agent Task Processor" / `ASS` for the historic "Agent Software Studio" short code + sequence `130`; existing short codes are not auto-renamed by the agent-orchestrator rebrand because they are persisted on every existing card).
 
 Projects created through `POST /api/projects` use `<TaskRepository>/projects/PROJ-NNN/tasks/` as their watched task-store root. The product repository remains a separate `RepositoryPath` and never receives a new `.orchestrator/jobs` store. Legacy projects can retain their existing storage location until a controlled migration.
 
-The full layout migration (jobs sharded under `projects/PROJ-XXX/jobs/<bucket>/<slug>/`, jobKey moved to `PROJ-NNN::<slug>`) is tracked under F45c and is not active yet; jobs continue to live in the lane-folder layout shown below until that ships. New code that needs to address a project should prefer the registry id over the watch-path string; the resolver in [`backend/Services/Jobs/JobKeyResolver.cs`](../../backend/Services/Jobs/JobKeyResolver.cs) accepts either form.
+The full layout migration (jobs sharded under `projects/PROJ-XXX/jobs/<bucket>/<slug>/`, jobKey moved to `PROJ-NNN::<slug>`) is tracked under F45c and is not active yet; jobs continue to live in the lane-folder layout shown below until that ships. New code that needs to address a project should prefer the registry id over the watch-path string.
 
 ## Operational Boundary
 
@@ -280,11 +289,11 @@ Build feature X.
 - Implemented the requested change.
 ```
 
-## Quick Start: Create A New Job
+## Quick Start: Create A New Task
 
-```bash
-# Legacy in-target layout:
-mkdir -p .orchestrator/jobs/1-preparation/my-new-job/logs
-
-# Then create job.json and prompt.md from the templates above.
-```
+Create the task through the UI or `POST /api/tasks`. The application creates
+the lane and task folders below the project's central `StorageLocation` and
+writes `job.json` and `prompt.md`. Do not create those folders manually and do
+not add `.orchestrator/jobs` to the product checkout. See the
+[Task API skill](../../.agents/skills/task-api/SKILL.md) for the current request
+shape and client-identity requirements.

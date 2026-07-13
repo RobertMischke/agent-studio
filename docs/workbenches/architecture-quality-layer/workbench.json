@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "architecture-quality-layer",
+  "title": "Architecture and quality layer",
+  "summary": "Explore the Project Map, applicable guides, analysis history, and evidence-backed component grading contracts.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "decision-ready",
+  "updatedAt": "2026-07-13T21:45:00Z",
+  "sourceTaskKeys": ["AGT-2126", "AGT-2127", "AGT-2128"]
+}

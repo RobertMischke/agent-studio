@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-06-10
+Version: 2026-07-13
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -13,6 +13,10 @@ pipeline view.
   is the concept ADR for CI/CD-style task pipelines.
 - [docs/concepts/task-execution-and-log-architecture.md](../concepts/task-execution-and-log-architecture.md)
   covers the Server/Runner split, stream logs, leases, and shared state.
+- [Runner provenance, host handoff, and continuation](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance)
+  defines how a pipeline cycle, agent run, execution attempt, and step execution
+  retain ordered runner/host placement across planned review handoffs and
+  recovery. A single task- or pipeline-level runner field is not sufficient.
 - [docs/schemas/pipeline-definition.schema.json](../schemas/pipeline-definition.schema.json)
   pins versioned pipeline definitions.
 - [docs/schemas/step-run.schema.json](../schemas/step-run.schema.json) pins
@@ -107,9 +111,10 @@ pipeline view.
   `[[CODE_REVIEW_GRADE: grade=<A|B|C|D>; summary=<short>]]` sentinel parser, the
   `code-review:grade-{a..d}` tag mapping, and the grade->pass/concerns/block
   severity mapping.
-- `backend/Services/Review/CodeReviewGradeModelSelector.cs`: resolves the grade
+- `backend/Features/Review/CodeReviewGradeModelSelector.cs`: resolves the grade
   model/CLI from `CodeReviewStep:DefaultModel` / `CodeReviewStep:DefaultCli`,
-  defaulting to Claude Opus 4.8.
+  defaulting to Codex's live-discovered flagship (gpt-5.5 fallback) at its top
+  advertised reasoning level.
 - `backend/Features/Cli/Routing/OneShot/PromptLoggingCliOneShot.cs`: the
   central-dispatch decorator over `ICliOneShot.RunAsync` that captures the raw
   final prompt of every one-shot step-call. `backend/Host/Program.cs` registers
@@ -122,7 +127,7 @@ pipeline view.
   adapter for model-backed pipeline steps. A project can opt an aspect or the
   abort-review step into Codex through its existing `PipelineSteps` CLI/model
   override, including a live-discovered Spark model, without changing the core
-  coding run or the default Claude route.
+  coding run. Model-backed review/pipeline defaults now use Codex/OpenAI routes.
 - `backend/Features/Cli/Routing/OneShot/StepPromptLog.cs`: the per-job
   append/read writer for `.metadata/prompts.jsonl` (see filesystem-contract).
   Writes through the shared `IJsonlAppender` (concurrent aspect fan-out cannot
@@ -155,6 +160,58 @@ pipeline view.
   Aspect output validation is unchanged and deterministic across models: valid
   sentinels map to the three aspect statuses, while a malformed Spark reply maps
   to `Concerns` plus `review:unparseable` through the existing parser path.
+
+### Post-step lifecycle and ownership
+
+A post-step has four distinct lifecycle states. **Defined** means the code-owned
+catalogue knows its id, capabilities, dependencies, and default. **Enabled**
+means a project override (or the catalogue default) includes it in future task
+pipelines. **Run** means one task has an immutable execution attempt with its
+own start, finish, outcome, and artefact reference. **Re-run** appends another
+attempt for that same task and step; it does not restart CORE, replace an older
+artefact, or rewrite the earlier attempt. The task Overview is the execution
+surface, while Project Hub -> Pipeline is the durable activation surface.
+
+Ownership is deliberately layered. The global catalogue owns what a step is
+and whether it is available. A project owns the effective default configuration
+(enabled, agent, prompt binding, condition, and order). A card owns only its
+execution plan and attempt history: an operator may add a catalogue step to an
+existing card after creation and run it immediately, without changing the
+project default. The Overview must show the effective activation source as
+`global`, `project`, or `condition`, with the backend supplying the exact reason
+so the UI never re-derives precedence. Its settings link lands on Project Hub ->
+Pipeline, the control that can persist a project override; a global default is
+code-owned, so that same destination is where an operator overrides it. A
+card-level addition is a separate execution-plan fact, not an activation source
+or a new arbitrary executable definition; it can only reference a known
+catalogue step.
+
+On-demand execution is bounded to post-steps that declare themselves
+idempotent and have an implemented runner. It is allowed after the main run and
+after the card has reached a terminal lane. Each invocation appends a
+timestamped result artefact or an append-only execution entry and records the
+CLI-task substrate visibility used by normal pipeline steps. Quality grading is
+the first LLM-backed retro use case: it resolves the task-owned branch/commit
+range, writes a new `code-review-grade-<timestamp>.md`, updates the current
+grade tag, and retains every older grade report. Reporting-only re-runs never
+move the card or revise the historical orchestrator verdict.
+
+Deterministic on-demand tools write one immutable task result at
+`results/post-steps/<step-id>-attempt-<NNN>.md` and append the matching substrate
+row to `logs/step-runs.jsonl`. The result links the project artefact a tool
+created or refreshed. This separates the task's audit history from the tool's
+idempotent project output, which may legitimately converge on one wiki page.
+Attempt numbers are reserved with create-new filesystem markers before a run,
+and result files are also create-new, so concurrent requests and process
+restarts can leave gaps but can never reuse an attempt or overwrite evidence.
+Rows carry the registry-backed `PROJ-NNN` identity, a canonical
+`PROJ-NNN::jobId` key, and the schema-defined hash id; mutable display names and
+watch paths are not persisted as identity. A project artefact write runs only
+against a clean managed checkout, is committed by the platform as one bounded
+commit, stamped onto the task, and handed to the completed-push queue. Commit
+failure restores only the paths produced inside that boundary; pre-existing
+operator changes cause the step to fail before its writer runs.
+
 - Aspect and code-review prompts carry a complete evidence set (AGT-2022): the
   run-window diff summary is appended with the task-branch-vs-base commit range
   (`base..task/<id>` via `GitService.GetCommitsInRangeAtRoot`) so a squash/merge
@@ -178,11 +235,23 @@ pipeline view.
   redundantly redoes existing code. It is reporting-only and never gates the lane:
   the grade surfaces as a `code-review:grade-{a..d}` card tag plus a rendered
   detail file, a D records a `Failed` step row so it stands out in the Overview,
-  and A-C record `Passed`. The grade model is quality-first: it defaults to Claude
-  Opus 4.8 (`CodeReviewStep:DefaultModel`, CLI `CodeReviewStep:DefaultCli`) while
-  the four cheap aspect reviews stay on Haiku - the deliberate ASS-855/ASS-916
-  asymmetry. Opt out per deployment with `CodeReviewStep:AutoGrade=false`. An
+  and A-C record `Passed`. The grade model is quality-first: it defaults to the
+  live-discovered Codex flagship with the top supported reasoning level
+  (`CodeReviewStep:DefaultModel`, CLI `CodeReviewStep:DefaultCli`), while the four
+  bounded aspect reviews use Codex `gpt-5.4-mini` at `high`. Opt out per deployment
+  with `CodeReviewStep:AutoGrade=false`. An
   unparseable reply degrades to grade C, never silently A.
+- The grade is reporting evidence, not a success gate. It therefore runs before
+  the red build/test-gate reissue branch and before the aspect-infrastructure
+  escalation branch. A grade transport/runtime failure records `Failed` with its
+  error and clears stale `code-review:grade-*` tags, but never changes the lane
+  decision.
+- Completing a pipeline terminalizes every known, non-deferred, non-stub row:
+  an unreached `Pending` row becomes `Skipped` with the branch's causal reason,
+  while an interrupted `Running` row becomes `Failed`. Deferred merge/push rows
+  remain `Pending`, catalogue stubs remain `Planned`, and unknown extension rows
+  are preserved. `PipelineExecutionLog.Read` applies the same projection purely
+  to legacy current and previous attempts without rewriting their JSON files.
 - A missing / unparseable aspect verdict caused by the reviewing CLI dying (the
   backend cut that killed the aspect runner mid-run) is an ENVIRONMENTAL infra
   fault, never the card's unfinished work (AGT-2021, belege AGT-1996). The aspect
@@ -203,7 +272,11 @@ pipeline view.
   shared project checkout for a worktree run: a dev backend can legitimately
   hold that checkout's build output open, and the shared checkout can contain
   different source. Sequential and legacy runs with no registered worktree
-  retain the shared-checkout fallback.
+  retain the shared-checkout fallback. Within one backend process, complete
+  verify-command loops are admitted one at a time per Git common directory, so
+  a shared checkout and its linked worktrees cannot launch overlapping full
+  builds or test suites. Admission and host-load waits are cancellable and do
+  not consume the per-command execution timeout.
 - Abort review is contract-bounded: the model returns a verdict, while
   `PostAbortReviewDecider` owns the binding action and rerun budget.
 - The read-only pipeline drops git steps. Planning and research tasks must not
@@ -233,7 +306,7 @@ pipeline view.
   and configure a target project before it fires. It runs in the reporting bracket
   (after the aspects, before the pipeline `Complete` mark) and is reporting-only:
   it NEVER changes the source task's lane decision. The relevance + prompt-generation
-  model is quality-first (best available Claude at `max` effort via
+  model is quality-first (the live-discovered Codex flagship at its top effort via
   `TaskSpawnerModelSelector`, layered under the per-project step override), while the
   spawned card is left to the target project's default model. It is conservative and
   spam-safe by three guards: a run whose aspects `Block` does not spawn (it is about
@@ -283,10 +356,13 @@ pipeline view.
 - Review and abort-review changes need `ReviewDecisionOrchestrator*Tests`,
   `PostAbortReviewDeciderTests`, and `PostAbortReviewStepServiceTests`.
 - Quality-grade step changes need `CodeReviewStepServiceTests` (grade parsing,
-  tagging, MD render), `CodeReviewGradeModelSelectorTests` (Opus-4.8 default vs
-  Haiku regression guard), `CodeReviewGradeParsingTests` (sentinel grammar), and
-  `ReviewDecisionOrchestratorGradeStepTests` (end-to-end: the step executes,
-  invokes Opus 4.8 not Haiku, and stamps the `code-review:grade-*` tag).
+  tagging, MD render), `CodeReviewGradeModelSelectorTests` (live Codex flagship
+  default vs bounded aspect model), `CodeReviewGradeParsingTests` (sentinel
+  grammar), and `ReviewDecisionOrchestratorGradeStepTests` (end-to-end: the step
+  executes on normal, red build-gate, and aspect-infrastructure paths; invokes the
+  Codex flagship; records runtime errors as `Failed`; and stamps only authoritative
+  `code-review:grade-*` tags). `PipelineExecutionRestartTests` pins completed-row
+  terminalization plus deferred/stub preservation and legacy-read projection.
 - Raw step-prompt capture changes need `StepPromptLogTests` (writer/reader
   round-trip with provenance, dedup for main-run shape, capture-before-failure)
   and the `overview-pane.component.spec.ts` step-prompt read-model assertion.

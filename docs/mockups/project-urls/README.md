@@ -130,12 +130,12 @@ rows should NOT go through `StudioTabStateService`/`@Output()` request
 emitters like the other five (those all open a tab) - it should just open the
 URL (`window.open(url, '_blank')`), since these are plain external links.
 
-## Future direction: embedded live preview (not in scope for the work above)
+## Shipped direction: embedded live preview
 
 Robert's own framing: *"das ist so ein bisschen perspektivischer Ausblick"* -
-a further-out vision layered on top of Project URLs, not part of the
-near-term data-model/UI work above. Captured here so the context lives in the
-plan, not just in a chat.
+a direction layered on top of Project URLs. The basic embedded preview,
+host-side readiness check, in-place settings, and owned process console have
+shipped. Element selection and deeper orchestrator context remain future work.
 
 **The idea:** clicking a Project URL's "Open" action opens it embedded in the
 app's own main content area (VS Code's "Simple Browser" is the closest
@@ -145,12 +145,9 @@ tab. On top of that:
   actual dev-server page, its own live-reload (`ng serve` / Vite HMR /
   `dotnet watch`) already refreshes it - no separate polling needed for that
   part.
-- **A collapsible console/log drawer**, collapsed by default so the preview
-  keeps maximum space (again, VS Code integrated-terminal-like). This is not
-  the browser JS console - it is the **stdout/stderr of the dev-server
-  process** that "Build & start" (see Project URLs above) already spawns, so
-  it is not a new subsystem: pipe that process's output into the same
-  run-log-streaming mechanism the app already uses for CLI run output.
+- **A collapsible console/log drawer** shows the bounded stdout/stderr tail of
+  the owned dev-server process. It is not the browser JavaScript console and
+  it is deliberately separate from agent CLI task output.
 - **The orchestrator becomes aware of what's on screen** - the currently
   embedded URL (and ideally page title/route) is ambient context for whatever
   you type next. Corrected after feedback: this does **not** mean a second
@@ -158,10 +155,9 @@ tab. On top of that:
   already lives elsewhere in the app (its own panel); the preview pane only
   needs to feed it "what URL/page am I looking at" as context, not host its
   own chat control.
-- A small **"go to this URL's settings"** affordance (gear icon in the
-  preview's address-bar chrome) jumps straight to that URL's row on the
-  Project Hub "Project URLs" page - the shortcut back from "looking at it" to
-  "configuring it".
+- **Per-embed settings** edit URL, start command, working directory, and port
+  without leaving the preview. The command remains explicit and configurable;
+  Studio does not silently force a production serve mode.
 - **One level further (Robert's explicit "next level"): reach into the page
   and hand elements to the orchestrator** - point at a rendered element (like
   an inspect-element picker) and pass its selector/markup as prompt context,
@@ -196,16 +192,14 @@ visual sketch of the layout (address bar, fake preview, collapsed console
 drawer, orchestrator input bar with a context chip) - it is a sketch of the
 *shape*, not a proposal for how the iframe/CDP question gets resolved.
 
-## Open questions (not resolved by this mockup)
+## Resolved runtime contract
 
-- How is "running" actually detected - a TCP/HTTP probe against the URL on an
-  interval, or does the backend track the process it spawned? A externally
-  started dev server (started outside the app) should still show as running,
-  which argues for probing over process-tracking.
-- Where does the spawned process live - reuse the existing CLI-runner process
-  supervision, or a separate, simpler "dev server" process table? A dev server
-  is long-running and interactive-log-free, unlike an agent CLI run.
-- Should `StartRule.Command` support multiple projects sharing one repo
-  checkout differently (e.g. one `Cwd` per URL, as in Coding Agent Chat, where
-  `website`/`lab`/`workbench` all run from the same repository root but via
-  different scripts) - the model above already allows this via per-URL `Cwd`.
+- HTTP readiness remains the liveness truth, including servers started outside
+  Studio. A process snapshot answers the different question of whether Studio
+  owns a command that can be inspected or stopped.
+- A dedicated singleton owns dev-server sessions and a bounded output tail.
+  Restart, URL/project removal, failed launch cleanup, and backend shutdown all
+  terminate the complete process tree.
+- Each URL keeps its own explicit command and optional CWD/port. Working
+  directory resolution falls back from URL CWD to repository path, then project
+  root path.

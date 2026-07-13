@@ -286,15 +286,24 @@ public sealed class PipelineExecutionLog
     /// <summary>
     /// Stamp <see cref="PipelineExecutionRecord.CompletedAt"/> on the
     /// record so the UI can show "ran for X" instead of "still running".
+    /// Any ordinary step that the completed bracket never reached is
+    /// terminalized as <see cref="PipelineStepStatus.Skipped"/> with an honest
+    /// reason; an ordinary step still marked Running becomes Failed. Deferred
+    /// operator-triggered steps deliberately remain Pending, and catalogue
+    /// stubs remain Planned.
     /// </summary>
-    public void Complete(string jobFolderPath, DateTime? nowUtc = null)
+    public void Complete(
+        string jobFolderPath,
+        DateTime? nowUtc = null,
+        string? pendingStepReason = null)
     {
         var lockObj = _locks.GetOrAdd(NormalizeKey(jobFolderPath), _ => new object());
         lock (lockObj)
         {
             var current = TryRead(jobFolderPath);
             if (current == null) return;
-            WriteAtomic(jobFolderPath, current with { CompletedAt = nowUtc ?? DateTime.UtcNow });
+            var completed = current with { CompletedAt = nowUtc ?? DateTime.UtcNow };
+            WriteAtomic(jobFolderPath, NormalizeCompletedRecord(completed, pendingStepReason));
         }
     }
 
@@ -302,7 +311,92 @@ public sealed class PipelineExecutionLog
     /// Read the current execution record for the job, or null if no
     /// pipeline run has been recorded yet.
     /// </summary>
-    public PipelineExecutionRecord? Read(string jobFolderPath) => TryRead(jobFolderPath);
+    public PipelineExecutionRecord? Read(string jobFolderPath)
+    {
+        var record = TryRead(jobFolderPath);
+        return record is null ? null : NormalizeCompletedRecord(record);
+    }
+
+    /// <summary>
+    /// Compatibility projection for records written before <see cref="Complete"/>
+    /// terminalized unreached rows. It is deliberately pure: callers receive an
+    /// honest read model, while the historical JSON file remains untouched.
+    /// Previous attempts are normalized recursively so the Run Switcher cannot
+    /// resurrect a stale Pending grade from an older completed attempt.
+    /// </summary>
+    private static PipelineExecutionRecord NormalizeCompletedRecord(
+        PipelineExecutionRecord record,
+        string? pendingStepReason = null)
+    {
+        var previousAttempts = record.PreviousAttempts
+            .Select(previous => NormalizeCompletedRecord(previous))
+            .ToList();
+
+        if (!record.IsComplete)
+        {
+            return record with { PreviousAttempts = previousAttempts };
+        }
+
+        var pipeline = PipelineCatalogue.Get(record.PipelineId);
+        if (pipeline is null)
+        {
+            return record with { PreviousAttempts = previousAttempts };
+        }
+
+        var definitions = pipeline.AllSteps.ToDictionary(
+            step => step.Id,
+            StringComparer.OrdinalIgnoreCase);
+        var reason = string.IsNullOrWhiteSpace(pendingStepReason)
+            ? LegacyPendingCompletionReason(record)
+            : pendingStepReason.Trim();
+
+        var steps = record.Steps.Select(step =>
+        {
+            if (step.Status is not (PipelineStepStatus.Pending or PipelineStepStatus.Running)) return step;
+            if (!definitions.TryGetValue(step.StepId, out var definition)) return step;
+            if (definition.Deferred || definition.Stub) return step;
+
+            if (step.Status == PipelineStepStatus.Running)
+            {
+                return step with
+                {
+                    Status = PipelineStepStatus.Failed,
+                    CompletedAt = record.CompletedAt,
+                    DurationMs = step.StartedAt.HasValue && record.CompletedAt.HasValue
+                        ? Math.Max(0L, (long)(record.CompletedAt.Value - step.StartedAt.Value).TotalMilliseconds)
+                        : step.DurationMs,
+                    Reason = "Pipeline attempt ended while this step was still running.",
+                };
+            }
+
+            return step with
+            {
+                Status = PipelineStepStatus.Skipped,
+                CompletedAt = record.CompletedAt,
+                Reason = string.IsNullOrWhiteSpace(step.Reason) ? reason : step.Reason,
+            };
+        }).ToList();
+
+        return record with
+        {
+            Steps = steps,
+            PreviousAttempts = previousAttempts,
+        };
+    }
+
+    private static string LegacyPendingCompletionReason(PipelineExecutionRecord record)
+    {
+        var failed = record.Steps.FirstOrDefault(step => step.Status == PipelineStepStatus.Failed);
+        if (failed is null)
+        {
+            return "Not run before this pipeline attempt ended.";
+        }
+
+        var detail = string.IsNullOrWhiteSpace(failed.Reason)
+            ? string.Empty
+            : $": {failed.Reason.Trim()}";
+        return $"Not run because this pipeline attempt ended after {failed.StepId} failed{detail}.";
+    }
 
     private PipelineExecutionRecord? TryRead(string jobFolderPath)
     {

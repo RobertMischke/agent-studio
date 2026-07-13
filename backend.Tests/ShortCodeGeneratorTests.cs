@@ -46,6 +46,19 @@ public class ShortCodeGeneratorTests
         Assert.Equal("HI", code);
     }
 
+    [Theory]
+    [InlineData("A")]
+    [InlineData("123 Project")]
+    [InlineData("123")]
+    [InlineData("1A")]
+    public void Derive_AlwaysProducesAValidOptionalPostCode(string displayName)
+    {
+        var code = ShortCodeGenerator.Derive(displayName, []);
+
+        Assert.True(ShortCodeGenerator.ValidateFormat(code),
+            $"Expected a valid generated code for '{displayName}', got '{code}'.");
+    }
+
     [Fact]
     public void Derive_EmptyInput_FallsBackToProj()
     {

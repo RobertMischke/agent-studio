@@ -165,6 +165,22 @@ export class ProjectOverlaysService {
     }
   }
 
+  /** Keep the mounted project shell and its deep-link valid after a registry rename. */
+  renameOpenProjectShell(name: string): void {
+    if (!name.trim() || this.projectShellName() === null) return;
+    this.projectShellName.set(name.trim());
+    const slug = toProjectSlug(name);
+    if (!slug) return;
+    const rail = this.projectShellRail();
+    const target = `${this.shellHashPrefix}${slug}`
+      + (rail !== DEFAULT_PROJECT_RAIL_KEY ? `/${rail}` : '');
+    if (window.location.hash !== target) {
+      try {
+        history.replaceState(null, '', window.location.pathname + window.location.search + target);
+      } catch { /* ignore */ }
+    }
+  }
+
   /**
    * Cross-overlay nav: clicking "open feed" inside the project-shell
    * stacks the orchestrator feed over the shell. The shell stays

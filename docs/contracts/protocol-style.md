@@ -237,21 +237,23 @@ Both surfaces read `--studio-*` design tokens so they render correctly in either
 
 ### 4.3 Git policy
 
-Job folders are checked into the **target project's** repo (the watched workspace), not this app's repo. The product position is: **the protocol is the durable record; the screenshots are local proof.** Logs are text and cheap, so they push; images are heavy binaries and stay local.
+Task folders live in the central task-store evidence repository, never in the
+product repository or this app's source repository. The product position is:
+**the protocol is the durable record; the screenshots are local proof.** Logs
+are text and cheap, so the evidence repository can retain them; images are
+heavy binaries and stay local.
 
-Recommended `.gitignore` for the watched workspace. Match whichever job layout is in use:
+Recommended `.gitignore` for the central `TaskRepository` evidence checkout:
 
 ```gitignore
-# Canonical layout (filesystem-contract.md).
-.orchestrator/jobs/**/attachments/
-.orchestrator/jobs/**/results/
-
-# Flat per-state layout (e.g. projects/<project>/<state>/<job>/).
-**/attachments/
-**/results/
+# Canonical projects/<PROJ-NNN>/tasks/<lane>/<task>/ layout.
+projects/*/tasks/*/*/attachments/
+projects/*/tasks/*/*/results/
 ```
 
-The `**/attachments/` and `**/results/` patterns are broad on purpose: any folder named `attachments/` or `results/` anywhere in the workspace is treated as job-local image scratch. Adopt the canonical layout if that is too broad for your repo. Logs (`logs/`) are intentionally **not** ignored; they are the audit trail.
+Logs (`logs/`) are intentionally **not** ignored in the evidence repository;
+they are the audit trail. Product-repository `.gitignore` files do not need
+Agent Studio task-folder rules because onboarding never creates task data there.
 
 Already-committed images are not retroactively untracked by adding these rules. If a workspace has historical images in git, run `git rm --cached <path>` once to stop tracking them; the files stay on disk.
 

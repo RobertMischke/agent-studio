@@ -48,10 +48,11 @@ public static class TaskFilesEndpoints
             return FileContentResult(content);
         });
 
-        // Lists every `.md` file directly in the job root (status.md excluded).
-        // Drives the detail view's Files tab (F48): prompt + aspect verdicts +
-        // operator notes surface as a sortable, kind-classified manifest, with
-        // content fetched lazily through `/files/{fileName}`.
+        // Lists supported documents directly in the job root (status.md
+        // excluded). Drives the detail view's Files tab (F48): prompt, aspect
+        // verdicts, operator notes, and interactive isolated HTML surface as a
+        // sortable, kind-classified manifest, with content fetched lazily
+        // through `/files/{fileName}`.
         group.MapGet("/{jobId}/artifacts", (string jobId, string? project, string? watchPath, TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);

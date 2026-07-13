@@ -1,6 +1,14 @@
 # Remote execution in the product — user-facing integration concept
 
-**Status:** draft 2026-07-07, companion to
+**Status:** historical product-integration slices, revised 2026-07-13. The
+canonical three-component ownership and lifecycle model is now
+[`distributed-agent-studio-target-architecture.md`](distributed-agent-studio-target-architecture.md).
+This page remains useful for host onboarding and UI slices, but its earlier
+"local Studio stays the brain" wording is superseded: Agent Studio is a
+replaceable client, Task Server is the durable control plane, and Agent Runner
+is the execution plane.
+
+Originally a draft companion to
 [`remote-ready-kickoff-2026-07.md`](../research/remote-ready-kickoff-2026-07.md)
 (ADR-0059). The kickoff owns the *architecture* phases; this document answers
 the *product* questions: how does a human decide "this project runs remote",
@@ -12,15 +20,14 @@ details live in
 
 ## 0. Product stance (operator decision, 2026-07-07; sharpened 2026-07-08)
 
-**The target picture, in the operator's words:** *"Ich habe hier meinen
-lokalen Agent-Orchestrator, und mit dem möchte ich sagen: führe die Sache auf
-einem anderen Host aus."* — The **local** studio stays the brain; remote
-hosts are **execution arms** it delegates to, per project. That is **Mode C
-(runner split)**. Mode A (full stack on the remote host, viewed through a
-tunnel) was the Phase-1 *proof and test bed*, **not the plan** — a
-communication misunderstanding corrected on 2026-07-08. Phase 2 (central
-URL + auth) is the technical prerequisite for runners to talk to the task
-server, not a goal in itself.
+**The target picture, clarified 2026-07-13:** Agent Studio is the replaceable
+human surface. The independently hosted Task Server remains the durable brain
+and control plane. Remote hosts are execution arms that act only under
+Task-Server authority, per project. Closing Agent Studio must not interrupt
+Task Server or Runner. That is **Mode C (runner split)**. Mode A (full stack on
+the remote host, viewed through a tunnel) was the Phase-1 proof and test bed,
+not the plan. Phase 2 (central URL + auth) is the prerequisite for both Studio
+and Runners to use the separated Task Server.
 
 **Remote CLI execution is a first-class product concept**, not an ops
 appendix. Consequences:
@@ -83,8 +90,11 @@ project**" become a real product feature instead of a deployment choice.
   between runs.
 - **Visibility on the board:** running task cards carry a small runner badge
   (host name) next to the CLI badge; the task detail run header shows which
-  runner executed each run. No other UI changes — lanes, logs, history are
-  already server-owned.
+  runner executed each run. The target keeps an ordered route when coding,
+  continuation, and review use several runners, including A → B → A returns.
+  Assignment changes, historical attribution, and controlled host switching are
+  defined in the Wiki's
+  [runner provenance and host handoff contract](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance).
 - **Failure surface:** a runner that misses heartbeats shows as offline; its
   projects fall back to `blocked: runner offline` instead of silently
   queueing (explicit beats implicit).

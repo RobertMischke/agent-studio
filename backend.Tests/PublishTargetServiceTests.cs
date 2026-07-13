@@ -2,6 +2,7 @@ using System.Diagnostics;
 using AgentStudio.Publishing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 using Xunit;
 
@@ -25,6 +26,7 @@ namespace AgentStudio.Tests;
 public class PublishTargetServiceTests : IDisposable
 {
     private readonly string _tempDir;
+    private readonly List<PublishTargetService> _services = [];
 
     public PublishTargetServiceTests()
     {
@@ -34,6 +36,7 @@ public class PublishTargetServiceTests : IDisposable
 
     public void Dispose()
     {
+        foreach (var service in _services) service.Dispose();
         try
         {
             foreach (var f in Directory.EnumerateFiles(_tempDir, "*", SearchOption.AllDirectories))
@@ -157,6 +160,160 @@ public class PublishTargetServiceTests : IDisposable
     }
 
     [Fact]
+    public void Derive_WarmHeartbeatBeyondFormerTtl_DoesNotRecomputeGitProjection()
+    {
+        var (repoRoot, watchPath) = SetupRepo();
+        WriteWorkflow(repoRoot, "release.yml", NuGetReleaseWorkflow);
+        WriteFile(repoRoot, "src/Runner/Runner.csproj", PackableCsproj("Pkg"));
+        CommitAll(repoRoot, "seed");
+        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-07-13T12:00:00Z"));
+        var service = BuildService(repoRoot, watchPath, time);
+
+        service.GetProjectPublishStatus("Demo");
+        Assert.Equal(1, service.ComputationCount);
+
+        time.Advance(TimeSpan.FromMinutes(5));
+        service.GetProjectPublishStatus("Demo");
+
+        Assert.Equal(1, service.ComputationCount);
+    }
+
+    [Fact]
+    public void Derive_UncommittedWorkflowChangeInvalidatesWarmProjectionImmediately()
+    {
+        var (repoRoot, watchPath) = SetupRepo();
+        WriteWorkflow(repoRoot, "release.yml", "on: [push]\njobs:\n  test:\n    steps:\n      - run: dotnet test\n");
+        WriteFile(repoRoot, "src/Runner/Runner.csproj", PackableCsproj("Pkg"));
+        CommitAll(repoRoot, "seed");
+        var service = BuildService(repoRoot, watchPath);
+
+        Assert.Empty(service.GetProjectPublishStatus("Demo").Targets);
+        Assert.Equal(1, service.ComputationCount);
+
+        WriteWorkflow(repoRoot, "release.yml", NuGetReleaseWorkflow);
+        var status = service.GetProjectPublishStatus("Demo");
+
+        Assert.Contains(status.Targets, target => target.Ecosystem == PublishEcosystems.NuGet);
+        Assert.Equal(2, service.ComputationCount);
+    }
+
+    [Fact]
+    public void Derive_UncommittedNestedManifestChangeInvalidatesViaWatcher()
+    {
+        var (repoRoot, watchPath) = SetupRepo();
+        WriteWorkflow(repoRoot, "release.yml", NuGetReleaseWorkflow);
+        WriteFile(repoRoot, "src/Runner/Runner.csproj", PackableCsproj("Pkg.One"));
+        CommitAll(repoRoot, "seed");
+        var service = BuildService(repoRoot, watchPath);
+
+        var first = Assert.Single(service.GetProjectPublishStatus("Demo").Targets);
+        Assert.Equal("Pkg.One", first.PackageName);
+
+        WriteFile(repoRoot, "src/Runner/Runner.csproj", PackableCsproj("Pkg.Two"));
+        ProjectPublishStatus? refreshed = null;
+        Assert.True(SpinWait.SpinUntil(() =>
+        {
+            refreshed = service.GetProjectPublishStatus("Demo");
+            return refreshed.Targets.SingleOrDefault()?.PackageName == "Pkg.Two";
+        }, TimeSpan.FromSeconds(5)));
+
+        Assert.NotNull(refreshed);
+        Assert.True(service.ComputationCount >= 2);
+    }
+
+    [Fact]
+    public void Derive_DeletingDirectoryWithNestedManifestInvalidatesWarmProjection()
+    {
+        var (repoRoot, watchPath) = SetupRepo();
+        WriteWorkflow(repoRoot, "release.yml", ReleaseTriggerOnlyWorkflow);
+        WriteFile(repoRoot, "src/Runner/Runner.csproj", PackableCsproj("Pkg"));
+        CommitAll(repoRoot, "seed");
+        var service = BuildService(repoRoot, watchPath);
+
+        Assert.Single(service.GetProjectPublishStatus("Demo").Targets);
+        Directory.Delete(Path.Combine(repoRoot, "src", "Runner"), recursive: true);
+
+        Assert.True(SpinWait.SpinUntil(
+            () => service.GetProjectPublishStatus("Demo").Targets.Count == 0,
+            TimeSpan.FromSeconds(5)));
+        Assert.True(service.ComputationCount >= 2);
+    }
+
+    [Fact]
+    public void Derive_RenamingManifestDirectoryIntoIgnoredTreeInvalidatesWarmProjection()
+    {
+        var (repoRoot, watchPath) = SetupRepo();
+        WriteWorkflow(repoRoot, "release.yml", ReleaseTriggerOnlyWorkflow);
+        WriteFile(repoRoot, "src/Runner.v1/Runner.csproj", PackableCsproj("Pkg"));
+        CommitAll(repoRoot, "seed");
+        var service = BuildService(repoRoot, watchPath);
+
+        Assert.Single(service.GetProjectPublishStatus("Demo").Targets);
+        Directory.Move(
+            Path.Combine(repoRoot, "src", "Runner.v1"),
+            Path.Combine(repoRoot, "src", "obj"));
+
+        Assert.True(SpinWait.SpinUntil(
+            () => service.GetProjectPublishStatus("Demo").Targets.Count == 0,
+            TimeSpan.FromSeconds(5)));
+        Assert.True(service.ComputationCount >= 2);
+    }
+
+    [Fact]
+    public void Derive_UnrelatedSourceContentChangeDoesNotInvalidatePublishInputs()
+    {
+        var (repoRoot, watchPath) = SetupRepo();
+        WriteWorkflow(repoRoot, "release.yml", NuGetReleaseWorkflow);
+        WriteFile(repoRoot, "src/Runner/Runner.csproj", PackableCsproj("Pkg"));
+        WriteFile(repoRoot, "src/Runner/Feature.cs", "// committed source");
+        CommitAll(repoRoot, "seed");
+        var service = BuildService(repoRoot, watchPath);
+
+        service.GetProjectPublishStatus("Demo");
+        Assert.Equal(1, service.ComputationCount);
+        WriteFile(repoRoot, "src/Runner/Feature.cs", "// uncommitted source edit");
+
+        Assert.False(SpinWait.SpinUntil(() =>
+        {
+            service.GetProjectPublishStatus("Demo");
+            return service.ComputationCount > 1;
+        }, TimeSpan.FromMilliseconds(500)));
+    }
+
+    [Fact]
+    public void Derive_ErrorValueUsesShortRetryTtl()
+    {
+        var (repoRoot, watchPath) = SetupRepo();
+        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-07-13T12:00:00Z"));
+        var service = BuildService(repoRoot, watchPath, time);
+
+        Assert.NotNull(service.GetProjectPublishStatus("No Such Project").Error);
+        Assert.Equal(1, service.ComputationCount);
+
+        time.Advance(TimeSpan.FromSeconds(2));
+        Assert.NotNull(service.GetProjectPublishStatus("No Such Project").Error);
+        Assert.Equal(2, service.ComputationCount);
+    }
+
+    [Fact]
+    public void Derive_RemoteOnlyOriginHeadFallbackUsesRemoteTrackingBranch()
+    {
+        var (repoRoot, watchPath) = SetupRepo();
+        WriteWorkflow(repoRoot, "release.yml", NuGetReleaseWorkflow);
+        WriteFile(repoRoot, "src/Runner/Runner.csproj", PackableCsproj("Remote.Pkg"));
+        CommitAll(repoRoot, "seed");
+        RunGit(repoRoot, "update-ref", "refs/remotes/origin/main", "main");
+        RunGit(repoRoot, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+        RunGit(repoRoot, "checkout", "-q", "--detach", "main");
+        RunGit(repoRoot, "branch", "-D", "main");
+
+        var status = BuildService(repoRoot, watchPath).GetProjectPublishStatus("Demo");
+
+        var package = Assert.Single(status.Targets);
+        Assert.Equal("Remote.Pkg", package.PackageName);
+    }
+
+    [Fact]
     public void TaskPublishable_MapsCompletedTaskToTheTargetItsCommitTouched()
     {
         var (repoRoot, watchPath) = SetupRepo();
@@ -261,6 +418,17 @@ public class PublishTargetServiceTests : IDisposable
               - uses: actions/deploy-pages@v4
         """;
 
+    private const string ReleaseTriggerOnlyWorkflow = """
+        name: release
+        on:
+          push:
+            tags: ['v*']
+        jobs:
+          release:
+            steps:
+              - run: echo release
+        """;
+
     private static string PackableCsproj(string packageId) =>
         $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>{packageId}</PackageId><Version>0.3.1</Version></PropertyGroup></Project>";
 
@@ -279,7 +447,10 @@ public class PublishTargetServiceTests : IDisposable
         return (repoRoot, watchPath);
     }
 
-    private static PublishTargetService BuildService(string repoRoot, string watchPath)
+    private PublishTargetService BuildService(
+        string repoRoot,
+        string watchPath,
+        TimeProvider? timeProvider = null)
     {
         var dict = new Dictionary<string, string?>
         {
@@ -293,7 +464,13 @@ public class PublishTargetServiceTests : IDisposable
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
-        return new PublishTargetService(git, settings, NullLogger<PublishTargetService>.Instance);
+        var service = new PublishTargetService(
+            git,
+            settings,
+            NullLogger<PublishTargetService>.Instance,
+            timeProvider ?? TimeProvider.System);
+        _services.Add(service);
+        return service;
     }
 
     private static TaskInfo CompletedTask(string id, string watchPath, string sha) => new()

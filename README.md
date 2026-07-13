@@ -6,7 +6,7 @@
 
 *One board across every watched project. Tasks flow `ready → in progress → review`; the runner picks them up automatically, so your role shrinks to the part that needs you — review.*
 
-> .NET 10 backend + Angular 21 PWA. Task state lives in `.orchestrator/jobs/` folders on disk; the Task Access API fronts the filesystem so the runner, supervisor, frontend, remote clients, and scripts read and mutate through one boundary. Runs tasks through Claude Code, Codex, GitHub Copilot, or Gemini. Coding work is sequential by default and can opt into bounded, orchestrator-gated parallelism via `maxParallelism`.
+> .NET 10 backend + Angular 21 PWA. Newly onboarded task state lives in the central `TaskRepository`, separate from product repositories; legacy in-repository stores remain compatibility-only until migrated. The Task Access API fronts the filesystem so the runner, supervisor, frontend, remote clients, and scripts read and mutate through one boundary. Runs tasks through Claude Code, Codex, GitHub Copilot, or Gemini. Coding work is sequential by default and can opt into bounded, orchestrator-gated parallelism via `maxParallelism`.
 
 ## Highlights
 
@@ -210,9 +210,9 @@ The orchestrator should use these reports to improve the steering layer over tim
 
 Agent-facing steering documents are product surface, not hidden implementation detail. A project page should make the relevant README, AGENTS, task contract, skills lookup, ADR index, and project-specific notes inspectable, with a shorter human summary on top that explains what the agents are being told and flags where the guidance looks stale, conflicting, or incomplete.
 
-Task-level feedback is different. Security audits, code-review findings, task checks, screenshots, run protocols, and reviewer notes belong with the task evidence, usually in the watched project's `.orchestrator/jobs/<state>/<job>/` folder. If that evidence reveals new product work, create a normal queued task instead of burying the work inside the report.
+Task-level feedback is different. Security audits, code-review findings, task checks, screenshots, run protocols, and reviewer notes belong with the task evidence under the central `<TaskRepository>/projects/<projectId>/tasks/<state>/<task>/` store. They never belong in the product checkout. If that evidence reveals new product work, create a normal queued task instead of burying the work inside the report.
 
-Repositories should not stay dirty after a task is accepted. When a task reaches review or completion and its changes are accepted, the changed software and the task evidence should be committed promptly in the target repository and pushed unless the user has explicitly held the push back. The product should make uncommitted and unpushed task work visible so finished work does not quietly pile up on disk.
+Repositories should not stay dirty after a task is accepted. When a task reaches review or completion and its changes are accepted, commit and push the changed software in the product repository unless the user has explicitly held the push back. Keep task evidence durable in the central task store's own evidence Git repository, never in the product repository. The product should make uncommitted and unpushed software or evidence visible so finished work does not quietly pile up on disk.
 
 Direct-agent maintenance follows the same ownership boundary as managed task runs: a small documentation, mockup, prompt, roadmap, or task-queue change should be reported with changed files and verification, then committed or pushed only by an explicit operator action. That keeps project memory durable without letting a worker session author history on its own.
 
@@ -239,31 +239,30 @@ All task operations flow through the API. Direct filesystem mutation is reserved
 
 The system is layered:
 
-1. **Filesystem on disk.** The watched project's `.orchestrator/jobs/<lane>/<job>/` folders hold `job.json`, `prompt.md`, `status.md`, `logs/`, and `results/`. Disk stays the source of truth on cold start.
+1. **Filesystem on disk.** Central `<TaskRepository>/projects/<projectId>/tasks/<lane>/<task>/` folders hold `job.json`, `prompt.md`, `status.md`, `logs/`, and `results/`. Disk stays the source of truth on cold start; the product checkout remains separate.
 2. **Task Access API.** A typed software layer in the backend owns reads, lists, mutations, and lane transitions. It boots once, indexes every watched project's lane folders, watches the filesystem for external changes, serves cheap reads off the index, and accepts narrowly typed mutations. See [ADR-0024](./docs/architecture/decisions/adr-archive.md) for the layer design and the queued `task-access-api-layer-extraction` work for the migration phasing.
 3. **Services and clients consume the API.** The runner, the supervisor, the frontend PWA, the meta-cycle, and external scripts go through the API. They do not touch the lane folders directly. The same boundary mirrors mutations onto the [agent message bus](./docs/architecture/bus/agent-message-bus.md) so every cross-cutting structured signal lands in one observable timeline.
 
-```
-┌─────────────────────────────┐     ┌──────────────────────────────────┐
-│  agent-taskboard/           │     │  Target project (e.g. C:\Proj\X) │
-│  ════════════════           │     │  ═══════════════════════════════  │
-│  App source code:           │     │  Where the agent works:          │
-│  - backend/  (.NET 10 API)  │     │  - src/, lib/, ...               │
-│  - frontend/ (Angular PWA)  │     │  - .orchestrator/                │
-│  - docs/                    │     │    └── jobs/                     │
-│  - .github/prompts/         │     │        ├── 1-preparation/        │
-│                             │────►│        ├── 2-ready/              │
-│  Hosts the Task Access API. │     │        ├── 3-progress/           │
-│  Reads and mutates the      │     │        ├── 4-review/             │
-│  target's jobs/ folder      │     │        ├── 5-completed/          │
-│  through that one boundary. │     │        └── 6-archive/            │
-└─────────────────────────────┘     └──────────────────────────────────┘
+```text
+┌─────────────────────────────┐      ┌──────────────────────────────────┐
+│ Agent Studio app            │      │ Central TaskRepository           │
+│ backend/ + frontend/        │─────►│ projects/PROJ-NNN/tasks/         │
+│ Hosts the Task Access API   │      │ lane/task metadata and evidence  │
+└──────────────┬──────────────┘      └──────────────────────────────────┘
+               │ starts the CLI in RootPath
+               ▼
+┌─────────────────────────────┐
+│ Product checkout            │
+│ source code + project docs  │
+│ no Agent Studio task store  │
+└─────────────────────────────┘
 ```
 
 | Location | Contents |
 |----------|----------|
 | `agent-taskboard/` | App source, prompts, docs, Task Access API host |
-| `<target-project>/.orchestrator/jobs/` | `job.json`, `prompt.md`, `status.md`, `logs/` per task |
+| `<TaskRepository>/projects/PROJ-NNN/tasks/` | Central task metadata, prompts, logs, results, and review evidence |
+| Product `RepositoryPath` | Source code and project-owned docs only; never Agent Studio task data |
 
 One task processor, many targets. The board watches several projects in parallel. Inside each project, coding is serial by default and may become bounded parallel work only when the project opts into `maxParallelism`, the orchestrator admits the task, and the worktree isolation steps are active.
 

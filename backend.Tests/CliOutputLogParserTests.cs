@@ -36,6 +36,17 @@ public class CliOutputLogParserTests
         Assert.Equal("raw row without persisted metadata", parsed[0].Text);
     }
 
+    [Fact]
+    public void ParseLines_StripsAnsiFromPlainTextSnippets()
+    {
+        var parsed = CliOutputLogParser.ParseLines(
+            ["[12:18:54.201] [stderr] \u001b[33m[39m Building...\u001b[0m"],
+            new DateTime(2026, 4, 26, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Single(parsed);
+        Assert.Equal(" Building...", parsed[0].Text);
+    }
+
     // Regression: a runaway task can grow logs/cli-output.log without bound.
     // ParseFile is called from the supervisor tick, the review-decision tick,
     // the projection sources, the regression radar, and several frontend-polled

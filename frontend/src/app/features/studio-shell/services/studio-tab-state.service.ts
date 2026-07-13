@@ -224,6 +224,7 @@ export class StudioTabStateService {
       if (t.kind === 'board' && t.projectName !== ALL_PROJECTS) return validNames.has(t.projectName);
       if (t.kind === 'epics' && t.projectName !== null) return validNames.has(t.projectName);
       if (t.kind === 'hub') return validNames.has(t.projectName);
+      if (t.kind === 'workbench') return validNames.has(t.projectName);
       if (t.kind === 'url-preview') return validNames.has(t.projectName);
       return true;
     });
@@ -231,6 +232,35 @@ export class StudioTabStateService {
     this._tabs.set(after);
     if (!after.some(t => studioTabKey(t) === this._activeKey())) {
       this._activeKey.set(after.length ? studioTabKey(after[after.length - 1]) : null);
+    }
+    this.persist();
+  }
+
+  /** Retarget every project-keyed tab after a registry display-name change. */
+  renameProject(previousName: string, currentName: string): void {
+    if (!previousName || !currentName || previousName === currentName) return;
+    const active = this.activeTab();
+    const rename = (tab: StudioTab): StudioTab => {
+      switch (tab.kind) {
+        case 'board':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        case 'epics':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        case 'hub':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        case 'url-preview':
+          return tab.projectName === previousName ? { ...tab, projectName: currentName } : tab;
+        default:
+          return tab;
+      }
+    };
+    const next = this.dedupe(this._tabs().map(rename));
+    this._tabs.set(next);
+    if (active) {
+      const renamedActiveKey = studioTabKey(rename(active));
+      this._activeKey.set(next.some((tab) => studioTabKey(tab) === renamedActiveKey)
+        ? renamedActiveKey
+        : (next.length ? studioTabKey(next[next.length - 1]) : null));
     }
     this.persist();
   }
@@ -303,7 +333,14 @@ export class StudioTabStateService {
       case 'task':
         return { kind: 'task', taskKey: tab.taskKey };
       case 'hub':
-        return { kind: 'hub', projectName: tab.projectName, section: tab.section };
+        return {
+          kind: 'hub',
+          projectName: tab.projectName,
+          section: tab.section,
+          ...(tab.pipelineStepId ? { pipelineStepId: tab.pipelineStepId } : {}),
+        };
+      case 'workbench':
+        return { kind: 'workbench', projectName: tab.projectName, workbenchId: tab.workbenchId, title: tab.title };
       case 'diff':
         return { kind: 'diff', commitSha: tab.commitSha };
       case 'activity':

@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-07-10
+Version: 2026-07-13
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -21,18 +21,13 @@ or commit attribution.
   and [docs/schemas/task-find-result.schema.json](../schemas/task-find-result.schema.json)
   pin task API shapes.
 
-## Project source contract
+## Project onboarding contract
 
-`GET /api/project-sources` returns the extensible source catalogue used by
-onboarding and Workspace Settings. `POST /api/projects` accepts an optional
-`sourceType`; omitted values default to `local-folder`. Only catalogue entries
-marked available may be created. `remote-git` and `cloud` are reserved,
-currently unavailable extension points.
-
-Workspace Settings exposes the same catalogue at
-`#/workspace/settings/project-sources`. The onboarding dialog submits the
-selected catalogue id in `sourceType`; source-specific configuration can be
-added without changing the project identity contract.
+Project onboarding is one product workflow, not a configurable project-source
+catalogue. The onboarding UI has no source-type selector and Workspace Settings
+has no Project Sources administration page. A repository URL records the
+project's repository location; it does not promise a managed clone or a cloud
+workspace workflow.
 
 `POST /api/projects` is the product onboarding mutation. It accepts project
 identity plus optional `repositoryPath`, `repositoryUrl`, and
@@ -42,6 +37,18 @@ scanning and watching without editing `WatchPaths` or restarting the backend.
 The repository URL is stored as the well-known `repo` project URL. New projects
 never place task data in the product checkout; legacy in-repository stores stay
 in place until an explicit migration.
+
+The same basic values remain editable after creation in Project Settings.
+`PUT /api/projects/{PROJ-NNN}` is the canonical update mutation for display
+name, short code, workspace, colour, repository checkout, working directory,
+repository URL, default CLI/model, and execution runner. The request uses
+optional patch fields plus explicit `clear*` flags for optional values. Registry
+fields are validated together before they are persisted. The runner value is
+delegated to `ProjectSettingsService`; it is not duplicated in the project
+registry. The Project Settings UI continues to edit runner assignment through
+the dedicated `PUT /api/projects/{projectName}/execution-runner` contract.
+Project id, source type, storage location, creation time, and the task-key
+counter are immutable and are never accepted as update fields.
 
 ## API-First Task Organization
 
@@ -62,6 +69,10 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
 
 ## Related Concepts
 
+- [../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance):
+  why runner assignment is scheduling policy rather than historical fact, how a
+  Task retains an ordered multi-runner route, and when a host change continues,
+  blocks, or starts a new attempt.
 - [../wiki/concepts/task-integration-and-merge-workflow.md](../wiki/concepts/task-integration-and-merge-workflow.md):
   how a finished task's branch reaches `develop` (worktree, deferred merge, the
   `5-human-review -> 6-completed` accept trigger).
@@ -69,6 +80,18 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   why integration semantics should not depend on `maxParallelism`.
 - [../wiki/concepts/auto-review-evidence-gate-analysis.html](../wiki/concepts/auto-review-evidence-gate-analysis.html):
   why auto-review reissues good work ("Needs rework") and the evidence-gate fix.
+
+## Files-tab document projection
+
+`GET /api/tasks/{id}/artifacts` projects supported top-level task documents into
+the Files tab: Markdown, self-contained `.html` / `.htm`, and structured
+`aspect-*.json`. `status.md` remains owned by Result, and subfolders remain out
+of scope. HTML content is fetched through the existing task-file endpoint and
+rendered through `srcdoc` with `sandbox="allow-scripts"`. The deliberate omission
+of `allow-same-origin` keeps an opaque origin, so interactive artifacts cannot
+read Studio cookies, storage, DOM, or APIs. Artifacts that require same-origin
+or controlled network integration belong to the Workbench viewer described in
+[Experimentier-Workbench](../concepts/experimentier-workbench.md#5-viewer-interactive-html-and-project-previews).
 
 ## Project proposals
 

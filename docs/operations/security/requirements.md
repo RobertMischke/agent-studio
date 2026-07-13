@@ -2,7 +2,15 @@
 
 These are the load-bearing constraints. If you make a change that touches one, surface it in the PR description.
 
-## R1 - Localhost only
+> **Scope note (2026-07-13):** R1 describes the current local compatibility
+> profile, not the distributed target. No port may be exposed until the human
+> authentication, Runner service identity, authorization, HTTPS, and audit
+> baseline in
+> [Distributed Agent Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md#8-security-baseline-for-an-internet-reachable-server)
+> is implemented and this requirements page is replaced with profile-specific
+> controls.
+
+## R1 - Local compatibility profile is localhost only
 
 Backend binds `127.0.0.1:5030`. Frontend dev server binds `127.0.0.1:4010`. CORS restricted to those two origins. No `0.0.0.0`, no LAN listeners, no tunneling.
 

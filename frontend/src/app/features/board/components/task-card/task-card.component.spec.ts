@@ -1107,6 +1107,29 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.textContent).toContain('⇥');
   });
 
+  it('treats a live remote lease as running when no local execution exists', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '3-progress',
+      execution: null,
+      runner: {
+        runnerId: 'agent-runner-01@linux-host',
+        runnerName: 'agent-runner-01',
+        hostname: 'linux-host',
+        backendName: 'remote',
+        isRemote: true,
+        leaseId: 'lease-live',
+        fencingToken: 9,
+        acquiredAt: '2026-07-11T13:45:00Z',
+      },
+    }));
+
+    const card = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
+    expect(fixture.componentInstance.isRunning()).toBe(true);
+    expect(card?.classList.contains('task-card--running')).toBe(true);
+    expect(card?.getAttribute('data-running')).toBe('true');
+    expect(fixture.nativeElement.textContent).toContain('agent-runner-01');
+  });
+
   it('renders a quiet "lokal" runner chip for an in-process run with no remote lease', async () => {
     const fixture = await renderCard(makeJob({
       state: '3-progress',

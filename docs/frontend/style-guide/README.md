@@ -1,5 +1,10 @@
 # Style Guide
 
+This component vocabulary is incorporated by the
+[Angular component guide](../../quality/angular-components.md). The single
+navigation entry for all technology-aware engineering guides is
+[docs/quality/](../../quality/README.md).
+
 Operator-facing index of the **canonical UI vocabulary** the shell uses: tokens, primitives, components, and the migration status that tracks how far each surface has converged onto them.
 
 This folder is the **second-look** for any visual or styling change. The first stop is still [`docs/frontend/design-system.md`](../design-system.md) (the "why" of the shell: Material 3 mapping, color philosophy, type ramp, motion grammar). The style guide is the **"what to grab"** for a concrete change:

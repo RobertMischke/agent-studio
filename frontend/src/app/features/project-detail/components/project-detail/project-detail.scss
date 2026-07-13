@@ -225,22 +225,6 @@
 
 .proj-detail__model-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 
-.proj-detail__path-field {
-  display: block;
-  margin-bottom: 8px;
-}
-.proj-detail__path-input {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  margin-top: 4px;
-  background: var(--studio-bg-overlay);
-  color: var(--studio-fg);
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 0.85rem;
-}
 .proj-detail__model-select {
   background: var(--studio-bg-overlay);
   color: var(--studio-fg);

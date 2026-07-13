@@ -61,6 +61,9 @@
         (openReport)="openReport($event)" />
     }
   }
+  @if (activeRail() === 'project-graph') {
+    <app-project-graph [projectName]="projectName()" />
+  }
   @defer (when activeRail() === 'drift') {
     @if (activeRail() === 'drift') {
       <app-project-detail
@@ -104,13 +107,14 @@
   }
   @defer (when activeRail() === 'wiki') {
     @if (activeRail() === 'wiki') {
-      <app-project-wiki-section [projectName]="projectName()" />
+      <app-project-wiki-section [projectName]="projectName()" (openWorkbench)="openWorkbench($event)" />
     }
   }
   @defer (when activeRail() === 'pipeline') {
     @if (activeRail() === 'pipeline') {
       <app-project-pipeline-panel
         [projectName]="projectName()"
+        [focusStepId]="pipelineStepId()"
         (openPrompts)="setRail('prompts')" />
     }
   }

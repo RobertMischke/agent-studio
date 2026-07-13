@@ -231,7 +231,7 @@ public sealed class AspectRunnerService
                 var stepThinkingLevel = thinkingLevelForAspect?.Invoke(entry.Def.Id);
                 var stepPrompt = promptForAspect?.Invoke(entry.Def.Id);
                 var stepCli = cliForAspect?.Invoke(entry.Def.Id);
-                if (string.IsNullOrWhiteSpace(stepCli)) stepCli = CliTypes.Claude;
+                if (string.IsNullOrWhiteSpace(stepCli)) stepCli = cliBinary;
                 return RunOneAspectAsync(entry.Index, entry.Def, inputs, stepCli, stepModel, stepThinkingLevel,
                     stepPrompt, perAspectTimeout, gate, now, ct);
             })
@@ -899,6 +899,23 @@ internal static class ConcernTagWriter
     public static void ReplaceCodeReviewGradeTag(string jobFolderPath, string gradeTagId, ILogger logger)
     {
         if (string.IsNullOrWhiteSpace(gradeTagId)) return;
+        ReconcileCodeReviewGradeTag(jobFolderPath, gradeTagId, logger);
+    }
+
+    /// <summary>
+    /// Remove every stale quality-grade tag while preserving all unrelated
+    /// tags. Used when a new grade dispatch failed before producing an
+    /// authoritative grade, so the card cannot keep advertising an older A-D
+    /// result beside a failed pipeline row.
+    /// </summary>
+    public static void ClearCodeReviewGradeTags(string jobFolderPath, ILogger logger)
+        => ReconcileCodeReviewGradeTag(jobFolderPath, gradeTagId: null, logger);
+
+    private static void ReconcileCodeReviewGradeTag(
+        string jobFolderPath,
+        string? gradeTagId,
+        ILogger logger)
+    {
         var jobJsonPath = Path.Combine(jobFolderPath, "task.json");
         if (!File.Exists(jobJsonPath)) return;
 
@@ -922,9 +939,12 @@ internal static class ConcernTagWriter
 
             var reconciled = existing
                 .Where(t => !t.StartsWith(CodeReviewGradeTagPrefix, StringComparison.OrdinalIgnoreCase))
-                .Append(gradeTagId)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+            if (!string.IsNullOrWhiteSpace(gradeTagId))
+            {
+                reconciled.Add(gradeTagId);
+            }
 
             var before = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
             var after = new HashSet<string>(reconciled, StringComparer.OrdinalIgnoreCase);
@@ -935,7 +955,7 @@ internal static class ConcernTagWriter
         catch (Exception ex)
         {
             logger.LogWarning(ex,
-                "ConcernTagWriter: failed to set code-review grade tag into {TaskFolder}",
+                "ConcernTagWriter: failed to reconcile code-review grade tag in {TaskFolder}",
                 jobFolderPath);
         }
     }

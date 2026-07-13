@@ -159,10 +159,15 @@ public static class ProjectSettingsEndpoints
             {
                 var resolved = PipelineStepModelDefaults.Resolve(projectSettings, s);
                 var configured = PipelineStepConfigResolver.Lookup(projectSettings, s.Id);
-                var cliType = configured?.CliType ?? s.CliType ?? (resolved is null ? null : CliTypes.Claude);
+                var cliType = configured?.CliType ?? s.CliType ?? PipelineStepModelDefaults.RuntimeDefaultCliFor(s);
                 var thinking = resolved is null
                     ? null
-                    : PipelineStepConfigResolver.ResolveThinkingLevelWithSource(projectSettings, s, cliType, resolved.Model);
+                    : PipelineStepConfigResolver.ResolveThinkingLevelWithSource(
+                        projectSettings,
+                        s,
+                        cliType,
+                        resolved.Model,
+                        PipelineStepModelDefaults.RuntimeDefaultThinkingLevelFor(s));
                 return new
                 {
                     id = s.Id,
@@ -451,13 +456,31 @@ public static class ProjectSettingsEndpoints
         // cannot drift apart. Blank executionRunner hands the project back to
         // the local runner. Eligibility defaults true; screenshots/headless UI
         // work is supported remotely, while machine-bound projects opt out.
-        app.MapPut("/api/projects/{projectName}/execution-runner", (string projectName, SetExecutionRunnerRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        app.MapPut("/api/projects/{projectName}/execution-runner", (string projectName, SetExecutionRunnerRequest req,
+            ProjectSettingsService settings, TaskScannerService scanner, ClientIdentityStore clients) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
-            settings.SetExecutionRunner(projectName, req.ExecutionRunner, req.RemoteExecutionEnabled);
-            return Results.Ok(settings.Get(projectName));
+            try
+            {
+                var runner = ExecutionRunnerAssignment.NormalizeAndValidate(req.ExecutionRunner, clients);
+                settings.RekeyProject(
+                    projectName,
+                    projectName,
+                    updateExecutionRunner: true,
+                    executionRunner: runner,
+                    remoteExecutionEnabled: req.RemoteExecutionEnabled);
+                return Results.Ok(settings.Get(projectName));
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            catch (ProjectPersistenceException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: StatusCodes.Status500InternalServerError);
+            }
         });
 
         // ADR-0052: integration branch parallel task worktrees branch off and

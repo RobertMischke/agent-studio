@@ -22,9 +22,9 @@ public sealed record WorkstreamCollectorContext
     public string StatusSummary { get; init; } = "";
     public string DiffSummary { get; init; } = "";
     public string ReviewSummary { get; init; } = "";
-    public string Model { get; init; } = "";
-    public string Cli { get; init; } = CliTypes.Claude;
-    public string? ThinkingLevel { get; init; }
+    public string Model { get; init; } = PipelineStepModelDefaults.SupportModel;
+    public string Cli { get; init; } = PipelineStepModelDefaults.DefaultCli;
+    public string? ThinkingLevel { get; init; } = PipelineStepModelDefaults.SupportThinkingLevel;
     public EngineeringWorkstreamFrameLanguage FrameLanguage { get; init; } = EngineeringWorkstreamFrameLanguage.English;
 }
 
@@ -258,10 +258,10 @@ public sealed class WorkstreamCollectorPostStepRunner
 
     private async Task<CliOneShotResult> RunOneShotAsync(CliOneShotRequest request, CancellationToken ct)
     {
-        var oneShot = _oneShots?.Get(request.CliType) ?? _oneShots?.Get(CliTypes.Claude);
+        var oneShot = _oneShots?.Get(request.CliType);
         if (oneShot != null) return await oneShot.RunAsync(request, ct);
         var now = DateTime.UtcNow;
-        return CliOneShotResult.SpawnFailure("no one-shot CLI registered", now, now);
+        return CliOneShotResult.SpawnFailure("no one-shot CLI registered for " + request.CliType, now, now);
     }
 
     private static string RenderFrameMap() => string.Join("\n", EngineeringWorkstreamFrame.Areas.Select(a =>

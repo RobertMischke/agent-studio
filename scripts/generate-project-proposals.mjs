@@ -26,6 +26,16 @@ const decode = value => value.replace(/<[^>]+>/g, '').replaceAll('&amp;', '&').r
 const field = (body, regex) => decode(body.match(regex)?.[1] ?? '');
 const quote = value => JSON.stringify(value);
 const slug = value => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 72);
+const classify = value => {
+  const text = value.toLowerCase();
+  if (/responsive|narrow|mobile|430 px|overflow/.test(text)) return ['Responsiveness', ['responsiveness']];
+  if (/accessib|keyboard|screen reader/.test(text)) return ['Accessibility', ['accessibility']];
+  if (/performance|loading|latency/.test(text)) return ['Performance', ['performance']];
+  if (/security|permission/.test(text)) return ['Security', ['security']];
+  if (/navigation|explorer/.test(text)) return ['Navigation', ['navigation']];
+  if (/test/.test(text)) return ['Test quality', ['test-quality']];
+  return ['Product quality', ['product-quality']];
+};
 
 let created = 0;
 let preserved = 0;
@@ -42,6 +52,7 @@ for (const article of articles) {
   const fileName = field(article, /<p class="filename">([\s\S]*?)<\/p>/);
   const image = article.match(/src="data:image\/png;base64,([^"]+)"/)?.[1];
   const id = `survey-${generation}-${number}-${slug(title)}`;
+  const [topic, categories] = classify(`${title} ${finding} ${proposal}`);
   const relImage = `assets/${number}-${slug(title)}.png`;
   const docPath = path.join(generationDir, `${id}.md`);
   if (image) fs.writeFileSync(path.join(generationDir, relImage), Buffer.from(image, 'base64'));
@@ -50,8 +61,10 @@ for (const article of articles) {
   const document = `---\n` +
     `id: ${quote(id)}\ngeneration: ${quote(generation)}\nfinding: ${quote(finding)}\n` +
     `evidenceScreenshot: ${quote(`${generation}/${relImage}`)}\nproposal: ${quote(proposal)}\n` +
-    `estimatedEffort: ${quote(effort)}\nseverity: ${quote(severity)}\nstatus: "proposed"\nspawnedTask: null\n---\n\n` +
-    `# ${proposal}\n\n## Finding\n\n${finding}\n\n## Evidence\n\n![${title}](./${relImage})\n\n` +
+    `estimatedEffort: ${quote(effort)}\nseverity: ${quote(severity)}\nstatus: "proposed"\nspawnedTask: null\n` +
+    `topic: ${quote(topic)}\ncategories: ${quote(categories.join(','))}\nsource: ${quote(`Visual survey: ${fileName || input}`)}\n` +
+    `rejectionReason: null\nrejectionReasonRaw: null\n` +
+    `---\n\n# ${proposal}\n\n## Topic\n\n${topic}\n\n## Finding\n\n${finding}\n\n## Evidence\n\n![${title}](./${relImage})\n\n` +
     `Source capture: \`${fileName}\`\n\n## Proposal\n\n${proposal}\n\nEstimated effort: **${effort}**  \nSeverity: **${severity}**\n`;
   fs.writeFileSync(docPath, document);
   created++;

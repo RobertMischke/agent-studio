@@ -11,6 +11,10 @@ touches the UI sees it, the same way the workstream-frame pages are known. When
 you add or change a load-bearing visual rule, add it here first, then let the
 component follow.
 
+For the navigable style-guide family, technology applicability, and the process
+for changing a rule, start at [docs/quality/](../quality/README.md). This page
+remains the canonical non-negotiable UI baseline linked from that index.
+
 ## The rules
 
 ### R1 - No left accent lines or bars

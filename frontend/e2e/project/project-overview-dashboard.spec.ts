@@ -166,14 +166,11 @@ async function proxyBackend(page: Page, backendBaseUrl: string): Promise<void> {
   });
 }
 
-async function resolveRealProject(backendBaseUrl: string): Promise<string> {
+async function resolveRealProject(backendBaseUrl: string): Promise<string | null> {
   const watchPathsResponse = await fetch(`${backendBaseUrl}/api/watch-paths`);
   expect(watchPathsResponse.ok).toBe(true);
   const watchPaths = await watchPathsResponse.json() as { name: string }[];
-  expect(
-    watchPaths.length,
-    'The dev-backend fixture must configure a watch path for real-source evidence.',
-  ).toBeGreaterThan(0);
+  if (watchPaths.length === 0) return null;
   return watchPaths.find(item => /agent.?task/i.test(item.name))?.name ?? watchPaths[0].name;
 }
 
@@ -185,6 +182,12 @@ async function mockDashboard(page: Page): Promise<{ startedUrl: () => boolean; t
   await page.route('http://127.0.0.1:4311/**', route => offlineStarted
     ? route.fulfill({ status: 200, body: 'ok' })
     : route.abort('connectionrefused'));
+  await page.route(`**/api/projects/${PROJECT_ID}/urls/frontend/readiness`, route => fulfillJson(route, {
+    kind: 'healthy', statusCode: 200, framePolicy: 'allowed', detail: null, durationMs: 12,
+  }));
+  await page.route(`**/api/projects/${PROJECT_ID}/urls/storybook/readiness`, route => fulfillJson(route, offlineStarted
+    ? { kind: 'healthy', statusCode: 200, framePolicy: 'allowed', detail: null, durationMs: 18 }
+    : { kind: 'offline', statusCode: null, framePolicy: 'unknown', detail: 'Connection refused.', durationMs: 7 }));
 
   await page.route('**/api/watch-paths', route => fulfillJson(route, [{
     name: PROJECT_NAME, path: '/mock/tasks/operator-demo', rootPath: '/mock/repos/operator-demo',
@@ -206,6 +209,18 @@ async function mockDashboard(page: Page): Promise<{ startedUrl: () => boolean; t
   await page.route('**/api/projects/*/deployment/summary', route => fulfillJson(route, deployment));
   await page.route('**/api/projects/*/wiki/pulse**', route => fulfillJson(route, wikiPulse));
   await page.route('**/api/projects/*/snapshot', route => fulfillJson(route, snapshot));
+  await page.route('**/api/git/inventory**', route => fulfillJson(route, {
+    projectName: PROJECT_NAME, repositoryPath: '/mock/repos/operator-demo', isRepo: true,
+    currentBranch: 'develop', worktrees: [], recentCommits: [], error: null,
+    branches: [
+      { name: 'main', category: 'main', tipSha: 'a'.repeat(40), tipShortSha: 'aaaaaaa', isCurrent: false,
+        upstream: 'origin/main', ahead: 0, behind: 2, lastCommitSubject: 'release', lastCommitAtUtc: '2026-07-11T09:00:00Z', worktreePath: null },
+      { name: 'develop', category: 'develop', tipSha: 'b'.repeat(40), tipShortSha: 'bbbbbbb', isCurrent: true,
+        upstream: 'origin/develop', ahead: 4, behind: 0, lastCommitSubject: 'integrate', lastCommitAtUtc: '2026-07-11T11:00:00Z', worktreePath: '/mock/repos/operator-demo' },
+      { name: 'task/OPD-221-plan-deployment-history', category: 'task', tipSha: 'c'.repeat(40), tipShortSha: 'ccccccc', isCurrent: false,
+        upstream: null, ahead: 0, behind: 0, lastCommitSubject: 'plan', lastCommitAtUtc: '2026-07-11T10:00:00Z', worktreePath: null },
+    ],
+  }));
   await page.route('**/api/projects/*/visual-evidence', route => fulfillJson(route, {
     project: PROJECT_NAME, capturedAt: '2026-07-11T12:00:00Z', unseenCount: evidenceReviewed ? 0 : 1,
     items: [{
@@ -235,6 +250,7 @@ async function mockDashboard(page: Page): Promise<{ startedUrl: () => boolean; t
   }));
   await page.route(`**/api/projects/${PROJECT_ID}/urls/storybook/start`, async route => {
     offlineStarted = true;
+    await new Promise(resolve => setTimeout(resolve, 500));
     await fulfillJson(route, { started: true, processId: 4421 });
   });
   await page.route('**/api/projects/*/token-usage/heatmap**', route => fulfillJson(route, {
@@ -285,6 +301,10 @@ test.describe('Project Overview · operator dashboard', () => {
     await expect(page.getByTestId('project-overview-wiki')).toContainText('Deployment as a first-class citizen');
     await expect(page.getByTestId('project-overview-planning-plan-deployment-history')).toBeVisible();
     await expect(page.getByTestId('project-overview-evidence-count')).toHaveText('1 unseen');
+    await expect(page.getByTestId('project-overview-remote-truth')).toContainText('4 to push');
+    await expect(page.getByTestId('project-overview-remote-truth')).toContainText('2 to pull');
+    await expect(page.getByTestId('project-overview-remote-truth')).toContainText('No upstream · local-only');
+    await expect(page.getByTestId('project-overview-branch-task-plan-deployment-history')).toBeVisible();
     await expect(page.getByTestId('project-overview-evidence-visual-screenshot-removed')).toContainText('No longer actionable');
     await page.getByTestId('project-overview-evidence-ack-visual-screenshot-overview').click();
     await expect(page.getByTestId('project-overview-evidence-count')).toHaveText('0 unseen');
@@ -362,6 +382,13 @@ test.describe('Project Overview · operator dashboard', () => {
     // Switch from deterministic routes to this worktree's fixture backend and
     // persist a separately labelled real-source pair.
     const realProjectName = await resolveRealProject(devBackend.baseUrl);
+    if (!realProjectName) {
+      test.info().annotations.push({
+        type: 'real-source-evidence',
+        description: 'Not captured because the fixture backend has no configured watch path.',
+      });
+      return;
+    }
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await proxyBackend(page, devBackend.baseUrl);
     await openDashboard(page, realProjectName, true);

@@ -121,6 +121,29 @@ public sealed class SteerTimeoutMonitorTests : IDisposable
     }
 
     [Fact]
+    public async Task SteerPendingPhaseWithoutMarker_IsStillBounded()
+    {
+        // AGT-2087: the UI showed "waiting for answer" for 155 minutes, but
+        // the marker-only monitor had no candidate to enforce. The visible,
+        // persisted lifecycle phase is itself durable evidence of the wait and
+        // must keep the invariant even when marker creation failed.
+        const string slug = "card-2087";
+        var dir = Path.Combine(_watchPath, TaskStates.Progress, slug);
+        Directory.CreateDirectory(dir);
+        var enteredAt = DateTime.UtcNow - TimeSpan.FromMinutes(155);
+        File.WriteAllText(Path.Combine(dir, "task.json"),
+            $$"""{"id":"{{slug}}","title":"{{slug}}","state":"{{TaskStates.Progress}}","order":1,"agent":"copilot","phase":"{{LifecyclePhases.SteerPending}}","phaseEnteredAt":"{{enteredAt:o}}"}""");
+
+        var (monitor, scanner) = Build();
+        scanner.InvalidateCache();
+        var outcome = Assert.Single(await monitor.SweepAsync());
+
+        Assert.Equal(SteerTimeoutOutcomeKinds.Blocked, outcome.Kind);
+        Assert.False(Directory.Exists(dir));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, slug)));
+    }
+
+    [Fact]
     public async Task StaleActiveJobId_DoesNotSuppressPersistedTimeout()
     {
         WriteSteerPending("stale-active", question: "ist iframe schon implementiert?", waitedHours: 5);

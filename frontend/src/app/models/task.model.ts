@@ -754,10 +754,10 @@ export interface FileGenerationMeta {
 }
 
 /**
- * One `.md` file in the job root surfaced by the Files tab. The content
+ * One supported document in the job root surfaced by the Files tab. Markdown,
+ * HTML, and structured aspect JSON are listed. The content
  * itself is not embedded — the Files tab fetches it lazily through
- * `GET /api/tasks/{id}/files/{fileName}` only when the user expands the
- * card (or when it's the sole prompt and auto-expanded).
+ * `GET /api/tasks/{id}/files/{fileName}` lazily for the Files-tab surface.
  */
 export interface TaskArtifact {
   name: string;
@@ -997,6 +997,21 @@ export interface ProjectUrlStartRule {
   source: string;
 }
 
+/** Snapshot of a backend-owned dev-server process for a project URL. */
+export interface ProjectUrlProcessSnapshot {
+  started: boolean;
+  projectId: string;
+  urlId: string;
+  command: string;
+  cwd: string;
+  state: 'starting' | 'running' | 'exited' | 'stopped' | 'failed';
+  processId: number | null;
+  startedAtUtc: string;
+  finishedAtUtc: string | null;
+  exitCode: number | null;
+  output: string[];
+}
+
 /** Mirrors backend `ProjectUrlRecord`: one watchable URL on a project. */
 export interface RegistryProjectUrl {
   id: string;
@@ -1017,6 +1032,9 @@ export interface ProjectUrlSuggestion {
   source: string;
 }
 
+/** Compatibility name retained for existing start-only consumers. */
+export type ProjectUrlStartResponse = ProjectUrlProcessSnapshot;
+
 /**
  * F45a / ADR-0042 — flat project summary returned by `GET /api/projects`
  * and embedded under `WorkspaceListItem.projects`. Mirrors backend
@@ -1035,6 +1053,8 @@ export interface RegistryProjectSummary {
   storageLocation: string;
   repositoryPath: string | null;
   rootPath: string | null;
+  /** Well-known repository URL (`urls[id=repo]`) projected for project basics editing. */
+  repositoryUrl: string | null;
   /** Configured watchable URLs, ordered; empty for most projects. */
   urls: RegistryProjectUrl[];
   archived: boolean;
@@ -1042,7 +1062,6 @@ export interface RegistryProjectSummary {
 }
 
 export interface CreateRegistryProjectRequest {
-  sourceType?: ProjectSourceType;
   workspaceId: string;
   displayName: string;
   shortCode?: string;
@@ -1060,13 +1079,7 @@ export interface CreateRegistryProjectRequest {
   executionRunner?: string;
 }
 
-export type ProjectSourceType = 'local-folder' | 'remote-git' | 'cloud';
-export interface ProjectSourceDescriptor {
-  id: ProjectSourceType;
-  label: string;
-  available: boolean;
-  description: string;
-}
+export type ProjectSourceType = 'local-folder';
 
 /**
  * F45a / ADR-0042 — workspace listing entry returned by `GET /api/workspaces`.

@@ -106,22 +106,6 @@
         @case ('remote-hosts') {
           <app-remote-hosts-panel [workspaces]="watchPaths()" (openTask)="openJobDetail.emit($event)" />
         }
-        @case ('project-sources') {
-          <section class="ws-settings__section" data-testid="workspace-project-sources">
-            <header class="ws-settings__section-head">
-              <h2 class="ws-settings__panel-title">Project sources</h2>
-              <p class="ws-settings__panel-desc">Local folder is the active onboarding source. Remote Git and cloud workspaces are reserved extension points and are not yet available.</p>
-            </header>
-            <div class="ws-settings__cards">
-              @for (source of projectSources(); track source.id) {
-                <div class="ws-settings__card" [attr.data-testid]="'project-source-' + source.id">
-                  <span class="ws-settings__card-title">{{ source.label }}</span>
-                  <span class="ws-settings__card-desc">{{ source.available ? 'Available. ' : 'Coming soon. ' }}{{ source.description }}</span>
-                </div>
-              }
-            </div>
-          </section>
-        }
         @case ('orchestrator') {
           <section class="ws-settings__section" data-testid="workspace-orchestrator">
             <header class="ws-settings__section-head">

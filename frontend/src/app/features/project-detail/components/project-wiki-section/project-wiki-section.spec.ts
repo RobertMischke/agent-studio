@@ -5,7 +5,7 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ProjectWikiSectionComponent } from './project-wiki-section';
-import type { WikiFileHistory, WikiPulse, WikiTree } from '../../../../models/project-docs.model';
+import type { ProjectStyleGuideCatalogue, WikiFileHistory, WikiPulse, WikiTree } from '../../../../models/project-docs.model';
 
 const TREE: WikiTree = {
   projectName: 'Demo',
@@ -97,6 +97,51 @@ const PULSE: WikiPulse = {
   critical: { available: true, reason: 'No pages have been graded yet.', count: 0, overallGrade: 'none', items: [] },
 };
 
+const STYLE_GUIDES: ProjectStyleGuideCatalogue = {
+  projectKey: 'PROJ-0042',
+  projectDisplayName: 'Demo',
+  technologies: [
+    { key: 'angular', displayLabel: 'Angular' },
+    { key: 'dotnet', displayLabel: '.NET' },
+  ],
+  guides: [
+    {
+      id: 'angular-components',
+      title: 'Angular component guide',
+      relPath: 'quality/angular-components.md',
+      summary: 'Rendering, identity, and token rules for Angular UI work.',
+      promptSummary: 'Use OnPush and stable tracking.',
+      version: '1',
+      appliesTo: { projects: ['*'], technologies: ['angular'], taskAreas: ['frontend'] },
+      match: {
+        projectWildcard: true,
+        projectSelector: '*',
+        technologyWildcard: false,
+        technologies: [{ key: 'angular', displayLabel: 'Angular' }],
+      },
+    },
+    {
+      id: 'dotnet-backend',
+      title: '.NET backend guide',
+      relPath: 'quality/dotnet-backend.md',
+      summary: 'Feature ownership and pure policy rules for backend work.',
+      promptSummary: 'Use pure policy tests.',
+      version: '1',
+      appliesTo: { projects: ['*'], technologies: ['dotnet'], taskAreas: ['backend'] },
+      match: {
+        projectWildcard: true,
+        projectSelector: '*',
+        technologyWildcard: false,
+        technologies: [{ key: 'dotnet', displayLabel: '.NET' }],
+      },
+    },
+  ],
+  warnings: [],
+  snapshotId: '0123456789abcdef',
+  capturedAtUtc: '2026-07-14T08:00:00Z',
+  refreshAfterUtc: '2026-07-14T08:05:00Z',
+};
+
 async function setup(tree: WikiTree = TREE) {
   await TestBed.configureTestingModule({
     imports: [ProjectWikiSectionComponent],
@@ -116,6 +161,8 @@ async function setup(tree: WikiTree = TREE) {
   http.expectOne('/api/projects/Demo/wiki/tree').flush(tree);
   flushWikiPulse(http);
   flushGradingContext(http);
+  fixture.detectChanges();
+  flushStyleGuidesIfRendered(http);
   fixture.detectChanges();
   return { fixture, http };
 }
@@ -138,6 +185,13 @@ function flushGradingContext(http: HttpTestingController): void {
  */
 function flushWikiPulse(http: HttpTestingController, pulse: WikiPulse = PULSE): void {
   http.expectOne(r => r.url.includes('/wiki/pulse')).flush(pulse);
+}
+
+/** The style-guide panel is absent when persisted state opens a document directly. */
+function flushStyleGuidesIfRendered(http: HttpTestingController): void {
+  const requests = http.match('/api/projects/Demo/style-guides');
+  expect(requests.length).toBeLessThanOrEqual(1);
+  requests[0]?.flush(STYLE_GUIDES);
 }
 
 const el = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
@@ -248,6 +302,30 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
+  it('shows applicable repository style guides and opens one in the Wiki reader', async () => {
+    const { fixture, http } = await setup();
+
+    const panel = el(fixture).querySelector('[data-testid="project-wiki-style-guides"]');
+    expect(panel?.textContent).toContain('Engineering style guides');
+    expect(panel?.textContent).toContain('Angular');
+    expect(panel?.textContent).toContain('.NET backend guide');
+    expect(panel?.textContent).toContain('Prompt context · v1');
+
+    el(fixture)
+      .querySelector<HTMLButtonElement>('[data-testid="project-wiki-style-guide-angular-components"]')!
+      .click();
+    fixture.detectChanges();
+
+    http.expectOne('/api/projects/Demo/wiki/files/quality/angular-components.md')
+      .flush({ relPath: 'quality/angular-components.md', content: '# Angular component guide' });
+    http.expectOne('/api/projects/Demo/wiki/history/quality/angular-components.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.openedRel()).toBe('quality/angular-components.md');
+    expect(el(fixture).textContent).toContain('Angular component guide');
+    http.verify();
+  });
+
   it('loads a document and its history on click', async () => {
     const { fixture, http } = await setup();
     expandConcepts(fixture);
@@ -283,7 +361,8 @@ describe('ProjectWikiSectionComponent', () => {
     fixture.detectChanges();
     const reportFrame = el(fixture).querySelector<HTMLIFrameElement>('[data-testid="project-wiki-report-frame"]');
     expect(reportFrame, 'report iframe').toBeTruthy();
-    expect(reportFrame!.getAttribute('sandbox')).toBe('');
+    expect(reportFrame!.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(reportFrame!.getAttribute('sandbox')).not.toContain('allow-same-origin');
     expect(reportFrame!.getAttribute('srcdoc') ?? reportFrame!.srcdoc).toContain('Why drift');
 
     // History is no longer a document tab; it lives in the right context rail.
@@ -693,7 +772,7 @@ describe('ProjectWikiSectionComponent', () => {
     http.verify();
   });
 
-  it('renders an HTML doc inside a script-disabled sandboxed iframe', async () => {
+  it('renders an HTML doc inside a script-enabled opaque-origin sandboxed iframe', async () => {
     const { fixture, http } = await setup();
     expandConcepts(fixture);
     el(fixture)
@@ -712,8 +791,8 @@ describe('ProjectWikiSectionComponent', () => {
 
     const frame = el(fixture).querySelector<HTMLIFrameElement>('[data-testid="project-wiki-html-frame"]');
     expect(frame, 'html iframe').toBeTruthy();
-    // sandbox attribute is present and empty => no allow-scripts token.
-    expect(frame!.getAttribute('sandbox')).toBe('');
+    expect(frame!.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame!.getAttribute('sandbox')).not.toContain('allow-same-origin');
     const srcdoc = frame!.getAttribute('srcdoc') ?? frame!.srcdoc;
     expect(srcdoc).toContain('Sandboxed');
     http.verify();
@@ -975,7 +1054,7 @@ describe('ProjectWikiSectionComponent', () => {
     });
   }
 
-  it('navigates between frame landing shells, rendering each in the script-disabled iframe', async () => {
+  it('navigates between frame landing shells, rendering each in the interactive isolated iframe', async () => {
     const { fixture, http } = await setup(FRAME_TREE);
     expandFrame(fixture);
     const root = el(fixture);
@@ -995,7 +1074,8 @@ describe('ProjectWikiSectionComponent', () => {
 
     let frame = root.querySelector<HTMLIFrameElement>('[data-testid="project-wiki-html-frame"]');
     expect(frame, 'overview iframe').toBeTruthy();
-    expect(frame!.getAttribute('sandbox')).toBe(''); // no allow-scripts token
+    expect(frame!.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame!.getAttribute('sandbox')).not.toContain('allow-same-origin');
     expect(frame!.getAttribute('srcdoc') ?? frame!.srcdoc).toContain('The development story');
     expect(root.querySelector('[data-testid="project-wiki-viewer-path"]')!.textContent)
       .toContain('engineering-workstream/00-overview.html');

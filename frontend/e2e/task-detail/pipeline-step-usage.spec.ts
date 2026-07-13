@@ -118,11 +118,16 @@ function pipeline() {
     id: 'aspect-code-quality', displayName: 'Code quality', kind: 'aspect',
     runMode: 'parallel', dependsOn: [], idempotent: true, stub: false,
   };
+  const wikiSteps = [
+    { id: 'post-wiki-maintenance', displayName: 'Wiki maintenance', kind: 'tool', runMode: 'sequential', dependsOn: ['core-agent-run'], idempotent: true, stub: false },
+    { id: 'post-wiki-learnings', displayName: 'Wiki learnings', kind: 'tool', runMode: 'sequential', dependsOn: ['aspect-code-quality'], idempotent: true, stub: false },
+    { id: 'post-agents-wiki-sync', displayName: 'Agent skills / AGENTS wiki sync', kind: 'tool', runMode: 'sequential', dependsOn: ['core-agent-run'], idempotent: true, stub: false },
+  ];
   return {
     pipeline: {
       id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
-      pre: [], core: [coreStep], post: [aspectStep],
-      allSteps: [coreStep, aspectStep],
+      pre: [], core: [coreStep], post: [aspectStep, ...wikiSteps],
+      allSteps: [coreStep, aspectStep, ...wikiSteps],
     },
     execution: { ...current, previousAttempts: [previous] },
     cost: {
@@ -135,7 +140,51 @@ function pipeline() {
       totalInputCostUsd: 0, totalOutputCostUsd: 0, totalCacheReadCostUsd: 0,
       totalCacheCreationCostUsd: 0, totalCostUsd: 2.75, anyModelUnknown: false,
     },
-    config: {},
+    config: {
+      'core-agent-run': {
+        enabled: true, canDisable: false, enabledSource: 'catalogue',
+        activation: { state: 'active', source: 'global', reason: 'Enabled by the global catalogue default.' },
+      },
+      'aspect-code-quality': {
+        enabled: true, canDisable: true, enabledSource: 'catalogue',
+        activation: { state: 'active', source: 'global', reason: 'Enabled by the global catalogue default.' },
+      },
+      'post-wiki-maintenance': {
+        enabled: true, canDisable: true, enabledSource: 'catalogue',
+        activation: {
+          state: 'active', source: 'condition',
+          reason: 'Enabled by the global catalogue default; condition "task has tag \'wiki\'" matched this run.',
+        },
+      },
+      'post-wiki-learnings': {
+        enabled: false, canDisable: true, enabledSource: 'project',
+        activation: { state: 'inactive', source: 'project', reason: 'Disabled by the project override.' },
+      },
+      'post-agents-wiki-sync': {
+        enabled: true, canDisable: true, enabledSource: 'catalogue',
+        activation: {
+          state: 'skipped', source: 'condition',
+          reason: 'Condition "an aspect failed" did not match this run.',
+        },
+      },
+    },
+    onDemand: {
+      plannedStepIds: ['post-wiki-maintenance'],
+      attempts: [
+        {
+          stepId: 'post-wiki-maintenance', attempt: 1, status: 'Warn',
+          summary: 'created the first maintenance note',
+          startedAt: '2026-07-11T00:15:00Z', finishedAt: '2026-07-11T00:15:01Z', durationMs: 700,
+          artifactRef: 'results/post-steps/post-wiki-maintenance-attempt-001.md',
+        },
+        {
+          stepId: 'post-wiki-maintenance', attempt: 2, status: 'Ok',
+          summary: 'updated existing problem entry',
+          startedAt: '2026-07-12T00:15:00Z', finishedAt: '2026-07-12T00:15:01Z', durationMs: 850,
+          artifactRef: 'results/post-steps/post-wiki-maintenance-attempt-002.md',
+        },
+      ],
+    },
   };
 }
 
@@ -254,4 +303,103 @@ test('token usage: each pipeline step surfaces its own usage, without the aggreg
   await page.evaluate(() => { document.documentElement.dataset['studioTheme'] = 'dark'; });
   await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
   await saveShot(page, 'cost-breakdown-dialog-dark--mocked.png');
+});
+
+test('post-step lifecycle shows backend activation, history, and the exact settings row in both themes', async ({ page }) => {
+  await page.addInitScript(() => {
+    try { localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false })); }
+    catch { /* ignore */ }
+  });
+  await installFixtureRoutes(page);
+  await page.route('**/api/projects/pipeline-catalogue**', route => route.fulfill(json({ steps: [{
+    id: 'post-wiki-learnings', displayName: 'Wiki learnings', kind: 'tool', phase: 'post',
+    runMode: 'sequential', dependsOn: ['aspect-code-quality'], idempotent: true, stub: false,
+    usesModel: false, usesPrompt: false, supportsMode: false, canDisable: true,
+    defaultEnabled: false, supportsCondition: false,
+  }] })));
+  await page.route('**/api/projects/settings', route => route.fulfill(json({
+    'agent-taskboard': { pipelineSteps: { 'post-wiki-learnings': { enabled: false } } },
+  })));
+  let activationBody: unknown = null;
+  await page.route('**/api/projects/agent-taskboard/pipeline-step', async route => {
+    activationBody = route.request().postDataJSON();
+    await route.fulfill(json({
+      stepId: 'post-wiki-learnings',
+      pipelineSteps: { 'post-wiki-learnings': { enabled: true } },
+    }));
+  });
+  await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+
+  await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
+  await page.getByText('TOOL', { exact: true }).click();
+  await page.getByText('ASPECT', { exact: true }).click();
+  const maintenance = page.locator('[data-step-id="post-wiki-maintenance"]');
+  const learnings = page.locator('[data-step-id="post-wiki-learnings"]');
+  const agentsSync = page.locator('[data-step-id="post-agents-wiki-sync"]');
+  const aspect = page.locator('[data-step-id="aspect-code-quality"]');
+  await expect(maintenance.getByTestId('overview-post-step-source')).toHaveText('active·condition');
+  await expect(maintenance.getByTestId('overview-post-step-source')).toHaveAttribute(
+    'aria-label',
+    'active from condition: Enabled by the global catalogue default; condition "task has tag \'wiki\'" matched this run. Open settings.',
+  );
+  await expect(maintenance.getByTestId('overview-post-step-run')).toHaveText('Run again');
+  await expect(maintenance.getByTestId('overview-post-step-attempts')).toContainText('2 attempts');
+  await maintenance.getByTestId('overview-post-step-attempts').click();
+  await expect(maintenance.getByTestId('overview-post-step-attempt-row')).toHaveCount(2);
+  await expect(maintenance.getByTestId('overview-post-step-attempt-row').first()).toContainText('#2');
+  await expect(maintenance.getByTestId('overview-post-step-artifact').first()).toContainText('attempt-002.md');
+  await expect(learnings.getByTestId('overview-post-step-source')).toHaveText('inactive·project');
+  await expect(learnings.getByTestId('overview-post-step-run')).toHaveText('Add + run');
+  await expect(agentsSync.getByTestId('overview-post-step-source')).toHaveText('skipped·condition');
+  await expect(agentsSync.getByTestId('overview-post-step-source')).toHaveAttribute(
+    'aria-label',
+    'skipped from condition: Condition "an aspect failed" did not match this run. Open settings.',
+  );
+  await expect(aspect.getByTestId('overview-post-step-source')).toHaveText('active·global');
+  await expect(aspect.getByTestId('overview-post-step-run')).toHaveCount(0);
+
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate(t => { document.documentElement.dataset['studioTheme'] = t; }, theme);
+    const path = RESULTS_DIR
+      ? join(RESULTS_DIR, `post-step-lifecycle-${theme}--mocked.png`)
+      : `test-results/post-step-lifecycle-${theme}--mocked.png`;
+    await page.getByTestId('overview-pipeline').screenshot({ path });
+  }
+
+  await maintenance.getByTestId('overview-post-step-attempts').click();
+  await expect(maintenance.getByTestId('overview-post-step-attempt-row')).toHaveCount(0);
+  await learnings.getByTestId('overview-post-step-source').click();
+  const activationRow = page.getByTestId('pipeline-step-row-post-wiki-learnings');
+  await expect(page.getByTestId('project-detail-pipeline')).toBeVisible();
+  await expect(activationRow).toBeVisible();
+  await expect(activationRow).toHaveAttribute('aria-current', 'location');
+  await expect(activationRow).toHaveJSProperty('open', true);
+  await page.getByTestId('pipeline-step-enabled-post-wiki-learnings').check();
+  await expect.poll(() => activationBody).toMatchObject({ stepId: 'post-wiki-learnings', enabled: true });
+});
+
+test('retro grading stays available on an existing card and is captured in both themes', async ({ page }) => {
+  await page.addInitScript(() => {
+    try { localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false })); }
+    catch { /* ignore */ }
+  });
+  await installFixtureRoutes(page);
+  await page.route('**/api/tasks/code-review/defaults', route => route.fulfill(json({ cliType: 'claude', model: 'claude-opus-4-8' })));
+  await page.route(`**/api/tasks/${JOB_ID}/code-review/list**`, route => route.fulfill(json({ entries: [{
+    fileName: 'code-review-grade-2026-07-11T22-15-00Z.md', verdict: 'pass', grade: 'B',
+    summary: 'Solid result with one small evidence gap.', model: 'claude-opus-4-8', cliType: 'claude',
+    commit: 'base..task/pipeline-step-usage-fixture', runAt: '2026-07-11T22:15:00Z',
+  }] })));
+  await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+  await page.getByTestId('prompt-tab-code-review').click();
+
+  await expect(page.getByTestId('code-review-grade-run')).toBeVisible();
+  await expect(page.getByTestId('code-review-list')).toContainText('Grade B');
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate(t => { document.documentElement.dataset['studioTheme'] = t; }, theme);
+    const path = RESULTS_DIR
+      ? join(RESULTS_DIR, `retro-grading-${theme}--mocked.png`)
+      : `test-results/retro-grading-${theme}--mocked.png`;
+    await page.getByTestId('code-review-panel').screenshot({ path });
+  }
 });

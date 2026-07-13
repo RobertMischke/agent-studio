@@ -1,3 +1,7 @@
+using System.Collections.Concurrent;
+using System.Collections.Immutable;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -38,18 +42,21 @@ public enum ReviewDecisionKind
 /// </summary>
 public static class ReviewDecisionLog
 {
+    private const int FingerprintSampleCount = 8;
+    private const int FingerprintSampleSize = 512;
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = false,
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
     };
 
-    // The auto-review read-only pool reviews several tasks concurrently, so
-    // Append / ReadAll can be hit from multiple threads at once. The journal is
-    // a single append-only file per project; serialise access through one
-    // process-wide lock so a concurrent append cannot interleave a line or have
-    // its OS file handle collide with a concurrent read.
-    private static readonly object FileLock = new();
+    // Journals are independent per workspace/project. A process-wide lock made
+    // an unrelated 27 MB read block every append and board read in every other
+    // project. Each canonical file path now owns its own gate and latest-by-job
+    // index instead.
+    private static readonly ConcurrentDictionary<string, LatestIndexEntry> LatestIndexes = new(
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     public static string DecisionsDir(string workspaceRoot)
     {
@@ -69,9 +76,67 @@ public static class ReviewDecisionLog
         Directory.CreateDirectory(dir);
         var path = DecisionsFile(workspaceRoot, record.Project);
         var line = JsonSerializer.Serialize(record, Json);
-        lock (FileLock)
+        var payload = Encoding.UTF8.GetBytes(line + Environment.NewLine);
+        var entry = EntryFor(path);
+        lock (entry.Gate)
         {
-            File.AppendAllText(path, line + Environment.NewLine);
+            FileStream? beforeStream = null;
+            var cachedBefore = entry.Initialized && TryOpenJournal(path, out beforeStream);
+            JournalSnapshot before = default;
+            if (cachedBefore)
+            {
+                using (beforeStream)
+                {
+                    before = CaptureSnapshot(beforeStream!, path, beforeStream!.Length);
+                }
+                cachedBefore = entry.Exists && entry.Snapshot.Equals(before);
+            }
+            else if (entry.Initialized && !entry.Exists)
+            {
+                cachedBefore = !File.Exists(path);
+            }
+
+            using (var stream = new FileStream(
+                       path,
+                       FileMode.Append,
+                       FileAccess.Write,
+                       FileShare.Read,
+                       bufferSize: 4096,
+                       FileOptions.SequentialScan))
+            {
+                stream.Write(payload);
+            }
+
+            // Appends made through this process can update the immutable index
+            // in O(1). If the file changed between our cached snapshot and the
+            // write, discard the cache instead of risking a missed external
+            // record; the next read performs a safe rebuild.
+            if (cachedBefore && TryOpenJournal(path, out var afterStream))
+            {
+                using (afterStream)
+                {
+                    var after = CaptureSnapshot(afterStream!, path, afterStream!.Length);
+                    var expectedLength = before.Length + payload.Length;
+                    var identityMatches = !entry.Exists
+                        || before.CreationTimeUtc == after.CreationTimeUtc;
+                    var previousContentMatches = !entry.Exists
+                        || string.Equals(
+                            ComputeFingerprint(afterStream!, before.Length),
+                            before.Fingerprint,
+                            StringComparison.Ordinal);
+                    if (identityMatches && previousContentMatches && after.Length == expectedLength)
+                    {
+                        if (!string.IsNullOrEmpty(record.JobId))
+                            entry.Latest = entry.Latest.SetItem(record.JobId, record);
+                        entry.Snapshot = after;
+                        entry.Exists = true;
+                        entry.Initialized = true;
+                        return;
+                    }
+                }
+            }
+
+            entry.Initialized = false;
         }
     }
 
@@ -80,7 +145,8 @@ public static class ReviewDecisionLog
         var path = DecisionsFile(workspaceRoot, project);
         if (!File.Exists(path)) return Array.Empty<ReviewDecisionRecord>();
         var result = new List<ReviewDecisionRecord>();
-        lock (FileLock)
+        var entry = EntryFor(path);
+        lock (entry.Gate)
         {
             foreach (var line in File.ReadLines(path))
             {
@@ -95,4 +161,226 @@ public static class ReviewDecisionLog
         }
         return result;
     }
+
+    /// <summary>
+    /// Returns an immutable latest-record-by-job snapshot for one journal.
+    /// The first call builds the index once. Later calls validate a small,
+    /// distributed content fingerprint and either return the cached snapshot,
+    /// parse only appended bytes, or rebuild after truncation/replacement.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, ReviewDecisionRecord> ReadLatestByJob(
+        string workspaceRoot,
+        string project)
+    {
+        var path = DecisionsFile(workspaceRoot, project);
+        var entry = EntryFor(path);
+        lock (entry.Gate)
+        {
+            if (!TryOpenJournal(path, out var stream))
+            {
+                if (entry.Initialized && !entry.Exists)
+                {
+                    entry.CacheHits++;
+                    return entry.Latest;
+                }
+
+                entry.Latest = ImmutableDictionary.Create<string, ReviewDecisionRecord>(StringComparer.Ordinal);
+                entry.Snapshot = default;
+                entry.Exists = false;
+                entry.Initialized = true;
+                entry.FullLoads++;
+                return entry.Latest;
+            }
+
+            using (stream)
+            {
+                var length = stream!.Length;
+                var current = CaptureSnapshot(stream, path, length);
+                if (entry.Initialized && entry.Exists)
+                {
+                    if (entry.Snapshot.Equals(current))
+                    {
+                        entry.CacheHits++;
+                        return entry.Latest;
+                    }
+
+                    if (CanApplyAsAppend(entry.Snapshot, current, stream))
+                    {
+                        entry.Latest = ParseRange(stream, entry.Snapshot.Length, entry.Latest);
+                        entry.Snapshot = current;
+                        entry.IncrementalLoads++;
+                        return entry.Latest;
+                    }
+                }
+
+                entry.Latest = ParseRange(
+                    stream,
+                    startOffset: 0,
+                    ImmutableDictionary.Create<string, ReviewDecisionRecord>(StringComparer.Ordinal));
+                entry.Snapshot = current;
+                entry.Exists = true;
+                entry.Initialized = true;
+                entry.FullLoads++;
+                return entry.Latest;
+            }
+        }
+    }
+
+    internal static ReviewDecisionIndexDiagnostics GetLatestIndexDiagnostics(
+        string workspaceRoot,
+        string project)
+    {
+        var entry = EntryFor(DecisionsFile(workspaceRoot, project));
+        lock (entry.Gate)
+        {
+            return new ReviewDecisionIndexDiagnostics(
+                entry.FullLoads,
+                entry.IncrementalLoads,
+                entry.CacheHits);
+        }
+    }
+
+    private static LatestIndexEntry EntryFor(string path)
+        => LatestIndexes.GetOrAdd(Path.GetFullPath(path), static _ => new LatestIndexEntry());
+
+    private static bool TryOpenJournal(string path, out FileStream? stream)
+    {
+        try
+        {
+            stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 4096,
+                FileOptions.SequentialScan);
+            return true;
+        }
+        catch (FileNotFoundException)
+        {
+            stream = null;
+            return false;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            stream = null;
+            return false;
+        }
+    }
+
+    private static bool CanApplyAsAppend(
+        JournalSnapshot cached,
+        JournalSnapshot current,
+        FileStream stream)
+    {
+        if (current.Length <= cached.Length) return false;
+        if (current.CreationTimeUtc != cached.CreationTimeUtc) return false;
+
+        // LastWriteTime necessarily changes for an append. Validate the bytes
+        // that formed the previous snapshot instead. A rotation, truncation,
+        // or external rewrite changes this distributed fingerprint and forces
+        // a full rebuild.
+        var previousContentFingerprint = ComputeFingerprint(stream, cached.Length);
+        return string.Equals(
+            previousContentFingerprint,
+            cached.Fingerprint,
+            StringComparison.Ordinal);
+    }
+
+    private static ImmutableDictionary<string, ReviewDecisionRecord> ParseRange(
+        FileStream stream,
+        long startOffset,
+        ImmutableDictionary<string, ReviewDecisionRecord> seed)
+    {
+        stream.Position = startOffset;
+        var latest = seed.ToBuilder();
+        using var reader = new StreamReader(
+            stream,
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false),
+            detectEncodingFromByteOrderMarks: startOffset == 0,
+            bufferSize: 64 * 1024,
+            leaveOpen: true);
+        while (reader.ReadLine() is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            try
+            {
+                var record = JsonSerializer.Deserialize<ReviewDecisionRecord>(line, Json);
+                if (record != null && !string.IsNullOrEmpty(record.JobId))
+                    latest[record.JobId] = record;
+            }
+            catch (JsonException __ex)
+            {
+                SilentCatch.Note(
+                    __ex,
+                    "ReviewDecisionRecord latest index: skip malformed lines; the file is append-only");
+            }
+        }
+        return latest.ToImmutable();
+    }
+
+    private static JournalSnapshot CaptureSnapshot(FileStream stream, string path, long length)
+        => new(
+            Length: length,
+            CreationTimeUtc: File.GetCreationTimeUtc(path),
+            LastWriteTimeUtc: File.GetLastWriteTimeUtc(path),
+            Fingerprint: ComputeFingerprint(stream, length));
+
+    private static string ComputeFingerprint(FileStream stream, long length)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        Span<byte> lengthBytes = stackalloc byte[sizeof(long)];
+        BitConverter.TryWriteBytes(lengthBytes, length);
+        hash.AppendData(lengthBytes);
+
+        if (length == 0) return Convert.ToHexString(hash.GetHashAndReset());
+
+        var sample = new byte[FingerprintSampleSize];
+        var sampleCount = length <= FingerprintSampleSize
+            ? 1
+            : FingerprintSampleCount;
+        for (var i = 0; i < sampleCount; i++)
+        {
+            var maxOffset = Math.Max(0, length - FingerprintSampleSize);
+            var offset = sampleCount == 1
+                ? 0
+                : maxOffset * i / (sampleCount - 1);
+            stream.Position = offset;
+            var wanted = (int)Math.Min(FingerprintSampleSize, length - offset);
+            var read = 0;
+            while (read < wanted)
+            {
+                var count = stream.Read(sample, read, wanted - read);
+                if (count == 0) break;
+                read += count;
+            }
+            hash.AppendData(sample.AsSpan(0, read));
+        }
+
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    private sealed class LatestIndexEntry
+    {
+        internal readonly object Gate = new();
+        internal ImmutableDictionary<string, ReviewDecisionRecord> Latest =
+            ImmutableDictionary.Create<string, ReviewDecisionRecord>(StringComparer.Ordinal);
+        internal JournalSnapshot Snapshot;
+        internal bool Exists;
+        internal bool Initialized;
+        internal long FullLoads;
+        internal long IncrementalLoads;
+        internal long CacheHits;
+    }
+
+    private readonly record struct JournalSnapshot(
+        long Length,
+        DateTime CreationTimeUtc,
+        DateTime LastWriteTimeUtc,
+        string Fingerprint);
 }
+
+internal readonly record struct ReviewDecisionIndexDiagnostics(
+    long FullLoads,
+    long IncrementalLoads,
+    long CacheHits);

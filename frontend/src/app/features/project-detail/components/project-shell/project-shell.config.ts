@@ -17,6 +17,7 @@ export type ProjectRailKey =
   | 'visual-evidence'
   | 'security'
   | 'architecture'
+  | 'project-graph'
   | 'drift'
   | 'uxui'
   | 'test-quality'
@@ -200,6 +201,16 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     empty: 'Architecture placeholder. ADR list and high-level map land in the architecture slice.',
     icon: '⊞',
     railIcon: 'layout',
+  },
+  {
+    key: 'project-graph',
+    group: 'context',
+    label: 'Project Graph',
+    panelTitle: 'Project Graph',
+    description: 'Read-only component inventory from solution, project, package, Angular workspace, and workflow manifests',
+    empty: 'No repository graph is available for this project.',
+    icon: '⌘',
+    railIcon: 'branch',
   },
   {
     key: 'wiki',

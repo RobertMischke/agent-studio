@@ -5,6 +5,7 @@ import { TaskService } from '../../../../services/task.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { GlobalOrchestratorCardComponent } from '../global-orchestrator-card/global-orchestrator-card';
 import { LoadDistributionComponent } from '../load-distribution/load-distribution.component';
+import { taskNavigationHref } from '../../../task-detail/state/task-url';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
@@ -152,7 +153,12 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
 
   navigateToTask(entry: OrchestratorLogEntry): void {
     if (!entry.jobId || !entry.watchPath) return;
-    window.location.assign(`?job=${encodeURIComponent(entry.jobId)}&watchPath=${encodeURIComponent(entry.watchPath)}`);
+    this.jobService.getDetail(entry.jobId, entry.watchPath).subscribe({
+      next: (detail) => {
+        const href = taskNavigationHref(detail.info);
+        if (href) window.location.assign(href);
+      },
+    });
   }
 
   isSelected(entry: OrchestratorLogEntry): boolean {

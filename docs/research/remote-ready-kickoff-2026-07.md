@@ -2,7 +2,10 @@
 
 **Status.** **Committed — remote execution is a major goal** since 2026-07-07
 (**ADR-0059**, [adr-archive.md](../architecture/decisions/adr-archive.md)).
-This document is the plan of record and the working log for the theme.
+This document is the historical phase plan and working log for the theme. The
+canonical current ownership, lifecycle, security, and component-organization
+target is
+[`distributed-agent-studio-target-architecture.md`](../concepts/distributed-agent-studio-target-architecture.md).
 **Phase 0 and Phase 1 are complete (2026-07-07)** — see "Phase 1 findings"
 below; next up is Phase 2 (central URL + auth), gated on the security-overview
 rewrite and D1.

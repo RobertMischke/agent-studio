@@ -57,6 +57,7 @@
   </section>
 
   <div class="wpulse__grid">
+    <app-workbench-inbox [catalogue]="pulse()?.workbenches ?? null" (openWorkbench)="openWorkbench.emit($event)" />
     <article class="wpulse__panel" data-testid="project-wiki-pulse-warnings">
       <header class="wpulse__panel-head">
         <app-studio-icon name="warn" [size]="13"></app-studio-icon>

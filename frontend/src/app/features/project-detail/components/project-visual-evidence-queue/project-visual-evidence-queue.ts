@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal } from '@angular/core';
+import { timeout } from 'rxjs';
 import type { ProjectVisualEvidenceItem, ProjectVisualEvidenceQueue } from '../../../../models/project-overview.model';
 import { TaskService } from '../../../../services/task.service';
 
@@ -18,6 +19,8 @@ export class ProjectVisualEvidenceQueueComponent {
   readonly loading = signal(true);
   readonly error = signal(false);
   readonly acknowledging = signal<ReadonlySet<string>>(new Set());
+  private loadGeneration = 0;
+  private queueProject: string | null = null;
 
   constructor() {
     effect(() => {
@@ -28,16 +31,21 @@ export class ProjectVisualEvidenceQueueComponent {
 
   load(project = this.projectName()): void {
     if (!project) return;
+    const generation = ++this.loadGeneration;
+    if (project !== this.queueProject) this.queue.set(null);
     this.loading.set(true);
     this.error.set(false);
-    this.tasks.getProjectVisualEvidence(project).subscribe({
+    this.tasks.getProjectVisualEvidence(project, this.refreshGeneration() > 0).pipe(
+      timeout({ first: 15_000 }),
+    ).subscribe({
       next: queue => {
-        if (project !== this.projectName()) return;
+        if (generation !== this.loadGeneration || project !== this.projectName()) return;
+        this.queueProject = project;
         this.queue.set(queue);
         this.loading.set(false);
       },
       error: () => {
-        if (project !== this.projectName()) return;
+        if (generation !== this.loadGeneration || project !== this.projectName()) return;
         this.error.set(true);
         this.loading.set(false);
       },
