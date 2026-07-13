@@ -60,12 +60,13 @@ internal static class ReadOnlyGitRefFingerprint
             metadata.Common,
             Path.Combine(metadata.Common, "packed-refs"));
 
-        // Loose version tags are created/replaced atomically. Directory metadata
-        // detects those normal Git updates without recursively enumerating every
-        // tag on a cache hit. Packed tags are covered by packed-refs above.
+        // Loose version tags are created/replaced atomically. Hash directory
+        // metadata recursively (never tag-file contents), so a tag under an
+        // existing namespace such as refs/tags/v1/* is observed cheaply. Packed
+        // tags are covered by packed-refs above.
         if (includeTags)
         {
-            reliable &= AppendDirectoryMetadata(
+            reliable &= AppendDirectoryTreeMetadata(
                 hash,
                 metadata.Common,
                 Path.Combine(metadata.Common, "refs", "tags"));
@@ -129,6 +130,9 @@ internal static class ReadOnlyGitRefFingerprint
             const string originPrefix = "refs/remotes/origin/";
             if (target.StartsWith(originPrefix, StringComparison.Ordinal))
                 AddBranchPaths(commonDir, target[originPrefix.Length..], paths);
+            const string localPrefix = "refs/heads/";
+            if (target.StartsWith(localPrefix, StringComparison.Ordinal))
+                AddBranchPaths(commonDir, target[localPrefix.Length..], paths);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -240,6 +244,37 @@ internal static class ReadOnlyGitRefFingerprint
         {
             Append(hash, "unreadable");
             SilentCatch.Note(ex, "ReadOnlyGitRefFingerprint: directory metadata read failed");
+            return false;
+        }
+    }
+
+    private static bool AppendDirectoryTreeMetadata(
+        IncrementalHash hash,
+        string commonDir,
+        string root)
+    {
+        if (!AppendDirectoryMetadata(hash, commonDir, root)) return false;
+        if (!Directory.Exists(root)) return true;
+
+        try
+        {
+            var options = new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                AttributesToSkip = FileAttributes.ReparsePoint,
+                IgnoreInaccessible = false,
+            };
+            var directories = Directory.EnumerateDirectories(root, "*", options)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
+            var reliable = true;
+            foreach (var directory in directories)
+                reliable &= AppendDirectoryMetadata(hash, commonDir, directory);
+            return reliable;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Append(hash, "tag-directories-unreadable");
+            SilentCatch.Note(ex, "ReadOnlyGitRefFingerprint: tag directory enumeration failed");
             return false;
         }
     }

@@ -93,6 +93,38 @@ public sealed class ReadOnlyGitRefFingerprintTests : IDisposable
         Assert.NotEqual(before.Value, after.Value);
     }
 
+    [Fact]
+    public void Capture_HeadFallbackTracksCorrespondingOriginMirror()
+    {
+        Git("branch", "trunk", "main");
+        Git("checkout", "-q", "develop");
+        File.WriteAllText(Path.Combine(_root, "develop-only.txt"), "change");
+        Git("add", "-A");
+        Git("commit", "-q", "-m", "develop-only change");
+        Git("checkout", "-q", "trunk");
+        Git("update-ref", "refs/remotes/origin/trunk", "main");
+        var before = ReadOnlyGitRefFingerprint.Capture(_root, ["develop", "main"]);
+
+        Git("update-ref", "refs/remotes/origin/trunk", "develop");
+
+        var after = ReadOnlyGitRefFingerprint.Capture(_root, ["develop", "main"]);
+        Assert.NotEqual(before, after);
+    }
+
+    [Fact]
+    public void Capture_NestedLooseTagChangeUsesDirectoryMetadata()
+    {
+        Git("tag", "v1/one");
+        var before = ReadOnlyGitRefFingerprint.Capture(
+            _root, ["develop", "main"], includeTags: true);
+
+        Git("tag", "v1/two");
+
+        var after = ReadOnlyGitRefFingerprint.Capture(
+            _root, ["develop", "main"], includeTags: true);
+        Assert.NotEqual(before, after);
+    }
+
     private void Git(params string[] args)
     {
         var start = new ProcessStartInfo

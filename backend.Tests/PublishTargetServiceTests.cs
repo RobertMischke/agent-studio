@@ -244,13 +244,13 @@ public class PublishTargetServiceTests : IDisposable
     {
         var (repoRoot, watchPath) = SetupRepo();
         WriteWorkflow(repoRoot, "release.yml", ReleaseTriggerOnlyWorkflow);
-        WriteFile(repoRoot, "src/Runner/Runner.csproj", PackableCsproj("Pkg"));
+        WriteFile(repoRoot, "src/Runner.v1/Runner.csproj", PackableCsproj("Pkg"));
         CommitAll(repoRoot, "seed");
         var service = BuildService(repoRoot, watchPath);
 
         Assert.Single(service.GetProjectPublishStatus("Demo").Targets);
         Directory.Move(
-            Path.Combine(repoRoot, "src", "Runner"),
+            Path.Combine(repoRoot, "src", "Runner.v1"),
             Path.Combine(repoRoot, "src", "obj"));
 
         Assert.True(SpinWait.SpinUntil(
@@ -260,17 +260,18 @@ public class PublishTargetServiceTests : IDisposable
     }
 
     [Fact]
-    public void Derive_UnrelatedSourceChangeDoesNotInvalidatePublishInputs()
+    public void Derive_UnrelatedSourceContentChangeDoesNotInvalidatePublishInputs()
     {
         var (repoRoot, watchPath) = SetupRepo();
         WriteWorkflow(repoRoot, "release.yml", NuGetReleaseWorkflow);
         WriteFile(repoRoot, "src/Runner/Runner.csproj", PackableCsproj("Pkg"));
+        WriteFile(repoRoot, "src/Runner/Feature.cs", "// committed source");
         CommitAll(repoRoot, "seed");
         var service = BuildService(repoRoot, watchPath);
 
         service.GetProjectPublishStatus("Demo");
         Assert.Equal(1, service.ComputationCount);
-        WriteFile(repoRoot, "src/Runner/Feature.cs", "// uncommitted source");
+        WriteFile(repoRoot, "src/Runner/Feature.cs", "// uncommitted source edit");
 
         Assert.False(SpinWait.SpinUntil(() =>
         {
