@@ -69,9 +69,9 @@ public static class ProjectDocsEndpoints
         // Repository-owned style-guide family. The same applicability result
         // is consumed by intake prompt enrichment, so the Wiki never advertises
         // a guide that the coding run cannot discover.
-        app.MapGet("/api/projects/{projectName}/style-guides", (string projectName, ProjectStyleGuideService guides) =>
+        app.MapGet("/api/projects/{projectName}/style-guides", (string projectName, ProjectStyleGuideService guides, bool refresh = false) =>
         {
-            var catalogue = guides.GetCatalogue(projectName);
+            var catalogue = guides.GetCatalogue(projectName, refresh);
             return catalogue == null
                 ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
                 : Results.Ok(catalogue);

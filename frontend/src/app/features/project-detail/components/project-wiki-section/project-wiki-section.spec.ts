@@ -98,9 +98,12 @@ const PULSE: WikiPulse = {
 };
 
 const STYLE_GUIDES: ProjectStyleGuideCatalogue = {
-  projectName: 'Demo',
-  repositoryRoot: '/repo',
-  technologies: ['angular', 'dotnet', 'scss', 'typescript'],
+  projectKey: 'PROJ-0042',
+  projectDisplayName: 'Demo',
+  technologies: [
+    { key: 'angular', displayLabel: 'Angular' },
+    { key: 'dotnet', displayLabel: '.NET' },
+  ],
   guides: [
     {
       id: 'angular-components',
@@ -110,6 +113,12 @@ const STYLE_GUIDES: ProjectStyleGuideCatalogue = {
       promptSummary: 'Use OnPush and stable tracking.',
       version: '1',
       appliesTo: { projects: ['*'], technologies: ['angular'], taskAreas: ['frontend'] },
+      match: {
+        projectWildcard: true,
+        projectSelector: '*',
+        technologyWildcard: false,
+        technologies: [{ key: 'angular', displayLabel: 'Angular' }],
+      },
     },
     {
       id: 'dotnet-backend',
@@ -119,9 +128,18 @@ const STYLE_GUIDES: ProjectStyleGuideCatalogue = {
       promptSummary: 'Use pure policy tests.',
       version: '1',
       appliesTo: { projects: ['*'], technologies: ['dotnet'], taskAreas: ['backend'] },
+      match: {
+        projectWildcard: true,
+        projectSelector: '*',
+        technologyWildcard: false,
+        technologies: [{ key: 'dotnet', displayLabel: '.NET' }],
+      },
     },
   ],
   warnings: [],
+  snapshotId: '0123456789abcdef',
+  capturedAtUtc: '2026-07-14T08:00:00Z',
+  refreshAfterUtc: '2026-07-14T08:05:00Z',
 };
 
 async function setup(tree: WikiTree = TREE) {
@@ -289,7 +307,7 @@ describe('ProjectWikiSectionComponent', () => {
 
     const panel = el(fixture).querySelector('[data-testid="project-wiki-style-guides"]');
     expect(panel?.textContent).toContain('Engineering style guides');
-    expect(panel?.textContent).toContain('angular');
+    expect(panel?.textContent).toContain('Angular');
     expect(panel?.textContent).toContain('.NET backend guide');
     expect(panel?.textContent).toContain('Prompt context · v1');
 

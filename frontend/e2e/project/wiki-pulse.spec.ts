@@ -112,24 +112,38 @@ const GRADING_STATUS_DONE = {
   },
 };
 const STYLE_GUIDES_FIXTURE = {
-  projectName: 'demo',
-  repositoryRoot: '/throwaway/demo',
-  technologies: ['angular', 'dotnet', 'typescript'],
+  projectKey: 'PROJ-0042',
+  projectDisplayName: 'Demo',
+  technologies: [
+    { key: 'angular', displayLabel: 'Angular' },
+    { key: 'dotnet', displayLabel: '.NET' },
+  ],
   guides: [
     {
       id: 'angular-components', title: 'Angular component guide', relPath: 'quality/angular-components.md',
       summary: 'Rendering, identity, and token rules for Angular UI work.',
       promptSummary: 'Use standalone OnPush components and semantic tokens.', version: '1',
       appliesTo: { projects: ['*'], technologies: ['angular'], taskAreas: ['frontend'] },
+      match: {
+        projectWildcard: true, projectSelector: '*', technologyWildcard: false,
+        technologies: [{ key: 'angular', displayLabel: 'Angular' }],
+      },
     },
     {
       id: 'dotnet-backend', title: '.NET backend guide', relPath: 'quality/dotnet-backend.md',
       summary: 'Feature ownership, pure policy, and side-effect ordering for .NET work.',
       promptSummary: 'Keep feature flow explicit and policy pure.', version: '1',
       appliesTo: { projects: ['*'], technologies: ['dotnet'], taskAreas: ['backend'] },
+      match: {
+        projectWildcard: true, projectSelector: '*', technologyWildcard: false,
+        technologies: [{ key: 'dotnet', displayLabel: '.NET' }],
+      },
     },
   ],
   warnings: [],
+  snapshotId: '0123456789abcdef',
+  capturedAtUtc: '2026-07-14T08:00:00Z',
+  refreshAfterUtc: '2026-07-14T08:05:00Z',
 };
 
 /** Mocks the grading trigger's seed endpoints so the surface is deterministic. */
@@ -278,6 +292,8 @@ test.describe('Wiki Pulse landing view (PULSE-2)', () => {
     await expect(panel).toContainText('Angular component guide');
     await expect(panel).toContainText('.NET backend guide');
     await expect(panel).toContainText('Prompt context · v1');
+    await expect(panel).toContainText('Snapshot 01234567');
+    await expect(panel).toContainText('Matches all projects');
     await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'light');
     await panel.screenshot({ path: path.join(SCREENSHOT_DIR, 'style-guides-light--mocked.png') });
 

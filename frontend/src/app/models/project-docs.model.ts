@@ -439,6 +439,18 @@ export interface ProjectStyleGuideAppliesTo {
   taskAreas: string[];
 }
 
+export interface ProjectTechnology {
+  key: string;
+  displayLabel: string;
+}
+
+export interface ProjectStyleGuideMatch {
+  projectWildcard: boolean;
+  projectSelector: string;
+  technologyWildcard: boolean;
+  technologies: ProjectTechnology[];
+}
+
 export interface ProjectStyleGuide {
   id: string;
   title: string;
@@ -447,12 +459,16 @@ export interface ProjectStyleGuide {
   promptSummary: string;
   version: string;
   appliesTo: ProjectStyleGuideAppliesTo;
+  match: ProjectStyleGuideMatch;
 }
 
 export interface ProjectStyleGuideCatalogue {
-  projectName: string;
-  repositoryRoot: string;
-  technologies: string[];
+  projectKey: string;
+  projectDisplayName: string;
+  technologies: ProjectTechnology[];
   guides: ProjectStyleGuide[];
   warnings: { relPath: string; message: string }[];
+  snapshotId: string;
+  capturedAtUtc: string;
+  refreshAfterUtc: string;
 }

@@ -77,7 +77,10 @@ public sealed class IntakeRunner
 {
     public const string IntakeParticipantPrefix = "intake:";
     public const string EnrichedContextRelativePath = "intake/enriched-context.md";
-    private const string EnrichmentSelector = "constraint-selector-v2-style-guides";
+    public const int MaxEnrichmentContextCharacters = 8_000;
+    public const int MaxEnrichmentEstimatedTokens = 2_000;
+    private const int MaxDetailedOmissions = 16;
+    private const string EnrichmentSelector = "constraint-selector-v3-budgeted-style-guides";
 
     private readonly TaskScannerService _scanner;
     private readonly TaskMutationService _mutations;
@@ -116,46 +119,101 @@ public sealed class IntakeRunner
     public static IntakeEnrichmentManifest BuildEnrichmentManifest(
         TaskInfo target,
         string? promptMarkdown,
-        IReadOnlyList<ProjectStyleGuide>? applicableGuides = null)
+        IReadOnlyList<ProjectStyleGuide>? applicableGuides = null,
+        string? styleGuideSnapshotId = null)
     {
         var areas = DetectTaskAreas(target, promptMarkdown);
         var areaSet = new HashSet<string>(areas, StringComparer.OrdinalIgnoreCase);
-        var selected = new List<IntakeConstraintSelection>();
+        var candidates = new List<IntakeConstraintSelection>();
 
         foreach (var rule in ConstraintRules)
         {
             if (rule.Applies(areaSet))
-                selected.Add(CloneConstraint(rule.Constraint));
+                candidates.Add(CloneConstraint(rule.Constraint));
         }
 
         if (string.Equals(TaskModes.Normalize(target.Mode), TaskModes.Coding, StringComparison.Ordinal)
             && applicableGuides != null)
         {
-            foreach (var guide in applicableGuides)
+            foreach (var guide in applicableGuides
+                         .OrderBy(candidate => candidate.Id, StringComparer.Ordinal)
+                         .ThenBy(candidate => candidate.RelPath, StringComparer.Ordinal))
             {
-                var matchedAreas = guide.AppliesTo.TaskAreas
-                    .Intersect(areaSet, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                var areaWildcard = guide.AppliesTo.TaskAreas.Contains("*", StringComparer.OrdinalIgnoreCase);
+                var matchedAreas = areaWildcard
+                    ? (areas.Count > 0 ? areas.ToList() : ["general"])
+                    : guide.AppliesTo.TaskAreas.Intersect(areaSet, StringComparer.OrdinalIgnoreCase).ToList();
                 if (matchedAreas.Count == 0)
                     continue;
-                selected.Add(new IntakeConstraintSelection
+                candidates.Add(new IntakeConstraintSelection
                 {
                     Id = $"style-guide:{guide.Id}",
                     Title = guide.Title,
                     Source = $"docs/{guide.RelPath}",
-                    Areas = guide.AppliesTo.TaskAreas.ToList(),
+                    Areas = matchedAreas,
                     Text = $"Style-guide version {guide.Version}; matched task area(s): {string.Join(", ", matchedAreas)}. {guide.PromptSummary}"
                 });
             }
         }
 
-        return new IntakeEnrichmentManifest
+        return ApplyEnrichmentBudget(areas, candidates, styleGuideSnapshotId);
+    }
+
+    private static IntakeEnrichmentManifest ApplyEnrichmentBudget(
+        IReadOnlyList<string> areas,
+        IReadOnlyList<IntakeConstraintSelection> candidates,
+        string? styleGuideSnapshotId)
+    {
+        var selected = candidates.ToList();
+        var omitted = new List<IntakeConstraintOmission>();
+        var detailLimit = MaxDetailedOmissions;
+
+        while (true)
         {
-            ArtifactPath = EnrichedContextRelativePath,
-            Selector = EnrichmentSelector,
-            Areas = areas.ToList(),
-            Constraints = selected
-        };
+            var detailed = omitted.Take(detailLimit).ToList();
+            var manifest = new IntakeEnrichmentManifest
+            {
+                ArtifactPath = EnrichedContextRelativePath,
+                Selector = EnrichmentSelector,
+                Areas = areas.ToList(),
+                StyleGuideSnapshotId = styleGuideSnapshotId,
+                Constraints = selected.ToList(),
+                CharacterBudget = MaxEnrichmentContextCharacters,
+                EstimatedTokenBudget = MaxEnrichmentEstimatedTokens,
+                Omissions = detailed,
+                AdditionalOmissionCount = omitted.Count - detailed.Count
+            };
+            var rendered = RenderEnrichedContextMarkdown(manifest);
+            if (rendered.Length <= MaxEnrichmentContextCharacters)
+            {
+                return manifest with
+                {
+                    UsedCharacters = rendered.Length,
+                    EstimatedTokens = (rendered.Length + 3) / 4
+                };
+            }
+
+            if (selected.Count > 0)
+            {
+                var removed = selected[^1];
+                selected.RemoveAt(selected.Count - 1);
+                omitted.Insert(0, new IntakeConstraintOmission
+                {
+                    Id = removed.Id,
+                    Reason = "context-character-budget",
+                    EstimatedCharacters = RenderConstraintMarkdown(removed).Length
+                });
+                continue;
+            }
+
+            if (detailLimit > 0)
+            {
+                detailLimit--;
+                continue;
+            }
+
+            throw new InvalidOperationException("The fixed intake-enrichment header exceeds its hard context budget.");
+        }
     }
 
     public static IReadOnlyList<string> DetectTaskAreas(TaskInfo target, string? promptMarkdown)
@@ -185,24 +243,47 @@ public sealed class IntakeRunner
         sb.AppendLine($"- Selector: `{(string.IsNullOrWhiteSpace(manifest.Selector) ? EnrichmentSelector : manifest.Selector)}`");
         sb.AppendLine($"- Detected areas: `{(manifest.Areas.Count == 0 ? "general" : string.Join("`, `", manifest.Areas))}`");
         sb.AppendLine($"- Audit artifact: `{(string.IsNullOrWhiteSpace(manifest.ArtifactPath) ? EnrichedContextRelativePath : manifest.ArtifactPath)}`");
+        if (!string.IsNullOrWhiteSpace(manifest.StyleGuideSnapshotId))
+            sb.AppendLine($"- Style-guide snapshot: `{manifest.StyleGuideSnapshotId}`");
+        sb.AppendLine($"- Hard budget: `{(manifest.CharacterBudget > 0 ? manifest.CharacterBudget : MaxEnrichmentContextCharacters)} characters` / `~{(manifest.EstimatedTokenBudget > 0 ? manifest.EstimatedTokenBudget : MaxEnrichmentEstimatedTokens)} tokens`");
         sb.AppendLine();
 
         if (manifest.Constraints.Count == 0)
         {
             sb.AppendLine("No task-specific constraints were selected.");
-            return sb.ToString().TrimEnd();
+        }
+        else
+        {
+            sb.AppendLine("### Injected constraints");
+            sb.AppendLine();
+            foreach (var constraint in manifest.Constraints)
+                sb.Append(RenderConstraintMarkdown(constraint));
         }
 
-        sb.AppendLine("### Injected constraints");
-        sb.AppendLine();
-        foreach (var c in manifest.Constraints)
+        if (manifest.Omissions.Count > 0 || manifest.AdditionalOmissionCount > 0)
         {
-            sb.AppendLine($"- **{c.Title}** (`{c.Id}`)");
-            sb.AppendLine($"  Source: `{c.Source}`");
-            sb.AppendLine($"  {c.Text}");
+            sb.AppendLine();
+            sb.AppendLine("### Omitted relevant constraints");
+            sb.AppendLine();
+            sb.AppendLine("These constraints matched the task but were not injected because the hard context budget was exhausted:");
+            foreach (var omission in manifest.Omissions)
+            {
+                sb.AppendLine($"- `{omission.Id}`: {omission.Reason} (~{omission.EstimatedCharacters} characters)");
+            }
+            if (manifest.AdditionalOmissionCount > 0)
+                sb.AppendLine($"- `{manifest.AdditionalOmissionCount}` additional omission(s) are summarized by count.");
         }
 
         return sb.ToString().TrimEnd();
+    }
+
+    private static string RenderConstraintMarkdown(IntakeConstraintSelection constraint)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"- **{constraint.Title}** (`{constraint.Id}`)");
+        sb.AppendLine($"  Source: `{constraint.Source}`");
+        sb.AppendLine($"  {constraint.Text}");
+        return sb.ToString();
     }
 
     /// <summary>
@@ -357,8 +438,12 @@ public sealed class IntakeRunner
         // Context-load: resolve references + prompt attachments against what is
         // actually available, so the verdict and sidecar carry the card's context.
         var context = BuildContextManifest(info, prompt, peers, ReadAttachmentFileNames(info.FolderPath));
-        var applicableGuides = _styleGuides?.GetCatalogue(info.ProjectName)?.Guides;
-        var enrichment = BuildEnrichmentManifest(info, prompt, applicableGuides);
+        var styleGuideCatalogue = _styleGuides?.GetCatalogue(info.ProjectName);
+        var enrichment = BuildEnrichmentManifest(
+            info,
+            prompt,
+            styleGuideCatalogue?.Guides,
+            styleGuideCatalogue?.SnapshotId);
         WriteEnrichedContextArtifact(info, enrichment);
         // Surface the context-load result in the run log: the manifest already
         // lands in lifecycle.json, but a structured line lets operators watching

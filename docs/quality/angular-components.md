@@ -4,7 +4,7 @@ title: Angular component guide
 version: 1
 summary: Rendering, identity, and token rules for Angular UI work.
 promptSummary: Use standalone OnPush components with signal-backed state; track repeated rows by stable identity; read semantic color and spacing tokens in both themes; never add decorative left accent lines; render comparable numeric metrics with tabular-nums.
-appliesTo: {"projects":["*"],"technologies":["angular","typescript","scss"],"taskAreas":["frontend"]}
+appliesTo: {"projects":["*"],"technologies":["angular"],"taskAreas":["frontend"]}
 ---
 
 # Angular component guide
