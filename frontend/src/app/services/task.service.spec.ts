@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TaskService, orchestratorContextChatSegment } from './task.service';
 import { ErrorDialogService } from './error-dialog.service';
 import { JobsHubClient, type JobsHubHandlers } from './jobs-hub-client.service';
+import type { TaskInfo } from '../models/task.model';
 
 class ErrorDialogServiceStub {
   show(): void { return undefined; }
@@ -109,8 +110,8 @@ describe('TaskService', () => {
     expect(hub.handlers?.reconnected).toBeTruthy();
     hub.handlers?.reconnected?.();
 
-    http.expectOne('/api/tasks').flush([]);
     http.expectOne('/api/tasks/grouped').flush(emptyGrouped);
+    http.expectNone('/api/tasks');
     http.expectOne('/api/runner/status').flush({
       projects: {
         demo: {
@@ -126,6 +127,31 @@ describe('TaskService', () => {
     expect(service.runnerStatus().projects['demo'].activeJobId).toBe('job-1');
     expect(service.runnerStatus().projects['demo'].mode).toBe('auto-continuous');
     service.stopLiveUpdates();
+  });
+
+  it('builds flat and grouped board state from one grouped request', () => {
+    const task = {
+      id: 'job-1',
+      taskKey: 'DEMO-1',
+      watchPath: 'C:/projects/demo/.orchestrator/jobs',
+      state: '4-auto-review',
+      title: 'Single snapshot',
+    } as TaskInfo;
+
+    service.refresh();
+
+    const grouped = {
+      ...emptyGrouped,
+      autoReview: [task],
+      review: [task],
+    };
+    http.expectOne('/api/tasks/grouped').flush(grouped);
+    http.expectNone('/api/tasks');
+    http.expectOne('/api/runner/status').flush({ projects: {} });
+
+    expect(service.grouped().autoReview).toEqual([task]);
+    expect(service.jobs()).toEqual([task]);
+    expect(service.loading()).toBe(false);
   });
 
   it('calls the file-source history endpoints with encoded paths and source params', () => {

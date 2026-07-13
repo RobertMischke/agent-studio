@@ -33,6 +33,7 @@ public sealed class TaskIndexCache
     private readonly TaskScannerService _scanner;
     private readonly ILogger<TaskIndexCache> _logger;
     private readonly TimeSpan _safetyTtl;
+    private readonly Func<List<TaskInfo>> _scanAllJobsRaw;
 
     // Cache slot: snapshot + when it was taken + whether a mutation/watcher
     // event marked it stale before the next read got there.
@@ -46,12 +47,13 @@ public sealed class TaskIndexCache
     private ImmutableList<TaskInfo> _archiveSnapshot = ImmutableList<TaskInfo>.Empty;
     private DateTime _snapshotAtUtc = DateTime.MinValue;
     private bool _dirty = true;
+    private bool _hasSnapshot;
 
-    // Single-flight: while one thread refreshes, others wait briefly for it to
-    // finish so that a post-Invalidate read always sees the fresh snapshot.
-    // A round counter lets waiters detect completion without holding a lock.
-    private int _refreshing;
-    private long _scanRound;
+    // Single-flight refresh ownership. Readers never spin: while a refresh is
+    // in progress they return the last good snapshot immediately. The only
+    // exception is cold start, where no snapshot exists yet; those callers
+    // await the same completion source without consuming CPU.
+    private TaskCompletionSource<bool>? _refreshCompletion;
 
     // Invalidation generation counter. Incremented on every Invalidate so the
     // refresher can detect "did a mutation land while my disk walk was in
@@ -70,13 +72,24 @@ public sealed class TaskIndexCache
     // a future debug endpoint without spinning up a profiler.
     public long Hits;
     public long Misses;
+    public long StaleHits;
     public long ExternalInvalidations;
     public long MutationInvalidations;
 
     public TaskIndexCache(TaskScannerService scanner, ILogger<TaskIndexCache> logger, IConfiguration config)
+        : this(scanner, logger, config, scanner.ScanAllJobsRaw)
+    {
+    }
+
+    internal TaskIndexCache(
+        TaskScannerService scanner,
+        ILogger<TaskIndexCache> logger,
+        IConfiguration config,
+        Func<List<TaskInfo>> scanAllJobsRaw)
     {
         _scanner = scanner;
         _logger = logger;
+        _scanAllJobsRaw = scanAllJobsRaw;
         var ttlSec = int.TryParse(config["TaskIndexCache:SafetyTtlSeconds"], out var v) ? v : 30;
         _safetyTtl = TimeSpan.FromSeconds(Math.Max(1, ttlSec));
     }
@@ -109,23 +122,17 @@ public sealed class TaskIndexCache
     /// <summary>
     /// Ensures both partitions (<see cref="_snapshot"/> + <see cref="_archiveSnapshot"/>)
     /// reflect a scan taken after the last <see cref="Invalidate"/> / safety-TTL
-    /// expiry. Single-flight: only one thread does the disk walk; concurrent
-    /// readers wait briefly for it so a post-Invalidate read always observes the
-    /// fresh snapshot (read-after-write guarantee).
+    /// expiry. Single-flight: only one thread does the disk walk. Concurrent
+    /// readers receive the last good snapshot instead of waiting or spinning;
+    /// cold-start readers share one non-spinning wait because no stale snapshot
+    /// exists yet.
     /// </summary>
     private void EnsureFresh()
     {
-        // Bounded retry: if a waiter wakes onto a racy in-flight snapshot
-        // (_dirty=true), it must re-run the refresh path so the mutation that
-        // triggered the invalidation is observable. Without the loop, a
-        // mutation that lands during an unrelated polling refresh leaves the
-        // very next reader (e.g. POST /attachments right after CreateJob)
-        // staring at the pre-mutation snapshot and 400-ing as "Job not found".
-        // 4 retries is plenty: a sustained write storm would still terminate
-        // the loop, and the worst-case wall time stays bounded at ~4 * 500 ms.
-        for (var attempt = 0; attempt < 4; attempt++)
+        while (true)
         {
-            // Fast path: not dirty, within TTL.
+            TaskCompletionSource<bool>? refresh = null;
+            Task? coldStartRefresh = null;
             lock (_lock)
             {
                 if (!_dirty && DateTime.UtcNow - _snapshotAtUtc < _safetyTtl)
@@ -133,73 +140,79 @@ public sealed class TaskIndexCache
                     Interlocked.Increment(ref Hits);
                     return;
                 }
+
+                if (_refreshCompletion != null)
+                {
+                    if (_hasSnapshot)
+                    {
+                        Interlocked.Increment(ref Hits);
+                        Interlocked.Increment(ref StaleHits);
+                        return;
+                    }
+                    coldStartRefresh = _refreshCompletion.Task;
+                }
+                else
+                {
+                    refresh = new TaskCompletionSource<bool>(
+                        TaskCreationOptions.RunContinuationsAsynchronously);
+                    _refreshCompletion = refresh;
+                }
             }
 
-            // Single-flight: only one thread does the disk walk. Concurrent readers
-            // wait up to 500 ms for it to finish so that a post-Invalidate read
-            // always sees the fresh snapshot (read-after-write guarantee). Disk
-            // rescans typically finish in <50 ms; the timeout is a safety valve.
-            var roundBefore = Volatile.Read(ref _scanRound);
-            if (Interlocked.CompareExchange(ref _refreshing, 1, 0) != 0)
+            if (coldStartRefresh != null)
             {
-                SpinWait.SpinUntil(() => Volatile.Read(ref _scanRound) != roundBefore, 500);
-                lock (_lock)
-                {
-                    // If the in-flight refresh resolved everything, return.
-                    // If a mutation landed during it, _dirty is still true and
-                    // the snapshot the refresher installed is racy w.r.t. that
-                    // mutation - loop to drive a fresh scan ourselves.
-                    if (!_dirty) return;
-                }
+                coldStartRefresh.GetAwaiter().GetResult();
                 continue;
             }
-            try
-            {
-                // Capture the invalidation generation BEFORE the disk walk. Any
-                // Invalidate() that lands while ScanAllJobsRaw is in flight bumps
-                // the counter, so when we take the lock below we can tell whether
-                // our just-read snapshot is racy. Without this, a mutation that
-                // happens during the disk walk gets stomped by `_dirty = false`
-                // and the cache serves stale data for the rest of the safety TTL.
-                var genBefore = Volatile.Read(ref _invalidationGen);
-                // One walk, two partitions: board (every live lane) vs the
-                // terminal 7-archive lane. Splitting here keeps the board reads
-                // archive-free at zero extra disk cost and gives the paged
-                // archive endpoint a ready snapshot.
-                var fresh = _scanner.ScanAllJobsRaw();
-                var board = new List<TaskInfo>(fresh.Count);
-                var archive = new List<TaskInfo>();
-                foreach (var job in fresh)
-                {
-                    if (string.Equals(job.State, TaskStates.Archive, StringComparison.Ordinal))
-                        archive.Add(job);
-                    else
-                        board.Add(job);
-                }
-                lock (_lock)
-                {
-                    _snapshot = board.ToImmutableList();
-                    _archiveSnapshot = archive.ToImmutableList();
-                    _snapshotAtUtc = DateTime.UtcNow;
-                    // If no invalidation landed during the disk walk, the snapshot
-                    // is authoritative. If one did, leave _dirty=true so the next
-                    // reader rescans and observes the post-mutation state.
-                    if (Volatile.Read(ref _invalidationGen) == genBefore)
-                    {
-                        _dirty = false;
-                    }
-                    Interlocked.Increment(ref Misses);
-                    return;
-                }
-            }
-            finally
-            {
-                Interlocked.Increment(ref _scanRound);
-                Interlocked.Exchange(ref _refreshing, 0);
-            }
+
+            if (refresh == null) continue;
+            Refresh(refresh);
+            return;
         }
-        // Fallthrough: bounded retries exhausted under a storm. Leave whatever
-        // we have in place rather than blocking forever; the next read rescans.
+    }
+
+    private void Refresh(TaskCompletionSource<bool> completion)
+    {
+        try
+        {
+            // Every invalidation during this disk walk advances the generation.
+            // They collapse into one dirty bit, so after this single-flight
+            // finishes at most one follow-up refresh can be admitted.
+            var genBefore = Volatile.Read(ref _invalidationGen);
+            var fresh = _scanAllJobsRaw();
+            var board = new List<TaskInfo>(fresh.Count);
+            var archive = new List<TaskInfo>();
+            foreach (var job in fresh)
+            {
+                if (string.Equals(job.State, TaskStates.Archive, StringComparison.Ordinal))
+                    archive.Add(job);
+                else
+                    board.Add(job);
+            }
+
+            lock (_lock)
+            {
+                _snapshot = board.ToImmutableList();
+                _archiveSnapshot = archive.ToImmutableList();
+                _snapshotAtUtc = DateTime.UtcNow;
+                _hasSnapshot = true;
+                _dirty = Volatile.Read(ref _invalidationGen) != genBefore;
+                if (ReferenceEquals(_refreshCompletion, completion))
+                    _refreshCompletion = null;
+                Interlocked.Increment(ref Misses);
+            }
+            completion.TrySetResult(true);
+        }
+        catch (Exception ex)
+        {
+            lock (_lock)
+            {
+                if (ReferenceEquals(_refreshCompletion, completion))
+                    _refreshCompletion = null;
+            }
+            completion.TrySetException(ex);
+            throw;
+        }
     }
 
     /// <summary>

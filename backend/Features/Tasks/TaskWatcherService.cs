@@ -1,4 +1,6 @@
-
+using System.Collections.Concurrent;
+using System.Text;
+using System.Text.Json;
 
 namespace AgentStudio.Tasks;
 
@@ -30,11 +32,22 @@ public class TaskWatcherService : BackgroundService
     private readonly ILogger<TaskWatcherService> _logger;
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly TimeSpan _debounce;
+    private readonly ConcurrentDictionary<string, string> _taskIndexSignatures = new(PathComparer);
     private DateTime? _startedAt;
     private int _configuredPathCount;
     private string? _lastError;
 
     public event Action<string>? OnJobChanged;
+    /// <summary>
+    /// Raw filesystem change stream for consumers that own their own narrow
+    /// filtering (for example conversation projection of cli-output.log).
+    /// Unlike <see cref="OnJobChanged"/>, this event never invalidates the
+    /// task index by itself.
+    /// </summary>
+    public event Action<string>? OnPathChanged;
+
+    private static StringComparer PathComparer =>
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     public TaskWatcherService(TaskScannerService scanner, ILogger<TaskWatcherService> logger, IConfiguration config)
     {
@@ -99,10 +112,10 @@ public class TaskWatcherService : BackgroundService
                 EnableRaisingEvents = true,
                 InternalBufferSize = 64 * 1024
             };
-            watcher.Changed += (_, e) => Debounce(e.FullPath);
-            watcher.Created += (_, e) => Debounce(e.FullPath);
-            watcher.Deleted += (_, e) => Debounce(e.FullPath);
-            watcher.Renamed += (_, e) => Debounce(e.FullPath);
+            watcher.Changed += (_, e) => HandleChange(entry.Path, e.FullPath, e.ChangeType);
+            watcher.Created += (_, e) => HandleChange(entry.Path, e.FullPath, e.ChangeType);
+            watcher.Deleted += (_, e) => HandleChange(entry.Path, e.FullPath, e.ChangeType);
+            watcher.Renamed += (_, e) => HandleChange(entry.Path, e.FullPath, e.ChangeType, e.OldFullPath);
             watcher.Error += (_, e) =>
             {
                 var error = e.GetException();
@@ -150,13 +163,26 @@ public class TaskWatcherService : BackgroundService
 
     private DateTime _lastEvent = DateTime.MinValue;
     private readonly Lock _lock = new();
+    private readonly Dictionary<string, DateTime> _lastNotifiedByTask = new(PathComparer);
+
+    private void HandleChange(
+        string watchPath,
+        string path,
+        WatcherChangeTypes changeType,
+        string? oldPath = null)
+    {
+        try { OnPathChanged?.Invoke(path); }
+        catch (Exception ex) { _logger.LogWarning(ex, "OnPathChanged subscriber threw for {Path}", path); }
+
+        if (!ShouldNotifyIndexChange(watchPath, path, changeType, oldPath)) return;
+        Debounce(path);
+    }
 
     /// <summary>
     /// Coalesces bursty FileSystemWatcher events into a single
-    /// <see cref="OnJobChanged"/> invocation per debounce window. Also
-    /// filters out paths that obviously don't represent a job-state change
-    /// (orchestrator log churn, attachment binary writes) so cache
-    /// invalidations don't fire on every CLI heartbeat.
+    /// <see cref="OnJobChanged"/> invocation per task and debounce window.
+    /// Filtering happens before this method so generated sidecars never enter
+    /// the task-index invalidation path.
     /// </summary>
     private void Debounce(string path)
     {
@@ -165,7 +191,11 @@ public class TaskWatcherService : BackgroundService
         lock (_lock)
         {
             var now = DateTime.UtcNow;
-            if (now - _lastEvent < _debounce) return;
+            var key = string.Equals(Path.GetFileName(path), "task.json", StringComparison.OrdinalIgnoreCase)
+                ? Path.GetDirectoryName(path) ?? path
+                : path;
+            if (_lastNotifiedByTask.TryGetValue(key, out var last) && now - last < _debounce) return;
+            _lastNotifiedByTask[key] = now;
             _lastEvent = now;
         }
 
@@ -180,32 +210,100 @@ public class TaskWatcherService : BackgroundService
     }
 
     /// <summary>
-    /// Returns true when the path obviously doesn't represent a job lane
-    /// change worth notifying about. Lives here so the noise filter is in
-    /// one place; downstream subscribers (TaskIndexCache, runner
-    /// reconciliation, SignalR push) all benefit from the same gate.
+    /// Decides whether a filesystem event can change a cached
+    /// <see cref="TaskInfo"/>. Only task.json content and task-folder
+    /// structural moves/deletes qualify. Generated sidecars, logs, results,
+    /// lifecycle output and index mirrors are intentionally excluded: API
+    /// writers invalidate synchronously, while genuinely external edits are
+    /// covered by the safety TTL.
+    ///
+    /// A task.json-only <c>lastProgressAt</c> heartbeat is also excluded after
+    /// its first observation. That field is crash-recovery metadata and is not
+    /// projected into <see cref="TaskInfo"/>; treating every heartbeat as a
+    /// board mutation caused a full workspace scan feedback loop.
     /// </summary>
-    private static bool IsNoiseyPath(string path)
+    internal bool ShouldNotifyIndexChange(
+        string watchPath,
+        string path,
+        WatcherChangeTypes changeType,
+        string? oldPath = null)
     {
-        if (string.IsNullOrEmpty(path)) return true;
-        // Orchestrator log files and chat attachments churn constantly during
-        // a run. The runner's active job stays in 3-progress for the whole
-        // run, so cache invalidation on every log line is pure waste.
-        var p = path.Replace('\\', '/');
-        if (p.Contains("/.orchestrator/")) return true;
-        if (p.Contains("/chat/")) return true;
-        if (p.Contains("/attachments/")) return true;
-        if (p.Contains("/results/")) return true;
-        // CLI streams write tool-calls.jsonl, cli-output.log, session-events.jsonl
-        // continuously. They live under <jobDir>/logs/ and never affect the
-        // lane / task.json fields the cache tracks.
-        if (p.Contains("/logs/")) return true;
-        // VS Code, ripgrep, and other tooling create temp files on the way
-        // to atomic writes. Ignore the obvious patterns.
-        var name = Path.GetFileName(path);
-        if (name.StartsWith('.') && (name.EndsWith(".tmp") || name.EndsWith(".swp"))) return true;
-        if (name.EndsWith("~")) return true;
+        if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(path)) return false;
+
+        if (string.Equals(Path.GetFileName(path), "task.json", StringComparison.OrdinalIgnoreCase))
+        {
+            if (changeType == WatcherChangeTypes.Deleted)
+            {
+                _taskIndexSignatures.TryRemove(path, out _);
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(oldPath)
+                && !string.Equals(oldPath, path, OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal))
+            {
+                _taskIndexSignatures.TryRemove(oldPath, out _);
+            }
+
+            var signature = ComputeTaskIndexSignature(path);
+            if (signature == null) return true; // partial/locked write: fail open
+            if (_taskIndexSignatures.TryGetValue(path, out var previous)
+                && string.Equals(previous, signature, StringComparison.Ordinal))
+                return false;
+            _taskIndexSignatures[path] = signature;
+            return true;
+        }
+
+        if (changeType is WatcherChangeTypes.Deleted or WatcherChangeTypes.Renamed)
+            return IsTaskFolderPath(watchPath, path)
+                   || (!string.IsNullOrWhiteSpace(oldPath) && IsTaskFolderPath(watchPath, oldPath));
+
         return false;
+    }
+
+    internal static string? ComputeTaskIndexSignature(string taskJsonPath)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(taskJsonPath));
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return null;
+            var signature = new StringBuilder();
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (string.Equals(property.Name, "lastProgressAt", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                signature.Append(property.Name.Length).Append(':').Append(property.Name)
+                    .Append('=').Append(property.Value.GetRawText()).Append(';');
+            }
+            return signature.ToString();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsTaskFolderPath(string watchPath, string path)
+    {
+        try
+        {
+            var relative = Path.GetRelativePath(watchPath, path);
+            if (relative == "." || Path.IsPathRooted(relative)) return false;
+            var parts = relative.Split(
+                [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Any(part => part == "..")) return false;
+
+            // Legacy: <root>/<lane>/<slug>. Flat: <root>/tasks/<bucket>/<key>.
+            return parts.Length == 2 && TaskStates.All.Contains(parts[0], StringComparer.Ordinal)
+                   || parts.Length == 3
+                   && string.Equals(parts[0], TaskStorageLayout.JobsDirName, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 }
 

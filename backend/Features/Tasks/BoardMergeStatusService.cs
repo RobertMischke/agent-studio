@@ -45,8 +45,7 @@ public sealed class BoardMergeStatusService
     /// </summary>
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(8);
 
-    private readonly ConcurrentDictionary<string, (DateTime At, RepoReachability Value)> _cache =
-        new(StringComparer.OrdinalIgnoreCase);
+    private readonly GenerationSingleFlightCache<RepoReachability> _cache = new();
 
     public BoardMergeStatusService(
         GitService git,
@@ -88,10 +87,23 @@ public sealed class BoardMergeStatusService
             list.Add(job);
         }
 
+        var reaches = new ConcurrentDictionary<string, RepoReachability>(StringComparer.OrdinalIgnoreCase);
+        Parallel.ForEach(
+            byRepo,
+            new ParallelOptions { MaxDegreeOfParallelism = ReadOnlyGitConcurrencyLimiter.MaxConcurrency },
+            pair =>
+            {
+                var configuredBranch = ConfiguredIntegrationBranch(pair.Value[0].ProjectName);
+                var cacheKey = $"{pair.Key}\0{configuredBranch}";
+                reaches[pair.Key] = _cache.GetOrCreate(
+                    cacheKey,
+                    CacheTtl,
+                    () => ComputeReachability(pair.Key, configuredBranch));
+            });
+
         foreach (var (root, repoJobs) in byRepo)
         {
-            var integrationBranch = ResolveIntegrationBranch(repoJobs[0].ProjectName, root);
-            var reach = GetReachability(root, integrationBranch);
+            var reach = reaches[root];
 
             foreach (var job in repoJobs)
             {
@@ -116,7 +128,7 @@ public sealed class BoardMergeStatusService
                     Branch = branch,
                     InIntegration = inIntegration,
                     InRelease = inRelease,
-                    IntegrationBranch = integrationBranch,
+                    IntegrationBranch = reach.IntegrationBranch,
                     ReleaseBranch = ReleaseBranch,
                     IntegrationSha = inIntegration ? Short(mergeSha ?? anchor) : null,
                     ReleaseSha = inRelease ? Short(anchor) : null,
@@ -149,51 +161,47 @@ public sealed class BoardMergeStatusService
         return string.IsNullOrWhiteSpace(last) ? null : last;
     }
 
-    private RepoReachability GetReachability(string root, string integrationBranch)
-    {
-        if (_cache.TryGetValue(root, out var cached) && DateTime.UtcNow - cached.At < CacheTtl)
-            return cached.Value;
-
-        var fresh = ComputeReachability(root, integrationBranch);
-        _cache[root] = (DateTime.UtcNow, fresh);
-        return fresh;
-    }
-
     /// <summary>
     /// The develop + main ancestor SHA sets for one repo. TWO (up to four with the
-    /// <c>origin/</c> mirror) <c>rev-list</c> spawns per repo per TTL window, run in
-    /// parallel - the whole batch that replaces a per-card ancestry fan-out. Both
+    /// <c>origin/</c> mirror) <c>rev-list</c> spawns per repo per TTL window. Repos
+    /// are processed with bounded parallelism while each repo's reads stay
+    /// sequential, avoiding the former unbounded <c>Task.Run</c> fan-out. Both
     /// the local ref and its <c>origin/</c> mirror are unioned so a fresh clone with
     /// only remote-tracking branches still resolves, matching
     /// <see cref="TaskProvenanceService"/>'s local-or-origin semantics.
     /// </summary>
-    private RepoReachability ComputeReachability(string root, string integrationBranch)
+    private RepoReachability ComputeReachability(string root, string configuredBranch)
     {
-        var tIntLocal = Task.Run(() => _git.GetAncestorShaSet(root, integrationBranch));
-        var tIntOrigin = Task.Run(() => _git.GetAncestorShaSet(root, "origin/" + integrationBranch));
-        var tRelLocal = Task.Run(() => _git.GetAncestorShaSet(root, ReleaseBranch));
-        var tRelOrigin = Task.Run(() => _git.GetAncestorShaSet(root, "origin/" + ReleaseBranch));
-        Task.WaitAll(tIntLocal, tIntOrigin, tRelLocal, tRelOrigin);
+        return ReadOnlyGitConcurrencyLimiter.Run(() =>
+        {
+            // Branch resolution is part of the cached computation. Previously
+            // every board request resolved it before checking the reachability
+            // cache, which still spawned git processes on an otherwise-hot hit.
+            var integrationBranch = _git.ResolveIntegrationBranch(root, configuredBranch);
+            var integration = _git.GetAncestorShaSet(root, integrationBranch);
+            integration.UnionWith(_git.GetAncestorShaSet(root, "origin/" + integrationBranch));
 
-        var integration = tIntLocal.Result;
-        integration.UnionWith(tIntOrigin.Result);
-        var release = tRelLocal.Result;
-        release.UnionWith(tRelOrigin.Result);
-        return new RepoReachability(integration, release);
+            var release = _git.GetAncestorShaSet(root, ReleaseBranch);
+            release.UnionWith(_git.GetAncestorShaSet(root, "origin/" + ReleaseBranch));
+            return new RepoReachability(integrationBranch, integration, release);
+        });
     }
 
-    private string ResolveIntegrationBranch(string projectName, string? repoRoot)
+    private string ConfiguredIntegrationBranch(string projectName)
     {
         var configured = _settings.Get(projectName).IntegrationBranch;
-        if (!string.IsNullOrWhiteSpace(repoRoot))
-            return _git.ResolveIntegrationBranch(repoRoot, configured);
-        return string.IsNullOrWhiteSpace(configured) ? new ProjectSettings().IntegrationBranch : configured;
+        return string.IsNullOrWhiteSpace(configured)
+            ? new ProjectSettings().IntegrationBranch
+            : configured.Trim();
     }
 
     /// <summary>Drops the cached reachability sets. Tests use this to force a fresh read.</summary>
-    internal void InvalidateCache() => _cache.Clear();
+    internal void InvalidateCache() => _cache.Invalidate();
 
     private static string Short(string sha) => sha.Length > 7 ? sha[..7] : sha;
 
-    private sealed record RepoReachability(HashSet<string> Integration, HashSet<string> Release);
+    private sealed record RepoReachability(
+        string IntegrationBranch,
+        HashSet<string> Integration,
+        HashSet<string> Release);
 }

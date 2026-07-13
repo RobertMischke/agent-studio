@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-
 namespace AgentStudio.Publishing;
 
 /// <summary>
@@ -38,8 +36,7 @@ public sealed class PublishTargetService
     private static readonly string[] PackageMetaExcludes = [".github", "docs", ".orchestrator"];
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(5);
-    private readonly ConcurrentDictionary<string, (DateTime At, ProjectPublishComputation Value)> _cache =
-        new(StringComparer.OrdinalIgnoreCase);
+    private readonly GenerationSingleFlightCache<ProjectPublishComputation> _cache = new();
 
     public PublishTargetService(
         GitService git,
@@ -78,17 +75,15 @@ public sealed class PublishTargetService
         if (string.IsNullOrWhiteSpace(projectName))
             return ProjectPublishComputation.Empty(projectName ?? "", "projectName is required");
 
-        if (_cache.TryGetValue(projectName, out var cached) && DateTime.UtcNow - cached.At < CacheTtl)
-            return cached.Value;
-
-        using var _t = GitProcessTelemetry.BeginRequest("publish/derive", _logger);
-        var fresh = Compute(projectName);
-        _cache[projectName] = (DateTime.UtcNow, fresh);
-        return fresh;
+        return _cache.GetOrCreate(projectName, CacheTtl, () =>
+        {
+            using var _t = GitProcessTelemetry.BeginRequest("publish/derive", _logger);
+            return ReadOnlyGitConcurrencyLimiter.Run(() => Compute(projectName));
+        });
     }
 
     /// <summary>Drops the cached computations. Tests use this after mutating a fixture repo.</summary>
-    internal void InvalidateCache() => _cache.Clear();
+    internal void InvalidateCache() => _cache.Invalidate();
 
     private ProjectPublishComputation Compute(string projectName)
     {

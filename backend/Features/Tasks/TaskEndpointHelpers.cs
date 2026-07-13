@@ -292,29 +292,20 @@ internal static class TaskEndpointHelpers
         var workspace = configuration["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace)) return verdicts;
 
-        // Read each (workspace, project) journal at most once per request.
-        var byProject = new Dictionary<string, IReadOnlyList<ReviewDecisionRecord>>(StringComparer.OrdinalIgnoreCase);
+        // Resolve each (workspace, project) journal index at most once per
+        // request. ReviewDecisionLog validates a tiny fingerprint and parses
+        // only appended bytes, so a board poll never rehydrates the full JSONL.
+        var byProject = new Dictionary<string, IReadOnlyDictionary<string, ReviewDecisionRecord>>(StringComparer.OrdinalIgnoreCase);
         foreach (var job in jobs)
         {
             if (string.IsNullOrWhiteSpace(job.ProjectName)) continue;
-            if (!byProject.TryGetValue(job.ProjectName, out var records))
+            if (!byProject.TryGetValue(job.ProjectName, out var latestByJob))
             {
-                try { records = ReviewDecisionLog.ReadAll(workspace!, job.ProjectName); }
-                catch { records = Array.Empty<ReviewDecisionRecord>(); }
-                byProject[job.ProjectName] = records;
+                try { latestByJob = ReviewDecisionLog.ReadLatestByJob(workspace!, job.ProjectName); }
+                catch { latestByJob = new Dictionary<string, ReviewDecisionRecord>(StringComparer.Ordinal); }
+                byProject[job.ProjectName] = latestByJob;
             }
-            // Latest record wins. The journal is append-only; the last
-            // entry for this jobId reflects the most recent decision.
-            ReviewDecisionRecord? latest = null;
-            for (int i = records.Count - 1; i >= 0; i--)
-            {
-                if (records[i].JobId == job.Id)
-                {
-                    latest = records[i];
-                    break;
-                }
-            }
-            if (latest == null) continue;
+            if (!latestByJob.TryGetValue(job.Id, out var latest)) continue;
             var verdict = latest.Kind switch
             {
                 ReviewDecisionKind.Reissue      => "reissue",

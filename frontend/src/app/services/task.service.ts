@@ -160,6 +160,26 @@ const STATE_TO_LANE: Record<string, LaneKey> = {
 };
 
 /**
+ * The grouped response already contains every live board task. Build the flat
+ * signal from that same snapshot so one refresh cannot launch two equivalent
+ * backend enrichment pipelines. The legacy `review` lane aliases
+ * `autoReview`, hence the identity-based de-duplication.
+ */
+function uniqueJobsFromGrouped(grouped: GroupedJobs): TaskInfo[] {
+  const seen = new Set<string>();
+  const jobs: TaskInfo[] = [];
+  for (const lane of Object.values(grouped)) {
+    for (const job of lane ?? []) {
+      const key = job.taskKey || `${job.watchPath}::${job.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      jobs.push(job);
+    }
+  }
+  return jobs;
+}
+
+/**
  * Turn an orchestrator context key (`project:<PROJ>` or `task:<PROJ>/<KEY>`,
  * mirroring the backend `OrchestratorContextKey`) into the URL path segment(s)
  * for the `/api/runner/{contextKey}/orchestrator-chat` route. Each id part is
@@ -298,10 +318,11 @@ export class TaskService {
       return true;
     };
 
-    this.http.get<TaskInfo[]>(`${this.baseUrl}/tasks`).subscribe({
-      next: (jobs) => {
+    this.http.get<GroupedJobs>(`${this.baseUrl}/tasks/grouped`).subscribe({
+      next: (grouped) => {
         if (acceptOptimisticTarget()) {
-          this.jobs.set(jobs);
+          this.grouped.set(grouped);
+          this.jobs.set(uniqueJobsFromGrouped(grouped));
         }
         if (silent) {
           this.error.set(null);
@@ -319,27 +340,10 @@ export class TaskService {
           this.errorDialog.show(err, {
             title: 'Failed to load jobs',
             fallbackMessage: 'Failed to load jobs',
-            source: 'Dashboard refresh',
-          });
-        }
-        this.loading.set(false);
-      },
-    });
-
-    this.http.get<GroupedJobs>(`${this.baseUrl}/tasks/grouped`).subscribe({
-      next: (grouped) => {
-        if (acceptOptimisticTarget()) {
-          this.grouped.set(grouped);
-        }
-      },
-      error: (err) => {
-        if (!silent) {
-          this.errorDialog.show(err, {
-            title: 'Failed to load board columns',
-            fallbackMessage: 'Failed to load board columns',
             source: 'Board refresh',
           });
         }
+        this.loading.set(false);
       },
     });
 

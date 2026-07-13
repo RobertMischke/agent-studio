@@ -37,6 +37,32 @@ public class TaskScannerWatchPathTests
         Assert.Equal(1, warnings);
     }
 
+    [Fact]
+    public void ScanAllJobsRaw_InvalidPhase_WarnsOnlyOncePerTaskAndValue()
+    {
+        var watchPath = Path.Combine(Path.GetTempPath(), "atp-invalid-phase-" + Guid.NewGuid().ToString("N"));
+        var taskPath = Path.Combine(watchPath, TaskStates.HumanReview, "bad-phase");
+        Directory.CreateDirectory(taskPath);
+        File.WriteAllText(
+            Path.Combine(taskPath, "task.json"),
+            $$"""{"id":"bad-phase","title":"Bad phase","state":"{{TaskStates.HumanReview}}","phase":"{{LifecyclePhases.PostProcessingRunning}}","order":1}""");
+
+        try
+        {
+            var capture = new CapturingLogger();
+            var scanner = BuildScanner(watchPath, capture);
+
+            for (var i = 0; i < 25; i++) scanner.ScanAllJobsRaw();
+
+            var warnings = capture.Warnings.Count(w => w.Contains("is not allowed for state"));
+            Assert.Equal(1, warnings);
+        }
+        finally
+        {
+            Directory.Delete(watchPath, recursive: true);
+        }
+    }
+
     private static TaskScannerService BuildScanner(string watchPath, ILogger<TaskScannerService> logger)
     {
         var config = new ConfigurationBuilder()

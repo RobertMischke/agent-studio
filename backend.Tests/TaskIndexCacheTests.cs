@@ -209,6 +209,100 @@ public class TaskIndexCacheTests : IDisposable
         Assert.Equal(2, bareScanner.ScanAllJobs().Count);
     }
 
+    [Fact]
+    public async Task ConcurrentReaders_ReturnStaleSnapshot_WhileOneRefreshIsInFlight()
+    {
+        var refreshEntered = new ManualResetEventSlim(false);
+        var releaseRefresh = new ManualResetEventSlim(false);
+        var scans = 0;
+        var cache = new TaskIndexCache(
+            _scanner,
+            NullLogger<TaskIndexCache>.Instance,
+            _config,
+            () =>
+            {
+                var scan = Interlocked.Increment(ref scans);
+                if (scan == 2)
+                {
+                    refreshEntered.Set();
+                    Assert.True(releaseRefresh.Wait(TimeSpan.FromSeconds(5)));
+                }
+                return [new TaskInfo { Id = $"job-{scan}", State = TaskStates.Ready }];
+            });
+
+        Assert.Equal("job-1", Assert.Single(cache.GetSnapshot()).Id);
+        cache.Invalidate(TaskIndexCache.InvalidationSource.External);
+
+        var refresher = Task.Run(() => cache.GetSnapshot());
+        Assert.True(refreshEntered.Wait(TimeSpan.FromSeconds(5)));
+
+        var readers = Enumerable.Range(0, 24)
+            .Select(_ => Task.Run(() => cache.GetSnapshot()))
+            .ToArray();
+        var allReaders = Task.WhenAll(readers);
+
+        Assert.Same(allReaders, await Task.WhenAny(allReaders, Task.Delay(TimeSpan.FromSeconds(2))));
+        Assert.All(await allReaders, snapshot => Assert.Equal("job-1", Assert.Single(snapshot).Id));
+        Assert.Equal(2, Volatile.Read(ref scans));
+
+        releaseRefresh.Set();
+        Assert.Equal("job-2", Assert.Single(await refresher).Id);
+    }
+
+    [Fact]
+    public async Task InvalidationsDuringRefresh_AreCoalescedIntoOneFollowupRefresh()
+    {
+        var secondScanEntered = new ManualResetEventSlim(false);
+        var releaseSecondScan = new ManualResetEventSlim(false);
+        var thirdScanEntered = new ManualResetEventSlim(false);
+        var releaseThirdScan = new ManualResetEventSlim(false);
+        var scans = 0;
+        var cache = new TaskIndexCache(
+            _scanner,
+            NullLogger<TaskIndexCache>.Instance,
+            _config,
+            () =>
+            {
+                var scan = Interlocked.Increment(ref scans);
+                if (scan == 2)
+                {
+                    secondScanEntered.Set();
+                    Assert.True(releaseSecondScan.Wait(TimeSpan.FromSeconds(5)));
+                }
+                if (scan == 3)
+                {
+                    thirdScanEntered.Set();
+                    Assert.True(releaseThirdScan.Wait(TimeSpan.FromSeconds(5)));
+                }
+                return [new TaskInfo { Id = $"job-{scan}", State = TaskStates.Ready }];
+            });
+
+        _ = cache.GetSnapshot();
+        cache.Invalidate(TaskIndexCache.InvalidationSource.External);
+        var secondRefresh = Task.Run(() => cache.GetSnapshot());
+        Assert.True(secondScanEntered.Wait(TimeSpan.FromSeconds(5)));
+
+        for (var i = 0; i < 50; i++)
+            cache.Invalidate(TaskIndexCache.InvalidationSource.External);
+
+        releaseSecondScan.Set();
+        Assert.Equal("job-2", Assert.Single(await secondRefresh).Id);
+
+        var thirdRefresh = Task.Run(() => cache.GetSnapshot());
+        Assert.True(thirdScanEntered.Wait(TimeSpan.FromSeconds(5)));
+        var staleReaders = Enumerable.Range(0, 24)
+            .Select(_ => Task.Run(() => cache.GetSnapshot()))
+            .ToArray();
+        await Task.WhenAll(staleReaders);
+
+        Assert.Equal(3, Volatile.Read(ref scans));
+        Assert.All(staleReaders, reader => Assert.Equal("job-2", Assert.Single(reader.Result).Id));
+
+        releaseThirdScan.Set();
+        Assert.Equal("job-3", Assert.Single(await thirdRefresh).Id);
+        Assert.Equal(3, Volatile.Read(ref scans));
+    }
+
     private void WriteJob(string state, string slug, string title)
     {
         var dir = Path.Combine(_watchPath, state, slug);
