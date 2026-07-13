@@ -77,9 +77,19 @@ groups, and a failed domain reports an error without hiding successful domains.
   (Insight / Quality / Context / Config). Its inventory and grouping are
   defined once in `project-shell/project-shell.config.ts`; edit that file, not
   the template, to add or move a rail entry. Context contains Architecture,
-  Wiki, Agent Docs (the AGENTS.md-style instructions agents read on their own,
-  key `steering`), and Prompts. The former Runtime Prompts placeholder rail is
-  intentionally removed. The Wiki / Docs rail
+  Project Graph, Wiki, Agent Docs (the AGENTS.md-style instructions agents read
+  on their own, key `steering`), and Prompts. Project Graph (`project-graph`)
+  consumes the read-only
+  `GET /api/projects/{projectName}/graph` catalog and offers a bounded component
+  graph plus a complete component list. The catalog retains unavailable managed
+  projects instead of omitting them, resolves internal manifest references only,
+  and reports independent repository revision / dirty state with snapshot schema,
+  generator version, and capture time. It deliberately does not infer a code-call
+  graph, runtime behavior, or architecture grade. The prompt-readable companion
+  and regeneration command live in
+  [architecture/project-map.md](../architecture/project-map.md); each regeneration
+  also writes a dated JSON envelope under `architecture/project-map-history/`.
+  The former Runtime Prompts placeholder rail is intentionally removed. The Wiki / Docs rail
   (`project-detail/components/project-wiki-section/`) renders the physical
   `docs/` folder tree directly, supports real create / move / rename / delete
   operations, and shows a per-doc History panel (model / when / why + git log);

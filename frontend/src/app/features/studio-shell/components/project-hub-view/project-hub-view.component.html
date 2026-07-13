@@ -61,6 +61,9 @@
         (openReport)="openReport($event)" />
     }
   }
+  @if (activeRail() === 'project-graph') {
+    <app-project-graph [projectName]="projectName()" />
+  }
   @defer (when activeRail() === 'drift') {
     @if (activeRail() === 'drift') {
       <app-project-detail

@@ -14,6 +14,7 @@ import {
   ProjectUrlsPanelComponent,
   ProjectGitPanelComponent,
   ProjectProposalsPanelComponent,
+  ProjectGraphComponent,
 } from '../../../project-detail';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { PromptAdminPanelComponent } from '../../../orchestrator';
@@ -39,6 +40,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   'security',
   'proposals',
   'architecture',
+  'project-graph',
   'drift',
   'uxui',
   'test-quality',
@@ -89,6 +91,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     ProjectUrlsPanelComponent,
     ProjectGitPanelComponent,
     ProjectProposalsPanelComponent,
+    ProjectGraphComponent,
     PromptAdminPanelComponent,
     WorkspaceScreenshotsComponent,
     RegressionRadarComponent,
@@ -120,6 +123,7 @@ export class ProjectHubViewComponent {
   }
 
   hasCustomPanel(rail: ProjectRailKey): boolean {
+    if (rail === 'project-graph') return true;
     return RAILS_WITH_CUSTOM_PANEL.has(rail);
   }
 

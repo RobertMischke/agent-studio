@@ -45,6 +45,7 @@ Use this page as the first stop when you need the right document quickly.
 | ADR archive | [architecture/decisions/adr-archive.md](architecture/decisions/adr-archive.md) |
 | Architecture model | [architecture/model.md](architecture/model.md) |
 | Architecture and Quality layer (Project Map, mapped guides, analysis inventory, component grading) | [concept](concepts/architecture-quality-layer.md) · [interactive Workbench](workbenches/architecture-quality-layer/index.html) |
+| Managed project manifest map | [architecture/project-map.md](architecture/project-map.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](design/style-guide-hard-rules.md) |
 | Engineering style guides (technology-aware and prompt-injected) | [quality/README.md](quality/README.md) |

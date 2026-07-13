@@ -24,6 +24,7 @@ export { ProjectUrlPreviewTabComponent } from './components/project-url-preview-
 export { WorkbenchViewerComponent } from './components/workbench-viewer/workbench-viewer.component';
 export { ProjectGitPanelComponent } from './components/project-git-panel/project-git-panel.component';
 export { ProjectProposalsPanelComponent } from './components/project-proposals-panel/project-proposals-panel.component';
+export { ProjectGraphComponent } from './components/project-graph/project-graph.component';
 
 // section components used cross-feature
 export { ProjectSteeringDocsSectionComponent } from './components/project-steering-docs-section/project-steering-docs-section';
