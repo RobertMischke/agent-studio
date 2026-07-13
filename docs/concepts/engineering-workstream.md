@@ -40,6 +40,10 @@ Together they answer, in order: what now, how healthy, how it works, why it is
 so, and what happened. The frame is deliberately small and never grows — five
 areas is the whole vocabulary.
 
+The decided [release-semantics model](release-semantics.md) is a canonical
+Decision Log topic: it separates integration, acceptance, release, and stable
+freeze while preserving the fast Workstream that parallel agents need.
+
 ## 3. Physical model — the frame is real folders
 
 Consistent with the wiki tree contract ([../contracts/wiki-tree.md](../contracts/wiki-tree.md)),

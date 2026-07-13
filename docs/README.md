@@ -63,6 +63,7 @@ Use this page as the first stop when you need the right document quickly.
 | Experiment workbenches (Explorer, orchestrator chat, decision-to-task) | [concept](concepts/experimentier-workbench.md) · [interactive mockup](concepts/mockups/experimentier-workbench.html) |
 | Decoupled agent-session lifecycles (holder, consumer channel, multi-client attach) | [concept](concepts/decoupled-lifecycles.md) · [interactive Workbench-family mockup](concepts/mockups/decoupled-lifecycles.html) |
 | Deployment as a first-class citizen (Deployment page, scenario templates, prompt-defined dynamic UI over CLI tasks; DEP-1..5) | [concept](concepts/deployment-first-class.md) · [interactive mockup](concepts/mockups/deployment-first-class.html) |
+| Release semantics (integration vs acceptance vs release vs stable freeze; transparent watering-can model) | [concept](concepts/release-semantics.md) |
 | Project Overview operator dashboard (metrics, Visual Evidence Queue, Project URLs, deployment summary, Wiki entry) | [mockup contract](mockups/project-overview-dashboard/README.md) · [interactive mockup](mockups/project-overview-dashboard/ui.html) |
 | Wiki classification | [product/wiki-document-classification.md](product/wiki-document-classification.md) |
 | Wiki editing flow | [product/wiki-editing-and-branch-flow.md](product/wiki-editing-and-branch-flow.md) |
