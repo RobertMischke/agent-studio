@@ -193,9 +193,11 @@ The Workbench view is host chrome around isolated content:
 Ordinary Wiki, Git-pane preview, and Files-tab HTML all use the same baseline
 viewer policy: `srcdoc` with `sandbox="allow-scripts"`. Scripts can power
 self-contained interactions, while the deliberate omission of
-`allow-same-origin` gives the document an opaque origin and prevents access to
-Studio cookies, storage, DOM, and APIs. The ordinary viewer does not promise
-same-origin integration or network-backed application behavior.
+`allow-same-origin` gives the document an opaque origin and prevents it from
+inheriting Studio's origin or directly reading Studio cookies, storage, and DOM.
+Network requests remain subject to normal browser and CORS policy. The ordinary
+viewer does not promise same-origin integration or network-backed application
+behavior.
 
 The Workbench remains the distinct viewer for artifacts that need more than
 that baseline, including controlled network-backed previews or a future

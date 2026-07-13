@@ -260,6 +260,10 @@ describe('FilesPaneComponent (smoke)', () => {
     fixture.detectChanges();
 
     const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[data-testid="file-card-html-frame"]')).toBeNull();
+    root.querySelector<HTMLElement>('[data-testid="file-card-interactive-report.html"] .file-card__head')!.click();
+    fixture.detectChanges();
+
     const frame = root.querySelector<HTMLIFrameElement>('[data-testid="file-card-html-frame"]');
     expect(frame).not.toBeNull();
     expect(frame?.getAttribute('sandbox')).toBe('allow-scripts');
@@ -267,6 +271,53 @@ describe('FilesPaneComponent (smoke)', () => {
     expect(frame?.getAttribute('srcdoc') ?? '').toContain('dataset.ran');
     expect(root.querySelector('[data-testid="file-card-html-isolation-chip"]')?.textContent)
       .toContain('interactive, isolated');
+    http.verify();
+  });
+
+  it('clears cached HTML when switching tasks with the same file name', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FilesPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FilesPaneComponent);
+    const artifact = {
+      name: 'interactive-report.html',
+      sizeBytes: 256,
+      mtime: '2026-07-11T08:00:00Z',
+      kind: 'other' as const,
+    };
+    fixture.componentRef.setInput('jobId', 'first-job');
+    fixture.componentRef.setInput('artifacts', [artifact]);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne((r) => r.url.includes('/api/tasks/first-job/files/interactive-report.html'))
+      .flush(utf8Buffer('<h1>First task</h1>'));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    root.querySelector<HTMLElement>('[data-testid="file-card-interactive-report.html"] .file-card__head')!.click();
+    fixture.detectChanges();
+    expect(root.querySelector<HTMLIFrameElement>('[data-testid="file-card-html-frame"]')?.getAttribute('srcdoc'))
+      .toContain('First task');
+
+    fixture.componentRef.setInput('jobId', 'second-job');
+    fixture.detectChanges();
+    expect(root.querySelector('[data-testid="file-card-html-frame"]')).toBeNull();
+    http.expectOne((r) => r.url.includes('/api/tasks/second-job/files/interactive-report.html'))
+      .flush(utf8Buffer('<h1>Second task</h1>'));
+    fixture.detectChanges();
+
+    root.querySelector<HTMLElement>('[data-testid="file-card-interactive-report.html"] .file-card__head')!.click();
+    fixture.detectChanges();
+    const secondFrame = root.querySelector<HTMLIFrameElement>('[data-testid="file-card-html-frame"]');
+    expect(secondFrame?.getAttribute('srcdoc')).toContain('Second task');
+    expect(secondFrame?.getAttribute('srcdoc')).not.toContain('First task');
     http.verify();
   });
 });

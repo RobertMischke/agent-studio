@@ -90,6 +90,7 @@ export class FilesPaneComponent {
       this.loading.set(new Set());
       this.fetched.clear();
       this.aspectDocCache.clear();
+      this.htmlDocCache.clear();
     }, { allowSignalWrites: true });
 
     // Prefetch content for every non-prompt artifact so previews / expansions
@@ -155,7 +156,9 @@ export class FilesPaneComponent {
   /**
    * `allow-scripts` powers self-contained interaction in the template iframe.
    * `allow-same-origin` is deliberately omitted so the document receives an
-   * opaque origin and cannot read Studio cookies, storage, DOM, or APIs.
+   * opaque origin and cannot inherit Studio's origin or directly read its
+   * cookies, storage, or DOM. Network requests still follow normal browser
+   * and CORS policy.
    */
   trustedHtmlFor(file: TaskArtifact): SafeHtml | null {
     if (!this.isHtmlFile(file)) return null;

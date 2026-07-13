@@ -88,7 +88,9 @@ Returns the recursive physical docs tree.
 Reads a Markdown or HTML page from the physical docs tree. HTML pages are served
 as content and rendered by the frontend in a script-enabled sandboxed iframe.
 The iframe grants only `allow-scripts`; without `allow-same-origin` it receives
-an opaque origin and cannot access Studio cookies, storage, DOM, or APIs.
+an opaque origin and cannot inherit Studio's origin or directly access its
+cookies, storage, or DOM. Network requests remain subject to normal browser and
+CORS policy; this sandbox is not a network-deny boundary.
 
 ### `GET /wiki/assets/{relPath}`
 

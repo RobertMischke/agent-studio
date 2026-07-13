@@ -7,19 +7,21 @@ interface WatchPath { name: string }
 
 const REL_PATH = 'design/tree-indicator-exploration-2026-07.html';
 const ARTIFACT_PATH = path.resolve(__dirname, '..', '..', '..', 'docs', REL_PATH);
-const SCREENSHOT_DIR = process.env.JOB_RESULTS_DIR
-  ?? path.resolve(__dirname, '..', '..', 'playwright-screenshots');
-
 function slugFor(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-test('AGT-2083 exploration runs scripts while parent access stays blocked', async ({ page }) => {
+test('repository HTML exploration runs scripts while parent access stays blocked', async ({ page }, testInfo) => {
   const projects = await api<WatchPath[]>('/api/watch-paths');
   expect(projects.length).toBeGreaterThan(0);
   const projectName = projects[0].name;
   const encodedProject = encodeURIComponent(projectName);
   const artifactHtml = fs.readFileSync(ARTIFACT_PATH, 'utf8');
+  const screenshotDir = process.env.JOB_RESULTS_DIR;
+  if (screenshotDir) fs.mkdirSync(screenshotDir, { recursive: true });
+  const screenshotPath = (name: string): string => screenshotDir
+    ? path.join(screenshotDir, name)
+    : testInfo.outputPath(name);
 
   await page.route(`**/api/projects/${encodedProject}/wiki/tree`, route => route.fulfill({
     status: 200,
@@ -87,9 +89,8 @@ test('AGT-2083 exploration runs scripts while parent access stays blocked', asyn
   await expect(frameElement).toHaveAttribute('sandbox', 'allow-scripts');
   const exploration = page.frameLocator('[data-testid="project-wiki-html-frame"]');
   await expect(exploration.locator('body')).toHaveAttribute('data-option', 'dots');
-  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
   await page.screenshot({
-    path: path.join(SCREENSHOT_DIR, 'agt-2083-option-a-interactive-isolated.png'),
+    path: screenshotPath('agt-2083-option-a-interactive-isolated.png'),
     fullPage: true,
   });
   await exploration.locator('[data-option="pulse"]').click();
@@ -111,7 +112,7 @@ test('AGT-2083 exploration runs scripts while parent access stays blocked', asyn
   })).toBe('blocked');
 
   await page.screenshot({
-    path: path.join(SCREENSHOT_DIR, 'agt-2083-option-e-interactive-isolated.png'),
+    path: screenshotPath('agt-2083-option-e-interactive-isolated.png'),
     fullPage: true,
   });
 });

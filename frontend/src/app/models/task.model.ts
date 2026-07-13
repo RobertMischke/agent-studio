@@ -757,8 +757,7 @@ export interface FileGenerationMeta {
  * One supported document in the job root surfaced by the Files tab. Markdown,
  * HTML, and structured aspect JSON are listed. The content
  * itself is not embedded — the Files tab fetches it lazily through
- * `GET /api/tasks/{id}/files/{fileName}` only when the user expands the
- * card (or when it's the sole prompt and auto-expanded).
+ * `GET /api/tasks/{id}/files/{fileName}` lazily for the Files-tab surface.
  */
 export interface TaskArtifact {
   name: string;
