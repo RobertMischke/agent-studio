@@ -98,10 +98,11 @@
             [model]="effectiveModel()"
             [thinkingLevel]="effectiveThinkingLevel()"
             [availableModels]="availableModels()"
-            [disabled]="isRunning()"
+            [disabled]="agentConfigDisabled()"
+            [disabledReason]="agentConfigDisabledReason()"
             triggerTestid="chat-compose-model"
             pickerTestidPrefix="chat-model-picker"
-            (commit)="agentConfigCommit.emit($event)" />
+            (commit)="onAgentConfigCommit($event)" />
           @if (effectiveCliType(); as ct) {
             <span class="ov-agent-combo__cli"
                   data-testid="overview-agent-cli"
@@ -373,7 +374,7 @@
                 [resultHeader]="resultForRow(row)?.header ?? null"
                 [concernTitle]="row.concernTooltip?.title ?? null"
                 [concernBody]="row.concernTooltip?.body ?? null" />
-              @if (selectedPipelineIsCurrent() && row.canDisable && !row.hasExecution) {
+              @if (selectedPipelineIsCurrent() && canConfigurePendingPipelineSteps() && row.canDisable && !row.hasExecution) {
                 <app-pipeline-step-toggle
                   class="ov-pl-step__toggle"
                   [projectName]="job().projectName"

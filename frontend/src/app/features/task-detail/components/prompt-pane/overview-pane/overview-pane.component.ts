@@ -239,7 +239,7 @@ function makeAttachmentId(): string {
   return Math.random().toString(36).slice(2, 14);
 }
 
-/** Title-case label for an aspect concern verdict, for the tooltip header. */
+/** Title-case label for execution detail that belongs behind a verdict pill. */
 function verdictTitle(verdict: string | null): string | null {
   switch ((verdict ?? '').toLowerCase()) {
     case 'concern':
@@ -249,6 +249,9 @@ function verdictTitle(verdict: string | null): string | null {
     // Auto-mode Ralph-loop guard verdicts (pre-loop-guard step).
     case 'looping':       return 'Loop forming';
     case 'loop-detected': return 'Loop detected';
+    case 'open-items':    return 'Open items';
+    case 'escalated':
+    case 'escalate':      return 'Escalation reason';
     case 'selected':      return 'Economy selection';
     case 'override':      return 'Card override';
     case 'fallback':      return 'Default fallback';
@@ -277,10 +280,10 @@ function reconcileCoreVerdict(
 }
 
 /**
- * Build the structured tooltip for an aspect step's verdict pill. Returns
- * null unless the step carries concern detail (a non-pass verdict with
- * summary text), so a pass verdict — or a step the backend left unenriched
- * — shows no tooltip rather than a misleading empty one.
+ * Build the structured tooltip for detail behind a step verdict. Aspect
+ * concerns, loop-guard findings, and reissue open-item/escalation decisions
+ * all use the same compact verdict pill and details-dialog concern section.
+ * A pass verdict or a step with no recorded detail stays bare.
  */
 function buildConcernTooltip(
   label: string,
@@ -550,6 +553,27 @@ export class OverviewPaneComponent {
   ]);
 
   /**
+   * Pending project-level step switches are useful only while this task can
+   * still reach another pipeline step. Human review and every lane after it
+   * are read-only evidence: changing project configuration there cannot alter
+   * the run being inspected and misleadingly looks like a task-local change.
+   */
+  private static readonly PIPELINE_CONFIGURABLE_STATES = new Set<string>([
+    TaskState.Backlog,
+    TaskState.Preparation,
+    TaskState.OrchestratorPrep,
+    TaskState.Ready,
+    TaskState.Progress,
+    TaskState.FailedPickup,
+    TaskState.CodeNotComplete,
+    TaskState.AutoReview,
+  ]);
+
+  readonly canConfigurePendingPipelineSteps = computed(() =>
+    OverviewPaneComponent.PIPELINE_CONFIGURABLE_STATES.has(this.job().state),
+  );
+
+  /**
    * "Promote to coding task" is offered only on a planning task whose latest
    * run finished. Research tasks are read-only reports by design and never
    * show it; coding tasks have nothing to promote to.
@@ -628,6 +652,38 @@ export class OverviewPaneComponent {
     const override = this.thinkingLevelOverride();
     return override !== undefined ? override : (this.job().thinkingLevel ?? null);
   });
+
+  /**
+   * The Overview agent chip records the accepted task configuration. Keep it
+   * visible but read-only once the task has reached a terminal lane. A task
+   * that is explicitly re-opened becomes editable again through its new lane;
+   * the composer remains independently configurable for continuation runs.
+   */
+  readonly agentConfigReadOnly = computed<boolean>(() => {
+    const state = this.job().state;
+    return state === TaskState.Completed || state === TaskState.Archive;
+  });
+
+  readonly agentConfigDisabled = computed<boolean>(
+    () => this.isRunning() || this.agentConfigReadOnly(),
+  );
+
+  readonly agentConfigDisabledReason = computed<string | null>(() => {
+    if (this.isRunning()) return 'Stop the run before changing the agent configuration.';
+    if (this.agentConfigReadOnly()) {
+      return 'Agent configuration is read-only after delivery. Re-open the task to change it.';
+    }
+    return null;
+  });
+
+  onAgentConfigCommit(change: {
+    cliType: CliType;
+    model: string;
+    thinkingLevel: string | null;
+  }): void {
+    if (this.agentConfigDisabled()) return;
+    this.agentConfigCommit.emit(change);
+  }
 
   /** Clear the optimistic override once the real `job().title` catches up
    *  to the saved value (parent re-fetched the detail after PUT). */
@@ -891,7 +947,7 @@ export class OverviewPaneComponent {
         modelOverride,
         thinkingLevelOverride,
         verdict,
-        concernTooltip: buildConcernTooltip(label, verdict, e?.verdictSummary ?? null),
+        concernTooltip: buildConcernTooltip(label, verdict, e?.verdictSummary ?? e?.reason ?? null),
         explanation: buildStepExplanation(step.id, label, step.kind),
         durationMs: e?.durationMs ?? 0,
         startedAt: e?.startedAt ?? null,

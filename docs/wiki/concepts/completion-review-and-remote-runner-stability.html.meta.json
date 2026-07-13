@@ -83,6 +83,18 @@
       "title": "Integrate typed Runner events and replay into Agent Studio",
       "linkedAt": "2026-07-13T18:07:00Z",
       "source": "manual"
+    },
+    {
+      "key": "AGT-2179",
+      "title": "Remote runner claim must respect paused project mode",
+      "linkedAt": "2026-07-13T19:53:10Z",
+      "source": "manual"
+    },
+    {
+      "key": "AGT-2189",
+      "title": "P0 Remote project admission: enforce maxParallelism and truthful eligible queue/slot projection",
+      "linkedAt": "2026-07-13T19:53:10Z",
+      "source": "manual"
     }
   ]
 }

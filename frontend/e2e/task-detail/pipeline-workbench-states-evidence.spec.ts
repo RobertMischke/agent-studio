@@ -52,7 +52,11 @@ function step(id: string, displayName: string, kind: string, runMode: string, ex
 }
 
 // A realistic configured shape: pre / core / two aspects / tool / decision / drift.
-const pre = [step('pre-loop-guard', 'Loop guard', 'module', 'sequential')];
+const pre = [
+  step('pre-loop-guard', 'Loop guard', 'module', 'sequential'),
+  step('pre-model-qualification', 'Model qualification', 'module', 'sequential'),
+  step('pre-reissue-open-items', 'Reissue open-items check', 'module', 'sequential'),
+];
 const core = [step('core-agent-run', 'Agent execution', 'core', 'sequential')];
 const post = [
   step('aspect-requirement-fit', 'Requirement fit', 'aspect', 'parallel'),
@@ -102,7 +106,10 @@ const emptyCost = {
 
 // EMPTY: configured pipeline, nothing has run.
 function pipelineEmpty() {
-  return { pipeline: basePipeline(), execution: null, cost: emptyCost, config: {} };
+  return {
+    pipeline: basePipeline(), execution: null, cost: emptyCost,
+    config: { 'pre-model-qualification': { enabled: true, canDisable: true } },
+  };
 }
 
 // RUNNING: core in flight, everything after it still pending.
@@ -142,6 +149,10 @@ function pipelineBlocked() {
       startedAt: '2026-06-02T08:00:00Z', completedAt: null, attempt: 2, previousAttempts: [priorRun],
       steps: [
         execStep('pre-loop-guard', 'module', 'passed'),
+        execStep('pre-reissue-open-items', 'module', 'failed', {
+          verdict: 'escalate',
+          verdictSummary: '2 open item(s): browser evidence is missing; integration test is still failing',
+        }),
         execStep('core-agent-run', 'core', 'failed'),
         execStep('aspect-requirement-fit', 'aspect', 'passed', { verdict: 'concerns', verdictSummary: 'Integration test evidence is missing for the changed export path.' }),
         execStep('aspect-code-quality', 'aspect', 'passed', { verdict: 'pass' }),
@@ -155,7 +166,7 @@ function pipelineBlocked() {
       steps: [costStep('core-agent-run', 47_600, 3.1), costStep('aspect-requirement-fit', 8_000, 0.012)],
       totalTokens: 55_600, totalCostUsd: 3.11,
     },
-    config: {},
+    config: { 'pre-model-qualification': { enabled: true, canDisable: true } },
   };
 }
 
@@ -195,7 +206,10 @@ function pipelineDone() {
       totalTokens: 272_800, totalCostUsd: 4.41,
     },
     // ADR drift stays switched off in project config -> a muted, collapsed section.
-    config: { 'post-drift-adr-code': { enabled: false, model: null, mode: null } },
+    config: {
+      'pre-model-qualification': { enabled: true, canDisable: true },
+      'post-drift-adr-code': { enabled: false, model: null, mode: null },
+    },
   };
 }
 
@@ -300,6 +314,8 @@ test.describe('Pipeline workbench state evidence', () => {
     const expanded = page.locator('[data-testid="overview-pipeline-phase"][aria-expanded="true"]');
     await expect(expanded).toHaveCount(0);
     await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(0);
+    await expandAllPipelineSections(page);
+    await expect(page.getByTestId('pipeline-step-toggle-pre-model-qualification')).toBeVisible();
     await shot(page, pipeline, 'pipeline-state-empty--mocked.png');
   });
 
@@ -322,6 +338,14 @@ test.describe('Pipeline workbench state evidence', () => {
     await expect(page.locator('[data-step-id="core-agent-run"]')).toHaveAttribute('data-status', 'failed');
     // The aspect concern is surfaced on its row and rolled up on its section header.
     await expect(page.locator('[data-testid="overview-pipeline-phase"][data-phase="aspect"] [data-testid="overview-pipeline-phase-concern"]')).toBeVisible();
+    // The failed open-items guard explains exactly why it escalated in its
+    // details dialog instead of leaving the operator with only a red cross.
+    await page.locator('[data-step-id="pre-reissue-open-items"]')
+      .getByTestId('overview-pipeline-step-details').click();
+    const detail = page.getByTestId('overview-pipeline-step-concerns-detail');
+    await expect(detail).toContainText('Escalation reason');
+    await expect(detail).toContainText('browser evidence is missing');
+    await page.getByTestId('overview-pipeline-step-details-dialog').getByRole('button', { name: 'Close' }).click();
     await shot(page, pipeline, 'pipeline-state-blocked--mocked.png');
   });
 
@@ -332,6 +356,9 @@ test.describe('Pipeline workbench state evidence', () => {
     // Every executable section reads ok; the disabled drift section reads muted.
     await expect(page.locator('[data-testid="overview-pipeline-phase"][data-phase="core"]')).toHaveAttribute('data-tone', 'ok');
     await expect(page.locator('[data-testid="overview-pipeline-phase"][data-phase="drift"]')).toHaveAttribute('data-tone', 'muted');
+    // A pending project-level switch is no longer actionable from a task that
+    // has already reached human review.
+    await expect(page.getByTestId('pipeline-step-toggle-pre-model-qualification')).toHaveCount(0);
     await shot(page, pipeline, 'pipeline-state-done--mocked.png');
   });
 

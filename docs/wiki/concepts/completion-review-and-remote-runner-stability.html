@@ -1033,6 +1033,14 @@
         <p><strong>Deployment and observability remained unchanged:</strong> Stable stayed on <code>2026.07.12-1055+18fd1f89</code>. Cards still showed <code>runner=null</code> and <code>no-active-run</code>, Remote events still had <code>runId=null</code>, and AGT-2155 had zero canonical run records. Earlier CPU had reached 91.7% with load1 19.94, but during most of AGT-2155's failing gate wait the Remote Host was completely idle at roughly 0% CPU and load1 0.25. That separates this wrong-subject post-processing failure from Remote execution pressure.</p>
       </article>
 
+      <article class="card tint-red" style="margin-top: 14px;">
+        <span class="label">Admission truth audit · 2026-07-13, 21:37-21:53 CEST</span>
+        <p><strong>The Agent Studio backlog reached zero without bypassing dependency truth:</strong> AGT-2180 moved to Ready and was claimed, AGT-2170 moved to Ready but remained non-pickable behind CAR-6, CAC-8, and CAC-9, and the non-runnable AGT-2129 Epic moved to Human Review. This proves the lane can be drained safely when executable work, hard waits, and containers are classified separately.</p>
+        <p><strong>Remote admission then violated the configured project limit:</strong> Agent Studio reported <code>maxParallelism=2</code>, while <code>agent-runner-01</code> acquired four distinct, simultaneously held fenced leases for AGT-2180, AGT-2136, AGT-2138, and AGT-2188. All four leases renewed under fencing token 1. The host-wide cap of four was respected, but the project cap was exceeded by two. This is a server-side admission defect, not a stale-card or telemetry inference.</p>
+        <p><strong>The ordinary status projection described a different system:</strong> <code>/api/runner/status</code> continued to report <code>occupiedSlots=0</code> because it counted only in-process local runs. Before later reissues, <code>queuedJobIds</code> contained 13 Ready cards, consisting of ten open-dependency tasks and three Epics, even though none was claim-eligible. Raw lane inventory and work that will start automatically must be separate fields backed by the same canonical attempt and eligibility snapshot used by admission.</p>
+        <p><strong>Host health did not explain the breach:</strong> with all four host slots occupied, the daemon remained healthy and Git-capable. The sample showed 12.1% CPU, load1 3.38 on 12 cores, 6.59 of 67.29 GB memory, zero swap, 0% steal, 0.02% I/O wait, and no telemetry findings. AGT-2189 now owns the quantitative project-capacity and truthful queue/slot fix. AGT-2173 retains the stable-key versus composite-key runner-badge defect.</p>
+      </article>
+
       <div class="table-wrap">
         <table>
           <thead><tr><th>CEST</th><th>CPU</th><th>Load 1</th><th>Memory</th></tr></thead>
@@ -1064,8 +1072,8 @@
     <section id="delivery">
       <div class="section-head">
         <p class="eyebrow">12 · Roadmap, live status, and delivery evidence</p>
-        <h2>One Remote epic, retained root-cause issues, and six missing implementation slices</h2>
-        <p>The operator-approved program is grouped under AGT-2129. Existing issues retain their narrow ownership; new issues cover only the authority, durable handoff, Remote Review Executor, CLI recovery, capability drain, and final replay gaps that did not already exist.</p>
+        <h2>One Remote epic, retained root-cause issues, and seven missing implementation slices</h2>
+        <p>The operator-approved program is grouped under AGT-2129. Existing issues retain their narrow ownership; new issues cover only the authority, project-capacity admission, durable handoff, Remote Review Executor, CLI recovery, capability drain, and final replay gaps that did not already exist.</p>
       </div>
 
       <div class="principle">
@@ -1120,6 +1128,7 @@
           <tbody>
             <tr><td>P0</td><td>Gate-storm containment and revision-bound failure identity</td><td><strong>AGT-2155</strong> retained</td><td>Gate scheduler and classifier</td><td>None</td><td>A2, A5, A6</td><td>M2, M4, M6</td></tr>
             <tr><td>P1</td><td>Persisted RunAttempt and ReviewAttempt authority</td><td><strong>AGT-2182</strong> new</td><td>Task Server control plane</td><td>AGT-2155</td><td>A3, A9</td><td>M1, M6</td></tr>
+            <tr><td>P1</td><td>Project-capacity admission and truthful eligible queue/slot projection</td><td><strong>AGT-2189</strong> new</td><td>Task Server admission and status</td><td>AGT-2182, AGT-2179</td><td>A10</td><td>M1, M3, M6</td></tr>
             <tr><td>P1</td><td>Durable outbox and immutable result handoff</td><td><strong>AGT-2183</strong> new</td><td>Remote Coding Executor</td><td>AGT-2182</td><td>A4</td><td>M1, M6</td></tr>
             <tr><td>P1</td><td>Typed CLI outcome and bounded recovery</td><td><strong>AGT-2185</strong> new</td><td>Runner adapters</td><td>AGT-2182</td><td>A5</td><td>M1, M5, M6</td></tr>
             <tr><td>P2</td><td>Exact-SHA Remote Review Executor</td><td><strong>AGT-2184</strong> new</td><td>Remote review data plane</td><td>AGT-2182, AGT-2183</td><td>A1, A2, A6</td><td>M1-M4</td></tr>
@@ -1127,7 +1136,7 @@
             <tr><td>P2</td><td>Semantic final-attempt completion judge</td><td><strong>AGT-2168</strong> corrected</td><td>Semantic review</td><td>AGT-2184</td><td>A7</td><td>M5, M6</td></tr>
             <tr><td>P3</td><td>Capability-specific drain and canary admission</td><td><strong>AGT-2186</strong> new</td><td>Host admission</td><td>AGT-2185</td><td>A8</td><td>M3, M6</td></tr>
             <tr><td>P3</td><td>Host-to-task and operator truth</td><td><strong>AGT-2173</strong>, AGT-2170, AGT-2142</td><td>Projection and existing UI</td><td>AGT-2182 plus upstream events</td><td>A9</td><td>M1, M3, M6</td></tr>
-            <tr><td>P4</td><td>Incident replay, Remote canary, and operator handoff</td><td><strong>AGT-2187</strong> new</td><td>Integration and test harness</td><td>AGT-2184, AGT-2186, AGT-2121, AGT-2168, AGT-2173</td><td>A1-A9</td><td>M1-M6</td></tr>
+            <tr><td>P4</td><td>Incident replay, Remote canary, and operator handoff</td><td><strong>AGT-2187</strong> new</td><td>Integration and test harness</td><td>AGT-2184, AGT-2186, AGT-2189, AGT-2121, AGT-2168, AGT-2173</td><td>A1-A10</td><td>M1-M6</td></tr>
           </tbody>
         </table>
       </div>
@@ -1143,6 +1152,7 @@
         <li><code>A7</code> Keyword-only, prompt-echo, historical-failure, and deployment-pending fixtures produce zero false lane decisions.</li>
         <li><code>A8</code> Codex 401 drains only Codex claims while healthy capabilities continue; common host failure drains all.</li>
         <li><code>A9</code> Every active Remote coding and review attempt appears in canonical history and operator surfaces; no live lease projects <code>runner=null</code> or <code>no-active-run</code>.</li>
+        <li><code>A10</code> Concurrent Remote claims never exceed project <code>maxParallelism</code>; <code>occupiedSlots</code> and the claim-eligible queue come from the same canonical attempt and admission snapshot, while spare host capacity remains available to other projects.</li>
       </ul>
     </section>
 
@@ -1170,8 +1180,9 @@
       </div>
 
       <div class="timeline">
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Remote project capacity breached live.</strong> Agent Studio declared <code>maxParallelism=2</code>, but four distinct fenced leases ran concurrently on a healthy four-slot host while project status reported <code>occupiedSlots=0</code>. The Ready queue also mixed ten dependency-blocked tasks and three Epics into an apparently runnable list. AGT-2189 now owns atomic project-cap enforcement plus truthful eligible queue and slot projection; it is dependency-blocked in Ready behind AGT-2182 and AGT-2179.</div><div class="timeline-action">Reproduced and scheduled</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>AGT-2155 bootstrap review is NO-GO.</strong> Remote implementation SHA <code>589c462f</code> reached <code>TASK_DONE</code>, but Auto Review selected local Wiki snapshot <code>61306343</code> and escalated with <code>attempt=1</code>. Independent inspection of the actual result also found the Remote Result-SHA handoff, real replay, attempt-chain isolation, evidence retention, cleanup, and bounded queue behavior incomplete. AGT-2155 stays Escalated and AGT-2182 stays blocked until the operator approves a dependency correction and isolated Remote bootstrap sequence.</div><div class="timeline-action">Operator decision required</div></div>
-        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Stabilization program queued.</strong> AGT-2129 now groups the retained AGT-2155, AGT-2121, AGT-2168, AGT-2173, and AGT-2170 work with six missing slices: AGT-2182 attempt authority, AGT-2183 durable outbox, AGT-2184 Remote Review Executor, AGT-2185 typed CLI recovery, AGT-2186 capability drain, and AGT-2187 final replay and canary. Hard <code>dependsOn</code> edges keep later work visible in Ready without allowing premature pickup.</div><div class="timeline-action">Queued via Task API</div></div>
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Stabilization program queued.</strong> AGT-2129 now groups the retained AGT-2155, AGT-2121, AGT-2168, AGT-2173, and AGT-2170 work with seven missing slices: AGT-2182 attempt authority, AGT-2189 project-capacity admission, AGT-2183 durable outbox, AGT-2184 Remote Review Executor, AGT-2185 typed CLI recovery, AGT-2186 capability drain, and AGT-2187 final replay and canary. Hard <code>dependsOn</code> edges keep later work visible in Ready without allowing premature pickup.</div><div class="timeline-action">Queued via Task API</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>No deployed fix evidence yet.</strong> Stable remained on <code>18fd1f89</code>. AGT-2159, AGT-2163, and AGT-2169 reached Remote <code>TASK_DONE</code> and Auto Review, but two remained there without a gate outcome for more than ten minutes. Remote cards still lacked canonical runner and run identity, AGT-2176 remained stale Progress, and host load again peaked above twice the core count.</div><div class="timeline-action">Observed read-only</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Fully remote target clarified.</strong> Exact-SHA materialization and all completion, build/test, evidence, vision, and quality aspects run inside a fenced Remote ReviewAttempt. The Task Server remains the authority and scheduler but owns no project checkout. Coding and review may initially share a physical Remote Host only as isolated roles; a dedicated review pool is the stronger stability target.</div><div class="timeline-action">Target corrected</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Authority inversion confirmed.</strong> LLM aspect prompts describe concerns as non-blocking and Human Review as final, while deterministic evidence and solution-quality gates can turn concern wording and keyword matches into reissue.</div><div class="timeline-action">Open design decision</div></div>
