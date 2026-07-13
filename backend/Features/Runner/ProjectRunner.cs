@@ -1670,26 +1670,39 @@ public class ProjectRunner
         IntegrationLeaseGrant? integrationLease = null)
     {
         var started = DateTime.UtcNow;
+        var settings = _projectSettings.Get(ProjectName);
+        var step = AgentStudio.Pipeline.PipelineCatalogue.Standard.AllSteps.First(s =>
+            string.Equals(s.Id, AgentStudio.Pipeline.PipelineCatalogue.ConflictResolutionStepId, StringComparison.OrdinalIgnoreCase));
+        var resolverCliType = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveCliType(settings, step)
+            ?? AgentStudio.Pipeline.PipelineStepModelDefaults.DefaultCli;
+        var resolverModel = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveModel(
+            settings, step, AgentStudio.Pipeline.PipelineStepModelDefaults.SupportModel);
+        var resolverThinkingLevel = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveThinkingLevel(
+            settings,
+            step,
+            resolverCliType,
+            resolverModel,
+            AgentStudio.Pipeline.PipelineStepModelDefaults.SupportThinkingLevel);
         RecordConflictResolutionStep(info, PipelineStepStatus.Running, "running",
-            IntegrationSummary("Starting managed Codex conflict-resolution run.", run, workBranch, conflict),
+            IntegrationSummary($"Starting managed {resolverCliType} conflict-resolution run.", run, workBranch, conflict),
             started,
-            model: info.Model);
+            model: resolverModel);
 
         try
         {
-            var resolver = _router.Get(CliTypes.Codex);
+            var resolver = _router.Get(resolverCliType);
             if (resolver.CliType == AgentTypes.Human || !resolver.IsAvailable())
             {
-                var unavailable = $"Codex resolver is unavailable at `{resolver.GetCliPath()}`.";
+                var unavailable = $"{resolverCliType} resolver is unavailable at `{resolver.GetCliPath()}`.";
                 var result = new IntegrationResult(IntegrationOutcome.Conflict, null, unavailable, conflict.ConflictedFiles);
                 RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
-                    IntegrationSummary(unavailable, run, workBranch, result), started, model: info.Model);
+                    IntegrationSummary(unavailable, run, workBranch, result), started, model: resolverModel);
                 return result;
             }
 
             var resolverJobKey = $"{GetJobKey(info.Id)}:conflict-resolution";
-            var permissionMode = _projectSettings.ResolveCliMode(ProjectName, CliTypes.Codex).Mode;
-            var contextMode = _projectSettings.ResolveContextMode(ProjectName, CliTypes.Codex, info.ContextMode).Mode;
+            var permissionMode = _projectSettings.ResolveCliMode(ProjectName, resolverCliType).Mode;
+            var contextMode = _projectSettings.ResolveContextMode(ProjectName, resolverCliType, info.ContextMode).Mode;
             var prompt = BuildConflictResolutionPrompt(info, run, workBranch, conflict);
             var (execution, error) = await resolver.StartAsync(
                 $"{info.Id}-conflict-resolution",
@@ -1698,8 +1711,8 @@ public class ProjectRunner
                 run.WorktreePath!,
                 sessionName: null,
                 resumeSession: false,
-                model: info.Model,
-                thinkingLevel: null,
+                model: resolverModel,
+                thinkingLevel: resolverThinkingLevel,
                 jobFolderPath: info.FolderPath,
                 permissionMode: permissionMode,
                 contextMode: contextMode,
@@ -1712,7 +1725,7 @@ public class ProjectRunner
                 RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
                     IntegrationSummary(failed.Error ?? "Codex resolver failed to start.", run, workBranch, failed),
                     started,
-                    model: info.Model);
+                    model: resolverModel);
                 return failed;
             }
 
@@ -1735,7 +1748,7 @@ public class ProjectRunner
                 var timedOut = new IntegrationResult(IntegrationOutcome.Conflict, null,
                     "Codex conflict resolver timed out.", _git.ListUnmergedFiles(run.WorktreePath!));
                 RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
-                    IntegrationSummary(timedOut.Error!, run, workBranch, timedOut), started, model: final.Model ?? info.Model);
+                    IntegrationSummary(timedOut.Error!, run, workBranch, timedOut), started, model: final.Model ?? resolverModel);
                 return timedOut;
             }
 
@@ -1745,7 +1758,7 @@ public class ProjectRunner
                 RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "lease-lost",
                     IntegrationSummary("Integration lease was lost during conflict-resolution.", run, workBranch, lost),
                     started,
-                    model: final.Model ?? info.Model);
+                    model: final.Model ?? resolverModel);
                 return lost;
             }
 
@@ -1765,7 +1778,7 @@ public class ProjectRunner
                 RecordConflictResolutionStep(info, PipelineStepStatus.Passed, "resolved",
                     $"Conflict resolved and `{run.Branch}` merged into `{workBranch}` at `{retry.IntegratedSha ?? "<unknown>"}`.",
                     started,
-                    model: final.Model ?? info.Model);
+                    model: final.Model ?? resolverModel);
                 return retry;
             }
 
@@ -1778,7 +1791,7 @@ public class ProjectRunner
             RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
                 IntegrationSummary("Integration blocked.", run, workBranch, blocked),
                 started,
-                model: final.Model ?? info.Model);
+                model: final.Model ?? resolverModel);
             return blocked;
         }
         catch (Exception ex)
@@ -1786,7 +1799,7 @@ public class ProjectRunner
             _logger.LogWarning(ex, "[taskboard] conflict-resolution step failed for {Job}", run.JobId);
             var failed = new IntegrationResult(IntegrationOutcome.Conflict, null, ex.Message, conflict.ConflictedFiles);
             RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
-                IntegrationSummary("Integration blocked.", run, workBranch, failed), started, model: info.Model);
+                IntegrationSummary("Integration blocked.", run, workBranch, failed), started, model: resolverModel);
             return failed;
         }
     }
@@ -6003,16 +6016,17 @@ public class ProjectRunner
         var model = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveModel(
             settings,
             AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep,
-            runtimeDefault: execution.Model ?? activeInfo.Model ?? ModelIds.ClaudeHaiku45);
+            runtimeDefault: AgentStudio.Pipeline.PipelineStepModelDefaults.SupportModel);
         var reviewCliType = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveCliType(
             settings,
-            AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep) ?? cliType;
+            AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep)
+            ?? AgentStudio.Pipeline.PipelineStepModelDefaults.DefaultCli;
         var thinkingLevel = AgentStudio.Pipeline.PipelineStepConfigResolver.ResolveThinkingLevel(
             settings,
             AgentStudio.Pipeline.PipelineCatalogue.AbortReviewStep,
             reviewCliType,
             model,
-            execution.ThinkingLevel ?? activeInfo.ThinkingLevel);
+            AgentStudio.Pipeline.PipelineStepModelDefaults.SupportThinkingLevel);
 
         var phase = _phaseByJob.TryGetValue(jobKey, out var snap) ? snap.Phase.ToString() : RunPhase.Unknown.ToString();
         var request = new PostAbortReviewRequest(

@@ -307,8 +307,8 @@ public static class PipelineCatalogue
     /// <see cref="AgentStudio.Review.CodeReviewStepService"/> (a
     /// grade mode), runs after the parallel aspect verdicts and before the final
     /// orchestrator decision, and uses a quality-first model
-    /// (<c>CodeReviewStep:DefaultModel</c>, Claude Opus by default) rather than
-    /// the cheap aspect model. Default-on; the recording lives in
+    /// (<c>CodeReviewStep:DefaultModel</c>, the live Codex flagship by default)
+    /// rather than the bounded aspect model. Default-on; the recording lives in
     /// <c>ReviewDecisionOrchestrator</c>. Reporting only - the grade never gates
     /// the lane decision, so a low grade surfaces for the human without forcing a
     /// reissue.
@@ -321,8 +321,8 @@ public static class PipelineCatalogue
     /// (a new feature, a removed capability, ...) and, on a conservative yes,
     /// SPAWNS a follow-up card there with a generated prompt and a
     /// <c>relatedTo</c> reference back to the source task. The relevance +
-    /// prompt-generation model is quality-first (defaults to the catalogue's best
-    /// Claude, currently Opus 4.8, at <c>max</c> effort); the spawned card is
+    /// prompt-generation model is quality-first (defaults to the live Codex
+    /// flagship at its top advertised reasoning level); the spawned card is
     /// worked by the target project's default model. Generic, not
     /// website-hardwired: the target project, relevance question, and spawn lane
     /// come from <c>ProjectSettings.TaskSpawner</c>. Reporting-only - it never

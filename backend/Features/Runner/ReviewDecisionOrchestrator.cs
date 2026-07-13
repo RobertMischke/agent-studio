@@ -2959,11 +2959,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// grade to the task's full change set with a quality-first model
     /// (<c>CodeReviewStep:DefaultModel</c>, default Opus 4.8) and hangs a
     /// <c>code-review:grade-*</c> tag on the card so the grade shows in the
-    /// Overview and as a card badge. Best-effort: any failure is logged,
-    /// recorded as a skipped row, and swallowed so a grade hiccup never
-    /// blocks the lane decision. No-op when the optional service is not wired
-    /// (stand-alone test path) or the step is disabled via
-    /// <c>CodeReviewStep:AutoGrade=false</c>.
+    /// Overview and as a card badge. Best-effort: any runtime failure is logged,
+    /// recorded as a failed row, and swallowed so a grade hiccup never blocks
+    /// the lane decision. An unavailable service, explicit disable, or condition
+    /// mismatch records an honest skipped row rather than remaining Pending.
     /// </summary>
     private async Task RunCodeReviewGradePostStepAsync(
         WatchPathEntry entry,
@@ -2971,12 +2970,26 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string taskBody,
         CancellationToken ct)
     {
-        if (_codeReviewStep == null) return;
+        var stepId = PipelineCatalogue.CodeReviewGradeStepId;
+        if (_codeReviewStep == null)
+        {
+            RecordCodeReviewGradeTerminal(
+                job.FolderPath,
+                PipelineStepStatus.Skipped,
+                "Quality-grade service is unavailable in this runtime.");
+            return;
+        }
 
         // Opt-out switch; default on so every pipelined task carries a grade.
-        if (!_configuration.GetValue("CodeReviewStep:AutoGrade", true)) return;
+        if (!_configuration.GetValue("CodeReviewStep:AutoGrade", true))
+        {
+            RecordCodeReviewGradeTerminal(
+                job.FolderPath,
+                PipelineStepStatus.Skipped,
+                "Quality grade disabled by CodeReviewStep:AutoGrade=false.");
+            return;
+        }
 
-        var stepId = PipelineCatalogue.CodeReviewGradeStepId;
         var projectSettings = _projectSettings?.Get(entry.Name);
         var catalogueStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
             string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase));
@@ -2990,10 +3003,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 Tags = job.Tags,
             }))
         {
+            RecordCodeReviewGradeTerminal(
+                job.FolderPath,
+                PipelineStepStatus.Skipped,
+                "Quality-grade pipeline condition did not match this task.");
             return;
         }
 
         var startedAt = DateTime.UtcNow;
+        string? selectedModel = null;
+        string? selectedThinkingLevel = null;
         try
         {
             // Quality over cost: the grade pass defaults to Opus 4.8 even though
@@ -3009,6 +3028,20 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var thinkingLevel = catalogueStep is null
                 ? null
                 : PipelineStepConfigResolver.ResolveThinkingLevel(projectSettings, catalogueStep, cli, model);
+            selectedModel = model;
+            selectedThinkingLevel = thinkingLevel;
+
+            // Persist dispatch before the one-shot begins. A slow or interrupted
+            // reviewer now reads Running instead of the misleading Pending state.
+            _pipelineLog?.RecordStep(job.FolderPath, new PipelineStepExecution
+            {
+                StepId = stepId,
+                Kind = StepKind.Orchestrator,
+                Status = PipelineStepStatus.Running,
+                StartedAt = startedAt,
+                Model = selectedModel,
+                ThinkingLevel = selectedThinkingLevel,
+            });
 
             var (diff, commitLabel) = BuildGradeDiff(entry, job);
 
@@ -3065,24 +3098,53 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
         catch (OperationCanceledException)
         {
+            RecordCodeReviewGradeTerminal(
+                job.FolderPath,
+                PipelineStepStatus.Failed,
+                "Quality-grade step was cancelled before completion.",
+                startedAt,
+                selectedModel,
+                selectedThinkingLevel);
             throw;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "code-review-grade: post-step failed for {Project}/{JobId}; recording a skipped row",
+                "code-review-grade: post-step failed for {Project}/{JobId}; recording a failed row",
                 entry.Name, job.Id);
-            _pipelineLog?.RecordStep(job.FolderPath, new PipelineStepExecution
-            {
-                StepId = stepId,
-                Kind = StepKind.Orchestrator,
-                Status = PipelineStepStatus.Skipped,
-                StartedAt = startedAt,
-                CompletedAt = DateTime.UtcNow,
-                DurationMs = 0,
-                Reason = "grade step error: " + ex.Message,
-            });
+            RecordCodeReviewGradeTerminal(
+                job.FolderPath,
+                PipelineStepStatus.Failed,
+                "Quality-grade step error: " + ex.Message,
+                startedAt,
+                selectedModel,
+                selectedThinkingLevel);
         }
+    }
+
+    private void RecordCodeReviewGradeTerminal(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        string reason,
+        DateTime? startedAt = null,
+        string? model = null,
+        string? thinkingLevel = null)
+    {
+        if (_pipelineLog == null) return;
+        var completedAt = DateTime.UtcNow;
+        var started = startedAt ?? completedAt;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.CodeReviewGradeStepId,
+            Kind = StepKind.Orchestrator,
+            Status = status,
+            StartedAt = started,
+            CompletedAt = completedAt,
+            DurationMs = Math.Max(0L, (long)(completedAt - started).TotalMilliseconds),
+            Model = model,
+            ThinkingLevel = thinkingLevel,
+            Reason = reason,
+        });
     }
 
     /// <summary>

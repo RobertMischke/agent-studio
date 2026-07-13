@@ -109,7 +109,8 @@ pipeline view.
   severity mapping.
 - `backend/Services/Review/CodeReviewGradeModelSelector.cs`: resolves the grade
   model/CLI from `CodeReviewStep:DefaultModel` / `CodeReviewStep:DefaultCli`,
-  defaulting to Claude Opus 4.8.
+  defaulting to Codex's live-discovered flagship (gpt-5.5 fallback) at its top
+  advertised reasoning level.
 - `backend/Features/Cli/Routing/OneShot/PromptLoggingCliOneShot.cs`: the
   central-dispatch decorator over `ICliOneShot.RunAsync` that captures the raw
   final prompt of every one-shot step-call. `backend/Host/Program.cs` registers
@@ -122,7 +123,7 @@ pipeline view.
   adapter for model-backed pipeline steps. A project can opt an aspect or the
   abort-review step into Codex through its existing `PipelineSteps` CLI/model
   override, including a live-discovered Spark model, without changing the core
-  coding run or the default Claude route.
+  coding run. Model-backed review/pipeline defaults now use Codex/OpenAI routes.
 - `backend/Features/Cli/Routing/OneShot/StepPromptLog.cs`: the per-job
   append/read writer for `.metadata/prompts.jsonl` (see filesystem-contract).
   Writes through the shared `IJsonlAppender` (concurrent aspect fan-out cannot
@@ -178,10 +179,11 @@ pipeline view.
   redundantly redoes existing code. It is reporting-only and never gates the lane:
   the grade surfaces as a `code-review:grade-{a..d}` card tag plus a rendered
   detail file, a D records a `Failed` step row so it stands out in the Overview,
-  and A-C record `Passed`. The grade model is quality-first: it defaults to Claude
-  Opus 4.8 (`CodeReviewStep:DefaultModel`, CLI `CodeReviewStep:DefaultCli`) while
-  the four cheap aspect reviews stay on Haiku - the deliberate ASS-855/ASS-916
-  asymmetry. Opt out per deployment with `CodeReviewStep:AutoGrade=false`. An
+  and A-C record `Passed`. The grade model is quality-first: it defaults to the
+  live-discovered Codex flagship with the top supported reasoning level
+  (`CodeReviewStep:DefaultModel`, CLI `CodeReviewStep:DefaultCli`), while the four
+  bounded aspect reviews use Codex `gpt-5.4-mini` at `high`. Opt out per deployment
+  with `CodeReviewStep:AutoGrade=false`. An
   unparseable reply degrades to grade C, never silently A.
 - A missing / unparseable aspect verdict caused by the reviewing CLI dying (the
   backend cut that killed the aspect runner mid-run) is an ENVIRONMENTAL infra
@@ -233,7 +235,7 @@ pipeline view.
   and configure a target project before it fires. It runs in the reporting bracket
   (after the aspects, before the pipeline `Complete` mark) and is reporting-only:
   it NEVER changes the source task's lane decision. The relevance + prompt-generation
-  model is quality-first (best available Claude at `max` effort via
+  model is quality-first (the live-discovered Codex flagship at its top effort via
   `TaskSpawnerModelSelector`, layered under the per-project step override), while the
   spawned card is left to the target project's default model. It is conservative and
   spam-safe by three guards: a run whose aspects `Block` does not spawn (it is about
@@ -283,10 +285,10 @@ pipeline view.
 - Review and abort-review changes need `ReviewDecisionOrchestrator*Tests`,
   `PostAbortReviewDeciderTests`, and `PostAbortReviewStepServiceTests`.
 - Quality-grade step changes need `CodeReviewStepServiceTests` (grade parsing,
-  tagging, MD render), `CodeReviewGradeModelSelectorTests` (Opus-4.8 default vs
-  Haiku regression guard), `CodeReviewGradeParsingTests` (sentinel grammar), and
-  `ReviewDecisionOrchestratorGradeStepTests` (end-to-end: the step executes,
-  invokes Opus 4.8 not Haiku, and stamps the `code-review:grade-*` tag).
+  tagging, MD render), `CodeReviewGradeModelSelectorTests` (live Codex flagship
+  default vs bounded aspect model), `CodeReviewGradeParsingTests` (sentinel
+  grammar), and `ReviewDecisionOrchestratorGradeStepTests` (end-to-end: the step
+  executes, invokes the Codex flagship, and stamps the `code-review:grade-*` tag).
 - Raw step-prompt capture changes need `StepPromptLogTests` (writer/reader
   round-trip with provenance, dedup for main-run shape, capture-before-failure)
   and the `overview-pane.component.spec.ts` step-prompt read-model assertion.
