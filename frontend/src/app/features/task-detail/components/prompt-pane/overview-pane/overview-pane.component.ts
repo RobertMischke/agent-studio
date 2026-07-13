@@ -1,15 +1,5 @@
 import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  ElementRef,
-  ViewChild,
-  computed,
-  effect,
-  inject,
-  input,
-  output,
-  signal,
+  ChangeDetectionStrategy, Component, DestroyRef, ElementRef, ViewChild, computed, effect, inject, input, output, signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { CliType, PromoteToCodingResponse, TaskInfo } from '../../../../../models/task.model';
@@ -29,6 +19,7 @@ import type {
   PipelineStep,
   PipelineStepConfig,
   PipelineStepStatus,
+  TaskPipelineResponse,
   StepKind,
   StepRunMode,
 } from '../../../../task-pipeline';
@@ -50,6 +41,7 @@ import { TaskPromptPopoverComponent } from '../task-prompt-popover/task-prompt-p
 import { PipelineRunHistoryComponent } from '../pipeline-run-history/pipeline-run-history.component';
 import { PipelineStepDetailsComponent } from '../pipeline-step-details/pipeline-step-details.component';
 import { PipelineStepToggleComponent } from '../pipeline-step-toggle/pipeline-step-toggle.component';
+import { PostStepControlsComponent } from '../post-step-controls/post-step-controls.component';
 import { lifecyclePhaseLabel } from './lifecycle-phase.util';
 import {
   isSteeringKind,
@@ -70,7 +62,6 @@ import {
   type PipelineGroupVm,
 } from './pipeline-groups.util';
 
-/** One per-step row in the Overview pipeline block. */
 interface PipelineRowVm {
   id: string;
   label: string;
@@ -488,7 +479,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, StudioIconComponent, CostBreakdownTriggerDirective],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, PlanningSpawnPanelComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, PipelineRunHistoryComponent, PipelineStepDetailsComponent, PipelineStepToggleComponent, PostStepControlsComponent, StudioIconComponent, CostBreakdownTriggerDirective],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -521,7 +512,7 @@ export class OverviewPaneComponent {
 
   private readonly runTimelinePoll = inject(RunTimelinePollService);
   private readonly agentWorkPoll = inject(AgentWorkSummaryPollService);
-  private readonly pipelinePoll = inject(TaskPipelinePollService);
+  readonly pipelinePoll = inject(TaskPipelinePollService);
   private readonly timelinePoll = inject(TaskTimelinePollService);
   private readonly clients = inject(ClientService);
   private readonly jobService = inject(TaskService);
@@ -875,15 +866,21 @@ export class OverviewPaneComponent {
     const isCurrentRun = this.selectedPipelineIsCurrent();
     const exec = new Map((selectedExecution?.steps ?? []).map(s => [s.stepId.toLowerCase(), s]));
     const cost = new Map((isCurrentRun ? (res.cost?.steps ?? []) : []).map(c => [c.stepId.toLowerCase(), c]));
+    const cardPlan = new Set((res.onDemand?.plannedStepIds ?? []).map(id => id.toLowerCase()));
+    const latestOnDemand = new Map<string, NonNullable<TaskPipelineResponse['onDemand']>['attempts'][number]>(isCurrentRun
+      ? (res.onDemand?.attempts ?? []).map(attempt => [attempt.stepId.toLowerCase(), attempt]) : []);
 
     const rows = steps.map(step => {
       const key = step.id.toLowerCase();
       const e = exec.get(key);
+      const onDemand = latestOnDemand.get(key);
       const c = cost.get(key);
       const cfg = res.config?.[step.id];
-      const enabled = cfg?.enabled ?? true;
+      const enabled = cardPlan.has(key) || (cfg?.enabled ?? true);
       let status: PipelineRowVm['status'];
       if (!enabled) status = 'disabled';
+      else if (onDemand) status = onDemand.status.toLowerCase() === 'failed' ? 'failed'
+        : onDemand.status.toLowerCase() === 'skipped' ? 'skipped' : 'passed';
       else if (e) status = e.status;
       else if (step.stub) status = 'planned';
       else status = 'pending';
@@ -924,7 +921,7 @@ export class OverviewPaneComponent {
         isFinalVerdict: step.id === FINAL_VERDICT_STEP_ID,
         enabled,
         canDisable: cfg?.canDisable ?? false,
-        hasExecution: e != null,
+        hasExecution: e != null || onDemand != null,
         config: cfg ?? null,
         status,
         statusTooltip: buildStepStatusTooltip(label, status, statusDetail),
@@ -936,12 +933,12 @@ export class OverviewPaneComponent {
         modelEditable,
         modelOverride,
         thinkingLevelOverride,
-        verdict,
+        verdict: onDemand ? `attempt ${onDemand.attempt}` : verdict,
         concernTooltip: buildConcernTooltip(label, verdict, statusDetail),
         explanation: buildStepExplanation(step.id, label, step.kind),
-        durationMs: e?.durationMs ?? 0,
-        startedAt: e?.startedAt ?? null,
-        completedAt: e?.completedAt ?? null,
+        durationMs: onDemand?.durationMs ?? e?.durationMs ?? 0,
+        startedAt: onDemand?.startedAt ?? e?.startedAt ?? null,
+        completedAt: onDemand?.finishedAt ?? e?.completedAt ?? null,
         tokenUsageSource: c?.tokenUsageSource ?? e?.tokenUsageSource ?? null,
         inputTokens,
         outputTokens,

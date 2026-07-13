@@ -1,5 +1,4 @@
 <div class="overview" data-testid="overview-tab">
-
   <section class="ov-section ov-title-block studio-measure studio-measure--prose" data-testid="overview-title-block">
     @if (editingTitle()) {
       <input #titleInput class="ov-title-input" data-testid="overview-title-input" type="text"
@@ -383,6 +382,7 @@
                   [config]="row.config"
                   (changed)="refreshPipeline()" />
               }
+              @if (selectedPipelineIsCurrent() && row.phaseKey !== 'pre' && row.phaseKey !== 'core') { <app-post-step-controls [stepId]="row.id" [label]="row.label" [jobId]="job().id" [watchPath]="job().watchPath" [projectName]="job().projectName" [activation]="row.config?.activation ?? null" [attempts]="pipelinePoll.pipeline()?.onDemand?.attempts ?? []" /> }
             </span>
             @if (row.runMode === 'parallel') {
               <span class="ov-pl-step__parallel-note"

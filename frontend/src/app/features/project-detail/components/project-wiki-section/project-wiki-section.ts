@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   input,
+  output,
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -28,6 +29,7 @@ import {
   WikiTree,
   WikiTreeMetadata,
   WikiTreeNode,
+  WorkbenchListItem,
 } from '../../../../models/project-docs.model';
 import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor/markdown-rich-editor';
@@ -38,6 +40,7 @@ import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
 import { WikiPulseComponent, WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
 import { WikiGradePanelComponent } from './wiki-grade-panel/wiki-grade-panel.component';
+import { ProjectStyleGuidesPanelComponent } from '../project-style-guides-panel/project-style-guides-panel';
 import {
   WikiTreeRow,
   collectFolderIds,
@@ -55,10 +58,8 @@ const WIKI_CONTEXT_MIN_WIDTH = 232;
 const WIKI_CONTEXT_MAX_WIDTH = 420;
 const WIKI_CONTEXT_DEFAULT_WIDTH = 284;
 const WIKI_RESIZE_STEP = 16;
-
 type WikiViewerTab = 'doc' | 'report' | 'source' | 'edit';
 type WikiResizablePanel = 'nav' | 'context';
-
 interface WikiPersistedState {
   navCollapsed?: boolean;
   contextCollapsed?: boolean;
@@ -105,8 +106,8 @@ interface WikiMetricChip {
  * Project-level knowledge view backed by the physical docs/ folder hierarchy:
  * the tree is the real folders + .md/.html files on disk (no virtual
  * organisation layer). Categories expand/collapse; the right pane renders the
- * selected page (markdown inline, HTML inside a script-disabled sandboxed
- * iframe). The right context rail carries provenance, the file's git log, and
+ * selected page (markdown inline, HTML inside a script-enabled, opaque-origin
+ * sandboxed iframe). The right context rail carries provenance, the file's git log, and
  * old-revision previews so only one page is open at a time.
  *
  * Structural edits are real git commits in the project repo: a text-only
@@ -128,6 +129,7 @@ interface WikiMetricChip {
     WikiDocHistoryComponent,
     WikiPulseComponent,
     WikiGradePanelComponent,
+    ProjectStyleGuidesPanelComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-wiki-section.html',
@@ -135,6 +137,7 @@ interface WikiMetricChip {
 })
 export class ProjectWikiSectionComponent {
   readonly projectName = input.required<string>();
+  readonly openWorkbench = output<WorkbenchListItem>();
 
   private readonly docs = inject(ProjectDocsService);
   private readonly drift = inject(DriftService);
@@ -316,7 +319,7 @@ export class ProjectWikiSectionComponent {
   readonly displayContent = computed(() =>
     this.revisionSha() ? this.revisionContent() : this.openedContent());
 
-  /** Trusted srcdoc for an HTML doc — the iframe sandbox (no scripts) isolates it. */
+  /** `allow-scripts` enables interaction; omitted same-origin isolates Studio state and APIs. */
   readonly trustedHtml = computed<SafeHtml>(() =>
     this.sanitizer.bypassSecurityTrustHtml(this.displayContent()));
 
@@ -393,7 +396,6 @@ export class ProjectWikiSectionComponent {
 
   readonly firstDoc = computed(() => this.findFirstDoc(this.roots()));
 
-  /** Open a page picked from the Pulse feed or inbox. */
   onPulseOpen(req: WikiPulseOpenRequest): void {
     this.openFile(req.relPath, req.type);
   }

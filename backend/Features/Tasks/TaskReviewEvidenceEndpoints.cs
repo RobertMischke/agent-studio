@@ -88,6 +88,7 @@ public static class TaskReviewEvidenceEndpoints
 
             var newId = mutations.CreateJob(req);
             if (newId is null) return Results.Conflict(new { error = "Failed to create follow-up task (slug collision or invalid input)." });
+            var created = scanner.FindJob(newId, info.WatchPath);
 
             // Stamp the new job id back onto the source finding so the panel
             // can render a "follow-up: <id>" chip and so a second click does
@@ -102,6 +103,7 @@ public static class TaskReviewEvidenceEndpoints
             return Results.Ok(new CreateFollowupFromEvidenceResponse
             {
                 JobId = newId,
+                TaskKey = created?.Key,
                 TargetState = targetState
             });
         });

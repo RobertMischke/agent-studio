@@ -7,6 +7,7 @@ import {
 } from '../../../features/task-timeline';
 import { TaskService } from '../../../services/task.service';
 import { TaskBackgroundPoller } from './task-background-poller';
+import { stripAnsi } from '../../../utils/ansi-text';
 
 /**
  * Polls the per-task event ledger (`/api/tasks/{id}/timeline`, ADR-0049 /
@@ -42,10 +43,23 @@ export class TaskTimelinePollService extends TaskBackgroundPoller<TaskTimelineEv
   }
 
   protected applyResponse(res: TaskTimelineEvent[]): void {
-    this.events.set(res ?? []);
+    this.events.set(sanitizeTimelineEvents(res));
   }
 
   protected clearValue(): void {
     this.events.set([]);
   }
+}
+
+/** Plain-text timeline surfaces must never expose terminal control codes. */
+export function sanitizeTimelineEvents(
+  events: readonly TaskTimelineEvent[] | null | undefined,
+): TaskTimelineEvent[] {
+  return (events ?? []).map((event) => ({
+    ...event,
+    summary: stripAnsi(event.summary),
+    details: event.details
+      ? Object.fromEntries(Object.entries(event.details).map(([key, value]) => [key, stripAnsi(value)]))
+      : event.details,
+  }));
 }

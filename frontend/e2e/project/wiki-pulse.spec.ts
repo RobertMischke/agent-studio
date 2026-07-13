@@ -111,6 +111,40 @@ const GRADING_STATUS_DONE = {
     error: null, recent: [],
   },
 };
+const STYLE_GUIDES_FIXTURE = {
+  projectKey: 'PROJ-0042',
+  projectDisplayName: 'Demo',
+  technologies: [
+    { key: 'angular', displayLabel: 'Angular' },
+    { key: 'dotnet', displayLabel: '.NET' },
+  ],
+  guides: [
+    {
+      id: 'angular-components', title: 'Angular component guide', relPath: 'quality/angular-components.md',
+      summary: 'Rendering, identity, and token rules for Angular UI work.',
+      promptSummary: 'Use standalone OnPush components and semantic tokens.', version: '1',
+      appliesTo: { projects: ['*'], technologies: ['angular'], taskAreas: ['frontend'] },
+      match: {
+        projectWildcard: true, projectSelector: '*', technologyWildcard: false,
+        technologies: [{ key: 'angular', displayLabel: 'Angular' }],
+      },
+    },
+    {
+      id: 'dotnet-backend', title: '.NET backend guide', relPath: 'quality/dotnet-backend.md',
+      summary: 'Feature ownership, pure policy, and side-effect ordering for .NET work.',
+      promptSummary: 'Keep feature flow explicit and policy pure.', version: '1',
+      appliesTo: { projects: ['*'], technologies: ['dotnet'], taskAreas: ['backend'] },
+      match: {
+        projectWildcard: true, projectSelector: '*', technologyWildcard: false,
+        technologies: [{ key: 'dotnet', displayLabel: '.NET' }],
+      },
+    },
+  ],
+  warnings: [],
+  snapshotId: '0123456789abcdef',
+  capturedAtUtc: '2026-07-14T08:00:00Z',
+  refreshAfterUtc: '2026-07-14T08:05:00Z',
+};
 
 /** Mocks the grading trigger's seed endpoints so the surface is deterministic. */
 async function mockGradingContext(page: import('@playwright/test').Page): Promise<void> {
@@ -122,6 +156,11 @@ async function mockGradingContext(page: import('@playwright/test').Page): Promis
 
 /** Keeps the spec independent of the host's configured real projects. */
 async function mockProjectContext(page: import('@playwright/test').Page): Promise<void> {
+  await page.route('**/api/crash-recovery/pending', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ pending: [] }),
+  }));
   await page.route('**/api/watch-paths', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -131,6 +170,11 @@ async function mockProjectContext(page: import('@playwright/test').Page): Promis
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({ exists: true, root: [{ type: 'md', name: 'README.md', relPath: 'README.md' }] }),
+  }));
+  await page.route('**/api/projects/demo/style-guides', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(STYLE_GUIDES_FIXTURE),
   }));
 }
 
@@ -228,6 +272,36 @@ test.describe('Wiki Pulse landing view (PULSE-2)', () => {
     expect(overflow).toBe(false);
 
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'wiki-pulse-warnings-in-progress--mocked.png'), fullPage: true });
+  });
+
+  test('shows applicable style guides in both themes', async ({ page, devBackend }) => {
+    expect(devBackend.port).toBe(5030);
+    await proxyBackend(page);
+    await mockProjectContext(page);
+    await page.route('**/wiki/pulse**', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PULSE_FIXTURE) }));
+    await mockGradingContext(page);
+    await page.addInitScript(() => {
+      if (!localStorage.getItem('atp.studio.theme')) localStorage.setItem('atp.studio.theme', 'light');
+    });
+
+    await page.goto(`/#/projects/${slugFor(projectName)}/wiki`);
+
+    const panel = page.getByTestId('project-wiki-style-guides');
+    await expect(panel).toBeVisible({ timeout: 10_000 });
+    await expect(panel).toContainText('Angular component guide');
+    await expect(panel).toContainText('.NET backend guide');
+    await expect(panel).toContainText('Prompt context · v1');
+    await expect(panel).toContainText('Snapshot 01234567');
+    await expect(panel).toContainText('Matches all projects');
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'light');
+    await panel.screenshot({ path: path.join(SCREENSHOT_DIR, 'style-guides-light--mocked.png') });
+
+    await page.evaluate(() => localStorage.setItem('atp.studio.theme', 'dark'));
+    await page.reload();
+    await expect(panel).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
+    await panel.screenshot({ path: path.join(SCREENSHOT_DIR, 'style-guides-dark--mocked.png') });
   });
 
   test('degrades to labelled empty states when a source is unavailable', async ({ page, devBackend }) => {

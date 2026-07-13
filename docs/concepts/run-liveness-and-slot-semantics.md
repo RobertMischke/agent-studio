@@ -146,6 +146,17 @@ remains bounded even if the project mode later changes to manual or paused.
 Project mode is not proof that a human is actively answering. Manual runs do not
 create these markers in the first place.
 
+AGT-2087 exposed two ways that contract could still be bypassed. First, the
+completion callback used the project's current mode instead of remembering that
+the run was auto-picked; an `auto-single` mode flip could therefore make an
+unattended `NeedsInput` look manual. Second, the monitor required the
+`steer-pending.json` sidecar even though the separately persisted
+`steer-pending` phase already made the board show "waiting for answer". The
+completion decision now treats the original auto-pick intent as authoritative
+and no longer depends on optional run-plan metadata. The monitor also
+reconstructs a missing marker from `phaseEnteredAt`, so every visibly pending
+wait remains bounded even after a torn sidecar write.
+
 The **auto-answer** is the named 2067 case: for an "is this already
 implemented?" question, the resolver checks the branch/develop state - if the
 task's `task/<id>` branch is already an ancestor of the integration branch, it
@@ -183,6 +194,12 @@ to the card's timeline (`steer_timeout_resolved`).
 `execution-running`, `loop-waiting`, `steer-pending`, and
 `post-processing-running` are first-class lifecycle phases. The board and task
 detail show the phase; intentional waits include their elapsed time.
+
+For remotely executed cards, an unexpired fenced run lease is also a board
+running signal. The read overlay projects the lease holder onto the task, and a
+`3-progress` card renders the same blue running treatment as a local execution
+plus a `remote` runner chip. Local `activeExecution` is not required for that
+remote state.
 
 Execution-slot ownership follows the coding CLI process, not `3-progress`
 membership. `ActiveRuns` retains the run record for finalisation after process

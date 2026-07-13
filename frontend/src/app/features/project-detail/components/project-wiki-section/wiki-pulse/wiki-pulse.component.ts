@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { StudioIconComponent } from '../../../../../components/studio-icon/studio-icon.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
-import { WikiNodeType, WikiPulse, WikiPulseDriftArea, WikiPulseFeedItem } from '../../../../../models/project-docs.model';
+import { WikiNodeType, WikiPulse, WikiPulseDriftArea, WikiPulseFeedItem, WorkbenchListItem } from '../../../../../models/project-docs.model';
+import { WorkbenchInboxComponent } from './workbench-inbox/workbench-inbox.component';
 
 /** What the parent needs to open a page from a Pulse row. */
 export interface WikiPulseOpenRequest {
@@ -34,7 +35,7 @@ type WikiPulseTone = 'good' | 'info' | 'warn' | 'bad' | 'muted';
 @Component({
   selector: 'app-wiki-pulse',
   standalone: true,
-  imports: [StudioIconComponent, TooltipDirective],
+  imports: [StudioIconComponent, TooltipDirective, WorkbenchInboxComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './wiki-pulse.component.html',
   styleUrl: './wiki-pulse.component.scss',
@@ -44,6 +45,7 @@ export class WikiPulseComponent {
   readonly loading = input(false);
 
   readonly openPage = output<WikiPulseOpenRequest>();
+  readonly openWorkbench = output<WorkbenchListItem>();
 
   readonly feed = computed(() => this.pulse()?.feed ?? null);
   readonly inbox = computed(() => this.pulse()?.inbox ?? null);

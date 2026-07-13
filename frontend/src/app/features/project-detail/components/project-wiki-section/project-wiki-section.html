@@ -320,7 +320,7 @@
                   } @else {
                     <iframe class="pwiki__html-frame pwiki__report-frame"
                             data-testid="project-wiki-report-frame"
-                            sandbox=""
+                            sandbox="allow-scripts"
                             [srcdoc]="trustedReportHtml()"
                     title="Document metadata reasoning report"></iframe>
                   }
@@ -379,7 +379,7 @@
               } @else if (openedType() === 'html') {
                 <iframe class="pwiki__html-frame"
                         data-testid="project-wiki-html-frame"
-                        sandbox=""
+                        sandbox="allow-scripts"
                         [srcdoc]="trustedHtml()"
                 title="HTML knowledge page"></iframe>
               } @else if (openedType() === 'json') {
@@ -601,12 +601,12 @@
                   <span>Start drift analysis</span>
                 </button>
               </div>
-
+              <app-project-style-guides-panel [projectName]="projectName()" (openGuide)="openFile($event, 'md')" />
               <app-wiki-pulse
                   class="pwiki__pulse"
                   [pulse]="pulse()"
                   [loading]="pulseLoading()"
-                  (openPage)="onPulseOpen($event)" />
+                  (openPage)="onPulseOpen($event)" (openWorkbench)="openWorkbench.emit($event)" />
 
               <app-wiki-grade-panel
                   class="pwiki__grade"

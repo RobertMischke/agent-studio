@@ -1,6 +1,10 @@
 # Git-Integration: Zielbild, Verhalten & offene Fragen
 
-> **Status: ENTWURF zur Review** (Operator-Entscheidungen in §7 offen).
+> **Status: HISTORICAL DRAFT.** Its reviewed-only `develop` and release
+> assumptions were superseded by the decided
+> [transparent release model](release-semantics.md). Keep this page as design
+> history for the `develop-local` option; do not use it as the current release
+> contract.
 > Kontext: Epic ASS-1720 (Lane-Rename + Merge-into-Develop), Provenienz-Slice ASS-1724,
 > Messung vom 2026-06-10 (§6). Verwandt: [structure-target](../architecture/backend-structure/structure-target.md),
 > [STYLEGUIDE](../architecture/backend-structure/styleguide.md).

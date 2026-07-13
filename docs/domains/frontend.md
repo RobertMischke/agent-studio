@@ -65,20 +65,44 @@ groups, and a failed domain reports an error without hiding successful domains.
   backend seed + navigate).
 - `frontend/src/app/features/task-detail/`: task detail shell, protocol pane,
   prompt pane, git pane, timeline, pipeline overview, and command surfaces.
+  Escalated tasks render a borderless, collapsible decision section that
+  reconciles delivery and decision state in one sentence, lists reissue
+  timestamps and triggers from the timeline, and shows open gate evidence.
+  Timeline and steering text is ANSI-sanitised before rendering. Code Review
+  keeps the last available grade visible with its date when it belongs to an
+  older delivery.
 - `frontend/src/app/features/project-detail/`: project shell and project-level
   quality, settings, architecture, runtime, drift, and supervisor panels. The
   left rail (`project-shell`) is a collapsible-segment tree
   (Insight / Quality / Context / Config). Its inventory and grouping are
   defined once in `project-shell/project-shell.config.ts`; edit that file, not
   the template, to add or move a rail entry. Context contains Architecture,
-  Wiki, Agent Docs (the AGENTS.md-style instructions agents read on their own,
-  key `steering`), and Prompts. The former Runtime Prompts placeholder rail is
-  intentionally removed. The Wiki / Docs rail
+  Project Graph, Wiki, Agent Docs (the AGENTS.md-style instructions agents read
+  on their own, key `steering`), and Prompts. Project Graph (`project-graph`)
+  consumes the read-only
+  `GET /api/projects/{projectName}/graph` catalog and offers a bounded component
+  graph plus a complete component list. The catalog retains unavailable managed
+  projects instead of omitting them, resolves internal manifest references only,
+  and reports independent repository revision / dirty state with snapshot schema,
+  generator version, and capture time. It deliberately does not infer a code-call
+  graph, runtime behavior, or architecture grade. The prompt-readable companion
+  and regeneration command live in
+  [architecture/project-map.md](../architecture/project-map.md); each regeneration
+  also writes a dated JSON envelope under `architecture/project-map-history/`.
+  The former Runtime Prompts placeholder rail is intentionally removed. The Wiki / Docs rail
   (`project-detail/components/project-wiki-section/`) renders the physical
   `docs/` folder tree directly, supports real create / move / rename / delete
   operations, and shows a per-doc History panel (model / when / why + git log);
   its endpoints and tree contract are documented in
   [docs/contracts/wiki-tree.md](../contracts/wiki-tree.md).
+- `frontend/src/app/features/project-detail/components/workbench-viewer/` is the
+  read-only Workbench host. Explorer discovery is lazy per expanded project;
+  Pulse reuses the same catalogue as a thinking inbox. Repository HTML runs only
+  in an opaque-origin `srcdoc` iframe with the Workbench CSP and no host API
+  bridge. An inert DOM parse moves artifact nodes into a fixed policy-first
+  wrapper, and dirty working-tree content is labelled as uncommitted instead of
+  receiving the current HEAD revision. Chat pinning and decision mutations are
+  intentionally not mounted.
 - `frontend/src/app/features/project-detail/components/project-overview-dashboard/`:
   the operator-first Project Overview composition. It presents project outcomes,
   important runtime entry points, deployment readiness, and work requiring
@@ -158,7 +182,7 @@ The dashboard is a projection over existing domain truths:
 |---|---|---|
 | Delivered work | `GET /api/projects/{projectName}/throughput`, including archived task history and exact rolling 24-hour and 7-day windows | Board and task history |
 | Token use | `GET /api/projects/{projectName}/token-usage/summary`, including rolling 24-hour and 7-day totals | Token Usage rail |
-| Project URLs | Embedded project URLs from `GET /api/workspaces`, live URL probes, and the existing `POST /api/projects/{projectId}/urls/{urlId}/start` action | Project URLs rail and registry |
+| Project URLs | Embedded project URLs from `GET /api/workspaces`; host-side readiness probes; per-embed URL/start settings; and owned process start, snapshot, output, and stop through `POST .../start` plus `GET/DELETE .../process` | Project URL embed, Project URLs rail, and registry |
 | Deployment readiness | `GET /api/projects/{projectName}/deployment/summary`, the shared DEP-1 read model for the last stable deployment and current pending commit delta | Deployment domain |
 | Wiki activity | `GET /api/projects/{projectName}/wiki/pulse?feedLimit=6` | Wiki rail |
 | Planning work | Active planning-mode tasks from the current board snapshot | Task detail and Board |

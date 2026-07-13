@@ -224,6 +224,7 @@ export class StudioTabStateService {
       if (t.kind === 'board' && t.projectName !== ALL_PROJECTS) return validNames.has(t.projectName);
       if (t.kind === 'epics' && t.projectName !== null) return validNames.has(t.projectName);
       if (t.kind === 'hub') return validNames.has(t.projectName);
+      if (t.kind === 'workbench') return validNames.has(t.projectName);
       if (t.kind === 'url-preview') return validNames.has(t.projectName);
       return true;
     });
@@ -332,7 +333,14 @@ export class StudioTabStateService {
       case 'task':
         return { kind: 'task', taskKey: tab.taskKey };
       case 'hub':
-        return { kind: 'hub', projectName: tab.projectName, section: tab.section };
+        return {
+          kind: 'hub',
+          projectName: tab.projectName,
+          section: tab.section,
+          ...(tab.pipelineStepId ? { pipelineStepId: tab.pipelineStepId } : {}),
+        };
+      case 'workbench':
+        return { kind: 'workbench', projectName: tab.projectName, workbenchId: tab.workbenchId, title: tab.title };
       case 'diff':
         return { kind: 'diff', commitSha: tab.commitSha };
       case 'activity':

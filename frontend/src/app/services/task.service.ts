@@ -29,7 +29,7 @@ import type {
   RegistryProjectSummary,
   ProjectUrlStartRule,
   ProjectUrlSuggestion,
-  ProjectUrlStartResponse,
+  ProjectUrlProcessSnapshot,
   PublishActionPanel,
   PublishAutomationMode,
   PublishWorkflowRun,
@@ -133,6 +133,7 @@ export interface CodeReviewRunResponse {
   concernTagId?: string | null;
   durationMs: number;
   startedAt: string;
+  grade?: string | null;
 }
 
 type LaneKey = keyof GroupedJobs;
@@ -699,10 +700,22 @@ export class TaskService {
       `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}`);
   }
 
-  /** Build &amp; start (or restart) the dev server behind a URL's start rule. */
+  /** Start/restart the owned dev server and return its observable session. */
   startProjectUrl(projId: string, urlId: string) {
-    return this.http.post<ProjectUrlStartResponse>(
+    return this.http.post<ProjectUrlProcessSnapshot>(
       `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/start`, {});
+  }
+
+  /** Current owned process, or null (HTTP 204) when Studio did not start one. */
+  getProjectUrlProcess(projId: string, urlId: string) {
+    return this.http.get<ProjectUrlProcessSnapshot | null>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/process`);
+  }
+
+  /** Explicitly stop the process tree owned for this URL. */
+  stopProjectUrlProcess(projId: string, urlId: string) {
+    return this.http.delete<ProjectUrlProcessSnapshot>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}/urls/${encodeURIComponent(urlId)}/process`);
   }
 
   /**
@@ -882,13 +895,27 @@ export class TaskService {
    */
   runCodeReview(
     jobId: string,
-    body: { model?: string; cliType?: string; thinkingLevel?: string | null; commit?: string },
+    body: { model?: string; cliType?: string; thinkingLevel?: string | null; commit?: string; mode?: 'verdict' | 'grade' },
     watchPath?: string,
   ) {
     return this.http.post<CodeReviewRunResponse>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/code-review`,
       body,
       this.withWatchPath(watchPath),
+    );
+  }
+
+  /** Add an implemented post-step to an existing card and run only that step. */
+  runTaskPostStep(jobId: string, stepId: string, watchPath?: string) {
+    return this.http.post<{
+      stepId: string;
+      attempt: number;
+      status: string;
+      summary: string;
+      artifactRef?: string | null;
+    }>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/pipeline/steps/${encodeURIComponent(stepId)}/run`,
+      { watchPath, addToCard: true },
     );
   }
 
@@ -923,7 +950,8 @@ export class TaskService {
   /**
    * Create a queued follow-up task in the same project, prefilled with the
    * finding's title + body + linked artifacts/file refs. Returns the new
-   * job's id so the UI can route the user to the new card.
+   * job's id plus its stable key so the UI can route without exposing the
+   * project's filesystem location.
    */
   createReviewEvidenceFollowup(
     jobId: string,
@@ -931,7 +959,7 @@ export class TaskService {
     body: { title?: string; targetState?: string },
     watchPath?: string,
   ) {
-    return this.http.post<{ jobId: string; targetState: string }>(
+    return this.http.post<{ jobId: string; taskKey?: string; targetState: string }>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/review-evidence/${encodeURIComponent(evidenceId)}/follow-up`,
       body,
       this.withWatchPath(watchPath),
@@ -955,9 +983,10 @@ export class TaskService {
   }
 
   /**
-   * Lists every `.md` file in the job root (status.md excluded). Drives the
-   * Files tab in the detail view; cheap manifest call so the tab can fetch
-   * individual file contents lazily through {@link readJobFile}.
+   * Lists supported Markdown, HTML, and aspect JSON documents in the job root
+   * (status.md excluded). Drives the Files tab in the detail view; cheap
+   * manifest call so the tab can fetch individual contents lazily through
+   * {@link readJobFile}.
    */
   listJobArtifacts(jobId: string, watchPath?: string) {
     return this.http.get<TaskArtifactsResponse>(
@@ -968,8 +997,8 @@ export class TaskService {
 
   /**
    * Reads one file from the job root. Used by the Files tab to lazily
-   * fetch the content of an aspect / note / other markdown card when the
-   * user expands it. Returns the body as plain text.
+   * fetch the content of an aspect, note, HTML, or other document card when
+   * the user expands it. Returns the body as plain text.
    */
   readJobFile(jobId: string, fileName: string, watchPath?: string) {
     const opts = this.withWatchPath(watchPath);

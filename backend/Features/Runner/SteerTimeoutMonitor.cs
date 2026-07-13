@@ -93,7 +93,8 @@ public sealed class SteerTimeoutMonitor
 
     /// <summary>
     /// One uptime sweep: for every <c>3-progress</c> card carrying a
-    /// steer-pending marker, apply <see cref="SteerTimeoutPolicy"/> and execute
+    /// steer-pending marker or persisted steer-pending lifecycle phase, apply
+    /// <see cref="SteerTimeoutPolicy"/> and execute
     /// the verdict. Returns the actions taken (auto-answered / blocked), for the
     /// hosted service to log and for tests to assert.
     /// </summary>
@@ -135,7 +136,8 @@ public sealed class SteerTimeoutMonitor
                     && !string.IsNullOrEmpty(activeJobId)
                     && string.Equals(laneFolder.Slug, activeJobId, StringComparison.OrdinalIgnoreCase))
                     continue;
-                var marker = SteerPendingMarker.TryRead(laneFolder.FolderPath, _logger);
+                var marker = SteerPendingMarker.TryRead(laneFolder.FolderPath, _logger)
+                    ?? RecoverMarkerFromPhase(laneFolder.Slug, laneFolder.FolderPath, entry.Path);
                 if (marker == null) continue;
                 candidates.Add(new Candidate(laneFolder.Slug, laneFolder.FolderPath, marker));
             }
@@ -195,6 +197,42 @@ public sealed class SteerTimeoutMonitor
                 outcomes.Count(o => o.Kind == SteerTimeoutOutcomeKinds.Blocked));
 
         return outcomes;
+    }
+
+    /// <summary>
+    /// Fail-safe for a torn marker write. The lifecycle phase is persisted by a
+    /// separate write and is what makes the card visibly say "waiting for
+    /// answer". Treat that phase as authoritative evidence of a bounded wait,
+    /// using its entry timestamp as the original clock. Otherwise a missing
+    /// sidecar can turn a visibly tracked wait into an infinite one (AGT-2087).
+    /// </summary>
+    private SteerPendingRecord? RecoverMarkerFromPhase(string slug, string folder, string watchPath)
+    {
+        TaskInfo? task;
+        try { task = _scanner.FindJob(slug, watchPath); }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "SteerTimeoutMonitor: could not inspect markerless phase for {Slug}", slug);
+            return null;
+        }
+        if (task == null || !string.Equals(task.Phase, LifecyclePhases.SteerPending, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var taskJson = Path.Combine(folder, "task.json");
+        var fileStamp = File.Exists(taskJson) ? File.GetLastWriteTimeUtc(taskJson) : DateTime.UtcNow;
+        var waitStartedAt = task.PhaseEnteredAt ?? (task.LastActivity == default ? fileStamp : task.LastActivity);
+        var recovered = new SteerPendingRecord
+        {
+            WaitStartedAt = waitStartedAt.ToUniversalTime(),
+            Kind = SteerPendingKinds.NeedsInput,
+            Question = "Steer-pending phase persisted without its durable question marker.",
+            CliType = task.CliType,
+        };
+        SteerPendingMarker.Write(folder, recovered, _logger);
+        _logger.LogWarning(
+            "SteerTimeoutMonitor: recovered missing steer marker for {Project}/{Slug} from phase entered at {WaitStartedAt:o}",
+            task.ProjectName, slug, recovered.WaitStartedAt);
+        return recovered;
     }
 
     private SteerResolveResult ResolveSafe(WatchPathEntry entry, Candidate c)

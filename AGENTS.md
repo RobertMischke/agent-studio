@@ -71,6 +71,7 @@ apply only under `frontend/`.
 | Pipeline | [docs/domains/pipeline.md](./docs/domains/pipeline.md) | Pre/core/post steps, pipeline history, step contracts, and the review/aspect evidence contract (branch diff + `results/` inventory + card mode; when "deliverables missing" is legitimate). |
 | Tasks | [docs/domains/tasks.md](./docs/domains/tasks.md) | Job folders, lane states, API mutations, task access, Epic lifecycle and archive-inclusive history, and the project onboarding and central-store contract. |
 | Frontend | [docs/domains/frontend.md](./docs/domains/frontend.md) | Angular surfaces, design system, Playwright proof. |
+| Style guides | [docs/quality/README.md](./docs/quality/README.md) | Technology-aware Angular and .NET guidance selected into coding prompts; incorporates the hard design baseline. |
 | Design rules | [docs/design/style-guide-hard-rules.md](./docs/design/style-guide-hard-rules.md) | Hard, non-negotiable design rules (no left accent bars, full-bleed views, aggregate = sum of visible children, acute-only signals, both themes). |
 | CLI | [docs/domains/cli.md](./docs/domains/cli.md) | Claude, Codex, Copilot, Gemini drivers and quota probes. |
 | ADRs | [docs/architecture/decisions/adr-archive.md](./docs/architecture/decisions/adr-archive.md) | Load-bearing decisions and deliberate non-goals. |

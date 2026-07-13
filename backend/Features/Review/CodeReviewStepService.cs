@@ -176,7 +176,9 @@ public sealed class CodeReviewStepService
         }
 
         var fileNamePrefix = request.Mode == CodeReviewMode.Grade ? "code-review-grade" : "code-review";
-        var fileName = $"{fileNamePrefix}-{startedAt:yyyy-MM-ddTHH-mm-ssZ}.md";
+        // Milliseconds keep rapid operator-triggered retro grades append-only;
+        // a second invocation must never replace the previous report.
+        var fileName = $"{fileNamePrefix}-{startedAt:yyyy-MM-ddTHH-mm-ss-fffZ}.md";
         var filePath = Path.Combine(request.JobFolderPath, fileName);
 
         try

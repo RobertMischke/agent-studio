@@ -1,13 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  effect,
-  inject,
-  input,
-  output,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../../services/task.service';
 import { CLI_TYPES, type CliType } from '../../../../models/task.model';
@@ -19,8 +10,7 @@ import type {
 } from '../../../task-pipeline';
 import type { ProjectPipelineCostTimeline } from '../../../project-token-usage';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
-import { TooltipDirective } from 'coding-agent-chat/shared';
-import type { StructuredTooltip } from 'coding-agent-chat/shared';
+import { TooltipDirective, type StructuredTooltip } from 'coding-agent-chat/shared';
 import {
   PIPELINE_GATE_MODES,
   PIPELINE_CONDITIONS,
@@ -37,6 +27,7 @@ import {
   stepTokenLabel,
   stepTokenTooltip,
 } from './pipeline-config.util';
+import { PipelineStepFocusDirective } from './pipeline-step-focus.directive';
 /**
  * Project-level Pipeline page (Nav-rebuild step 3 / T4a). Renders the
  * pre/core/post step catalogue as a calm CSS grid where each configurable
@@ -55,6 +46,7 @@ import {
   selector: 'app-project-pipeline-panel',
   standalone: true,
   imports: [FormsModule, CliModelSelectorComponent, TooltipDirective],
+  hostDirectives: [{ directive: PipelineStepFocusDirective, inputs: ['focusStepId'] }],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-pipeline-panel.component.html',
   styleUrl: './project-pipeline-panel.component.scss',

@@ -1,8 +1,9 @@
 # Experiment workbenches
 
-Status: concept and mockup complete, 2026-07-11. Production implementation is
-intentionally deferred. WB-1 through WB-5 are proposed follow-up feature cards,
-ready for Epic handoff, and are not unfinished scope in this concept card.
+Status: concept and mockup complete, 2026-07-11. The first read-only production
+slice landed on 2026-07-12: repository discovery, Explorer catalogue, isolated
+viewer, Pulse thinking inbox, and the curated legacy pilot. Chat attachment and
+decision mutations remain future slices.
 
 Mockup:
 [mockups/experimentier-workbench.html](mockups/experimentier-workbench.html).
@@ -99,6 +100,12 @@ failure remains `decision-pending` and can be reconciled by operation id.
 Invalid descriptors remain visible as an Explorer error row with their path and
 validation problem; they are never silently omitted.
 
+Catalogue reads are containment-checked against the physical repository path.
+Any symbolic-link or reparse-point component below that root is rejected, so a
+descriptor, entrypoint, or Workbench folder cannot redirect discovery outside
+the checkout. HTML is capped at 20 MiB before it is read; oversized entries are
+reported as invalid rather than loaded into the API or browser.
+
 There is no `docs/workbenches/registry.json`. The physical folders are the
 organization model, consistent with the
 [Wiki tree contract](../contracts/wiki-tree.md). The descriptor adds properties
@@ -169,11 +176,14 @@ Selecting an item opens a Workbench tab and preserves project, path, viewed
 branch, and revision in the header. This uses the shared Branch Context Control
 from the [project relationship model](project-relationship-model.md). The list
 and viewer must never imply that content from one branch represents another.
+When the descriptor or entrypoint has uncommitted working-tree changes, the
+viewer says so explicitly and withholds the HEAD revision instead of attaching
+that SHA to bytes HEAD does not contain.
 
 Because the files remain below `docs/`, they also stay visible in the physical
 Wiki tree and Git/Pulse history. The ordinary Wiki view renders the entrypoint
-as a static artifact. The Workbenches row is a narrow generated projection with
-lifecycle actions, not a second content tree.
+as an interactive but isolated artifact. The Workbenches row is a narrow
+generated projection with lifecycle actions, not a second content tree.
 
 Pulse may report recently changed, invalid, or decision-ready Workbenches, but
 Pulse does not own their list or lifecycle. Its role remains a generated entry
@@ -190,11 +200,22 @@ The Workbench view is host chrome around isolated content:
 +-------------+---------------------------------------+-----------------------+
 ```
 
-This requires a distinct viewer policy. Ordinary Wiki HTML is intentionally
-rendered in a script-disabled sandbox. Workbenches may need scripts, so the host
-loads sanitized content through `srcdoc` and can opt into `allow-scripts`
-while retaining an opaque origin. It must not receive `allow-same-origin`, top
-navigation, forms, downloads, modals, popups, clipboard access, or direct Agent
+Ordinary Wiki, Git-pane preview, and Files-tab HTML all use the same baseline
+viewer policy: `srcdoc` with `sandbox="allow-scripts"`. Before assignment, the
+host parses the source in an inert document and moves it into a fixed wrapper
+whose CSP and `about:blank` base precede every artifact node; artifact CSP,
+refresh, and base elements cannot move ahead of that boundary. Scripts can power
+self-contained interactions, while the deliberate omission of
+`allow-same-origin` gives the document an opaque origin and prevents it from
+inheriting Studio's origin or directly reading Studio cookies, storage, and DOM.
+The Workbench CSP denies network requests. The ordinary viewer does not promise
+same-origin integration or network-backed application behavior.
+
+The Workbench remains the distinct viewer for artifacts that need more than
+that baseline, including controlled network-backed previews or a future
+same-origin capability. Its host must not grant same-origin implicitly. It also
+must not receive top navigation, forms, downloads, modals, popups, clipboard
+access, or direct Agent
 Studio credentials. A restrictive Content Security Policy blocks network,
 frames, forms, and external assets by default while permitting only the inline
 CSS/script and data images required by the self-contained artifact.
@@ -351,6 +372,30 @@ The first useful read-only cut is medium.
 | **WB-4: Host-owned task editor, decision spawn, and receipt** | L | Add the user-driven task draft editor and Build/Archive previews in trusted host chrome, including field validation, explicit confirmation, shared validated task creation, idempotent operation handling, manifest transition, planning-ledger recording, and AGT-2050 receipts. | Generated and chat-prepared values remain editable; neither chat nor iframe can confirm; retry cannot duplicate a card; failed partial completion is visible and repairable; a source planning task receives both `relatedTo` and a `SpawnedTaskLedger` record. |
 | **WB-5: Curated migration pilot** | M | Promote a small named set such as pipeline workbench, project-state exploration, and app survey; document provenance and leave other mockups untouched. | Each promoted item has one live source, valid metadata, and an explicit owner; incompatible storage/network assumptions are reported; no bulk heuristic migration. |
 
+### First production slice, 2026-07-12
+
+The implemented MVP combines the useful read-only boundaries of WB-1 and WB-2
+with Robert's required Pulse entry point and the first WB-5 discovery pilot:
+
+- `GET /api/projects/{projectName}/workbenches` validates canonical folders,
+  keeps invalid descriptors visible, sorts current items newest first, and can
+  include settled history through `?history=true`;
+- the Explorer loads a project's catalogue only when its Workbenches row is
+  expanded, and the count equals the visible rows;
+- the viewer carries project, path, branch, and revision provenance and renders
+  `srcdoc` with `sandbox="allow-scripts"`, an opaque origin, and a restrictive
+  CSP that denies network, frames, forms, objects, workers, and base URLs;
+- Pulse receives the same current catalogue as an "Open Workbench topics"
+  thinking inbox and opens the same viewer;
+- a named migration allowlist projects the existing pipeline companion report,
+  Workbench mockup family, and application survey from their single live paths.
+  The exact `docs/concepts/mockups/decoupled-lifecycles.html` path joins the list
+  automatically when that artifact lands. There is no general HTML heuristic.
+
+This slice deliberately exposes no chat pinning, source editing, archive/build
+action, or decision-to-task mutation. The typed Workbench tab/document boundary
+is the host-side seam for those later features; the iframe receives none of it.
+
 WB-2, WB-3, and WB-4 are the risk-bearing slices. If the team requires strictly
 small cards, split WB-3 into context builder and UI attachment, and WB-4 into
 preview and mutation/receipt. That makes seven cards but does not change the
@@ -366,15 +411,12 @@ cards.
 
 ## 11. Feature handoff status
 
-This concept card is complete with the concept, self-contained interactive
-mockup, implementation slice proposal, and second-opinion pass. The original
-scope explicitly excludes production code. Consequently, no WB slice is
-claimed as implemented here and none is an open item on this concept card.
-
-Feature delivery should start by creating an Epic or coordinated card family
-from WB-1 through WB-5. Each card must be accepted against the boundary in the
-slice table. WB-4 is handed off as its own large card, not as residual work in
-WB-3.
+The concept card remains complete. The 2026-07-12 implementation records the
+first read-only product slice described above without retroactively expanding
+the concept card's original scope. WB-3 and WB-4 remain separate future work;
+WB-4 is still handed off as its own large card, not as residual viewer work.
+Further WB-2 hardening and additional curated migrations should continue to be
+accepted against the boundaries in the slice table.
 
 ## 12. Validation plan for implementation
 

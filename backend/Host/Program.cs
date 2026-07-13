@@ -226,6 +226,7 @@ builder.Services.AddSingleton<TaskSessionLog>();
 builder.Services.AddSingleton<TimelineLog>();
 builder.Services.AddSingleton<ProjectThroughputService>();
 builder.Services.AddSingleton<ProjectVisualEvidenceService>();
+builder.Services.AddSingleton<ProjectGraphDiscoveryService>();
 // T2b (ASS-1740): the single per-task read layer. Loads all raw sources
 // (detail, session-events, cli-output, timeline ledger) once and projects the
 // run timeline + meshed ledger so the /runs and /timeline views stop
@@ -454,6 +455,9 @@ builder.Services.AddHostedService<AgentStudio.Docs.WorkstreamCuratorHostedServic
 // designated-topic pointers consistent and collects each topic's current state.
 // Injected into the review orchestrator; default-OFF per project.
 builder.Services.AddSingleton<AgentStudio.Pipeline.AgentsWikiSyncPostStepRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.IManagedProjectArtifactCommitService,
+    AgentStudio.Pipeline.ManagedProjectArtifactCommitService>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.OnDemandPostStepService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkstreamCollectorPostStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WikiTaskCrossReferenceService>();
 // Opt-in task-spawner post-step (AGT-2028): relevance judgment + follow-up
@@ -518,6 +522,8 @@ builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 // hours the way 2062/2067/2068 did on 2026-07-10.
 builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
+builder.Services.AddSingleton<ProjectStyleGuideService>();
+builder.Services.AddSingleton<WorkbenchCatalogueService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalService>();
 builder.Services.AddSingleton<AgentStudio.Proposals.ProjectProposalDraftingService>();
 // Wiki-grading maintenance run (AGT-2051): the maintenance-model default (its own

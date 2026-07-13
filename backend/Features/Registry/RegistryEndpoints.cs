@@ -341,13 +341,17 @@ public static class RegistryEndpoints
         // Storage is deleted first so a failure aborts before any metadata is
         // touched — never leaving an orphan folder behind a dangling pointer.
         app.MapDelete(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}",
-            (string projId, ProjectRegistry projects, WorkspaceManagementService workspaceManagement, ILoggerFactory loggerFactory) =>
+            (string projId, ProjectRegistry projects, ProjectUrlProcessService procs,
+                WorkspaceManagementService workspaceManagement, ILoggerFactory loggerFactory) =>
         {
             var log = loggerFactory.CreateLogger("ProjectDelete");
             var record = projects.FindById(projId);
             if (record == null)
                 return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
 
+            // Stop repository-owned preview children before metadata and storage
+            // disappear. The process service also repeats this at host shutdown.
+            procs.StopProject(projId);
             var storageResult = workspaceManagement.DeleteProjectStorage(record.StorageLocation);
             if (storageResult.Outcome == WorkspaceManagementOutcome.BadRequest)
             {
@@ -416,10 +420,13 @@ public static class RegistryEndpoints
         });
 
         app.MapDelete(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}",
-            (string projId, string urlId, ProjectRegistry projects) =>
+            (string projId, string urlId, ProjectRegistry projects, ProjectUrlProcessService procs) =>
         {
             try
             {
+                // A removed URL must not leave an owned process without a UI
+                // surface from which an operator can stop it.
+                procs.Stop(projId, urlId);
                 var updated = projects.RemoveUrl(projId, urlId);
                 return Results.Ok(updated);
             }
@@ -439,9 +446,8 @@ public static class RegistryEndpoints
             catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
         });
 
-        // Build & start / restart a URL's dev server (spawns StartRule.Command
-        // in Cwd, default RepositoryPath). Surfacing stdout/stderr is future
-        // scope; this only gets the process running.
+        // Start/restart, inspect, and stop the owned dev-server lifecycle. The
+        // bounded snapshot output powers the embed's in-place live console.
         app.MapPost(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/start",
             (string projId, string urlId, ProjectRegistry projects, ProjectUrlProcessService procs) =>
         {
@@ -469,6 +475,22 @@ public static class RegistryEndpoints
                     cwd,
                 });
             }
+        });
+
+        app.MapGet(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/process",
+            (string projId, string urlId, ProjectUrlProcessService procs) =>
+        {
+            var snapshot = procs.Get(projId, urlId);
+            return snapshot == null ? Results.NoContent() : Results.Ok(snapshot);
+        });
+
+        app.MapDelete(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/process",
+            (string projId, string urlId, ProjectUrlProcessService procs) =>
+        {
+            var snapshot = procs.Stop(projId, urlId);
+            return snapshot == null
+                ? Results.NotFound(new { error = "No process is owned for this URL." })
+                : Results.Ok(snapshot);
         });
 
         // Browser no-cors probes hide HTTP status. Probe the registry-owned URL

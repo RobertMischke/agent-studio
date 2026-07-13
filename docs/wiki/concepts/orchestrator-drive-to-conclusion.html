@@ -750,6 +750,28 @@
             the skipped causes visible even if the card is moved again later.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-11</td>
+          <td><code>AGT-2134</code><br><span class="small">steer timeout bypass<br>(observed on <code>AGT-2087</code>)</span></td>
+          <td>
+            AGT-2087 remained visibly in "waiting for answer" for 155 minutes although the default steer timeout was
+            120 seconds and the uptime monitor was deployed. No runtime artefacts for the 13:45-16:20 window were present
+            in this checkout, so the code-path audit reconstructed the bypasses and locked them with fixtures.
+          </td>
+          <td>
+            NeedsInput ownership was inferred from the project's mode at completion time and was unnecessarily gated on
+            an optional captured run plan. An auto-picked run could therefore look manual after a mode flip. Separately,
+            the timeout sweep considered only <code>steer-pending.json</code>; a card whose durable phase said
+            <code>steer-pending</code> but whose sidecar write was missing remained visible yet untracked.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> original <code>AutoPickup</code> intent now keeps NeedsInput unattended
+            regardless of a later mode flip and without run-plan metadata. A missing steer marker is reconstructed from
+            the persisted phase timestamp. Timed-out waits therefore reach either <code>auto-answered</code> and
+            <span class="lane">2-ready</span>, or the <code>steer-unanswered</code> blocked terminal in
+            <span class="lane">5e-escalated</span>; they cannot remain in progress indefinitely.
+          </td>
+        </tr>
       </tbody>
     </table>
 

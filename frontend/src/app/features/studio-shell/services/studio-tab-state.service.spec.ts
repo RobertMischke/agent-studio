@@ -123,6 +123,23 @@ describe('StudioTabStateService', () => {
       expect(svc.activeTab()).toEqual({ kind: 'hub', projectName: 'Project A', section: 'drift' });
     });
 
+    it('preserves an exact pipeline-row deep link when adopting the Hub tab', () => {
+      svc.open({ kind: 'hub', projectName: 'Project A', section: 'overview' });
+      svc.open({
+        kind: 'hub',
+        projectName: 'Project A',
+        section: 'pipeline',
+        pipelineStepId: 'post-wiki-learnings',
+      });
+
+      expect(svc.activeTab()).toEqual({
+        kind: 'hub',
+        projectName: 'Project A',
+        section: 'pipeline',
+        pipelineStepId: 'post-wiki-learnings',
+      });
+    });
+
     it('keeps the tab in its original slot when adopting a new section', () => {
       svc.open({ kind: 'hub', projectName: 'Project A', section: 'drift' });
       svc.open({ kind: 'task', taskKey: 'later' });

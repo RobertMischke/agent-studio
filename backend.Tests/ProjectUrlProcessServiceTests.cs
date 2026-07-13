@@ -62,7 +62,7 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
     [Fact]
     public void Start_ReturnsCommandAndEffectiveWorkingDirectory()
     {
-        var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance);
+        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance);
         var url = new ProjectUrlRecord
         {
             Id = "url-1",
@@ -77,6 +77,69 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
         Assert.Equal(url.StartRule.Command, result.Command);
         Assert.Equal(_root, result.Cwd);
         Assert.True(result.ProcessId > 0);
+    }
+
+    [Fact]
+    public async Task Start_CapturesOutputAndCompletionInTheSessionSnapshot()
+    {
+        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance);
+        var started = service.Start(Project(repositoryPath: _root), Url("url-output", EchoCommand()));
+
+        var settled = await WaitForAsync(service, started.UrlId, snapshot =>
+            snapshot.State == ProjectUrlProcessStates.Exited
+            && snapshot.Output.Any(line => line.Contains("embed-ready", StringComparison.Ordinal)));
+
+        Assert.Equal(0, settled.ExitCode);
+        Assert.Contains(settled.Output, line => line.Contains("embed-ready", StringComparison.Ordinal));
+        Assert.Contains(settled.Output, line => line.Contains("exited with code 0", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Stop_TerminatesTheOwnedProcessTreeAndRetainsItsSnapshot()
+    {
+        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance);
+        var started = service.Start(Project(repositoryPath: _root), Url("url-stop", LongRunningCommand()));
+
+        var stopped = service.Stop(started.ProjectId, started.UrlId);
+
+        Assert.NotNull(stopped);
+        Assert.Equal(ProjectUrlProcessStates.Stopped, stopped.State);
+        Assert.NotNull(stopped.FinishedAtUtc);
+        Assert.Contains(stopped.Output, line => line.Contains("stopped by operator", StringComparison.Ordinal));
+        var retained = service.Get(started.ProjectId, started.UrlId);
+        Assert.NotNull(retained);
+        Assert.Equal(stopped.ProcessId, retained.ProcessId);
+        Assert.Equal(stopped.State, retained.State);
+        Assert.Equal(stopped.Output, retained.Output);
+    }
+
+    [Fact]
+    public void StopProject_TerminatesEveryOwnedUrlProcess()
+    {
+        using var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance);
+        var project = Project(repositoryPath: _root);
+        service.Start(project, Url("url-one", LongRunningCommand()));
+        service.Start(project, Url("url-two", LongRunningCommand()));
+
+        var stopped = service.StopProject(project.Id);
+
+        Assert.Equal(2, stopped.Count);
+        Assert.All(stopped, snapshot => Assert.Equal(ProjectUrlProcessStates.Stopped, snapshot.State));
+    }
+
+    [Fact]
+    public void Dispose_TerminatesOwnedProcessesSoHostShutdownCannotOrphanThem()
+    {
+        var service = new ProjectUrlProcessService(NullLogger<ProjectUrlProcessService>.Instance);
+        var started = service.Start(
+            Project(repositoryPath: _root),
+            Url("url-shutdown", LongRunningCommand()));
+
+        service.Dispose();
+
+        var settled = service.Get(started.ProjectId, started.UrlId);
+        Assert.NotNull(settled);
+        Assert.False(ProjectUrlProcessStates.IsActive(settled.State));
     }
 
     [Fact]
@@ -106,4 +169,35 @@ public sealed class ProjectUrlProcessServiceTests : IDisposable
         Command = command,
         Cwd = cwd,
     };
+
+    private static ProjectUrlRecord Url(string id, string command) => new()
+    {
+        Id = id,
+        Label = id,
+        Url = "http://localhost:4202",
+        StartRule = Rule(command),
+    };
+
+    private static string EchoCommand() => OperatingSystem.IsWindows()
+        ? "echo embed-ready"
+        : "printf 'embed-ready\\n'";
+
+    private static string LongRunningCommand() => OperatingSystem.IsWindows()
+        ? "ping -n 30 127.0.0.1 > nul"
+        : "sleep 30";
+
+    private static async Task<ProjectUrlProcessSnapshot> WaitForAsync(
+        ProjectUrlProcessService service,
+        string urlId,
+        Func<ProjectUrlProcessSnapshot, bool> predicate)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (!timeout.IsCancellationRequested)
+        {
+            var snapshot = service.Get("PROJ-001", urlId);
+            if (snapshot != null && predicate(snapshot)) return snapshot;
+            await Task.Delay(25, timeout.Token);
+        }
+        throw new TimeoutException("Process did not reach the expected state.");
+    }
 }

@@ -171,6 +171,36 @@ export interface WikiRevisionContent {
   content: string;
 }
 
+export type WorkbenchStatus = 'active' | 'decision-pending' | 'decided' | 'archived' | 'invalid';
+
+export interface WorkbenchListItem {
+  id: string;
+  title: string;
+  summary: string;
+  status: WorkbenchStatus;
+  phase: 'shaping' | 'testing' | 'decision-ready' | null;
+  updatedAtUtc: string;
+  entryPath: string;
+  valid: boolean;
+  error: string | null;
+  sourceTaskKeys: string[];
+}
+
+export interface WorkbenchCatalogue {
+  projectName: string;
+  includesHistory: boolean;
+  count: number;
+  items: WorkbenchListItem[];
+}
+
+export interface WorkbenchDocument {
+  workbench: WorkbenchListItem;
+  html: string;
+  branch: string | null;
+  revision: string | null;
+  workingTreeModified: boolean;
+}
+
 // ---- Wiki Pulse (PULSE-1: the generated wiki landing view) ----
 
 /** One change-feed row: a recently-edited page + frame-area badge + task key. */
@@ -323,6 +353,7 @@ export interface WikiPulse {
   critical: WikiPulseCritical;
   warnings?: WikiPulseWarnings;
   activity?: WikiPulseActivity;
+  workbenches?: WorkbenchCatalogue | null;
 }
 
 // ---- Wiki grading maintenance run (AGT-2051) ----
@@ -400,4 +431,44 @@ export interface ArchitectureOverview {
   exists: boolean;
   preamble: string;
   decisions: ArchitectureDecisionSummary[];
+}
+
+export interface ProjectStyleGuideAppliesTo {
+  projects: string[];
+  technologies: string[];
+  taskAreas: string[];
+}
+
+export interface ProjectTechnology {
+  key: string;
+  displayLabel: string;
+}
+
+export interface ProjectStyleGuideMatch {
+  projectWildcard: boolean;
+  projectSelector: string;
+  technologyWildcard: boolean;
+  technologies: ProjectTechnology[];
+}
+
+export interface ProjectStyleGuide {
+  id: string;
+  title: string;
+  relPath: string;
+  summary: string;
+  promptSummary: string;
+  version: string;
+  appliesTo: ProjectStyleGuideAppliesTo;
+  match: ProjectStyleGuideMatch;
+}
+
+export interface ProjectStyleGuideCatalogue {
+  projectKey: string;
+  projectDisplayName: string;
+  technologies: ProjectTechnology[];
+  guides: ProjectStyleGuide[];
+  warnings: { relPath: string; message: string }[];
+  snapshotId: string;
+  capturedAtUtc: string;
+  refreshAfterUtc: string;
 }

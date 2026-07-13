@@ -1886,7 +1886,11 @@ public record WikiPulse(
     WikiPulseDrift Drift,
     WikiPulseCritical Critical,
     WikiPulseWarnings Warnings,
-    WikiPulseActivity Activity);
+    WikiPulseActivity Activity)
+{
+    /// <summary>Open experiment questions projected into Pulse as a thinking inbox.</summary>
+    public WorkbenchCatalogue? Workbenches { get; init; }
+}
 
 public record WikiPulseWarnings(bool Available, string? Reason, int Count, List<WikiPulseWarningItem> Items)
 {

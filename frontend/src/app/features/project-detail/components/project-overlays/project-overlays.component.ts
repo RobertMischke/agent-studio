@@ -6,6 +6,7 @@ import { ProjectDetailComponent } from '../project-detail/project-detail';
 import { ProjectOverviewDashboardComponent } from '../project-overview-dashboard/project-overview-dashboard';
 import { ProjectDeploymentPanelComponent } from '../project-deployment-panel/project-deployment-panel.component';
 import { ProjectUrlsPanelComponent } from '../project-urls-panel/project-urls-panel.component';
+import { ProjectGraphComponent } from '../project-graph/project-graph.component';
 import { ProjectSettingsPanelComponent } from '../project-settings-panel/project-settings-panel.component';
 import { ProjectShellComponent } from '../project-shell/project-shell.component';
 import { SecurityPanelComponent } from '../security-panel/security-panel.component';
@@ -43,6 +44,7 @@ import { TooltipDirective } from 'coding-agent-chat/shared';
     ProjectOverviewDashboardComponent,
     ProjectDeploymentPanelComponent,
     ProjectUrlsPanelComponent,
+    ProjectGraphComponent,
     ProjectSettingsPanelComponent,
     ProjectShellComponent,
     SecurityPanelComponent,
@@ -84,6 +86,7 @@ export class ProjectOverlaysComponent {
       || rail === 'security'
       || rail === 'visual-evidence'
       || rail === 'architecture'
+      || rail === 'project-graph'
       || rail === 'drift'
       || rail === 'uxui'
       || rail === 'test-quality'
