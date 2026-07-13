@@ -32,6 +32,7 @@ public sealed class TaskIndexCache
 {
     private readonly TimeSpan _safetyTtl;
     private readonly Func<List<TaskInfo>> _scanAllJobsRaw;
+    private readonly Action? _beforeRefreshGenerationCapture;
 
     // Cache slot: snapshot + when it was taken + whether a mutation/watcher
     // event marked it stale before the next read got there.
@@ -88,9 +89,11 @@ public sealed class TaskIndexCache
         TaskScannerService scanner,
         ILogger<TaskIndexCache> logger,
         IConfiguration config,
-        Func<List<TaskInfo>> scanAllJobsRaw)
+        Func<List<TaskInfo>> scanAllJobsRaw,
+        Action? beforeRefreshGenerationCapture = null)
     {
         _scanAllJobsRaw = scanAllJobsRaw;
+        _beforeRefreshGenerationCapture = beforeRefreshGenerationCapture;
         var ttlSec = int.TryParse(config["TaskIndexCache:SafetyTtlSeconds"], out var v) ? v : 30;
         _safetyTtl = TimeSpan.FromSeconds(Math.Max(1, ttlSec));
     }
@@ -118,6 +121,19 @@ public sealed class TaskIndexCache
     {
         EnsureFresh();
         lock (_lock) return _archiveSnapshot;
+    }
+
+    /// <summary>
+    /// Atomically captures the live and archive partitions from one published
+    /// cache generation. Archive-inclusive readers must use this method rather
+    /// than calling <see cref="GetSnapshot"/> and <see cref="GetArchiveSnapshot"/>
+    /// separately: a refresh between those calls could otherwise duplicate or
+    /// omit a task that changed between a live lane and archive.
+    /// </summary>
+    public (ImmutableList<TaskInfo> Live, ImmutableList<TaskInfo> Archive) GetSnapshotPartitions()
+    {
+        EnsureFresh();
+        lock (_lock) return (_snapshot, _archiveSnapshot);
     }
 
     /// <summary>
@@ -184,8 +200,18 @@ public sealed class TaskIndexCache
             // Every invalidation during this disk walk advances the generation.
             // They collapse into one dirty bit, so after this single-flight
             // finishes at most one follow-up refresh can be admitted.
-            var genBefore = Volatile.Read(ref _invalidationGen);
-            var mutationGenBefore = Volatile.Read(ref _requiredMutationGen);
+            _beforeRefreshGenerationCapture?.Invoke();
+            long genBefore;
+            long mutationGenBefore;
+            lock (_lock)
+            {
+                // These generations describe one logical cache state and must
+                // be captured atomically. Reading them separately allowed a
+                // mutation between the reads to look both included and racy,
+                // forcing an unnecessary second full scan.
+                genBefore = _invalidationGen;
+                mutationGenBefore = _requiredMutationGen;
+            }
             var fresh = _scanAllJobsRaw();
             var board = new List<TaskInfo>(fresh.Count);
             var archive = new List<TaskInfo>();
@@ -204,7 +230,7 @@ public sealed class TaskIndexCache
                 _snapshotAtUtc = DateTime.UtcNow;
                 _hasSnapshot = true;
                 _publishedMutationGen = Math.Max(_publishedMutationGen, mutationGenBefore);
-                _dirty = Volatile.Read(ref _invalidationGen) != genBefore;
+                _dirty = _invalidationGen != genBefore;
                 if (ReferenceEquals(_refreshCompletion, completion))
                     _refreshCompletion = null;
                 Interlocked.Increment(ref Misses);

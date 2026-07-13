@@ -257,8 +257,7 @@ public class TaskScannerService : ITaskScanner
     {
         if (_indexCache != null)
         {
-            var live = _indexCache.GetSnapshot();
-            var archived = _indexCache.GetArchiveSnapshot();
+            var (live, archived) = _indexCache.GetSnapshotPartitions();
             var combined = new List<TaskInfo>(live.Count + archived.Count);
             combined.AddRange(live);
             combined.AddRange(archived);
