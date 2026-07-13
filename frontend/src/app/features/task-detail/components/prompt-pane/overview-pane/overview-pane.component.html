@@ -98,11 +98,10 @@
             [model]="effectiveModel()"
             [thinkingLevel]="effectiveThinkingLevel()"
             [availableModels]="availableModels()"
-            [disabled]="agentConfigDisabled()"
-            [disabledReason]="agentConfigDisabledReason()"
-            triggerTestid="chat-compose-model"
-            pickerTestidPrefix="chat-model-picker"
-            (commit)="onAgentConfigCommit($event)" />
+            [disabled]="isRunning() || agentConfigReadOnly()"
+            [disabledReason]="agentConfigReadOnly() ? 'Agent configuration is read-only after delivery. Re-open the task to change it.' : null"
+            triggerTestid="chat-compose-model" pickerTestidPrefix="chat-model-picker"
+            (commit)="agentConfigCommit.emit($event)" />
           @if (effectiveCliType(); as ct) {
             <span class="ov-agent-combo__cli"
                   data-testid="overview-agent-cli"

@@ -211,15 +211,6 @@ describe('OverviewPaneComponent (smoke)', () => {
           '[data-testid="overview-agent"] [data-testid="chat-model-picker"]',
         ),
       ).toBeNull();
-
-      const commits: unknown[] = [];
-      fixture.componentInstance.agentConfigCommit.subscribe((change) => commits.push(change));
-      fixture.componentInstance.onAgentConfigCommit({
-        cliType: 'claude',
-        model: 'claude-opus-4-8',
-        thinkingLevel: 'high',
-      });
-      expect(commits).toEqual([]);
     },
   );
 

@@ -653,37 +653,8 @@ export class OverviewPaneComponent {
     return override !== undefined ? override : (this.job().thinkingLevel ?? null);
   });
 
-  /**
-   * The Overview agent chip records the accepted task configuration. Keep it
-   * visible but read-only once the task has reached a terminal lane. A task
-   * that is explicitly re-opened becomes editable again through its new lane;
-   * the composer remains independently configurable for continuation runs.
-   */
-  readonly agentConfigReadOnly = computed<boolean>(() => {
-    const state = this.job().state;
-    return state === TaskState.Completed || state === TaskState.Archive;
-  });
-
-  readonly agentConfigDisabled = computed<boolean>(
-    () => this.isRunning() || this.agentConfigReadOnly(),
-  );
-
-  readonly agentConfigDisabledReason = computed<string | null>(() => {
-    if (this.isRunning()) return 'Stop the run before changing the agent configuration.';
-    if (this.agentConfigReadOnly()) {
-      return 'Agent configuration is read-only after delivery. Re-open the task to change it.';
-    }
-    return null;
-  });
-
-  onAgentConfigCommit(change: {
-    cliType: CliType;
-    model: string;
-    thinkingLevel: string | null;
-  }): void {
-    if (this.agentConfigDisabled()) return;
-    this.agentConfigCommit.emit(change);
-  }
+  readonly agentConfigReadOnly = computed(() =>
+    this.job().state === TaskState.Completed || this.job().state === TaskState.Archive);
 
   /** Clear the optimistic override once the real `job().title` catches up
    *  to the saved value (parent re-fetched the detail after PUT). */
