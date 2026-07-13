@@ -1,0 +1,46 @@
+@if (catalogue(); as guideCatalogue) {
+<section class="style-guides" data-testid="project-wiki-style-guides">
+  <header class="style-guides__head">
+    <div>
+      <span class="style-guides__kicker">Applicable guidance</span>
+      <h3>Engineering style guides</h3>
+      <p>Repository guides selected from project and technology frontmatter. Coding cards receive the same applicable rules during Preparation.</p>
+    </div>
+    <div class="style-guides__technologies" aria-label="Detected technologies">
+      @for (technology of guideCatalogue.technologies; track technology) {
+        <code>{{ technology }}</code>
+      }
+    </div>
+  </header>
+
+  @if (guideCatalogue.guides.length > 0) {
+    <div class="style-guides__grid">
+      @for (guide of guideCatalogue.guides; track guide.id) {
+        <button class="style-guides__card"
+                type="button"
+                [attr.data-testid]="'project-wiki-style-guide-' + guide.id"
+                (click)="openGuide.emit(guide.relPath)">
+          <span class="style-guides__copy">
+            <strong>{{ guide.title }}</strong>
+            <span>{{ guide.summary }}</span>
+          </span>
+          <span class="style-guides__meta">
+            <code>{{ guide.relPath }}</code>
+            <span>Prompt context · v{{ guide.version }}</span>
+          </span>
+        </button>
+      }
+    </div>
+  } @else {
+    <p class="style-guides__empty">No repository style guide matches the detected technologies.</p>
+  }
+
+  @if (guideCatalogue.warnings.length > 0) {
+    <div class="style-guides__warnings" role="status" data-testid="project-wiki-style-guide-warnings">
+      @for (warning of guideCatalogue.warnings; track warning.relPath) {
+        <p><code>{{ warning.relPath }}</code>: {{ warning.message }}</p>
+      }
+    </div>
+  }
+</section>
+}

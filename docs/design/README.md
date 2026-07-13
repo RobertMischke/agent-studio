@@ -4,6 +4,10 @@ Product-wide, prompt-known design hard rules. These are the rules that every
 coding card touching the UI is expected to already know, so they live at the top
 level and are referenced from `AGENTS.md`.
 
+The single cross-technology navigation entry is the
+[engineering style-guide family](../quality/README.md). This folder owns the
+short visual baseline that the Angular guide incorporates.
+
 | Page | What lives there |
 |---|---|
 | [style-guide-hard-rules.md](style-guide-hard-rules.md) | The hard, non-negotiable design rules (no left accent bars, full-bleed views, aggregate = sum of visible children, acute-only signals, both themes). |

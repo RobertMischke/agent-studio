@@ -40,6 +40,7 @@ import { resolveWikiImageSrc } from './wiki-image-resolver';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
 import { WikiPulseComponent, WikiPulseOpenRequest } from './wiki-pulse/wiki-pulse.component';
 import { WikiGradePanelComponent } from './wiki-grade-panel/wiki-grade-panel.component';
+import { ProjectStyleGuidesPanelComponent } from '../project-style-guides-panel/project-style-guides-panel';
 import {
   WikiTreeRow,
   collectFolderIds,
@@ -57,10 +58,8 @@ const WIKI_CONTEXT_MIN_WIDTH = 232;
 const WIKI_CONTEXT_MAX_WIDTH = 420;
 const WIKI_CONTEXT_DEFAULT_WIDTH = 284;
 const WIKI_RESIZE_STEP = 16;
-
 type WikiViewerTab = 'doc' | 'report' | 'source' | 'edit';
 type WikiResizablePanel = 'nav' | 'context';
-
 interface WikiPersistedState {
   navCollapsed?: boolean;
   contextCollapsed?: boolean;
@@ -130,6 +129,7 @@ interface WikiMetricChip {
     WikiDocHistoryComponent,
     WikiPulseComponent,
     WikiGradePanelComponent,
+    ProjectStyleGuidesPanelComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-wiki-section.html',

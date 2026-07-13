@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import {
   ArchitectureOverview,
+  ProjectStyleGuideCatalogue,
   SecurityFileContent,
   SecurityMeta,
   SecurityOverview,
@@ -61,6 +62,13 @@ export class ProjectDocsService {
   getWikiOverview(projectName: string) {
     return this.http.get<WikiOverview>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki`
+    );
+  }
+
+  /** Technology-aware style guides selected from repository frontmatter. */
+  getProjectStyleGuides(projectName: string) {
+    return this.http.get<ProjectStyleGuideCatalogue>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/style-guides`
     );
   }
 

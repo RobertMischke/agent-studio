@@ -601,7 +601,7 @@
                   <span>Start drift analysis</span>
                 </button>
               </div>
-
+              <app-project-style-guides-panel [projectName]="projectName()" (openGuide)="openFile($event, 'md')" />
               <app-wiki-pulse
                   class="pwiki__pulse"
                   [pulse]="pulse()"

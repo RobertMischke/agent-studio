@@ -339,6 +339,63 @@ public class IntakeRunnerTests : IDisposable
         Assert.DoesNotContain(manifest.Constraints, c => c.Id == "git-handling-api-not-cli");
     }
 
+    [Fact]
+    public void BuildEnrichmentManifest_CodingTask_IncludesApplicableRepositoryStyleGuide()
+    {
+        var target = new TaskInfo
+        {
+            Id = "angular-card",
+            Title = "Add Angular usage metric component",
+            State = TaskStates.Ready,
+            Mode = TaskModes.Coding,
+            Tags = ["frontend"]
+        };
+        var guide = new ProjectStyleGuide(
+            "angular-components",
+            "Angular component guide",
+            "quality/angular-components.md",
+            "Angular rules",
+            "Use OnPush, stable tracking, semantic tokens, and tabular numbers.",
+            "1",
+            new StyleGuideAppliesTo(["*"], ["angular"], ["frontend"]));
+
+        var manifest = IntakeRunner.BuildEnrichmentManifest(
+            target,
+            "Build the Angular component and SCSS for a frontend usage card.",
+            [guide]);
+
+        var selected = Assert.Single(manifest.Constraints,
+            constraint => constraint.Id == "style-guide:angular-components");
+        Assert.Equal("docs/quality/angular-components.md", selected.Source);
+        Assert.Contains("OnPush", selected.Text);
+        Assert.Equal("constraint-selector-v2-style-guides", manifest.Selector);
+    }
+
+    [Fact]
+    public void BuildEnrichmentManifest_ReadOnlyTask_DoesNotInjectCodingStyleGuide()
+    {
+        var target = new TaskInfo
+        {
+            Id = "research-card",
+            Title = "Research Angular rendering",
+            State = TaskStates.Ready,
+            Mode = TaskModes.Research,
+            Tags = ["frontend"]
+        };
+        var guide = new ProjectStyleGuide(
+            "angular-components", "Angular component guide", "quality/angular-components.md",
+            "Angular rules", "Use OnPush.", "1",
+            new StyleGuideAppliesTo(["*"], ["angular"], ["frontend"]));
+
+        var manifest = IntakeRunner.BuildEnrichmentManifest(
+            target,
+            "Research the Angular component rendering behavior and write a report.",
+            [guide]);
+
+        Assert.DoesNotContain(manifest.Constraints,
+            constraint => constraint.Id == "style-guide:angular-components");
+    }
+
     // ---- RunForJob integration: phase transitions + sidecar ------------------
 
     [Fact]

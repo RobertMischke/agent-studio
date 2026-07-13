@@ -14,6 +14,7 @@ Use this page as the first stop when you need the right document quickly.
 | [domains/](domains/README.md) | Current system-of-record domain maps for runner, pipeline, tasks, frontend, CLI, tokens, and token pricing. |
 | [contracts/](contracts/README.md) | Durable filesystem, task, protocol, run outcome, code-pattern, and wiki organization contracts. |
 | [design/](design/README.md) | Product-wide, prompt-known design hard rules (no left accent bars, full-bleed views, aggregate = sum, acute-only signals, both themes). |
+| [quality/](quality/README.md) | Technology-aware Angular and .NET style guides, applicability metadata, and the rule-authoring workflow used by Project Hub and intake prompts. |
 | [product/](product/README.md) | Product and UX direction: design principles, orchestrator chat, companion app, and skills architecture. |
 | [frontend/](frontend/README.md) | Frontend design system, style guide, testing contract, performance playbook, and audits. |
 | [cli/](cli/README.md) | Supported CLI contract, per-CLI skills, audits, and investigations. |
@@ -45,6 +46,7 @@ Use this page as the first stop when you need the right document quickly.
 | Architecture model | [architecture/model.md](architecture/model.md) |
 | Agent message bus | [architecture/bus/agent-message-bus.md](architecture/bus/agent-message-bus.md) |
 | Design hard rules (prompt-known) | [design/style-guide-hard-rules.md](design/style-guide-hard-rules.md) |
+| Engineering style guides (technology-aware and prompt-injected) | [quality/README.md](quality/README.md) |
 | Application visual survey (2026-07-11) | [design/app-survey-2026-07-11.html](design/app-survey-2026-07-11.html) |
 | Angular performance review (2026-07) | [design/angular-performance-report-2026-07.html](design/angular-performance-report-2026-07.html) |
 | Explorer project state indicator exploration (2026-07) | [design/tree-indicator-exploration-2026-07.html](design/tree-indicator-exploration-2026-07.html) and [alternatives catalog](wiki/concepts/tree-project-indicator-alternatives.md) |

@@ -432,3 +432,27 @@ export interface ArchitectureOverview {
   preamble: string;
   decisions: ArchitectureDecisionSummary[];
 }
+
+export interface ProjectStyleGuideAppliesTo {
+  projects: string[];
+  technologies: string[];
+  taskAreas: string[];
+}
+
+export interface ProjectStyleGuide {
+  id: string;
+  title: string;
+  relPath: string;
+  summary: string;
+  promptSummary: string;
+  version: string;
+  appliesTo: ProjectStyleGuideAppliesTo;
+}
+
+export interface ProjectStyleGuideCatalogue {
+  projectName: string;
+  repositoryRoot: string;
+  technologies: string[];
+  guides: ProjectStyleGuide[];
+  warnings: { relPath: string; message: string }[];
+}

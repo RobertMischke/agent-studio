@@ -77,7 +77,7 @@ public sealed class IntakeRunner
 {
     public const string IntakeParticipantPrefix = "intake:";
     public const string EnrichedContextRelativePath = "intake/enriched-context.md";
-    private const string EnrichmentSelector = "constraint-selector-v1";
+    private const string EnrichmentSelector = "constraint-selector-v2-style-guides";
 
     private readonly TaskScannerService _scanner;
     private readonly TaskMutationService _mutations;
@@ -85,6 +85,7 @@ public sealed class IntakeRunner
     private readonly AgentMessageBusBridge? _bus;
     private readonly ILogger<IntakeRunner> _logger;
     private readonly TimeProvider _time;
+    private readonly ProjectStyleGuideService? _styleGuides;
 
     public IntakeRunner(
         TaskScannerService scanner,
@@ -92,7 +93,8 @@ public sealed class IntakeRunner
         OrchestratorChatLog chatLog,
         ILogger<IntakeRunner> logger,
         AgentMessageBusBridge? bus = null,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        ProjectStyleGuideService? styleGuides = null)
     {
         _scanner = scanner;
         _mutations = mutations;
@@ -100,6 +102,7 @@ public sealed class IntakeRunner
         _bus = bus;
         _logger = logger;
         _time = time ?? TimeProvider.System;
+        _styleGuides = styleGuides;
     }
 
     public static string ParticipantIntakeFor(string project) => $"{IntakeParticipantPrefix}{project}";
@@ -110,7 +113,10 @@ public sealed class IntakeRunner
     /// contract testable and cheap; the manifest's selector/version fields let a
     /// later model-assisted selector land without changing the audit artifact.
     /// </summary>
-    public static IntakeEnrichmentManifest BuildEnrichmentManifest(TaskInfo target, string? promptMarkdown)
+    public static IntakeEnrichmentManifest BuildEnrichmentManifest(
+        TaskInfo target,
+        string? promptMarkdown,
+        IReadOnlyList<ProjectStyleGuide>? applicableGuides = null)
     {
         var areas = DetectTaskAreas(target, promptMarkdown);
         var areaSet = new HashSet<string>(areas, StringComparer.OrdinalIgnoreCase);
@@ -120,6 +126,27 @@ public sealed class IntakeRunner
         {
             if (rule.Applies(areaSet))
                 selected.Add(CloneConstraint(rule.Constraint));
+        }
+
+        if (string.Equals(TaskModes.Normalize(target.Mode), TaskModes.Coding, StringComparison.Ordinal)
+            && applicableGuides != null)
+        {
+            foreach (var guide in applicableGuides)
+            {
+                var matchedAreas = guide.AppliesTo.TaskAreas
+                    .Intersect(areaSet, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (matchedAreas.Count == 0)
+                    continue;
+                selected.Add(new IntakeConstraintSelection
+                {
+                    Id = $"style-guide:{guide.Id}",
+                    Title = guide.Title,
+                    Source = $"docs/{guide.RelPath}",
+                    Areas = guide.AppliesTo.TaskAreas.ToList(),
+                    Text = $"Style-guide version {guide.Version}; matched task area(s): {string.Join(", ", matchedAreas)}. {guide.PromptSummary}"
+                });
+            }
         }
 
         return new IntakeEnrichmentManifest
@@ -330,7 +357,8 @@ public sealed class IntakeRunner
         // Context-load: resolve references + prompt attachments against what is
         // actually available, so the verdict and sidecar carry the card's context.
         var context = BuildContextManifest(info, prompt, peers, ReadAttachmentFileNames(info.FolderPath));
-        var enrichment = BuildEnrichmentManifest(info, prompt);
+        var applicableGuides = _styleGuides?.GetCatalogue(info.ProjectName)?.Guides;
+        var enrichment = BuildEnrichmentManifest(info, prompt, applicableGuides);
         WriteEnrichedContextArtifact(info, enrichment);
         // Surface the context-load result in the run log: the manifest already
         // lands in lifecycle.json, but a structured line lets operators watching

@@ -5,7 +5,7 @@ import { provideHttpClientTesting, HttpTestingController } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ProjectWikiSectionComponent } from './project-wiki-section';
-import type { WikiFileHistory, WikiPulse, WikiTree } from '../../../../models/project-docs.model';
+import type { ProjectStyleGuideCatalogue, WikiFileHistory, WikiPulse, WikiTree } from '../../../../models/project-docs.model';
 
 const TREE: WikiTree = {
   projectName: 'Demo',
@@ -97,6 +97,33 @@ const PULSE: WikiPulse = {
   critical: { available: true, reason: 'No pages have been graded yet.', count: 0, overallGrade: 'none', items: [] },
 };
 
+const STYLE_GUIDES: ProjectStyleGuideCatalogue = {
+  projectName: 'Demo',
+  repositoryRoot: '/repo',
+  technologies: ['angular', 'dotnet', 'scss', 'typescript'],
+  guides: [
+    {
+      id: 'angular-components',
+      title: 'Angular component guide',
+      relPath: 'quality/angular-components.md',
+      summary: 'Rendering, identity, and token rules for Angular UI work.',
+      promptSummary: 'Use OnPush and stable tracking.',
+      version: '1',
+      appliesTo: { projects: ['*'], technologies: ['angular'], taskAreas: ['frontend'] },
+    },
+    {
+      id: 'dotnet-backend',
+      title: '.NET backend guide',
+      relPath: 'quality/dotnet-backend.md',
+      summary: 'Feature ownership and pure policy rules for backend work.',
+      promptSummary: 'Use pure policy tests.',
+      version: '1',
+      appliesTo: { projects: ['*'], technologies: ['dotnet'], taskAreas: ['backend'] },
+    },
+  ],
+  warnings: [],
+};
+
 async function setup(tree: WikiTree = TREE) {
   await TestBed.configureTestingModule({
     imports: [ProjectWikiSectionComponent],
@@ -116,6 +143,8 @@ async function setup(tree: WikiTree = TREE) {
   http.expectOne('/api/projects/Demo/wiki/tree').flush(tree);
   flushWikiPulse(http);
   flushGradingContext(http);
+  fixture.detectChanges();
+  flushStyleGuidesIfRendered(http);
   fixture.detectChanges();
   return { fixture, http };
 }
@@ -138,6 +167,13 @@ function flushGradingContext(http: HttpTestingController): void {
  */
 function flushWikiPulse(http: HttpTestingController, pulse: WikiPulse = PULSE): void {
   http.expectOne(r => r.url.includes('/wiki/pulse')).flush(pulse);
+}
+
+/** The style-guide panel is absent when persisted state opens a document directly. */
+function flushStyleGuidesIfRendered(http: HttpTestingController): void {
+  const requests = http.match('/api/projects/Demo/style-guides');
+  expect(requests.length).toBeLessThanOrEqual(1);
+  requests[0]?.flush(STYLE_GUIDES);
 }
 
 const el = (f: { nativeElement: unknown }) => f.nativeElement as HTMLElement;
@@ -245,6 +281,30 @@ describe('ProjectWikiSectionComponent', () => {
     ).toBe('Metadata unscored');
     expect(el(fixture).querySelector('[data-file-type="html"]')).toBeTruthy();
     expect(el(fixture).querySelector('[data-file-type="json"]')).toBeTruthy();
+    http.verify();
+  });
+
+  it('shows applicable repository style guides and opens one in the Wiki reader', async () => {
+    const { fixture, http } = await setup();
+
+    const panel = el(fixture).querySelector('[data-testid="project-wiki-style-guides"]');
+    expect(panel?.textContent).toContain('Engineering style guides');
+    expect(panel?.textContent).toContain('angular');
+    expect(panel?.textContent).toContain('.NET backend guide');
+    expect(panel?.textContent).toContain('Prompt context · v1');
+
+    el(fixture)
+      .querySelector<HTMLButtonElement>('[data-testid="project-wiki-style-guide-angular-components"]')!
+      .click();
+    fixture.detectChanges();
+
+    http.expectOne('/api/projects/Demo/wiki/files/quality/angular-components.md')
+      .flush({ relPath: 'quality/angular-components.md', content: '# Angular component guide' });
+    http.expectOne('/api/projects/Demo/wiki/history/quality/angular-components.md').flush(HISTORY);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.openedRel()).toBe('quality/angular-components.md');
+    expect(el(fixture).textContent).toContain('Angular component guide');
     http.verify();
   });
 

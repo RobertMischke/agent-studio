@@ -66,6 +66,17 @@ public static class ProjectDocsEndpoints
                 : Results.Ok(ov);
         });
 
+        // Repository-owned style-guide family. The same applicability result
+        // is consumed by intake prompt enrichment, so the Wiki never advertises
+        // a guide that the coding run cannot discover.
+        app.MapGet("/api/projects/{projectName}/style-guides", (string projectName, ProjectStyleGuideService guides) =>
+        {
+            var catalogue = guides.GetCatalogue(projectName);
+            return catalogue == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(catalogue);
+        });
+
         // Repository-owned experiment Workbenches. The list is bounded by the
         // physical docs/workbenches folders plus a named legacy migration pilot;
         // HTML is returned as data and is never executed by the backend origin.
