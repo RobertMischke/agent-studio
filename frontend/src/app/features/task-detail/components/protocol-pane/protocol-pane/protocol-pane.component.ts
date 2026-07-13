@@ -1376,20 +1376,11 @@ export class ProtocolPaneComponent implements OnDestroy {
   onOpenFollowup(followup: string | { jobId: string; taskKey?: string }): void {
     if (typeof window === 'undefined') return;
     const reference = typeof followup === 'string' ? { jobId: followup } : followup;
-    if (reference.taskKey) {
-      window.location.href = taskUrl(reference.taskKey, new URL(window.location.href));
-      return;
-    }
-
-    // Compatibility fallback for an older backend response: resolve the new
-    // task first, then navigate using its stable key. The watch path is used
-    // only for the API lookup and never copied into browser history.
-    this.jobs.getDetail(reference.jobId, this.detail().info.watchPath).subscribe({
-      next: (detail) => {
-        const href = taskNavigationHref(detail.info);
-        if (href) window.location.href = href;
-      },
-    });
+    const navigate = (href: string | null): void => { if (href) window.location.href = href; };
+    if (reference.taskKey) return navigate(taskUrl(reference.taskKey, new URL(window.location.href)));
+    this.jobs.getDetail(reference.jobId, this.detail().info.watchPath).subscribe(
+      (detail) => navigate(taskNavigationHref(detail.info))
+    );
   }
 
   rateLimitTooltip(): string {
