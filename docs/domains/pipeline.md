@@ -111,7 +111,7 @@ pipeline view.
   `[[CODE_REVIEW_GRADE: grade=<A|B|C|D>; summary=<short>]]` sentinel parser, the
   `code-review:grade-{a..d}` tag mapping, and the grade->pass/concerns/block
   severity mapping.
-- `backend/Services/Review/CodeReviewGradeModelSelector.cs`: resolves the grade
+- `backend/Features/Review/CodeReviewGradeModelSelector.cs`: resolves the grade
   model/CLI from `CodeReviewStep:DefaultModel` / `CodeReviewStep:DefaultCli`,
   defaulting to Codex's live-discovered flagship (gpt-5.5 fallback) at its top
   advertised reasoning level.
@@ -189,6 +189,17 @@ pipeline view.
   bounded aspect reviews use Codex `gpt-5.4-mini` at `high`. Opt out per deployment
   with `CodeReviewStep:AutoGrade=false`. An
   unparseable reply degrades to grade C, never silently A.
+- The grade is reporting evidence, not a success gate. It therefore runs before
+  the red build/test-gate reissue branch and before the aspect-infrastructure
+  escalation branch. A grade transport/runtime failure records `Failed` with its
+  error and clears stale `code-review:grade-*` tags, but never changes the lane
+  decision.
+- Completing a pipeline terminalizes every known, non-deferred, non-stub row:
+  an unreached `Pending` row becomes `Skipped` with the branch's causal reason,
+  while an interrupted `Running` row becomes `Failed`. Deferred merge/push rows
+  remain `Pending`, catalogue stubs remain `Planned`, and unknown extension rows
+  are preserved. `PipelineExecutionLog.Read` applies the same projection purely
+  to legacy current and previous attempts without rewriting their JSON files.
 - A missing / unparseable aspect verdict caused by the reviewing CLI dying (the
   backend cut that killed the aspect runner mid-run) is an ENVIRONMENTAL infra
   fault, never the card's unfinished work (AGT-2021, belege AGT-1996). The aspect
@@ -209,7 +220,11 @@ pipeline view.
   shared project checkout for a worktree run: a dev backend can legitimately
   hold that checkout's build output open, and the shared checkout can contain
   different source. Sequential and legacy runs with no registered worktree
-  retain the shared-checkout fallback.
+  retain the shared-checkout fallback. Within one backend process, complete
+  verify-command loops are admitted one at a time per Git common directory, so
+  a shared checkout and its linked worktrees cannot launch overlapping full
+  builds or test suites. Admission and host-load waits are cancellable and do
+  not consume the per-command execution timeout.
 - Abort review is contract-bounded: the model returns a verdict, while
   `PostAbortReviewDecider` owns the binding action and rerun budget.
 - The read-only pipeline drops git steps. Planning and research tasks must not
@@ -292,7 +307,10 @@ pipeline view.
   tagging, MD render), `CodeReviewGradeModelSelectorTests` (live Codex flagship
   default vs bounded aspect model), `CodeReviewGradeParsingTests` (sentinel
   grammar), and `ReviewDecisionOrchestratorGradeStepTests` (end-to-end: the step
-  executes, invokes the Codex flagship, and stamps the `code-review:grade-*` tag).
+  executes on normal, red build-gate, and aspect-infrastructure paths; invokes the
+  Codex flagship; records runtime errors as `Failed`; and stamps only authoritative
+  `code-review:grade-*` tags). `PipelineExecutionRestartTests` pins completed-row
+  terminalization plus deferred/stub preservation and legacy-read projection.
 - Raw step-prompt capture changes need `StepPromptLogTests` (writer/reader
   round-trip with provenance, dedup for main-run shape, capture-before-failure)
   and the `overview-pane.component.spec.ts` step-prompt read-model assertion.

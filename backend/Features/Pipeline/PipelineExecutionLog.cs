@@ -362,6 +362,9 @@ public sealed class PipelineExecutionLog
                 {
                     Status = PipelineStepStatus.Failed,
                     CompletedAt = record.CompletedAt,
+                    DurationMs = step.StartedAt.HasValue && record.CompletedAt.HasValue
+                        ? Math.Max(0L, (long)(record.CompletedAt.Value - step.StartedAt.Value).TotalMilliseconds)
+                        : step.DurationMs,
                     Reason = "Pipeline attempt ended while this step was still running.",
                 };
             }

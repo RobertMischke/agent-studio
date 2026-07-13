@@ -9,6 +9,14 @@ namespace AgentStudio.Git;
 /// </summary>
 internal static class ReadOnlyGitRefFingerprint
 {
+    /// <summary>
+    /// Resolves the shared Git metadata directory without spawning Git. Linked
+    /// worktrees return the same directory, which makes it a stable repository
+    /// identity for process-admission gates.
+    /// </summary>
+    internal static string? ResolveCommonDirectory(string repoRoot)
+        => ResolveMetadataDirectories(repoRoot)?.Common;
+
     public static string Capture(
         string repoRoot,
         IEnumerable<string> branchNames,

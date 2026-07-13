@@ -1,8 +1,15 @@
 # Task Execution & Log Architecture (concept)
 
-Status: concept / pre-implementation. Resolves the log-contention bug (Windows
-file-lock from shared `cli-output.log` + orphaned writers) AND sets up a
-distributed Server/Runner split. Written 2026-05-30.
+Status: historical foundation / partially implemented. The canonical runtime
+ownership, disconnect semantics, and server-sequenced multi-client target now
+live in
+[Distributed Agent Studio target architecture](distributed-agent-studio-target-architecture.md).
+Local stream files remain Runner journals and outage buffers, not a second
+authoritative live Task API.
+
+This concept originally resolved the log-contention bug (Windows file-lock from
+shared `cli-output.log` + orphaned writers) and set up a distributed
+Server/Runner split. Written 2026-05-30.
 
 ## 1. Terminology — kill the Job/Task ambiguity (one model)
 
@@ -33,21 +40,22 @@ The tension: writing a local file AND streaming to the server AND reading back
 looks like the same work done twice. Resolution = **two phases, one source of
 truth per phase** (they never do the same job at the same time):
 
-- **In progress (live) → LOCAL, direct.**
+- **In progress (live) -> LOCAL journal, server-sequenced projection.**
   The executor writes each Stream to its **own append-only local file**:
   `…/<task>/runs/<runId>/<streamId>.log`. The live progress UI reads these
-  **directly/locally** — fast, no round-trip, and the executor never depends on a
-  (possibly remote) server to operate. Chunks are shipped to the Server
-  **async, fire-and-forget** for aggregation, but the live read does NOT block on it.
-- **After / history / remote → SERVER, aggregated.**
+  locally for crash recovery and bounded replay. A local diagnostic UI may read
+  that journal, but remote and multi-client product views use the Task Server's
+  acknowledged event sequence. The Runner may tolerate a short transport
+  interruption; it does not operate autonomously beyond server-issued authority.
+- **After / history / remote -> SERVER, aggregated.**
   The Task-Server holds the merged, durable copy. Reads for completed tasks,
   other machines, and history go to the Server (DB-backed). Local Stream files
   can be GC'd after they've synced.
 
-So the Server is **not** where logs are "made" — it's where they're aggregated
-and served for non-local / historical / cross-machine access. While a Task is in
-progress, the **direct local access** is the source of truth. This is the
-"bottom line" the user asked for.
+The Runner is where output is produced. The Task Server is the canonical event
+sequence and read truth for product surfaces. The local journal remains the
+replay source until its events are acknowledged and may then be garbage
+collected.
 
 ## 4. Multiple concurrent writers (the actual root cause of the lock bug)
 

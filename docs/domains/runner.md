@@ -155,9 +155,11 @@ state.
 - Host-load admission (AGT-2077) samples total system CPU every 15 seconds. A
   continuous minute above 90 percent activates `load-throttle`: existing runs
   continue, new slot picks are deferred with timeline and orchestrator-feed
-  decisions, and support OneShots queue until cooling. Calls released after a
-  load phase receive a 3x timeout and one timeout retry after cooling. These
-  failures are `environmental-load`, never a work-quality conclusion.
+  decisions, while support OneShots and build/test post-gates queue until
+  cooling. Build/test post-gates are also serialized per Git repository before
+  they enter host-load admission. Calls released after a load phase receive a
+  3x timeout and one timeout retry after cooling. These failures are
+  `environmental-load`, never a work-quality conclusion.
 - No-progress failures count across auto-pickup and `UserContinue` reissues
   until progress, review, or quarantine resets the streak.
 - Orchestrator session turns use the existing CLI session machinery. A context

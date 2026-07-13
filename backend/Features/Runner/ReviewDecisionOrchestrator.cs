@@ -22,10 +22,13 @@ namespace AgentStudio.Runner;
 /// decision request, the orchestrator should read the task, the recent
 /// activity, the roadmap, prior decisions, and either answer the
 /// question (reissuing the task back to 3-progress with the orchestrator's
-/// reply) or escalate to the user with a clear reason. A fast-model
-/// Claude (Haiku) session is spawned per pending review with a structured
-/// prompt and is expected to respond with a single
-/// <c>[[ORCHESTRATOR_DECISION]]</c> sentinel.
+/// reply) or escalate to the user with a clear reason. A configurable
+/// review-decision CLI call (<c>ReviewDecisionOrchestrator:Cli</c> /
+/// <c>ReviewDecisionOrchestrator:Model</c>, Codex with <c>gpt-5.4-mini</c>
+/// by default) handles unresolved questions and is expected to respond with
+/// a single <c>[[ORCHESTRATOR_DECISION]]</c> sentinel. DONE reviews use
+/// independently routed aspect reviewers followed by deterministic gates and
+/// aggregation.
 /// </para>
 ///
 /// <para>
@@ -880,7 +883,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             _logger.LogWarning(
                 "ReviewDecisionOrchestrator: no decision sentinel parsed for {Project}/{JobId}; escalating to human review",
                 entry.Name, pending.Job.Id);
-            await HandleEscalateAsync(workspace, entry, pending, prompt, response, fallback, ct);
+            await HandleEscalateAsync(workspace, entry, pending, prompt, response, fallback, cliBinary, ct);
             return;
         }
 
@@ -890,10 +893,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 await HandleReissueAsync(workspace, entry, pending, prompt, response, verdict, ct);
                 break;
             case OrchestratorDecisionAction.Escalate:
-                await HandleEscalateAsync(workspace, entry, pending, prompt, response, verdict, ct);
+                await HandleEscalateAsync(workspace, entry, pending, prompt, response, verdict, cliBinary, ct);
                 break;
             case OrchestratorDecisionAction.AcceptAsDone:
-                HandleAcceptAsDone(workspace, entry, pending, prompt, response, verdict);
+                HandleAcceptAsDone(workspace, entry, pending, prompt, response, verdict, cliBinary);
                 break;
         }
     }
@@ -1112,7 +1115,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                             await HandleReissueAsync(workspace, entry, pending, prompt, response, verdict, ct);
                             return;
                         case OrchestratorDecisionAction.Escalate:
-                            await HandleEscalateAsync(workspace, entry, pending, prompt, response, verdict, ct);
+                            await HandleEscalateAsync(workspace, entry, pending, prompt, response, verdict, cliBinary, ct);
                             return;
                         case OrchestratorDecisionAction.AcceptAsDone:
                             _logger.LogInformation(
@@ -1837,21 +1840,21 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             WritePostProcessingOutcome(movedInfo, PostProcessingOutcomes.FindingsAdded,
                 summary: FormatConcernCount(report),
-                performerCliType: CliTypes.Claude,
                 stepId: PipelineCatalogue.OrchestratorDecisionStepId,
                 evidenceRef: "pipeline-execution.json",
                 findingRefs: report.Verdicts
                     .Where(v => v.Status == AspectStatus.Concerns)
                     .Select(v => $"aspect-{v.Aspect}.md")
-                    .ToList());
+                    .ToList(),
+                performer: PostProcessingPerformers.Orchestrator);
         }
         WritePostProcessingOutcome(movedInfo, PostProcessingOutcomes.PassToHumanReview,
             summary: report.Overall == AspectStatus.Concerns
                 ? $"Accepted with concerns: {FormatConcernCount(report)}"
                 : "Accepted as done after post-processing.",
-            performerCliType: CliTypes.Claude,
             stepId: PipelineCatalogue.OrchestratorDecisionStepId,
-            evidenceRef: "pipeline-execution.json");
+            evidenceRef: "pipeline-execution.json",
+            performer: PostProcessingPerformers.Orchestrator);
 
         // Provenance: the orchestrator (not a human) advanced this task
         // toward Completed. Stamp on the authoritative post-move path.
@@ -1930,13 +1933,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             DecisionVerdictReissue, "Multi-aspect block: " + AspectSummaryLine(report));
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsFollowUpTask,
             summary: "Blocking aspect verdicts require follow-up work before human review.",
-            performerCliType: CliTypes.Claude,
             stepId: PipelineCatalogue.OrchestratorDecisionStepId,
             evidenceRef: "pipeline-execution.json",
             findingRefs: report.Verdicts
                 .Where(v => v.Status == AspectStatus.Block)
                 .Select(v => $"aspect-{v.Aspect}.md")
-                .ToList());
+                .ToList(),
+            performer: PostProcessingPerformers.Orchestrator);
 
         await WriteFollowUpFileAsync(moved, followUp, ct);
 
@@ -2026,10 +2029,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             "environmental", reason);
         WritePostProcessingOutcome(escalated, PostProcessingOutcomes.FailedPostProcessing,
             summary: reason,
-            performerCliType: CliTypes.Claude,
             stepId: PipelineCatalogue.OrchestratorDecisionStepId,
             evidenceRef: "pipeline-execution.json",
-            findingRefs: report.InfraFailures.Select(v => $"aspect-{v.Aspect}.md").ToList());
+            findingRefs: report.InfraFailures.Select(v => $"aspect-{v.Aspect}.md").ToList(),
+            performer: PostProcessingPerformers.Orchestrator);
 
         EmitVerdictTimeline(escalatedFolder,
             TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, reason,
@@ -2373,7 +2376,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 DecisionVerdictEscalate, gate.Reason);
             WritePostProcessingOutcome(escalated, PostProcessingOutcomes.NeedsHumanInput,
                 summary: gate.Reason,
-                performerCliType: CliTypes.Claude,
                 stepId: PipelineCatalogue.OrchestratorDecisionStepId,
                 evidenceRef: "pipeline-execution.json",
                 findingRefs: report.Verdicts
@@ -2381,7 +2383,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                                 (string.Equals(v.Aspect, SolutionQualityGate.RequirementFitAspectId, StringComparison.OrdinalIgnoreCase) ||
                                  string.Equals(v.Aspect, SolutionQualityGate.CodeQualityAspectId, StringComparison.OrdinalIgnoreCase)))
                     .Select(v => $"aspect-{v.Aspect}.md")
-                    .ToList());
+                    .ToList(),
+                performer: PostProcessingPerformers.Orchestrator);
 
             EmitVerdictTimeline(escalatedFolder,
                 TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, gate.Reason,
@@ -2416,7 +2419,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             DecisionVerdictReissue, gate.Reason);
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsFollowUpTask,
             summary: gate.Reason,
-            performerCliType: CliTypes.Claude,
             stepId: PipelineCatalogue.OrchestratorDecisionStepId,
             evidenceRef: "pipeline-execution.json",
             findingRefs: report.Verdicts
@@ -2424,7 +2426,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                             (string.Equals(v.Aspect, SolutionQualityGate.RequirementFitAspectId, StringComparison.OrdinalIgnoreCase) ||
                              string.Equals(v.Aspect, SolutionQualityGate.CodeQualityAspectId, StringComparison.OrdinalIgnoreCase)))
                 .Select(v => $"aspect-{v.Aspect}.md")
-                .ToList());
+                .ToList(),
+            performer: PostProcessingPerformers.Orchestrator);
 
         await WriteFollowUpFileAsync(moved, followUp, ct);
 
@@ -2850,10 +2853,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 DecisionVerdictEscalate, gate.Reason);
             WritePostProcessingOutcome(escalated, PostProcessingOutcomes.NeedsHumanInput,
                 summary: gate.Reason,
-                performerCliType: CliTypes.Claude,
                 stepId: PipelineCatalogue.OrchestratorReviewStepId,
                 evidenceRef: "pipeline-execution.json",
-                findingRefs: gate.Findings.Take(CompletionGate.MaxFindings).ToList());
+                findingRefs: gate.Findings.Take(CompletionGate.MaxFindings).ToList(),
+                performer: PostProcessingPerformers.Orchestrator);
 
             EmitVerdictTimeline(escalatedFolder,
                 TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, gate.Reason,
@@ -2890,10 +2893,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             DecisionVerdictReissue, gate.Reason);
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsFollowUpTask,
             summary: gate.Reason,
-            performerCliType: CliTypes.Claude,
             stepId: PipelineCatalogue.OrchestratorReviewStepId,
             evidenceRef: "pipeline-execution.json",
-            findingRefs: gate.Findings.Take(CompletionGate.MaxFindings).ToList());
+            findingRefs: gate.Findings.Take(CompletionGate.MaxFindings).ToList(),
+            performer: PostProcessingPerformers.Orchestrator);
 
         await WriteFollowUpFileAsync(moved, followUp, ct);
 
@@ -2957,7 +2960,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// Run the automatic post-CORE quality-grade code-review step (ASS-1657)
     /// and record it on the pipeline. Reporting only: it assigns an A/B/C/D
     /// grade to the task's full change set with a quality-first model
-    /// (<c>CodeReviewStep:DefaultModel</c>, default Opus 4.8) and hangs a
+    /// (<c>CodeReviewStep:DefaultModel</c>, the live Codex flagship by default)
+    /// and hangs a
     /// <c>code-review:grade-*</c> tag on the card so the grade shows in the
     /// Overview and as a card badge. Best-effort: any runtime failure is logged,
     /// recorded as a failed row, and swallowed so a grade hiccup never blocks
@@ -3015,9 +3019,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string? selectedThinkingLevel = null;
         try
         {
-            // Quality over cost: the grade pass defaults to Opus 4.8 even though
-            // the four cheap aspect reviews stay on Haiku. Configurable so a
-            // deployment can dial the grade model without touching the aspects.
+            // Quality over cost: the grade pass defaults to the live Codex
+            // flagship, while the bounded aspect reviews use the support model.
+            // Configurable so a deployment can dial the grade model without
+            // touching the aspects.
             var (defaultModel, defaultCli) = AgentStudio.Review.CodeReviewGradeModelSelector.Resolve(
                 _configuration["CodeReviewStep:DefaultModel"],
                 _configuration["CodeReviewStep:DefaultCli"]);
@@ -3063,6 +3068,20 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             };
 
             var report = await _codeReviewStep.RunAsync(request, ct);
+            if (!string.IsNullOrWhiteSpace(report.ExecutionError))
+            {
+                _logger.LogWarning(
+                    "code-review-grade: reviewer failed for {Project}/{JobId}: {Error}",
+                    entry.Name, job.Id, report.ExecutionError);
+                RecordCodeReviewGradeTerminal(
+                    job.FolderPath,
+                    PipelineStepStatus.Failed,
+                    "Quality-grade step error: " + report.ExecutionError,
+                    startedAt,
+                    report.Model,
+                    report.ThinkingLevel);
+                return;
+            }
 
             var gradeToken = report.Grade is null
                 ? "?"
@@ -3082,6 +3101,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 CompletedAt = DateTime.UtcNow,
                 DurationMs = report.DurationMs,
                 Model = report.Model,
+                ThinkingLevel = report.ThinkingLevel,
                 Verdict = gradeToken,
                 VerdictSummary = string.IsNullOrWhiteSpace(report.Summary) ? null : report.Summary,
             });
@@ -3130,6 +3150,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string? model = null,
         string? thinkingLevel = null)
     {
+        if (status is PipelineStepStatus.Failed or PipelineStepStatus.Skipped)
+        {
+            ConcernTagWriter.ClearCodeReviewGradeTags(jobFolderPath, _logger);
+        }
         if (_pipelineLog == null) return;
         var completedAt = DateTime.UtcNow;
         var started = startedAt ?? completedAt;
@@ -4007,10 +4031,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var started = DateTime.UtcNow;
         try
         {
-            var fallbackModel = ModelMetadataRegistry.DefaultForCli(CliTypes.Claude) ?? ModelIds.ClaudeSonnet45;
+            var fallbackModel = PipelineStepModelDefaults.SupportModel;
             var model = PipelineStepConfigResolver.ResolveModel(settings, step, fallbackModel);
-            var cli = PipelineStepConfigResolver.ResolveCliType(settings, stepId) ?? CliTypes.Claude;
-            var thinking = PipelineStepConfigResolver.ResolveThinkingLevel(settings, step, cli, model, "high");
+            var cli = PipelineStepConfigResolver.ResolveCliType(settings, stepId) ?? PipelineStepModelDefaults.DefaultCli;
+            var thinking = PipelineStepConfigResolver.ResolveThinkingLevel(
+                settings, step, cli, model, PipelineStepModelDefaults.SupportThinkingLevel);
             var review = string.Join("\n", report.Verdicts.Select(v =>
                 $"- {v.Aspect}: {AspectVerdictParsing.StatusToken(v.Status)} - {v.Summary}"));
             var result = await _workstreamCollector.RunAsync(new WorkstreamCollectorContext
@@ -5093,6 +5118,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string prompt,
         string response,
         OrchestratorDecisionVerdict verdict,
+        string cliBinary,
         CancellationToken ct)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
@@ -5121,7 +5147,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var moved = current with { FolderPath = movedFolderPath, State = TaskStates.Escalated };
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsHumanInput,
             summary: verdict.Reason,
-            performerCliType: CliTypes.Claude,
+            performerCliType: NormalizeReviewCliType(cliBinary),
             stepId: PipelineCatalogue.OrchestratorDecisionStepId,
             evidenceRef: "pipeline-execution.json");
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
@@ -5154,7 +5180,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         PendingDecision pending,
         string prompt,
         string response,
-        OrchestratorDecisionVerdict verdict)
+        OrchestratorDecisionVerdict verdict,
+        string cliBinary)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
         var reason = verdict.Reason ?? string.Empty;
@@ -5183,7 +5210,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.PassToHumanReview,
             summary: reason,
-            performerCliType: CliTypes.Claude,
+            performerCliType: NormalizeReviewCliType(cliBinary),
             stepId: PipelineCatalogue.OrchestratorDecisionStepId,
             evidenceRef: "pipeline-execution.json");
 

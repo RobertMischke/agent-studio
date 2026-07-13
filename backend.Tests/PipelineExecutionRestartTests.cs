@@ -84,17 +84,19 @@ public class PipelineExecutionRestartTests : IDisposable
     [Fact]
     public void Complete_TerminalizesUnreachedSteps_ButPreservesDeferredAndPlannedSlots()
     {
+        var runningAt = new DateTime(2026, 7, 13, 10, 0, 0, DateTimeKind.Utc);
+        var completedAt = runningAt.AddSeconds(5);
         _log.Begin(_jobFolder, PipelineCatalogue.Standard, project: "demo", jobId: "job-1");
         _log.RecordStep(_jobFolder, new PipelineStepExecution
         {
             StepId = "aspect-code-quality",
             Kind = StepKind.Aspect,
             Status = PipelineStepStatus.Running,
-            StartedAt = DateTime.UtcNow.AddSeconds(-5),
+            StartedAt = runningAt,
         });
 
         const string stopReason = "Not run because the build/test gate failed: dotnet test exit 1.";
-        _log.Complete(_jobFolder, pendingStepReason: stopReason);
+        _log.Complete(_jobFolder, nowUtc: completedAt, pendingStepReason: stopReason);
 
         var completed = _log.Read(_jobFolder);
         Assert.NotNull(completed);
@@ -109,6 +111,7 @@ public class PipelineExecutionRestartTests : IDisposable
         Assert.Equal(PipelineStepStatus.Failed, interrupted.Status);
         Assert.Equal("Pipeline attempt ended while this step was still running.", interrupted.Reason);
         Assert.NotNull(interrupted.CompletedAt);
+        Assert.Equal(5000, interrupted.DurationMs);
 
         // Deferred operator-triggered delivery steps deliberately remain
         // pending after the automatic pipeline bracket ends.
@@ -167,6 +170,7 @@ public class PipelineExecutionRestartTests : IDisposable
         Assert.Equal(PipelineStepStatus.Failed, interrupted.Status);
         Assert.Equal("Pipeline attempt ended while this step was still running.", interrupted.Reason);
         Assert.Equal(completedAt, interrupted.CompletedAt);
+        Assert.Equal(3000, interrupted.DurationMs);
 
         Assert.Equal(PipelineStepStatus.Pending,
             normalized.Steps.Single(s => s.StepId == PipelineCatalogue.MergeIntoDevelopStepId).Status);

@@ -125,6 +125,41 @@ public sealed class ReadOnlyGitRefFingerprintTests : IDisposable
         Assert.NotEqual(before, after);
     }
 
+    [Fact]
+    public void ResolveCommonDirectory_LinkedWorktreeUsesSameAdmissionIdentity()
+    {
+        var linkedRoot = Path.Combine(
+            Path.GetTempPath(),
+            "git-ref-fingerprint-linked-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Git("worktree", "add", "-q", linkedRoot, "develop");
+
+            var mainCommon = ReadOnlyGitRefFingerprint.ResolveCommonDirectory(_root);
+            var linkedCommon = ReadOnlyGitRefFingerprint.ResolveCommonDirectory(linkedRoot);
+            var comparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+            Assert.NotNull(mainCommon);
+            Assert.True(string.Equals(mainCommon, linkedCommon, comparison));
+            Assert.True(string.Equals(
+                BuildTestGateRunner.ResolveAdmissionKey(_root),
+                BuildTestGateRunner.ResolveAdmissionKey(linkedRoot),
+                comparison));
+        }
+        finally
+        {
+            if (Directory.Exists(linkedRoot))
+            {
+                try { Git("worktree", "remove", "--force", linkedRoot); }
+                catch { /* best effort */ }
+                try { Directory.Delete(linkedRoot, recursive: true); }
+                catch { /* best effort */ }
+            }
+        }
+    }
+
     private void Git(params string[] args)
     {
         var start = new ProcessStartInfo

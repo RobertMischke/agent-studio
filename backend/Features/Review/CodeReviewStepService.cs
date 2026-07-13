@@ -103,6 +103,7 @@ public sealed class CodeReviewStepService
         OrchestratorTokenUsage? callUsage = null;
         var sw = Stopwatch.StartNew();
         var ok = true;
+        string? executionError = null;
         try
         {
             rawResponse = _thinkingAwareCliRunner is null
@@ -122,6 +123,7 @@ public sealed class CodeReviewStepService
         {
             sw.Stop();
             ok = false;
+            executionError = ex.Message;
             _logger.LogWarning(ex,
                 "code-review-step: CLI invocation failed for {Project}/{JobId}; defaulting to concerns",
                 request.Project, request.JobId);
@@ -209,10 +211,22 @@ public sealed class CodeReviewStepService
         string? concernTagId;
         if (request.Mode == CodeReviewMode.Grade)
         {
-            // Authoritative single grade tag: drop any stale code-review:grade-*
-            // a prior run hung so a re-graded card carries exactly one grade.
-            concernTagId = CodeReviewGradeParsing.TagFor(grade!.Value);
-            ConcernTagWriter.ReplaceCodeReviewGradeTag(request.JobFolderPath, concernTagId, _logger);
+            // A transport/runtime failure did not produce an authoritative
+            // grade. Keep the diagnostic report, but do not turn the fallback
+            // C used for rendering into a durable grade tag.
+            concernTagId = executionError is null
+                ? CodeReviewGradeParsing.TagFor(grade!.Value)
+                : null;
+            if (concernTagId is not null)
+            {
+                // Authoritative single grade tag: drop any stale
+                // code-review:grade-* so a re-graded card carries exactly one.
+                ConcernTagWriter.ReplaceCodeReviewGradeTag(request.JobFolderPath, concernTagId, _logger);
+            }
+            else
+            {
+                ConcernTagWriter.ClearCodeReviewGradeTags(request.JobFolderPath, _logger);
+            }
         }
         else
         {
@@ -241,7 +255,8 @@ public sealed class CodeReviewStepService
             ConcernTagId: concernTagId,
             DurationMs: sw.ElapsedMilliseconds,
             StartedAt: startedAt,
-            Grade: grade);
+            Grade: grade,
+            ExecutionError: executionError);
     }
 
     /// <summary>Tag id for the given verdict, or null when no tag should be hung.</summary>
@@ -518,4 +533,5 @@ public sealed record CodeReviewStepReport(
     string? ConcernTagId,
     long DurationMs,
     DateTime StartedAt,
-    CodeReviewGrade? Grade = null);
+    CodeReviewGrade? Grade = null,
+    string? ExecutionError = null);

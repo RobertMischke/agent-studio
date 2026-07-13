@@ -4,6 +4,12 @@ Status: operator-vision concept and Workbench-family mockup, 2026-07-12. This
 is an architecture target, not a claim that the production runtime already has
 these lifecycle guarantees.
 
+The system-level ownership and disconnect contract is coordinated by
+[Distributed Agent Studio target architecture](distributed-agent-studio-target-architecture.md).
+In particular, "detached" means Studio may disappear while Task Server and
+Runner stay online. It does not authorize an autonomous Runner-side Task Store
+when Task Server is unavailable.
+
 Review artifact:
 [interactive lifecycle Workbench-family mockup](mockups/decoupled-lifecycles.html).
 It is browsable in the current Wiki. It is not yet a manifest-backed Project

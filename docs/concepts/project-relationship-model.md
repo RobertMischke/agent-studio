@@ -4,6 +4,13 @@
 > implementation slices. It does not describe shipped behavior unless a section
 > explicitly says so.
 >
+> **Target clarification, 2026-07-13:**
+> [Distributed Agent Studio target architecture](distributed-agent-studio-target-architecture.md)
+> separates organizational component projects from repository bindings. The
+> strict `Project 1 represents 1 Git repository` rule below is no longer the
+> target for a monorepo containing Agent Studio, Task Server, and Agent Runner.
+> Branch-context and provenance rules remain applicable.
+>
 > Visual companion: [relationship and Wiki checkout mockup](mockups/project-relationship-model.html).
 
 ## Decision summary

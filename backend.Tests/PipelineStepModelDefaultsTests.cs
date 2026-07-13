@@ -51,6 +51,7 @@ public class PipelineStepModelDefaultsTests
         var r = PipelineStepModelDefaults.Resolve(null, Step(PipelineCatalogue.PreOrchestratorPrepStepId));
         Assert.NotNull(r);
         Assert.Equal(PipelineStepModelDefaults.SupportModel, r!.Model);
+        Assert.Equal(PipelineStepModelDefaults.SupportModel, OrchestratorPrepHostedService.PrepFallbackModel);
     }
 
     [Fact]

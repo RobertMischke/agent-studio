@@ -9,6 +9,12 @@
 > hosts, per-runner identities) **before** any port is exposed beyond SSH.
 > Plan of record: [remote-ready-kickoff-2026-07.md](../../research/remote-ready-kickoff-2026-07.md)
 > (phase 2 gates on it, see D4).
+>
+> **Target clarification (2026-07-13).** The required human login, Runner
+> service identity, HTTPS boundary, audit, and management model is now defined
+> in [Distributed Agent Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md#8-security-baseline-for-an-internet-reachable-server).
+> The local-only text below is current-state documentation, not the networked
+> target.
 
 ## Situation
 

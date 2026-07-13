@@ -219,7 +219,12 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
     [Fact]
     public async Task GradeStep_RuntimeError_RecordsFailedRow_WithoutBlockingLaneDecision()
     {
-        SeedReviewJobWithDone("grade-error", CleanStatus, taskType: TaskTypes.Chore, withScreenshot: true);
+        SeedReviewJobWithDone(
+            "grade-error",
+            CleanStatus,
+            taskType: TaskTypes.Chore,
+            withScreenshot: true,
+            withStaleGradeTag: true);
 
         var orchestrator = BuildOrchestrator(
             aspectStub: (_, _) => PassVerdict,
@@ -235,6 +240,7 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         Assert.Equal(PipelineStepStatus.Failed, grade.Status);
         Assert.Contains("Codex grade process unavailable", grade.Reason);
         Assert.DoesNotContain(ReadTags(folder), t => t.StartsWith("code-review:grade-"));
+        Assert.Contains("keep-me", ReadTags(folder));
     }
 
     [Fact]
@@ -324,12 +330,14 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         string slug,
         string status,
         string taskType,
-        bool withScreenshot = false)
+        bool withScreenshot = false,
+        bool withStaleGradeTag = false)
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        var tagsJson = withStaleGradeTag ? ",\"tags\":[\"keep-me\",\"code-review:grade-a\"]" : string.Empty;
         File.WriteAllText(Path.Combine(dir, "task.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\",\"taskType\":\"{taskType}\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\",\"taskType\":\"{taskType}\"{tagsJson}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing for {slug}.\n");
         File.WriteAllText(Path.Combine(dir, "status.md"), status);
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
