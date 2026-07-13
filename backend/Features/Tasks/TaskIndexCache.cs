@@ -24,9 +24,11 @@ namespace AgentStudio.Tasks;
 /// snapshot. Refresh is single-flight. While one thread is rescanning,
 /// readers dirtied only by external watcher churn see the previous snapshot
 /// rather than queueing behind the disk walk. A reader whose required mutation
-/// generation is newer than the published snapshot awaits that same refresh
-/// without spinning and, when necessary, admits exactly one follow-up refresh.
-/// This preserves API read-after-write without a thundering herd.</para>
+/// generation at reader entry is newer than the published snapshot awaits that
+/// same refresh without spinning and, when necessary, admits exactly one
+/// follow-up refresh. Later overlapping mutations do not move that reader's
+/// consistency target. This preserves API read-after-write without a
+/// thundering herd or starvation under continuous mutation churn.</para>
 /// </summary>
 public sealed class TaskIndexCache
 {
@@ -146,6 +148,14 @@ public sealed class TaskIndexCache
     /// </summary>
     private void EnsureFresh()
     {
+        // Freeze the read-after-write target at reader entry. Comparing every
+        // retry with the latest global generation turns continuous task churn
+        // into a moving goalpost: waiters can be serialized behind one full
+        // workspace scan per later mutation even after their own prerequisite
+        // generation has been published.
+        long targetMutationGen;
+        lock (_lock) targetMutationGen = _requiredMutationGen;
+
         while (true)
         {
             TaskCompletionSource<bool>? refresh = null;
@@ -154,7 +164,7 @@ public sealed class TaskIndexCache
             {
                 if (!_dirty
                     && Volatile.Read(ref _publishedMutationGen)
-                    >= Volatile.Read(ref _requiredMutationGen)
+                    >= targetMutationGen
                     && DateTime.UtcNow - _snapshotAtUtc < _safetyTtl)
                 {
                     Interlocked.Increment(ref Hits);
@@ -165,7 +175,7 @@ public sealed class TaskIndexCache
                 {
                     if (_hasSnapshot
                         && Volatile.Read(ref _publishedMutationGen)
-                        >= Volatile.Read(ref _requiredMutationGen))
+                        >= targetMutationGen)
                     {
                         Interlocked.Increment(ref Hits);
                         Interlocked.Increment(ref StaleHits);
@@ -184,6 +194,20 @@ public sealed class TaskIndexCache
             if (coldStartRefresh != null)
             {
                 coldStartRefresh.GetAwaiter().GetResult();
+
+                // The completed refresh may have published this reader's
+                // target while a later mutation dirtied the cache again. That
+                // later write overlaps this read and belongs to a later
+                // reader; do not chase it with another global scan here.
+                lock (_lock)
+                {
+                    if (_hasSnapshot && _publishedMutationGen >= targetMutationGen)
+                    {
+                        Interlocked.Increment(ref Hits);
+                        if (_dirty) Interlocked.Increment(ref StaleHits);
+                        return;
+                    }
+                }
                 continue;
             }
 

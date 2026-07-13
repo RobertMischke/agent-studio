@@ -341,6 +341,72 @@ public class TaskIndexCacheTests : IDisposable
     }
 
     [Fact]
+    public async Task LaterMutation_DoesNotMoveGoalpostForAlreadyWaitingReader()
+    {
+        var secondScanEntered = new ManualResetEventSlim(false);
+        var releaseSecondScan = new ManualResetEventSlim(false);
+        var thirdScanEntered = new ManualResetEventSlim(false);
+        var releaseThirdScan = new ManualResetEventSlim(false);
+        var waiterCalling = new ManualResetEventSlim(false);
+        var scans = 0;
+        var cache = new TaskIndexCache(
+            _scanner,
+            NullLogger<TaskIndexCache>.Instance,
+            _config,
+            () =>
+            {
+                var scan = Interlocked.Increment(ref scans);
+                if (scan == 2)
+                {
+                    secondScanEntered.Set();
+                    Assert.True(releaseSecondScan.Wait(TimeSpan.FromSeconds(5)));
+                }
+                if (scan == 3)
+                {
+                    thirdScanEntered.Set();
+                    Assert.True(releaseThirdScan.Wait(TimeSpan.FromSeconds(5)));
+                }
+                return [new TaskInfo { Id = $"job-{scan}", State = TaskStates.Ready }];
+            });
+
+        Assert.Equal("job-1", Assert.Single(cache.GetSnapshot()).Id);
+        cache.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
+        var owner = Task.Run(() => cache.GetSnapshot());
+        Assert.True(secondScanEntered.Wait(TimeSpan.FromSeconds(5)));
+
+        var alreadyWaiting = Task.Run(() =>
+        {
+            waiterCalling.Set();
+            return cache.GetSnapshot();
+        });
+        Assert.True(waiterCalling.Wait(TimeSpan.FromSeconds(5)));
+        Assert.NotSame(alreadyWaiting, await Task.WhenAny(
+            alreadyWaiting, Task.Delay(TimeSpan.FromMilliseconds(150))));
+
+        // This mutation overlaps the waiting read. It must make a later reader
+        // refresh again, but it must not move the older reader's consistency
+        // target and serialize that reader behind another full workspace scan.
+        cache.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
+
+        try
+        {
+            releaseSecondScan.Set();
+            Assert.Equal("job-2", Assert.Single(await owner).Id);
+            Assert.Same(alreadyWaiting, await Task.WhenAny(
+                alreadyWaiting, Task.Delay(TimeSpan.FromSeconds(2))));
+            Assert.Equal("job-2", Assert.Single(await alreadyWaiting).Id);
+            Assert.False(thirdScanEntered.IsSet);
+            Assert.Equal(2, Volatile.Read(ref scans));
+        }
+        finally
+        {
+            releaseSecondScan.Set();
+            releaseThirdScan.Set();
+            await Task.WhenAll(owner, alreadyWaiting);
+        }
+    }
+
+    [Fact]
     public async Task SnapshotPartitions_AlwaysComeFromOnePublishedGeneration()
     {
         var secondScanEntered = new ManualResetEventSlim(false);

@@ -1,6 +1,6 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { map } from 'rxjs';
+import { finalize, map } from 'rxjs';
 import type {
   ArchivedTasksResponse,
   CreateTaskRequest,
@@ -214,6 +214,12 @@ export class TaskService {
   private readonly baseUrl = '/api';
   private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
   private pushRefreshHandle: ReturnType<typeof setTimeout> | null = null;
+  private groupedRefreshInFlight = false;
+  private groupedRefreshQueued = false;
+  private groupedRefreshQueuedSilent = true;
+  private runnerRefreshInFlight = false;
+  private runnerRefreshQueued = false;
+  private runnerRefreshQueuedSilent = true;
 
   // Push (SignalR `/hubs/jobs`) is the primary update path. The poll is
   // demoted to a slow heartbeat that reconciles drift and backs up the socket
@@ -309,6 +315,25 @@ export class TaskService {
       this.error.set(null);
     }
 
+    this.refreshGrouped(silent);
+    this.refreshRunnerStatus(silent);
+  }
+
+  /**
+   * Keep the expensive board snapshot single-flight. Runner and SignalR
+   * events can request another refresh while a slow response is outstanding;
+   * collapse all of them into one trailing read instead of allowing an
+   * unbounded queue of full snapshots to build up behind the backend.
+   */
+  private refreshGrouped(silent: boolean): void {
+    if (this.groupedRefreshInFlight) {
+      this.groupedRefreshQueued = true;
+      this.groupedRefreshQueuedSilent &&= silent;
+      return;
+    }
+
+    this.groupedRefreshInFlight = true;
+
     const versionAtStart = this.mutationVersion;
     const acceptOptimisticTarget = () => {
       if (!silent) return true;
@@ -318,7 +343,9 @@ export class TaskService {
       return true;
     };
 
-    this.http.get<GroupedJobs>(`${this.baseUrl}/tasks/grouped`).subscribe({
+    this.http.get<GroupedJobs>(`${this.baseUrl}/tasks/grouped`).pipe(
+      finalize(() => this.finishGroupedRefresh()),
+    ).subscribe({
       next: (grouped) => {
         if (acceptOptimisticTarget()) {
           this.grouped.set(grouped);
@@ -327,7 +354,6 @@ export class TaskService {
         if (silent) {
           this.error.set(null);
         }
-        this.loading.set(false);
       },
       error: (err) => {
         const message =
@@ -343,11 +369,22 @@ export class TaskService {
             source: 'Board refresh',
           });
         }
-        this.loading.set(false);
       },
     });
+  }
 
-    this.refreshRunnerStatus(silent);
+  private finishGroupedRefresh(): void {
+    this.groupedRefreshInFlight = false;
+    if (!this.groupedRefreshQueued) {
+      this.loading.set(false);
+      return;
+    }
+
+    const silent = this.groupedRefreshQueuedSilent;
+    this.groupedRefreshQueued = false;
+    this.groupedRefreshQueuedSilent = true;
+    this.loading.set(!silent);
+    this.refreshGrouped(silent);
   }
 
   /**
@@ -2226,7 +2263,16 @@ export class TaskService {
   }
 
   refreshRunnerStatus(silent = false): void {
-    this.getRunnerStatus().subscribe({
+    if (this.runnerRefreshInFlight) {
+      this.runnerRefreshQueued = true;
+      this.runnerRefreshQueuedSilent &&= silent;
+      return;
+    }
+
+    this.runnerRefreshInFlight = true;
+    this.getRunnerStatus().pipe(
+      finalize(() => this.finishRunnerRefresh()),
+    ).subscribe({
       next: (status) => this.runnerStatus.set(status),
       error: (err) => {
         if (!silent) {
@@ -2238,6 +2284,16 @@ export class TaskService {
         }
       },
     });
+  }
+
+  private finishRunnerRefresh(): void {
+    this.runnerRefreshInFlight = false;
+    if (!this.runnerRefreshQueued) return;
+
+    const silent = this.runnerRefreshQueuedSilent;
+    this.runnerRefreshQueued = false;
+    this.runnerRefreshQueuedSilent = true;
+    this.refreshRunnerStatus(silent);
   }
 
   startLiveUpdates(intervalMs = 2000): void {

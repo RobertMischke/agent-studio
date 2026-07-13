@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-06-09
+Version: 2026-07-13
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -17,6 +17,11 @@ state.
 - Use [docs/contracts/run-outcome.md](../contracts/run-outcome.md) for the shared
   classification that drives lane routing, `status.md`, and frontend failure
   surfacing.
+- Use [Runner provenance, host handoff, and continuation](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance)
+  when a change touches historical runner attribution, runner assignment during
+  active work, cross-host continuation, attempt identity, or per-step placement.
+  It defines the deferred-switch default, the no-hot-migration boundary, and the
+  ordered runner route shown in Overview and task detail.
 - Read [docs/wiki/concepts/orchestrator-drive-to-conclusion.html](../wiki/concepts/orchestrator-drive-to-conclusion.html)
   before touching reissue, retry, CLI-crash, or classifier logic: it holds the
   target model (retry-with-cooldown, no classifier-unknown, honest human-review

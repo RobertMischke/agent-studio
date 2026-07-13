@@ -69,6 +69,10 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
 
 ## Related Concepts
 
+- [../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance):
+  why runner assignment is scheduling policy rather than historical fact, how a
+  Task retains an ordered multi-runner route, and when a host change continues,
+  blocks, or starts a new attempt.
 - [../wiki/concepts/task-integration-and-merge-workflow.md](../wiki/concepts/task-integration-and-merge-workflow.md):
   how a finished task's branch reaches `develop` (worktree, deferred merge, the
   `5-human-review -> 6-completed` accept trigger).

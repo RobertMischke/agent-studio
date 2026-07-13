@@ -292,6 +292,62 @@
     }
     .local-strip strong { color: var(--text); }
 
+    .relay-track {
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+      margin: 20px 0 10px;
+      padding: 18px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--blue-soft) 45%, transparent), transparent 44%),
+        var(--surface-soft);
+    }
+    .relay-node {
+      flex: 1 0 132px;
+      min-height: 168px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      text-align: center;
+    }
+    .relay-node.baton { background: var(--green-soft); }
+    .relay-node.authority { background: var(--blue-soft); }
+    .relay-node.review { background: var(--violet-soft); }
+    .relay-icon { display: block; margin-bottom: 7px; font-size: 1.55rem; line-height: 1; }
+    .relay-node strong { display: block; margin-bottom: 5px; font-weight: 500; }
+    .relay-node small { display: block; color: var(--muted); font-size: 0.75rem; line-height: 1.45; }
+    .relay-arrow {
+      display: grid;
+      flex: 0 0 24px;
+      place-items: center;
+      color: var(--faint);
+      font-size: 1.15rem;
+    }
+    .relay-caption { margin: 0 0 18px; color: var(--muted); text-align: center; font-size: 0.84rem; }
+    .route-demo {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .route-stop {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font-size: 0.82rem;
+    }
+    .route-change { color: var(--faint); }
+    .route-summary { color: var(--muted); font: 0.78rem/1.5 var(--mono); }
+
     .glossary dt { margin-bottom: 0.35rem; font-weight: 500; }
     .glossary dd { margin: 0; color: var(--muted); }
     .glossary .card { min-height: 170px; }
@@ -384,6 +440,10 @@
       .flow-step:nth-child(3)::after { display: block; }
       .remote-flow { grid-template-columns: 1fr; }
       .result-envelope { min-height: 52px; }
+      .relay-track { flex-direction: column; overflow-x: visible; }
+      .relay-node { flex-basis: auto; min-height: auto; text-align: left; }
+      .relay-icon { display: inline; margin-right: 7px; }
+      .relay-arrow { flex-basis: 24px; transform: rotate(90deg); }
       .layer { grid-template-columns: 1fr; gap: 6px; }
       .timeline-row { grid-template-columns: 1fr; gap: 5px; }
       .source-list { columns: 1; }
@@ -405,11 +465,12 @@
   <header class="hero">
     <p class="eyebrow">Working concept · 2026-07-13</p>
     <h1>Completion, Review, and Remote Runner Stability</h1>
-    <p class="lede">A plain-language and implementation-grounded model for deciding whether agent work is complete, reviewing the exact submitted revision, separating product defects from review infrastructure failures, and operating a parallel Remote Host without turning every fault into a full task rerun.</p>
+    <p class="lede">A plain-language and implementation-grounded model for deciding whether agent work is complete, reviewing the exact submitted revision, preserving runner and host provenance across continuations, separating product defects from review infrastructure failures, and operating a parallel Remote Host without turning every fault into a full task rerun.</p>
     <div class="chips" aria-label="Document status">
       <span class="chip"><span class="dot green"></span>Analysis and proposal</span>
       <span class="chip"><span class="dot amber"></span>Remote parallelism unchanged</span>
       <span class="chip"><span class="dot green"></span>Fully remote review target</span>
+      <span class="chip"><span class="dot green"></span>Runner handoff policy recorded</span>
       <span class="chip"><span class="dot"></span>Observation only</span>
       <span class="chip">AGT-2129 program queued</span>
       <span class="chip"><span class="dot amber"></span>Bootstrap blocked: AGT-2155 NO-GO</span>
@@ -429,10 +490,11 @@
       <a href="#retry">8. Retry budgets</a>
       <a href="#abort">9. CLI aborts</a>
       <a href="#host">10. Remote Host target</a>
-      <a href="#monitoring">11. Live observation</a>
-      <a href="#delivery">12. Delivery map</a>
-      <a href="#decisions">13. Remaining policy decisions</a>
-      <a href="#knowledge">14. Living knowledge log</a>
+      <a href="#provenance">11. Runner provenance and host switching</a>
+      <a href="#monitoring">12. Live observation</a>
+      <a href="#delivery">13. Delivery map</a>
+      <a href="#decisions">14. Remaining policy decisions</a>
+      <a href="#knowledge">15. Living knowledge log</a>
     </div>
   </nav>
 
@@ -997,9 +1059,245 @@
       <p>Heartbeat loss alone means <code>process-unknown</code>, not “dead.” A replacement must not begin solely because time elapsed. Durable fence continuity protects server writes; a changed host boot ID, service-manager proof of an empty containment unit, or audited host fencing proves that external execution cannot overlap.</p>
     </section>
 
+    <section id="provenance">
+      <div class="section-head">
+        <p class="eyebrow">11 · Runner provenance, host handoff, and continuation</p>
+        <h2>A task may use several runners, but a live process never teleports between hosts</h2>
+        <p>The visible card is long-lived. Its pre-work, core agent work, verification, and decision work can legitimately be executed by different actors over time. The product must therefore record an ordered execution route, not one mutable runner field on the task.</p>
+      </div>
+
+      <div class="principle">
+        <strong>Policy answer.</strong>
+        <p>Changing a project's runner assignment does not abort or migrate the active attempt. By default the change is pending and applies at the next admission boundary. An immediate switch is a controlled stop, durable handoff, and new fenced attempt. If the old process cannot be proven stopped, the task blocks as <code>process-unknown</code>; a second workspace-mutating runner does not start.</p>
+      </div>
+
+      <div class="grid four">
+        <article class="card tint-amber">
+          <span class="label">Current live view</span>
+          <h3>Runner is an active overlay</h3>
+          <p><code>TaskInfo.Runner</code> is projected from the current Remote lease only while the task is in Progress. It disappears after release or a lane move. A local run is inferred from the absence of that lease.</p>
+        </article>
+        <article class="card tint-amber">
+          <span class="label">Current pipeline view</span>
+          <h3>Steps have no placement</h3>
+          <p><code>pipeline-execution.json</code> keeps a pipeline counter and recent step results, but no canonical run ID, runner, host, lease, fence, or ordered handoff.</p>
+        </article>
+        <article class="card tint-amber">
+          <span class="label">Current event view</span>
+          <h3>One finish line is not history</h3>
+          <p>A Remote completion adds a free-form runner name to one timeline finish event. It does not bind a start, host, lease, pipeline cycle, or later decision work to the same attempt.</p>
+        </article>
+        <article class="card tint-blue">
+          <span class="label">Target distinction</span>
+          <h3>Assignment is policy; provenance is fact</h3>
+          <p><code>executionRunner</code> says where future work should be admitted. Immutable attempt records say where work actually ran. Renaming or reassigning a runner never rewrites history.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">The runner relay: pass durable state, not process memory</h3>
+      <div class="relay-track" role="img" aria-label="Host A performs pre and core work under fence 41, publishes a durable checkpoint, and stops. The Task Server records the handoff. Host B starts a new attempt under fence 42 and publishes an immutable result. Review Host C inspects that exact result. The Task Server validates the report and changes task state.">
+        <div class="relay-node">
+          <span class="relay-icon" aria-hidden="true">🏃</span>
+          <strong>Host A</strong>
+          <small>Workspace pre-steps and Core Agent Work<br /><code>RunAttempt A</code><br />fence 41</small>
+        </div>
+        <div class="relay-arrow" aria-hidden="true">→</div>
+        <div class="relay-node baton">
+          <span class="relay-icon" aria-hidden="true">📦</span>
+          <strong>Durable baton</strong>
+          <small>Checkpoint or immutable result<br />Git ref + artifacts + manifest<br />acknowledged</small>
+        </div>
+        <div class="relay-arrow" aria-hidden="true">→</div>
+        <div class="relay-node authority">
+          <span class="relay-icon" aria-hidden="true">🧠</span>
+          <strong>Task Server</strong>
+          <small>Closes A, persists route and pinned versions, proves no overlap, grants the next claim</small>
+        </div>
+        <div class="relay-arrow" aria-hidden="true">→</div>
+        <div class="relay-node">
+          <span class="relay-icon" aria-hidden="true">🏃</span>
+          <strong>Host B</strong>
+          <small>New process and attempt<br />fresh CLI session when needed<br />fence 42</small>
+        </div>
+        <div class="relay-arrow" aria-hidden="true">→</div>
+        <div class="relay-node baton">
+          <span class="relay-icon" aria-hidden="true">🔒</span>
+          <strong>Exact result</strong>
+          <small>Immutable result SHA or bundle<br />the review subject cannot drift</small>
+        </div>
+        <div class="relay-arrow" aria-hidden="true">→</div>
+        <div class="relay-node review">
+          <span class="relay-icon" aria-hidden="true">🔎</span>
+          <strong>Review Host C</strong>
+          <small><code>ReviewAttempt C</code><br />build, test, evidence, and semantic review of that result</small>
+        </div>
+        <div class="relay-arrow" aria-hidden="true">→</div>
+        <div class="relay-node authority">
+          <span class="relay-icon" aria-hidden="true">✓</span>
+          <strong>Task Server</strong>
+          <small>Validates the fenced report, records the route, and applies the lane decision</small>
+        </div>
+      </div>
+      <p class="relay-caption"><strong>No teleportation trick:</strong> the little box in the middle is the only baton. A provider session ID, RAM, open file handle, or host-local uncommitted change is not a cross-host checkpoint.</p>
+
+      <h3 style="margin-top: 2rem;">Identity hierarchy and vocabulary</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Level</th><th>Meaning</th><th>Identity and placement rule</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Task</strong></td><td>The long-lived card.</td><td>Has many processing cycles and attempts. It does not own one historical runner field.</td></tr>
+            <tr><td><strong>Pipeline cycle</strong></td><td>One full pre, core, post/review processing pass.</td><td>Gets a stable <code>runId</code>, a 1-based cycle number, and pinned pipeline/config revisions. A re-open starts a new cycle.</td></tr>
+            <tr><td><strong>Agent run</strong></td><td>One CLI invocation between user inputs.</td><td>Gets its own run record and immutable placement snapshot. A cross-host continuation starts a new agent run, even when it belongs to the same recoverable cycle.</td></tr>
+            <tr><td><strong>Execution attempt</strong></td><td>One fenced claim by a Coding or Review Executor.</td><td><code>RunAttempt</code> and <code>ReviewAttempt</code> each bind an executor instance, lease, fence, lifecycle, and source/result identity.</td></tr>
+            <tr><td><strong>Step execution</strong></td><td>One concrete pre/core/post step try.</td><td>References the owning attempt. A retry on another runner receives a new step-execution ID and retains <code>continuedFrom</code>.</td></tr>
+            <tr><td><strong>Runner, host, instance</strong></td><td>Runner is the logical registered service; host is the machine; instance is one daemon boot.</td><td>Persist <code>runnerId</code>, display name, <code>hostId</code>/hostname, instance or host-boot ID, backend and protocol version as a start-time snapshot.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small muted">Avoid a naked “Attempt N” label. The existing UI already uses that word for pipeline cycles, agent runs, and completion-loop budget. Name the scope: “Pipeline cycle 2,” “Agent run 3,” “Review attempt 1,” or “Completion attempt 2/4.”</p>
+
+      <div class="grid two" style="margin-top: 18px;">
+        <article class="card">
+          <span class="label">Placement rule</span>
+          <h3>Keep workspace-affine work sticky</h3>
+          <p>Pre-steps that touch the checkout, Core Agent Work, and any workspace-mutating post-step stay on the same coding executor and isolated worktree. A host change inside that bracket is an interrupted attempt followed by recovery, never a transparent move.</p>
+        </article>
+        <article class="card">
+          <span class="label">Planned phase boundary</span>
+          <h3>Review may use another runner by design</h3>
+          <p>After an immutable result is acknowledged, build, test, visual inspection, and semantic review run in a separately fenced ReviewAttempt. It may use the same host, another host, or a dedicated review pool. The final rule/lane mutation remains Task Server work.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">What happens when the runner or system changes?</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Situation</th><th>Default behavior</th><th>What the history records</th></tr></thead>
+          <tbody>
+            <tr><td>Assignment changes with no live attempt</td><td>The next eligible claim uses the new assignment after capability checks.</td><td>Assignment revision on the new attempt; old attempts remain unchanged.</td></tr>
+            <tr><td>Assignment changes while the current runner is healthy</td><td>Do not abort. Show “switch pending”; let the current attempt finish and apply the assignment at the next admission boundary.</td><td>No handoff yet. The active placement and pending assignment are shown separately.</td></tr>
+            <tr><td>Operator chooses “stop and switch now”</td><td>Drain the current attempt, cancel and reap its process group, publish and acknowledge a safe checkpoint, close the attempt, prove no overlap, then grant a new fenced attempt.</td><td><code>interrupted-by-switch</code>, checkpoint/result reference, old and new attempt IDs, reason, and ordered A → B transition.</td></tr>
+            <tr><td>Heartbeat disappears but the old process may still exist</td><td>Mark <code>process-unknown</code>. Do not start a second workspace-mutating attempt from TTL alone. Wait for cooperative release, changed boot identity plus containment proof, or audited host fencing.</td><td>Suspect time, last heartbeat, lease/fence, and the evidence that eventually allowed recovery or escalation.</td></tr>
+            <tr><td>Old owner is positively stopped and a durable checkpoint exists</td><td>Start a new attempt with a higher persisted fence. Reconstruct from server-owned task data and the durable Git/artifact checkpoint.</td><td><code>continuedFromAttemptId</code>, recovery reason, new executor snapshot, input checkpoint, and higher fence.</td></tr>
+            <tr><td>Core result is durable but review/decision work fails</td><td>Start a new ReviewAttempt on the same immutable result. Do not rerun coding work.</td><td>Same result SHA, new review attempt/runner, infrastructure outcome, and retry reason.</td></tr>
+            <tr><td>Pipeline, prompt, model policy, or runner software changes mid-cycle</td><td>Continue only with the pinned compatible definition and effective-config snapshot. If it cannot be honored, block or explicitly restart as a new pipeline cycle with current configuration.</td><td>Pinned versions on the old cycle plus the explicit restart decision and new versions on the next cycle.</td></tr>
+            <tr><td>No pushed ref, bundle, or acknowledged checkpoint exists</td><td>Do not claim continuity. Retain or salvage the old worktree when possible; otherwise restart from the last durable base or escalate potential work loss.</td><td><code>checkpoint-missing</code> or <code>worktree-blocked</code>; never a misleading “resumed” label.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="principle">
+        <strong>Does the task abort?</strong>
+        <p>Usually no. A runner change may end one execution attempt as interrupted, but the Task remains the durable unit and either continues through a new attempt or becomes visibly blocked. Only an explicit task cancellation or a terminal task policy ends the Task itself.</p>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Five data streams, one authority</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Stream</th><th>Direction</th><th>Required contract</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Admission and control</strong></td><td>Task Server → runner</td><td>Assignment revision, attempt ID, attempt kind, pinned config, lease ID, persisted fence, heartbeat deadline, cancellation/drain command.</td></tr>
+            <tr><td><strong>Recovery input</strong></td><td>Task Server → runner</td><td>Task snapshot, pipeline cycle/version, exact base or result ref, artifact manifest, completed-step facts, continuation reason, and allowed next action.</td></tr>
+            <tr><td><strong>Observability</strong></td><td>Runner → Task Server</td><td>Attempt ID, step-execution ID, stream ID, monotonic sequence number, runner instance, fence, timestamps, log/token/event payload. Replays are idempotent.</td></tr>
+            <tr><td><strong>Durable output</strong></td><td>Runner → Task Server / Git</td><td>Immutable commit or bundle, artifact hashes, result/checkpoint manifest, outbox event ID, and server acknowledgement before teardown.</td></tr>
+            <tr><td><strong>Terminal state</strong></td><td>Runner → Task Server</td><td>Fenced completion/verdict, outcome taxonomy, base/result/tested SHA, interruption or handoff reason. Only the current authority may affect task or pipeline state.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small muted">A stale runner's late state mutation is rejected deterministically. Late diagnostic bytes may be retained in a quarantined stale-attempt stream, but they cannot replace current logs, artifacts, results, or lane state.</p>
+
+      <h3 style="margin-top: 2rem;">Persistence and projections</h3>
+      <div class="grid three">
+        <article class="card tint-blue">
+          <span class="label">Canonical task-store truth</span>
+          <h3>Append an attempt ledger before spawn</h3>
+          <p>A file-backed, append-only execution-attempt ledger records start, placement snapshot, lease/fence, step links, checkpoint, handoff, terminal outcome, and continuation links. The first durable start event lands before the process starts.</p>
+        </article>
+        <article class="card">
+          <span class="label">Restart safety</span>
+          <h3>Persist authority, not only telemetry</h3>
+          <p>Active attempt rows, the authority epoch, and monotonic fencing counters survive Task Server restart. Restart does not forget a live owner or reset a fence to one. The runner's disk outbox replays unacknowledged events.</p>
+        </article>
+        <article class="card">
+          <span class="label">Read models</span>
+          <h3>Timeline and pipeline are projections</h3>
+          <p><code>pipeline-execution.json</code>, <code>timeline.jsonl</code>, run history, and Overview summaries project the attempt ledger. The planned step-run telemetry references attempt and step-execution IDs; none becomes a second ownership truth.</p>
+        </article>
+      </div>
+
+      <p>The ordered route is derived from actual step executions, not from the current project setting. Adjacent steps on the same executor instance collapse into one display stop, but a return is preserved:</p>
+      <div class="card" aria-label="Example task execution route">
+        <span class="label">Task Overview example</span>
+        <div class="route-demo">
+          <span class="route-stop">🏃 coding-a · host-a</span>
+          <span class="route-change">→</span>
+          <span class="route-stop">🔎 review-b · host-b</span>
+          <span class="route-change">→</span>
+          <span class="route-stop">🏃 coding-a · host-a</span>
+          <span class="route-summary">2 runners · 2 handoffs · A → B → A retained</span>
+        </div>
+        <p class="small muted">A current activity chip is separate from this historical route. “Assigned now: review-c” is configuration and must not replace “actually ran on: A → B → A.”</p>
+      </div>
+
+      <div class="grid three" style="margin-top: 14px;">
+        <article class="card">
+          <span class="label">Board and task lists</span>
+          <h3>Compact route summary</h3>
+          <p>While active, show the current runner and host. After execution, show the latest pipeline cycle's route. One stop renders as one runner; two or three render as A → B; longer or repeated routes render “3 runners · 4 handoffs” with a drill-down.</p>
+        </article>
+        <article class="card">
+          <span class="label">Task Overview and timeline</span>
+          <h3>Placement on every real run and step</h3>
+          <p>Group by pipeline cycle. Each agent run and executed pipeline step carries its runner/host snapshot, time, outcome, checkpoint, and handoff reason. Insert an explicit transition row when adjacent executions change placement.</p>
+        </article>
+        <article class="card">
+          <span class="label">Legacy truth</span>
+          <h3>Unknown is better than invented local</h3>
+          <p>Old records with no placement show “Runner not recorded.” A historical Remote finish line may be marked partial provenance. Never infer “Local” merely because no active lease exists now.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Stabilization acceptance</h3>
+      <div class="grid two">
+        <article class="card tint-green">
+          <span class="label">Must be true</span>
+          <ul class="checklist">
+            <li>Every local and Remote execution gets an immutable placement snapshot before spawn.</li>
+            <li>A → B → A remains ordered and queryable after all leases are released.</li>
+            <li>Task Server restart preserves active ownership, authority epoch, and fence monotonicity.</li>
+            <li>Every state-affecting log, artifact, result, verdict, and lane mutation is attempt-bound and fenced.</li>
+            <li>Cross-host continuation names a durable input checkpoint and creates a new process/attempt identity.</li>
+            <li>Core-finished plus review-failed retries review on the same result, not coding from scratch.</li>
+            <li>Overview, task detail, pipeline, and runner administration project the same attempt truth.</li>
+          </ul>
+        </article>
+        <article class="card tint-red">
+          <span class="label">Must never happen</span>
+          <ul class="checklist anti">
+            <li>Changing assignment kills a healthy attempt without an explicit immediate-switch action.</li>
+            <li>Lease expiry alone launches overlapping workspace mutation on another host.</li>
+            <li>A provider session ID is treated as a portable checkpoint across different worktrees or hosts.</li>
+            <li>Runner rename, retirement, or project reassignment rewrites historical attribution.</li>
+            <li>A single task-level runner field hides per-step placement or a return to an earlier runner.</li>
+            <li>Missing historical data is presented as proof that execution was local.</li>
+          </ul>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 2rem;">Delivery slices</h3>
+      <div class="flow" aria-label="Recommended implementation sequence for runner provenance and host switching">
+        <div class="flow-step tint-blue"><b>1. Canonical attempts</b><span>Persist local and Remote runner snapshots, stable run/attempt IDs, leases, fences, and terminal outcomes.</span></div>
+        <div class="flow-step"><b>2. Correlate steps</b><span>Link agent runs and every executed pipeline step to the owning attempt and immutable source/result.</span></div>
+        <div class="flow-step tint-green"><b>3. Project the UI</b><span>Expose current placement, ordered route, completeness, handoff count, and detail history through one API truth.</span></div>
+        <div class="flow-step"><b>4. Restart authority</b><span>Persist leases, authority epoch, counters, idempotency keys, and host outbox acknowledgements.</span></div>
+        <div class="flow-step tint-amber"><b>5. Controlled switch</b><span>Add pending assignment, explicit stop-and-switch, positive no-overlap proof, and checkpoint validation.</span></div>
+        <div class="flow-step tint-violet"><b>6. Placement policy</b><span>Route workspace work, exact-result review, and server decisions by capability without creating a general workflow engine.</span></div>
+      </div>
+    </section>
+
     <section id="monitoring">
       <div class="section-head">
-        <p class="eyebrow">11 · Live observation at current parallelism</p>
+        <p class="eyebrow">12 · Live observation at current parallelism</p>
         <h2>Keep the Remote Host running and observe the causal signals</h2>
         <p>The operator decision for this analysis is explicit: do not lower Remote Host parallelism and do not change gate configuration. The useful experiment is to correlate claims, attempts, resource load, exact revisions, overlapping reviews, and lane outcomes.</p>
       </div>
@@ -1079,7 +1377,7 @@
 
     <section id="delivery">
       <div class="section-head">
-        <p class="eyebrow">12 · Roadmap, live status, and delivery evidence</p>
+        <p class="eyebrow">13 · Roadmap, live status, and delivery evidence</p>
         <h2>One Remote epic, retained root-cause issues, and seven missing implementation slices</h2>
         <p>The operator-approved program is grouped under AGT-2129. Existing issues retain their narrow ownership; new issues cover only the authority, project-capacity admission, durable handoff, Remote Review Executor, CLI recovery, capability drain, and final replay gaps that did not already exist.</p>
       </div>
@@ -1166,7 +1464,7 @@
 
     <section id="decisions">
       <div class="section-head">
-        <p class="eyebrow">13 · Remaining policy decisions</p>
+        <p class="eyebrow">14 · Remaining policy decisions</p>
         <h2>Implementation is scheduled; unresolved policy stays visible</h2>
       </div>
 
@@ -1176,18 +1474,19 @@
         <article class="card"><h3>Visual evidence</h3><p>Should a missing image for clearly visual work trigger an evidence-only follow-up, Human Review with concern, or a coding reissue only when the model also finds the implementation unverifiable?</p></article>
         <article class="card"><h3>Accept with concerns</h3><p>Should a high-confidence complete verdict with non-blocking concerns always wait in Human Review, or can selected low-risk projects auto-accept under explicit policy?</p></article>
         <article class="card"><h3>Retry ceilings</h3><p>Choose the specific per-fingerprint retry count and the task-level semantic churn ceiling. Infrastructure retries remain separately bounded.</p></article>
-        <article class="card"><h3>Host restart resume</h3><p>Recommended default: automatic resume is project opt-in and globally off until provider-specific resume, process containment, and fencing probes are green.</p></article>
+        <article class="card tint-green"><span class="label">Policy default recorded</span><h3>Host change and restart resume</h3><p>Runner assignment changes are deferred by default and never hot-move a live process. Automatic cross-host resume stays project opt-in and globally off until durable checkpoints, positive no-overlap evidence, process containment, and persisted fencing probes are green. See <a href="#provenance">Runner provenance and host switching</a>.</p></article>
         <article class="card tint-green"><span class="label">Rollout recorded</span><h3>Remote review placement</h3><p>The fully remote contract is fixed. Allow an isolated review role on existing Remote Hosts first, add a dedicated review pool, and let high-risk project policy require a different host failure domain.</p></article>
       </div>
     </section>
 
     <section id="knowledge">
       <div class="section-head">
-        <p class="eyebrow">14 · Living knowledge log</p>
+        <p class="eyebrow">15 · Living knowledge log</p>
         <h2>New findings, newest first</h2>
       </div>
 
       <div class="timeline">
+        <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Runner provenance and host-switching policy recorded.</strong> A Task may show an ordered A → B → A execution route across coding and review attempts. Assignment changes are deferred by default; there is no live process migration. Immediate switching requires controlled stop, durable checkpoint or immutable result, positive no-overlap evidence, and a new fenced attempt. Pipeline cycles pin configuration, and legacy placement remains explicitly unknown rather than inferred as local.</div><div class="timeline-action">Concept extended</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Concurrent Remote handoff collision reproduced three times.</strong> AGT-2138, AGT-2136, and AGT-2180 finished Remote execution successfully at result SHAs <code>ef0efacb</code>, <code>4ca0c5f2</code>, and <code>9974651d</code>, but Auto Review recorded the unrelated local snapshot chain <code>0c604084</code> → <code>377fb137</code> → <code>32e68518</code>. Review attribution is therefore cross-task contaminated before any gate verdict. Existing AGT-2182, AGT-2183, AGT-2184, and AGT-2187 own the fix and replay; no duplicate task was added.</div><div class="timeline-action">Reproduced and mapped</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>Remote project capacity breached live.</strong> Agent Studio declared <code>maxParallelism=2</code>, but four distinct fenced leases ran concurrently on a healthy four-slot host while project status reported <code>occupiedSlots=0</code>. The Ready queue also mixed ten dependency-blocked tasks and three Epics into an apparently runnable list. AGT-2189 now owns atomic project-cap enforcement plus truthful eligible queue and slot projection; it is dependency-blocked in Ready behind AGT-2182 and AGT-2179.</div><div class="timeline-action">Reproduced and scheduled</div></div>
         <div class="timeline-row"><div class="timeline-id">2026-07-13</div><div><strong>AGT-2155 bootstrap review is NO-GO.</strong> Remote implementation SHA <code>589c462f</code> reached <code>TASK_DONE</code>, but Auto Review selected local Wiki snapshot <code>61306343</code> and escalated with <code>attempt=1</code>. Independent inspection of the actual result also found the Remote Result-SHA handoff, real replay, attempt-chain isolation, evidence retention, cleanup, and bounded queue behavior incomplete. AGT-2155 stays Escalated and AGT-2182 stays blocked until the operator approves a dependency correction and isolated Remote bootstrap sequence.</div><div class="timeline-action">Operator decision required</div></div>

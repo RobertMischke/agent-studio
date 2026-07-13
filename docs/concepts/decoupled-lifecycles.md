@@ -54,6 +54,11 @@ This builds on, rather than replaces, the current architecture:
   lease rows are in memory. The lease is execution authority, not a viewer
   connection, and detached lifecycles cannot ship until restart continuity is
   closed as specified below.
+- The Wiki's
+  [runner provenance and host handoff contract](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance)
+  owns the user-visible ordered runner route, the deferred assignment-switch
+  default, the positive no-overlap requirement, and the rule that a cross-host
+  continuation creates a new process and attempt identity.
 - [Remote Dauerbetrieb A/B](../operations/setup/linux-runner-host.md), delivered
   through AGT-2004/AGT-2005, and the
   [persistent connection runbook](../operations/setup/remote-runner-persistent-connection.md)

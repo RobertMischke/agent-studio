@@ -8,6 +8,15 @@ public sealed class WorkstreamCollectorPostStepTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "workstream-collector-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
+    public void ContextDefaultsToCodexMiniHigh()
+    {
+        var context = new WorkstreamCollectorContext();
+        Assert.Equal(CliTypes.Codex, context.Cli);
+        Assert.Equal(ModelIds.Gpt54Mini, context.Model);
+        Assert.Equal("high", context.ThinkingLevel);
+    }
+
+    [Fact]
     public void Apply_MergesSignalByIdentity_AndIncrementsFrequency()
     {
         var docs = PrepareDocs();

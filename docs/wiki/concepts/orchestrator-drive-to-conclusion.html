@@ -728,6 +728,27 @@
             recovery continues to route a historical finished run to post-processing and an unfinished zombie back to Ready.
           </td>
         </tr>
+        <tr>
+          <td>2026-07-13</td>
+          <td><code>AGT-2117</code><br><span class="small">quality-grade starvation and stale Pending rows<br>(also observed on <code>AGT-2112</code>, <code>AGT-2114</code>, <code>AGT-2118</code>, and <code>AGT-2108</code>)</span></td>
+          <td>
+            Attempt 8 failed its deterministic build/test gate and ultimately escalated, but Code-review quality grade,
+            the aspect rows, and later pipeline rows remained <code>Pending</code> without a reason. If the grade had been
+            reached, its configured fallback still selected Claude despite the GPT-only operating constraint.
+          </td>
+          <td>
+            The red build-gate and aspect-infrastructure branches returned before the reporting grade. Pipeline completion
+            only stamped <code>CompletedAt</code>; it did not close rows that the terminal branch never dispatched, so the UI
+            represented a finished attempt as work still waiting to start.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> the reporting grade now runs before both short-circuits and never gates the lane
+            decision. Completing a pipeline turns known unreached rows into <code>Skipped</code> with the causal terminal reason
+            and interrupted <code>Running</code> rows into <code>Failed</code>; a pure read projection repairs legacy attempts.
+            Model-backed pipeline defaults use Codex, with the detected flagship reserved for quality grading and task spawning.
+            The actual AGT-2117 lane terminal remains <span class="lane">Escalated</span>, now with the skipped causes visible.
+          </td>
+        </tr>
       </tbody>
     </table>
 

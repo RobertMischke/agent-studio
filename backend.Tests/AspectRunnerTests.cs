@@ -412,6 +412,26 @@ public class AspectRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task NullPerAspectCli_KeepsRunWideCli()
+    {
+        string? capturedCli = null;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        runner.CliRunner = (_, cli, _, _, _, _) =>
+        {
+            capturedCli = cli;
+            return Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+        };
+
+        await runner.RunAsync(BuildInputs(), ["documentation-impact"],
+            CliTypes.Codex, ModelIds.Gpt54Mini, TimeSpan.FromSeconds(5), CancellationToken.None,
+            cliForAspect: null);
+
+        Assert.Equal(CliTypes.Codex, capturedCli);
+    }
+
+    [Fact]
     public void AspectVerdictParsing_RoundTripsStatusToken()
     {
         var v = new AspectVerdict("code-quality", AspectStatus.Concerns, "summary text", "body", "quality:concerns");

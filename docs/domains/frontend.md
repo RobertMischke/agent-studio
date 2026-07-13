@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-07-11
+Version: 2026-07-13
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -99,7 +99,11 @@ groups, and a failed domain reports an error without hiding successful domains.
   `develop`, toolchain, and no-op readiness from the host registry snapshot.
   Board cards deliberately show the actual live runner from the fenced run
   lease, not merely this configured target, so assignment and attribution
-  cannot be confused.
+  cannot be confused. The historical target is the ordered, immutable route
+  defined by [Runner provenance and host handoff](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance):
+  task Overview and run/pipeline detail show actual placement per agent run and
+  executed step, preserve A → B → A returns, and label missing legacy data as
+  unknown rather than inferring local execution.
 - Project Settings starts with an editable **Project basics** section. It owns
   the workspace, display name, short code, project colour, repository checkout,
   CLI working directory, repository URL, and default coding CLI/model. It

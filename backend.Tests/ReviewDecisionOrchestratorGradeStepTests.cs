@@ -16,14 +16,13 @@ namespace AgentStudio.Tests;
 /// <list type="number">
 ///   <item>the grade step actually executes in the pipeline flow and records a
 ///   <c>post-code-review-grade</c> row with the parsed grade verdict;</item>
-///   <item>it invokes the strong model (Claude Opus 4.8) — and demonstrably NOT
-///   the cheap Haiku the four aspect reviews run on, the exact ASS-855/ASS-916
-///   asymmetry this feature exists to enforce;</item>
+///   <item>it invokes the live Codex flagship — and demonstrably NOT
+///   the bounded gpt-5.4-mini model the four aspect reviews run on;</item>
 ///   <item>it stamps a single <c>code-review:grade-*</c> tag on the real task
 ///   and leaves a rendered <c>code-review-grade-*.md</c> behind.</item>
 /// </list>
 /// The CLI is stubbed so the suite runs offline; the model id the orchestrator
-/// hands the service is captured so the Opus-vs-Haiku assertion is on the real
+/// hands the service is captured so the flagship-vs-mini assertion is on the real
 /// wired value, not a constant.
 /// </summary>
 public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
@@ -50,7 +49,7 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
     }
 
     [Fact]
-    public async Task GradeStep_RunsEndToEnd_InvokesOpus48NotHaiku_StampsGradeTag_AndRecordsPipelineRow()
+    public async Task GradeStep_RunsEndToEnd_InvokesCodexFlagshipNotMini_StampsGradeTag_AndRecordsPipelineRow()
     {
         SeedReviewJobWithDone("grade-e2e", CleanStatus, taskType: TaskTypes.Chore, withScreenshot: true);
 
@@ -77,10 +76,9 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
         Assert.True(Directory.Exists(folder), "a clean accepted task should land in 5-human-review");
 
         // 1. The grade step ran on the strong model and demonstrably NOT on the
-        //    cheap aspect model. This is the ASS-855(Haiku)/ASS-916(Opus) tension
-        //    the feature resolves: aspects stay cheap, the grade goes Opus 4.8.
-        Assert.Equal("claude-opus-4-8", gradeModel);
-        Assert.Equal("claude-haiku-4-5", aspectModel);
+        //    bounded aspect model: aspects stay economical, the grade uses the flagship.
+        Assert.Equal(ModelMetadataRegistry.DefaultForCli(CliTypes.Codex), gradeModel);
+        Assert.Equal(ModelIds.Gpt54Mini, aspectModel);
         Assert.NotEqual(aspectModel, gradeModel);
 
         // 2. The pipeline records a post-code-review-grade row with the parsed grade.
@@ -122,7 +120,7 @@ public class ReviewDecisionOrchestratorGradeStepTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        // The per-deployment override is honored over the Opus-4.8 default, so a
+        // The per-deployment override is honored over the Codex flagship default, so a
         // deployment can dial the grade model without code changes.
         Assert.Equal("claude-opus-4-7", gradeModel);
     }

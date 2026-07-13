@@ -85,6 +85,13 @@ public class PipelineExecutionRestartTests : IDisposable
     public void Complete_TerminalizesUnreachedSteps_ButPreservesDeferredAndPlannedSlots()
     {
         _log.Begin(_jobFolder, PipelineCatalogue.Standard, project: "demo", jobId: "job-1");
+        _log.RecordStep(_jobFolder, new PipelineStepExecution
+        {
+            StepId = "aspect-code-quality",
+            Kind = StepKind.Aspect,
+            Status = PipelineStepStatus.Running,
+            StartedAt = DateTime.UtcNow.AddSeconds(-5),
+        });
 
         const string stopReason = "Not run because the build/test gate failed: dotnet test exit 1.";
         _log.Complete(_jobFolder, pendingStepReason: stopReason);
@@ -97,6 +104,11 @@ public class PipelineExecutionRestartTests : IDisposable
         Assert.Equal(PipelineStepStatus.Skipped, grade.Status);
         Assert.Equal(stopReason, grade.Reason);
         Assert.NotNull(grade.CompletedAt);
+
+        var interrupted = completed.Steps.Single(s => s.StepId == "aspect-code-quality");
+        Assert.Equal(PipelineStepStatus.Failed, interrupted.Status);
+        Assert.Equal("Pipeline attempt ended while this step was still running.", interrupted.Reason);
+        Assert.NotNull(interrupted.CompletedAt);
 
         // Deferred operator-triggered delivery steps deliberately remain
         // pending after the automatic pipeline bracket ends.
@@ -120,6 +132,16 @@ public class PipelineExecutionRestartTests : IDisposable
             project: "demo",
             jobId: "job-1");
         var completedAt = DateTime.UtcNow;
+        pending = pending with
+        {
+            Steps = pending.Steps.Select(step => step.StepId == "aspect-code-quality"
+                ? step with
+                {
+                    Status = PipelineStepStatus.Running,
+                    StartedAt = completedAt.AddSeconds(-3),
+                }
+                : step).ToList(),
+        };
 
         // Reproduce an on-disk record written before completion terminalized
         // unreached rows: CompletedAt is present while the grade is Pending.
@@ -140,6 +162,11 @@ public class PipelineExecutionRestartTests : IDisposable
         Assert.Equal(PipelineStepStatus.Skipped, grade.Status);
         Assert.Contains("pipeline attempt ended", grade.Reason, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(completedAt, grade.CompletedAt);
+
+        var interrupted = normalized.Steps.Single(s => s.StepId == "aspect-code-quality");
+        Assert.Equal(PipelineStepStatus.Failed, interrupted.Status);
+        Assert.Equal("Pipeline attempt ended while this step was still running.", interrupted.Reason);
+        Assert.Equal(completedAt, interrupted.CompletedAt);
 
         Assert.Equal(PipelineStepStatus.Pending,
             normalized.Steps.Single(s => s.StepId == PipelineCatalogue.MergeIntoDevelopStepId).Status);

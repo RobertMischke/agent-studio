@@ -288,8 +288,9 @@ public sealed class PipelineExecutionLog
     /// record so the UI can show "ran for X" instead of "still running".
     /// Any ordinary step that the completed bracket never reached is
     /// terminalized as <see cref="PipelineStepStatus.Skipped"/> with an honest
-    /// reason. Deferred operator-triggered steps deliberately remain Pending,
-    /// and catalogue stubs remain Planned.
+    /// reason; an ordinary step still marked Running becomes Failed. Deferred
+    /// operator-triggered steps deliberately remain Pending, and catalogue
+    /// stubs remain Planned.
     /// </summary>
     public void Complete(
         string jobFolderPath,
@@ -351,9 +352,19 @@ public sealed class PipelineExecutionLog
 
         var steps = record.Steps.Select(step =>
         {
-            if (step.Status != PipelineStepStatus.Pending) return step;
+            if (step.Status is not (PipelineStepStatus.Pending or PipelineStepStatus.Running)) return step;
             if (!definitions.TryGetValue(step.StepId, out var definition)) return step;
             if (definition.Deferred || definition.Stub) return step;
+
+            if (step.Status == PipelineStepStatus.Running)
+            {
+                return step with
+                {
+                    Status = PipelineStepStatus.Failed,
+                    CompletedAt = record.CompletedAt,
+                    Reason = "Pipeline attempt ended while this step was still running.",
+                };
+            }
 
             return step with
             {

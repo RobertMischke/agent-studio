@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-06-10
+Version: 2026-07-13
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -13,6 +13,10 @@ pipeline view.
   is the concept ADR for CI/CD-style task pipelines.
 - [docs/concepts/task-execution-and-log-architecture.md](../concepts/task-execution-and-log-architecture.md)
   covers the Server/Runner split, stream logs, leases, and shared state.
+- [Runner provenance, host handoff, and continuation](../wiki/concepts/completion-review-and-remote-runner-stability.html#provenance)
+  defines how a pipeline cycle, agent run, execution attempt, and step execution
+  retain ordered runner/host placement across planned review handoffs and
+  recovery. A single task- or pipeline-level runner field is not sufficient.
 - [docs/schemas/pipeline-definition.schema.json](../schemas/pipeline-definition.schema.json)
   pins versioned pipeline definitions.
 - [docs/schemas/step-run.schema.json](../schemas/step-run.schema.json) pins
